@@ -1,4 +1,4 @@
-"""Adversarial tests for the F-116 current-source-authority publisher."""
+"""Adversarial tests for the F-118 current-source-authority publisher."""
 
 from __future__ import annotations
 
@@ -228,9 +228,11 @@ class Campaign:
     publisher: Path
     f115_head: str
     bridge_head: str
+    f116_head: str
     final_head: str
     f115_bundle: Path
     bridge_bundle: Path
+    f116_bundle: Path
     final_bundle: Path
     evidence_candidate: Path
     provenance_candidate: Path
@@ -238,6 +240,8 @@ class Campaign:
     audit_candidate: Path
     f115_bindings: dict[str, object]
     f115_digests: dict[str, str]
+    f116_bindings: dict[str, object]
+    f116_digests: dict[str, str]
     final_verified_revisions: list[str]
     reviewer_ids: dict[str, str]
     authorization: dict[str, object]
@@ -295,13 +299,13 @@ class Campaign:
         f115_bundle.chmod(0o644)
         bridge_bundle.chmod(0o644)
 
-        write_bytes(repository / "final.txt", b"final F116 source\n", 0o644)
-        git(repository, "add", "final.txt")
-        git(repository, "commit", "-m", "fixture final F116 source")
-        final_head = git(repository, "rev-parse", "HEAD").stdout.strip()
-        final_bundle = candidates / f"athenak-feature-cgl-through-{final_head[:9]}.bundle"
-        git(repository, "bundle", "create", str(final_bundle), "HEAD")
-        final_bundle.chmod(0o644)
+        write_bytes(repository / "f116.txt", b"F116 selected source\n", 0o644)
+        git(repository, "add", "f116.txt")
+        git(repository, "commit", "-m", "fixture F116 selected source")
+        f116_head = git(repository, "rev-parse", "HEAD").stdout.strip()
+        f116_bundle = archives / f"athenak-feature-cgl-through-{f116_head[:9]}.bundle"
+        git(repository, "bundle", "create", str(f116_bundle), "HEAD")
+        f116_bundle.chmod(0o644)
 
         f115_bindings, f115_digests = cls._publish_f115(
             root, repository, f115_bundle, f115_head
@@ -311,6 +315,25 @@ class Campaign:
         write_bytes(archives / "README.md", old_readme, 0o644)
         write_bytes(archives / "SHA256SUMS", old_sums, 0o644)
         write_bytes(archives / authority.CORRUPT_C7_NAME, b"retained incident evidence\n", 0o644)
+        f116_bindings, f116_digests = cls._publish_f116(
+            root,
+            repository,
+            f115_bindings,
+            f115_digests,
+            f115_head,
+            bridge_bundle,
+            bridge_head,
+            f116_bundle,
+            f116_head,
+        )
+
+        write_bytes(repository / "final.txt", b"final F118 source\n", 0o644)
+        git(repository, "add", "final.txt")
+        git(repository, "commit", "-m", "fixture final F118 source")
+        final_head = git(repository, "rev-parse", "HEAD").stdout.strip()
+        final_bundle = candidates / f"athenak-feature-cgl-through-{final_head[:9]}.bundle"
+        git(repository, "bundle", "create", str(final_bundle), "HEAD")
+        final_bundle.chmod(0o644)
 
         campaign = cls(
             repository=repository,
@@ -319,23 +342,27 @@ class Campaign:
             publisher=publisher,
             f115_head=f115_head,
             bridge_head=bridge_head,
+            f116_head=f116_head,
             final_head=final_head,
             f115_bundle=f115_bundle,
             bridge_bundle=bridge_bundle,
+            f116_bundle=f116_bundle,
             final_bundle=final_bundle,
-            evidence_candidate=candidates / f"{authority.F116_NAME}.candidate",
+            evidence_candidate=candidates / f"{authority.F118_NAME}.candidate",
             provenance_candidate=(
-                candidates / f"{authority.F116_NAME}.provenance_security_review.json.candidate"
+                candidates / f"{authority.F118_NAME}.provenance_security_review.json.candidate"
             ),
             plasma_candidate=(
-                candidates / f"{authority.F116_NAME}.plasma_scientific_review.json.candidate"
+                candidates / f"{authority.F118_NAME}.plasma_scientific_review.json.candidate"
             ),
             audit_candidate=(
-                candidates / f"{authority.F116_NAME}.publication_audit.json.candidate"
+                candidates / f"{authority.F118_NAME}.publication_audit.json.candidate"
             ),
             f115_bindings=f115_bindings,
             f115_digests=f115_digests,
-            final_verified_revisions=[f115_head, bridge_head, final_head],
+            f116_bindings=f116_bindings,
+            f116_digests=f116_digests,
+            final_verified_revisions=[f115_head, bridge_head, f116_head, final_head],
             reviewer_ids={"provenance": "fixture-provenance", "plasma": "fixture-plasma"},
             authorization=dict(authority.AUTHORIZATION),
             subject_override=None,
@@ -421,6 +448,229 @@ class Campaign:
         }
         return bindings, digests
 
+    @staticmethod
+    def _publish_f116(
+        root: Path,
+        repository: Path,
+        f115_bindings: dict[str, object],
+        f115_digests: dict[str, str],
+        f115_head: str,
+        bridge_bundle: Path,
+        bridge_head: str,
+        bundle: Path,
+        head: str,
+    ) -> tuple[dict[str, object], dict[str, str]]:
+        paths = {key: root / relative for key, relative in authority.F116_PATHS.items()}
+        archives = root / "source-archives"
+        old_readme = (archives / "README.md").read_bytes()
+        old_sums = (archives / "SHA256SUMS").read_bytes()
+        subject = git(repository, "show", "-s", "--format=%s", head).stdout.strip()
+        block = (
+            f"`{bundle.name}` records complete history through commit `{head}` "
+            f"(`{subject}`). It is the sole current Stage I source-selection bundle "
+            "after independently reviewed F-116 publication. It preserves F-115 as "
+            "immutable historical R03 s02 authority and does not itself authorize prepare "
+            f"or submission. Its SHA-256 is `{sha256(bundle)}`.\n\n"
+            f"`{bridge_bundle.name}` records complete history through commit `{bridge_head}`. "
+            "It is retained and cataloged as a non-current branch-ref bridge between F-115 "
+            "and the final F-116 tooling revision; it is never selected as current source "
+            f"authority. Its SHA-256 is `{sha256(bridge_bundle)}`.\n\n"
+        ).encode()
+        new_readme = old_readme.replace(b"## AthenaK\n\n", b"## AthenaK\n\n" + block, 1)
+        new_sums = old_sums + (
+            f"{sha256(bridge_bundle)}  {bridge_bundle.name}\n"
+            f"{sha256(bundle)}  {bundle.name}\n"
+        ).encode()
+        before = {
+            "readme_sha256": hashlib.sha256(old_readme).hexdigest(),
+            "sha256sums_sha256": hashlib.sha256(old_sums).hexdigest(),
+            "bridge_listed": False,
+            "final_bundle_listed": False,
+            "corrupt_c7_listed": False,
+        }
+        after = {
+            "readme_sha256": hashlib.sha256(new_readme).hexdigest(),
+            "sha256sums_sha256": hashlib.sha256(new_sums).hexdigest(),
+            "bridge_listed_exactly_once": True,
+            "final_bundle_listed_exactly_once": True,
+            "corrupt_c7_listed": False,
+            "historical_f115_preserved": True,
+            "sole_current_source_bundle": f"source-archives/{bundle.name}",
+        }
+        bridge = {
+            "path": f"source-archives/{bridge_bundle.name}",
+            "sha256": sha256(bridge_bundle),
+            "complete_history": True,
+            "head": bridge_head,
+            "advertised_tip": {
+                "revision": bridge_head,
+                "name": "refs/heads/feature/cgl-landau-fluid",
+            },
+            "verified_revisions": sorted([f115_head, bridge_head]),
+            "selected_as_current": False,
+            "role": "retained-non-current-bridge",
+        }
+        current = {
+            "candidate_path": str(root.parent / "f116-bundle-candidate"),
+            "path": f"source-archives/{bundle.name}",
+            "sha256": sha256(bundle),
+            "complete_history": True,
+            "head": head,
+            "advertised_tip": {"revision": head, "name": "HEAD"},
+            "verified_revisions": sorted([f115_head, bridge_head, head]),
+            "selected_as_current": True,
+            "subject": subject,
+        }
+        tools = [
+            {
+                "path": relative,
+                "revision": head,
+                "sha256": sha256(repository / relative),
+                "mode": mode,
+            }
+            for relative, mode in sorted(authority.REQUIRED_TOOLS.items())
+        ]
+        publisher = next(
+            item for item in tools if item["path"] == authority.PUBLISHER_RELATIVE.as_posix()
+        )
+        generated = now()
+        evidence = {
+            "schema_version": 1,
+            "record_type": "stage-i-current-source-authority-supersession-evidence",
+            "checkpoint": "F-116",
+            "execution_epoch": authority.EXECUTION_EPOCH,
+            "generated_utc": generated,
+            "scope": {
+                "relationship": "current-source-selection-only-supersession",
+                "summary": "Select the exact committed final tooling source without execution authority.",
+                "preserves": authority.F116_PRESERVES,
+                "does_not_authorize": authority.DOES_NOT_AUTHORIZE,
+            },
+            "predecessor_authorities": {"historical_f115": f115_bindings},
+            "implementation": {
+                "publisher": publisher,
+                "committed_tools": tools,
+                "intermediate_36140_bundle": bridge,
+                "current_source_bundle": current,
+            },
+            "source_archive_catalog": {"before": before, "after": after},
+            "authorization": authority.AUTHORIZATION,
+            "validation": authority.F116_VALIDATION_CLAIMS,
+            "publication_requirements": authority.PUBLICATION_REQUIREMENTS,
+        }
+        evidence_sha = write_json(paths["evidence"], evidence, 0o444)
+        verified = {
+            "authorization_broadening": False,
+            "bridge_selected_as_current": False,
+            "corrupt_c7_excluded": True,
+            "current_source_selection_only": True,
+            "final_bundle_sha256": sha256(bundle),
+            "final_head": head,
+            "historical_f115_preserved": True,
+        }
+        reviews: dict[str, tuple[dict[str, object], str]] = {}
+        for key, kind, decision, agent in (
+            ("provenance_review", "provenance-security", "approved-for-publication", "f116-p"),
+            ("plasma_review", "plasma-scientific-continuation", "approved", "f116-s"),
+        ):
+            review = {
+                "schema_version": 1,
+                "record_type": (
+                    "stage-i-current-source-authority-supersession-independent-review"
+                ),
+                "checkpoint": "F-116",
+                "execution_epoch": authority.EXECUTION_EPOCH,
+                "review_kind": kind,
+                "decision": decision,
+                "reviewed_candidate": {
+                    "path": str(root.parent / f"{key}.f116-candidate"),
+                    "sha256": evidence_sha,
+                },
+                "published_f116": {"path": str(paths["evidence"]), "sha256": evidence_sha},
+                "reviewer": {"agent_id": agent, "identity": f"fixture {agent}"},
+                "reviewed_utc": now(),
+                "findings": ["Exact F116 predecessor authority verified."],
+                "limitations": [
+                    "No execution authority.",
+                    authority.INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION,
+                ],
+                "verified": verified,
+            }
+            reviews[key] = (review, write_json(paths[key], review, 0o444))
+        audit = {
+            "schema_version": 1,
+            "record_type": "stage-i-current-source-authority-supersession-publication-audit",
+            "checkpoint": "F-116",
+            "execution_epoch": authority.EXECUTION_EPOCH,
+            "published_utc": now(),
+            "artifact": published_binding(paths["evidence"], evidence_sha, "0444"),
+            "independent_reviews": {
+                "reviews_bind_exact_published_f116_sha256": evidence_sha,
+                "provenance_security": published_binding(
+                    paths["provenance_review"], reviews["provenance_review"][1], "0444"
+                ),
+                "plasma_scientific_continuation": published_binding(
+                    paths["plasma_review"], reviews["plasma_review"][1], "0444"
+                ),
+            },
+            "historical_f115_authority": f115_digests,
+            "source_archive_catalog": {
+                "readme": published_binding(
+                    archives / "README.md", after["readme_sha256"], "0644"
+                ),
+                "sha256sums": published_binding(
+                    archives / "SHA256SUMS", after["sha256sums_sha256"], "0644"
+                ),
+                "bridge_bundle": {
+                    "path": str(bridge_bundle),
+                    "sha256": sha256(bridge_bundle),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": bridge_head,
+                    "role": "retained-non-current-bridge",
+                    "selected_as_current": False,
+                },
+                "current_source_bundle": {
+                    "path": str(bundle),
+                    "sha256": sha256(bundle),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": head,
+                    "selected_as_current": True,
+                },
+                "corrupt_c7_absent_from_active_checksum_ledger": True,
+                "sole_current_source_bundle": str(bundle),
+            },
+            "authority_and_enforcement": authority.AUTHORIZATION,
+            "publication": (
+                "recoverable-forward-transaction-with-publication-audit-commit-marker-"
+                "under-stage-i-lock"
+            ),
+        }
+        audit_sha = write_json(paths["publication_audit"], audit, 0o444)
+        write_bytes(archives / "README.md", new_readme, 0o644)
+        write_bytes(archives / "SHA256SUMS", new_sums, 0o644)
+        digests = {
+            "evidence_sha256": evidence_sha,
+            "publication_audit_sha256": audit_sha,
+            "provenance_review_sha256": reviews["provenance_review"][1],
+            "plasma_review_sha256": reviews["plasma_review"][1],
+        }
+        bindings = {
+            key: {
+                "path": authority.F116_PATHS[key].as_posix(),
+                "sha256": (
+                    evidence_sha
+                    if key == "evidence"
+                    else audit_sha
+                    if key == "publication_audit"
+                    else reviews[key][1]
+                ),
+            }
+            for key in authority.F116_PATHS
+        }
+        return bindings, digests
+
     @property
     def final_target(self) -> Path:
         return self.root / "source-archives" / self.final_bundle.name
@@ -449,8 +699,7 @@ class Campaign:
             old_readme,
             old_sums,
             bridge_name=self.bridge_bundle.name,
-            bridge_sha256=bridge_sha,
-            bridge_revision=self.bridge_head,
+            predecessor_name=self.f116_bundle.name,
             final_name=self.final_bundle.name,
             final_sha256=final_sha,
             final_revision=self.final_head,
@@ -459,17 +708,22 @@ class Campaign:
         before = {
             "readme_sha256": hashlib.sha256(old_readme).hexdigest(),
             "sha256sums_sha256": hashlib.sha256(old_sums).hexdigest(),
-            "bridge_listed": False,
+            "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
             "final_bundle_listed": False,
             "corrupt_c7_listed": False,
+            "historical_f115_preserved": True,
         }
         after = {
             "readme_sha256": hashlib.sha256(new_readme).hexdigest(),
             "sha256sums_sha256": hashlib.sha256(new_sums).hexdigest(),
             "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
             "final_bundle_listed_exactly_once": True,
             "corrupt_c7_listed": False,
             "historical_f115_preserved": True,
+            "historical_f116_preserved": True,
+            "all_prior_checksum_entries_preserved": True,
             "sole_current_source_bundle": f"source-archives/{self.final_bundle.name}",
         }
         final = {
@@ -492,9 +746,24 @@ class Campaign:
                 "revision": self.bridge_head,
                 "name": "refs/heads/feature/cgl-landau-fluid",
             },
-            "verified_revisions": [self.f115_head, self.bridge_head],
+            "verified_revisions": sorted([self.f115_head, self.bridge_head]),
             "selected_as_current": False,
             "role": "retained-non-current-bridge",
+        }
+        predecessor = {
+            "path": f"source-archives/{self.f116_bundle.name}",
+            "sha256": sha256(self.f116_bundle),
+            "complete_history": True,
+            "head": self.f116_head,
+            "advertised_tip": {"revision": self.f116_head, "name": "HEAD"},
+            "verified_revisions": sorted(
+                [self.f115_head, self.bridge_head, self.f116_head]
+            ),
+            "selected_as_current": False,
+            "role": "retained-non-current-predecessor",
+            "subject": git(
+                self.repository, "show", "-s", "--format=%s", self.f116_head
+            ).stdout.strip(),
         }
         generated = now()
         evidence = {
@@ -509,7 +778,7 @@ class Campaign:
                 "preserves": authority.PRESERVES,
                 "does_not_authorize": authority.DOES_NOT_AUTHORIZE,
             },
-            "predecessor_authorities": {"historical_f115": self.f115_bindings},
+            "predecessor_authorities": {"historical_f116": self.f116_bindings},
             "implementation": {
                 "publisher": {
                     "path": authority.PUBLISHER_RELATIVE.as_posix(),
@@ -519,6 +788,7 @@ class Campaign:
                 },
                 "committed_tools": self.committed_tools(),
                 "intermediate_36140_bundle": bridge,
+                "predecessor_current_source_bundle": predecessor,
                 "current_source_bundle": final,
             },
             "source_archive_catalog": {"before": before, "after": after},
@@ -546,8 +816,8 @@ class Campaign:
                     "path": str(self.evidence_candidate),
                     "sha256": evidence_sha,
                 },
-                "published_f116": {
-                    "path": str(self.root / authority.F116_PATHS["evidence"]),
+                "published_f118": {
+                    "path": str(self.root / authority.F118_PATHS["evidence"]),
                     "sha256": evidence_sha,
                 },
                 "reviewer": {
@@ -571,22 +841,22 @@ class Campaign:
             "execution_epoch": authority.EXECUTION_EPOCH,
             "published_utc": now(),
             "artifact": published_binding(
-                self.root / authority.F116_PATHS["evidence"], evidence_sha, "0444"
+                self.root / authority.F118_PATHS["evidence"], evidence_sha, "0444"
             ),
             "independent_reviews": {
-                "reviews_bind_exact_published_f116_sha256": evidence_sha,
+                "reviews_bind_exact_published_f118_sha256": evidence_sha,
                 "provenance_security": published_binding(
-                    self.root / authority.F116_PATHS["provenance_review"],
+                    self.root / authority.F118_PATHS["provenance_review"],
                     reviews["provenance"],
                     "0444",
                 ),
                 "plasma_scientific_continuation": published_binding(
-                    self.root / authority.F116_PATHS["plasma_review"],
+                    self.root / authority.F118_PATHS["plasma_review"],
                     reviews["plasma"],
                     "0444",
                 ),
             },
-            "historical_f115_authority": self.f115_digests,
+            "historical_f116_authority": self.f116_digests,
             "source_archive_catalog": {
                 "readme": published_binding(
                     self.root / "source-archives/README.md", after["readme_sha256"], "0644"
@@ -603,6 +873,15 @@ class Campaign:
                     "links": 1,
                     "head": self.bridge_head,
                     "role": "retained-non-current-bridge",
+                    "selected_as_current": False,
+                },
+                "predecessor_current_source_bundle": {
+                    "path": str(self.f116_bundle),
+                    "sha256": sha256(self.f116_bundle),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": self.f116_head,
+                    "role": "retained-non-current-predecessor",
                     "selected_as_current": False,
                 },
                 "current_source_bundle": {
@@ -783,8 +1062,8 @@ def bind_external_reviews(campaign: Campaign, evidence_path: Path) -> None:
             "path": str(evidence_path),
             "sha256": evidence_sha256,
         }
-        review["published_f116"] = {
-            "path": str(campaign.root / authority.F116_PATHS["evidence"]),
+        review["published_f118"] = {
+            "path": str(campaign.root / authority.F118_PATHS["evidence"]),
             "sha256": evidence_sha256,
         }
         review["reviewed_utc"] = now()
@@ -798,15 +1077,89 @@ def test_promotes_and_verifies_source_selection_only(campaign: Campaign) -> None
     sums = (campaign.root / "source-archives/SHA256SUMS").read_text()
     assert sums.count(campaign.f115_bundle.name) == 1
     assert sums.count(campaign.bridge_bundle.name) == 1
+    assert sums.count(campaign.f116_bundle.name) == 1
     assert sums.count(campaign.final_bundle.name) == 1
     assert authority.CORRUPT_C7_NAME not in sums
     assert campaign.f115_bundle.exists()
     assert campaign.bridge_bundle.exists()
+    assert campaign.f116_bundle.exists()
     assert campaign.final_target.exists()
-    audit = json.loads((campaign.root / authority.F116_PATHS["publication_audit"]).read_text())
+    audit = json.loads((campaign.root / authority.F118_PATHS["publication_audit"]).read_text())
     assert audit["authority_and_enforcement"] == authority.AUTHORIZATION
     assert audit["authority_and_enforcement"]["prepare_authorized"] is False
     assert audit["authority_and_enforcement"]["submit_authorized"] is False
+
+
+def test_f118_preserves_exact_f116_four_part_authority_and_selected_bundle(
+    campaign: Campaign,
+) -> None:
+    retained = {
+        key: retained_tree_snapshot(campaign.root / relative)
+        for key, relative in authority.F116_PATHS.items()
+    }
+    retained["selected_bundle"] = retained_tree_snapshot(campaign.f116_bundle)
+    assert all(
+        campaign.root / authority.F116_PATHS[key]
+        != campaign.root / authority.F118_PATHS[key]
+        for key in authority.F116_PATHS
+    )
+
+    assert campaign.promote().returncode == 0
+    assert campaign.verify().returncode == 0
+
+    assert {
+        key: retained_tree_snapshot(campaign.root / relative)
+        for key, relative in authority.F116_PATHS.items()
+    } == {key: retained[key] for key in authority.F116_PATHS}
+    assert retained_tree_snapshot(campaign.f116_bundle) == retained["selected_bundle"]
+    assert all((campaign.root / relative).exists() for relative in authority.F118_PATHS.values())
+
+
+def test_f118_ignores_and_preserves_retained_f116_transaction_namespace(
+    campaign: Campaign,
+) -> None:
+    retained = (
+        campaign.root / "accounting" / authority.F116_TRANSACTION_ROOT_NAME
+        / f"2026-06-06T000000+0000-{'a' * 32}.staging"
+    )
+    retained.mkdir(parents=True, mode=0o700)
+    write_bytes(retained / "journal.json", b"retained F116 transaction bytes\n", 0o600)
+    before = retained_tree_snapshot(retained.parent)
+
+    assert campaign.promote().returncode == 0
+    assert campaign.verify().returncode == 0
+
+    assert retained_tree_snapshot(retained.parent) == before
+    assert (
+        campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    ).exists()
+
+
+def test_rejects_valid_foreign_archive_and_checksum_entry_after_f116(
+    campaign: Campaign,
+) -> None:
+    archives = campaign.root / "source-archives"
+    foreign = archives / "foreign-valid-history.bundle"
+    write_bytes(foreign, b"foreign structurally valid history\n", 0o644)
+    sums_path = archives / "SHA256SUMS"
+    sums_path.write_bytes(
+        sums_path.read_bytes() + f"{sha256(foreign)}  {foreign.name}\n".encode()
+    )
+    assert_failed(
+        campaign.promote(),
+        "live predecessor source-archive catalog differs from authenticated F116 catalog_after",
+    )
+    assert not campaign.final_target.exists()
+
+
+def test_rejects_readme_only_drift_after_f116(campaign: Campaign) -> None:
+    readme = campaign.root / "source-archives/README.md"
+    readme.write_bytes(readme.read_bytes() + b"\nForeign but structurally valid note.\n")
+    assert_failed(
+        campaign.promote(),
+        "live predecessor source-archive catalog differs from authenticated F116 catalog_after",
+    )
+    assert not campaign.final_target.exists()
 
 
 @pytest.mark.parametrize(
@@ -822,7 +1175,7 @@ def test_promotes_and_verifies_source_selection_only(campaign: Campaign) -> None
 )
 def test_every_publication_interruption_recovers(campaign: Campaign, point: str) -> None:
     assert_failed(campaign.promote(point), f"simulated interruption {point}")
-    audit = campaign.root / authority.F116_PATHS["publication_audit"]
+    audit = campaign.root / authority.F118_PATHS["publication_audit"]
     assert audit.exists() is (point == "after-audit")
     if point == "after-audit":
         assert campaign.verify().returncode == 0
@@ -852,7 +1205,7 @@ def test_incomplete_staging_interruption_fails_closed_and_remains_bounded(
     assert len(retained) == 1
     assert retained[0].name.endswith(authority.STAGING_TRANSACTION_SUFFIX)
     assert not campaign.final_target.exists()
-    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["publication_audit"]).exists()
     assert_failed(campaign.promote(), "requires operator disposition")
     assert list(transactions.iterdir()) == retained
 
@@ -871,21 +1224,21 @@ def test_repeated_crash_promotion_cleans_all_private_slots_before_audit_commit(
 ) -> None:
     assert_failed(campaign.promote("after-staging"), "simulated interruption after-staging")
     targets = (
-        (campaign.final_target, "F116 final source bundle"),
-        (campaign.root / authority.F116_PATHS["evidence"], "F116 evidence"),
+        (campaign.final_target, "F118 final source bundle"),
+        (campaign.root / authority.F118_PATHS["evidence"], "F118 evidence"),
         (
-            campaign.root / authority.F116_PATHS["provenance_review"],
-            "F116 provenance review",
+            campaign.root / authority.F118_PATHS["provenance_review"],
+            "F118 provenance review",
         ),
         (
-            campaign.root / authority.F116_PATHS["plasma_review"],
-            "F116 plasma review",
+            campaign.root / authority.F118_PATHS["plasma_review"],
+            "F118 plasma review",
         ),
         (campaign.root / "source-archives/README.md", "source-archive README"),
         (campaign.root / "source-archives/SHA256SUMS", "source-archive SHA256SUMS"),
         (
-            campaign.root / authority.F116_PATHS["publication_audit"],
-            "F116 publication audit",
+            campaign.root / authority.F118_PATHS["publication_audit"],
+            "F118 publication audit",
         ),
     )
     private_paths = []
@@ -897,7 +1250,7 @@ def test_repeated_crash_promotion_cleans_all_private_slots_before_audit_commit(
             private_paths.append(private)
 
     assert_failed(campaign.promote("after-catalogs"), "simulated interruption after-catalogs")
-    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["publication_audit"]).exists()
     assert any(os.path.lexists(path) for path in private_paths)
 
     assert campaign.promote().returncode == 0
@@ -907,9 +1260,9 @@ def test_repeated_crash_promotion_cleans_all_private_slots_before_audit_commit(
 
 def test_exact_audit_commit_never_cleans_late_private_slot(campaign: Campaign) -> None:
     assert campaign.promote().returncode == 0
-    target = campaign.root / authority.F116_PATHS["evidence"]
+    target = campaign.root / authority.F118_PATHS["evidence"]
     private = target.parent / authority.private_publication_names(
-        target.name, "F116 evidence"
+        target.name, "F118 evidence"
     )[0]
     write_bytes(private, b"late non-authoritative debris\n", 0o600)
     before = private.stat()
@@ -926,16 +1279,16 @@ def test_precommit_private_cleanup_rejects_hardlinked_incomplete_slot(
     campaign: Campaign,
 ) -> None:
     assert_failed(campaign.promote("after-catalogs"), "simulated interruption after-catalogs")
-    target = campaign.root / authority.F116_PATHS["evidence"]
+    target = campaign.root / authority.F118_PATHS["evidence"]
     private = target.parent / authority.private_publication_names(
-        target.name, "F116 evidence"
+        target.name, "F118 evidence"
     )[0]
     alias = target.parent / "injected-private-alias"
     write_bytes(private, b"hardlinked private debris\n", 0o600)
     os.link(private, alias)
 
     assert_failed(campaign.promote(), "has 2 links, expected 1")
-    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["publication_audit"]).exists()
     assert private.stat().st_nlink == 2
     assert alias.stat().st_nlink == 2
 
@@ -952,17 +1305,17 @@ def test_abandoned_staging_cleanup_fails_closed_on_unexpected_entry(
     write_bytes(staging / "unreviewed", b"unexpected\n", 0o600)
     assert_failed(campaign.promote(), "staging contains unexpected entries")
     assert not campaign.final_target.exists()
-    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["publication_audit"]).exists()
 
 
-def test_abandoned_staging_cleanup_rejects_visible_f116_target(
+def test_abandoned_staging_cleanup_rejects_visible_f118_target(
     campaign: Campaign,
 ) -> None:
     assert_failed(
         campaign.promote("during-staging-after-directory"),
         "simulated interruption during-staging-after-directory",
     )
-    visible = campaign.root / authority.F116_PATHS["evidence"]
+    visible = campaign.root / authority.F118_PATHS["evidence"]
     write_bytes(visible, b"uncommitted authority\n", 0o444)
     assert_failed(campaign.promote(), "requires operator disposition")
     assert visible.read_bytes() == b"uncommitted authority\n"
@@ -1046,8 +1399,8 @@ def test_forensic_only_root_retirement_restores_concurrently_inserted_active_ent
     layout = {
         "transactions": transactions,
         **{
-            f"f116_{key}": root / relative
-            for key, relative in authority.F116_PATHS.items()
+            f"f118_{key}": root / relative
+            for key, relative in authority.F118_PATHS.items()
         },
     }
     real_renameat2_between = authority.renameat2_between
@@ -1222,7 +1575,7 @@ def test_draft_evidence_is_deterministic_and_never_publishes(campaign: Campaign)
     assert first.read_bytes() == second.read_bytes()
     assert first.stat().st_mode & 0o777 == 0o444
     assert not campaign.final_target.exists()
-    assert not (campaign.root / authority.F116_PATHS["evidence"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["evidence"]).exists()
     assert sha256(campaign.root / "source-archives/README.md") == readme_before
     assert sha256(campaign.root / "source-archives/SHA256SUMS") == sums_before
 
@@ -1287,7 +1640,7 @@ def test_candidate_drafting_accepts_setgid_complete_stale_staging_without_mutati
         "non-ancestor-publisher",
         "wrong-publisher-bytes",
         "wrong-publisher-mode",
-        "rebound-f116-target",
+        "rebound-f118-target",
         "rebound-bundle-target",
         "rebound-catalog-target",
         "mode-zero-journal",
@@ -1392,9 +1745,9 @@ def test_drafting_and_new_promotion_reject_non_inert_stale_transaction(
             campaign.repository, "rev-parse", "HEAD"
         ).stdout.strip()
         write_json(journal, retained_journal, 0o600)
-    elif corruption == "rebound-f116-target":
+    elif corruption == "rebound-f118-target":
         retained_journal = json.loads(journal.read_text())
-        retained_journal["targets"]["evidence"] = "accounting/rebound-f116-evidence"
+        retained_journal["targets"]["evidence"] = "accounting/rebound-f118-evidence"
         write_json(journal, retained_journal, 0o600)
     elif corruption == "rebound-bundle-target":
         retained_journal = json.loads(journal.read_text())
@@ -1438,7 +1791,7 @@ def test_drafting_and_new_promotion_reject_non_inert_stale_transaction(
         campaign.final_target.symlink_to(campaign.candidates / "missing-public-bundle")
     elif corruption == "partial-public-artifact":
         write_bytes(
-            campaign.root / authority.F116_PATHS["evidence"],
+            campaign.root / authority.F118_PATHS["evidence"],
             (transaction / authority.TRANSACTION_PAYLOADS["evidence"][0]).read_bytes(),
             0o444,
         )
@@ -1457,10 +1810,10 @@ def test_drafting_and_new_promotion_reject_non_inert_stale_transaction(
                 0o644,
             )
     elif corruption == "private-publication-slot":
-        target = campaign.root / authority.F116_PATHS["evidence"]
+        target = campaign.root / authority.F118_PATHS["evidence"]
         write_bytes(
             target.parent / authority.private_publication_names(
-                target.name, "stale F116 evidence"
+                target.name, "stale F118 evidence"
             )[0],
             b"private publication debris\n",
             0o600,
@@ -1545,7 +1898,7 @@ def test_drafting_rejects_each_stale_public_target_and_dangling_symlink(
         payload_key = "bundle"
         mode = 0o644
     else:
-        target = campaign.root / authority.F116_PATHS[target_key]
+        target = campaign.root / authority.F118_PATHS[target_key]
         payload_key = "audit" if target_key == "publication_audit" else target_key
         mode = 0o444
     if dangling:
@@ -1589,7 +1942,7 @@ def test_drafting_and_new_promotion_reject_foreign_transaction_recovery_names(
     campaign.refresh_candidates()
 
     target = (
-        campaign.root / authority.F116_PATHS["evidence"]
+        campaign.root / authority.F118_PATHS["evidence"]
         if target_kind == "artifact"
         else campaign.root / "source-archives/README.md"
     )
@@ -1698,7 +2051,7 @@ def test_drafted_evidence_reviews_and_audit_are_operable_end_to_end(
     assert audit_one.read_bytes() == audit_two.read_bytes()
     assert audit_one.stat().st_mode & 0o777 == 0o444
     assert not campaign.final_target.exists()
-    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["publication_audit"]).exists()
 
     command = campaign.promote_command()
     replacements = {
@@ -1774,7 +2127,7 @@ def test_draft_audit_rejects_review_for_different_evidence(campaign: Campaign) -
         "identity or authorization boundary differs",
     )
     assert not audit.exists()
-    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["publication_audit"]).exists()
 
 
 def test_draft_output_cannot_enter_campaign_root_or_overwrite(
@@ -1806,6 +2159,35 @@ def test_rejects_historical_f115_chain_drift(campaign: Campaign) -> None:
     path.write_bytes(path.read_bytes() + b" ")
     path.chmod(0o444)
     assert_failed(campaign.promote(), "historical F115 evidence checksum differs")
+
+
+@pytest.mark.parametrize("key", sorted(authority.F116_PATHS))
+def test_rejects_historical_f116_four_part_drift(campaign: Campaign, key: str) -> None:
+    path = campaign.root / authority.F116_PATHS[key]
+    path.chmod(0o644)
+    path.write_bytes(path.read_bytes() + b" ")
+    path.chmod(0o444)
+    assert_failed(campaign.promote(), f"historical F116 {key} checksum differs")
+
+
+def test_rejects_historical_f116_selected_bundle_drift(campaign: Campaign) -> None:
+    campaign.f116_bundle.write_bytes(campaign.f116_bundle.read_bytes() + b" ")
+    assert_failed(campaign.promote(), "historical F116 current source bundle checksum differs")
+
+
+def test_rejects_catalog_that_drops_f116_predecessor_bundle(campaign: Campaign) -> None:
+    sums = campaign.root / "source-archives/SHA256SUMS"
+    sums.write_text(
+        "".join(
+            line
+            for line in sums.read_text().splitlines(keepends=True)
+            if campaign.f116_bundle.name not in line
+        )
+    )
+    assert_failed(
+        campaign.promote(),
+        "live predecessor source-archive catalog differs from authenticated F116 catalog_after",
+    )
 
 
 def test_rejects_final_bundle_that_advertises_branch_ref(campaign: Campaign) -> None:
@@ -1847,12 +2229,15 @@ def test_rejects_corrupt_c7_reentry_in_active_catalog(campaign: Campaign) -> Non
     sums = campaign.root / "source-archives/SHA256SUMS"
     sums.write_text(sums.read_text() + f"{sha256(corrupt)}  {corrupt.name}\n")
     campaign.refresh_candidates()
-    assert_failed(campaign.promote(), "corrupt C7 bundle reappeared")
+    assert_failed(
+        campaign.promote(),
+        "live predecessor source-archive catalog differs from authenticated F116 catalog_after",
+    )
 
 
 def test_rejects_existing_final_target(campaign: Campaign) -> None:
     write_bytes(campaign.final_target, b"collision\n", 0o644)
-    assert_failed(campaign.promote(), "F116 target already exists")
+    assert_failed(campaign.promote(), "F118 target already exists")
 
 
 def test_repeated_promotion_resumes_exact_retained_transaction(campaign: Campaign) -> None:
@@ -1907,7 +2292,7 @@ def test_new_promotion_rejects_nonmatching_stale_transaction_payload_tampering(
     assert_failed(campaign.promote(), "checksum differs")
     assert list(transactions.iterdir()) == [stale]
     assert not campaign.final_target.exists()
-    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert not (campaign.root / authority.F118_PATHS["publication_audit"]).exists()
 
 
 def test_recovery_rejects_transaction_payload_tampering(campaign: Campaign) -> None:
@@ -2159,7 +2544,7 @@ def test_recovery_never_repairs_state_beneath_visible_audit_marker(
     assert_failed(campaign.promote("after-staging"), "simulated interruption")
     transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
     transaction = next(transactions.iterdir())
-    audit_target = campaign.root / authority.F116_PATHS["publication_audit"]
+    audit_target = campaign.root / authority.F118_PATHS["publication_audit"]
     write_bytes(
         audit_target,
         (transaction / authority.TRANSACTION_PAYLOADS["audit"][0]).read_bytes(),
@@ -2182,7 +2567,7 @@ def test_high_level_resume_completes_partial_audit_marker(
     assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
     transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
     transaction = next(transactions.iterdir())
-    audit_target = campaign.root / authority.F116_PATHS["publication_audit"]
+    audit_target = campaign.root / authority.F118_PATHS["publication_audit"]
     if state == "mode-zero-partial":
         write_bytes(audit_target, b'{"partial":', 0o000)
     elif state == "owner-only-partial":
@@ -2195,7 +2580,7 @@ def test_high_level_resume_completes_partial_audit_marker(
         )
     else:
         private = audit_target.parent / authority.private_publication_names(
-            audit_target.name, "F116 publication audit"
+            audit_target.name, "F118 publication audit"
         )[0]
         write_bytes(
             private,
@@ -2259,7 +2644,7 @@ def test_post_commit_retained_staging_is_non_authoritative_recovery_debris(
 
 def test_recovery_rejects_forged_final_mode_audit_marker(campaign: Campaign) -> None:
     assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
-    audit_target = campaign.root / authority.F116_PATHS["publication_audit"]
+    audit_target = campaign.root / authority.F118_PATHS["publication_audit"]
     write_bytes(audit_target, b'{"forged": true}\n', 0o444)
 
     assert_failed(campaign.recover(), "checksum differs")
@@ -2520,7 +2905,7 @@ def test_direct_catalog_completion_never_renames(
 ) -> None:
     target = tmp_path / "README.md"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     write_bytes(
         target,
         old_payload if initial == "predecessor" else b"partial",
@@ -2552,7 +2937,7 @@ def test_direct_catalog_hardlink_injection_never_mutates_public_inode(
     target = tmp_path / "README.md"
     alias = tmp_path / "injected-alias"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     write_bytes(target, old_payload, 0o644)
     real_link = authority.os.link
     real_write = authority.os.write
@@ -2607,7 +2992,7 @@ def test_direct_catalog_partial_write_is_forward_recoverable(
 ) -> None:
     target = tmp_path / "README.md"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     write_bytes(target, old_payload, 0o644)
     real_write = authority.os.write
     interrupted = False
@@ -2658,7 +3043,7 @@ def test_direct_catalog_recovers_after_predecessor_unlink_crash(
 ) -> None:
     target = tmp_path / "README.md"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     write_bytes(target, old_payload, 0o644)
     real_unlink = authority.unlink_bound_name_lustre
     interrupted = False
@@ -2936,7 +3321,7 @@ def test_partial_catalog_temporary_is_retired_and_recreated(
     transaction_id = "fixture"
     temporary = tmp_path / f".{target.name}.{transaction_id}.tmp"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     write_bytes(target, old_payload, 0o644)
     write_bytes(temporary, b"partial", remnant_mode)
     retained_before = set(tmp_path.parent.glob(".cgl-source-authority-retired-*.forensic"))
@@ -2966,7 +3351,7 @@ def test_partial_catalog_temporary_substitution_fails_closed(
     substitute = tmp_path / "substitute"
     escaped = tmp_path / "escaped-partial"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     write_bytes(target, old_payload, 0o644)
     write_bytes(temporary, b"partial", 0o000)
     write_bytes(substitute, new_payload, 0o644)
@@ -3008,7 +3393,7 @@ def test_catalog_publication_rejects_in_place_recovery_file_drift(
     transaction_id = "fixture"
     temporary = tmp_path / f".{target.name}.{transaction_id}.tmp"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     write_bytes(target, old_payload, 0o644)
     real_exchange = authority.exchange_bound_entries
     raced = False
@@ -3052,7 +3437,7 @@ def test_catalog_forged_public_bytes_are_rolled_back_and_retryable(
     target = tmp_path / "README.md"
     transaction_id = "fixture"
     old_payload = b"reviewed predecessor\n"
-    new_payload = b"reviewed F116 catalog\n"
+    new_payload = b"reviewed F118 catalog\n"
     forged = b"X" * len(new_payload)
     old_digest = hashlib.sha256(old_payload).hexdigest()
     new_digest = hashlib.sha256(new_payload).hexdigest()
@@ -3541,7 +3926,7 @@ def test_source_authority_requires_noncryptographic_review_limitation(
             plasma,
             evidence_candidate_path=campaign.evidence_candidate,
             evidence_sha256=sha256(campaign.evidence_candidate),
-            evidence_path=campaign.root / authority.F116_PATHS["evidence"],
+            evidence_path=campaign.root / authority.F118_PATHS["evidence"],
             final=evidence["implementation"]["current_source_bundle"],
             generated_utc=evidence["generated_utc"],
         )
@@ -3550,7 +3935,7 @@ def test_source_authority_requires_noncryptographic_review_limitation(
 def test_source_authority_declared_independence_disclaims_cryptographic_identity() -> None:
     assurance = authority.declared_process_independence_assurance(
         {"provenance-security": "reviewer-a", "plasma-scientific": "reviewer-b"},
-        "F116 review",
+        "F118 review",
     )
     assert assurance["cryptographic_identity_verified"] is False
     assert (

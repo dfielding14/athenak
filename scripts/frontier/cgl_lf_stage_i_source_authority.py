@@ -1,12 +1,12 @@
 #!/opt/cray/pe/python/3.11.7/bin/python3.11 -I
-"""Draft and promote the exact F-116 Stage I current-source authority.
+"""Draft and promote the exact F-118 Stage I current-source authority.
 
 Authenticated drafting emits deterministic evidence and audit candidates but
 never creates reviews, self-approves, or publishes.  Promotion changes source
 selection only.  It never authorizes prepare, submit, scheduler mutation,
 scientific changes, or historical manifest rebinding.  Publication is a
 recoverable forward transaction under the canonical Stage-I lock; the
-single-link exact-digest 0444 F-116 publication audit is the sole authority
+single-link exact-digest 0444 F-118 publication audit is the sole authority
 commit marker.
 Before that marker, the exact complete transaction matching the requested audit
 is a recovery input; only complete inert staged transactions with no publication
@@ -52,9 +52,13 @@ CANONICAL_PUBLIC_NAMESPACE_PROFILES = (
 )
 EXECUTION_EPOCH = "E03-forcing-policy"
 EXECUTION_EPOCH_SLUG = "E03_forcing_policy"
-CHECKPOINT = "F-116"
+CHECKPOINT = "F-118"
 PUBLISHER_RELATIVE = PurePosixPath(
     "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+)
+F118_NAME = (
+    "mks24_stage_i_E03_forcing_policy_"
+    "F118_current_source_authority_supersession_evidence.json"
 )
 F116_NAME = (
     "mks24_stage_i_E03_forcing_policy_"
@@ -86,11 +90,29 @@ F116_PATHS = {
         PurePosixPath("accounting") / f"{F116_NAME}.publication_audit.json"
     ),
 }
+F118_PATHS = {
+    "evidence": PurePosixPath("accounting") / F118_NAME,
+    "provenance_review": (
+        PurePosixPath("accounting") / f"{F118_NAME}.provenance_security_review.json"
+    ),
+    "plasma_review": (
+        PurePosixPath("accounting") / f"{F118_NAME}.plasma_scientific_review.json"
+    ),
+    "publication_audit": (
+        PurePosixPath("accounting") / f"{F118_NAME}.publication_audit.json"
+    ),
+}
 F115_CANONICAL_SHA256 = {
     "evidence": "cb50beb064678a9446ac33801a0023547d06c432d8c59b6bd3fbe34b11cf0391",
     "publication_audit": "5923e3872b1d4a84a147bcd1d81fddc20ee79b72bfc410683d083039781f5b1f",
     "provenance_review": "6fcd19f9267f36332742f1f103968098216bd8e6b42fa9821964ab8df704bacd",
     "plasma_review": "a78357ed90e593809b1a82a641d2b40d651b16569ec943fc1781940e569b8440",
+}
+F116_CANONICAL_SHA256 = {
+    "evidence": "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a",
+    "provenance_review": "e9731aab8305505e058c68ae8bb61c9ec5ff4885bde1bee3162719c41ab9bafd",
+    "plasma_review": "bc4da6897263843f5d233f996539ff047d6ef465b775a9b5cdc8f864de96a6b8",
+    "publication_audit": "3a6168e3039c02656b38ebdfcadffc07a2f151b1a474084307a80a341ba83096",
 }
 BRIDGE_REVISION = "36140ea825cb853b298714c27720440fdab60b9e"
 BRIDGE_SHA256 = "2c2f57a166877387244dd5bb6bdf87beb12492ea075a7431939b78e5df7307a0"
@@ -128,8 +150,13 @@ AUTHORIZATION = {
     "scientific_configuration_change_authorized": False,
     "historical_manifest_rebinding_authorized": False,
 }
-PRESERVES = [
+F116_PRESERVES = [
     "The immutable F-115 evidence, reviews, publication audit, and historical R03 s02 authority.",
+    "The qualified executable, frozen source revision, inputs, matrix, restart lineages, targets, resources, qualification, and Stage I budget policy.",
+    "Every prior active source-archive checksum-ledger entry and the corrupt-C7 incident-evidence exclusion.",
+]
+PRESERVES = [
+    "The immutable F-116 evidence, reviews, publication audit, selected source bundle, and nested F-115 historical authority.",
     "The qualified executable, frozen source revision, inputs, matrix, restart lineages, targets, resources, qualification, and Stage I budget policy.",
     "Every prior active source-archive checksum-ledger entry and the corrupt-C7 incident-evidence exclusion.",
 ]
@@ -151,6 +178,17 @@ PUBLICATION_REQUIREMENTS = {
     "recovery_required_after_interruption": True,
 }
 VALIDATION_CLAIMS = {
+    "historical_f116_chain": "passed",
+    "historical_f115_chain": "passed",
+    "bridge_bundle_complete_history": "passed",
+    "predecessor_current_source_bundle_complete_history": "passed",
+    "final_bundle_complete_history": "passed",
+    "final_bundle_single_head_tip": "passed",
+    "final_bundle_required_revisions": "passed",
+    "committed_tool_bytes": "passed",
+    "corrupt_c7_exclusion_preserved": True,
+}
+F116_VALIDATION_CLAIMS = {
     "historical_f115_chain": "passed",
     "bridge_bundle_complete_history": "passed",
     "final_bundle_complete_history": "passed",
@@ -163,15 +201,21 @@ REVIEW_VERIFIED_KEYS = frozenset(
     {
         "authorization_broadening",
         "bridge_selected_as_current",
+        "predecessor_current_source_bundle_selected_as_current",
         "corrupt_c7_excluded",
         "current_source_selection_only",
         "final_bundle_sha256",
         "final_head",
         "historical_f115_preserved",
+        "historical_f116_preserved",
     }
 )
-TRANSACTION_ROOT_NAME = (
+F116_TRANSACTION_ROOT_NAME = (
     f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_source_authority_transactions"
+)
+# F118 has a disjoint recovery namespace; retained F116 transactions are immutable history.
+TRANSACTION_ROOT_NAME = (
+    f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F118_source_authority_transactions"
 )
 RETIRED_TRANSACTION_SUFFIX = ".retired"
 STAGING_TRANSACTION_SUFFIX = ".staging"
@@ -2053,6 +2097,39 @@ def committed_tools(repository: Path, expected_head: str,
     return retained
 
 
+def committed_tools_at_revision(repository: Path, revision: str,
+                                label: str) -> list[dict[str, object]]:
+    """Authenticate required tool bytes and modes at one retained revision."""
+
+    revision = require_revision(revision, f"{label} revision")
+    retained = []
+    for relative, expected_mode in sorted(REQUIRED_TOOLS.items()):
+        committed = git_run(repository, ["show", f"{revision}:{relative}"])
+        if committed.returncode:
+            raise ValueError(f"{label} required tool is absent: {relative}")
+        tree = git_run(repository, ["ls-tree", revision, "--", relative])
+        expected_git_mode = "100755" if expected_mode == "0755" else "100644"
+        if tree.returncode:
+            raise ValueError(f"cannot inspect {label} tool mode: {relative}")
+        try:
+            tree_line = tree.stdout.decode("ascii").strip()
+        except UnicodeDecodeError as error:
+            raise ValueError(f"{label} tool mode is not ASCII: {relative}") from error
+        if not tree_line.startswith(f"{expected_git_mode} blob ") or not tree_line.endswith(
+            f"\t{relative}"
+        ):
+            raise ValueError(f"{label} tool mode differs: {relative}")
+        retained.append(
+            {
+                "path": relative,
+                "revision": revision,
+                "sha256": sha256_bytes(committed.stdout),
+                "mode": expected_mode,
+            }
+        )
+    return retained
+
+
 def stable_bundle_validation(repository: Path, path: Path, expected_sha256: str,
                              expected_revision: str, expected_name: str,
                              required_revisions: list[str], label: str
@@ -2297,6 +2374,338 @@ def historical_f115(root: Path, repository: Path, bindings: object,
     }
 
 
+def historical_f116(root: Path, repository: Path, bindings: object,
+                    *, canonical: bool) -> dict[str, object]:
+    """Authenticate the immutable four-part F116 authority and nested F115."""
+
+    retained_bindings = require_exact_keys(
+        bindings, set(F116_PATHS), "historical F116 bindings"
+    )
+    loaded: dict[str, tuple[dict[str, object], str, Path]] = {}
+    for key, relative in F116_PATHS.items():
+        selected_relative, expected = binding(
+            retained_bindings[key], f"historical F116 {key}"
+        )
+        if selected_relative != relative:
+            raise ValueError(f"historical F116 {key} path differs")
+        if canonical and expected != F116_CANONICAL_SHA256[key]:
+            raise ValueError(f"historical F116 {key} digest differs from canonical authority")
+        path = root / relative
+        value, _, digest = read_json(
+            path, f"historical F116 {key}", expected=expected, mode=0o444
+        )
+        loaded[key] = value, digest, path
+
+    evidence, evidence_sha, evidence_path = loaded["evidence"]
+    evidence = require_exact_keys(
+        evidence,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "generated_utc", "scope", "predecessor_authorities", "implementation",
+            "source_archive_catalog", "authorization", "validation",
+            "publication_requirements",
+        },
+        "historical F116 evidence",
+    )
+    if (
+        evidence["schema_version"] != 1
+        or evidence["record_type"] != "stage-i-current-source-authority-supersession-evidence"
+        or evidence["checkpoint"] != "F-116"
+        or evidence["execution_epoch"] != EXECUTION_EPOCH
+        or evidence["authorization"] != AUTHORIZATION
+        or evidence["validation"] != F116_VALIDATION_CLAIMS
+        or evidence["publication_requirements"] != PUBLICATION_REQUIREMENTS
+    ):
+        raise ValueError("historical F116 evidence identity or authority differs")
+    generated = require_utc(evidence["generated_utc"], "historical F116 generation timestamp")
+    scope = require_exact_keys(
+        evidence["scope"],
+        {"relationship", "summary", "preserves", "does_not_authorize"},
+        "historical F116 scope",
+    )
+    if (
+        scope["relationship"] != "current-source-selection-only-supersession"
+        or not require_nonempty(scope["summary"], "historical F116 scope summary")
+        or scope["preserves"] != F116_PRESERVES
+        or scope["does_not_authorize"] != DOES_NOT_AUTHORIZE
+    ):
+        raise ValueError("historical F116 scope differs or broadens authority")
+    predecessors = require_exact_keys(
+        evidence["predecessor_authorities"], {"historical_f115"},
+        "historical F116 predecessor authorities",
+    )
+    f115 = historical_f115(
+        root, repository, predecessors["historical_f115"], canonical=canonical
+    )
+    implementation = require_exact_keys(
+        evidence["implementation"],
+        {
+            "publisher", "committed_tools", "intermediate_36140_bundle",
+            "current_source_bundle",
+        },
+        "historical F116 implementation",
+    )
+    bridge = parse_bundle_declaration(
+        implementation["intermediate_36140_bundle"],
+        "historical F116 bridge bundle",
+        current=False,
+    )
+    current = parse_bundle_declaration(
+        implementation["current_source_bundle"],
+        "historical F116 current source bundle",
+        current=True,
+    )
+    stable_bundle_validation(
+        repository,
+        root / str(bridge["path"]),
+        str(bridge["sha256"]),
+        str(bridge["head"]),
+        str(bridge["advertised_tip"]["name"]),
+        list(bridge["verified_revisions"]),
+        "historical F116 bridge bundle",
+    )
+    stable_bundle_validation(
+        repository,
+        root / str(current["path"]),
+        str(current["sha256"]),
+        str(current["head"]),
+        "HEAD",
+        list(current["verified_revisions"]),
+        "historical F116 current source bundle",
+    )
+    if (
+        f115["bundle"]["head"] not in set(bridge["verified_revisions"])
+        or not {f115["bundle"]["head"], bridge["head"], current["head"]}.issubset(
+            set(current["verified_revisions"])
+        )
+    ):
+        raise ValueError("historical F116 bundles do not cover the nested F115 chain")
+    tools = committed_tools_at_revision(
+        repository, str(current["head"]), "historical F116"
+    )
+    publisher = next(
+        item for item in tools if item["path"] == PUBLISHER_RELATIVE.as_posix()
+    )
+    if implementation["committed_tools"] != tools or implementation["publisher"] != publisher:
+        raise ValueError("historical F116 committed-tool vector or publisher differs")
+    if current["subject"] != revision_subject(
+        repository, str(current["head"]), "historical F116 current source"
+    ):
+        raise ValueError("historical F116 current source subject differs")
+
+    catalogs = require_exact_keys(
+        evidence["source_archive_catalog"], {"before", "after"},
+        "historical F116 source-archive catalog",
+    )
+    before = require_exact_keys(
+        catalogs["before"],
+        {
+            "readme_sha256", "sha256sums_sha256", "bridge_listed",
+            "final_bundle_listed", "corrupt_c7_listed",
+        },
+        "historical F116 source-archive catalog before",
+    )
+    after = require_exact_keys(
+        catalogs["after"],
+        {
+            "readme_sha256", "sha256sums_sha256", "bridge_listed_exactly_once",
+            "final_bundle_listed_exactly_once", "corrupt_c7_listed",
+            "historical_f115_preserved", "sole_current_source_bundle",
+        },
+        "historical F116 source-archive catalog after",
+    )
+    for catalog, label in ((before, "before"), (after, "after")):
+        for key in ("readme_sha256", "sha256sums_sha256"):
+            require_sha256(catalog[key], f"historical F116 catalog {label} {key}")
+    if (
+        before["bridge_listed"] is not False
+        or before["final_bundle_listed"] is not False
+        or before["corrupt_c7_listed"] is not False
+        or after["bridge_listed_exactly_once"] is not True
+        or after["final_bundle_listed_exactly_once"] is not True
+        or after["corrupt_c7_listed"] is not False
+        or after["historical_f115_preserved"] is not True
+        or after["sole_current_source_bundle"] != current["path"]
+    ):
+        raise ValueError("historical F116 source-archive catalog policy differs")
+
+    expected_verified = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": current["sha256"],
+        "final_head": current["head"],
+        "historical_f115_preserved": True,
+    }
+    review_times = []
+    agents = set()
+    for key, kind, decision in (
+        ("provenance_review", "provenance-security", "approved-for-publication"),
+        ("plasma_review", "plasma-scientific-continuation", "approved"),
+    ):
+        review, _, review_path = loaded[key]
+        review = require_exact_keys(
+            review,
+            {
+                "schema_version", "record_type", "checkpoint", "execution_epoch",
+                "review_kind", "decision", "reviewed_candidate", "published_f116",
+                "reviewer", "reviewed_utc", "findings", "limitations", "verified",
+            },
+            f"historical F116 {key}",
+        )
+        reviewed_candidate = require_exact_keys(
+            review["reviewed_candidate"], {"path", "sha256"},
+            f"historical F116 {key} reviewed candidate",
+        )
+        normalized_absolute(
+            Path(require_nonempty(
+                reviewed_candidate["path"], f"historical F116 {key} reviewed candidate path"
+            )),
+            f"historical F116 {key} reviewed candidate path",
+        )
+        reviewer = require_exact_keys(
+            review["reviewer"], {"agent_id", "identity"},
+            f"historical F116 {key} reviewer",
+        )
+        agent = require_nonempty(
+            reviewer["agent_id"], f"historical F116 {key} reviewer agent ID"
+        )
+        if (
+            review["schema_version"] != 1
+            or review["record_type"]
+            != "stage-i-current-source-authority-supersession-independent-review"
+            or review["checkpoint"] != "F-116"
+            or review["execution_epoch"] != EXECUTION_EPOCH
+            or review["review_kind"] != kind
+            or review["decision"] != decision
+            or reviewed_candidate["sha256"] != evidence_sha
+            or review["published_f116"]
+            != {"path": str(evidence_path), "sha256": evidence_sha}
+            or review["verified"] != expected_verified
+            or agent in agents
+            or not require_nonempty(
+                reviewer["identity"], f"historical F116 {key} reviewer identity"
+            )
+            or not isinstance(review["findings"], list)
+            or not review["findings"]
+            or any(not isinstance(item, str) or not item for item in review["findings"])
+            or not isinstance(review["limitations"], list)
+            or not review["limitations"]
+            or any(not isinstance(item, str) or not item for item in review["limitations"])
+            or INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION not in review["limitations"]
+        ):
+            raise ValueError(f"historical F116 {key} identity or review differs")
+        reviewed = require_utc(review["reviewed_utc"], f"historical F116 {key} timestamp")
+        if reviewed < generated:
+            raise ValueError(f"historical F116 {key} predates evidence")
+        agents.add(agent)
+        review_times.append(reviewed)
+
+    audit, _, audit_path = loaded["publication_audit"]
+    audit = require_exact_keys(
+        audit,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "published_utc", "artifact", "independent_reviews",
+            "historical_f115_authority", "source_archive_catalog",
+            "authority_and_enforcement", "publication",
+        },
+        "historical F116 publication audit",
+    )
+    if (
+        audit["schema_version"] != 1
+        or audit["record_type"]
+        != "stage-i-current-source-authority-supersession-publication-audit"
+        or audit["checkpoint"] != "F-116"
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or audit["historical_f115_authority"] != f115["digests"]
+        or audit["authority_and_enforcement"] != AUTHORIZATION
+        or audit["publication"]
+        != "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
+    ):
+        raise ValueError("historical F116 publication audit identity or authority differs")
+    published = require_utc(audit["published_utc"], "historical F116 publication timestamp")
+    if any(published < reviewed for reviewed in review_times):
+        raise ValueError("historical F116 publication audit predates review")
+    declared_binding(
+        audit["artifact"], evidence_path, evidence_sha, "historical F116 audit artifact"
+    )
+    reviews = require_exact_keys(
+        audit["independent_reviews"],
+        {
+            "reviews_bind_exact_published_f116_sha256",
+            "provenance_security", "plasma_scientific_continuation",
+        },
+        "historical F116 audit independent reviews",
+    )
+    if reviews["reviews_bind_exact_published_f116_sha256"] != evidence_sha:
+        raise ValueError("historical F116 audit review digest binding differs")
+    declared_binding(
+        reviews["provenance_security"],
+        loaded["provenance_review"][2],
+        loaded["provenance_review"][1],
+        "historical F116 provenance review",
+    )
+    declared_binding(
+        reviews["plasma_scientific_continuation"],
+        loaded["plasma_review"][2],
+        loaded["plasma_review"][1],
+        "historical F116 plasma review",
+    )
+    audit_catalog = require_exact_keys(
+        audit["source_archive_catalog"],
+        {
+            "readme", "sha256sums", "bridge_bundle", "current_source_bundle",
+            "corrupt_c7_absent_from_active_checksum_ledger",
+            "sole_current_source_bundle",
+        },
+        "historical F116 audit source-archive catalog",
+    )
+    declared_binding(
+        audit_catalog["readme"], root / "source-archives/README.md",
+        str(after["readme_sha256"]), "historical F116 catalog README", mode="0644",
+    )
+    declared_binding(
+        audit_catalog["sha256sums"], root / "source-archives/SHA256SUMS",
+        str(after["sha256sums_sha256"]), "historical F116 catalog SHA256SUMS", mode="0644",
+    )
+    if audit_catalog["bridge_bundle"] != {
+        "path": str(root / str(bridge["path"])),
+        "sha256": bridge["sha256"],
+        "mode": "0644",
+        "links": 1,
+        "head": bridge["head"],
+        "role": "retained-non-current-bridge",
+        "selected_as_current": False,
+    } or audit_catalog["current_source_bundle"] != {
+        "path": str(root / str(current["path"])),
+        "sha256": current["sha256"],
+        "mode": "0644",
+        "links": 1,
+        "head": current["head"],
+        "selected_as_current": True,
+    } or (
+        audit_catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
+        or audit_catalog["sole_current_source_bundle"] != str(root / str(current["path"]))
+    ):
+        raise ValueError("historical F116 audit catalog binding differs")
+
+    return {
+        "digests": {
+            "evidence_sha256": evidence_sha,
+            "publication_audit_sha256": loaded["publication_audit"][1],
+            "provenance_review_sha256": loaded["provenance_review"][1],
+            "plasma_review_sha256": loaded["plasma_review"][1],
+        },
+        "historical_f115": f115,
+        "bridge": bridge,
+        "bundle": current,
+        "catalog_after": after,
+        "publication_audit_path": audit_path,
+    }
+
+
 def parse_sha256sums(payload: bytes, label: str) -> list[tuple[str, str]]:
     try:
         lines = payload.decode("utf-8").splitlines()
@@ -2332,43 +2741,52 @@ def validate_checksum_entries(source_archives: Path, entries: list[tuple[str, st
             raise ValueError(f"source archive checksum differs: {name}")
 
 
+def catalog_readme_block(*, final_name: str, final_sha256: str,
+                         final_revision: str, final_subject: str) -> bytes:
+    return (
+        f"`{final_name}` records complete history through commit `{final_revision}` "
+        f"(`{final_subject}`). It is the sole current Stage I source-selection bundle "
+        "after independently reviewed F-118 publication. It preserves the immutable "
+        "four-part F-116 authority and every prior active source-archive catalog entry; "
+        "it does not itself authorize prepare or submission. "
+        f"Its SHA-256 is `{final_sha256}`.\n\n"
+    ).encode()
+
+
 def catalog_payloads(old_readme: bytes, old_sums: bytes, *,
-                     bridge_name: str, bridge_sha256: str, bridge_revision: str,
+                     bridge_name: str, predecessor_name: str,
                      final_name: str, final_sha256: str, final_revision: str,
                      final_subject: str) -> tuple[bytes, bytes]:
     marker = b"## AthenaK\n\n"
     if old_readme.count(marker) != 1:
         raise ValueError("source-archive README lacks one exact AthenaK insertion marker")
-    for name in (bridge_name, final_name):
-        if name.encode() in old_readme:
-            raise ValueError(f"source-archive README already mentions {name}")
-    block = (
-        f"`{final_name}` records complete history through commit `{final_revision}` "
-        f"(`{final_subject}`). It is the sole current Stage I source-selection bundle "
-        "after independently reviewed F-116 publication. It preserves F-115 as immutable "
-        "historical R03 s02 authority and does not itself authorize prepare or submission. "
-        f"Its SHA-256 is `{final_sha256}`.\n\n"
-        f"`{bridge_name}` records complete history through commit `{bridge_revision}`. "
-        "It is retained and cataloged as a non-current branch-ref bridge between F-115 "
-        "and the final F-116 tooling revision; it is never selected as current source "
-        f"authority. Its SHA-256 is `{bridge_sha256}`.\n\n"
-    ).encode()
+    for name in (bridge_name, predecessor_name):
+        if name.encode() not in old_readme:
+            raise ValueError(f"source-archive README does not preserve {name}")
+    if final_name.encode() in old_readme:
+        raise ValueError(f"source-archive README already mentions {final_name}")
+    block = catalog_readme_block(
+        final_name=final_name,
+        final_sha256=final_sha256,
+        final_revision=final_revision,
+        final_subject=final_subject,
+    )
     new_readme = old_readme.replace(marker, marker + block, 1)
     entries = parse_sha256sums(old_sums, "source-archive SHA256SUMS")
     names = {name for _, name in entries}
-    if bridge_name in names or final_name in names:
-        raise ValueError("source-archive checksum ledger already lists a promoted F-116 bundle")
+    if bridge_name not in names or predecessor_name not in names:
+        raise ValueError("source-archive checksum ledger omits an F118 predecessor bundle")
+    if final_name in names:
+        raise ValueError("source-archive checksum ledger already lists the F118 final bundle")
     new_sums = old_sums
     if new_sums and not new_sums.endswith(b"\n"):
         raise ValueError("source-archive SHA256SUMS must end newline")
-    new_sums += (
-        f"{bridge_sha256}  {bridge_name}\n"
-        f"{final_sha256}  {final_name}\n"
-    ).encode()
+    new_sums += f"{final_sha256}  {final_name}\n".encode()
     return new_readme, new_sums
 
 
-def validate_catalog_before(root: Path, f115: dict[str, object], bridge: dict[str, object],
+def validate_catalog_before(root: Path, f116: dict[str, object],
+                            bridge: dict[str, object], predecessor: dict[str, object],
                             final: dict[str, object], final_payload: bytes
                             ) -> dict[str, object]:
     source_archives = root / "source-archives"
@@ -2376,22 +2794,43 @@ def validate_catalog_before(root: Path, f115: dict[str, object], bridge: dict[st
     sums_path = source_archives / "SHA256SUMS"
     old_readme, old_readme_sha = read_file(readme_path, "source-archive README", mode=0o644)
     old_sums, old_sums_sha = read_file(sums_path, "source-archive SHA256SUMS", mode=0o644)
+    f116_catalog_after = require_exact_keys(
+        f116["catalog_after"],
+        {
+            "readme_sha256", "sha256sums_sha256", "bridge_listed_exactly_once",
+            "final_bundle_listed_exactly_once", "corrupt_c7_listed",
+            "historical_f115_preserved", "sole_current_source_bundle",
+        },
+        "authenticated F116 source-archive catalog after",
+    )
+    if (
+        old_readme_sha != f116_catalog_after["readme_sha256"]
+        or old_sums_sha != f116_catalog_after["sha256sums_sha256"]
+    ):
+        raise ValueError(
+            "live predecessor source-archive catalog differs from authenticated "
+            "F116 catalog_after"
+        )
     entries = parse_sha256sums(old_sums, "source-archive SHA256SUMS")
     validate_checksum_entries(source_archives, entries)
     names = [name for _, name in entries]
-    f115_name = Path(str(f115["bundle"]["path"])).name
+    f115_name = Path(str(f116["historical_f115"]["bundle"]["path"])).name
+    predecessor_name = str(predecessor["name"])
     if names.count(f115_name) != 1:
         raise ValueError("historical F115 bundle is not listed exactly once")
+    if names.count(str(bridge["name"])) != 1:
+        raise ValueError("historical bridge bundle is not listed exactly once")
+    if names.count(predecessor_name) != 1:
+        raise ValueError("F116 predecessor bundle is not listed exactly once")
     if CORRUPT_C7_NAME in names:
         raise ValueError("corrupt C7 bundle reappeared in active checksum ledger")
-    if names.count(str(bridge["name"])) or names.count(str(final["name"])):
-        raise ValueError("bridge or final F-116 bundle is already cataloged")
+    if names.count(str(final["name"])):
+        raise ValueError("final F118 bundle is already cataloged")
     new_readme, new_sums = catalog_payloads(
         old_readme,
         old_sums,
         bridge_name=str(bridge["name"]),
-        bridge_sha256=str(bridge["sha256"]),
-        bridge_revision=str(bridge["head"]),
+        predecessor_name=predecessor_name,
         final_name=str(final["name"]),
         final_sha256=str(final["sha256"]),
         final_revision=str(final["head"]),
@@ -2404,11 +2843,13 @@ def validate_catalog_before(root: Path, f115: dict[str, object], bridge: dict[st
     new_names = [name for _, name in new_entries]
     if (
         new_names.count(str(bridge["name"])) != 1
+        or new_names.count(predecessor_name) != 1
         or new_names.count(str(final["name"])) != 1
         or CORRUPT_C7_NAME in new_names
         or new_names.count(f115_name) != 1
+        or new_entries[:-1] != entries
     ):
-        raise ValueError("new source-archive checksum ledger violates F-116 catalog policy")
+        raise ValueError("new source-archive checksum ledger violates F-118 catalog policy")
     return {
         "old_readme": old_readme,
         "old_sums": old_sums,
@@ -2417,17 +2858,22 @@ def validate_catalog_before(root: Path, f115: dict[str, object], bridge: dict[st
         "before": {
             "readme_sha256": old_readme_sha,
             "sha256sums_sha256": old_sums_sha,
-            "bridge_listed": False,
+            "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
             "final_bundle_listed": False,
             "corrupt_c7_listed": False,
+            "historical_f115_preserved": True,
         },
         "after": {
             "readme_sha256": sha256_bytes(new_readme),
             "sha256sums_sha256": sha256_bytes(new_sums),
             "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
             "final_bundle_listed_exactly_once": True,
             "corrupt_c7_listed": False,
             "historical_f115_preserved": True,
+            "historical_f116_preserved": True,
+            "all_prior_checksum_entries_preserved": True,
             "sole_current_source_bundle": str(final["path"]),
         },
     }
@@ -2493,6 +2939,55 @@ def parse_bundle_declaration(value: object, label: str, *,
     }
 
 
+def parse_predecessor_bundle_declaration(value: object, label: str) -> dict[str, object]:
+    retained = require_exact_keys(
+        value,
+        {
+            "path", "sha256", "complete_history", "head", "advertised_tip",
+            "verified_revisions", "selected_as_current", "role", "subject",
+        },
+        label,
+    )
+    selected = {
+        **retained,
+        "candidate_path": "/retained-predecessor-not-a-candidate",
+        "selected_as_current": True,
+    }
+    selected.pop("role")
+    parsed = parse_bundle_declaration(selected, label, current=True)
+    if (
+        retained["selected_as_current"] is not False
+        or retained["role"] != "retained-non-current-predecessor"
+    ):
+        raise ValueError(f"{label} role or selection declaration differs")
+    return {
+        **retained,
+        "path": parsed["path"],
+        "name": parsed["name"],
+        "sha256": parsed["sha256"],
+        "head": parsed["head"],
+        "verified_revisions": parsed["verified_revisions"],
+        "subject": parsed["subject"],
+    }
+
+
+def retained_predecessor_declaration(f116: dict[str, object]) -> dict[str, object]:
+    bundle = f116["bundle"]
+    if not isinstance(bundle, dict):
+        raise ValueError("historical F116 current source bundle is missing")
+    return {
+        "path": bundle["path"],
+        "sha256": bundle["sha256"],
+        "complete_history": True,
+        "head": bundle["head"],
+        "advertised_tip": bundle["advertised_tip"],
+        "verified_revisions": bundle["verified_revisions"],
+        "selected_as_current": False,
+        "role": "retained-non-current-predecessor",
+        "subject": bundle["subject"],
+    }
+
+
 def parse_evidence(value: dict[str, object], *, root: Path, repository: Path,
                    evidence_candidate_path: Path, bundle_candidate_path: Path,
                    publisher_sha256: str, canonical: bool,
@@ -2506,7 +3001,7 @@ def parse_evidence(value: dict[str, object], *, root: Path, repository: Path,
             "source_archive_catalog", "authorization", "validation",
             "publication_requirements",
         },
-        "F116 evidence",
+        "F118 evidence",
     )
     if (
         evidence["schema_version"] != 1
@@ -2514,50 +3009,54 @@ def parse_evidence(value: dict[str, object], *, root: Path, repository: Path,
         or evidence["checkpoint"] != CHECKPOINT
         or evidence["execution_epoch"] != EXECUTION_EPOCH
     ):
-        raise ValueError("F116 evidence identity differs")
-    require_utc(evidence["generated_utc"], "F116 evidence generation timestamp")
+        raise ValueError("F118 evidence identity differs")
+    require_utc(evidence["generated_utc"], "F118 evidence generation timestamp")
     scope = require_exact_keys(
         evidence["scope"],
         {"relationship", "summary", "preserves", "does_not_authorize"},
-        "F116 scope",
+        "F118 scope",
     )
     if (
         scope["relationship"] != "current-source-selection-only-supersession"
-        or not require_nonempty(scope["summary"], "F116 scope summary")
+        or not require_nonempty(scope["summary"], "F118 scope summary")
         or scope["preserves"] != PRESERVES
         or scope["does_not_authorize"] != DOES_NOT_AUTHORIZE
     ):
-        raise ValueError("F116 scope differs or broadens authority")
+        raise ValueError("F118 scope differs or broadens authority")
     predecessors = require_exact_keys(
-        evidence["predecessor_authorities"], {"historical_f115"},
-        "F116 predecessor authorities",
+        evidence["predecessor_authorities"], {"historical_f116"},
+        "F118 predecessor authorities",
     )
     implementation = require_exact_keys(
         evidence["implementation"],
         {
             "publisher", "committed_tools", "intermediate_36140_bundle",
-            "current_source_bundle",
+            "predecessor_current_source_bundle", "current_source_bundle",
         },
-        "F116 implementation",
+        "F118 implementation",
     )
     bridge = parse_bundle_declaration(
-        implementation["intermediate_36140_bundle"], "F116 bridge bundle", current=False
+        implementation["intermediate_36140_bundle"], "F118 bridge bundle", current=False
     )
     final = parse_bundle_declaration(
-        implementation["current_source_bundle"], "F116 current source bundle", current=True
+        implementation["current_source_bundle"], "F118 current source bundle", current=True
+    )
+    predecessor = parse_predecessor_bundle_declaration(
+        implementation["predecessor_current_source_bundle"],
+        "F118 predecessor current source bundle",
     )
     if final["candidate_path"] != bundle_candidate_path:
-        raise ValueError("F116 final bundle candidate path differs")
+        raise ValueError("F118 final bundle candidate path differs")
     if canonical and (
         bridge["head"] != BRIDGE_REVISION
         or bridge["sha256"] != BRIDGE_SHA256
         or bridge["name"] != BRIDGE_NAME
     ):
-        raise ValueError("canonical F116 bridge identity differs")
+        raise ValueError("canonical F118 bridge identity differs")
     head = final["head"]
     tools = committed_tools(repository, head, publisher_sha256)
     if implementation["committed_tools"] != tools:
-        raise ValueError("F116 committed-tool vector differs")
+        raise ValueError("F118 committed-tool vector differs")
     publisher = {
         "path": PUBLISHER_RELATIVE.as_posix(),
         "revision": head,
@@ -2565,33 +3064,34 @@ def parse_evidence(value: dict[str, object], *, root: Path, repository: Path,
         "mode": REQUIRED_TOOLS[PUBLISHER_RELATIVE.as_posix()],
     }
     if implementation["publisher"] != publisher:
-        raise ValueError("F116 publisher binding differs")
+        raise ValueError("F118 publisher binding differs")
     subject = git_run(repository, ["show", "-s", "--format=%s", head])
     try:
         committed_subject = subject.stdout.decode("utf-8").rstrip("\n")
     except UnicodeDecodeError as error:
-        raise ValueError("F116 final HEAD subject is not UTF-8") from error
+        raise ValueError("F118 final HEAD subject is not UTF-8") from error
     if subject.returncode or not committed_subject or final["subject"] != committed_subject:
-        raise ValueError("F116 final HEAD subject differs")
-    required = {head, bridge["head"]}
+        raise ValueError("F118 final HEAD subject differs")
+    required = {head, bridge["head"], predecessor["head"]}
     if canonical:
         required |= PRODUCTION_REQUIRED_REVISIONS
     if not required.issubset(set(final["verified_revisions"])):
-        raise ValueError("F116 final bundle verified revisions omit required history")
+        raise ValueError("F118 final bundle verified revisions omit required history")
     if evidence["source_archive_catalog"] != {
         "before": old_catalog,
         "after": new_catalog,
     }:
-        raise ValueError("F116 source-archive catalog binding differs")
+        raise ValueError("F118 source-archive catalog binding differs")
     if evidence["authorization"] != AUTHORIZATION:
-        raise ValueError("F116 evidence broadens source-selection-only authority")
+        raise ValueError("F118 evidence broadens source-selection-only authority")
     if evidence["validation"] != VALIDATION_CLAIMS:
-        raise ValueError("F116 validation claims differ")
+        raise ValueError("F118 validation claims differ")
     if evidence["publication_requirements"] != PUBLICATION_REQUIREMENTS:
-        raise ValueError("F116 publication requirements differ")
+        raise ValueError("F118 publication requirements differ")
     return {
-        "historical_f115_bindings": predecessors["historical_f115"],
+        "historical_f116_bindings": predecessors["historical_f116"],
         "bridge": bridge,
+        "predecessor": predecessor,
         "final": final,
         "head": head,
         "tools": tools,
@@ -2604,11 +3104,13 @@ def review_verified(final: dict[str, object]) -> dict[str, object]:
     return {
         "authorization_broadening": False,
         "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
         "corrupt_c7_excluded": True,
         "current_source_selection_only": True,
         "final_bundle_sha256": final["sha256"],
         "final_head": final["head"],
         "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
     }
 
 
@@ -2644,15 +3146,15 @@ def parse_reviews(provenance: dict[str, object], plasma: dict[str, object], *,
     role_agents = {}
     reviewed_times = []
     for value, label, kind, decision in (
-        (provenance, "F116 provenance review", "provenance-security",
+        (provenance, "F118 provenance review", "provenance-security",
          "approved-for-publication"),
-        (plasma, "F116 plasma review", "plasma-scientific-continuation", "approved"),
+        (plasma, "F118 plasma review", "plasma-scientific-continuation", "approved"),
     ):
         review = require_exact_keys(
             value,
             {
                 "schema_version", "record_type", "checkpoint", "execution_epoch",
-                "review_kind", "decision", "reviewed_candidate", "published_f116",
+                "review_kind", "decision", "reviewed_candidate", "published_f118",
                 "reviewer", "reviewed_utc", "findings", "limitations", "verified",
             },
             label,
@@ -2667,7 +3169,7 @@ def parse_reviews(provenance: dict[str, object], plasma: dict[str, object], *,
             or review["decision"] != decision
             or review["reviewed_candidate"]
             != {"path": str(evidence_candidate_path), "sha256": evidence_sha256}
-            or review["published_f116"]
+            or review["published_f118"]
             != {"path": str(evidence_path), "sha256": evidence_sha256}
             or review["verified"] != review_verified(final)
         ):
@@ -2677,7 +3179,7 @@ def parse_reviews(provenance: dict[str, object], plasma: dict[str, object], *,
         agent = require_nonempty(reviewer["agent_id"], f"{label} reviewer agent ID")
         require_nonempty(reviewer["identity"], f"{label} reviewer identity")
         if agent in agents:
-            raise ValueError("F116 independent reviews do not have distinct reviewers")
+            raise ValueError("F118 independent reviews do not have distinct reviewers")
         agents.add(agent)
         role_agents[kind] = agent
         if (
@@ -2697,11 +3199,11 @@ def parse_reviews(provenance: dict[str, object], plasma: dict[str, object], *,
                 f"{label} must state the non-cryptographic reviewer identity limitation"
             )
         reviewed = require_utc(review["reviewed_utc"], f"{label} timestamp")
-        if reviewed < require_utc(generated_utc, "F116 evidence generation timestamp"):
-            raise ValueError(f"{label} predates F116 evidence")
+        if reviewed < require_utc(generated_utc, "F118 evidence generation timestamp"):
+            raise ValueError(f"{label} predates F118 evidence")
         reviewed_times.append(reviewed)
     declared_process_independence_assurance(
-        role_agents, "F116 independent-review process"
+        role_agents, "F118 independent-review process"
     )
     return reviewed_times[0].isoformat(), reviewed_times[1].isoformat()
 
@@ -2709,17 +3211,18 @@ def parse_reviews(provenance: dict[str, object], plasma: dict[str, object], *,
 def parse_audit(value: dict[str, object], *, root: Path, evidence_sha256: str,
                 provenance_sha256: str, plasma_sha256: str,
                 final: dict[str, object], bridge: dict[str, object],
-                f115: dict[str, object], catalog_after: dict[str, object],
+                predecessor: dict[str, object], f116: dict[str, object],
+                catalog_after: dict[str, object],
                 reviewed_times: tuple[str, str]) -> None:
     audit = require_exact_keys(
         value,
         {
             "schema_version", "record_type", "checkpoint", "execution_epoch",
             "published_utc", "artifact", "independent_reviews",
-            "historical_f115_authority", "source_archive_catalog",
+            "historical_f116_authority", "source_archive_catalog",
             "authority_and_enforcement", "publication",
         },
-        "F116 publication audit",
+        "F118 publication audit",
     )
     if (
         audit["schema_version"] != 1
@@ -2729,51 +3232,52 @@ def parse_audit(value: dict[str, object], *, root: Path, evidence_sha256: str,
         or audit["execution_epoch"] != EXECUTION_EPOCH
         or audit["publication"]
         != "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
-        or audit["historical_f115_authority"] != f115["digests"]
+        or audit["historical_f116_authority"] != f116["digests"]
         or audit["authority_and_enforcement"] != AUTHORIZATION
     ):
-        raise ValueError("F116 publication audit identity or authority differs")
-    published = require_utc(audit["published_utc"], "F116 publication timestamp")
-    if any(published < require_utc(value, "F116 review timestamp") for value in reviewed_times):
-        raise ValueError("F116 publication audit predates independent review")
-    evidence_path = root / F116_PATHS["evidence"]
-    provenance_path = root / F116_PATHS["provenance_review"]
-    plasma_path = root / F116_PATHS["plasma_review"]
-    declared_binding(audit["artifact"], evidence_path, evidence_sha256, "F116 audit artifact")
+        raise ValueError("F118 publication audit identity or authority differs")
+    published = require_utc(audit["published_utc"], "F118 publication timestamp")
+    if any(published < require_utc(value, "F118 review timestamp") for value in reviewed_times):
+        raise ValueError("F118 publication audit predates independent review")
+    evidence_path = root / F118_PATHS["evidence"]
+    provenance_path = root / F118_PATHS["provenance_review"]
+    plasma_path = root / F118_PATHS["plasma_review"]
+    declared_binding(audit["artifact"], evidence_path, evidence_sha256, "F118 audit artifact")
     reviews = require_exact_keys(
         audit["independent_reviews"],
         {
-            "reviews_bind_exact_published_f116_sha256",
+            "reviews_bind_exact_published_f118_sha256",
             "provenance_security", "plasma_scientific_continuation",
         },
-        "F116 audit independent reviews",
+        "F118 audit independent reviews",
     )
-    if reviews["reviews_bind_exact_published_f116_sha256"] != evidence_sha256:
-        raise ValueError("F116 audit review digest binding differs")
+    if reviews["reviews_bind_exact_published_f118_sha256"] != evidence_sha256:
+        raise ValueError("F118 audit review digest binding differs")
     declared_binding(
         reviews["provenance_security"], provenance_path, provenance_sha256,
-        "F116 provenance review",
+        "F118 provenance review",
     )
     declared_binding(
         reviews["plasma_scientific_continuation"], plasma_path, plasma_sha256,
-        "F116 plasma review",
+        "F118 plasma review",
     )
     catalog = require_exact_keys(
         audit["source_archive_catalog"],
         {
-            "readme", "sha256sums", "bridge_bundle", "current_source_bundle",
+            "readme", "sha256sums", "bridge_bundle",
+            "predecessor_current_source_bundle", "current_source_bundle",
             "corrupt_c7_absent_from_active_checksum_ledger",
             "sole_current_source_bundle",
         },
-        "F116 audit source-archive catalog",
+        "F118 audit source-archive catalog",
     )
     declared_binding(
         catalog["readme"], root / "source-archives/README.md",
-        str(catalog_after["readme_sha256"]), "F116 catalog README", mode="0644",
+        str(catalog_after["readme_sha256"]), "F118 catalog README", mode="0644",
     )
     declared_binding(
         catalog["sha256sums"], root / "source-archives/SHA256SUMS",
-        str(catalog_after["sha256sums_sha256"]), "F116 catalog SHA256SUMS", mode="0644",
+        str(catalog_after["sha256sums_sha256"]), "F118 catalog SHA256SUMS", mode="0644",
     )
     if catalog["bridge_bundle"] != {
         "path": str(root / str(bridge["path"])),
@@ -2784,7 +3288,17 @@ def parse_audit(value: dict[str, object], *, root: Path, evidence_sha256: str,
         "role": "retained-non-current-bridge",
         "selected_as_current": False,
     }:
-        raise ValueError("F116 audit bridge binding differs")
+        raise ValueError("F118 audit bridge binding differs")
+    if catalog["predecessor_current_source_bundle"] != {
+        "path": str(root / str(predecessor["path"])),
+        "sha256": predecessor["sha256"],
+        "mode": "0644",
+        "links": 1,
+        "head": predecessor["head"],
+        "role": "retained-non-current-predecessor",
+        "selected_as_current": False,
+    }:
+        raise ValueError("F118 audit predecessor current bundle binding differs")
     if catalog["current_source_bundle"] != {
         "path": str(root / str(final["path"])),
         "sha256": final["sha256"],
@@ -2793,12 +3307,12 @@ def parse_audit(value: dict[str, object], *, root: Path, evidence_sha256: str,
         "head": final["head"],
         "selected_as_current": True,
     }:
-        raise ValueError("F116 audit current bundle binding differs")
+        raise ValueError("F118 audit current bundle binding differs")
     if (
         catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
         or catalog["sole_current_source_bundle"] != str(root / str(final["path"]))
     ):
-        raise ValueError("F116 audit catalog authority differs")
+        raise ValueError("F118 audit catalog authority differs")
 
 
 def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool,
@@ -2818,12 +3332,12 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
         plasma = json.loads(plasma_payload)
         audit = json.loads(audit_payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("F116 transaction payload is not valid JSON") from error
+        raise ValueError("F118 transaction payload is not valid JSON") from error
     for value, payload, label in (
-        (evidence, evidence_payload, "F116 evidence"),
-        (provenance, provenance_payload, "F116 provenance review"),
-        (plasma, plasma_payload, "F116 plasma review"),
-        (audit, audit_payload, "F116 publication audit"),
+        (evidence, evidence_payload, "F118 evidence"),
+        (provenance, provenance_payload, "F118 provenance review"),
+        (plasma, plasma_payload, "F118 plasma review"),
+        (audit, audit_payload, "F118 publication audit"),
     ):
         if not isinstance(value, dict) or canonical_json(value) != payload:
             raise ValueError(f"{label} payload is not stable canonical JSON")
@@ -2831,23 +3345,27 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
         evidence.get("implementation"),
         {
             "publisher", "committed_tools", "intermediate_36140_bundle",
-            "current_source_bundle",
+            "predecessor_current_source_bundle", "current_source_bundle",
         },
-        "F116 implementation",
+        "F118 implementation",
     )
     bridge = parse_bundle_declaration(
-        preliminary["intermediate_36140_bundle"], "F116 bridge bundle", current=False
+        preliminary["intermediate_36140_bundle"], "F118 bridge bundle", current=False
     )
     final = parse_bundle_declaration(
-        preliminary["current_source_bundle"], "F116 current source bundle", current=True
+        preliminary["current_source_bundle"], "F118 current source bundle", current=True
+    )
+    predecessor = parse_predecessor_bundle_declaration(
+        preliminary["predecessor_current_source_bundle"],
+        "F118 predecessor current source bundle",
     )
     if final["sha256"] != bundle_sha256:
-        raise ValueError("F116 evidence final bundle digest differs from selected candidate")
+        raise ValueError("F118 evidence final bundle digest differs from selected candidate")
     if (
         expected_bundle_candidate_path is not None
         and final["candidate_path"] != expected_bundle_candidate_path
     ):
-        raise ValueError("F116 transaction final-bundle candidate path differs")
+        raise ValueError("F118 transaction final-bundle candidate path differs")
     bridge_path = root / str(bridge["path"])
     stable_bundle_validation(
         repository,
@@ -2856,7 +3374,16 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
         str(bridge["head"]),
         str(bridge["advertised_tip"]["name"]),
         list(bridge["verified_revisions"]),
-        "F116 retained bridge bundle",
+        "F118 retained bridge bundle",
+    )
+    stable_bundle_validation(
+        repository,
+        root / str(predecessor["path"]),
+        str(predecessor["sha256"]),
+        str(predecessor["head"]),
+        "HEAD",
+        list(predecessor["verified_revisions"]),
+        "F118 retained predecessor current source bundle",
     )
     stable_bundle_validation(
         repository,
@@ -2865,14 +3392,14 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
         str(final["head"]),
         "HEAD",
         list(final["verified_revisions"]),
-        "F116 final source bundle",
+        "F118 final source bundle",
     )
     final_payload, _ = read_file(
-        bundle_path, "F116 final source bundle payload",
+        bundle_path, "F118 final source bundle payload",
         expected=bundle_sha256, mode=0o644,
     )
     catalog = validate_catalog_payload_pair(
-        root, old_readme, old_sums, new_readme, new_sums, bridge, final,
+        root, old_readme, old_sums, new_readme, new_sums, bridge, predecessor, final,
         final_payload,
     )
     parsed = parse_evidence(
@@ -2886,15 +3413,21 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
         old_catalog=catalog["before"],
         new_catalog=catalog["after"],
     )
-    f115 = historical_f115(
-        root, repository, parsed["historical_f115_bindings"], canonical=canonical
+    f116 = historical_f116(
+        root, repository, parsed["historical_f116_bindings"], canonical=canonical
     )
-    if f115["bundle"]["head"] not in set(final["verified_revisions"]):
-        raise ValueError("F116 final bundle does not cover historical F115 source")
-    f115_name = Path(str(f115["bundle"]["path"])).name
+    expected_predecessor = parse_predecessor_bundle_declaration(
+        retained_predecessor_declaration(f116),
+        "authenticated historical F116 predecessor current source bundle",
+    )
+    if bridge != f116["bridge"] or predecessor != expected_predecessor:
+        raise ValueError("F118 retained predecessor bundle declarations differ from F116")
+    if f116["bundle"]["head"] not in set(final["verified_revisions"]):
+        raise ValueError("F118 final bundle does not cover historical F116 source")
+    f115_name = Path(str(f116["historical_f115"]["bundle"]["path"])).name
     for payload, label in (
-        (old_sums, "F116 predecessor checksum ledger"),
-        (new_sums, "F116 published checksum ledger"),
+        (old_sums, "F118 predecessor checksum ledger"),
+        (new_sums, "F118 published checksum ledger"),
     ):
         if [name for _, name in parse_sha256sums(payload, label)].count(f115_name) != 1:
             raise ValueError(f"{label} does not preserve historical F115 exactly once")
@@ -2903,7 +3436,7 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
         plasma,
         evidence_candidate_path=evidence_path,
         evidence_sha256=evidence_sha256,
-        evidence_path=root / F116_PATHS["evidence"],
+        evidence_path=root / F118_PATHS["evidence"],
         final=final,
         generated_utc=str(parsed["generated_utc"]),
     )
@@ -2915,15 +3448,17 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
         plasma_sha256=plasma_sha256,
         final=final,
         bridge=bridge,
-        f115=f115,
+        predecessor=predecessor,
+        f116=f116,
         catalog_after=catalog["after"],
         reviewed_times=reviewed_times,
     )
     return {
         "evidence": evidence,
         "bridge": bridge,
+        "predecessor": predecessor,
         "final": final,
-        "f115": f115,
+        "f116": f116,
         "catalog": catalog,
         "audit_sha256": audit_sha256,
     }
@@ -2931,30 +3466,32 @@ def validate_candidate_payloads(*, root: Path, repository: Path, canonical: bool
 
 def validate_catalog_payload_pair(root: Path, old_readme: bytes, old_sums: bytes,
                                   new_readme: bytes, new_sums: bytes,
-                                  bridge: dict[str, object], final: dict[str, object],
+                                  bridge: dict[str, object],
+                                  predecessor: dict[str, object],
+                                  final: dict[str, object],
                                   final_payload: bytes) -> dict[str, object]:
     generated_readme, generated_sums = catalog_payloads(
         old_readme,
         old_sums,
         bridge_name=str(bridge["name"]),
-        bridge_sha256=str(bridge["sha256"]),
-        bridge_revision=str(bridge["head"]),
+        predecessor_name=str(predecessor["name"]),
         final_name=str(final["name"]),
         final_sha256=str(final["sha256"]),
         final_revision=str(final["head"]),
         final_subject=str(final["subject"]),
     )
     if generated_readme != new_readme or generated_sums != new_sums:
-        raise ValueError("F116 transaction catalog payloads are not deterministic")
+        raise ValueError("F118 transaction catalog payloads are not deterministic")
     entries = parse_sha256sums(old_sums, "old source-archive SHA256SUMS")
     validate_checksum_entries(root / "source-archives", entries)
     old_names = [name for _, name in entries]
     if (
-        str(bridge["name"]) in old_names
+        old_names.count(str(bridge["name"])) != 1
+        or old_names.count(str(predecessor["name"])) != 1
         or str(final["name"]) in old_names
         or CORRUPT_C7_NAME in old_names
     ):
-        raise ValueError("old source-archive catalog violates F116 predecessor policy")
+        raise ValueError("old source-archive catalog violates F118 predecessor policy")
     new_entries = parse_sha256sums(new_sums, "new source-archive SHA256SUMS")
     validate_checksum_entries(
         root / "source-archives",
@@ -2965,25 +3502,32 @@ def validate_catalog_payload_pair(root: Path, old_readme: bytes, old_sums: bytes
     new_names = [name for _, name in new_entries]
     if (
         new_names.count(str(bridge["name"])) != 1
+        or new_names.count(str(predecessor["name"])) != 1
         or new_names.count(str(final["name"])) != 1
         or CORRUPT_C7_NAME in new_names
+        or new_entries[:-1] != entries
     ):
-        raise ValueError("new source-archive catalog violates F116 policy")
+        raise ValueError("new source-archive catalog violates F118 policy")
     return {
         "before": {
             "readme_sha256": sha256_bytes(old_readme),
             "sha256sums_sha256": sha256_bytes(old_sums),
-            "bridge_listed": False,
+            "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
             "final_bundle_listed": False,
             "corrupt_c7_listed": False,
+            "historical_f115_preserved": True,
         },
         "after": {
             "readme_sha256": sha256_bytes(new_readme),
             "sha256sums_sha256": sha256_bytes(new_sums),
             "bridge_listed_exactly_once": True,
+            "predecessor_current_source_bundle_listed_exactly_once": True,
             "final_bundle_listed_exactly_once": True,
             "corrupt_c7_listed": False,
             "historical_f115_preserved": True,
+            "historical_f116_preserved": True,
+            "all_prior_checksum_entries_preserved": True,
             "sole_current_source_bundle": str(final["path"]),
         },
     }
@@ -2998,7 +3542,7 @@ def root_layout(root: Path) -> dict[str, Path]:
         "transactions": root / "accounting" / TRANSACTION_ROOT_NAME,
         "readme": root / "source-archives/README.md",
         "sha256sums": root / "source-archives/SHA256SUMS",
-        **{f"f116_{key}": root / relative for key, relative in F116_PATHS.items()},
+        **{f"f118_{key}": root / relative for key, relative in F118_PATHS.items()},
     }
 
 
@@ -3298,18 +3842,18 @@ def require_external_draft_output(path: Path, root: Path, label: str) -> Path:
 def require_draftable_state(root: Path, repository: Path,
                             layout: dict[str, Path]) -> None:
     require_other_transactions_empty(layout)
-    for key in F116_PATHS:
-        if os.path.lexists(layout[f"f116_{key}"]):
-            raise ValueError(f"F116 target already exists: {layout[f'f116_{key}']}")
+    for key in F118_PATHS:
+        if os.path.lexists(layout[f"f118_{key}"]):
+            raise ValueError(f"F118 target already exists: {layout[f'f118_{key}']}")
     require_inert_stale_transactions(root, repository, layout)
 
 
-def current_f115_bindings(root: Path, canonical: bool) -> dict[str, object]:
+def current_f116_bindings(root: Path, canonical: bool) -> dict[str, object]:
     retained = {}
-    for key, relative in F115_PATHS.items():
-        _, digest = read_file(root / relative, f"historical F115 {key}", mode=0o444)
-        if canonical and digest != F115_CANONICAL_SHA256[key]:
-            raise ValueError(f"historical F115 {key} digest differs from canonical authority")
+    for key, relative in F116_PATHS.items():
+        _, digest = read_file(root / relative, f"historical F116 {key}", mode=0o444)
+        if canonical and digest != F116_CANONICAL_SHA256[key]:
+            raise ValueError(f"historical F116 {key} digest differs from canonical authority")
         retained[key] = {"path": relative.as_posix(), "sha256": digest}
     return retained
 
@@ -3334,7 +3878,7 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
                    layout: dict[str, Path]) -> Path:
     require_draftable_state(root, repository, layout)
     output = require_external_draft_output(
-        args.evidence_candidate_output, root, "F116 evidence candidate output"
+        args.evidence_candidate_output, root, "F118 evidence candidate output"
     )
     bundle_path = normalized_absolute(args.bundle_candidate, "final bundle candidate")
     bridge_path = normalized_absolute(args.bridge_bundle, "retained bridge bundle")
@@ -3354,14 +3898,12 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
         raise ValueError("canonical retained bridge identity differs")
     final_target = layout["source_archives"] / bundle_path.name
     if final_target.exists():
-        raise ValueError(f"F116 target already exists: {final_target}")
+        raise ValueError(f"F118 target already exists: {final_target}")
 
-    f115_bindings = current_f115_bindings(root, canonical)
-    f115 = historical_f115(root, repository, f115_bindings, canonical=canonical)
-    bridge_revisions = {str(f115["bundle"]["head"]), bridge_head}
-    if canonical:
-        bridge_revisions |= set(PRODUCTION_REQUIRED_REVISIONS)
-    final_revisions = bridge_revisions | {head}
+    f116_bindings = current_f116_bindings(root, canonical)
+    f116 = historical_f116(root, repository, f116_bindings, canonical=canonical)
+    bridge_revisions = set(f116["bridge"]["verified_revisions"])
+    final_revisions = set(f116["bundle"]["verified_revisions"]) | {head}
     stable_bundle_validation(
         repository,
         bridge_path,
@@ -3369,7 +3911,7 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
         bridge_head,
         "refs/heads/feature/cgl-landau-fluid",
         sorted(bridge_revisions),
-        "F116 retained bridge bundle",
+        "F118 retained bridge bundle",
     )
     stable_bundle_validation(
         repository,
@@ -3378,10 +3920,10 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
         head,
         "HEAD",
         sorted(final_revisions),
-        "F116 final source bundle candidate",
+        "F118 final source bundle candidate",
     )
     final_payload, _ = read_file(
-        bundle_path, "F116 final source bundle candidate payload",
+        bundle_path, "F118 final source bundle candidate payload",
         expected=bundle_sha256, mode=0o644,
     )
     bridge = {
@@ -3397,6 +3939,7 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
         "selected_as_current": False,
         "role": "retained-non-current-bridge",
     }
+    predecessor = retained_predecessor_declaration(f116)
     final = {
         "candidate_path": str(bundle_path),
         "path": (PurePosixPath("source-archives") / bundle_path.name).as_posix(),
@@ -3406,19 +3949,27 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
         "advertised_tip": {"revision": head, "name": "HEAD"},
         "verified_revisions": sorted(final_revisions),
         "selected_as_current": True,
-        "subject": revision_subject(repository, head, "F116 final HEAD"),
+        "subject": revision_subject(repository, head, "F118 final HEAD"),
     }
     parsed_bridge = parse_bundle_declaration(
-        bridge, "F116 retained bridge bundle", current=False
+        bridge, "F118 retained bridge bundle", current=False
+    )
+    parsed_predecessor = parse_predecessor_bundle_declaration(
+        predecessor, "F118 retained predecessor current source bundle"
     )
     parsed_final = parse_bundle_declaration(
-        final, "F116 current source bundle", current=True
+        final, "F118 current source bundle", current=True
     )
+    if parsed_bridge != f116["bridge"] or parsed_predecessor != parse_predecessor_bundle_declaration(
+        retained_predecessor_declaration(f116),
+        "authenticated historical F116 predecessor current source bundle",
+    ):
+        raise ValueError("F118 retained predecessor bundle arguments differ from F116")
     catalog = validate_catalog_before(
-        root, f115, parsed_bridge, parsed_final, final_payload
+        root, f116, parsed_bridge, parsed_predecessor, parsed_final, final_payload
     )
     generated_utc = require_utc(
-        args.generated_utc, "F116 evidence generation timestamp"
+        args.generated_utc, "F118 evidence generation timestamp"
     ).isoformat()
     evidence = {
         "schema_version": 1,
@@ -3432,7 +3983,7 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
             "preserves": PRESERVES,
             "does_not_authorize": DOES_NOT_AUTHORIZE,
         },
-        "predecessor_authorities": {"historical_f115": f115_bindings},
+        "predecessor_authorities": {"historical_f116": f116_bindings},
         "implementation": {
             "publisher": {
                 "path": PUBLISHER_RELATIVE.as_posix(),
@@ -3442,6 +3993,7 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
             },
             "committed_tools": committed_tools(repository, head, publisher_sha256),
             "intermediate_36140_bundle": bridge,
+            "predecessor_current_source_bundle": predecessor,
             "current_source_bundle": final,
         },
         "source_archive_catalog": {
@@ -3465,7 +4017,7 @@ def draft_evidence(args: argparse.Namespace, root: Path, repository: Path,
     )
     payload = canonical_json(evidence)
     write_exclusive(output, payload, 0o444)
-    read_file(output, "drafted F116 evidence candidate", expected=sha256_bytes(payload), mode=0o444)
+    read_file(output, "drafted F118 evidence candidate", expected=sha256_bytes(payload), mode=0o444)
     return output
 
 
@@ -3474,33 +4026,42 @@ def reviewed_draft_context(args: argparse.Namespace, root: Path, repository: Pat
                            layout: dict[str, Path]) -> dict[str, object]:
     require_draftable_state(root, repository, layout)
     bundle_path = normalized_absolute(args.bundle_candidate, "final bundle candidate")
-    evidence_path = normalized_absolute(args.evidence_candidate, "F116 evidence candidate")
+    evidence_path = normalized_absolute(args.evidence_candidate, "F118 evidence candidate")
     evidence_payload, evidence_sha256 = candidate_file(
-        evidence_path, args.expected_evidence_sha256, "F116 evidence candidate"
+        evidence_path, args.expected_evidence_sha256, "F118 evidence candidate"
     )
-    evidence = parse_json_payload(evidence_payload, "F116 evidence candidate")
+    evidence = parse_json_payload(evidence_payload, "F118 evidence candidate")
     implementation = evidence.get("implementation")
     if not isinstance(implementation, dict):
-        raise ValueError("F116 evidence implementation is missing")
+        raise ValueError("F118 evidence implementation is missing")
     bridge = parse_bundle_declaration(
-        implementation.get("intermediate_36140_bundle"), "F116 bridge bundle", current=False
+        implementation.get("intermediate_36140_bundle"), "F118 bridge bundle", current=False
     )
     final = parse_bundle_declaration(
-        implementation.get("current_source_bundle"), "F116 current source bundle", current=True
+        implementation.get("current_source_bundle"), "F118 current source bundle", current=True
+    )
+    predecessor = parse_predecessor_bundle_declaration(
+        implementation.get("predecessor_current_source_bundle"),
+        "F118 predecessor current source bundle",
     )
     bundle_sha256 = require_sha256(args.expected_bundle_sha256, "final bundle SHA-256")
     if final["candidate_path"] != bundle_path or final["sha256"] != bundle_sha256:
-        raise ValueError("F116 evidence does not bind the selected final bundle candidate")
+        raise ValueError("F118 evidence does not bind the selected final bundle candidate")
     final_target = root / str(final["path"])
     if final_target.exists():
-        raise ValueError(f"F116 target already exists: {final_target}")
+        raise ValueError(f"F118 target already exists: {final_target}")
     predecessors = require_exact_keys(
-        evidence.get("predecessor_authorities"), {"historical_f115"},
-        "F116 predecessor authorities",
+        evidence.get("predecessor_authorities"), {"historical_f116"},
+        "F118 predecessor authorities",
     )
-    f115 = historical_f115(
-        root, repository, predecessors["historical_f115"], canonical=canonical
+    f116 = historical_f116(
+        root, repository, predecessors["historical_f116"], canonical=canonical
     )
+    if bridge != f116["bridge"] or predecessor != parse_predecessor_bundle_declaration(
+        retained_predecessor_declaration(f116),
+        "authenticated historical F116 predecessor current source bundle",
+    ):
+        raise ValueError("F118 retained predecessor bundle declarations differ from F116")
     stable_bundle_validation(
         repository,
         root / str(bridge["path"]),
@@ -3508,7 +4069,16 @@ def reviewed_draft_context(args: argparse.Namespace, root: Path, repository: Pat
         str(bridge["head"]),
         str(bridge["advertised_tip"]["name"]),
         list(bridge["verified_revisions"]),
-        "F116 retained bridge bundle",
+        "F118 retained bridge bundle",
+    )
+    stable_bundle_validation(
+        repository,
+        root / str(predecessor["path"]),
+        str(predecessor["sha256"]),
+        str(predecessor["head"]),
+        "HEAD",
+        list(predecessor["verified_revisions"]),
+        "F118 retained predecessor current source bundle",
     )
     stable_bundle_validation(
         repository,
@@ -3517,13 +4087,15 @@ def reviewed_draft_context(args: argparse.Namespace, root: Path, repository: Pat
         str(final["head"]),
         "HEAD",
         list(final["verified_revisions"]),
-        "F116 final source bundle candidate",
+        "F118 final source bundle candidate",
     )
     final_payload, _ = read_file(
-        bundle_path, "F116 final source bundle candidate payload",
+        bundle_path, "F118 final source bundle candidate payload",
         expected=bundle_sha256, mode=0o644,
     )
-    catalog = validate_catalog_before(root, f115, bridge, final, final_payload)
+    catalog = validate_catalog_before(
+        root, f116, bridge, predecessor, final, final_payload
+    )
     parsed = parse_evidence(
         evidence,
         root=root,
@@ -3543,16 +4115,16 @@ def reviewed_draft_context(args: argparse.Namespace, root: Path, repository: Pat
         ("plasma", args.plasma_review_candidate, args.expected_plasma_review_sha256),
     ):
         payload, digest = candidate_file(
-            path, expected, f"F116 {key} review candidate"
+            path, expected, f"F118 {key} review candidate"
         )
-        reviews[key] = parse_json_payload(payload, f"F116 {key} review candidate")
+        reviews[key] = parse_json_payload(payload, f"F118 {key} review candidate")
         review_sha256[key] = digest
     reviewed_times = parse_reviews(
         reviews["provenance"],
         reviews["plasma"],
         evidence_candidate_path=evidence_path,
         evidence_sha256=evidence_sha256,
-        evidence_path=layout["f116_evidence"],
+        evidence_path=layout["f118_evidence"],
         final=final,
         generated_utc=str(parsed["generated_utc"]),
     )
@@ -3560,8 +4132,9 @@ def reviewed_draft_context(args: argparse.Namespace, root: Path, repository: Pat
         "evidence_sha256": evidence_sha256,
         "review_sha256": review_sha256,
         "reviewed_times": reviewed_times,
-        "f115": f115,
+        "f116": f116,
         "bridge": bridge,
+        "predecessor": predecessor,
         "final": final,
         "catalog": catalog,
     }
@@ -3571,24 +4144,25 @@ def draft_audit(args: argparse.Namespace, root: Path, repository: Path,
                 canonical: bool, publisher_sha256: str,
                 layout: dict[str, Path]) -> Path:
     output = require_external_draft_output(
-        args.audit_candidate_output, root, "F116 audit candidate output"
+        args.audit_candidate_output, root, "F118 audit candidate output"
     )
     context = reviewed_draft_context(
         args, root, repository, canonical, publisher_sha256, layout
     )
     published_utc = require_utc(
-        args.published_utc, "F116 publication timestamp"
+        args.published_utc, "F118 publication timestamp"
     ).isoformat()
     final = context["final"]
     bridge = context["bridge"]
-    f115 = context["f115"]
+    predecessor = context["predecessor"]
+    f116 = context["f116"]
     catalog = context["catalog"]
     review_sha256 = context["review_sha256"]
     if not all(
         isinstance(value, dict)
-        for value in (final, bridge, f115, catalog, review_sha256)
+        for value in (final, bridge, predecessor, f116, catalog, review_sha256)
     ):
-        raise ValueError("F116 audit drafting context differs")
+        raise ValueError("F118 audit drafting context differs")
     evidence_sha256 = str(context["evidence_sha256"])
     audit = {
         "schema_version": 1,
@@ -3597,22 +4171,22 @@ def draft_audit(args: argparse.Namespace, root: Path, repository: Path,
         "execution_epoch": EXECUTION_EPOCH,
         "published_utc": published_utc,
         "artifact": publication_binding(
-            layout["f116_evidence"], evidence_sha256, "0444"
+            layout["f118_evidence"], evidence_sha256, "0444"
         ),
         "independent_reviews": {
-            "reviews_bind_exact_published_f116_sha256": evidence_sha256,
+            "reviews_bind_exact_published_f118_sha256": evidence_sha256,
             "provenance_security": publication_binding(
-                layout["f116_provenance_review"],
+                layout["f118_provenance_review"],
                 str(review_sha256["provenance"]),
                 "0444",
             ),
             "plasma_scientific_continuation": publication_binding(
-                layout["f116_plasma_review"],
+                layout["f118_plasma_review"],
                 str(review_sha256["plasma"]),
                 "0444",
             ),
         },
-        "historical_f115_authority": f115["digests"],
+        "historical_f116_authority": f116["digests"],
         "source_archive_catalog": {
             "readme": publication_binding(
                 layout["readme"], str(catalog["after"]["readme_sha256"]), "0644"
@@ -3627,6 +4201,15 @@ def draft_audit(args: argparse.Namespace, root: Path, repository: Path,
                 "links": 1,
                 "head": bridge["head"],
                 "role": "retained-non-current-bridge",
+                "selected_as_current": False,
+            },
+            "predecessor_current_source_bundle": {
+                "path": str(root / str(predecessor["path"])),
+                "sha256": predecessor["sha256"],
+                "mode": "0644",
+                "links": 1,
+                "head": predecessor["head"],
+                "role": "retained-non-current-predecessor",
                 "selected_as_current": False,
             },
             "current_source_bundle": {
@@ -3654,13 +4237,14 @@ def draft_audit(args: argparse.Namespace, root: Path, repository: Path,
         plasma_sha256=str(review_sha256["plasma"]),
         final=final,
         bridge=bridge,
-        f115=f115,
+        predecessor=predecessor,
+        f116=f116,
         catalog_after=catalog["after"],
         reviewed_times=context["reviewed_times"],
     )
     payload = canonical_json(audit)
     write_exclusive(output, payload, 0o444)
-    read_file(output, "drafted F116 audit candidate", expected=sha256_bytes(payload), mode=0o444)
+    read_file(output, "drafted F118 audit candidate", expected=sha256_bytes(payload), mode=0o444)
     return output
 
 
@@ -3681,14 +4265,14 @@ def initial_plan(args: argparse.Namespace, root: Path, repository: Path,
     require_inert_stale_transactions(root, repository, layout)
     candidate_paths = {
         "bundle": normalized_absolute(args.bundle_candidate, "final bundle candidate"),
-        "evidence": normalized_absolute(args.evidence_candidate, "F116 evidence candidate"),
+        "evidence": normalized_absolute(args.evidence_candidate, "F118 evidence candidate"),
         "provenance_review": normalized_absolute(
-            args.provenance_review_candidate, "F116 provenance review candidate"
+            args.provenance_review_candidate, "F118 provenance review candidate"
         ),
         "plasma_review": normalized_absolute(
-            args.plasma_review_candidate, "F116 plasma review candidate"
+            args.plasma_review_candidate, "F118 plasma review candidate"
         ),
-        "audit": normalized_absolute(args.audit_candidate, "F116 audit candidate"),
+        "audit": normalized_absolute(args.audit_candidate, "F118 audit candidate"),
     }
     expected = {
         "bundle": args.expected_bundle_sha256,
@@ -3699,44 +4283,53 @@ def initial_plan(args: argparse.Namespace, root: Path, repository: Path,
     }
     payloads = {}
     for key, path in candidate_paths.items():
-        payloads[key], observed = candidate_file(path, expected[key], f"F116 {key} candidate")
+        payloads[key], observed = candidate_file(path, expected[key], f"F118 {key} candidate")
         if observed != expected[key]:
-            raise ValueError(f"F116 {key} candidate checksum differs")
-    evidence = parse_json_payload(payloads["evidence"], "F116 evidence candidate")
+            raise ValueError(f"F118 {key} candidate checksum differs")
+    evidence = parse_json_payload(payloads["evidence"], "F118 evidence candidate")
     implementation = evidence.get("implementation")
     if not isinstance(implementation, dict):
-        raise ValueError("F116 evidence implementation is missing")
+        raise ValueError("F118 evidence implementation is missing")
     bridge = parse_bundle_declaration(
-        implementation.get("intermediate_36140_bundle"), "F116 bridge bundle", current=False
+        implementation.get("intermediate_36140_bundle"), "F118 bridge bundle", current=False
     )
     final = parse_bundle_declaration(
-        implementation.get("current_source_bundle"), "F116 current source bundle", current=True
+        implementation.get("current_source_bundle"), "F118 current source bundle", current=True
+    )
+    predecessor = parse_predecessor_bundle_declaration(
+        implementation.get("predecessor_current_source_bundle"),
+        "F118 predecessor current source bundle",
     )
     if final["candidate_path"] != candidate_paths["bundle"]:
-        raise ValueError("F116 evidence does not bind the selected final bundle candidate")
+        raise ValueError("F118 evidence does not bind the selected final bundle candidate")
     if final["sha256"] != expected["bundle"]:
-        raise ValueError("F116 evidence final bundle SHA-256 differs")
+        raise ValueError("F118 evidence final bundle SHA-256 differs")
     if canonical and (
         bridge["head"] != BRIDGE_REVISION
         or bridge["sha256"] != BRIDGE_SHA256
         or bridge["name"] != BRIDGE_NAME
     ):
-        raise ValueError("canonical F116 bridge identity differs")
+        raise ValueError("canonical F118 bridge identity differs")
     final_target = root / str(final["path"])
     for path in (
         final_target,
-        layout["f116_evidence"],
-        layout["f116_provenance_review"],
-        layout["f116_plasma_review"],
-        layout["f116_publication_audit"],
+        layout["f118_evidence"],
+        layout["f118_provenance_review"],
+        layout["f118_plasma_review"],
+        layout["f118_publication_audit"],
     ):
         if path.exists():
-            raise ValueError(f"F116 target already exists: {path}")
-    f115_bindings = require_exact_keys(
-        evidence.get("predecessor_authorities"), {"historical_f115"},
-        "F116 predecessor authorities",
-    )["historical_f115"]
-    f115 = historical_f115(root, repository, f115_bindings, canonical=canonical)
+            raise ValueError(f"F118 target already exists: {path}")
+    f116_bindings = require_exact_keys(
+        evidence.get("predecessor_authorities"), {"historical_f116"},
+        "F118 predecessor authorities",
+    )["historical_f116"]
+    f116 = historical_f116(root, repository, f116_bindings, canonical=canonical)
+    if bridge != f116["bridge"] or predecessor != parse_predecessor_bundle_declaration(
+        retained_predecessor_declaration(f116),
+        "authenticated historical F116 predecessor current source bundle",
+    ):
+        raise ValueError("F118 retained predecessor bundle declarations differ from F116")
     stable_bundle_validation(
         repository,
         root / str(bridge["path"]),
@@ -3744,7 +4337,16 @@ def initial_plan(args: argparse.Namespace, root: Path, repository: Path,
         str(bridge["head"]),
         str(bridge["advertised_tip"]["name"]),
         list(bridge["verified_revisions"]),
-        "F116 retained bridge bundle",
+        "F118 retained bridge bundle",
+    )
+    stable_bundle_validation(
+        repository,
+        root / str(predecessor["path"]),
+        str(predecessor["sha256"]),
+        str(predecessor["head"]),
+        "HEAD",
+        list(predecessor["verified_revisions"]),
+        "F118 retained predecessor current source bundle",
     )
     stable_bundle_validation(
         repository,
@@ -3753,9 +4355,11 @@ def initial_plan(args: argparse.Namespace, root: Path, repository: Path,
         str(final["head"]),
         "HEAD",
         list(final["verified_revisions"]),
-        "F116 final source bundle candidate",
+        "F118 final source bundle candidate",
     )
-    catalog = validate_catalog_before(root, f115, bridge, final, payloads["bundle"])
+    catalog = validate_catalog_before(
+        root, f116, bridge, predecessor, final, payloads["bundle"]
+    )
     parsed = parse_evidence(
         evidence,
         root=root,
@@ -3767,20 +4371,20 @@ def initial_plan(args: argparse.Namespace, root: Path, repository: Path,
         old_catalog=catalog["before"],
         new_catalog=catalog["after"],
     )
-    if parsed["historical_f115_bindings"] != f115_bindings:
-        raise ValueError("F116 historical F115 authority changed during validation")
-    provenance = parse_json_payload(payloads["provenance_review"], "F116 provenance review")
-    plasma = parse_json_payload(payloads["plasma_review"], "F116 plasma review")
+    if parsed["historical_f116_bindings"] != f116_bindings:
+        raise ValueError("F118 historical F116 authority changed during validation")
+    provenance = parse_json_payload(payloads["provenance_review"], "F118 provenance review")
+    plasma = parse_json_payload(payloads["plasma_review"], "F118 plasma review")
     reviewed_times = parse_reviews(
         provenance,
         plasma,
         evidence_candidate_path=candidate_paths["evidence"],
         evidence_sha256=expected["evidence"],
-        evidence_path=layout["f116_evidence"],
+        evidence_path=layout["f118_evidence"],
         final=final,
         generated_utc=str(parsed["generated_utc"]),
     )
-    audit = parse_json_payload(payloads["audit"], "F116 publication audit")
+    audit = parse_json_payload(payloads["audit"], "F118 publication audit")
     parse_audit(
         audit,
         root=root,
@@ -3789,7 +4393,8 @@ def initial_plan(args: argparse.Namespace, root: Path, repository: Path,
         plasma_sha256=expected["plasma_review"],
         final=final,
         bridge=bridge,
-        f115=f115,
+        predecessor=predecessor,
+        f116=f116,
         catalog_after=catalog["after"],
         reviewed_times=reviewed_times,
     )
@@ -3829,13 +4434,13 @@ TRANSACTION_PAYLOADS = {
 def purge_forensic_only_prepublication_transaction_root(
     layout: dict[str, Path],
 ) -> bool:
-    """Retire one authenticated forensic-only root before F116 is visible."""
+    """Retire one authenticated forensic-only root before F118 is visible."""
 
     transactions = layout["transactions"]
     if not os.path.lexists(transactions):
         return False
     visible_targets = [
-        layout[f"f116_{key}"] for key in F116_PATHS if layout[f"f116_{key}"].exists()
+        layout[f"f118_{key}"] for key in F118_PATHS if layout[f"f118_{key}"].exists()
     ]
     if visible_targets:
         return False
@@ -3941,7 +4546,7 @@ def create_transaction(args: argparse.Namespace, layout: dict[str, Path],
                 "payloads": payload_bindings,
                 "targets": {
                     "bundle": plan["final"]["path"],
-                    **{key: relative.as_posix() for key, relative in F116_PATHS.items()},
+                    **{key: relative.as_posix() for key, relative in F118_PATHS.items()},
                     "readme": "source-archives/README.md",
                     "sha256sums": "source-archives/SHA256SUMS",
                 },
@@ -4304,13 +4909,19 @@ def read_complete_transaction(
             require_relative(value, f"source-authority journal {key} target")
         catalog_keys = {
             "catalog_before": {
-                "readme_sha256", "sha256sums_sha256", "bridge_listed",
+                "readme_sha256", "sha256sums_sha256",
+                "bridge_listed_exactly_once",
+                "predecessor_current_source_bundle_listed_exactly_once",
                 "final_bundle_listed", "corrupt_c7_listed",
+                "historical_f115_preserved",
             },
             "catalog_after": {
                 "readme_sha256", "sha256sums_sha256",
-                "bridge_listed_exactly_once", "final_bundle_listed_exactly_once",
-                "corrupt_c7_listed", "historical_f115_preserved",
+                "bridge_listed_exactly_once",
+                "predecessor_current_source_bundle_listed_exactly_once",
+                "final_bundle_listed_exactly_once", "corrupt_c7_listed",
+                "historical_f115_preserved", "historical_f116_preserved",
+                "all_prior_checksum_entries_preserved",
                 "sole_current_source_bundle",
             },
         }
@@ -4327,13 +4938,22 @@ def read_complete_transaction(
                 )
             catalogs[generation] = catalog
         if (
-            catalogs["catalog_before"]["bridge_listed"] is not False
+            catalogs["catalog_before"]["bridge_listed_exactly_once"] is not True
+            or catalogs["catalog_before"][
+                "predecessor_current_source_bundle_listed_exactly_once"
+            ] is not True
             or catalogs["catalog_before"]["final_bundle_listed"] is not False
             or catalogs["catalog_before"]["corrupt_c7_listed"] is not False
+            or catalogs["catalog_before"]["historical_f115_preserved"] is not True
             or catalogs["catalog_after"]["bridge_listed_exactly_once"] is not True
+            or catalogs["catalog_after"][
+                "predecessor_current_source_bundle_listed_exactly_once"
+            ] is not True
             or catalogs["catalog_after"]["final_bundle_listed_exactly_once"] is not True
             or catalogs["catalog_after"]["corrupt_c7_listed"] is not False
             or catalogs["catalog_after"]["historical_f115_preserved"] is not True
+            or catalogs["catalog_after"]["historical_f116_preserved"] is not True
+            or catalogs["catalog_after"]["all_prior_checksum_entries_preserved"] is not True
             or catalogs["catalog_after"]["sole_current_source_bundle"]
             != targets["bundle"]
         ):
@@ -4587,9 +5207,9 @@ def inert_stale_targets(
         },
         "source-authority journal targets",
     )
-    for key, relative in F116_PATHS.items():
+    for key, relative in F118_PATHS.items():
         if targets[key] != relative.as_posix():
-            raise ValueError(f"source-authority stale F116 {key} target differs")
+            raise ValueError(f"source-authority stale F118 {key} target differs")
     if (
         targets["readme"] != "source-archives/README.md"
         or targets["sha256sums"] != "source-archives/SHA256SUMS"
@@ -4618,7 +5238,7 @@ def inert_stale_targets(
         evidence["implementation"],
         {
             "publisher", "committed_tools", "intermediate_36140_bundle",
-            "current_source_bundle",
+            "predecessor_current_source_bundle", "current_source_bundle",
         },
         "source-authority stale evidence implementation",
     )
@@ -4657,13 +5277,13 @@ def inert_stale_targets(
         raise ValueError("source-authority stale bundle target is not a source-archive child")
     return (
         (bundle, "source-authority stale final source bundle"),
-        (layout["f116_evidence"], "source-authority stale F116 evidence"),
+        (layout["f118_evidence"], "source-authority stale F118 evidence"),
         (
-            layout["f116_provenance_review"],
-            "source-authority stale F116 provenance review",
+            layout["f118_provenance_review"],
+            "source-authority stale F118 provenance review",
         ),
-        (layout["f116_plasma_review"], "source-authority stale F116 plasma review"),
-        (layout["f116_publication_audit"], "source-authority stale F116 publication audit"),
+        (layout["f118_plasma_review"], "source-authority stale F118 plasma review"),
+        (layout["f118_publication_audit"], "source-authority stale F118 publication audit"),
     )
 
 
@@ -5118,9 +5738,9 @@ def ensure_direct_catalog(
     """Publish one reviewed catalog generation without rewriting public bytes."""
 
     old_sha256 = require_sha256(old_sha256, f"{label} predecessor SHA-256")
-    new_sha256 = require_sha256(new_sha256, f"{label} F116 SHA-256")
+    new_sha256 = require_sha256(new_sha256, f"{label} F118 SHA-256")
     if sha256_bytes(payload) != new_sha256:
-        raise ValueError(f"{label} F116 payload checksum differs")
+        raise ValueError(f"{label} F118 payload checksum differs")
     with bound_directory(target.parent, f"{label} parent") as (parent, _):
         try:
             observed = os.stat(target.name, dir_fd=parent, follow_symlinks=False)
@@ -5146,7 +5766,7 @@ def ensure_direct_catalog(
                     return
                 if digest != old_sha256:
                     raise ValueError(
-                        f"{label} is neither reviewed predecessor nor F116 catalog"
+                        f"{label} is neither reviewed predecessor nor F118 catalog"
                     )
                 # Prepare the complete successor before making the predecessor
                 # name absent.  A crash can therefore always continue forward.
@@ -5174,7 +5794,7 @@ def require_recoverable_catalog_state(
     """Require one catalog state that the locked forward transaction can finish."""
 
     old_sha256 = require_sha256(old_sha256, f"{label} predecessor SHA-256")
-    new_sha256 = require_sha256(new_sha256, f"{label} F116 SHA-256")
+    new_sha256 = require_sha256(new_sha256, f"{label} F118 SHA-256")
     with bound_directory(target.parent, f"{label} parent") as (parent, _):
         try:
             observed = os.stat(target.name, dir_fd=parent, follow_symlinks=False)
@@ -5218,11 +5838,11 @@ def require_recoverable_catalog_state(
 def publication_audit_committed(
     layout: dict[str, Path], expected_audit_sha256: str
 ) -> bool:
-    """Return whether the exact single-link 0444 F116 commit marker is visible."""
+    """Return whether the exact single-link 0444 F118 commit marker is visible."""
 
     expected = require_sha256(expected_audit_sha256, "expected audit SHA-256")
-    target = layout["f116_publication_audit"]
-    with bound_directory(target.parent, "F116 publication-audit parent") as (parent, _):
+    target = layout["f118_publication_audit"]
+    with bound_directory(target.parent, "F118 publication-audit parent") as (parent, _):
         try:
             observed = os.stat(target.name, dir_fd=parent, follow_symlinks=False)
         except FileNotFoundError:
@@ -5230,20 +5850,20 @@ def publication_audit_committed(
         retained_mode = stat.S_IMODE(observed.st_mode)
         if observed.st_nlink == 1 and retained_mode in {0o000, 0o600}:
             require_file_profile(
-                observed, "F116 publication audit", mode=retained_mode
+                observed, "F118 publication audit", mode=retained_mode
             )
             return False
         if observed.st_nlink == 2 and retained_mode == 0o444:
             audit_payload, _, audit_profile = read_bound_file(
                 parent,
                 target.name,
-                "F116 linked publication audit",
+                "F118 linked publication audit",
                 expected=expected,
                 mode=0o444,
                 links=2,
             )
             for private in private_publication_names(
-                target.name, "F116 publication audit"
+                target.name, "F118 publication audit"
             ):
                 try:
                     private_profile = os.stat(
@@ -5256,25 +5876,25 @@ def publication_audit_committed(
                 retained, _, _ = read_bound_file(
                     parent,
                     private,
-                    "F116 linked private publication audit",
+                    "F118 linked private publication audit",
                     expected=expected,
                     mode=0o444,
                     links=2,
                 )
                 if retained != audit_payload:
-                    raise ValueError("F116 linked publication audit payload differs")
+                    raise ValueError("F118 linked publication audit payload differs")
                 return False
             raise ValueError(
-                "F116 linked publication audit lacks its deterministic private name"
+                "F118 linked publication audit lacks its deterministic private name"
             )
         if retained_mode != 0o444:
             raise ValueError(
-                f"F116 publication audit mode is {retained_mode:04o}, expected 0444"
+                f"F118 publication audit mode is {retained_mode:04o}, expected 0444"
             )
         durably_authenticate_bound_file(
             parent,
             target.name,
-            "F116 publication audit",
+            "F118 publication audit",
             expected=expected,
             mode=0o444,
             payload=None,
@@ -5755,7 +6375,7 @@ def ensure_catalog(target: Path, payload: bytes, old_sha256: str, new_sha256: st
             except FileNotFoundError:
                 recovery_profile = None
             if recovery_profile is None:
-                raise ValueError(f"{label} is neither reviewed predecessor nor F116 catalog")
+                raise ValueError(f"{label} is neither reviewed predecessor nor F118 catalog")
             recovery_profile = authenticate_or_retire_recovery_file(
                 parent,
                 predecessor_recovery,
@@ -5910,7 +6530,7 @@ def validate_transaction_context(root: Path, repository: Path, canonical: bool,
         raise ValueError("source-authority journal publisher digest differs")
     head = require_revision(publisher["revision"], "source-authority journal publisher revision")
     if repository_head(repository) != head:
-        raise ValueError("live repository HEAD moved after F116 transaction staging")
+        raise ValueError("live repository HEAD moved after F118 transaction staging")
     targets = require_exact_keys(
         journal["targets"],
         {
@@ -5919,9 +6539,9 @@ def validate_transaction_context(root: Path, repository: Path, canonical: bool,
         },
         "source-authority journal targets",
     )
-    for key, relative in F116_PATHS.items():
+    for key, relative in F118_PATHS.items():
         if targets[key] != relative.as_posix():
-            raise ValueError(f"source-authority journal F116 {key} target differs")
+            raise ValueError(f"source-authority journal F118 {key} target differs")
     if targets["readme"] != "source-archives/README.md" or targets[
         "sha256sums"
     ] != "source-archives/SHA256SUMS":
@@ -5997,13 +6617,13 @@ def continue_transaction(args: argparse.Namespace, root: Path, repository: Path,
         raise ValueError("source-authority journal expected digests must be an object")
     final_target = root / str(context["final"]["path"])
     precommit_targets = (
-        (final_target, "F116 final source bundle"),
-        (layout["f116_evidence"], "F116 evidence"),
-        (layout["f116_provenance_review"], "F116 provenance review"),
-        (layout["f116_plasma_review"], "F116 plasma review"),
+        (final_target, "F118 final source bundle"),
+        (layout["f118_evidence"], "F118 evidence"),
+        (layout["f118_provenance_review"], "F118 provenance review"),
+        (layout["f118_plasma_review"], "F118 plasma review"),
         (layout["readme"], "source-archive README"),
         (layout["sha256sums"], "source-archive SHA256SUMS"),
-        (layout["f116_publication_audit"], "F116 publication audit"),
+        (layout["f118_publication_audit"], "F118 publication audit"),
     )
     if publication_audit_committed(layout, str(expected["audit"])):
         # Once the authority commit marker exists, recovery may only verify and
@@ -6016,16 +6636,16 @@ def continue_transaction(args: argparse.Namespace, root: Path, repository: Path,
         return
     ensure_direct_final_file(
         payloads["bundle"], final_target, str(expected["bundle"]),
-        0o644, "F116 final source bundle",
+        0o644, "F118 final source bundle",
     )
     simulation(args, "after-bundle")
     for key, label in (
-        ("evidence", "F116 evidence"),
-        ("provenance_review", "F116 provenance review"),
-        ("plasma_review", "F116 plasma review"),
+        ("evidence", "F118 evidence"),
+        ("provenance_review", "F118 provenance review"),
+        ("plasma_review", "F118 plasma review"),
     ):
         ensure_direct_final_file(
-            payloads[key], layout[f"f116_{key}"], str(expected[key]), 0o444,
+            payloads[key], layout[f"f118_{key}"], str(expected[key]), 0o444,
             label,
         )
     simulation(args, "after-artifacts")
@@ -6057,11 +6677,11 @@ def continue_transaction(args: argparse.Namespace, root: Path, repository: Path,
         require_private_publication_slots_absent(target, label)
     # This immutable audit is the sole authority commit marker and is always last.
     ensure_direct_final_file(
-        payloads["audit"], layout["f116_publication_audit"], str(expected["audit"]),
-        0o444, "F116 publication audit",
+        payloads["audit"], layout["f118_publication_audit"], str(expected["audit"]),
+        0o444, "F118 publication audit",
     )
     require_private_publication_slots_absent(
-        layout["f116_publication_audit"], "F116 publication audit"
+        layout["f118_publication_audit"], "F118 publication audit"
     )
     simulation(args, "after-audit")
     verify_promoted(
@@ -6108,31 +6728,31 @@ def classify_non_authoritative_recovery_debris(layout: dict[str, Path]) -> None:
 def promoted_payloads(layout: dict[str, Path], expected_audit_sha256: str
                       ) -> tuple[dict[str, bytes], dict[str, str]]:
     audit, audit_payload, audit_sha = read_json(
-        layout["f116_publication_audit"], "F116 publication audit",
+        layout["f118_publication_audit"], "F118 publication audit",
         expected=expected_audit_sha256, mode=0o444,
     )
     artifact = audit.get("artifact")
     reviews = audit.get("independent_reviews")
     if not isinstance(artifact, dict) or not isinstance(reviews, dict):
-        raise ValueError("F116 publication audit lacks exact publication bindings")
+        raise ValueError("F118 publication audit lacks exact publication bindings")
     expected = {
         "audit": audit_sha,
-        "evidence": require_sha256(artifact.get("sha256"), "F116 published evidence SHA-256"),
+        "evidence": require_sha256(artifact.get("sha256"), "F118 published evidence SHA-256"),
         "provenance_review": require_sha256(
             reviews.get("provenance_security", {}).get("sha256")
             if isinstance(reviews.get("provenance_security"), dict) else None,
-            "F116 published provenance review SHA-256",
+            "F118 published provenance review SHA-256",
         ),
         "plasma_review": require_sha256(
             reviews.get("plasma_scientific_continuation", {}).get("sha256")
             if isinstance(reviews.get("plasma_scientific_continuation"), dict) else None,
-            "F116 published plasma review SHA-256",
+            "F118 published plasma review SHA-256",
         ),
     }
     payloads = {"audit": audit_payload}
     for key in ("evidence", "provenance_review", "plasma_review"):
         payloads[key], _ = read_file(
-            layout[f"f116_{key}"], f"published F116 {key}",
+            layout[f"f118_{key}"], f"published F118 {key}",
             expected=expected[key], mode=0o444,
         )
     return payloads, expected
@@ -6144,18 +6764,18 @@ def verify_promoted(root: Path, repository: Path, canonical: bool, publisher_sha
     del allow_transaction
     require_other_transactions_empty(layout)
     payloads, expected = promoted_payloads(layout, expected_audit_sha256)
-    evidence = parse_json_payload(payloads["evidence"], "published F116 evidence")
+    evidence = parse_json_payload(payloads["evidence"], "published F118 evidence")
     implementation = evidence.get("implementation")
     if not isinstance(implementation, dict):
-        raise ValueError("published F116 implementation is missing")
+        raise ValueError("published F118 implementation is missing")
     final = parse_bundle_declaration(
-        implementation.get("current_source_bundle"), "published F116 current bundle",
+        implementation.get("current_source_bundle"), "published F118 current bundle",
         current=True,
     )
     old_catalog = evidence.get("source_archive_catalog", {}).get("before")
     new_catalog = evidence.get("source_archive_catalog", {}).get("after")
     if not isinstance(old_catalog, dict) or not isinstance(new_catalog, dict):
-        raise ValueError("published F116 catalog binding is missing")
+        raise ValueError("published F118 catalog binding is missing")
     readme, readme_sha = read_file(layout["readme"], "published source-archive README", mode=0o644)
     sums, sums_sha = read_file(
         layout["sha256sums"], "published source-archive SHA256SUMS", mode=0o644
@@ -6164,51 +6784,46 @@ def verify_promoted(root: Path, repository: Path, canonical: bool, publisher_sha
         readme_sha != new_catalog.get("readme_sha256")
         or sums_sha != new_catalog.get("sha256sums_sha256")
     ):
-        raise ValueError("published source-archive catalogs differ from F116 authority")
-    # Reconstruct the predecessor catalogs by removing the deterministic F116 additions.
+        raise ValueError("published source-archive catalogs differ from F118 authority")
+    # Reconstruct the predecessor catalogs by removing the deterministic F118 additions.
     bridge = parse_bundle_declaration(
-        implementation.get("intermediate_36140_bundle"), "published F116 bridge bundle",
+        implementation.get("intermediate_36140_bundle"), "published F118 bridge bundle",
         current=False,
     )
-    block_readme, _ = catalog_payloads(
-        b"## AthenaK\n\n",
-        b"0" * 64 + b"  placeholder.bundle\n",
-        bridge_name=str(bridge["name"]),
-        bridge_sha256=str(bridge["sha256"]),
-        bridge_revision=str(bridge["head"]),
+    predecessor = parse_predecessor_bundle_declaration(
+        implementation.get("predecessor_current_source_bundle"),
+        "published F118 predecessor current source bundle",
+    )
+    inserted = catalog_readme_block(
         final_name=str(final["name"]),
         final_sha256=str(final["sha256"]),
         final_revision=str(final["head"]),
         final_subject=str(final["subject"]),
     )
-    inserted = block_readme.removeprefix(b"## AthenaK\n\n")
     if readme.count(inserted) != 1:
-        raise ValueError("published README does not contain one exact F116 authority block")
+        raise ValueError("published README does not contain one exact F118 authority block")
     old_readme = readme.replace(inserted, b"", 1)
-    appended = (
-        f"{bridge['sha256']}  {bridge['name']}\n"
-        f"{final['sha256']}  {final['name']}\n"
-    ).encode()
+    appended = f"{final['sha256']}  {final['name']}\n".encode()
     if not sums.endswith(appended):
-        raise ValueError("published SHA256SUMS lacks exact terminal F116 entries")
+        raise ValueError("published SHA256SUMS lacks exact terminal F118 entry")
     old_sums = sums[:-len(appended)]
     if (
         sha256_bytes(old_readme) != old_catalog.get("readme_sha256")
         or sha256_bytes(old_sums) != old_catalog.get("sha256sums_sha256")
     ):
-        raise ValueError("published F116 predecessor catalogs cannot be reconstructed")
+        raise ValueError("published F118 predecessor catalogs cannot be reconstructed")
     provenance_preview = parse_json_payload(
-        payloads["provenance_review"], "published F116 provenance review"
+        payloads["provenance_review"], "published F118 provenance review"
     )
     reviewed_candidate = require_exact_keys(
         provenance_preview.get("reviewed_candidate"), {"path", "sha256"},
-        "published F116 reviewed candidate",
+        "published F118 reviewed candidate",
     )
     if reviewed_candidate["sha256"] != expected["evidence"]:
-        raise ValueError("published F116 reviewed-candidate digest differs")
+        raise ValueError("published F118 reviewed-candidate digest differs")
     reviewed_evidence_path = normalized_absolute(
-        Path(require_nonempty(reviewed_candidate["path"], "published F116 reviewed candidate path")),
-        "published F116 reviewed candidate path",
+        Path(require_nonempty(reviewed_candidate["path"], "published F118 reviewed candidate path")),
+        "published F118 reviewed candidate path",
     )
     validate_candidate_payloads(
         root=root,
@@ -6231,7 +6846,7 @@ def verify_promoted(root: Path, repository: Path, canonical: bool, publisher_sha
         new_readme=readme,
         new_sums=sums,
     )
-    # Once the exact audit commits F116, transaction contents have no authority
+    # Once the exact audit commits F118, transaction contents have no authority
     # over the published generation.  Validate only their bounded root namespace.
     classify_non_authoritative_recovery_debris(layout)
 
@@ -6424,16 +7039,16 @@ def main(argv: list[str] | None = None) -> int:
                 )
             elif args.action == "promote":
                 promote(args, root, repository, canonical, publisher_sha256, layout)
-                result = layout["f116_publication_audit"]
+                result = layout["f118_publication_audit"]
             elif args.action == "recover":
                 recover(args, root, repository, canonical, publisher_sha256, layout)
-                result = layout["f116_publication_audit"]
+                result = layout["f118_publication_audit"]
             else:
                 verify_promoted(
                     root, repository, canonical, publisher_sha256, layout,
                     args.expected_audit_sha256,
                 )
-                result = layout["f116_publication_audit"]
+                result = layout["f118_publication_audit"]
     print(result)
     return 0
 
