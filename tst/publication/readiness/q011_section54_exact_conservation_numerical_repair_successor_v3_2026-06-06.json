@@ -3,7 +3,7 @@
   "schema_version": 1,
   "date": "2026-06-06",
   "gate": "Q-011",
-  "status": "fixed_uniform_numerical_candidate_review_repair_complete_trusted_execution_pending",
+  "status": "fixed_uniform_numerical_candidate_bounded_repair_complete_authenticated_parity_rerun_pending_trusted_execution_pending",
   "qualification_effect": "none",
   "authority": {
     "execution_authorized": false,
@@ -21,11 +21,11 @@
     "primary_worktree_touched": false,
     "protected_historical_files_edited": false
   },
-  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. This review-repair successor preserves the reviewed numerical accounting, closes fixed-uniform topology, executable-reducer closure, ledger-disabled baseline, and source-enforced 2D3V admission findings, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
+  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. This bounded repair preserves the reviewed numerical accounting, requires true 2D plus 2D3V reducer admission, requires an authenticated exact-base and byte/path-distinct executable for ledger-disabled parity, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
   "source_fail_closed_contract": {
     "qualified_topology": "fixed uniform mesh only",
     "qualified_boundary_geometry": "reflecting inner-x1, inflow or outflow outer-x1, periodic transverse boundaries",
-    "required_model": "2D3V cosmic-ray paper_mhd_pic_vl2_tsc with RK2, TSC, coupled momentum and energy feedback, injection with gas subtraction, and user history",
+    "required_model": "true 2D x1-x2 geometry with nx2 greater than 1 and nx3 equal to 1, plus 2D3V cosmic-ray paper_mhd_pic_vl2_tsc with RK2, TSC, coupled momentum and energy feedback, injection with gas subtraction, and user history",
     "validated_mesh_state_requirements": [
       "mesh adaptive and multilevel flags are false",
       "max_level equals root_level",
@@ -42,6 +42,7 @@
       "restored adaptive cooldown metadata even when all blocks are at root level",
       "nonfinite or non-unit restored MeshBlock costs",
       "particle-aware runtime load balancing",
+      "one-dimensional decks labeled as 2D3V",
       "non-2D3V exact-ledger configurations",
       "boundary geometries outside the explicitly enforced Section 5.4 geometry"
     ]
@@ -61,6 +62,7 @@
       "non-unit restored MeshBlock cost",
       "refined adaptive topology hidden by uniform overrides",
       "adaptive restart metadata with root-only blocks",
+      "one-dimensional exact-ledger pure-reducer admission rejection",
       "non-2D3V exact-ledger admission rejection",
       "ledger-disabled nonperiodic 3D baseline admission"
     ]
@@ -81,11 +83,14 @@
     "mpi2_inflow": "not_requested",
     "ledger_disabled_parity": {
       "case": "ledger_disabled_nonperiodic_3d",
-      "base_commit": "1d72534619da277fdd6838cabdab0d465d0a8867",
-      "base_executable_sha256": "e3664bcbfb59e64f18a30613b6c5a43e1add4de5749302c0aba332c7bf139d98",
-      "new_executable_sha256": "bed6cbd4a7302bbd5bf4548a5efe9941562426f3783af3a0d6c1fe32c58641ee",
-      "mhd_history_state_exactly_equal": true,
-      "particle_payload_exactly_equal": true
+      "status": "pending_authenticated_distinct_baseline_rerun",
+      "required_base_commit": "1d72534619da277fdd6838cabdab0d465d0a8867",
+      "required_base_tree": "38c473644a42e01179a7b3140b2ad51e6345d667",
+      "required_base_executable_sha256": "e3664bcbfb59e64f18a30613b6c5a43e1add4de5749302c0aba332c7bf139d98",
+      "required_control_plane_version": "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246",
+      "required_authentication": "read-only clean-candidate revalidation of exact source commit, tree, executable, complete build provenance, current installed control-plane pair, and historical build-receipt control-plane pair",
+      "required_distinctness": "candidate and baseline executable paths and bytes must differ",
+      "prior_unauthenticated_parity_result": "invalidated_not_retained"
     },
     "restart_execution_negative_guards": {
       "exact_ledger_rejects_non_2d3v": {
@@ -149,12 +154,13 @@
     "runtime_source_closure_sha256": "a8a34854a55e7076457e06eac4ab481c5fe71f5b0e7f06cc61a1e4d9077a7791"
   },
   "candidate_preparation_validation": {
-    "focused_tests": "18 passed",
-    "transitive_dependency_adjacent_tests": "19 passed",
+    "focused_tests": "22 passed",
+    "transitive_dependency_adjacent_tests": "12 restart-adjacent tests passed",
     "production_contract_adjacent_tests": "22 passed",
-    "active_q011_adjacent_tests": "277 passed",
-    "mpi_enabled_debug_built_in_pgens_build": "pass",
-    "source_local_engineering_runtime_harness": "serial exact cases, admission/restart guards, and exact-primary-baseline ledger-disabled nonperiodic-3D parity pass; MPI not requested",
+    "active_q011_adjacent_tests": "44 combined focused plus production-contract tests passed; broader prior 277-test sweep not rerun",
+    "mpi_enabled_debug_built_in_pgens_build": "prior pass; executable not rebuilt for Python-only bounded repair",
+    "source_local_engineering_runtime_harness": "prior serial exact cases and admission/restart guards retained; prior unauthenticated ledger-disabled parity result invalidated; authenticated distinct-baseline parity rerun pending; MPI not requested",
+    "installed_control_plane_revalidation_probes": "passed: retained candidate 67a418c432e2d424aa9e6cf5ed16316ea40fc0a4 positively revalidated and rejected against the exact base-commit claim",
     "python_bytecode_compile": "pass",
     "git_diff_check": "pass"
   },
@@ -162,6 +168,7 @@
     "trusted installed-control-plane receipts",
     "No registered execution exists for this current-PIC numerical candidate.",
     "No fresh multi-rank or scheduler runtime evidence exists for this current-PIC numerical candidate.",
+    "Authenticated byte/path-distinct exact-base ledger-disabled nonperiodic-3D parity has not been rerun for this bounded repair.",
     "AMR, SMR, mixed-level exact conservation, migration, and particle-aware runtime load balancing remain outside scope.",
     "The production-target adaptive Section 5.4 deck intentionally fails closed under this candidate.",
     "The pure reducer and source-local harness do not establish build, scheduler, command, or independent-reducer execution provenance.",
@@ -198,7 +205,7 @@
     },
     {
       "path": "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "4a436c320e1520836918282189e6640049a8dd39e2ca6b4838a95a0d4e1439f4"
+      "sha256": "15f72698828413364f0e35e851edd4a0e998a2ce1ff49900c730fc4251a82aad"
     },
     {
       "path": "tst/publication/q011_section54_restart.py",
@@ -210,11 +217,11 @@
     },
     {
       "path": "tst/publication/test_q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "0f6f2a90509b01cfacda809eba7189e6fa2909c5a959e9b8d19541f1cf8ac698"
+      "sha256": "fb237eab0165e8795e69e81efa7f9b756612b783b68828fca3bb38a0c4c265ee"
     },
     {
       "path": "tst/scripts/particles/pic_parallel_shock_exact_conservation_closure_vl2_tsc.py",
-      "sha256": "0138ba844ac413e4bed1b5fc3a89ece8b52ff9cc11cf47f93774d27456e6514a"
+      "sha256": "67415d042791e302f31aa2e854228e5e6891508535289bc093c1be8002fef776"
     }
   ]
 }

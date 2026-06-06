@@ -23,6 +23,22 @@ from tst.publication import q011_section54_restart as restart_layout  # noqa: E4
 
 logger = logging.getLogger("athena" + __name__[7:])
 
+_LEDGER_DISABLED_PARITY_BASE_COMMIT = "1d72534619da277fdd6838cabdab0d465d0a8867"
+_LEDGER_DISABLED_PARITY_BASE_TREE = "38c473644a42e01179a7b3140b2ad51e6345d667"
+_LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256 = (
+    "e3664bcbfb59e64f18a30613b6c5a43e1add4de5749302c0aba332c7bf139d98"
+)
+_LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION = (
+    "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246"
+)
+_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER = (
+    Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane")
+    / _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION
+    / "run_control_plane.py"
+)
+_LEDGER_DISABLED_PARITY_BASE_CANDIDATE_MANIFEST_ENV = (
+    "ATHENA_PIC_EXACT_CONSERVATION_BASE_CANDIDATE_MANIFEST"
+)
 _DECK = (
     _SOURCE_ROOT
     / "inputs/tests/pic_parallel_shock_exact_conservation_closure_vl2_tsc.athinput"
@@ -796,12 +812,142 @@ def _compare_particle_state(full: bytes, restarted: bytes, label: str) -> dict[s
     }
 
 
+def _run_clean_candidate_revalidation(
+    candidate_manifest: Path, manifest_sha256: str
+) -> dict[str, object]:
+    command = [
+        str(_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER),
+        "revalidate_clean_candidate.py",
+        "--manifest",
+        str(candidate_manifest),
+        "--expected-manifest-sha256",
+        manifest_sha256,
+        "--expected-git-commit",
+        _LEDGER_DISABLED_PARITY_BASE_COMMIT,
+    ]
+    completed = subprocess.run(
+        command,
+        cwd="/",
+        env={"HOME": "/", "LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        check=False,
+        timeout=300,
+    )
+    if completed.returncode != 0 or completed.stderr:
+        raise RuntimeError(
+            "installed control-plane clean-candidate revalidation failed: "
+            f"returncode={completed.returncode}"
+        )
+    try:
+        report = json.loads(completed.stdout)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            "installed control-plane clean-candidate revalidation returned invalid JSON"
+        ) from error
+    if not isinstance(report, dict):
+        raise RuntimeError(
+            "installed control-plane clean-candidate revalidation returned no report object"
+        )
+    return report
+
+
+def _authenticate_ledger_disabled_parity_base(
+    *, candidate_executable: Path, base_executable: Path, candidate_manifest: Path
+) -> dict[str, object]:
+    candidate_executable = candidate_executable.resolve()
+    base_executable = base_executable.resolve()
+    candidate_manifest = candidate_manifest.resolve()
+    if candidate_executable == base_executable:
+        raise RuntimeError(
+            "ledger-disabled parity base and candidate executable paths are identical"
+        )
+    for label, path in (
+        ("candidate", candidate_executable),
+        ("base", base_executable),
+        ("base clean-candidate manifest", candidate_manifest),
+    ):
+        if not path.is_file():
+            raise RuntimeError(
+                f"ledger-disabled parity {label} is not a regular file: {path}"
+            )
+    candidate_payload = candidate_executable.read_bytes()
+    base_payload = base_executable.read_bytes()
+    candidate_sha256 = _sha(candidate_payload)
+    base_sha256 = _sha(base_payload)
+    if candidate_payload == base_payload or candidate_sha256 == base_sha256:
+        raise RuntimeError(
+            "ledger-disabled parity base and candidate executable bytes are identical"
+        )
+    if base_sha256 != _LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256:
+        raise RuntimeError(
+            "ledger-disabled parity baseline executable SHA-256 differs from pinned base build"
+        )
+    if base_executable != (candidate_manifest.parent / "athena").resolve():
+        raise RuntimeError(
+            "ledger-disabled parity baseline executable is not the clean-candidate "
+            "manifest executable"
+        )
+
+    manifest_sha256 = _sha(candidate_manifest.read_bytes())
+    try:
+        report = _run_clean_candidate_revalidation(candidate_manifest, manifest_sha256)
+    except Exception as error:
+        raise RuntimeError(
+            "ledger-disabled parity baseline clean-candidate build provenance "
+            "authentication failed"
+        ) from error
+    if (
+        report.get("status") != "passed"
+        or report.get("source", {}).get("git_commit")
+        != _LEDGER_DISABLED_PARITY_BASE_COMMIT
+        or report.get("source", {}).get("git_tree")
+        != _LEDGER_DISABLED_PARITY_BASE_TREE
+        or report.get("build", {}).get("executable_sha256")
+        != _LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256
+        or report.get("current_control_plane_version")
+        != _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION
+        or report.get("clean_candidate_manifest", {}).get("sha256")
+        != manifest_sha256
+        or Path(report.get("clean_candidate_manifest", {}).get("path", "")).resolve()
+        != candidate_manifest
+    ):
+        raise RuntimeError(
+            "ledger-disabled parity baseline authentication report does not match "
+            "the pinned base build"
+        )
+    return {
+        "executable": base_executable,
+        "source_commit": _LEDGER_DISABLED_PARITY_BASE_COMMIT,
+        "source_tree": _LEDGER_DISABLED_PARITY_BASE_TREE,
+        "clean_candidate_manifest_sha256": manifest_sha256,
+        "build_profile_id": report["build"]["profile_id"],
+        "build_receipt_control_plane_version": report["build"][
+            "receipt_control_plane_version"
+        ],
+        "current_control_plane_version": _LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
+        "executable_sha256": base_sha256,
+        "candidate_executable_sha256": candidate_sha256,
+    }
+
+
 def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
     raw_base = os.environ.get("ATHENA_PIC_EXACT_CONSERVATION_BASE_EXE")
-    if raw_base is None:
+    raw_manifest = os.environ.get(_LEDGER_DISABLED_PARITY_BASE_CANDIDATE_MANIFEST_ENV)
+    if raw_base is None and raw_manifest is None:
         return "not_requested"
-    base_executable = Path(raw_base).resolve()
+    if raw_base is None or raw_manifest is None:
+        raise RuntimeError(
+            "ledger-disabled parity requires both "
+            "ATHENA_PIC_EXACT_CONSERVATION_BASE_EXE and "
+            f"{_LEDGER_DISABLED_PARITY_BASE_CANDIDATE_MANIFEST_ENV}"
+        )
     new_dir = _exe_dir()
+    authentication = _authenticate_ledger_disabled_parity_base(
+        candidate_executable=new_dir / "athena",
+        base_executable=Path(raw_base),
+        candidate_manifest=Path(raw_manifest),
+    )
+    base_executable = Path(authentication["executable"])
     overrides = _LEDGER_DISABLED_NONPERIODIC_3D_OVERRIDES + (
         "time/tlim=5.0",
         "problem/ps_remove_birth_time_before=-1.0",
@@ -810,6 +956,13 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
     )
     results = []
     for name, executable in (("new", new_dir / "athena"), ("base", base_executable)):
+        expected_sha256 = authentication[
+            "candidate_executable_sha256" if name == "new" else "executable_sha256"
+        ]
+        if _sha(executable.read_bytes()) != expected_sha256:
+            raise RuntimeError(
+                f"ledger-disabled parity {name} executable changed after authentication"
+            )
         exe_dir = executable.parent
         basename = "pic_parallel_shock_exact_disabled_" + name
         with tempfile.TemporaryDirectory(prefix="q011-disabled-deck-", dir=exe_dir) as tmp:
@@ -822,12 +975,16 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
                 deck=deck,
                 overrides=overrides,
             )
+        if _sha(executable.read_bytes()) != expected_sha256:
+            raise RuntimeError(
+                f"ledger-disabled parity {name} executable changed during execution"
+            )
         path = _restart_paths(exe_dir, basename)[-1]
         mhd_rows, _ = closure._parse_history(
             _history_payload(exe_dir, basename, "mhd"), closure._MHD_LABELS, name
         )
         results.append({
-            "executable_sha256": _sha(executable.read_bytes()),
+            "executable_sha256": expected_sha256,
             "mhd": mhd_rows[-1],
             "particles": _particle_payload(path.read_bytes(), name),
         })
@@ -839,6 +996,9 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
         "case": "ledger_disabled_nonperiodic_3d",
         "new_executable_sha256": results[0]["executable_sha256"],
         "base_executable_sha256": results[1]["executable_sha256"],
+        "base_authentication": {
+            key: value for key, value in authentication.items() if key != "executable"
+        },
         "mhd_history_state_exactly_equal": True,
         "particle_payload_exactly_equal": True,
     }

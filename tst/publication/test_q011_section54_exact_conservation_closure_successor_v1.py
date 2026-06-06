@@ -9,6 +9,7 @@ import json
 import math
 from pathlib import Path
 import struct
+import tempfile
 import unittest
 from unittest import mock
 
@@ -43,10 +44,10 @@ def _fixture_deck_payload() -> bytes:
     replacements = (
         ("nx1       = 4000", "nx1       = 2"),
         ("x1max     = 48000.0", "x1max     = 2.0"),
-        ("nx2       = 260", "nx2       = 1"),
-        ("x2max     = 3120.0", "x2max     = 1.0"),
+        ("nx2       = 260", "nx2       = 2"),
+        ("x2max     = 3120.0", "x2max     = 2.0"),
         ("nx1       = 20", "nx1       = 2"),
-        ("nx2       = 20", "nx2       = 1"),
+        ("nx2       = 20", "nx2       = 2"),
         ("refinement           = adaptive", "refinement           = none"),
         ("num_levels           = 3", "num_levels           = 1"),
         ("ps_enable_curvature_amr       = true",
@@ -192,18 +193,18 @@ def _restart_payload(
 
     mesh_header = (
         struct.pack("<ii", 1, 0)
-        + struct.pack("<9d", 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0)
-        + struct.pack("<19i", 2, 2, 1, 1, 2, 3, 0, 0, 0, 0, *([0] * 9))
-        + struct.pack("<19i", 2, 2, 1, 1, 2, 3, 0, 0, 0, 0, *([0] * 9))
+        + struct.pack("<9d", 0.0, 0.0, 0.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0)
+        + struct.pack("<19i", 2, 2, 2, 1, 2, 3, 2, 3, 0, 0, *([0] * 9))
+        + struct.pack("<19i", 2, 2, 2, 1, 2, 3, 2, 3, 0, 0, *([0] * 9))
         + struct.pack("<ddii", time, 1.0, cycle, 1)
     )
     state = np.asarray(
         mhd_state or [INITIAL_MHD[0] - CR_STATE[0], 0.0, 0.0, 0.0, INITIAL_MHD[4]],
         dtype="<f8",
     )
-    mhd = np.zeros((5, 1, 1, 6), dtype="<f8")
-    mhd[:, 0, 0, 2:4] = state[:, None] / 2.0
-    face_fields = np.zeros(7 + 12 + 12, dtype="<f8")
+    mhd = np.zeros((5, 1, 6, 6), dtype="<f8")
+    mhd[:, 0, 2:4, 2:4] = state[:, None, None] / 4.0
+    face_fields = np.zeros(42 + 42 + 72, dtype="<f8")
     mhd_payload = mhd.tobytes() + face_fields.tobytes()
     mesh_layout = (
         struct.pack("<4i", 0, 0, 0, 0)
@@ -621,6 +622,14 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         result = _reduce(_fixture(deck_payload=outflow))
         self.assertEqual(len(result["checkpoints"]), 2)
 
+    def test_reducer_rejects_one_dimensional_deck_labeled_2d3v(self) -> None:
+        one_dimensional = FIXTURE_DECK.replace(b"nx2       = 2", b"nx2       = 1")
+        with self.assertRaisesRegex(
+            reducer.ConservationClosureError,
+            "requires true 2D x1-x2 geometry",
+        ):
+            _reduce(_fixture(deck_payload=one_dimensional))
+
     def test_restart_mesh_partition_metadata_payload_and_state_drift_fail_closed(
         self,
     ) -> None:
@@ -653,7 +662,7 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         struct.pack_into("<Q", bad_size, data_size, struct.unpack_from("<Q", valid, data_size)[0] + 8)
         bad_boundary = valid.replace(pic_magic, b"\x00" * 8 + pic_magic, 1)
         nonfinite = bytearray(valid)
-        struct.pack_into("<d", nonfinite, data + 2 * 8, math.nan)
+        struct.pack_into("<d", nonfinite, data + (2 * 6 + 2) * 8, math.nan)
 
         cases = (
             (bytes(bad_rank), "MeshBlock rank assignment drifted"),
@@ -854,6 +863,10 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             "exact_ledger_rejects_non_2d3v",
             "ledger_disabled_nonperiodic_3d",
             "ledger-disabled nonperiodic 3D new/base physics state differs",
+            "ATHENA_PIC_EXACT_CONSERVATION_BASE_CANDIDATE_MANIFEST",
+            "_LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER",
+            "base and candidate executable paths are identical",
+            "authentication failed",
             "_run_athena_expect_fail",
         ):
             self.assertIn(required, runtime_source)
@@ -915,6 +928,109 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
                 "problem/user_hist=false",
             ),
         )
+
+    def test_runtime_parity_rejects_same_executable_path_and_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "candidate"
+            baseline = root / "baseline"
+            manifest = root / "clean_candidate_manifest.json"
+            candidate.write_bytes(b"candidate-bytes")
+            baseline.write_bytes(b"candidate-bytes")
+            manifest.write_text("{}\n", encoding="ascii")
+            with self.assertRaisesRegex(RuntimeError, "paths are identical"):
+                runtime._authenticate_ledger_disabled_parity_base(
+                    candidate_executable=candidate,
+                    base_executable=candidate,
+                    candidate_manifest=manifest,
+                )
+            with self.assertRaisesRegex(RuntimeError, "bytes are identical"):
+                runtime._authenticate_ledger_disabled_parity_base(
+                    candidate_executable=candidate,
+                    base_executable=baseline,
+                    candidate_manifest=manifest,
+                )
+
+    def test_runtime_parity_revalidation_uses_pinned_installed_control_plane(self) -> None:
+        completed = mock.Mock(returncode=0, stderr=b"", stdout=b'{"status":"passed"}')
+        with mock.patch.object(runtime.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(
+                runtime._run_clean_candidate_revalidation(
+                    Path("/fixed/manifest.json"), "a" * 64
+                ),
+                {"status": "passed"},
+            )
+        command = run.call_args.args[0]
+        self.assertEqual(
+            command[0], str(runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_RUNNER)
+        )
+        self.assertEqual(command[-1], runtime._LEDGER_DISABLED_PARITY_BASE_COMMIT)
+        self.assertEqual(run.call_args.kwargs["cwd"], "/")
+        self.assertFalse(run.call_args.kwargs["check"])
+
+    def test_runtime_parity_rejects_bogus_baseline_and_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "candidate"
+            candidate.write_bytes(b"candidate-bytes")
+            manifest = root / "clean_candidate_manifest.json"
+            manifest.write_text("{}\n", encoding="ascii")
+            baseline = root / "athena"
+            baseline.write_bytes(b"bogus-baseline")
+            with self.assertRaisesRegex(RuntimeError, "differs from pinned base build"):
+                runtime._authenticate_ledger_disabled_parity_base(
+                    candidate_executable=candidate,
+                    base_executable=baseline,
+                    candidate_manifest=manifest,
+                )
+
+            with mock.patch.object(
+                runtime,
+                "_LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256",
+                hashlib.sha256(baseline.read_bytes()).hexdigest(),
+            ), mock.patch.object(
+                runtime,
+                "_run_clean_candidate_revalidation",
+                side_effect=ValueError("bogus provenance"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "provenance authentication failed"):
+                    runtime._authenticate_ledger_disabled_parity_base(
+                        candidate_executable=candidate,
+                        base_executable=baseline,
+                        candidate_manifest=manifest,
+                    )
+
+            forged_report = {
+                "status": "passed",
+                "source": {
+                    "git_commit": runtime._LEDGER_DISABLED_PARITY_BASE_COMMIT,
+                    "git_tree": "0" * 40,
+                },
+                "build": {
+                    "executable_sha256": hashlib.sha256(
+                        baseline.read_bytes()
+                    ).hexdigest(),
+                },
+                "clean_candidate_manifest": {
+                    "sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                    "path": str(manifest),
+                },
+            }
+            with mock.patch.object(
+                runtime,
+                "_LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256",
+                hashlib.sha256(baseline.read_bytes()).hexdigest(),
+            ), mock.patch.object(
+                runtime,
+                "_run_clean_candidate_revalidation",
+                return_value=forged_report,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "does not match the pinned base build"):
+                    runtime._authenticate_ledger_disabled_parity_base(
+                        candidate_executable=candidate,
+                        base_executable=baseline,
+                        candidate_manifest=manifest,
+                    )
 
     def test_paper_vl2_boundary_stage_and_checkpoint_order_are_explicit(self) -> None:
         driver = (ROOT / "src/driver/driver.cpp").read_text(encoding="utf-8")
@@ -985,6 +1101,30 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         self.assertEqual(
             record["evidence_boundary"]["self_attested_runtime_packet_verifier"],
             "removed_not_authoritative",
+        )
+        parity = record["source_local_engineering_runtime"]["ledger_disabled_parity"]
+        self.assertEqual(
+            parity["status"], "pending_authenticated_distinct_baseline_rerun"
+        )
+        self.assertEqual(
+            parity["prior_unauthenticated_parity_result"],
+            "invalidated_not_retained",
+        )
+        self.assertEqual(
+            parity["required_base_commit"],
+            runtime._LEDGER_DISABLED_PARITY_BASE_COMMIT,
+        )
+        self.assertEqual(
+            parity["required_base_tree"],
+            runtime._LEDGER_DISABLED_PARITY_BASE_TREE,
+        )
+        self.assertEqual(
+            parity["required_base_executable_sha256"],
+            runtime._LEDGER_DISABLED_PARITY_BASE_EXECUTABLE_SHA256,
+        )
+        self.assertEqual(
+            parity["required_control_plane_version"],
+            runtime._LEDGER_DISABLED_PARITY_CONTROL_PLANE_VERSION,
         )
         self.assertIn(
             "trusted installed-control-plane receipts",

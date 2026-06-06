@@ -266,6 +266,13 @@ def _deck_physics(payload: bytes) -> dict[str, object]:
     for block, key, expected in required:
         _require(blocks[block].get(key) == expected,
                  f"deck <{block}>/{key} does not equal {expected}")
+    try:
+        nx2 = int(blocks["mesh"]["nx2"])
+        nx3 = int(blocks["mesh"]["nx3"])
+    except (KeyError, ValueError) as error:
+        raise ConservationClosureError("deck mesh dimensionality is invalid") from error
+    _require(nx2 > 1 and nx3 == 1,
+             "deck exact closure requires true 2D x1-x2 geometry")
     _require(blocks["mesh"].get("ox1_bc") in {"inflow", "outflow"},
              "deck <mesh>/ox1_bc is not an exact-ledger physical boundary")
     refinement = blocks.get("mesh_refinement", {})
