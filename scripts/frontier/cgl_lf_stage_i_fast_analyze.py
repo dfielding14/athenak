@@ -42,6 +42,7 @@ FAILED_STATES = {
     "REVOKED",
     "TIMEOUT",
 }
+FAILED_ANALYSIS_OUTPUT = "FAILED_ANALYSIS_OUTPUT"
 
 
 class AnalysisLaunchError(RuntimeError):
@@ -93,6 +94,147 @@ def artifact_binding(path: Path) -> dict[str, object]:
         "sha256": sha256_file(resolved),
         "size_bytes": stat.st_size,
     }
+
+
+def binding_match_errors(
+    observed: object, expected: object, label: str
+) -> list[str]:
+    if not isinstance(observed, dict) or not isinstance(expected, dict):
+        return [f"{label} binding is malformed"]
+    errors: list[str] = []
+    for key in ("path", "sha256", "size_bytes"):
+        if key not in observed or key not in expected:
+            errors.append(f"{label} binding lacks {key}")
+            continue
+        left = observed[key]
+        right = expected[key]
+        if key == "path" and isinstance(left, str) and isinstance(right, str):
+            left = str(Path(left).expanduser().resolve())
+            right = str(Path(right).expanduser().resolve())
+        if left != right:
+            errors.append(f"{label} binding differs in {key}")
+    return errors
+
+
+def current_binding_errors(
+    binding: object, label: str, expected_path: Path | None = None
+) -> list[str]:
+    if not isinstance(binding, dict) or not isinstance(binding.get("path"), str):
+        return [f"{label} binding is malformed"]
+    path = Path(str(binding["path"])).expanduser().resolve()
+    errors = []
+    if expected_path is not None and path != expected_path.expanduser().resolve():
+        errors.append(f"{label} path differs from the expected artifact")
+    try:
+        current = artifact_binding(path)
+    except OSError as error:
+        errors.append(f"cannot bind current {label}: {error}")
+        return errors
+    errors.extend(binding_match_errors(binding, current, label))
+    return errors
+
+
+def analysis_completion_errors(
+    attempt_dir: Path, manifest: dict[str, object]
+) -> list[str]:
+    """Return reasons a zero-exit analysis attempt is not complete."""
+
+    errors: list[str] = []
+    case_id = manifest.get("case_id")
+    analysis_value = manifest.get("analysis_output")
+    attempt_value = manifest.get("attempt_dir")
+    if not isinstance(case_id, str) or not CASE_ID.fullmatch(case_id):
+        return ["job manifest case ID is malformed"]
+    if not isinstance(analysis_value, str):
+        return ["job manifest analysis output is malformed"]
+    if (
+        not isinstance(attempt_value, str)
+        or Path(attempt_value).expanduser().resolve() != attempt_dir.resolve()
+    ):
+        errors.append("job manifest attempt directory differs from the attempt")
+    analysis = Path(analysis_value).expanduser().resolve()
+    inventory_path = analysis / "inventory.json"
+    errors.extend(
+        current_binding_errors(
+            manifest.get("inventory"), "job inventory", inventory_path
+        )
+    )
+    errors.extend(
+        current_binding_errors(manifest.get("reporter"), "job reporter", REPORTER)
+    )
+
+    inventory: dict[str, object] | None = None
+    try:
+        inventory = load_json(inventory_path)
+    except AnalysisLaunchError as error:
+        errors.append(str(error))
+
+    diagnostics_path = analysis / "cases" / case_id / "diagnostics.json"
+    try:
+        diagnostics = load_json(diagnostics_path)
+    except AnalysisLaunchError as error:
+        errors.append(str(error))
+        return errors
+    if diagnostics.get("case_id") != case_id:
+        errors.append("case diagnostics identity differs from the job")
+    prepared_value = manifest.get("prepared_utc")
+    analyzed_value = diagnostics.get("analyzed_utc")
+    try:
+        prepared = datetime.fromisoformat(str(prepared_value))
+        analyzed = datetime.fromisoformat(str(analyzed_value))
+        if prepared.tzinfo is None or analyzed.tzinfo is None:
+            raise ValueError("timestamps must include time zones")
+        if analyzed < prepared:
+            errors.append("case diagnostics predate the analysis attempt")
+    except ValueError:
+        errors.append("case diagnostics or job preparation timestamp is malformed")
+    if diagnostics.get("assembly_status") != "complete":
+        errors.append("case diagnostics assembly_status is not complete")
+    if diagnostics.get("analysis_status") != "complete":
+        errors.append("case diagnostics analysis_status is not complete")
+    if diagnostics.get("snapshot_analysis_status") != "complete":
+        errors.append("case diagnostics snapshot_analysis_status is not complete")
+    if diagnostics.get("analysis_errors") != []:
+        errors.append(
+            "case diagnostics retain or lack a valid empty analysis_errors list"
+        )
+
+    provenance = diagnostics.get("provenance")
+    if not isinstance(provenance, dict):
+        errors.append("case diagnostics provenance is malformed")
+        return errors
+    errors.extend(
+        binding_match_errors(
+            provenance.get("adapter"),
+            manifest.get("reporter"),
+            "diagnostics reporter",
+        )
+    )
+
+    lineage_path = analysis / "cases" / case_id / "lineage.json"
+    errors.extend(
+        current_binding_errors(
+            provenance.get("lineage"), "diagnostics lineage", lineage_path
+        )
+    )
+    if inventory is not None:
+        cases = inventory.get("cases")
+        inventory_case = cases.get(case_id) if isinstance(cases, dict) else None
+        if not isinstance(inventory_case, dict):
+            errors.append("job inventory lacks the expected case record")
+        else:
+            if inventory_case.get("status") != "complete":
+                errors.append("job inventory case status is not complete")
+            if diagnostics.get("case_name") != inventory_case.get("case_name"):
+                errors.append("case diagnostics name differs from the job inventory")
+            try:
+                lineage = load_json(lineage_path)
+            except AnalysisLaunchError as error:
+                errors.append(str(error))
+            else:
+                if lineage != inventory_case:
+                    errors.append("diagnostics lineage differs from the job inventory")
+    return errors
 
 
 def is_relative_to(path: Path, parent: Path) -> bool:
@@ -274,6 +416,8 @@ def prepare_attempt(
     python: Path,
     retry_of: str | None = None,
 ) -> Path:
+    if cpus_per_task < 1:
+        raise AnalysisLaunchError("--cpus-per-task must be positive")
     existing = attempt_directories(jobs, case_id)
     number = len(existing)
     attempt_dir = jobs / case_id / f"attempt-{number:03d}"
@@ -346,6 +490,26 @@ def submit_attempt(attempt_dir: Path) -> str:
     return job_id
 
 
+def update_prepared_resources(
+    attempt_dir: Path,
+    manifest: dict[str, object],
+    walltime: str | None,
+    cpus_per_task: int | None,
+) -> None:
+    if walltime is None and cpus_per_task is None:
+        return
+    if walltime is not None:
+        manifest["walltime"] = walltime
+    if cpus_per_task is not None:
+        if cpus_per_task < 1:
+            raise AnalysisLaunchError("--cpus-per-task must be positive")
+        manifest["cpus_per_task"] = cpus_per_task
+    write_json(attempt_dir / "manifest.json", manifest)
+    script = attempt_dir / "run.sbatch"
+    script.write_text(batch_script(manifest), encoding="utf-8")
+    script.chmod(0o755)
+
+
 def normalized_state(value: str) -> str:
     return value.strip().split("+", 1)[0].split()[0].upper() if value.strip() else ""
 
@@ -357,7 +521,13 @@ def attempt_state(attempt_dir: Path, manifest: dict[str, object]) -> str:
             exit_code = int(exit_path.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             return "INVALID_EXIT_RECORD"
-        return "COMPLETED" if exit_code == 0 else f"FAILED_EXIT_{exit_code}"
+        if exit_code != 0:
+            return f"FAILED_EXIT_{exit_code}"
+        return (
+            FAILED_ANALYSIS_OUTPUT
+            if analysis_completion_errors(attempt_dir, manifest)
+            else "COMPLETED"
+        )
     job_id = manifest.get("job_id")
     if not isinstance(job_id, str):
         return "PREPARED"
@@ -455,8 +625,14 @@ def retry(args: argparse.Namespace) -> int:
                 report_options=[],
                 account=args.account,
                 partition=args.partition,
-                walltime=args.walltime,
-                cpus_per_task=args.cpus_per_task,
+                walltime=(
+                    DEFAULT_WALLTIME if args.walltime is None else args.walltime
+                ),
+                cpus_per_task=(
+                    DEFAULT_CPUS_PER_TASK
+                    if args.cpus_per_task is None
+                    else args.cpus_per_task
+                ),
                 python=python,
             )
         else:
@@ -465,7 +641,14 @@ def retry(args: argparse.Namespace) -> int:
             state = attempt_state(latest, manifest)
             if state == "PREPARED":
                 attempt = latest
-            elif state.startswith("FAILED_EXIT_") or state in FAILED_STATES:
+                update_prepared_resources(
+                    attempt, manifest, args.walltime, args.cpus_per_task
+                )
+            elif (
+                state.startswith("FAILED_EXIT_")
+                or state == FAILED_ANALYSIS_OUTPUT
+                or state in FAILED_STATES
+            ):
                 options = manifest.get("report_options")
                 if not isinstance(options, list) or not all(
                     isinstance(item, str) for item in options
@@ -481,9 +664,19 @@ def retry(args: argparse.Namespace) -> int:
                     report_options=options,
                     account=str(manifest.get("account", args.account)),
                     partition=str(manifest.get("partition", args.partition)),
-                    walltime=str(manifest.get("walltime", args.walltime)),
-                    cpus_per_task=int(
-                        manifest.get("cpus_per_task", args.cpus_per_task)
+                    walltime=(
+                        args.walltime
+                        if args.walltime is not None
+                        else str(manifest.get("walltime", DEFAULT_WALLTIME))
+                    ),
+                    cpus_per_task=(
+                        args.cpus_per_task
+                        if args.cpus_per_task is not None
+                        else int(
+                            manifest.get(
+                                "cpus_per_task", DEFAULT_CPUS_PER_TASK
+                            )
+                        )
                     ),
                     python=Path(str(manifest.get("python", python))),
                     retry_of=str(latest),
@@ -507,11 +700,19 @@ def add_selection_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def add_slurm_options(parser: argparse.ArgumentParser) -> None:
+def add_slurm_options(
+    parser: argparse.ArgumentParser, *, retry_overrides: bool = False
+) -> None:
     parser.add_argument("--account", default=DEFAULT_ACCOUNT)
     parser.add_argument("--partition", default=DEFAULT_PARTITION)
-    parser.add_argument("--walltime", default=DEFAULT_WALLTIME)
-    parser.add_argument("--cpus-per-task", type=int, default=DEFAULT_CPUS_PER_TASK)
+    parser.add_argument(
+        "--walltime", default=None if retry_overrides else DEFAULT_WALLTIME
+    )
+    parser.add_argument(
+        "--cpus-per-task",
+        type=int,
+        default=None if retry_overrides else DEFAULT_CPUS_PER_TASK,
+    )
     parser.add_argument(
         "--python",
         type=Path,
@@ -583,7 +784,7 @@ def parser() -> argparse.ArgumentParser:
         "retry", help="prepare or submit missing and terminally failed jobs"
     )
     add_selection_options(retry_command)
-    add_slurm_options(retry_command)
+    add_slurm_options(retry_command, retry_overrides=True)
     return command
 
 

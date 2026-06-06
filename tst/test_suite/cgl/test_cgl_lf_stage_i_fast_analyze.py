@@ -60,8 +60,16 @@ def inventory_fixture(
             "root": str(root),
             "output": str(declared_output or output),
             "cases": {
-                "R02": {"case_id": "R02", "status": "complete"},
-                "R03": {"case_id": "R03", "status": "in_progress"},
+                "R02": {
+                    "case_id": "R02",
+                    "case_name": "case-r02",
+                    "status": "complete",
+                },
+                "R03": {
+                    "case_id": "R03",
+                    "case_name": "case-r03",
+                    "status": "in_progress",
+                },
             },
         },
     )
@@ -98,6 +106,34 @@ def command_args(
         eddy_bins=24,
         eddy_seed=731,
     )
+
+
+def write_complete_analysis(
+    fast_analyze, analysis: Path, jobs: Path, case_id: str = "R02"
+) -> tuple[Path, dict[str, object]]:
+    attempt = jobs / case_id / "attempt-000"
+    manifest = fast_analyze.load_json(attempt / "manifest.json")
+    inventory = fast_analyze.load_json(analysis / "inventory.json")
+    case = inventory["cases"][case_id]
+    lineage = analysis / "cases" / case_id / "lineage.json"
+    write_json(lineage, case)
+    diagnostics = {
+        "schema_version": 1,
+        "analyzed_utc": fast_analyze.utc_now(),
+        "case_id": case_id,
+        "case_name": case["case_name"],
+        "assembly_status": "complete",
+        "analysis_status": "complete",
+        "snapshot_analysis_status": "complete",
+        "analysis_errors": [],
+        "provenance": {
+            "adapter": manifest["reporter"],
+            "lineage": fast_analyze.artifact_binding(lineage),
+        },
+    }
+    write_json(analysis / "cases" / case_id / "diagnostics.json", diagnostics)
+    (attempt / "exit_code.txt").write_text("0\n", encoding="utf-8")
+    return attempt, diagnostics
 
 
 def test_launch_binds_inventory_and_declared_analysis_output(
@@ -248,7 +284,10 @@ def test_retry_reuses_prepared_then_preserves_failed_attempt_options(
 
     first = jobs / "R02/attempt-000"
     (first / "exit_code.txt").write_text("9\n", encoding="utf-8")
-    fast_analyze.retry(args)
+    inherited = command_args(analysis, jobs, cases=["R02"])
+    inherited.walltime = None
+    inherited.cpus_per_task = None
+    fast_analyze.retry(inherited)
 
     second = jobs / "R02/attempt-001"
     first_manifest = fast_analyze.load_json(first / "manifest.json")
@@ -257,6 +296,132 @@ def test_retry_reuses_prepared_then_preserves_failed_attempt_options(
     assert second_manifest["report_options"] == first_manifest["report_options"]
     assert "--eddy-samples" in second_manifest["report_options"]
     assert "9876" in second_manifest["report_options"]
+    assert second_manifest["walltime"] == first_manifest["walltime"]
+    assert second_manifest["cpus_per_task"] == first_manifest["cpus_per_task"]
+
+    (second / "exit_code.txt").write_text("9\n", encoding="utf-8")
+    overridden = command_args(analysis, jobs, cases=["R02"])
+    overridden.walltime = "05:30:00"
+    overridden.cpus_per_task = 32
+    fast_analyze.retry(overridden)
+    third_manifest = fast_analyze.load_json(
+        jobs / "R02/attempt-002/manifest.json"
+    )
+    assert third_manifest["report_options"] == first_manifest["report_options"]
+    assert third_manifest["walltime"] == "05:30:00"
+    assert third_manifest["cpus_per_task"] == 32
+
+
+def test_retry_explicit_resources_update_unsubmitted_attempt(
+    fast_analyze, tmp_path
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    args = command_args(analysis, jobs, cases=["R02"])
+    fast_analyze.launch(args)
+    args.walltime = "04:00:00"
+    args.cpus_per_task = 24
+
+    fast_analyze.retry(args)
+
+    attempt = jobs / "R02/attempt-000"
+    manifest = fast_analyze.load_json(attempt / "manifest.json")
+    script = (attempt / "run.sbatch").read_text(encoding="utf-8")
+    assert manifest["walltime"] == "04:00:00"
+    assert manifest["cpus_per_task"] == 24
+    assert "#SBATCH --time=04:00:00" in script
+    assert "#SBATCH --cpus-per-task=24" in script
+
+
+def test_zero_exit_requires_complete_bound_case_diagnostics(
+    fast_analyze, tmp_path
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    fast_analyze.launch(command_args(analysis, jobs, cases=["R02"]))
+    attempt = jobs / "R02/attempt-000"
+    manifest = fast_analyze.load_json(attempt / "manifest.json")
+    (attempt / "exit_code.txt").write_text("0\n", encoding="utf-8")
+
+    assert fast_analyze.attempt_state(attempt, manifest) == (
+        fast_analyze.FAILED_ANALYSIS_OUTPUT
+    )
+
+    attempt, _diagnostics = write_complete_analysis(
+        fast_analyze, analysis, jobs
+    )
+    assert fast_analyze.attempt_state(attempt, manifest) == "COMPLETED"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("analyzed_utc", "2000-01-01T00:00:00+00:00"),
+        ("analysis_status", "partial"),
+        ("snapshot_analysis_status", "failed"),
+        ("analysis_errors", ["snapshot analysis failed"]),
+    ],
+)
+def test_zero_exit_rejects_incomplete_analysis_fields(
+    fast_analyze, tmp_path, field, value
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    fast_analyze.launch(command_args(analysis, jobs, cases=["R02"]))
+    attempt, diagnostics = write_complete_analysis(fast_analyze, analysis, jobs)
+    diagnostics[field] = value
+    write_json(analysis / "cases/R02/diagnostics.json", diagnostics)
+    manifest = fast_analyze.load_json(attempt / "manifest.json")
+
+    assert fast_analyze.attempt_state(attempt, manifest) == (
+        fast_analyze.FAILED_ANALYSIS_OUTPUT
+    )
+
+
+def test_zero_exit_rejects_stale_inventory_and_reporter_provenance(
+    fast_analyze, tmp_path, monkeypatch
+):
+    reporter = tmp_path / "reporter.py"
+    reporter.write_text("version = 1\n", encoding="utf-8")
+    monkeypatch.setattr(fast_analyze, "REPORTER", reporter)
+    _root, analysis, inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    fast_analyze.launch(command_args(analysis, jobs, cases=["R02"]))
+    attempt, diagnostics = write_complete_analysis(fast_analyze, analysis, jobs)
+    manifest = fast_analyze.load_json(attempt / "manifest.json")
+    assert fast_analyze.attempt_state(attempt, manifest) == "COMPLETED"
+
+    diagnostics["provenance"]["adapter"]["sha256"] = "0" * 64
+    write_json(analysis / "cases/R02/diagnostics.json", diagnostics)
+    assert fast_analyze.attempt_state(attempt, manifest) == (
+        fast_analyze.FAILED_ANALYSIS_OUTPUT
+    )
+
+    write_complete_analysis(fast_analyze, analysis, jobs)
+    original_inventory = fast_analyze.load_json(inventory)
+    inventory_value = dict(original_inventory)
+    inventory_value["assembled_utc"] = "changed"
+    write_json(inventory, inventory_value)
+    assert fast_analyze.attempt_state(attempt, manifest) == (
+        fast_analyze.FAILED_ANALYSIS_OUTPUT
+    )
+
+    write_json(inventory, original_inventory)
+    reporter.write_text("version = 2\n", encoding="utf-8")
+    assert fast_analyze.attempt_state(attempt, manifest) == (
+        fast_analyze.FAILED_ANALYSIS_OUTPUT
+    )
+
+
+def test_retry_parser_distinguishes_omitted_resource_overrides(
+    fast_analyze, tmp_path
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+
+    args = fast_analyze.parser().parse_args([str(analysis), "retry", "R02"])
+
+    assert args.walltime is None
+    assert args.cpus_per_task is None
 
 
 @pytest.mark.parametrize(
@@ -283,7 +448,13 @@ def test_invalid_parallel_snapshot_limits_fail_before_job_writes(
 
 @pytest.mark.parametrize(
     ("state", "expected_attempts"),
-    [("RUNNING", 1), ("COMPLETED", 1), ("UNKNOWN", 1), ("TIMEOUT", 2)],
+    [
+        ("RUNNING", 1),
+        ("COMPLETED", 1),
+        ("UNKNOWN", 1),
+        ("TIMEOUT", 2),
+        ("FAILED_ANALYSIS_OUTPUT", 2),
+    ],
 )
 def test_retry_state_handling(
     fast_analyze, tmp_path, monkeypatch, state, expected_attempts
