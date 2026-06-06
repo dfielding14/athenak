@@ -1,0 +1,155 @@
+{
+  "record_type": "q043_bell_current_volume_aware_source_local_preparation",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-043",
+  "campaign_id": "Q043-BELL-CURRENT-VOLUME-AWARE",
+  "supersedes_campaign_id": "Q023-PAPER-BELL-LINEAR",
+  "status": "source_local_authoritative_foundation_ready_runtime_oracle_observation_pending",
+  "qualification_effect": "none_source_local_preparation_only",
+  "current_normalization": "deposited_j_over_c_equals_2_b_g_k0",
+  "supersession_effect": "historical_c_multiplied_normalization_invalid_for_qualification",
+  "integration_binding": {
+    "selected_successor_campaign_id": "Q043-BELL-CURRENT-VOLUME-AWARE",
+    "selected_generator_name": "q043_bell_current_volume_aware",
+    "selected_parameter_block": "q043_bell_current_volume_aware",
+    "selected_readiness_record_prefix": "q043_bell_current_volume_aware_successor",
+    "supersession_gate_id": "Q043-BELL-CURRENT-NORMALIZATION-SUPERSESSION",
+    "supersession_identity_role": "authoritative_foundational_current_lineage",
+    "supersession_contract_path": "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json",
+    "supersession_contract_binding_status": "authoritative_q043_foundational_lineage_bound",
+    "integrated_raw_current_oracle_campaign_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+    "integrated_raw_current_oracle_identity": "q043_bell_current_volume_aware",
+    "integrated_raw_current_oracle_binding_status": "source_local_ready_runtime_observation_pending",
+    "integrated_raw_current_oracle_identity_compatible": true,
+    "integrated_raw_current_oracle_required": true,
+    "integrated_raw_current_oracle_source_local_ready": true,
+    "integrated_raw_current_oracle_runtime_observation_pending": true,
+    "integrated_raw_current_oracle_accepted_as_qualification_evidence": false,
+    "duplicate_q043_generator_or_oracle_required": false
+  },
+  "normalization_contract": {
+    "deposition_measure": "PPC*deposit_qscale*species_charge*v_CR/V_root_cell",
+    "required_closure": "PPC*deposit_qscale*species_charge*v_CR/V_root_cell=2*B0*k0",
+    "required_deposit_qscale": "2*B0*k0*V_root_cell/(PPC*species_charge*v_CR)",
+    "species_mass_contract": "uniform_current_oracle_accepts_arbitrary_positive_species_mass_with_species_charge_over_species_mass_equals_omega_over_b_g_corrected_linear_mode_requires_species_mass_1",
+    "root_cell_volume": "product_over_all_three_axes_of_global_root_mesh_extent_divided_by_global_root_mesh_count",
+    "root_cell_volume_reason": "ppc-created particles represent particles per root cell and AthenaK moment deposition divides macro charge by cell volume",
+    "artificial_light_speed_in_required_current": false,
+    "meshblock_decomposition_in_required_current": false,
+    "fixed_qscale_valid_across_dimensions_or_resolutions": false,
+    "fixed_qscale_policy": "forbidden_across_dimensions_and_resolutions",
+    "direct_deposited_current_outputs": [
+      "prtcl_jx",
+      "prtcl_jy",
+      "prtcl_jz"
+    ],
+    "strict_source_local_absolute_residual_limit": 1e-13,
+    "maximum_prepared_deck_absolute_residual": 1.9539925233402755e-14
+  },
+  "prepared_decks": [
+    {
+      "dimension": 1,
+      "carrier": "physical_1d_transverse_invariant_thin_2d3v_nx2_4",
+      "root_grid": [
+        32,
+        4,
+        1
+      ],
+      "root_cell_volume": 0.0078125,
+      "ppc": 1.0,
+      "deposit_qscale": 6250.0
+    },
+    {
+      "dimension": 2,
+      "carrier": "native_2d3v",
+      "root_grid": [
+        64,
+        32,
+        1
+      ],
+      "root_cell_volume": 0.0012207031250000002,
+      "ppc": 1.0,
+      "deposit_qscale": 976.5625000000003
+    },
+    {
+      "dimension": 3,
+      "carrier": "native_3d",
+      "root_grid": [
+        128,
+        64,
+        32
+      ],
+      "root_cell_volume": 4.588798980430252e-05,
+      "ppc": 1.0,
+      "deposit_qscale": 36.71039184344202
+    }
+  ],
+  "authority": {
+    "launch_authorized": false,
+    "qualification_eligible": false,
+    "scientific_claim_authorized": false,
+    "frontier_authorization_bound": false,
+    "clean_candidate_bound": false,
+    "registered_campaign_bound": false,
+    "runtime_observed_current_evidence_complete": false,
+    "independent_recompute_complete": false,
+    "external_review_complete": false
+  },
+  "source_implementation_boundary": {
+    "assumed_pgen_name": "q043_bell_current_volume_aware",
+    "assumed_parameter_block": "q043_bell_current_volume_aware",
+    "pgen_source_implementation_bound_by_this_preparation": true,
+    "pgen_registration_bound_by_this_preparation": true,
+    "historical_q023_q029_sources_modified": false,
+    "boundary": "This readiness record binds the unique Q043 source implementation, registration, two source modes, corrected linear decks, and source-local cycle-one raw-current oracle without granting execution or qualification authority."
+  },
+  "historical_campaign_disposition": {
+    "campaign_id": "Q023-PAPER-BELL-LINEAR",
+    "normalization": "omits_root_cell_volume_and_multiplies_by_artificial_C_invalid",
+    "qualification_eligible": false,
+    "disposition": "invalid_current_normalization_must_not_be_used_for_qualification",
+    "preservation": "historical files remain byte-preserved and chronology-only"
+  },
+  "artifact_bindings": {
+    "inputs/tests/pic_q043_bell_current_volume_aware_1d_candidate_vl2_tsc.athinput": "b4ed5ad811c2db81d2c424b055c3b4d7421360f1db1e9d343f593ecc65a7725f",
+    "inputs/tests/pic_q043_bell_current_volume_aware_2d_candidate_vl2_tsc.athinput": "a6a053eb4d6f889e480f9c115d9591b950922ba301bd292d7fe6f10e6d17023d",
+    "inputs/tests/pic_q043_bell_current_volume_aware_3d_candidate_vl2_tsc.athinput": "71b080a8a8112108b37856811bfb00e76633dd8da2b95d2b9010e66e472cc2c3",
+    "src/CMakeLists.txt": "937f6ee582313780ce562ba4bdebeb56e83a5549a5ac4defeb74b2a75bd86d76",
+    "src/pgen/AGENTS.md": "d76233e748027ae5b2fb666979221695fa4c7f219e8ea17f2afc298abe47529e",
+    "src/pgen/pgen.cpp": "f6553d0e635e3a3c1a647614c9c8a813123e0bd59bb9f108eb2effac92345874",
+    "src/pgen/pgen.hpp": "1ee1b72bf5c44adc672c776b2b4b053456f24e543b96367b8db123bea4800c5d",
+    "src/pgen/tests/q043_bell_current_volume_aware.cpp": "d3a6158dd4632c9c2774b035ecff6d5f4b0d6a32b5fbc4214afa25f08f8dcede",
+    "tst/publication/analyze_q043_bell_current_volume_aware.py": "8a381d4f6075bc3a1b3987a802018a010ed8c34c22af2ec9e5b92f1c36a79d7e",
+    "tst/publication/q043_bell_current_volume_aware_host_harness.cpp": "be9d1c0fcf0a9741a941cb064cec0befe197b1e3b858e5f41e8d8ff56773f462",
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "4ff96d6310e27198f51c2bf1a2b9d6b48be8ac667f812a195531ba1813f01bb6",
+    "tst/publication/test_analyze_q043_bell_current_volume_aware.py": "6f27848d9d91c88eacf1f33084fc05d229fbf4359bef339d43986b05803cd43c",
+    "tst/publication/test_q043_bell_current_volume_aware_host_harness.py": "6b4877805594581d6a824e2b21e97a47307139ce4d20246893e4714e06eb9974",
+    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "685f60a22431060deb31c441eec88b83c6b7ee76b3d49c925ec475ee34ddf213",
+    "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "140d0821dc60bd7b197d7d25527bce6044ce9e29f016c50f91c04d24a8bbe81b",
+    "tst/publication/readiness/q043_bell_current_volume_aware_deposited_current_oracle_source_local_2026-06-06.json": "b494894109e9331a27c9e0c08cfcc4326694bb9c008578a4a2acfdced15207d8",
+    "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json": "ebf8130cf85a8caff8e6e53f3b7dd8fbe16ff74349452b3152e2c080a3d74c31",
+    "tst/publication/test_q043_bell_current_normalization_supersession.py": "e8320dba50ee709e10ea4eea6d7ab7856865145e4cb014da89b11eaeb133568f"
+  },
+  "source_local_verification": {
+    "strict_preparation_analyzer": "pass",
+    "focused_preparation_tests": "pass",
+    "source_build_and_focused_runtime_smokes": "pass",
+    "cycle_one_raw_oracle_matrix_observation": "pending",
+    "qualification_effect": "none"
+  },
+  "explicitly_not_claimed": [
+    "Section 5.2 Bell linear qualification",
+    "runtime deposited-current validation",
+    "artificial-light-speed invariance from simulation output",
+    "resolution convergence",
+    "Frontier launch authority",
+    "nonlinear Bell saturation evidence",
+    "publication claim closure"
+  ],
+  "open_dependencies": [
+    "Bind a clean candidate, registered campaign, exact runtime decks, and authorized Orion artifact root.",
+    "Execute the complete cycle-one direct prtcl_rho/prtcl_jx/prtcl_jy/prtcl_jz current-oracle matrix at multiple artificial light speeds and root-grid resolutions.",
+    "Complete linear-growth qualification, independent recompute, and external scientific review before any Section 5.2 claim."
+  ]
+}

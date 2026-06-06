@@ -201,9 +201,12 @@ def validate_supersession(record: dict[str, object]) -> None:
                  f"interim cycle-zero oracle artifact drifted: {path}")
 
     successor = record["required_corrected_successor"]
-    _require(successor["implementation_status"] ==
-             "not_implemented_by_this_readiness_task",
-             "readiness task falsely claims implementation")
+    _require(
+        successor["implementation_status"] ==
+        "source_local_implementation_and_registration_ready_"
+        "runtime_oracle_observation_pending",
+        "successor source-local implementation status drifted",
+    )
     _require(successor["campaign_id"] == "Q043-BELL-CURRENT-VOLUME-AWARE",
              "successor campaign identity drifted")
     _require(successor["generator_name"] == "q043_bell_current_volume_aware",
@@ -220,8 +223,12 @@ def validate_supersession(record: dict[str, object]) -> None:
              "successor reuses a legacy generator identity")
 
     oracle = record["required_output_level_deposited_current_oracle"]
-    _require(oracle["status"] == "required_not_implemented",
-             "oracle status falsely claims closure")
+    _require(
+        oracle["status"] ==
+        "source_local_deck_matrix_and_raw_output_analyzer_ready_"
+        "runtime_observation_pending",
+        "oracle source-local readiness status drifted",
+    )
     _require(oracle["source_of_truth"] ==
              "raw_output_level_deposited_current_not_deck_arithmetic_or_"
              "generator_preflight",
@@ -279,6 +286,26 @@ class Q043BellCurrentNormalizationSupersessionTests(unittest.TestCase):
         self.assertIn("2.0*b_g*light_speed*k0", q029)
         self.assertIn("q_density = q_macro*inv_cell_vol", moments)
         self.assertIn("weighted_q_density*vx", moments)
+
+    def test_authoritative_source_uses_charge_closure_and_mode_scoped_mass(self) -> None:
+        source = (
+            REPO_ROOT / "src/pgen/tests/q043_bell_current_volume_aware.cpp"
+        ).read_text()
+        self.assertIn(
+            "ppc*qscale*species_charge*stream_speed/root_cell_volume", source
+        )
+        self.assertIn(
+            "species_charge/species_mass must equal omega/b_g",
+            source,
+        )
+        self.assertIn(
+            "uniform_current_oracle accepts any positive species_mass", source
+        )
+        self.assertIn(
+            "corrected_linear_eigenmode requires species_mass=1", source
+        )
+        self.assertNotIn("2.0*b_g*light_speed*k0", source)
+        self.assertNotIn("ppc*qscale*(species_charge/species_mass)", source)
 
     def test_rejects_non_volume_aware_or_C_weighted_successor_closure(self) -> None:
         bad_closures = [

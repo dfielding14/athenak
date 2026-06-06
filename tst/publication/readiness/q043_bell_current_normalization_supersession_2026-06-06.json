@@ -5,7 +5,7 @@
   "campaign_id": "Q043-BELL-CURRENT-NORMALIZATION-SUPERSESSION",
   "status": "legacy_q023_q019_q029_bell_current_relation_invalidated",
   "qualification_effect": "source_local_invalidation_only_no_execution_authorization_no_policy_mutation_no_claim_closure",
-  "scope": "Additive source-local readiness record preserving the historical Q-023, Q-019, and Q-029 Bell artifacts while prohibiting their physical execution or qualification under the legacy current relation. This record does not edit historical artifacts, authorize a launch, mutate the active execution policy, or implement the required corrected successor.",
+  "scope": "Additive source-local readiness record preserving the historical Q-023, Q-019, and Q-029 Bell artifacts while prohibiting their physical execution or qualification under the legacy current relation. This record binds the uniquely named Q043 corrected source and source-local cycle-one raw-current oracle without authorizing a launch, mutating active execution policy, or closing a scientific claim.",
   "authority": {
     "physical_execution_authorized": false,
     "scientific_qualification_authorized": false,
@@ -104,7 +104,7 @@
     }
   },
   "required_corrected_successor": {
-    "implementation_status": "not_implemented_by_this_readiness_task",
+    "implementation_status": "source_local_implementation_and_registration_ready_runtime_oracle_observation_pending",
     "campaign_id": "Q043-BELL-CURRENT-VOLUME-AWARE",
     "generator_name": "q043_bell_current_volume_aware",
     "readiness_record_prefix": "q043_bell_current_volume_aware_successor",
@@ -117,7 +117,8 @@
     "required_source_contracts": [
       "bind_the_exact_volume_aware_closure",
       "compute_V_root_cell_from_the_runtime_root_mesh_geometry",
-      "preserve_species_charge_and_species_mass_and_bind_q_over_mc_as_their_ratio",
+      "use_species_charge_directly_in_current_closure_and_bind_species_charge_over_species_mass_as_q_over_mc",
+      "support_arbitrary_positive_species_mass_in_uniform_current_oracle_mode_and_scope_any_mass_1_requirement_to_corrected_linear_mode",
       "treat_deposited_prtcl_j_as_j_CR_over_c",
       "scale_deposit_qscale_with_root_cell_volume_and_inverse_PPC_for_a_fixed_physical_current",
       "reject_dimension_resolution_PPC_or_mesh_changes_that_drift_the_intended_physical_current"
@@ -132,9 +133,15 @@
   },
   "required_output_level_deposited_current_oracle": {
     "oracle_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
-    "status": "required_not_implemented",
+    "status": "source_local_deck_matrix_and_raw_output_analyzer_ready_runtime_observation_pending",
+    "generator_name": "q043_bell_current_volume_aware",
+    "implementation_path": "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py",
+    "readiness_path": "tst/publication/readiness/q043_bell_current_volume_aware_deposited_current_oracle_source_local_2026-06-06.json",
     "source_of_truth": "raw_output_level_deposited_current_not_deck_arithmetic_or_generator_preflight",
     "required_observation_cycle": 1,
+    "canonical_output_dcycle": 2,
+    "canonical_output_timing": "cycle_zero_initialization_and_cycle_one_finalize_only",
+    "cross_field_runtime_metadata": "strict_after_normalizing_only_numbered_output_file_number_and_last_time",
     "cycle_zero_evidence_status": "prohibited_initial_output_precedes_particle_moment_deposition",
     "required_outputs": [
       "prtcl_rho",
@@ -397,5 +404,5 @@
     "rebase_Q019_and_rederive_Q029_before_their_separate_physical_campaigns",
     "bind_any_future_launch_through_the_existing_controlling_policy_without_mutating_it_in_this_task"
   ],
-  "disposition": "legacy_Bell_normalization_preserved_as_history_physical_execution_and_qualification_fail_closed_pending_Q043_volume_aware_successor_and_raw_deposited_current_oracle"
+  "disposition": "legacy_Bell_normalization_preserved_as_history_Q043_source_local_foundation_ready_physical_execution_and_qualification_fail_closed_pending_cycle_one_raw_deposited_current_oracle"
 }
