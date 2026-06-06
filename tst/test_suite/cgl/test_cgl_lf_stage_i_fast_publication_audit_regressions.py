@@ -636,6 +636,9 @@ def test_authenticated_science_and_ct_are_integrated_but_non_authorizing(
     assert ct_row["release_authorizing"] is False
     assert publication.health_rows(data)[0]["direct_ct_numerical"] == "pass"
     report = publication.report_markdown(data, [], tmp_path)
+    assert len(publication.integrated_audit_records(data)) == 1
+    assert publication.integrated_audit_records(data)[0] is data.ct_audit_record
+    assert "- Audit records discovered: `1`" in report
     assert "non-authorizing-direct-fast-scientific-assessment" in report
     assert "campaign_authority_eligible=false" in report
 

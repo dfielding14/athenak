@@ -141,6 +141,15 @@ class PublicationData:
     ingestion_warnings: list[str]
 
 
+def integrated_audit_records(data: PublicationData) -> list[dict[str, Any]]:
+    """Return authenticated audit records represented in publication products."""
+
+    records = list(data.audit_records)
+    if isinstance(data.ct_audit_record, dict):
+        records.append(data.ct_audit_record)
+    return records
+
+
 def nested(value: object, path: str) -> object | None:
     """Return one dotted-path value from nested dictionaries."""
 
@@ -3427,7 +3436,7 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         f"- Fast-report diagnostics available: `{', '.join(analyzed) or 'none'}`",
         f"- Scientific-acceptance passes: `{', '.join(accepted) or 'none'}`",
         f"- Acceptance records discovered: `{len(data.acceptance_records)}`",
-        f"- Audit records discovered: `{len(data.audit_records)}`",
+        f"- Audit records discovered: `{len(integrated_audit_records(data))}`",
         f"- Reviewed-science aggregate: **{aggregate_science_status(data)}** "
         f"(`{SCIENCE_AUTHORITY}`, release_authorizing=false)",
         f"- Reviewed-science selected cases: "
@@ -3740,7 +3749,8 @@ def main(argv: list[str] | None = None) -> int:
             str(record.get("record_type")) for record in data.acceptance_records
         }),
         "audit_record_types": sorted({
-            str(record.get("record_type")) for record in data.audit_records
+            str(record.get("record_type"))
+            for record in integrated_audit_records(data)
         }),
         "reviewed_science": {
             "record_type": data.science_record.get("record_type"),
@@ -3772,7 +3782,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"rendered {len(products)} publication products in {output}; "
         f"acceptance_records={len(data.acceptance_records)}, "
-        f"audit_records={len(data.audit_records)}, "
+        f"audit_records={len(integrated_audit_records(data))}, "
         f"ingestion_warnings={len(data.ingestion_warnings)}, "
         f"case_warnings={len(case_warning_rows(data))}"
     )
