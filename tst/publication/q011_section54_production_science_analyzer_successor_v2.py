@@ -40,11 +40,17 @@ def build_source_local_analysis_packet(
         "admission_sha256": contract.canonical_sha256(normalized),
         "production_deck": stage["production_deck"],
         "shock_front_detector": "unique_strongest_negative_density_gradient",
+        "resource_only_freeze_record": normalized["resource_only_freeze_record"],
+        "campaign_size_selection": normalized["campaign_size_selection"],
+        "reporting_uncertainty_policy": contract.reporting_uncertainty_policy(),
+        "frozen_reporting_rule": normalized["campaign_size_selection"][
+            "reporting_rule"
+        ],
         "gate_count": len(gates),
         "passed_gate_count": 0,
         "measurements_inspected": False,
         "gates": gates,
-        "blockers": contract.source_local_blockers(),
+        "blockers": list(normalized["blockers"]),
         "authorization": dict(contract.AUTHORIZATION_BOUNDARY),
     }
 

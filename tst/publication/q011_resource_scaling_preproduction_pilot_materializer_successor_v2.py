@@ -81,7 +81,7 @@ def _validate_pilot_deck(payload: bytes, *, phase: str, variant: str, seed: int)
         "pilot deck engineering seed drifted",
     )
     _require(seed in contract.ENGINEERING_SEEDS, "pilot deck does not use an engineering seed")
-    _require(seed not in contract.CORE_QUALIFYING_SEEDS, "pilot deck uses a qualifying seed")
+    _require(seed not in contract.QUALIFYING_SEED_POOL, "pilot deck uses a qualifying seed")
     if phase == "compute_scaling":
         _require(blocks["time"]["nlim"] == "512", "compute-scaling cycle limit drifted")
         _require(
@@ -153,6 +153,8 @@ def build_materialization(
         "status": "source_local_materialization_complete_execution_blocked",
         "stage_contract": stage,
         "plan_sha256": contract.canonical_sha256(normalized_plan),
+        "resource_only_freeze_record": normalized_plan["resource_only_freeze_record"],
+        "campaign_size_selection": normalized_plan["campaign_size_selection"],
         "production_deck": stage["production_deck"],
         "successor_output_count": 9,
         "phases": list(PHASES),
@@ -173,6 +175,19 @@ def build_materialization(
         "cases": cases,
         "gate_id": "exact_successor_deck_scaling_and_io_pilots",
         "gate_status": "blocked_pending_registered_runtime_evidence",
+        "resource_only_freeze_definition": contract.resource_only_freeze_definition(),
+        "resource_only_freeze_must_use_excluded_pilot_measurements": {
+            "rule": (
+                "the campaign-size freeze may use registered pilot resource "
+                "measurements only after the pilot gate passes and may not inspect "
+                "pilot physical outputs for scientific selection"
+            ),
+            "source_category": "engineering closure",
+            "rationale": (
+                "This binds the exact-deck pilot evidence to resource-only campaign "
+                "sizing without turning engineering pilots into qualifying science."
+            ),
+        },
         "authorization": dict(contract.AUTHORIZATION_BOUNDARY),
     }
     return manifest, files
@@ -181,7 +196,10 @@ def build_materialization(
 def validate_materialization(
     manifest: object, files: Mapping[str, bytes], plan: object | None = None
 ) -> tuple[dict[str, object], dict[str, bytes]]:
-    expected_manifest, expected_files = build_materialization(plan)
+    inferred_plan = plan
+    if inferred_plan is None and type(manifest) is dict:
+        inferred_plan = planner.build_plan(manifest.get("resource_only_freeze_record"))
+    expected_manifest, expected_files = build_materialization(inferred_plan)
     _require(
         contract._strict_equal(manifest, expected_manifest),
         "Q011 resource-pilot manifest drifted or acquired authority",

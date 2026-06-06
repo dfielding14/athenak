@@ -6,43 +6,43 @@
   "claim_id": "CLAIM-PAPER-SHOCK-001",
   "status": "source_local_contract_complete_execution_and_science_blocked",
   "qualification_effect": "contract_repair_only_no_launch_no_policy_no_qualifying_output_inspection_no_science_no_claim_closure",
-  "scope": "Additive production-campaign contract successor that binds the nine-output Section 5.4 production-science deck through planner, exact-deck resource pilots, registered-launch review, execution handoff, admission, and analyzer stages. It expands the runtime-critical PIC, source-term, EOS, MHD, AMR, load-balancing, problem-generator, output, and analysis source closure; supersedes the future-campaign shock-front sign rule with the strongest negative density gradient; and freezes fail-closed DSA, Bell, scaling, and I/O gates with explicit threshold provenance. It modifies no historical artifact and grants no authority.",
+  "scope": "Additive production-campaign contract successor that binds the nine-output Section 5.4 production-science deck through planner, exact-deck resource pilots, registered-launch review, execution handoff, admission, and analyzer stages. It expands the runtime-critical PIC, source-term, EOS, MHD, AMR, load-balancing, problem-generator, output, and analysis source closure; supersedes the future-campaign shock-front sign rule with the strongest negative density gradient; freezes fail-closed DSA, Bell, scaling, and I/O gates with explicit threshold provenance; and preregisters an eight-seed paired-triad envelope with a resource-only pre-launch freeze and honest small-N reporting rules. It modifies no historical artifact and grants no authority.",
   "source_bindings": {
     "central_contract": {
       "path": "tst/publication/q011_section54_production_campaign_contract_successor_v2.py",
-      "sha256": "3ef95f7056928f71424ffb1048304bed55faddc594808ca4456ddcd549c57a0b"
+      "sha256": "46e72d703ada9a471caaecaffbc06f17a4eae5582f81ddaec9af5b6751786762"
     },
     "planner": {
       "path": "tst/publication/q011_section54_production_campaign_planner_successor_v2.py",
-      "sha256": "bfcbda3a161e1e0cc6800bc432f46146fa74395304888cf6aadf1517f92470b9"
+      "sha256": "2df026f86b9efe964e9c5bfaeeb1992a03a496b42fcc1378b77fd582c59dd9a0"
     },
     "resource_pilot_materializer": {
       "path": "tst/publication/q011_resource_scaling_preproduction_pilot_materializer_successor_v2.py",
-      "sha256": "9e6712d0e61d474d44e80e26e4c64f931622f6431f76eaebf0da4fc976573432"
+      "sha256": "a55c1a2c2001c199d156953042ba5a2ab179f7907cc849a7babc00383a751910"
     },
     "registered_launch_materializer": {
       "path": "tst/publication/q011_section54_registered_launch_materializer_successor_v2.py",
-      "sha256": "28545b67c43d7ea610fea9709e674558425e51e5c1bf9696e11f2e05fb7af856"
+      "sha256": "8dab37b3e595218bc573ab0fad6effe62516606b51de8aac8055cc371a64d78f"
     },
     "campaign_execution": {
       "path": "tst/publication/q011_section54_qualifying_campaign_execution_successor_v2.py",
-      "sha256": "aac318a422757c234d6a1cd98ac6cb869c461919db1d0e0b6e40b2736181f612"
+      "sha256": "e6ac966a5a5aa66c3d96db6c31d3949b9c06a984d8a42a9a4fc634e67b27f7a4"
     },
     "admission": {
       "path": "tst/publication/q011_section54_production_science_admission_orchestration_successor_v2.py",
-      "sha256": "2e255b5fe335d109ea4673fffbc7cb160b6e9545321cd9e69dfa3d9a9713d50d"
+      "sha256": "d900cc87decf3542f915da009cd8e2db91a36ded077abad117f7922daf3da032"
     },
     "analyzer": {
       "path": "tst/publication/q011_section54_production_science_analyzer_successor_v2.py",
-      "sha256": "128855413fd245c1a48a0b51d5182b7ac39031cc4b432fa3fa4b34edaa0ef1be"
+      "sha256": "16e4da97b1cf488a945964eda6e58d2e8729705a6f5b8e76170b79754a427400"
     },
     "focused_adversarial_tests": {
       "path": "tst/publication/test_q011_section54_production_campaign_contract_successor_v2.py",
-      "sha256": "230a89bdc9b367010307ddadd85ae4e063650f60ae3f2cb8025231761fb8cb4c"
+      "sha256": "c2fb9e7824e84f8aa53bacaee9b214d8d961990bb87b534cc74c871685c53e3e"
     },
     "negative_gradient_preregistration": {
       "path": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v4_2026-06-06.json",
-      "sha256": "ebe0af57d0659d51d663145e53507081cda0e889bc335e0564656db6ee41b7bd"
+      "sha256": "4e275df2c738e0a20cc31b2561d6fbfd28cedb9a92cad9f919a08b03b0adacc5"
     },
     "production_deck": {
       "path": "inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput",
@@ -50,9 +50,12 @@
     }
   },
   "deterministic_contract_bindings": {
-    "pipeline_contract_sha256": "06ed6e6bb6553355057579eb9abaafb8313c1922fde6830d1b36a0e3983968b5",
-    "runtime_source_closure_sha256": "59096f5cbe6c59622d01ad9bf87c13d4d74720c54a4ffb860447ca70d7464abc",
-    "source_local_gate_records_sha256": "124d68b0a3f2bf8157c8591f427fb85842a414fcbe500985b55bfc3430152d4b"
+    "pipeline_contract_sha256": "34d0b5345cbda3b4f17b6b1a16f17acbe9248534f0caadf6a8fc53b5f7361db1",
+    "runtime_source_closure_sha256": "75924ca63af4e991bda83b6d5c875922c626d7aa37135def8dca6ae1a02d97ed",
+    "source_local_gate_records_sha256": "124d68b0a3f2bf8157c8591f427fb85842a414fcbe500985b55bfc3430152d4b",
+    "campaign_size_resource_design_sha256": "17bfe5d01276d1a1c40f70fa28b0e8a5867bd3cc466bcf6ca95d07812e1366f7",
+    "resource_only_freeze_definition_sha256": "1c4e95391c95934d8215bddcc1d43758fb32e4e06807622157118c166b7e1aba",
+    "reporting_uncertainty_policy_sha256": "dea22b7dcc4820400f28a795c89bba37bb9c7b826fd587cfc3becf6bce0be502"
   },
   "end_to_end_contract": {
     "stage_order": [
@@ -65,8 +68,34 @@
     ],
     "predecessor_rule": "Every stage consumes, validates, and hashes its predecessor record before emitting its own source-local fail-closed record.",
     "production_deck_rule": "Every stage binds the exact nine-output successor deck and launch path; the six-output historical deck is rejected.",
-    "core_campaign_matrix": "three paired qualifying seeds across coarse-uniform, three-level AMR, and fine-uniform variants for nine attempts",
-    "expansion_rule": "complete paired triads only after exact-deck scaling and I/O pilots pass without inspecting qualifying physical outputs"
+    "mandatory_core_campaign_matrix": "three paired qualifying seeds across coarse-uniform, three-level AMR, and fine-uniform variants for nine required attempts",
+    "reserve_seed_envelope": "five additional ordered paired seeds are preregistered through a maximum of eight complete triads and twenty-four possible attempts; the maximum is not promised",
+    "resource_only_freeze_rule": "after excluded exact-deck scaling and I/O pilots and before any qualifying launch or output inspection, freeze N as the largest complete paired-triad prefix from three through eight fitting the measured global ten-thousand node-hour ledger after all other registered campaign reservations and the stated contingency",
+    "post_execution_rule": "once qualifying execution begins, expansion, contraction, seed dropping, and science-output-driven sample-size changes are forbidden"
+  },
+  "statistical_and_resource_design": {
+    "mandatory_core_triads": {
+      "value": 3,
+      "source_category": "analysis-quality",
+      "rationale": "Three paired seeds are the mandatory repeatability core and not a literature-derived sample size."
+    },
+    "maximum_preregistered_triads": {
+      "value": 8,
+      "source_category": "engineering closure",
+      "rationale": "Eight is the maximum reserve envelope, not a promised run count or a literature-derived sample size."
+    },
+    "global_node_hour_cap": {
+      "value": 10000.0,
+      "source_category": "engineering closure",
+      "rationale": "The global project ledger cap is an engineering control with no scientific literature origin."
+    },
+    "contingency": {
+      "rule": "reserve the greater of one measured complete-triad cost or fifteen percent of the frozen Q011 production cost",
+      "source_category": "engineering closure",
+      "rationale": "The stated contingency protects complete paired retries without seed dropping and has no scientific literature origin."
+    },
+    "N_equals_3_reporting": "report every paired value and contrast plus the observed range; make narrow claims about these three realizations only and no broad population inference",
+    "N_greater_than_3_reporting": "before launch freeze the exact two-sided distribution-free order-statistic interval for the median paired contrast at nominal eighty-percent coverage, report achieved finite-sample coverage, document ties, and avoid asymptotic-normal or standard-error claims"
   },
   "runtime_source_closure": {
     "coverage": [
@@ -111,6 +140,7 @@
     "compute_scaling": "three full-geometry 512-cycle output-suppressed decks with explicit node ladders",
     "io_scaling": "three reduced-transverse full-time decks retaining the exact nine-output cadence",
     "engineering_seeds_disjoint_from_qualifying_seeds": true,
+    "campaign_size_freeze_binding": "registered exact-deck pilot resource measurements are required inputs to the resource-only freeze; pilot physical outputs remain excluded from qualifying science",
     "maximum_consumed_node_hours": {
       "value": 500.0,
       "source_category": "engineering closure",
@@ -128,8 +158,8 @@
     "verification": "The central contract hash-verifies sixteen protected historical artifacts and tests before building the pipeline."
   },
   "verification": {
-    "focused_adversarial_tests": "16 tests passed",
-    "adjacent_q011_regression_tests": "106 tests passed",
+    "focused_adversarial_tests": "22 tests passed",
+    "adjacent_q011_regression_tests": "112 tests passed",
     "python_compile": "passed",
     "git_diff_check": "passed",
     "adversarial_coverage": [
@@ -142,6 +172,11 @@
       "forged execution receipt injection",
       "premature attempt admission",
       "science-gate pass and output-inspection injection",
+      "science-output-derived campaign-size input injection",
+      "pre-pilot or post-launch resource-freeze injection",
+      "unaffordable mandatory core and non-largest freeze selection",
+      "post-freeze expansion, contraction, and seed dropping",
+      "N=3 descriptive-only and N>3 exact interval-estimator reporting rules",
       "non-finite JSON"
     ],
     "registered_runtime_execution": "not_run_not_authorized_by_this_successor"
@@ -151,6 +186,7 @@
     "Registered Frontier MPI HIP evidence for dynamic AMR migration, load balancing, restart, reflection, and escape remains absent.",
     "The production deck still sets particle load-balance cost per particle to zero; the exact-deck resource pilot must select and validate a production value.",
     "The scaling and I/O pilots are materialized but not executed, so node counts, memory margin, walltime, output cost, and the production campaign budget remain unclosed.",
+    "The resource-only campaign-size freeze has not been recorded from a measured post-pilot global ledger; the source-local executable plan therefore remains the mandatory three-seed, nine-run core.",
     "All DSA and Bell gate records are source-local preregistrations only. No registered production raw artifacts have been admitted or scientifically evaluated.",
     "AthenaK-selected numerical release thresholds are not literature-derived universal tolerances."
   ],

@@ -57,9 +57,11 @@ def build_review_candidates(
         "resource_pilot_materialization_sha256": contract.canonical_sha256(
             normalized_pilot
         ),
+        "resource_only_freeze_record": normalized_plan["resource_only_freeze_record"],
+        "campaign_size_selection": normalized_plan["campaign_size_selection"],
         "candidate_count": len(candidates),
         "candidates": candidates,
-        "blockers": contract.source_local_blockers(),
+        "blockers": list(normalized_plan["blockers"]),
         "authorization": dict(contract.AUTHORIZATION_BOUNDARY),
     }
 
@@ -69,7 +71,10 @@ def validate_review_candidates(
     plan: object | None = None,
     pilot_materialization: object | None = None,
 ) -> dict[str, object]:
-    expected = build_review_candidates(plan, pilot_materialization)
+    inferred_plan = plan
+    if inferred_plan is None and type(value) is dict:
+        inferred_plan = planner.build_plan(value.get("resource_only_freeze_record"))
+    expected = build_review_candidates(inferred_plan, pilot_materialization)
     _require(
         contract._strict_equal(value, expected),
         "Q011 registered-launch successor drifted or acquired authority",

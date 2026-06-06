@@ -56,9 +56,14 @@ def build_execution_handoffs(
         "registered_launch_review_sha256": contract.canonical_sha256(
             normalized_candidates
         ),
+        "resource_only_freeze_record": normalized_plan["resource_only_freeze_record"],
+        "campaign_size_selection": normalized_plan["campaign_size_selection"],
+        "post_qualifying_execution_rule": contract.campaign_size_resource_design()[
+            "post_qualifying_execution_rule"
+        ],
         "handoff_count": len(handoffs),
         "handoffs": handoffs,
-        "blockers": contract.source_local_blockers(),
+        "blockers": list(normalized_plan["blockers"]),
         "authorization": dict(contract.AUTHORIZATION_BOUNDARY),
     }
 
@@ -66,7 +71,10 @@ def build_execution_handoffs(
 def validate_execution_handoffs(
     value: object, plan: object | None = None, review_candidates: object | None = None
 ) -> dict[str, object]:
-    expected = build_execution_handoffs(plan, review_candidates)
+    inferred_plan = plan
+    if inferred_plan is None and type(value) is dict:
+        inferred_plan = planner.build_plan(value.get("resource_only_freeze_record"))
+    expected = build_execution_handoffs(inferred_plan, review_candidates)
     _require(
         contract._strict_equal(value, expected),
         "Q011 execution-handoff successor drifted or acquired authority",

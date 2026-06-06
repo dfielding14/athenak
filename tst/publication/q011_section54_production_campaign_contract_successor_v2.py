@@ -48,7 +48,24 @@ GRID_VARIANTS = (
     "three_level_amr_root_dx12_finest_dx3",
     "fine_uniform_dx3",
 )
-CORE_QUALIFYING_SEEDS = (23050101, 23050102, 23050103)
+QUALIFYING_SEED_POOL = (
+    23050101,
+    23050102,
+    23050103,
+    23050104,
+    23050105,
+    23050106,
+    23050107,
+    23050108,
+)
+CORE_QUALIFYING_SEEDS = QUALIFYING_SEED_POOL[:3]
+RESERVE_QUALIFYING_SEEDS = QUALIFYING_SEED_POOL[3:]
+MIN_FROZEN_TRIAD_COUNT = 3
+MAX_FROZEN_TRIAD_COUNT = 8
+GLOBAL_NODE_HOUR_LEDGER_CAP = 10000.0
+RESOURCE_CONTINGENCY_FRACTION = 0.15
+RESOURCE_CONTINGENCY_COMPLETE_TRIAD_FLOOR = 1
+PAIRED_INTERVAL_NOMINAL_COVERAGE = 0.80
 ENGINEERING_SEEDS = (24060601, 24060602, 24060603, 24060604)
 SEED_OVERRIDE_NAMES = (
     "particles/pic_random_seed",
@@ -348,6 +365,306 @@ THRESHOLD_SOURCE_CATEGORIES = frozenset(
         "literature comparison",
     }
 )
+
+def _policy_rule(
+    statement: str, source_category: str, rationale: str
+) -> dict[str, str]:
+    return {
+        "rule": statement,
+        "source_category": source_category,
+        "rationale": rationale,
+    }
+
+
+def campaign_size_resource_design() -> dict[str, object]:
+    """Return the preregistered paired-triad resource design."""
+    return {
+        "variants": list(GRID_VARIANTS),
+        "ordered_qualifying_seed_pool": list(QUALIFYING_SEED_POOL),
+        "mandatory_core_qualifying_seeds": list(CORE_QUALIFYING_SEEDS),
+        "preregistered_reserve_qualifying_seeds": list(RESERVE_QUALIFYING_SEEDS),
+        "paired_seed_rule": _policy_rule(
+            "Every selected seed must retain a complete coarse-AMR-fine triad.",
+            "analysis-quality",
+            (
+                "Complete paired triads preserve within-seed grid comparisons and "
+                "prevent resource pressure from selectively dropping a variant."
+            ),
+        ),
+        "ordered_prefix_rule": _policy_rule(
+            "The frozen seed set must be an ordered prefix of the preregistered pool.",
+            "analysis-quality",
+            (
+                "The ordered prefix prevents post-pilot or post-output selection of "
+                "apparently favorable random realizations."
+            ),
+        ),
+        "resource_only_freeze_rule": _policy_rule(
+            (
+                "After excluded exact-deck scaling and I/O pilots pass, and before "
+                "any qualifying launch or output inspection, freeze N as the largest "
+                "affordable complete paired-triad prefix."
+            ),
+            "engineering closure",
+            (
+                "The freeze uses resource evidence only, preserving the largest "
+                "affordable preregistered paired design without science-output-driven "
+                "sample-size selection."
+            ),
+        ),
+        "post_qualifying_execution_rule": _policy_rule(
+            (
+                "After the first qualifying launch begins, expansion, contraction, "
+                "seed dropping, and science-output-driven sample-size changes are "
+                "forbidden; retries retain the frozen seed and complete triad."
+            ),
+            "analysis-quality",
+            (
+                "An immutable frozen matrix prevents optional stopping and selective "
+                "removal while preserving paired comparisons after runtime failures."
+            ),
+        ),
+        "core_fit_failure_rule": _policy_rule(
+            (
+                "If the mandatory core plus contingency does not fit the measured "
+                "ledger, fail closed and launch no qualifying production attempt."
+            ),
+            "engineering closure",
+            (
+                "The mandatory core cannot be weakened to fit the budget, and the "
+                "global ledger cap cannot be exceeded."
+            ),
+        ),
+        "numeric_rules": [
+            {
+                "rule_id": "mandatory_core_triad_count",
+                "value": MIN_FROZEN_TRIAD_COUNT,
+                "source_category": "analysis-quality",
+                "rationale": (
+                    "Three paired seeds are the minimum preregistered repeatability "
+                    "core; this is an analysis-design choice, not a literature sample "
+                    "size."
+                ),
+            },
+            {
+                "rule_id": "mandatory_core_attempt_count",
+                "value": MIN_FROZEN_TRIAD_COUNT * len(GRID_VARIANTS),
+                "source_category": "analysis-quality",
+                "rationale": (
+                    "Nine attempts are the complete three-variant realization of the "
+                    "mandatory three-seed paired core, not a literature-derived count."
+                ),
+            },
+            {
+                "rule_id": "maximum_preregistered_triad_count",
+                "value": MAX_FROZEN_TRIAD_COUNT,
+                "source_category": "engineering closure",
+                "rationale": (
+                    "Eight paired triads cap the preregistered reserve pool without "
+                    "promising an unaffordable full matrix; this is a project resource "
+                    "choice with no literature origin."
+                ),
+            },
+            {
+                "rule_id": "maximum_preregistered_attempt_count",
+                "value": MAX_FROZEN_TRIAD_COUNT * len(GRID_VARIANTS),
+                "source_category": "engineering closure",
+                "rationale": (
+                    "Twenty-four is only the maximum preregistered design envelope, "
+                    "not a promised run count or a literature-derived sample size."
+                ),
+            },
+            {
+                "rule_id": "global_node_hour_ledger_cap",
+                "value": GLOBAL_NODE_HOUR_LEDGER_CAP,
+                "source_category": "engineering closure",
+                "rationale": (
+                    "The global ten-thousand node-hour cap is an AthenaK project "
+                    "resource-control limit and has no scientific literature origin."
+                ),
+            },
+            {
+                "rule_id": "resource_contingency_fraction",
+                "value": RESOURCE_CONTINGENCY_FRACTION,
+                "source_category": "engineering closure",
+                "rationale": (
+                    "The fifteen-percent proportional reserve is an AthenaK "
+                    "engineering recovery allowance selected before qualifying "
+                    "execution and has no scientific literature origin."
+                ),
+            },
+            {
+                "rule_id": "resource_contingency_complete_triad_floor",
+                "value": RESOURCE_CONTINGENCY_COMPLETE_TRIAD_FLOOR,
+                "source_category": "engineering closure",
+                "rationale": (
+                    "At least one measured complete-triad cost is reserved so a "
+                    "runtime retry does not require seed dropping; this is an "
+                    "engineering allowance with no literature origin."
+                ),
+            },
+        ],
+    }
+
+
+def resource_only_freeze_definition() -> dict[str, object]:
+    """Return the exact resource-only freeze contract."""
+    return {
+        "record_type": "q011_section54_resource_only_campaign_size_freeze_successor_v2",
+        "required_timing": _policy_rule(
+            (
+                "after excluded exact-deck scaling and I/O pilots pass and before "
+                "any qualifying launch, qualifying output inspection, or qualifying "
+                "production reservation"
+            ),
+            "engineering closure",
+            (
+                "This ordering isolates campaign-size selection from qualifying "
+                "science outputs and prevents unbudgeted production reservations."
+            ),
+        ),
+        "required_resource_evidence": _policy_rule(
+            (
+                "bind the measured global ledger snapshot, the complete reservation "
+                "manifest for every other registered campaign, and the exact-deck "
+                "pilot completion receipt"
+            ),
+            "engineering closure",
+            (
+                "The freeze must account for measured use and all prior obligations "
+                "before assigning the remaining ledger to Q011."
+            ),
+        ),
+        "selection_rule": _policy_rule(
+            (
+                "select the largest integer N in the preregistered range whose "
+                "complete paired-triad production cost and stated contingency fit "
+                "the global ledger after all other obligations"
+            ),
+            "engineering closure",
+            (
+                "Largest-affordable selection uses only pre-launch resource evidence "
+                "and never observed scientific outcomes."
+            ),
+        ),
+        "budget_equation": _policy_rule(
+            (
+                "global consumed + global currently reserved after all other "
+                "campaign reservations + unreserved Q011 nonbaseline obligations + "
+                "N times measured conservative complete-triad cost + max(one "
+                "complete-triad cost, contingency fraction times N times measured "
+                "complete-triad cost) <= global ledger cap"
+            ),
+            "engineering closure",
+            (
+                "The equation reserves all measured and registered obligations plus "
+                "a retry and proportional recovery allowance before production."
+            ),
+        ),
+        "prohibited_inputs": _policy_rule(
+            (
+                "qualifying measurements, gate results, physical observables, and "
+                "science-output-derived costs or preferences"
+            ),
+            "analysis-quality",
+            (
+                "Excluding qualifying science information prevents optional stopping "
+                "and outcome-dependent campaign-size selection."
+            ),
+        ),
+        "post_freeze_rule": campaign_size_resource_design()[
+            "post_qualifying_execution_rule"
+        ],
+        "authorization": dict(AUTHORIZATION_BOUNDARY),
+    }
+
+
+def reporting_uncertainty_policy() -> dict[str, object]:
+    """Return the preregistered honest small-N reporting policy."""
+    return {
+        "all_frozen_N": _policy_rule(
+            (
+                "report every paired seed value, every preregistered paired contrast, "
+                "and the observed min-max range without seed dropping"
+            ),
+            "analysis-quality",
+            (
+                "Transparent paired reporting exposes realization variability and "
+                "prevents a summary statistic from hiding an unfavorable seed."
+            ),
+        ),
+        "N_equals_3": _policy_rule(
+            (
+                "report paired values, paired contrasts, and ranges; make only "
+                "narrow claims about the three preregistered realizations and do not "
+                "make broad population inference"
+            ),
+            "analysis-quality",
+            (
+                "Three paired realizations do not support a useful distribution-free "
+                "population interval, so the honest scope is descriptive and narrow."
+            ),
+        ),
+        "N_greater_than_3": _policy_rule(
+            (
+                "before launch freeze the exact two-sided distribution-free "
+                "order-statistic interval for the median paired contrast, report its "
+                "achieved finite-sample coverage, document ties, and avoid "
+                "asymptotic-normal or standard-error claims"
+            ),
+            "analysis-quality",
+            (
+                "An exact order-statistic interval remains auditable for the small "
+                "frozen seed ensemble and does not assume Gaussian paired contrasts."
+            ),
+        ),
+        "inference_scope": _policy_rule(
+            (
+                "the interval describes repeatability over the preregistered seed "
+                "ensemble and does not establish universal astrophysical-parameter "
+                "population inference"
+            ),
+            "conservative applicability",
+            (
+                "Seed replication quantifies numerical-realization sensitivity but "
+                "does not sample the broader physical parameter population."
+            ),
+        ),
+        "numeric_rules": [
+            {
+                "rule_id": "descriptive_only_triad_count",
+                "value": MIN_FROZEN_TRIAD_COUNT,
+                "source_category": "analysis-quality",
+                "rationale": (
+                    "At three paired seeds the exact median interval at the chosen "
+                    "coverage is unavailable, so only paired values and ranges support "
+                    "narrow claims; this is not a literature threshold."
+                ),
+            },
+            {
+                "rule_id": "interval_estimator_minimum_triad_count",
+                "value": MIN_FROZEN_TRIAD_COUNT + 1,
+                "source_category": "analysis-quality",
+                "rationale": (
+                    "Four is the smallest frozen N admitting the preregistered exact "
+                    "two-sided median interval at the chosen coverage; this is a "
+                    "finite-sample analysis property, not a literature sample size."
+                ),
+            },
+            {
+                "rule_id": "paired_interval_nominal_coverage",
+                "value": PAIRED_INTERVAL_NOMINAL_COVERAGE,
+                "source_category": "analysis-quality",
+                "rationale": (
+                    "Eighty-percent nominal coverage guarantees an exact interval for "
+                    "every allowed N above three and permits an inner order-statistic "
+                    "interval at N seven and eight; achieved exact coverage is always "
+                    "reported and no literature origin is implied."
+                ),
+            },
+        ],
+    }
+
 
 GATE_DEFINITIONS: dict[str, dict[str, object]] = {
     "nonrelativistic_accelerated_tail_validity": {
@@ -964,6 +1281,7 @@ def preregistration_binding() -> dict[str, object]:
     """Validate and bind the versioned negative-gradient preregistration."""
     payload = _repo_payload(PREREGISTRATION, label="Q011 successor preregistration")
     value = _decode_json(payload, label="Q011 successor preregistration")
+    statistical_resource = validate_statistical_resource_design()
     _require(
         value.get("record_type")
         == "q011_section54_qualifying_campaign_preregistration_successor_v4"
@@ -972,6 +1290,12 @@ def preregistration_binding() -> dict[str, object]:
         and value.get("source_local_gate_ids") == list(GATE_DEFINITIONS)
         and value.get("threshold_provenance_policy", {}).get("allowed_source_categories")
         == sorted(THRESHOLD_SOURCE_CATEGORIES)
+        and value.get("campaign_size_resource_design")
+        == statistical_resource["campaign_size_resource_design"]
+        and value.get("resource_only_freeze_definition")
+        == statistical_resource["resource_only_freeze_definition"]
+        and value.get("reporting_uncertainty_policy")
+        == statistical_resource["reporting_uncertainty_policy"]
         and value.get("shock_front", {}).get("detector")
         == "unique_strongest_negative_density_gradient"
         and value.get("authorization") == AUTHORIZATION_BOUNDARY,
@@ -993,6 +1317,347 @@ def _require_finite_json_numbers(value: object, *, label: str) -> None:
             _require_finite_json_numbers(item, label=f"{label}[{index}]")
         return
     _require(False, f"{label}: unsupported threshold value type")
+
+
+def _validate_policy_rule(value: object, *, label: str) -> None:
+    _require(
+        type(value) is dict
+        and set(value) == {"rule", "source_category", "rationale"},
+        f"{label}: policy-rule schema drifted",
+    )
+    _require(
+        type(value["rule"]) is str and len(value["rule"].strip()) >= 24,
+        f"{label}: policy rule is missing",
+    )
+    _require(
+        value["source_category"] in THRESHOLD_SOURCE_CATEGORIES,
+        f"{label}: source category is missing or unsupported",
+    )
+    _require(
+        type(value["rationale"]) is str and len(value["rationale"].strip()) >= 24,
+        f"{label}: rationale is missing",
+    )
+
+
+def _validate_numeric_rules(value: object, *, label: str) -> None:
+    _require(type(value) is list and bool(value), f"{label}: numeric rules missing")
+    seen: set[str] = set()
+    for index, rule in enumerate(value):
+        rule_label = f"{label}[{index}]"
+        _require(
+            type(rule) is dict
+            and set(rule) == {"rule_id", "value", "source_category", "rationale"},
+            f"{rule_label}: numeric-rule schema drifted",
+        )
+        rule_id = rule["rule_id"]
+        _require(
+            type(rule_id) is str and bool(rule_id) and rule_id not in seen,
+            f"{rule_label}: numeric-rule ID is empty or duplicated",
+        )
+        seen.add(rule_id)
+        _require_finite_json_numbers(rule["value"], label=f"{rule_label}/value")
+        _require(
+            rule["source_category"] in THRESHOLD_SOURCE_CATEGORIES,
+            f"{rule_label}: source category is missing or unsupported",
+        )
+        _require(
+            type(rule["rationale"]) is str and len(rule["rationale"].strip()) >= 24,
+            f"{rule_label}: rationale is missing",
+        )
+        if rule["source_category"] == "literature comparison":
+            _require(
+                "not" in rule["rationale"].lower(),
+                f"{rule_label}: literature-comparison rule implies unsupported origin",
+            )
+
+
+def validate_statistical_resource_design() -> dict[str, dict[str, object]]:
+    """Validate resource-freeze and honest-reporting provenance."""
+    design = campaign_size_resource_design()
+    _require(
+        len(GRID_VARIANTS) == 3
+        and len(QUALIFYING_SEED_POOL) == MAX_FROZEN_TRIAD_COUNT
+        and CORE_QUALIFYING_SEEDS == QUALIFYING_SEED_POOL[:MIN_FROZEN_TRIAD_COUNT]
+        and RESERVE_QUALIFYING_SEEDS == QUALIFYING_SEED_POOL[MIN_FROZEN_TRIAD_COUNT:]
+        and len(set(QUALIFYING_SEED_POOL)) == len(QUALIFYING_SEED_POOL)
+        and set(QUALIFYING_SEED_POOL).isdisjoint(ENGINEERING_SEEDS),
+        "Q011 qualifying paired-triad seed design drifted",
+    )
+    for key in (
+        "paired_seed_rule",
+        "ordered_prefix_rule",
+        "resource_only_freeze_rule",
+        "post_qualifying_execution_rule",
+        "core_fit_failure_rule",
+    ):
+        _validate_policy_rule(design[key], label=f"campaign_size_resource_design/{key}")
+    _validate_numeric_rules(
+        design["numeric_rules"], label="campaign_size_resource_design/numeric_rules"
+    )
+
+    freeze = resource_only_freeze_definition()
+    for key in (
+        "required_timing",
+        "required_resource_evidence",
+        "selection_rule",
+        "budget_equation",
+        "prohibited_inputs",
+        "post_freeze_rule",
+    ):
+        _validate_policy_rule(freeze[key], label=f"resource_only_freeze_definition/{key}")
+    _require(
+        freeze["authorization"] == AUTHORIZATION_BOUNDARY,
+        "Q011 resource-only freeze definition acquired authority",
+    )
+
+    reporting = reporting_uncertainty_policy()
+    for key in ("all_frozen_N", "N_equals_3", "N_greater_than_3", "inference_scope"):
+        _validate_policy_rule(reporting[key], label=f"reporting_uncertainty_policy/{key}")
+    _validate_numeric_rules(
+        reporting["numeric_rules"], label="reporting_uncertainty_policy/numeric_rules"
+    )
+    return {
+        "campaign_size_resource_design": design,
+        "resource_only_freeze_definition": freeze,
+        "reporting_uncertainty_policy": reporting,
+    }
+
+
+def reporting_rule_for_frozen_n(triad_count: int) -> dict[str, object]:
+    """Return the exact preregistered reporting rule for one frozen N."""
+    _require(
+        type(triad_count) is int
+        and MIN_FROZEN_TRIAD_COUNT <= triad_count <= MAX_FROZEN_TRIAD_COUNT,
+        "Q011 frozen triad count is outside the preregistered range",
+    )
+    if triad_count == MIN_FROZEN_TRIAD_COUNT:
+        return {
+            "frozen_triad_count": triad_count,
+            "estimator_id": "none_descriptive_paired_values_and_range_only",
+            "interval_estimator_frozen": False,
+            "broad_population_inference_authorized": False,
+            "source_category": "analysis-quality",
+            "rationale": reporting_uncertainty_policy()["N_equals_3"]["rationale"],
+        }
+
+    maximum_lower_index = (triad_count + 1) // 2
+    selected_lower_index = 0
+    selected_coverage = 0.0
+    for lower_index in range(1, maximum_lower_index + 1):
+        lower_tail = sum(
+            math.comb(triad_count, index) for index in range(lower_index)
+        ) / (2**triad_count)
+        coverage = 1.0 - 2.0 * lower_tail
+        if coverage >= PAIRED_INTERVAL_NOMINAL_COVERAGE:
+            selected_lower_index = lower_index
+            selected_coverage = coverage
+    _require(
+        selected_lower_index > 0,
+        "Q011 frozen N does not admit the preregistered exact paired interval",
+    )
+    return {
+        "frozen_triad_count": triad_count,
+        "estimator_id": "exact_two_sided_order_statistic_interval_for_median_paired_contrast",
+        "interval_estimator_frozen": True,
+        "lower_order_statistic_index_1_based": selected_lower_index,
+        "upper_order_statistic_index_1_based": triad_count - selected_lower_index + 1,
+        "nominal_coverage": PAIRED_INTERVAL_NOMINAL_COVERAGE,
+        "achieved_finite_sample_coverage": selected_coverage,
+        "ties": "document_and_report_without_post_freeze_estimator_substitution",
+        "broad_population_inference_authorized": False,
+        "source_category": "analysis-quality",
+        "rationale": reporting_uncertainty_policy()["N_greater_than_3"]["rationale"],
+    }
+
+
+RESOURCE_FREEZE_INPUT_KEYS = frozenset(
+    {
+        "global_ledger_snapshot_binding",
+        "all_other_registered_campaign_reservations_manifest_binding",
+        "exact_deck_scaling_io_pilot_completion_binding",
+        "global_ledger_cumulative_consumed_node_hours_after_excluded_pilots",
+        "global_ledger_currently_reserved_node_hours_after_all_other_campaigns",
+        "q011_unreserved_nonbaseline_obligations_node_hours",
+        "measured_conservative_complete_paired_triad_node_hours",
+        "exact_deck_scaling_io_pilots_passed",
+        "exact_deck_scaling_io_pilots_excluded_from_qualifying_science",
+        "all_other_registered_campaigns_reserved",
+        "qualifying_production_reservations_present",
+        "qualifying_launch_started",
+        "qualifying_output_inspected",
+    }
+)
+
+
+def _normalize_registered_binding(value: object, *, label: str) -> dict[str, str]:
+    _require(
+        type(value) is dict and set(value) == {"path", "sha256"},
+        f"{label}: binding schema drifted",
+    )
+    relative = value["path"]
+    digest = value["sha256"]
+    path = PurePosixPath(relative) if type(relative) is str else PurePosixPath(".")
+    _require(
+        type(relative) is str
+        and bool(relative)
+        and not path.is_absolute()
+        and path.as_posix() == relative
+        and relative != "."
+        and all(part not in {"", ".", ".."} for part in path.parts),
+        f"{label}: unsafe registered binding path",
+    )
+    _require(
+        type(digest) is str and _SHA256.fullmatch(digest) is not None,
+        f"{label}: invalid registered binding SHA-256",
+    )
+    return {"path": relative, "sha256": digest}
+
+
+def _normalize_nonnegative_node_hours(value: object, *, label: str) -> float:
+    _require(
+        type(value) in {int, float}
+        and math.isfinite(float(value))
+        and float(value) >= 0.0,
+        f"{label}: expected finite nonnegative node hours",
+    )
+    return float(value)
+
+
+def _normalize_resource_freeze_inputs(value: object) -> dict[str, object]:
+    _require(
+        type(value) is dict and set(value) == RESOURCE_FREEZE_INPUT_KEYS,
+        "Q011 resource-only freeze inputs drifted or contain prohibited fields",
+    )
+    normalized: dict[str, object] = {}
+    for key in (
+        "global_ledger_snapshot_binding",
+        "all_other_registered_campaign_reservations_manifest_binding",
+        "exact_deck_scaling_io_pilot_completion_binding",
+    ):
+        normalized[key] = _normalize_registered_binding(value[key], label=key)
+    for key in (
+        "global_ledger_cumulative_consumed_node_hours_after_excluded_pilots",
+        "global_ledger_currently_reserved_node_hours_after_all_other_campaigns",
+        "q011_unreserved_nonbaseline_obligations_node_hours",
+        "measured_conservative_complete_paired_triad_node_hours",
+    ):
+        normalized[key] = _normalize_nonnegative_node_hours(value[key], label=key)
+    _require(
+        normalized["measured_conservative_complete_paired_triad_node_hours"] > 0.0,
+        "Q011 measured conservative complete-triad cost must be positive",
+    )
+    required_true = (
+        "exact_deck_scaling_io_pilots_passed",
+        "exact_deck_scaling_io_pilots_excluded_from_qualifying_science",
+        "all_other_registered_campaigns_reserved",
+    )
+    required_false = (
+        "qualifying_production_reservations_present",
+        "qualifying_launch_started",
+        "qualifying_output_inspected",
+    )
+    for key in required_true:
+        _require(value[key] is True, f"Q011 resource-only freeze requires {key}=true")
+        normalized[key] = True
+    for key in required_false:
+        _require(value[key] is False, f"Q011 resource-only freeze requires {key}=false")
+        normalized[key] = False
+    return normalized
+
+
+def build_resource_only_freeze_record(inputs: object) -> dict[str, object]:
+    """Freeze the largest affordable paired-triad prefix from resource data only."""
+    normalized = _normalize_resource_freeze_inputs(inputs)
+    consumed = normalized[
+        "global_ledger_cumulative_consumed_node_hours_after_excluded_pilots"
+    ]
+    reserved = normalized[
+        "global_ledger_currently_reserved_node_hours_after_all_other_campaigns"
+    ]
+    nonbaseline = normalized["q011_unreserved_nonbaseline_obligations_node_hours"]
+    triad_cost = normalized["measured_conservative_complete_paired_triad_node_hours"]
+    fixed_obligations = consumed + reserved + nonbaseline
+    evaluations: list[dict[str, object]] = []
+    for triad_count in range(MIN_FROZEN_TRIAD_COUNT, MAX_FROZEN_TRIAD_COUNT + 1):
+        production = triad_count * triad_cost
+        contingency = max(
+            RESOURCE_CONTINGENCY_COMPLETE_TRIAD_FLOOR * triad_cost,
+            RESOURCE_CONTINGENCY_FRACTION * production,
+        )
+        projected = fixed_obligations + production + contingency
+        evaluations.append(
+            {
+                "triad_count": triad_count,
+                "complete_paired_triad_production_node_hours": production,
+                "stated_contingency_node_hours": contingency,
+                "projected_global_node_hours": projected,
+                "fits_global_ledger": projected <= GLOBAL_NODE_HOUR_LEDGER_CAP,
+            }
+        )
+    affordable = [
+        evaluation for evaluation in evaluations if evaluation["fits_global_ledger"]
+    ]
+    _require(
+        bool(affordable)
+        and affordable[0]["triad_count"] == MIN_FROZEN_TRIAD_COUNT,
+        "Q011 mandatory three-triad core plus contingency does not fit the ledger",
+    )
+    selected = affordable[-1]["triad_count"]
+    _require(
+        all(
+            evaluation["fits_global_ledger"]
+            == (evaluation["triad_count"] <= selected)
+            for evaluation in evaluations
+        ),
+        "Q011 resource-only affordability is not a monotone paired-triad prefix",
+    )
+    return {
+        "record_type": "q011_section54_resource_only_campaign_size_freeze_successor_v2",
+        "schema_version": SCHEMA_VERSION,
+        "campaign_id": CAMPAIGN_ID,
+        "status": "resource_only_freeze_complete_execution_blocked",
+        "qualification_effect": (
+            "campaign_size_freeze_only_no_launch_no_qualifying_output_inspection_"
+            "no_scientific_acceptance_no_claim_closure"
+        ),
+        "resource_only_inputs": normalized,
+        "resource_only_freeze_definition_sha256": canonical_sha256(
+            resource_only_freeze_definition()
+        ),
+        "campaign_size_resource_design_sha256": canonical_sha256(
+            campaign_size_resource_design()
+        ),
+        "fixed_obligations_node_hours": fixed_obligations,
+        "global_node_hour_cap": {
+            "value": GLOBAL_NODE_HOUR_LEDGER_CAP,
+            "source_category": "engineering closure",
+            "rationale": (
+                "The global cap is the registered AthenaK project resource limit and "
+                "has no scientific literature origin."
+            ),
+        },
+        "candidate_budget_evaluations": evaluations,
+        "frozen_triad_count": selected,
+        "selected_qualifying_seeds": list(QUALIFYING_SEED_POOL[:selected]),
+        "unselected_preregistered_reserve_seeds": list(QUALIFYING_SEED_POOL[selected:]),
+        "frozen_attempt_count": selected * len(GRID_VARIANTS),
+        "reporting_rule": reporting_rule_for_frozen_n(selected),
+        "post_qualifying_execution_rule": campaign_size_resource_design()[
+            "post_qualifying_execution_rule"
+        ],
+        "authorization": dict(AUTHORIZATION_BOUNDARY),
+    }
+
+
+def validate_resource_only_freeze_record(value: object) -> dict[str, object]:
+    """Require a deterministic, resource-only, pre-launch campaign-size freeze."""
+    _require(type(value) is dict, "Q011 resource-only freeze record must be an object")
+    expected = build_resource_only_freeze_record(value.get("resource_only_inputs"))
+    _require(
+        _strict_equal(value, expected),
+        "Q011 resource-only freeze record drifted, used science inputs, or acquired authority",
+    )
+    return expected
 
 
 def validate_gate_definition_threshold_provenance() -> dict[str, dict[str, object]]:
@@ -1112,15 +1777,22 @@ def validate_source_local_gate_records(value: object) -> list[dict[str, object]]
     return expected
 
 
-def source_local_blockers() -> list[str]:
-    return [
+def source_local_blockers(resource_only_freeze_record: object | None = None) -> list[str]:
+    blockers = [
         "exact_combined_MHD_CR_conservation_not_integrated_for_dynamic_AMR_and_load_balancing",
         "registered_MPI_HIP_dynamic_AMR_migration_restart_and_load_balance_evidence_absent",
         "particle_load_balance_cost_per_particle_is_zero_and_requires_pilot_selection",
-        "exact_nine_output_successor_deck_scaling_and_io_pilots_not_executed",
         "registered_production_attempts_and_admitted_raw_artifacts_absent",
         "all_source_local_scientific_gate_records_are_unevaluated",
     ]
+    if resource_only_freeze_record is None:
+        blockers[3:3] = [
+            "exact_nine_output_successor_deck_scaling_and_io_pilots_not_executed",
+            "resource_only_campaign_size_freeze_not_recorded_before_qualifying_launch",
+        ]
+    else:
+        validate_resource_only_freeze_record(resource_only_freeze_record)
+    return blockers
 
 
 def _stage_record(stage_id: str, basis: Mapping[str, object]) -> dict[str, object]:
@@ -1143,6 +1815,15 @@ def _stage_record(stage_id: str, basis: Mapping[str, object]) -> dict[str, objec
         "runtime_source_closure_sha256": basis["runtime_source_closure_sha256"],
         "physical_preregistration": basis["physical_preregistration"],
         "source_local_gate_records_sha256": basis["source_local_gate_records_sha256"],
+        "campaign_size_resource_design_sha256": basis[
+            "campaign_size_resource_design_sha256"
+        ],
+        "resource_only_freeze_definition_sha256": basis[
+            "resource_only_freeze_definition_sha256"
+        ],
+        "reporting_uncertainty_policy_sha256": basis[
+            "reporting_uncertainty_policy_sha256"
+        ],
         "blockers": list(basis["blockers"]),
         "authorization": dict(AUTHORIZATION_BOUNDARY),
     }
@@ -1153,6 +1834,7 @@ def _basis() -> dict[str, object]:
     closure = runtime_source_closure()
     preregistration = preregistration_binding()
     gates = source_local_gate_records()
+    statistical_resource = validate_statistical_resource_design()
     implementations = {
         stage: _binding(
             STAGE_IMPLEMENTATIONS[stage],
@@ -1169,6 +1851,15 @@ def _basis() -> dict[str, object]:
         "runtime_source_closure_sha256": closure["sha256"],
         "physical_preregistration": preregistration["binding"],
         "source_local_gate_records_sha256": canonical_sha256(gates),
+        "campaign_size_resource_design_sha256": canonical_sha256(
+            statistical_resource["campaign_size_resource_design"]
+        ),
+        "resource_only_freeze_definition_sha256": canonical_sha256(
+            statistical_resource["resource_only_freeze_definition"]
+        ),
+        "reporting_uncertainty_policy_sha256": canonical_sha256(
+            statistical_resource["reporting_uncertainty_policy"]
+        ),
         "stage_implementations": implementations,
         "blockers": source_local_blockers(),
     }
@@ -1192,6 +1883,7 @@ def build_pipeline_contract() -> dict[str, object]:
     closure = runtime_source_closure()
     preregistration = preregistration_binding()
     gates = source_local_gate_records()
+    statistical_resource = validate_statistical_resource_design()
     basis = _basis()
     stages = [_stage_record(stage, basis) for stage in STAGE_ORDER]
     return {
@@ -1207,16 +1899,15 @@ def build_pipeline_contract() -> dict[str, object]:
         "physical_mode": PHYSICAL_MODE,
         "selected_pressure": dict(SELECTED_PRESSURE),
         "production_deck": deck,
-        "core_campaign_matrix": {
-            "variants": list(GRID_VARIANTS),
-            "qualifying_seeds": list(CORE_QUALIFYING_SEEDS),
-            "paired_seed_rule": "same seed across the complete coarse-AMR-fine triad",
-            "attempt_count": len(GRID_VARIANTS) * len(CORE_QUALIFYING_SEEDS),
-            "expansion_rule": (
-                "complete paired triads only after exact successor-deck scaling and "
-                "I/O pilots pass without inspecting qualifying physical outputs"
-            ),
-        },
+        "campaign_size_resource_design": statistical_resource[
+            "campaign_size_resource_design"
+        ],
+        "resource_only_freeze_definition": statistical_resource[
+            "resource_only_freeze_definition"
+        ],
+        "reporting_uncertainty_policy": statistical_resource[
+            "reporting_uncertainty_policy"
+        ],
         "stage_order": list(STAGE_ORDER),
         "stages": stages,
         "runtime_source_closure": closure,
@@ -1246,9 +1937,15 @@ def validate_pipeline_contract(value: object) -> dict[str, object]:
 
 
 def expected_attempt_argv(attempt_id: str, variant: str, seed: int) -> list[str]:
-    """Return the exact launch-prohibited argv for one core attempt."""
-    _require(variant in GRID_VARIANTS, "Q011 attempt variant is not in the core matrix")
-    _require(seed in CORE_QUALIFYING_SEEDS, "Q011 attempt seed is not in the core matrix")
+    """Return the exact launch-prohibited argv for one preregistered attempt."""
+    _require(
+        variant in GRID_VARIANTS,
+        "Q011 attempt variant is not in the preregistered paired-triad matrix",
+    )
+    _require(
+        seed in QUALIFYING_SEED_POOL,
+        "Q011 attempt seed is not in the preregistered paired-triad pool",
+    )
     _require(
         re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", attempt_id) is not None,
         "Q011 attempt ID is unsafe",

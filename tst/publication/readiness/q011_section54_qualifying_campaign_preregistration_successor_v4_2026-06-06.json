@@ -23,20 +23,186 @@
     "case_id": "ps_p0_1p00",
     "problem_ps_p0": 1.0
   },
-  "campaign_matrix": {
+  "campaign_size_resource_design": {
     "variants": [
       "coarse_uniform_dx12",
       "three_level_amr_root_dx12_finest_dx3",
       "fine_uniform_dx3"
     ],
-    "qualifying_seeds": [
+    "ordered_qualifying_seed_pool": [
+      23050101,
+      23050102,
+      23050103,
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "mandatory_core_qualifying_seeds": [
       23050101,
       23050102,
       23050103
     ],
-    "attempt_count": 9,
-    "paired_seed_rule": "same seed across the complete coarse-AMR-fine triad",
-    "expansion_rule": "complete paired triads only after exact successor-deck scaling and I/O pilots pass without inspecting qualifying physical outputs"
+    "preregistered_reserve_qualifying_seeds": [
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "paired_seed_rule": {
+      "rule": "Every selected seed must retain a complete coarse-AMR-fine triad.",
+      "source_category": "analysis-quality",
+      "rationale": "Complete paired triads preserve within-seed grid comparisons and prevent resource pressure from selectively dropping a variant."
+    },
+    "ordered_prefix_rule": {
+      "rule": "The frozen seed set must be an ordered prefix of the preregistered pool.",
+      "source_category": "analysis-quality",
+      "rationale": "The ordered prefix prevents post-pilot or post-output selection of apparently favorable random realizations."
+    },
+    "resource_only_freeze_rule": {
+      "rule": "After excluded exact-deck scaling and I/O pilots pass, and before any qualifying launch or output inspection, freeze N as the largest affordable complete paired-triad prefix.",
+      "source_category": "engineering closure",
+      "rationale": "The freeze uses resource evidence only, preserving the largest affordable preregistered paired design without science-output-driven sample-size selection."
+    },
+    "post_qualifying_execution_rule": {
+      "rule": "After the first qualifying launch begins, expansion, contraction, seed dropping, and science-output-driven sample-size changes are forbidden; retries retain the frozen seed and complete triad.",
+      "source_category": "analysis-quality",
+      "rationale": "An immutable frozen matrix prevents optional stopping and selective removal while preserving paired comparisons after runtime failures."
+    },
+    "core_fit_failure_rule": {
+      "rule": "If the mandatory core plus contingency does not fit the measured ledger, fail closed and launch no qualifying production attempt.",
+      "source_category": "engineering closure",
+      "rationale": "The mandatory core cannot be weakened to fit the budget, and the global ledger cap cannot be exceeded."
+    },
+    "numeric_rules": [
+      {
+        "rule_id": "mandatory_core_triad_count",
+        "value": 3,
+        "source_category": "analysis-quality",
+        "rationale": "Three paired seeds are the minimum preregistered repeatability core; this is an analysis-design choice, not a literature sample size."
+      },
+      {
+        "rule_id": "mandatory_core_attempt_count",
+        "value": 9,
+        "source_category": "analysis-quality",
+        "rationale": "Nine attempts are the complete three-variant realization of the mandatory three-seed paired core, not a literature-derived count."
+      },
+      {
+        "rule_id": "maximum_preregistered_triad_count",
+        "value": 8,
+        "source_category": "engineering closure",
+        "rationale": "Eight paired triads cap the preregistered reserve pool without promising an unaffordable full matrix; this is a project resource choice with no literature origin."
+      },
+      {
+        "rule_id": "maximum_preregistered_attempt_count",
+        "value": 24,
+        "source_category": "engineering closure",
+        "rationale": "Twenty-four is only the maximum preregistered design envelope, not a promised run count or a literature-derived sample size."
+      },
+      {
+        "rule_id": "global_node_hour_ledger_cap",
+        "value": 10000.0,
+        "source_category": "engineering closure",
+        "rationale": "The global ten-thousand node-hour cap is an AthenaK project resource-control limit and has no scientific literature origin."
+      },
+      {
+        "rule_id": "resource_contingency_fraction",
+        "value": 0.15,
+        "source_category": "engineering closure",
+        "rationale": "The fifteen-percent proportional reserve is an AthenaK engineering recovery allowance selected before qualifying execution and has no scientific literature origin."
+      },
+      {
+        "rule_id": "resource_contingency_complete_triad_floor",
+        "value": 1,
+        "source_category": "engineering closure",
+        "rationale": "At least one measured complete-triad cost is reserved so a runtime retry does not require seed dropping; this is an engineering allowance with no literature origin."
+      }
+    ]
+  },
+  "resource_only_freeze_definition": {
+    "record_type": "q011_section54_resource_only_campaign_size_freeze_successor_v2",
+    "required_timing": {
+      "rule": "after excluded exact-deck scaling and I/O pilots pass and before any qualifying launch, qualifying output inspection, or qualifying production reservation",
+      "source_category": "engineering closure",
+      "rationale": "This ordering isolates campaign-size selection from qualifying science outputs and prevents unbudgeted production reservations."
+    },
+    "required_resource_evidence": {
+      "rule": "bind the measured global ledger snapshot, the complete reservation manifest for every other registered campaign, and the exact-deck pilot completion receipt",
+      "source_category": "engineering closure",
+      "rationale": "The freeze must account for measured use and all prior obligations before assigning the remaining ledger to Q011."
+    },
+    "selection_rule": {
+      "rule": "select the largest integer N in the preregistered range whose complete paired-triad production cost and stated contingency fit the global ledger after all other obligations",
+      "source_category": "engineering closure",
+      "rationale": "Largest-affordable selection uses only pre-launch resource evidence and never observed scientific outcomes."
+    },
+    "budget_equation": {
+      "rule": "global consumed + global currently reserved after all other campaign reservations + unreserved Q011 nonbaseline obligations + N times measured conservative complete-triad cost + max(one complete-triad cost, contingency fraction times N times measured complete-triad cost) <= global ledger cap",
+      "source_category": "engineering closure",
+      "rationale": "The equation reserves all measured and registered obligations plus a retry and proportional recovery allowance before production."
+    },
+    "prohibited_inputs": {
+      "rule": "qualifying measurements, gate results, physical observables, and science-output-derived costs or preferences",
+      "source_category": "analysis-quality",
+      "rationale": "Excluding qualifying science information prevents optional stopping and outcome-dependent campaign-size selection."
+    },
+    "post_freeze_rule": {
+      "rule": "After the first qualifying launch begins, expansion, contraction, seed dropping, and science-output-driven sample-size changes are forbidden; retries retain the frozen seed and complete triad.",
+      "source_category": "analysis-quality",
+      "rationale": "An immutable frozen matrix prevents optional stopping and selective removal while preserving paired comparisons after runtime failures."
+    },
+    "authorization": {
+      "launch_authorized": false,
+      "scheduler_submission_authorized": false,
+      "live_policy_mutation_authorized": false,
+      "qualifying_output_inspection_authorized": false,
+      "scientific_acceptance_authorized": false,
+      "claim_closure_authorized": false
+    }
+  },
+  "reporting_uncertainty_policy": {
+    "all_frozen_N": {
+      "rule": "report every paired seed value, every preregistered paired contrast, and the observed min-max range without seed dropping",
+      "source_category": "analysis-quality",
+      "rationale": "Transparent paired reporting exposes realization variability and prevents a summary statistic from hiding an unfavorable seed."
+    },
+    "N_equals_3": {
+      "rule": "report paired values, paired contrasts, and ranges; make only narrow claims about the three preregistered realizations and do not make broad population inference",
+      "source_category": "analysis-quality",
+      "rationale": "Three paired realizations do not support a useful distribution-free population interval, so the honest scope is descriptive and narrow."
+    },
+    "N_greater_than_3": {
+      "rule": "before launch freeze the exact two-sided distribution-free order-statistic interval for the median paired contrast, report its achieved finite-sample coverage, document ties, and avoid asymptotic-normal or standard-error claims",
+      "source_category": "analysis-quality",
+      "rationale": "An exact order-statistic interval remains auditable for the small frozen seed ensemble and does not assume Gaussian paired contrasts."
+    },
+    "inference_scope": {
+      "rule": "the interval describes repeatability over the preregistered seed ensemble and does not establish universal astrophysical-parameter population inference",
+      "source_category": "conservative applicability",
+      "rationale": "Seed replication quantifies numerical-realization sensitivity but does not sample the broader physical parameter population."
+    },
+    "numeric_rules": [
+      {
+        "rule_id": "descriptive_only_triad_count",
+        "value": 3,
+        "source_category": "analysis-quality",
+        "rationale": "At three paired seeds the exact median interval at the chosen coverage is unavailable, so only paired values and ranges support narrow claims; this is not a literature threshold."
+      },
+      {
+        "rule_id": "interval_estimator_minimum_triad_count",
+        "value": 4,
+        "source_category": "analysis-quality",
+        "rationale": "Four is the smallest frozen N admitting the preregistered exact two-sided median interval at the chosen coverage; this is a finite-sample analysis property, not a literature sample size."
+      },
+      {
+        "rule_id": "paired_interval_nominal_coverage",
+        "value": 0.8,
+        "source_category": "analysis-quality",
+        "rationale": "Eighty-percent nominal coverage guarantees an exact interval for every allowed N above three and permits an inner order-statistic interval at N seven and eight; achieved exact coverage is always reported and no literature origin is implied."
+      }
+    ]
   },
   "shock_front": {
     "source_field": "rho",
@@ -98,6 +264,7 @@
     "registered MPI HIP dynamic AMR migration restart and load-balance evidence is absent",
     "particle load-balance cost per particle remains zero pending resource-pilot selection",
     "exact nine-output successor-deck scaling and I/O pilots are not executed",
+    "resource-only paired-triad count has not been frozen from the measured global ledger",
     "registered production attempts and admitted raw artifacts are absent"
   ],
   "authorization": {

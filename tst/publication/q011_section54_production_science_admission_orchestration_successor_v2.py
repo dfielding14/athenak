@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from tst.publication import q011_section54_production_campaign_contract_successor_v2 as contract
+from tst.publication import q011_section54_production_campaign_planner_successor_v2 as planner
 from tst.publication import q011_section54_qualifying_campaign_execution_successor_v2 as execution
 
 
@@ -46,10 +47,12 @@ def build_source_local_admission(handoffs: object | None = None) -> dict[str, ob
         "stage_contract": stage,
         "execution_handoffs_sha256": contract.canonical_sha256(normalized),
         "runtime_source_closure": contract.runtime_source_closure(),
+        "resource_only_freeze_record": normalized["resource_only_freeze_record"],
+        "campaign_size_selection": normalized["campaign_size_selection"],
         "attempt_count": len(attempts),
         "admitted_attempt_count": 0,
         "attempts": attempts,
-        "blockers": contract.source_local_blockers(),
+        "blockers": list(normalized["blockers"]),
         "authorization": dict(contract.AUTHORIZATION_BOUNDARY),
     }
 
@@ -57,7 +60,11 @@ def build_source_local_admission(handoffs: object | None = None) -> dict[str, ob
 def validate_source_local_admission(
     value: object, handoffs: object | None = None
 ) -> dict[str, object]:
-    expected = build_source_local_admission(handoffs)
+    inferred_handoffs = handoffs
+    if inferred_handoffs is None and type(value) is dict:
+        inferred_plan = planner.build_plan(value.get("resource_only_freeze_record"))
+        inferred_handoffs = execution.build_execution_handoffs(inferred_plan)
+    expected = build_source_local_admission(inferred_handoffs)
     _require(
         contract._strict_equal(value, expected),
         "Q011 source-local admission successor drifted or acquired authority",

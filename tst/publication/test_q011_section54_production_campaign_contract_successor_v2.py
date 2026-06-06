@@ -22,6 +22,34 @@ from tst.publication import q011_section54_qualifying_campaign_execution_success
 from tst.publication import q011_section54_registered_launch_materializer_successor_v2 as launch
 
 
+def valid_resource_freeze_inputs() -> dict[str, object]:
+    """Return resource-only inputs for a largest-affordable N=5 freeze."""
+    return {
+        "global_ledger_snapshot_binding": {
+            "path": "registered/ledger/node_hours_snapshot.json",
+            "sha256": "a" * 64,
+        },
+        "all_other_registered_campaign_reservations_manifest_binding": {
+            "path": "registered/campaigns/all_other_reservations.json",
+            "sha256": "b" * 64,
+        },
+        "exact_deck_scaling_io_pilot_completion_binding": {
+            "path": "registered/q011/exact_deck_pilot_completion.json",
+            "sha256": "c" * 64,
+        },
+        "global_ledger_cumulative_consumed_node_hours_after_excluded_pilots": 6000.0,
+        "global_ledger_currently_reserved_node_hours_after_all_other_campaigns": 1000.0,
+        "q011_unreserved_nonbaseline_obligations_node_hours": 500.0,
+        "measured_conservative_complete_paired_triad_node_hours": 400.0,
+        "exact_deck_scaling_io_pilots_passed": True,
+        "exact_deck_scaling_io_pilots_excluded_from_qualifying_science": True,
+        "all_other_registered_campaigns_reserved": True,
+        "qualifying_production_reservations_present": False,
+        "qualifying_launch_started": False,
+        "qualifying_output_inspected": False,
+    }
+
+
 class Q011ProductionCampaignContractSuccessorV2Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -36,6 +64,25 @@ class Q011ProductionCampaignContractSuccessorV2Tests(unittest.TestCase):
         )
         cls.admission = admission.build_source_local_admission(cls.execution_handoffs)
         cls.analysis = analyzer.build_source_local_analysis_packet(cls.admission)
+        cls.resource_freeze = contract.build_resource_only_freeze_record(
+            valid_resource_freeze_inputs()
+        )
+        cls.expanded_plan = planner.build_plan(cls.resource_freeze)
+        cls.expanded_pilot_manifest, cls.expanded_pilot_files = pilots.build_materialization(
+            cls.expanded_plan
+        )
+        cls.expanded_launch_candidates = launch.build_review_candidates(
+            cls.expanded_plan, cls.expanded_pilot_manifest
+        )
+        cls.expanded_execution_handoffs = execution.build_execution_handoffs(
+            cls.expanded_plan, cls.expanded_launch_candidates
+        )
+        cls.expanded_admission = admission.build_source_local_admission(
+            cls.expanded_execution_handoffs
+        )
+        cls.expanded_analysis = analyzer.build_source_local_analysis_packet(
+            cls.expanded_admission
+        )
 
     def test_pipeline_binds_one_exact_nine_output_deck_end_to_end(self) -> None:
         deck = self.pipeline["production_deck"]
@@ -59,6 +106,192 @@ class Q011ProductionCampaignContractSuccessorV2Tests(unittest.TestCase):
         for previous, current in zip(stages, stages[1:]):
             self.assertEqual(previous["emitted_record_type"], current["input_record_type"])
             self.assertEqual(current["predecessor_stage"], previous["stage_id"])
+
+    def test_campaign_size_design_preregisters_core_and_reserve_without_promising_24_runs(
+        self,
+    ) -> None:
+        design = self.pipeline["campaign_size_resource_design"]
+        self.assertEqual(
+            design["mandatory_core_qualifying_seeds"],
+            list(contract.CORE_QUALIFYING_SEEDS),
+        )
+        self.assertEqual(
+            design["preregistered_reserve_qualifying_seeds"],
+            list(contract.RESERVE_QUALIFYING_SEEDS),
+        )
+        self.assertEqual(
+            design["ordered_qualifying_seed_pool"],
+            list(contract.QUALIFYING_SEED_POOL),
+        )
+        numeric = {rule["rule_id"]: rule for rule in design["numeric_rules"]}
+        self.assertEqual(numeric["mandatory_core_triad_count"]["value"], 3)
+        self.assertEqual(numeric["mandatory_core_attempt_count"]["value"], 9)
+        self.assertEqual(numeric["maximum_preregistered_triad_count"]["value"], 8)
+        self.assertEqual(numeric["maximum_preregistered_attempt_count"]["value"], 24)
+        self.assertIn(
+            "not a promised run count",
+            numeric["maximum_preregistered_attempt_count"]["rationale"],
+        )
+        self.assertEqual(self.plan["attempt_count"], 9)
+        self.assertIsNone(
+            self.plan["campaign_size_selection"]["resource_only_freeze_record_sha256"]
+        )
+
+    def test_resource_only_freeze_selects_largest_affordable_complete_prefix_end_to_end(
+        self,
+    ) -> None:
+        freeze = contract.validate_resource_only_freeze_record(self.resource_freeze)
+        self.assertEqual(freeze["frozen_triad_count"], 5)
+        self.assertEqual(freeze["frozen_attempt_count"], 15)
+        self.assertEqual(
+            freeze["selected_qualifying_seeds"],
+            list(contract.QUALIFYING_SEED_POOL[:5]),
+        )
+        evaluations = freeze["candidate_budget_evaluations"]
+        self.assertEqual(
+            [item["triad_count"] for item in evaluations if item["fits_global_ledger"]],
+            [3, 4, 5],
+        )
+        self.assertEqual(evaluations[2]["projected_global_node_hours"], 9900.0)
+        self.assertEqual(evaluations[3]["projected_global_node_hours"], 10300.0)
+        maximum_inputs = valid_resource_freeze_inputs()
+        maximum_inputs[
+            "global_ledger_cumulative_consumed_node_hours_after_excluded_pilots"
+        ] = 0.0
+        maximum_inputs[
+            "global_ledger_currently_reserved_node_hours_after_all_other_campaigns"
+        ] = 0.0
+        maximum_inputs["q011_unreserved_nonbaseline_obligations_node_hours"] = 0.0
+        self.assertEqual(
+            contract.build_resource_only_freeze_record(maximum_inputs)[
+                "frozen_triad_count"
+            ],
+            8,
+        )
+        self.assertEqual(self.expanded_plan["attempt_count"], 15)
+        self.assertNotIn(
+            "resource_only_campaign_size_freeze_not_recorded_before_qualifying_launch",
+            self.expanded_plan["blockers"],
+        )
+        selected = set(freeze["selected_qualifying_seeds"])
+        for variant in contract.GRID_VARIANTS:
+            self.assertEqual(
+                {
+                    attempt["qualifying_seed"]
+                    for attempt in self.expanded_plan["attempts"]
+                    if attempt["variant"] == variant
+                },
+                selected,
+            )
+        for value in (
+            self.expanded_pilot_manifest,
+            self.expanded_launch_candidates,
+            self.expanded_execution_handoffs,
+            self.expanded_admission,
+            self.expanded_analysis,
+        ):
+            self.assertEqual(
+                value["campaign_size_selection"],
+                self.expanded_plan["campaign_size_selection"],
+            )
+            self.assertEqual(value["authorization"], contract.AUTHORIZATION_BOUNDARY)
+
+    def test_resource_only_freeze_rejects_science_inputs_bad_timing_and_unaffordable_core(
+        self,
+    ) -> None:
+        for key, value in (
+            ("qualifying_output_inspected", True),
+            ("qualifying_launch_started", True),
+            ("qualifying_production_reservations_present", True),
+            ("exact_deck_scaling_io_pilots_passed", False),
+            ("exact_deck_scaling_io_pilots_excluded_from_qualifying_science", False),
+            ("all_other_registered_campaigns_reserved", False),
+        ):
+            mutated = valid_resource_freeze_inputs()
+            mutated[key] = value
+            with self.assertRaises(contract.ProductionCampaignContractError):
+                contract.build_resource_only_freeze_record(mutated)
+
+        science_driven = valid_resource_freeze_inputs()
+        science_driven["observed_acceleration_efficiency"] = 0.2
+        with self.assertRaisesRegex(
+            contract.ProductionCampaignContractError, "prohibited fields"
+        ):
+            contract.build_resource_only_freeze_record(science_driven)
+
+        unaffordable = valid_resource_freeze_inputs()
+        unaffordable[
+            "global_ledger_cumulative_consumed_node_hours_after_excluded_pilots"
+        ] = 9000.0
+        with self.assertRaisesRegex(
+            contract.ProductionCampaignContractError, "mandatory three-triad core"
+        ):
+            contract.build_resource_only_freeze_record(unaffordable)
+
+    def test_frozen_prefix_seed_dropping_and_post_execution_mutation_fail_closed(
+        self,
+    ) -> None:
+        mutated_freeze = copy.deepcopy(self.resource_freeze)
+        mutated_freeze["selected_qualifying_seeds"].pop()
+        with self.assertRaises(contract.ProductionCampaignContractError):
+            contract.validate_resource_only_freeze_record(mutated_freeze)
+        non_largest_freeze = copy.deepcopy(self.resource_freeze)
+        non_largest_freeze["frozen_triad_count"] = 4
+        with self.assertRaises(contract.ProductionCampaignContractError):
+            contract.validate_resource_only_freeze_record(non_largest_freeze)
+
+        mutated_plan = copy.deepcopy(self.expanded_plan)
+        mutated_plan["attempts"] = [
+            attempt
+            for attempt in mutated_plan["attempts"]
+            if attempt["qualifying_seed"] != contract.QUALIFYING_SEED_POOL[3]
+        ]
+        mutated_plan["attempt_count"] = len(mutated_plan["attempts"])
+        with self.assertRaises(planner.ProductionCampaignPlannerError):
+            planner.validate_plan(mutated_plan)
+
+        mutated_execution = copy.deepcopy(self.expanded_execution_handoffs)
+        mutated_execution["campaign_size_selection"]["planned_triad_count"] = 4
+        with self.assertRaises(execution.CampaignExecutionSuccessorError):
+            execution.validate_execution_handoffs(
+                mutated_execution,
+                self.expanded_plan,
+                self.expanded_launch_candidates,
+            )
+
+    def test_reporting_rule_is_honest_for_n3_and_exactly_frozen_for_larger_n(
+        self,
+    ) -> None:
+        n3 = contract.reporting_rule_for_frozen_n(3)
+        self.assertFalse(n3["interval_estimator_frozen"])
+        self.assertFalse(n3["broad_population_inference_authorized"])
+        self.assertIn("descriptive", n3["rationale"])
+        expected_coverage = {4: 0.875, 5: 0.9375, 6: 0.96875, 7: 0.875, 8: 0.9296875}
+        for triad_count, coverage in expected_coverage.items():
+            rule = contract.reporting_rule_for_frozen_n(triad_count)
+            self.assertTrue(rule["interval_estimator_frozen"])
+            self.assertEqual(rule["nominal_coverage"], 0.8)
+            self.assertAlmostEqual(rule["achieved_finite_sample_coverage"], coverage)
+            self.assertFalse(rule["broad_population_inference_authorized"])
+        self.assertEqual(
+            self.expanded_analysis["frozen_reporting_rule"],
+            contract.reporting_rule_for_frozen_n(5),
+        )
+
+    def test_statistical_and_resource_numeric_rules_have_explicit_provenance(
+        self,
+    ) -> None:
+        validated = contract.validate_statistical_resource_design()
+        for section in (
+            validated["campaign_size_resource_design"],
+            validated["reporting_uncertainty_policy"],
+        ):
+            for rule in section["numeric_rules"]:
+                self.assertIn(
+                    rule["source_category"], contract.THRESHOLD_SOURCE_CATEGORIES
+                )
+                self.assertGreaterEqual(len(rule["rationale"].strip()), 24)
+                self.assertNotEqual(rule["source_category"], "literature comparison")
 
     def test_runtime_source_closure_covers_requested_runtime_paths(self) -> None:
         closure = self.pipeline["runtime_source_closure"]
@@ -164,6 +397,16 @@ class Q011ProductionCampaignContractSuccessorV2Tests(unittest.TestCase):
         self.assertEqual(budget["value"], 500.0)
         self.assertEqual(budget["source_category"], "engineering closure")
         self.assertIn("no scientific literature origin", budget["rationale"])
+        self.assertEqual(
+            self.pilot_manifest["resource_only_freeze_definition"],
+            contract.resource_only_freeze_definition(),
+        )
+        self.assertIn(
+            "resource-only campaign sizing",
+            self.pilot_manifest[
+                "resource_only_freeze_must_use_excluded_pilot_measurements"
+            ]["rationale"],
+        )
         for deck_record in self.pilot_manifest["decks"]:
             blocks = contract.parse_deck(
                 self.pilot_files[deck_record["path"]].decode("utf-8")
