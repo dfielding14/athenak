@@ -1,0 +1,144 @@
+{
+  "record_type": "q011_section54_production_science_admission_orchestration_successor_readiness",
+  "schema_version": 2,
+  "successor_id": "q011_section54_production_science_admission_orchestration_successor_v1",
+  "date": "2026-06-06",
+  "gate": "Q-011",
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "qualification_effect": "verified_attempt_admission_and_phase_aware_work_graph_only_no_launch_no_policy_promotion_no_qualification_no_claim_closure",
+  "scope": "Versioned non-authorizing admission and orchestration successor for a future Q-011 Section 5.4 production-science campaign. It verifies candidate, execution, source-closure, and raw-product bytes; binds exact variant and seed launch overrides; validates every frozen float32 cadence slot, restart publication, and terminal stdout record; and emits a persisted exactly revalidatable complete diagnostic work graph. It does not mutate evidence, launch work, promote policy, authorize qualification, or close a manuscript claim.",
+  "source_bindings": {
+    "successor": {
+      "path": "tst/publication/q011_section54_production_science_admission_orchestration_successor_v1.py",
+      "sha256": "4768e935078bf7727bc104db17110d8956500da20c21f60a14fda9fcf3f4e6ef"
+    },
+    "focused_tests": {
+      "path": "tst/publication/test_q011_section54_production_science_admission_orchestration_successor_v1.py",
+      "sha256": "57d391f69babd915822cb8e9cad613849f5e3a0ff0400e6687aa002d36f06505"
+    }
+  },
+  "historical_immutability": {
+    "historical_preregistrations_modified": false,
+    "historical_attempt_materializers_modified": false,
+    "historical_campaign_analyzers_modified": false,
+    "shared_uncommitted_diagnostic_successor_modified": false,
+    "implementation_policy": "additive_successor_files_only"
+  },
+  "attempt_admission_contract": {
+    "campaign_id": "Q011-SECTION54-PRODUCTION-SCIENCE-SUCCESSOR-V1",
+    "physical_mode": "paper_mhd_pic_vl2_tsc",
+    "selected_pressure": "ps_p0_1p00 / problem_ps_p0=1.0",
+    "expanded_raw_product_set": [
+      "mhd_w_bcc",
+      "prtcl_rho",
+      "prtcl_jx",
+      "prtcl_jy",
+      "prtcl_jz",
+      "mhd_j2",
+      "prtcl_all",
+      "hst",
+      "stdout",
+      "rst"
+    ],
+    "required_nominal_slots_omega0_inverse": [
+      0.0,
+      100.0,
+      200.0,
+      300.0,
+      400.0,
+      500.0,
+      600.0,
+      700.0,
+      800.0,
+      900.0,
+      1000.0,
+      1100.0,
+      1200.0
+    ],
+    "candidate_rule": "Read and hash-verify the clean-candidate manifest, executable, installed and reviewed environment profiles, exact production-science successor deck, required PIC source closure, and required reducer closure. Cross-bind commit, source bundle, executable path and hash, environment hash and control-plane version, and deck hash.",
+    "launch_rule": "Read and hash-verify the selected pressure receipt, attempt contract, and reconciled registered-execution receipt. Require exact attempt ID, variant, seed, pressure, model overrides, seed overrides, launch argv, raw root, artifact root, candidate hashes, COMPLETED state, and planner-retention cross-links.",
+    "raw_byte_rule": "Read every declared raw product through one no-follow file descriptor, require a stable regular-file identity, and verify SHA-256 and byte count before admission.",
+    "slot_rule": "Require one exact common cycle and observed committed time per slot and enforce the frozen IEEE-754 binary32 nominal-slot assignment for every interior slot, exact t=0 and t=1200 endpoints, and the t=500 lateness cap.",
+    "restart_rule": "Validate restart payload parameter headers and cycles, every payload completion marker, the exact manifest-to-payload membership and FNV-1a digests, and the manifest completion marker.",
+    "terminal_rule": "Require one stdout artifact proving unique time-limit termination with terminal time, tlim, and cycle equal to the terminal snapshot."
+  },
+  "physical_policy_successor": {
+    "predecessor_preregistration": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json",
+    "shock_front": {
+      "superseded_erroneous_rule": "unique_strongest_positive_density_gradient",
+      "successor_rule": "unique_strongest_negative_density_gradient",
+      "registration_status": "defined_not_registered_not_authoritative"
+    },
+    "magnetic_amplification": {
+      "future_qualifying_reference": "ideal_injection_surface",
+      "detected_front_relative_role": "supplemental_nonqualifying"
+    },
+    "particle_current_terminology": {
+      "raw_deposited_representation": "J_CR_over_c",
+      "required_frames": [
+        "lab_frame_deposited_J_CR_over_c",
+        "gas_frame_deposited_J_CR_over_c"
+      ],
+      "mhd_j2_interpretation": "MHD current magnitude squared, not particle current"
+    }
+  },
+  "campaign_phase_contract": {
+    "core_phase": {
+      "phase_id": "phase_3_paired_triads",
+      "seeds": [
+        23050101,
+        23050102,
+        23050103
+      ],
+      "attempt_count": 9
+    },
+    "expansion_phases": "Cumulative phases add exactly one complete paired triad at a time through phase_8_paired_triads.",
+    "expansion_decision": "Each expansion requires an exact resource-telemetry decision record, the immediately preceding cumulative phase, the fixed allowed telemetry field list, and qualifying_output_inspected=false.",
+    "forbidden_expansion_basis": "Physical or qualifying-output values may not influence expansion."
+  },
+  "complete_work_graph": {
+    "persisted_and_exactly_revalidated": true,
+    "job_families": [
+      "shock_front_jobs",
+      "magnetic_amplification_jobs",
+      "current_profile_jobs",
+      "downstream_spectrum_jobs",
+      "acceleration_history_jobs",
+      "energy_partition_jobs",
+      "float32_uncertainty_jobs",
+      "morphology_jobs",
+      "conserved_energy_closure_jobs",
+      "paired_grid_amr_residual_jobs"
+    ],
+    "acceleration_primary_observables": [
+      "q990_chi",
+      "q999_chi"
+    ],
+    "conserved_energy_status": "Exact closure hook emitted; boundary-transport instrumentation remains a separately explicit requirement.",
+    "morphology_status": "Energy-weighted CR distribution, refinement overlay, and publication-bound profile hooks emitted."
+  },
+  "authorization": {
+    "launch_authorized": false,
+    "scheduler_submission_authorized": false,
+    "policy_mutation_authorized": false,
+    "qualifying_output_inspection_authorized": false,
+    "qualification_authorized": false,
+    "claim_closure_authorized": false,
+    "required_next_boundary": "separate reviewed registration and policy promotion of this exact successor"
+  },
+  "verification": {
+    "focused_tests": 11,
+    "adversarial_coverage": [
+      "missing executable and forged launch argv",
+      "deck environment source-closure and clean-manifest byte drift",
+      "registered-execution receipt and selected-pressure drift",
+      "attempt relabeling across variant and seed cells",
+      "every-slot float32 assignment enforcement",
+      "restart header marker manifest and payload-relationship corruption",
+      "missing terminal stdout evidence",
+      "complete core and telemetry-only expansion phases",
+      "incomplete phase matrix reused registered-execution identities and persisted work-graph tampering"
+    ],
+    "raw_execution_status": "not_run_not_authorized_by_this_successor"
+  }
+}
