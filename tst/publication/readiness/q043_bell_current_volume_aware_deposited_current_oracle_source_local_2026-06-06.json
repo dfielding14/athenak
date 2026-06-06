@@ -23,6 +23,8 @@
     "root_cell_volume": "product_of_global_root_mesh_extent_divided_by_global_root_mesh_count_for_each_axis",
     "species_charge_semantics": "configured_species_charge_used_directly_in_deposition",
     "species_mass_contract": "oracle_uses_species_mass_2_and_species_charge_4pi_times_1e-6_with_species_charge_over_species_mass_equals_omega_over_b_g",
+    "species_population_contract": "exactly_one_species",
+    "species_velocity_contract": "effective_species0_vx0_vy0_vz0_must_match_nominal_particles_cr_vx0_cr_vy0_cr_vz0_with_matching_explicit_overrides_allowed",
     "artificial_light_speed_in_formula": false,
     "fixed_deposit_qscale_per_campaign": false,
     "ppc_contract": "positive_integer_only_because_AthenaK_realizes_a_discrete_global_particle_count",
@@ -134,8 +136,8 @@
   ],
   "artifact_bindings": {
     "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
-    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "7d8f48b95f4b33d0ae1589631d54b127d318be255a48430ed90429f29e918ab7",
-    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "20e971c7c528486398eaae2fe3db5e2cda7bb2c4ae697850e04766bb4a40f471"
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "f0a8db7fb47798d4bdc9ec742cef09e5ae0c69ff3ccb2f25d065602b23a26bed",
+    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "578245ade8e0d0e94c64c3f8a5ce3ae3b36e11e13c331fa03b5c98602272ed91"
   },
   "open_dependencies": [
     "integrate_and_review_the_separately_implemented_q043_bell_current_volume_aware_generator",

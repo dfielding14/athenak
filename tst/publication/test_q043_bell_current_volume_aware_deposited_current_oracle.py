@@ -41,6 +41,14 @@ def _case(case_id: str) -> dict[str, object]:
     return next(case for case in oracle.expected_cases() if case["case_id"] == case_id)
 
 
+def _with_species0_overrides(text: str, overrides: dict[str, str]) -> str:
+    additions = "".join(f"{name} = {value}\n" for name, value in overrides.items())
+    marker = "\n<problem>\n"
+    if text.count(marker) != 1:
+        raise AssertionError("rendered deck species0 insertion point drifted")
+    return text.replace(marker, f"{additions}{marker}", 1)
+
+
 def _block_payload(
     case: dict[str, object],
     field: str,
@@ -316,6 +324,85 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
         self.assertEqual(validation["species_mass"], 7.0)
         self.assertAlmostEqual(
             validation["configured_volume_mean_j_over_c"], oracle.EXPECTED_J_OVER_C
+        )
+
+    def test_deck_rejects_species_velocity_overrides_that_change_current(self) -> None:
+        case = _case("q043-current-oracle-d3-coarse-ppc1-single-cvr100")
+        rendered = oracle.render_oracle_deck(case)
+        nominal = oracle.parse_athinput_text(rendered)["particles"]
+        failures = (
+            ("zero", {"vx0": "0.0"}),
+            ("different", {"vy0": str(float(nominal["cr_vy0"]) + 0.125)}),
+        )
+        for label, overrides in failures:
+            with self.subTest(label=label):
+                deck = _with_species0_overrides(rendered, overrides)
+                with self.assertRaisesRegex(
+                    oracle.ContractError, "species0 v[xy]0 must match nominal CR velocity"
+                ):
+                    oracle.validate_rendered_deck(case, deck)
+
+    def test_deck_accepts_matching_species_velocity_overrides(self) -> None:
+        case = _case("q043-current-oracle-d3-coarse-ppc1-single-cvr100")
+        rendered = oracle.render_oracle_deck(case)
+        nominal = oracle.parse_athinput_text(rendered)["particles"]
+        deck = _with_species0_overrides(
+            rendered,
+            {
+                "vx0": nominal["cr_vx0"],
+                "vy0": nominal["cr_vy0"],
+                "vz0": nominal["cr_vz0"],
+            },
+        )
+        validation = oracle.validate_rendered_deck(case, deck)
+        self.assertAlmostEqual(
+            validation["configured_volume_mean_j_over_c"], oracle.EXPECTED_J_OVER_C
+        )
+
+    def test_deck_rejects_population_and_nominal_stream_drift(self) -> None:
+        case = _case("q043-current-oracle-d1-coarse-ppc1-single-cvr100")
+        rendered = oracle.render_oracle_deck(case)
+        failures = (
+            (
+                "extra-species",
+                rendered.replace("nspecies = 1", "nspecies = 2", 1),
+                "requires exactly one species",
+            ),
+            (
+                "reversed-nominal-stream",
+                rendered.replace("cr_vx0 = 2.5", "cr_vx0 = -2.5", 1),
+                "nominal CR velocity drifted",
+            ),
+        )
+        for label, deck, message in failures:
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(oracle.ContractError, message):
+                    oracle.validate_rendered_deck(case, deck)
+
+    def test_deck_and_helper_reject_fractional_ppc_without_truncation(self) -> None:
+        case = oracle.expected_cases()[0]
+        deck = oracle.render_oracle_deck(case).replace("ppc = 1.0", "ppc = 1.5", 1)
+        with self.assertRaisesRegex(oracle.ContractError, "PPC must be a positive integer"):
+            oracle.validate_rendered_deck(case, deck)
+        with self.assertRaisesRegex(oracle.ContractError, "PPC must be a positive integer"):
+            oracle.required_deposit_qscale(root_cell_volume=1.0, ppc=1.5)
+
+    def test_cpp_source_binds_effective_species_velocity_to_nominal_stream(self) -> None:
+        source = PGEN_SOURCE.read_text(encoding="utf-8")
+        for axis in ("x", "y", "z"):
+            with self.subTest(axis=axis):
+                self.assertIn(
+                    f'pin->GetReal("species0", "v{axis}0")',
+                    source,
+                )
+                self.assertIn(
+                    f'Q043VolumeAwareRequireClose("species0 v{axis}0", '
+                    f"species_v{axis}, cr_v{axis});",
+                    source,
+                )
+        self.assertIn(
+            "species_charge, species_v_cr, root_cell_volume, b_g, k0",
+            source,
         )
 
     def test_rendered_oracle_deck_satisfies_cpp_source_contract_end_to_end(self) -> None:
@@ -594,6 +681,18 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
         self.assertEqual(
             record["normalization_contract"]["formula"],
             "PPC*deposit_qscale*species_charge*v_CR/V_root_cell=2*B_g*k0",
+        )
+        self.assertEqual(
+            record["normalization_contract"]["species_population_contract"],
+            "exactly_one_species",
+        )
+        self.assertIn(
+            "effective_species0_vx0_vy0_vz0_must_match_nominal",
+            record["normalization_contract"]["species_velocity_contract"],
+        )
+        self.assertIn(
+            "positive_integer_only",
+            record["normalization_contract"]["ppc_contract"],
         )
         self.assertEqual(record["raw_output_oracle"]["cycle"], 1)
         self.assertEqual(record["raw_output_oracle"]["output_dcycle"], 2)

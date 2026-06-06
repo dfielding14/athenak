@@ -158,6 +158,20 @@ def _require(condition: bool, message: str) -> None:
         raise ContractError(message)
 
 
+def _positive_integral_ppc(value: object, *, label: str = "PPC") -> int:
+    """Parse AthenaK's real-valued PPC token without accepting truncation."""
+    _require(not isinstance(value, bool), f"{label} must be a positive integer")
+    try:
+        measured = float(value)
+    except (OverflowError, TypeError, ValueError) as error:
+        raise ContractError(f"{label} must be a positive integer") from error
+    _require(
+        math.isfinite(measured) and measured >= 1.0 and measured.is_integer(),
+        f"{label} must be a positive integer",
+    )
+    return int(measured)
+
+
 def _canonical_json_bytes(value: object) -> bytes:
     return (
         json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -200,9 +214,9 @@ def required_deposit_qscale(
     stream_speed: float = STREAM_SPEED,
 ) -> float:
     """Return qscale for volume-averaged deposited J_CR/c = 2 B_g k0."""
+    validated_ppc = _positive_integral_ppc(ppc)
     _require(
         root_cell_volume > 0.0
-        and ppc > 0
         and species_charge > 0.0
         and stream_speed > 0.0,
         "deposited-current normalization factors must be positive",
@@ -210,14 +224,14 @@ def required_deposit_qscale(
     return (
         EXPECTED_J_OVER_C
         * root_cell_volume
-        / (ppc * species_charge * stream_speed)
+        / (validated_ppc * species_charge * stream_speed)
     )
 
 
 def configured_volume_mean_j_over_c(case: Mapping[str, object]) -> float:
     """Reconstruct the configured volume-mean deposited current."""
     return (
-        int(case["ppc"])
+        _positive_integral_ppc(case["ppc"])
         * float(case["deposit_qscale"])
         * float(case["species_charge"])
         * STREAM_SPEED
@@ -568,19 +582,33 @@ def validate_rendered_deck(case: Mapping[str, object], text: str) -> dict[str, o
         for axis in (1, 2, 3)
     )
     root_cell_volume = _root_cell_volume(bounds, nx)
-    ppc = int(float(blocks["particles"]["ppc"]))
+    _require(
+        blocks["particles"]["nspecies"] == "1",
+        f"{case['case_id']}: deposited-current oracle requires exactly one species",
+    )
+    ppc = _positive_integral_ppc(
+        blocks["particles"]["ppc"], label=f"{case['case_id']}: PPC"
+    )
     qscale = float(blocks["particles"]["deposit_qscale"])
     stream = tuple(
         float(blocks["particles"][f"cr_v{axis}0"]) for axis in ("x", "y", "z")
     )
+    species_stream = tuple(
+        float(blocks["species0"].get(f"v{axis}0", blocks["particles"][f"cr_v{axis}0"]))
+        for axis in ("x", "y", "z")
+    )
     species_mass = float(blocks["species0"]["mass"])
     charge = float(blocks["species0"]["charge"])
     charge_q_over_mc = charge / species_mass
+    expected_stream = tuple(
+        STREAM_SPEED * basis_component
+        for basis_component in _mode_basis(int(case["dimension"]))
+    )
     measured = (
         ppc
         * qscale
         * charge
-        * math.sqrt(sum(value * value for value in stream))
+        * math.sqrt(sum(value * value for value in species_stream))
         / root_cell_volume
     )
     _require(nx == tuple(case["global_nx"]), f"{case['case_id']}: global nx drifted")
@@ -595,6 +623,30 @@ def validate_rendered_deck(case: Mapping[str, object], text: str) -> dict[str, o
         f"{case['case_id']}: root-cell volume drifted",
     )
     _require(ppc == case["ppc"], f"{case['case_id']}: PPC drifted")
+    for axis, nominal_value, expected_value in zip(("x", "y", "z"), stream, expected_stream):
+        _require(
+            math.isfinite(nominal_value)
+            and math.isclose(
+                nominal_value,
+                expected_value,
+                rel_tol=0.0,
+                abs_tol=1.0e-12 * max(1.0, abs(expected_value)),
+            ),
+            f"{case['case_id']}: nominal CR velocity drifted in {axis}",
+        )
+    for axis, species_value, nominal_value in zip(
+        ("x", "y", "z"), species_stream, stream
+    ):
+        _require(
+            math.isfinite(species_value)
+            and math.isclose(
+                species_value,
+                nominal_value,
+                rel_tol=0.0,
+                abs_tol=1.0e-12 * max(1.0, abs(nominal_value)),
+            ),
+            f"{case['case_id']}: species0 v{axis}0 must match nominal CR velocity",
+        )
     _require(
         species_mass > 0.0
         and math.isclose(species_mass, float(case["species_mass"]), rel_tol=1.0e-13),
@@ -886,7 +938,10 @@ def _validate_runtime_dataset(
         "runtime oracle case identity drifted",
     )
     _require(
-        int(float(_runtime_parameter(parameters, "particles", "ppc"))) == case["ppc"],
+        _positive_integral_ppc(
+            _runtime_parameter(parameters, "particles", "ppc"), label="runtime PPC"
+        )
+        == case["ppc"],
         "runtime PPC drifted",
     )
     _require(

@@ -335,6 +335,11 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   const Real qscale = pin->GetReal("particles", "deposit_qscale");
   const Real species_mass = pin->GetReal("species0", "mass");
   const Real species_charge = pin->GetReal("species0", "charge");
+  const Real species_vx = pin->GetReal("species0", "vx0");
+  const Real species_vy = pin->GetReal("species0", "vy0");
+  const Real species_vz = pin->GetReal("species0", "vz0");
+  const Real species_v_cr =
+      std::sqrt(species_vx*species_vx + species_vy*species_vy + species_vz*species_vz);
   const Real root_cell_volume = q043_bell_current_volume_aware::RootCellVolume(
       pmy_mesh_->mesh_size.x1max - pmy_mesh_->mesh_size.x1min,
       pmy_mesh_->mesh_indcs.nx1,
@@ -351,10 +356,14 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   Q043VolumeAwareRequireFinite("deposit_qscale", qscale);
   Q043VolumeAwareRequireFinite("species mass", species_mass);
   Q043VolumeAwareRequireFinite("species charge", species_charge);
+  Q043VolumeAwareRequireFinite("species0 vx0", species_vx);
+  Q043VolumeAwareRequireFinite("species0 vy0", species_vy);
+  Q043VolumeAwareRequireFinite("species0 vz0", species_vz);
+  Q043VolumeAwareRequireFinite("species0 stream speed", species_v_cr);
   Q043VolumeAwareRequireFinite("root cell volume", root_cell_volume);
   if (v_cr <= 0.0 || !PositiveIntegralPPCIsValid(ppc) || qscale <= 0.0 ||
       species_mass <= 0.0 ||
-      species_charge <= 0.0 || root_cell_volume <= 0.0) {
+      species_charge <= 0.0 || species_v_cr <= 0.0 || root_cell_volume <= 0.0) {
     Q043VolumeAwareFatal("q043_bell_current_volume_aware particle normalization "
                     "contract is invalid; PPC must be a positive integer because "
                     "AthenaK realizes a discrete global particle count");
@@ -366,6 +375,9 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   Q043VolumeAwareRequireClose("cr_vx0", cr_vx, v_cr*basis.parallel.x1);
   Q043VolumeAwareRequireClose("cr_vy0", cr_vy, v_cr*basis.parallel.x2);
   Q043VolumeAwareRequireClose("cr_vz0", cr_vz, v_cr*basis.parallel.x3);
+  Q043VolumeAwareRequireClose("species0 vx0", species_vx, cr_vx);
+  Q043VolumeAwareRequireClose("species0 vy0", species_vy, cr_vy);
+  Q043VolumeAwareRequireClose("species0 vz0", species_vz, cr_vz);
   Q043VolumeAwareRequireClose("pic_cr_light_speed", light_speed, c_over_v_cr*v_cr);
   if (!SourceModeSpeciesMassIsValid(source_mode, species_mass)) {
     Q043VolumeAwareFatal("corrected_linear_eigenmode requires species_mass=1; "
@@ -376,7 +388,7 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
                          "species mass must not enter the deposited-current closure");
   }
   if (!HasRequiredDepositedJOverC(
-          ppc, qscale, species_charge, v_cr, root_cell_volume, b_g, k0)) {
+          ppc, qscale, species_charge, species_v_cr, root_cell_volume, b_g, k0)) {
     Q043VolumeAwareFatal("PPC*deposit_qscale*species_charge*v_CR/V_root_cell must equal "
                     "2*b_g*k0; artificial light speed and MeshBlock decomposition "
                     "must not enter the required deposited current");

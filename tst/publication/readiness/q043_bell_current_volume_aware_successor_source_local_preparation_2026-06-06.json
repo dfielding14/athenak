@@ -104,6 +104,7 @@
     "pgen_source_implementation_bound_by_this_preparation": true,
     "pgen_registration_bound_by_this_preparation": true,
     "historical_q023_q029_sources_modified": false,
+    "deposited_current_fail_closed_contract": "exactly_one_species_with_effective_species0_velocity_bound_to_nominal_particles_CR_velocity_and_positive_integral_PPC",
     "boundary": "This readiness record binds the unique Q043 source implementation, registration, two source modes, corrected linear decks, and source-local cycle-one raw-current oracle without granting execution or qualification authority."
   },
   "historical_campaign_disposition": {
@@ -121,22 +122,22 @@
     "src/pgen/AGENTS.md": "d76233e748027ae5b2fb666979221695fa4c7f219e8ea17f2afc298abe47529e",
     "src/pgen/pgen.cpp": "f6553d0e635e3a3c1a647614c9c8a813123e0bd59bb9f108eb2effac92345874",
     "src/pgen/pgen.hpp": "1ee1b72bf5c44adc672c776b2b4b053456f24e543b96367b8db123bea4800c5d",
-    "src/pgen/tests/q043_bell_current_volume_aware.cpp": "0b3a6803d1b0111d08c43e04be4e984c0afb9b031708cd469895c0e1ae1c3fcf",
+    "src/pgen/tests/q043_bell_current_volume_aware.cpp": "dd44fff4fe39bf1640dad6019ded29ce7d434b50a0c9831a8749383c6241f3e3",
     "tst/publication/analyze_q043_bell_current_volume_aware.py": "8a381d4f6075bc3a1b3987a802018a010ed8c34c22af2ec9e5b92f1c36a79d7e",
     "tst/publication/q043_bell_current_volume_aware_host_harness.cpp": "0ad9f2c559cffc5831e3a130af260154cd9c7d76eeb12aa26877c2d137db184a",
-    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "7d8f48b95f4b33d0ae1589631d54b127d318be255a48430ed90429f29e918ab7",
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "f0a8db7fb47798d4bdc9ec742cef09e5ae0c69ff3ccb2f25d065602b23a26bed",
     "tst/publication/test_analyze_q043_bell_current_volume_aware.py": "6f27848d9d91c88eacf1f33084fc05d229fbf4359bef339d43986b05803cd43c",
     "tst/publication/test_q043_bell_current_volume_aware_host_harness.py": "800f43cdfbe61aee5db930fe475a9e57dda5d241901e4f8134eea67e267f602d",
-    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "20e971c7c528486398eaae2fe3db5e2cda7bb2c4ae697850e04766bb4a40f471",
+    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "578245ade8e0d0e94c64c3f8a5ce3ae3b36e11e13c331fa03b5c98602272ed91",
     "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
-    "tst/publication/readiness/q043_bell_current_volume_aware_deposited_current_oracle_source_local_2026-06-06.json": "829c65184f89a445c6708e5cedae770f29d04f06d19031dfb453677de241e046",
+    "tst/publication/readiness/q043_bell_current_volume_aware_deposited_current_oracle_source_local_2026-06-06.json": "7cdb27ec9d1d5d6b92e9c1dece3fc97c2ffa127c72b105c42d93d98a4395fb5f",
     "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json": "2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342",
     "tst/publication/test_q043_bell_current_normalization_supersession.py": "8abcc79548a66ce11984219e52953956eafbfd7b862cdebe458ccf3761ffe883"
   },
   "source_local_verification": {
     "strict_preparation_analyzer": "pass",
     "focused_preparation_tests": "pass",
-    "source_build_and_focused_runtime_smokes": "pass",
+    "source_build_and_focused_runtime_smokes": "source_build_pass_repaired_source_runtime_smoke_pending_not_launched_by_this_non_authorizing_repair",
     "cycle_one_raw_oracle_matrix_observation": "pending",
     "multidirectional_MPI_raw_oracle_observation": "pending",
     "qualification_effect": "none"
@@ -151,6 +152,7 @@
     "publication claim closure"
   ],
   "open_dependencies": [
+    "Execute a fresh source-local runtime smoke for the repaired exact source before registered-execution admission.",
     "Bind a clean candidate, registered campaign, exact runtime decks, and authorized Orion artifact root.",
     "Execute the complete cycle-one direct prtcl_rho/prtcl_jx/prtcl_jy/prtcl_jz current-oracle matrix at multiple artificial light speeds, root-grid resolutions, and x1/x2/x3/multiaxis MPI decompositions.",
     "Complete linear-growth qualification, independent recompute, and external scientific review before any Section 5.2 claim."
