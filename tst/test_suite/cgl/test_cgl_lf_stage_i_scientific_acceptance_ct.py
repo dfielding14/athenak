@@ -17,6 +17,7 @@ import pytest
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py"
+INVENTORY_BUILDER = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_ct_inventory.py"
 
 
 def load_utility():
@@ -31,6 +32,20 @@ def load_utility():
 
 
 acceptance = load_utility()
+
+
+def load_inventory_builder():
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_ct_inventory", INVENTORY_BUILDER
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+inventory_builder = load_inventory_builder()
 
 
 def sha256(path: Path) -> str:
@@ -372,6 +387,107 @@ def test_offline_multistate_inventory_tests_mechanics_but_is_non_authorizing(
         record["local_meshblocks"]
         for record in evidence["state_audits"][0]["restart_audits"]
     ] == [2, 3]
+
+
+def test_builder_deterministically_reconstructs_inventory_accepted_by_auditor(
+    policy, tmp_path
+):
+    expected_path, _ = build_inventory(policy, tmp_path / "accepted")
+    expected = json.loads(expected_path.read_text())
+    bundle_path = Path(expected["accepted_bundle_manifest"]["path"])
+    observed = inventory_builder.build_ct_inventory(
+        policy, "R02", bundle_path, sha256(bundle_path), "offline"
+    )
+    assert observed == expected
+
+    observed_path = tmp_path / "observed-inventory.json"
+    write_json(observed_path, observed)
+    _, _, states, _, canonical = acceptance.validate_ct_inventory(
+        policy, "R02", observed_path
+    )
+    assert [state["time"] for state in states] == [9.0, 10.0]
+    assert canonical is None
+    evidence = acceptance.audit_ct_divb(policy, "R02", [], observed_path)
+    assert evidence["coverage_complete"] is True
+    assert evidence["numerical_result"] == "pass"
+
+
+def test_builder_cli_emits_only_accepted_bundle_derived_inventory(policy, tmp_path):
+    expected_path, _ = build_inventory(policy, tmp_path / "accepted")
+    expected = json.loads(expected_path.read_text())
+    bundle_path = Path(expected["accepted_bundle_manifest"]["path"])
+    output = tmp_path / "cli-inventory.json"
+    assert inventory_builder.main([
+        "--case-id", "R02",
+        "--bundle-manifest", str(bundle_path),
+        "--expected-bundle-sha256", sha256(bundle_path),
+        "--authority-mode", "offline",
+        "--output", str(output),
+    ]) == 0
+    assert json.loads(output.read_text()) == expected
+    assert inventory_builder.main([
+        "--case-id", "R02",
+        "--bundle-manifest", str(bundle_path),
+        "--expected-bundle-sha256", sha256(bundle_path),
+        "--authority-mode", "offline",
+        "--output", str(output),
+    ]) == 2
+
+
+def test_builder_candidate_write_rejects_canonical_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(inventory_builder.acceptance, "CANONICAL_CAMPAIGN_ROOT", tmp_path)
+    with pytest.raises(inventory_builder.CtInventoryError, match="canonical root"):
+        inventory_builder.write_candidate(
+            tmp_path / "forbidden-inventory.json",
+            {"schema_version": 2},
+        )
+
+
+def test_builder_rejects_nonaccepted_or_incomplete_bundle_lineage(policy, tmp_path):
+    expected_path, _ = build_inventory(policy, tmp_path / "nonaccepted")
+    expected = json.loads(expected_path.read_text())
+    bundle_path = Path(expected["accepted_bundle_manifest"]["path"])
+    segment_path = Path(expected["states"][0]["accepted_segment_manifest"]["path"])
+    segment = json.loads(segment_path.read_text())
+    segment["accounting"]["result"] = "clean_partial"
+    write_json(segment_path, segment)
+    with pytest.raises(
+        inventory_builder.CtInventoryError, match="not an accepted CT source"
+    ):
+        inventory_builder.build_ct_inventory(
+            policy, "R02", bundle_path, sha256(bundle_path), "offline"
+        )
+
+    expected_path, _ = build_inventory(policy, tmp_path / "incomplete")
+    expected = json.loads(expected_path.read_text())
+    bundle_path = Path(expected["accepted_bundle_manifest"]["path"])
+    bundle = json.loads(bundle_path.read_text())
+    bundle["production_segment_manifests"] = bundle["production_segment_manifests"][1:]
+    write_json(bundle_path, bundle)
+    with pytest.raises(inventory_builder.CtInventoryError, match="exactly one t=9 state"):
+        inventory_builder.build_ct_inventory(
+            policy, "R02", bundle_path, sha256(bundle_path), "offline"
+        )
+
+
+def test_builder_rejects_copied_rank_bytes_and_false_canonical_authority(policy, tmp_path):
+    expected_path, _ = build_inventory(
+        policy, tmp_path / "copied", nmb_total=4, copied_rank_bytes=True
+    )
+    expected = json.loads(expected_path.read_text())
+    bundle_path = Path(expected["accepted_bundle_manifest"]["path"])
+    with pytest.raises(inventory_builder.CtInventoryError, match="copied rank bytes"):
+        inventory_builder.build_ct_inventory(
+            policy, "R02", bundle_path, sha256(bundle_path), "offline"
+        )
+
+    expected_path, _ = build_inventory(policy, tmp_path / "noncanonical")
+    expected = json.loads(expected_path.read_text())
+    bundle_path = Path(expected["accepted_bundle_manifest"]["path"])
+    with pytest.raises(inventory_builder.CtInventoryError, match="exact canonical bundle path"):
+        inventory_builder.build_ct_inventory(
+            policy, "R02", bundle_path, sha256(bundle_path), "canonical"
+        )
 
 
 def test_one_terminal_state_never_false_passes(policy, tmp_path):
