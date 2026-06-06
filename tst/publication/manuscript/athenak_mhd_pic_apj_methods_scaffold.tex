@@ -268,13 +268,38 @@ c\boldsymbol{E} &= -\boldsymbol{u}\times\boldsymbol{B}.
 \end{align}
 Equations~\ref{eq:particle-position}--\ref{eq:ideal-electric-field} follow the
 MHD-PIC formulation used by \citet{BaiEtAl2015} and \citet{SunBai2023}.
-\TODO{Insert a verified primary citation for the relativistic Boris method.}
-The particle timestep is restricted by both a configured maximum cell crossing
-and a configured maximum Boris gyro angle. These are numerical guards; they do
-not by themselves establish that a selected artificial light speed is
-physically adequate.
-\TODO{Add the exact Boris update equations only after a source-to-manuscript
-derivation audit.}
+AthenaK advances Equation~\ref{eq:particle-momentum} with the relativistic
+Boris rotation described in the standard particle-in-cell treatment of
+\citet{BirdsallLangdon2018}. For fields interpolated at the midpoint particle
+position, define
+\begin{align}
+\alpha &\equiv \frac{q}{mc}\frac{\Delta t}{2}, &
+\boldsymbol{w}^{-} &=
+\boldsymbol{w}^{n}+\alpha c\boldsymbol{E}^{n+1/2},
+\label{eq:boris-electric-minus}\\
+\gamma^{-} &=
+\left(1+\frac{|\boldsymbol{w}^{-}|^2}{\mathbb{C}^2}\right)^{1/2}, &
+\boldsymbol{t} &= \frac{\alpha\boldsymbol{B}^{n+1/2}}{\gamma^{-}},
+\qquad
+\boldsymbol{s}=\frac{2\boldsymbol{t}}{1+|\boldsymbol{t}|^2},
+\label{eq:boris-rotation-vectors}\\
+\boldsymbol{w}' &= \boldsymbol{w}^{-}
++ \boldsymbol{w}^{-}\times\boldsymbol{t}, &
+\boldsymbol{w}^{+} &= \boldsymbol{w}^{-}
++ \boldsymbol{w}'\times\boldsymbol{s},
+\label{eq:boris-rotation}\\
+\boldsymbol{w}^{n+1} &= \boldsymbol{w}^{+}
++\alpha c\boldsymbol{E}^{n+1/2}.
+\label{eq:boris-electric-plus}
+\end{align}
+These equations reproduce the implemented operation order: half electric
+acceleration, magnetic rotation using $\gamma^{-}$, and the second half
+electric acceleration. The magnetic substep preserves
+$|\boldsymbol{w}^{-}|$ algebraically, whereas changes in particle kinetic
+energy arise through the electric substeps. The particle timestep is restricted
+by both a configured maximum cell crossing and a configured maximum Boris gyro
+angle. These are numerical guards; they do not by themselves establish that a
+selected artificial light speed is physically adequate.
 
 \subsection{Deposited-Current Normalization}
 
@@ -515,6 +540,24 @@ feedback channels use Equations~\ref{eq:particle-momentum-rate} and
 recipient-cell volume before entering Equations~\ref{eq:gas-opposite-momentum}
 and \ref{eq:gas-opposite-energy}.
 
+For a cell center separated from the particle by $r$ cell widths, the
+implemented one-dimensional shape is
+\begin{equation}
+S_2(r)=
+\begin{cases}
+3/4-r^2, & |r|\leq 1/2,\\
+\frac{1}{2}(3/2-|r|)^2, & 1/2<|r|\leq 3/2,\\
+0, & |r|>3/2.
+\end{cases}
+\label{eq:tsc-shape}
+\end{equation}
+The multidimensional weight is the tensor product of
+Equation~\ref{eq:tsc-shape} over active dimensions. On a uniform periodic
+mesh, the three weights in each active dimension sum to unity. This
+partition-of-unity property is the discrete step that allows the summed
+opposite-impulse update to cancel the summed particle impulse in the
+uniform-mesh conservation envelope.
+
 On multilevel meshes, \runtime selects the separately named
 \texttt{paper\_smooth} candidate path, which routes receiver-resolution TSC
 records to leaf blocks. This choice follows the requirement that each
@@ -714,6 +757,70 @@ Hall-dominated shock-front conditions.}
 \section{Section 5.4 Parallel-Shock Demonstration}
 \label{sec:shock}
 
+\subsection{Configured Production Candidate}
+\label{sec:shock-setup}
+
+The Section~5.4 candidate is a two-dimensional, three-velocity-component
+parallel shock in a $48000\times3120\;c/\omega_{\rm pi}$ domain. The inner
+$x_1$ boundary reflects the gas and particles, the outer $x_1$ boundary
+supplies the upstream inflow, and both $x_2$ boundaries are periodic. In the
+selected normalization,
+\begin{equation}
+\rho_0=B_0=\frac{q}{mc}=1,\qquad
+P_0=1,\qquad
+u_0=30,\qquad
+\gamma_g=\frac{5}{3},\qquad
+\mathbb{C}=10^4 .
+\label{eq:shock-normalization}
+\end{equation}
+The configured upstream Alfv\'enic Mach number is therefore $M_A=30$. The
+three-level AMR candidate has cell sizes
+$\Delta x=12,6,$ and $3\;c/\omega_{\rm pi}$, uses $20\times20$-cell
+MeshBlocks, and applies density-curvature refinement and derefinement
+thresholds of 1 and 0.1. Coarse-uniform and fine-uniform members retain the
+same physical domain and are paired with the AMR member by random seed. These
+are exact properties of the configured candidate matrix, not evidence that
+the matrix has executed successfully or that AMR agrees with the fine run.
+
+\subsection{Ideal-Surface Injection and Source Accounting}
+\label{sec:shock-injection}
+
+Following the ideal-surface prescription used for the target comparison, the
+configured shock surface is
+\begin{equation}
+x_{\rm sh,ideal}(t)=\frac{\gamma_g-1}{2}u_0t=10t .
+\label{eq:ideal-shock-surface}
+\end{equation}
+At each physical cycle, the generator forms a global swept-mass budget
+\begin{equation}
+\Delta M_{\rm inj}
+=\eta\,\rho_0\left(u_0+u_{\rm sh,ideal}\right)
+\Delta t\,A_{\rm sh},
+\qquad \eta=10^{-3},
+\label{eq:shock-injected-mass}
+\end{equation}
+adds any unresolved remainder from the preceding cycle, and creates the
+largest integer number of equal-macro-mass particles that fits that budget.
+The generator identifies the half-open carrier-cell band that contains the
+ideal surface and distributes particles among those cells in proportion to
+their transverse area. Particle positions use the ideal-surface coordinate in
+$x_1$ and uniform within-cell coordinates transversely. Their directions are
+isotropic in three velocity dimensions relative to the moving ideal surface,
+and their monoenergetic momentum magnitude is
+\begin{equation}
+\frac{p_{\rm inj}}{m}=\sqrt{10}\,u_0 .
+\label{eq:shock-injection-momentum}
+\end{equation}
+The corresponding particle mass, momentum, and kinetic energy are subtracted
+from the unique carrier cells as a stage-weighted source transaction. Each
+cycle's gas-subtraction transaction is checked against the newly injected
+particle budget, while cumulative injection and removal ledgers persist through
+restart. At the configured cutoff, the startup cohort with birth time below
+$45\,\Omega_0^{-1}$ is removed once from the simulated population and recorded
+in the removal ledger. This prescription is a controlled MHD-PIC injection
+model; it does not resolve thermal-pool injection, and its ideal surface is not
+the independently diagnosed shock front.
+
 \paragraph{Current admissible statement.}
 A human-only pressure-selection receipt records
 \texttt{problem/ps\_p0=1.0} as the provenance-first baseline. The short pressure
@@ -748,8 +855,9 @@ and overflow accounting.}
 and does not establish.}
 \TODO{Report restart, MPI/GPU, particle provenance, load-balance, runtime, and
 memory evidence for the same qualifying campaign.}
-\TODO{State the simplified injection prescription and the exclusions of
-thermal-pool injection and oblique-shock generality.}
+\GATE{The source-audited injection prescription does not establish the
+Section~5.4 physical result, thermal-pool injection fidelity, or oblique-shock
+generality.}
 
 \section{Performance and Scalability}
 \label{sec:performance}

@@ -184,6 +184,15 @@ with a named reviewer:
   (2015)-anchored baseline; Sun & Bai (2023) Section 5.4 does not state `P0`;
 - no claim may imply thermal-pool injection physics or oblique-shock generality.
 
+The source-audited methods description may state the configured ideal-surface
+model, area-weighted carrier-cell injection, full-sphere isotropic
+surface-relative momentum distribution, integer macro-particle reservoir,
+stage-weighted gas-subtraction transaction with cycle-local validation,
+restart-persistent cumulative injection/removal ledgers, and one-time
+startup-cohort removal. These are method properties only; they do not establish
+a qualifying shock result or exact conservation outside the separately
+qualified envelope.
+
 Required result scope, if the gate closes: the exact paper-mode implementation,
 coarse/AMR/fine paired-seed matrix, nominal-slot and observed-committed-time
 semantics, retained failures, restart behavior, provenance, MPI/GPU scope,
