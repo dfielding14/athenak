@@ -527,39 +527,98 @@ def next_from_segment(segment: Path, *, submit: bool) -> Path | None:
     return next_segment
 
 
-def analyze_segment(segment: Path) -> dict[str, object]:
-    manifest = validate_segment(segment)
-    result = fast.analyze_segment(segment.resolve(), save=False)
-    if str(manifest["case_id"]) in FINITE_LIMITER_DIAGNOSTIC_CASES:
-        restart = result.get("terminal_restart")
-        snapshot = result.get("terminal_snapshot")
-        ranks = int(manifest["ranks"])
-        final_time = float(result["final_time"])
-        start_time = float(result["start_time"])
-        finite_progress = math.isfinite(final_time) and final_time > start_time
-        restart_complete = (
-            isinstance(restart, dict)
-            and int(restart.get("rank_count", -1)) == ranks
-            and math.isclose(
-                float(restart.get("physical_time", math.nan)),
-                final_time,
-                rel_tol=0.0,
-                abs_tol=1.0e-12,
-            )
+def analyze_finite_limiter_diagnostic(
+    segment: Path, manifest: dict[str, object]
+) -> dict[str, object]:
+    output = segment / "output"
+    rank_count = int(manifest["ranks"])
+    mhd_paths = sorted(output.glob("*.mhd.hst"))
+    user_paths = sorted(output.glob("*.user.hst"))
+    if len(mhd_paths) != 1 or len(user_paths) != 1:
+        raise CorrectedFastError(f"expected one MHD and one user history: {output}")
+    mhd = fast.parse_history(mhd_paths[0])
+    user = fast.parse_history(user_paths[0])
+    if "time" not in mhd or "time" not in user or "mass" not in mhd or "mass" not in user:
+        raise CorrectedFastError(f"histories lack required columns: {output}")
+    if len(mhd["time"]) != len(user["time"]) or any(
+        left != right for left, right in zip(mhd["time"], user["time"])
+    ):
+        raise CorrectedFastError(f"history times are not synchronized: {output}")
+
+    final_time = mhd["time"][-1]
+    restart = fast.terminal_product_group(output / "rst", ".rst", rank_count)
+    if not math.isclose(
+        float(restart["physical_time"]), final_time, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        raise CorrectedFastError(f"terminal restart and history times differ: {output}")
+
+    snapshot: dict[str, object] | None = None
+    snapshot_error: str | None = None
+    try:
+        snapshot = fast.terminal_product_group(output / "bin", ".bin", rank_count)
+    except fast.FastRunError as error:
+        snapshot_error = str(error)
+
+    strict_maxima = {
+        name: max(abs(value) for value in mhd.get(name, [math.inf]))
+        for name in fast.STRICT_FAILURE_COLUMNS
+    }
+    initial_mass = mhd["mass"][0]
+    mass_drift = max(abs(value - initial_mass) for value in mhd["mass"]) / max(
+        abs(initial_mass), 1.0
+    )
+    mass_mismatch = max(
+        abs(left - right) for left, right in zip(mhd["mass"], user["mass"])
+    ) / max(abs(initial_mass), 1.0)
+    start_time = float(manifest["start_time"])
+    target_time = float(manifest["target_time"])
+    finite_progress = math.isfinite(final_time) and final_time > start_time
+    restart_complete = (
+        int(restart["rank_count"]) == rank_count
+        and math.isclose(
+            float(restart["physical_time"]), final_time, rel_tol=0.0, abs_tol=1.0e-12
         )
-        snapshot_complete = (
-            isinstance(snapshot, dict)
-            and int(snapshot.get("rank_count", -1)) == ranks
-        )
-        result["base_strict_passed"] = result["passed"]
-        result["continuation_policy"] = "finite_progress_complete_terminal_products"
-        result["continuation_gate"] = {
+    )
+    base_strict_passed = (
+        all(value == 0.0 for value in strict_maxima.values())
+        and mass_drift <= 1.0e-8
+        and mass_mismatch <= 1.0e-8
+        and finite_progress
+    )
+    return {
+        "schema_version": 1,
+        "analyzed_utc": fast.utc_now(),
+        "case_id": manifest["case_id"],
+        "segment": segment.name,
+        "start_time": start_time,
+        "target_time": target_time,
+        "final_time": final_time,
+        "complete": final_time >= target_time - 1.0e-12,
+        "passed": finite_progress and restart_complete,
+        "base_strict_passed": base_strict_passed,
+        "continuation_policy": "finite_progress_complete_terminal_products",
+        "continuation_gate": {
             "finite_progress": finite_progress,
             "complete_terminal_restart": restart_complete,
-            "complete_terminal_snapshot": snapshot_complete,
             "hard_bound_zero_required": False,
-        }
-        result["passed"] = finite_progress and restart_complete and snapshot_complete
+            "terminal_snapshot_required": False,
+        },
+        "strict_lf_failure_maxima": strict_maxima,
+        "mass_relative_drift": mass_drift,
+        "mhd_user_mass_relative_mismatch": mass_mismatch,
+        "terminal_restart": restart,
+        "terminal_snapshot": snapshot,
+        "terminal_snapshot_error": snapshot_error,
+        "history_rows": len(mhd["time"]),
+    }
+
+
+def analyze_segment(segment: Path) -> dict[str, object]:
+    manifest = validate_segment(segment)
+    if str(manifest["case_id"]) in FINITE_LIMITER_DIAGNOSTIC_CASES:
+        result = analyze_finite_limiter_diagnostic(segment.resolve(), manifest)
+    else:
+        result = fast.analyze_segment(segment.resolve(), save=False)
     fast.write_json(segment / "manifest/fast_analysis.json", result)
     return result
 

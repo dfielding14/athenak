@@ -63,6 +63,30 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_history(path: Path, columns: dict[str, list[float]]) -> None:
+    names = list(columns)
+    lines = [
+        "# "
+        + " ".join(f"[{index}]={name}" for index, name in enumerate(names, start=1))
+    ]
+    lines.extend(
+        " ".join(format(value, ".17g") for value in row)
+        for row in zip(*(columns[name] for name in names))
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_restart_group(directory: Path, rank_count: int, time: float) -> Path:
+    payload = f"<time>\ntime = {time:.17g}\n<par_end>\n".encode() + b"\0payload"
+    rank_zero = directory / "rank_00000000/fixture.00001.rst"
+    for rank in range(rank_count):
+        path = directory / f"rank_{rank:08d}/fixture.00001.rst"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    return rank_zero
+
+
 def test_corrected_defaults_are_exact_active_only_and_aggressive(corrected):
     assert corrected.CAMPAIGN_ROOT == EXPECTED_ROOT
     assert corrected.FROZEN_SOURCE == EXPECTED_SOURCE
@@ -335,33 +359,40 @@ def test_diagnostic_analysis_continues_on_finite_complete_products_not_hard_boun
     corrected, tmp_path, monkeypatch
 ):
     segment = tmp_path / "campaign/runs/E03-forcing-policy/R14/fast_s000"
-    manifest = {"case_id": "R14", "ranks": 8}
-    monkeypatch.setattr(corrected, "validate_segment", lambda _segment: manifest)
-    monkeypatch.setattr(
-        corrected.fast,
-        "analyze_segment",
-        lambda _segment, save=False: {
-            "case_id": "R14",
-            "start_time": 0.0,
-            "final_time": 0.5,
-            "complete": False,
-            "passed": False,
-            "strict_lf_failure_maxima": {"lf_hardbd": 42.0},
-            "terminal_restart": {
-                "rank_zero": str(segment / "output/rst/rank_00000000/r.rst"),
-                "rank_count": 8,
-                "physical_time": 0.5,
-                "sha256": "a" * 64,
-            },
-            "terminal_snapshot": {"rank_count": 8},
+    output = segment / "output"
+    manifest = {
+        "case_id": "R14",
+        "ranks": 8,
+        "start_time": 0.0,
+        "target_time": 10.0,
+    }
+    write_history(
+        output / "fixture.mhd.hst",
+        {
+            "time": [0.0, 0.5],
+            "mass": [1.0, 1.0],
+            "lf_dfloor": [0.0, 0.0],
+            "lf_pfloor": [0.0, 0.0],
+            "lf_nonfin": [0.0, 0.0],
+            "lf_nonpos": [0.0, 0.0],
+            "lf_hardbd": [0.0, 42.0],
         },
     )
+    write_history(
+        output / "fixture.user.hst",
+        {"time": [0.0, 0.5], "mass": [1.0, 1.0]},
+    )
+    write_restart_group(output / "rst", 8, 0.5)
+    monkeypatch.setattr(corrected, "validate_segment", lambda _segment: manifest)
 
     result = corrected.analyze_segment(segment)
 
     assert result["base_strict_passed"] is False
     assert result["strict_lf_failure_maxima"]["lf_hardbd"] == 42.0
     assert result["continuation_gate"]["hard_bound_zero_required"] is False
+    assert result["continuation_gate"]["terminal_snapshot_required"] is False
+    assert result["terminal_snapshot"] is None
+    assert result["terminal_snapshot_error"] is not None
     assert result["passed"] is True
     saved = corrected.fast.load_json(segment / "manifest/fast_analysis.json")
     assert saved["passed"] is True
