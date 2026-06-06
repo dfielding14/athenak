@@ -5,6 +5,10 @@ on-the-fly subgrid-scale (SGS) filtering. `mach010_1024.athinput` is the project
 fiducial Mach-0.1 run; `mach025_1024.athinput` is the first higher-Mach commissioning
 run.
 
+See [HANDOFF.md](HANDOFF.md) for the scientific rationale, completed pilot results,
+known limitations, and the staged plan for moving toward a `16384 x 16384`
+production run.
+
 ## Two-Dimensional Forcing And Drag
 
 For `Nres = 1024`, the supplied inputs target global mode
