@@ -375,6 +375,152 @@ def empty_data(publication, analysis: Path):
     )
 
 
+def tree_bytes(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_staging_failure_preserves_previous_canonical_authority(
+    publication, tmp_path, monkeypatch
+):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    output = tmp_path / "publication"
+    publication.write_text(output / "tables/old.csv", "old\n")
+    publication.write_json(output / "manifest.json", {"authority": "old"})
+    previous = tree_bytes(output)
+
+    monkeypatch.setattr(
+        publication,
+        "discover_data",
+        lambda analysis_path, _acceptance: empty_data(publication, analysis_path),
+    )
+
+    def interrupted_render(_data, staging):
+        assert staging.parent == output.parent
+        assert staging != output
+        assert staging.name.startswith(".publication.staging-")
+        publication.write_text(staging / "tables/new.csv", "new\n")
+        raise RuntimeError("interrupted render")
+
+    monkeypatch.setattr(publication, "render_products", interrupted_render)
+
+    with pytest.raises(RuntimeError, match="interrupted render"):
+        publication.main([str(analysis), "--output", str(output)])
+
+    assert tree_bytes(output) == previous
+    assert list(tmp_path.glob(".publication.staging-*")) == []
+
+
+def test_interrupted_promotion_withdraws_manifest_and_rerun_recovers(
+    publication, tmp_path, monkeypatch
+):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    output = tmp_path / "publication"
+    publication.write_text(output / "a.txt", "old a\n")
+    publication.write_text(output / "b.txt", "old b\n")
+    publication.write_json(output / "manifest.json", {"authority": "old"})
+
+    monkeypatch.setattr(
+        publication,
+        "discover_data",
+        lambda analysis_path, _acceptance: empty_data(publication, analysis_path),
+    )
+
+    def fixed_render(_data, staging):
+        first = staging / "a.txt"
+        second = staging / "b.txt"
+        publication.write_text(first, "new a\n")
+        publication.write_text(second, "new b\n")
+        return [first, second]
+
+    monkeypatch.setattr(publication, "render_products", fixed_render)
+    real_promote_file = publication.promote_file
+    product_promotions = 0
+
+    def interrupt_after_first_product(staged, canonical):
+        nonlocal product_promotions
+        real_promote_file(staged, canonical)
+        if canonical.name != "manifest.json":
+            product_promotions += 1
+            if product_promotions == 1:
+                assert not (output / "manifest.json").exists()
+                raise RuntimeError("interrupted promotion")
+
+    monkeypatch.setattr(publication, "promote_file", interrupt_after_first_product)
+
+    with pytest.raises(RuntimeError, match="interrupted promotion"):
+        publication.main([str(analysis), "--output", str(output)])
+
+    assert not (output / "manifest.json").exists()
+    assert (output / "a.txt").read_text(encoding="utf-8") == "new a\n"
+    assert (output / "b.txt").read_text(encoding="utf-8") == "old b\n"
+    assert list(tmp_path.glob(".publication.staging-*")) == []
+
+    monkeypatch.setattr(publication, "promote_file", real_promote_file)
+    publication.main([str(analysis), "--output", str(output)])
+
+    recovered_manifest = json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert (
+        recovered_manifest["record_type"]
+        == "cgl_lf_stage_i_fast_publication_products"
+    )
+    assert (output / "a.txt").read_text(encoding="utf-8") == "new a\n"
+    assert (output / "b.txt").read_text(encoding="utf-8") == "new b\n"
+    for product in recovered_manifest["products"]:
+        path = Path(product["path"])
+        assert path.is_relative_to(output.absolute())
+        assert publication.source_binding(path) == product
+
+
+def test_main_commit_is_idempotent_and_uses_canonical_paths(
+    publication, tmp_path, monkeypatch
+):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    acceptance = tmp_path / "acceptance"
+    output = tmp_path / "publication"
+
+    monkeypatch.setattr(
+        publication,
+        "discover_data",
+        lambda analysis_path, _acceptance: empty_data(publication, analysis_path),
+    )
+    invocation = [
+        str(analysis),
+        "--output",
+        str(output),
+        "--acceptance",
+        str(acceptance),
+    ]
+
+    publication.main(invocation)
+    first = tree_bytes(output)
+    manifest = json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert manifest["normalized_invocation"] == publication.normalized_invocation(
+        analysis.absolute(), output.absolute(), [acceptance]
+    )
+    assert ".staging-" not in json.dumps(manifest)
+    for product in manifest["products"]:
+        path = Path(product["path"])
+        assert path.is_relative_to(output.absolute())
+        assert publication.source_binding(path) == product
+
+    publication.main(invocation)
+
+    assert tree_bytes(output) == first
+    assert list(tmp_path.glob(".publication.staging-*")) == []
+
+
 def test_stale_native_pass_cannot_override_current_direct_inconclusive(
     publication, tmp_path
 ):

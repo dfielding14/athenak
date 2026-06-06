@@ -66,6 +66,144 @@ def write_artifact(path: Path, text: str) -> Path:
     return path
 
 
+def publication_workflow_fixture(downstream, tmp_path: Path) -> dict[str, object]:
+    authority = tmp_path / "publication-authority"
+    identity = write_artifact(authority / "identity.json", "{}\n")
+    inventory = write_artifact(authority / "inventory.json", "{}\n")
+    executable = write_artifact(authority / "athena", "corrected\n")
+    audit = write_artifact(authority / "audit.py", "audit\n")
+    eos = write_artifact(authority / "eos.hpp", "corrected eos\n")
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    root = tmp_path / "workflow"
+    initial = root / "jobs/publication/attempt-000"
+    output = root / "publication"
+    context = {
+        "identity_binding": binding(identity),
+        "inventory_binding": binding(inventory),
+        "inventory_output": analysis.resolve(),
+        "identity_artifacts": {
+            "executable": binding(executable),
+            "audit": binding(audit),
+            "eos": binding(eos),
+        },
+    }
+    tools = {"orchestrator": binding(TOOL)}
+    command = [
+        sys.executable,
+        str(downstream.PUBLICATION_TOOL),
+        str(analysis.resolve()),
+        "--output",
+        str(output.resolve()),
+    ]
+    manifest = downstream.generic_job_manifest(
+        "publication",
+        initial,
+        command,
+        context,
+        tools,
+        "ast207",
+        "batch",
+        "02:00:00",
+        56,
+    )
+    manifest.update({
+        "job_id": "100",
+        "dependency_job_ids": ["101", "102", "103"],
+    })
+    downstream.prepare_generic_job(manifest)
+    workflow = {
+        "workflow_root": str(root.resolve()),
+        "tools": tools,
+        "commands": {
+            "publication": {
+                "job_dir": str(initial.resolve()),
+                "output": str(output.resolve()),
+                "command": command,
+            },
+        },
+    }
+    workflow_file = root / "workflow.json"
+    write_json(workflow_file, workflow)
+    return {
+        "root": root,
+        "workflow": workflow,
+        "workflow_binding": binding(workflow_file),
+        "context": context,
+        "initial": initial,
+        "output": output,
+    }
+
+
+def completed_upstream_fixture(tmp_path: Path) -> dict[str, object]:
+    hyper_attempt = tmp_path / "upstream/hyper/R02/attempt-001"
+    hyper_manifest = hyper_attempt / "manifest.json"
+    write_json(hyper_manifest, {"job_id": "201"})
+    hyper_result = write_artifact(hyper_attempt / "result.json", "hyper\n")
+    analysis_attempt = tmp_path / "upstream/analysis/R02/attempt-001"
+    analysis_manifest = analysis_attempt / "manifest.json"
+    write_json(analysis_manifest, {"job_id": "202"})
+    diagnostics = write_artifact(analysis_attempt / "diagnostics.json", "analysis\n")
+    ct_manifest = tmp_path / "upstream/ct/attempt-000/manifest.json"
+    write_json(ct_manifest, {"job_id": "203"})
+    ct_audit = write_artifact(tmp_path / "upstream/ct/ct_audit.json", "ct\n")
+    return {
+        "hyper": {
+            "R02": {
+                "attempt": str(hyper_attempt.resolve()),
+                "manifest": binding(hyper_manifest),
+                "result": binding(hyper_result),
+            },
+        },
+        "analysis": {
+            "R02": {
+                "attempt": str(analysis_attempt.resolve()),
+                "manifest": binding(analysis_manifest),
+                "diagnostics": binding(diagnostics),
+            },
+        },
+        "ct": {
+            "job_manifest": binding(ct_manifest),
+            "audit": binding(ct_audit),
+        },
+    }
+
+
+def add_publication_attempt(
+    downstream,
+    fixture: dict[str, object],
+    name: str,
+    dependencies: list[str],
+    job_id: str,
+    exit_code: int,
+) -> Path:
+    workflow = fixture["workflow"]
+    context = fixture["context"]
+    stage = workflow["commands"]["publication"]
+    initial = json.loads(
+        (fixture["initial"] / "manifest.json").read_text(encoding="utf-8")
+    )
+    attempt = fixture["initial"].parent / name
+    manifest = downstream.generic_job_manifest(
+        "publication",
+        attempt,
+        stage["command"],
+        context,
+        workflow["tools"],
+        initial["account"],
+        initial["partition"],
+        initial["walltime"],
+        initial["cpus_per_task"],
+    )
+    manifest.update({
+        "job_id": job_id,
+        "dependency_job_ids": dependencies,
+    })
+    downstream.prepare_generic_job(manifest)
+    write_artifact(attempt / "exit_code.txt", f"{exit_code}\n")
+    return attempt
+
+
 def campaign_fixture(
     downstream,
     identity_tool,
@@ -220,6 +358,64 @@ def install_composite_validator(downstream, monkeypatch) -> None:
     )
 
 
+def test_immutable_json_is_staged_then_exclusively_published_and_idempotent(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    target = tmp_path / "retained/record.json"
+    original_link = downstream.os.link
+    observations: list[bytes] = []
+
+    def observed_link(source, destination):
+        assert not Path(destination).exists()
+        observations.append(Path(source).read_bytes())
+        original_link(source, destination)
+
+    monkeypatch.setattr(downstream.os, "link", observed_link)
+    downstream.write_immutable_json(target, {"status": "complete"})
+    downstream.write_immutable_json(target, {"status": "complete"})
+
+    assert observations == [downstream.stable_json({"status": "complete"})]
+    assert target.read_bytes() == observations[0]
+    assert list(target.parent.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_immutable_json_interruption_never_publishes_partial_target(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    target = tmp_path / "retained/record.json"
+
+    def interrupted_link(_source, _destination):
+        raise OSError("simulated interruption before publication")
+
+    monkeypatch.setattr(downstream.os, "link", interrupted_link)
+    with pytest.raises(OSError, match="simulated interruption"):
+        downstream.write_immutable_json(target, {"status": "complete"})
+
+    assert not target.exists()
+    assert list(target.parent.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_immutable_json_rejects_concurrent_publication_without_replacement(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    target = tmp_path / "retained/record.json"
+    concurrent = b'{"concurrent": true}\n'
+
+    def racing_link(_source, destination):
+        Path(destination).write_bytes(concurrent)
+        raise FileExistsError("simulated publication race")
+
+    monkeypatch.setattr(downstream.os, "link", racing_link)
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="retained artifact appeared concurrently",
+    ):
+        downstream.write_immutable_json(target, {"status": "complete"})
+
+    assert target.read_bytes() == concurrent
+    assert list(target.parent.glob(f".{target.name}.*.tmp")) == []
+
+
 def test_composite_inventory_allows_legacy_passive_but_binds_every_active_corrected(
     downstream, identity_tool, tmp_path, monkeypatch
 ) -> None:
@@ -372,6 +568,196 @@ def test_prepare_writes_jobs_and_workflow_without_submitting(
         assert manifest["formula_id"] == "literature-correct"
         assert "require_sha" in script
         assert "/usr/bin/sbatch" not in script
+
+
+def test_retry_publication_submits_fresh_attempt_bound_to_current_upstream_jobs(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(
+        downstream,
+        "load_workflow",
+        lambda _root: (fixture["workflow"], fixture["workflow_binding"]),
+    )
+    monkeypatch.setattr(
+        downstream, "workflow_context", lambda _workflow: fixture["context"]
+    )
+    monkeypatch.setattr(
+        downstream,
+        "completed_hyperbolicity",
+        lambda _workflow, _context: upstream["hyper"],
+    )
+    monkeypatch.setattr(
+        downstream,
+        "completed_analysis",
+        lambda _workflow, _context: upstream["analysis"],
+    )
+    monkeypatch.setattr(
+        downstream, "completed_ct", lambda _workflow, _context: upstream["ct"]
+    )
+
+    def submit(command, **_kwargs):
+        calls.append(command)
+        return SimpleNamespace(stdout="900;frontier\n")
+
+    monkeypatch.setattr(downstream.subprocess, "run", submit)
+
+    attempt = downstream.retry_publication(fixture["root"])
+    manifest = json.loads((attempt / "manifest.json").read_text(encoding="utf-8"))
+
+    assert attempt.name == "attempt-001"
+    assert manifest["job_id"] == "900"
+    assert manifest["dependency_job_ids"] == ["201", "202", "203"]
+    assert calls == [[
+        "/usr/bin/sbatch",
+        "--parsable",
+        "--dependency=afterok:201:202:203",
+        str(attempt / "run.sbatch"),
+    ]]
+    assert json.loads(
+        (fixture["initial"] / "manifest.json").read_text(encoding="utf-8")
+    )["dependency_job_ids"] == ["101", "102", "103"]
+
+
+def test_submit_manifest_job_records_dependencies_before_scheduler_submission(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    job = tmp_path / "job"
+    write_json(job / "manifest.json", {"job_id": None})
+    write_artifact(job / "run.sbatch", "#!/bin/bash\n")
+
+    def submit(_command, **_kwargs):
+        manifest = json.loads((job / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["dependency_job_ids"] == ["201", "202"]
+        return SimpleNamespace(stdout="900;frontier\n")
+
+    monkeypatch.setattr(downstream.subprocess, "run", submit)
+
+    assert downstream.submit_manifest_job(job, ["202", "201"]) == "900"
+    manifest = json.loads((job / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["job_id"] == "900"
+    assert manifest["dependency_job_ids"] == ["201", "202"]
+
+
+def test_retry_publication_refuses_duplicate_while_matching_attempt_is_pending(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    pending = add_publication_attempt(
+        downstream, fixture, "attempt-001", ["201", "202", "203"], "900", 0
+    )
+    (pending / "exit_code.txt").unlink()
+    monkeypatch.setattr(
+        downstream,
+        "load_workflow",
+        lambda _root: (fixture["workflow"], fixture["workflow_binding"]),
+    )
+    monkeypatch.setattr(
+        downstream, "workflow_context", lambda _workflow: fixture["context"]
+    )
+    monkeypatch.setattr(
+        downstream,
+        "completed_hyperbolicity",
+        lambda _workflow, _context: upstream["hyper"],
+    )
+    monkeypatch.setattr(
+        downstream,
+        "completed_analysis",
+        lambda _workflow, _context: upstream["analysis"],
+    )
+    monkeypatch.setattr(
+        downstream, "completed_ct", lambda _workflow, _context: upstream["ct"]
+    )
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="matching publication attempt is still pending",
+    ):
+        downstream.retry_publication(fixture["root"])
+
+    assert not (fixture["initial"].parent / "attempt-002").exists()
+
+
+def test_completed_publication_selects_latest_successful_matching_attempt(
+    downstream, tmp_path
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    successful = add_publication_attempt(
+        downstream, fixture, "attempt-001", ["201", "202", "203"], "900", 0
+    )
+    add_publication_attempt(
+        downstream, fixture, "attempt-002", ["201", "202", "203"], "901", 1
+    )
+    product = write_artifact(fixture["output"] / "report.md", "publication\n")
+    sources = [
+        record[key]["path"]
+        for record in upstream["hyper"].values()
+        for key in ("manifest", "result")
+    ]
+    sources.extend(
+        record["diagnostics"]["path"] for record in upstream["analysis"].values()
+    )
+    sources.append(upstream["ct"]["audit"]["path"])
+    write_json(
+        fixture["output"] / "manifest.json",
+        {
+            "record_type": "cgl_lf_stage_i_fast_publication_products",
+            "analysis_output": str(fixture["context"]["inventory_output"]),
+            "sources": [{"path": path} for path in sources],
+            "products": [binding(product)],
+        },
+    )
+
+    completed = downstream.completed_publication(
+        fixture["workflow"],
+        fixture["context"],
+        upstream["hyper"],
+        upstream["analysis"],
+        upstream["ct"],
+    )
+
+    assert completed["attempt"] == str(successful)
+    assert completed["job_manifest"]["path"] == str(
+        (successful / "manifest.json").resolve()
+    )
+    assert completed["dependency_job_ids"] == ["201", "202", "203"]
+
+
+def test_completed_publication_rejects_stale_retry_dependencies(
+    downstream, tmp_path
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    add_publication_attempt(
+        downstream, fixture, "attempt-001", ["301", "302", "303"], "900", 0
+    )
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="lacks a successful attempt matching current upstream jobs",
+    ):
+        downstream.completed_publication(
+            fixture["workflow"],
+            fixture["context"],
+            upstream["hyper"],
+            upstream["analysis"],
+            upstream["ct"],
+        )
+
+
+def test_retry_publication_cli_is_explicit(downstream, tmp_path) -> None:
+    args = downstream.build_parser().parse_args([
+        "retry-publication",
+        "--workflow-root",
+        str(tmp_path / "workflow"),
+    ])
+
+    assert args.command == "retry-publication"
 
 
 def test_formula_binding_drift_is_rejected(

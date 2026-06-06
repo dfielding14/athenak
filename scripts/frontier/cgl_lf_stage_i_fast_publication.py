@@ -4,7 +4,9 @@
 This renderer is intentionally downstream-only.  It reads the direct-fast
 report output, discovers optional scientific-acceptance evidence, and writes a
 fixed set of summary figures and tables.  Missing or partial campaign evidence
-is shown explicitly rather than treated as a failed result.
+is shown explicitly rather than treated as a failed result.  Products are
+rendered in a sibling staging directory and promoted before ``manifest.json``;
+the canonical manifest is therefore the last-published authority.
 """
 
 from __future__ import annotations
@@ -5420,6 +5422,97 @@ def source_binding(path: Path) -> dict[str, object]:
     }
 
 
+def canonical_product_records(
+    products: Iterable[Path], staging: Path, output: Path
+) -> list[tuple[Path, Path, dict[str, object]]]:
+    """Bind staged products to their final canonical publication paths."""
+
+    staging = staging.absolute()
+    output = output.absolute()
+    records: list[tuple[Path, Path, dict[str, object]]] = []
+    seen: set[Path] = set()
+    for staged in sorted(path.absolute() for path in products):
+        try:
+            relative = staged.relative_to(staging)
+        except ValueError as error:
+            raise PublicationError(
+                f"staged publication product escapes staging root: {staged}"
+            ) from error
+        if relative == Path("manifest.json"):
+            raise PublicationError("manifest.json may not be promoted as a product")
+        if not staged.is_file():
+            raise PublicationError(f"staged publication product is missing: {staged}")
+        canonical = output / relative
+        if canonical in seen:
+            raise PublicationError(f"duplicate canonical publication product: {canonical}")
+        seen.add(canonical)
+        binding = source_binding(staged)
+        binding["path"] = str(canonical)
+        records.append((staged, canonical, binding))
+    if not records:
+        raise PublicationError("publication renderer produced no products")
+    return records
+
+
+def canonical_product_bindings(
+    products: Iterable[Path], staging: Path, output: Path
+) -> list[dict[str, object]]:
+    """Return deterministic bindings for staged bytes at canonical paths."""
+
+    return [
+        binding
+        for _, _, binding in canonical_product_records(products, staging, output)
+    ]
+
+
+def promote_file(staged: Path, canonical: Path) -> None:
+    """Atomically replace one canonical file with its staged sibling-FS file."""
+
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(staged, canonical)
+
+
+def promote_staged_publication(
+    staging: Path,
+    output: Path,
+    products: Iterable[Path],
+    manifest: dict[str, object],
+) -> Path:
+    """Promote products atomically and publish their canonical manifest last."""
+
+    staging = staging.absolute()
+    output = output.absolute()
+    if staging.parent.resolve(strict=True) != output.parent.resolve(strict=True):
+        raise PublicationError("publication staging directory must be a sibling of output")
+    records = canonical_product_records(products, staging, output)
+    expected_bindings = [binding for _, _, binding in records]
+    if manifest.get("products") != expected_bindings:
+        raise PublicationError(
+            "publication manifest products differ from staged canonical bindings"
+        )
+
+    staged_manifest = staging / "manifest.json"
+    write_json(staged_manifest, manifest)
+    output.mkdir(parents=True, exist_ok=True)
+    canonical_manifest = output / "manifest.json"
+
+    # Withdraw the previous authority before any canonical product is replaced.
+    # An interrupted promotion therefore leaves no manifest that could bless a
+    # mixed old/new product tree.  A later rerun replaces every product and
+    # republishes the authority.
+    if canonical_manifest.exists() or canonical_manifest.is_symlink():
+        canonical_manifest.unlink()
+    for staged, canonical, _ in records:
+        promote_file(staged, canonical)
+    for _, canonical, binding in records:
+        if source_binding(canonical) != binding:
+            raise PublicationError(
+                f"promoted publication product differs from staged binding: {canonical}"
+            )
+    promote_file(staged_manifest, canonical_manifest)
+    return canonical_manifest
+
+
 def source_identity_summary(data: PublicationData) -> dict[str, list[str]]:
     """Return selected-lineage executable, matrix, input, and launcher identities."""
 
@@ -5907,52 +6000,26 @@ exclude failed, incomplete, and numerically inconclusive cases.
     return products
 
 
-def parser() -> argparse.ArgumentParser:
-    """Build the command-line interface."""
+def build_publication_manifest(
+    data: PublicationData,
+    analysis: Path,
+    output: Path,
+    acceptance_paths: Iterable[Path],
+    staged_products: Iterable[Path],
+    staging: Path,
+) -> dict[str, object]:
+    """Build the final-path authority for one fully staged publication."""
 
-    command = argparse.ArgumentParser(description=__doc__)
-    command.add_argument(
-        "analysis_output", type=Path,
-        help="direct-fast report output containing cases/ and optional campaign/",
-    )
-    command.add_argument(
-        "--output", type=Path,
-        help=(
-            "publication product directory "
-            "(default: ANALYSIS_OUTPUT/publication-products)"
-        ),
-    )
-    command.add_argument(
-        "--acceptance", type=Path, action="append", default=[],
-        help="additional scientific-acceptance JSON file or directory; repeatable",
-    )
-    return command
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Render deterministic partial- or complete-campaign publication products."""
-
-    args = parser().parse_args(argv)
-    analysis = args.analysis_output.absolute()
-    if not analysis.is_dir():
-        raise SystemExit(f"analysis output does not exist: {analysis}")
-    output = (
-        args.output.absolute()
-        if args.output is not None
-        else analysis / "publication-products"
-    )
-    data = discover_data(analysis, args.acceptance)
-    products = render_products(data, output)
     import matplotlib
 
-    manifest = {
+    return {
         "schema_version": 2,
         "record_type": "cgl_lf_stage_i_fast_publication_products",
         "evidence_state": publication_evidence_state(data),
         "analysis_output": str(analysis),
         "renderer": source_binding(RENDERER_PATH),
         "normalized_invocation": normalized_invocation(
-            analysis, output, args.acceptance
+            analysis, output, acceptance_paths
         ),
         "runtime": {
             "python_executable": sys.executable,
@@ -5991,14 +6058,57 @@ def main(argv: list[str] | None = None) -> int:
             source_binding(path) for path in sorted(data.source_paths)
             if path.is_file()
         ],
-        "products": [
-            source_binding(path) for path in sorted(products)
-            if path.is_file()
-        ],
+        "products": canonical_product_bindings(staged_products, staging, output),
         "renderer_ingestion_warnings": data.ingestion_warnings,
         "case_warning_records": case_warning_rows(data),
     }
-    write_json(output / "manifest.json", manifest)
+
+
+def parser() -> argparse.ArgumentParser:
+    """Build the command-line interface."""
+
+    command = argparse.ArgumentParser(description=__doc__)
+    command.add_argument(
+        "analysis_output", type=Path,
+        help="direct-fast report output containing cases/ and optional campaign/",
+    )
+    command.add_argument(
+        "--output", type=Path,
+        help=(
+            "publication product directory "
+            "(default: ANALYSIS_OUTPUT/publication-products)"
+        ),
+    )
+    command.add_argument(
+        "--acceptance", type=Path, action="append", default=[],
+        help="additional scientific-acceptance JSON file or directory; repeatable",
+    )
+    return command
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Render deterministic partial- or complete-campaign publication products."""
+
+    args = parser().parse_args(argv)
+    analysis = args.analysis_output.absolute()
+    if not analysis.is_dir():
+        raise SystemExit(f"analysis output does not exist: {analysis}")
+    output = (
+        args.output.absolute()
+        if args.output is not None
+        else analysis / "publication-products"
+    )
+    data = discover_data(analysis, args.acceptance)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        dir=output.parent, prefix=f".{output.name}.staging-"
+    ) as staging_value:
+        staging = Path(staging_value).absolute()
+        products = render_products(data, staging)
+        manifest = build_publication_manifest(
+            data, analysis, output, args.acceptance, products, staging
+        )
+        promote_staged_publication(staging, output, products, manifest)
     print(
         f"rendered {len(products)} publication products in {output}; "
         f"acceptance_records={len(data.acceptance_records)}, "

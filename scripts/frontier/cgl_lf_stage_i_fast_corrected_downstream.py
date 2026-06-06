@@ -11,6 +11,8 @@ well-formed composite inventory.
 ``prepare`` creates the all-snapshot literature-correct hyperbolicity and
 analysis attempts through the existing launchers and creates CT/publication
 Slurm jobs.  It never submits jobs.  ``submit`` is an explicit later action.
+``retry-publication`` validates the latest successful upstream attempts before
+preparing and submitting a fresh publication attempt bound to their job IDs.
 ``complete`` writes immutable corrected-production completion records only
 after all products and their exact inventory, executable, and formula bindings
 have been revalidated.
@@ -69,6 +71,8 @@ PASSIVE_CASES = ("R06", "R07", "R08", "R09")
 ALL_CASES = tuple(sorted((*ACTIVE_CASES, *PASSIVE_CASES)))
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 JOB_ID_PATTERN = re.compile(r"[1-9]\d*(?:;[A-Za-z0-9_.-]+)?")
+SUBMITTED_JOB_ID_PATTERN = re.compile(r"[1-9]\d*")
+ATTEMPT_PATTERN = re.compile(r"attempt-([0-9]{3})")
 
 
 class CorrectedDownstreamError(RuntimeError):
@@ -124,15 +128,27 @@ def write_immutable_json(path: Path, value: object) -> None:
             )
         return
     path.parent.mkdir(parents=True, exist_ok=True)
+    staged: Path | None = None
     try:
-        with path.open("xb") as stream:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            staged = Path(stream.name)
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
+        os.link(staged, path)
     except FileExistsError as error:
         raise CorrectedDownstreamError(
             f"retained artifact appeared concurrently: {path}"
         ) from error
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
 
 
 def require_dict(value: object, label: str) -> dict[str, object]:
@@ -157,6 +173,24 @@ def require_sha256(value: object, label: str) -> str:
     if not isinstance(value, str) or SHA256_PATTERN.fullmatch(value) is None:
         raise CorrectedDownstreamError(f"{label} must be a lowercase SHA-256")
     return value
+
+
+def require_job_id(value: object, label: str) -> str:
+    if not isinstance(value, str) or SUBMITTED_JOB_ID_PATTERN.fullmatch(value) is None:
+        raise CorrectedDownstreamError(f"{label} must be a submitted Slurm job ID")
+    return value
+
+
+def require_job_ids(value: object, label: str) -> list[str]:
+    job_ids = [
+        require_job_id(item, f"{label} item")
+        for item in require_list(value, label)
+    ]
+    if len(set(job_ids)) != len(job_ids):
+        raise CorrectedDownstreamError(f"{label} contains duplicate job IDs")
+    if job_ids != sorted(job_ids):
+        raise CorrectedDownstreamError(f"{label} must be sorted")
+    return job_ids
 
 
 def is_relative_to(path: Path, parent: Path) -> bool:
@@ -1192,13 +1226,32 @@ def workflow_context(workflow: dict[str, object]) -> dict[str, object]:
 def submit_manifest_job(job_dir: Path, dependency_ids: Iterable[str] = ()) -> str:
     manifest_path = job_dir / "manifest.json"
     manifest, _ = load_bound_json(manifest_path, "job manifest")
+    requested_dependencies = [
+        require_job_id(dependency, "job dependency")
+        for dependency in dependency_ids
+    ]
+    if len(set(requested_dependencies)) != len(requested_dependencies):
+        raise CorrectedDownstreamError("job submission contains duplicate dependencies")
+    dependencies = sorted(requested_dependencies)
+    declared_dependencies = manifest.get("dependency_job_ids")
+    if declared_dependencies is not None:
+        if require_job_ids(
+            declared_dependencies, "job manifest dependency IDs"
+        ) != dependencies:
+            raise CorrectedDownstreamError(
+                f"job manifest dependencies differ from submission request: {job_dir}"
+            )
     job_id = manifest.get("job_id")
     if isinstance(job_id, str):
-        return job_id
+        return require_job_id(job_id, "job manifest job ID")
+    if job_id is not None:
+        raise CorrectedDownstreamError(f"job manifest job ID is malformed: {job_dir}")
     if (job_dir / "exit_code.txt").is_file():
         raise CorrectedDownstreamError(f"cannot submit completed job again: {job_dir}")
+    if dependencies and declared_dependencies is None:
+        manifest["dependency_job_ids"] = dependencies
+        write_json(manifest_path, manifest)
     command = ["/usr/bin/sbatch", "--parsable"]
-    dependencies = sorted(set(dependency_ids))
     if dependencies:
         command.append(f"--dependency=afterok:{':'.join(dependencies)}")
     command.append(str(job_dir / "run.sbatch"))
@@ -1232,11 +1285,14 @@ def submit_workflow(workflow_root: Path) -> Path:
     ct_dir = Path(require_text(require_dict(commands["ct"], "ct stage")["job_dir"], "CT job"))
     ct_id = submit_manifest_job(ct_dir)
     upstream_ids.append(ct_id)
+    if len(set(upstream_ids)) != len(upstream_ids):
+        raise CorrectedDownstreamError("submitted upstream jobs contain duplicate IDs")
+    publication_dependencies = sorted(upstream_ids)
     publication_dir = Path(require_text(
         require_dict(commands["publication"], "publication stage")["job_dir"],
         "publication job",
     ))
-    publication_id = submit_manifest_job(publication_dir, upstream_ids)
+    publication_id = submit_manifest_job(publication_dir, publication_dependencies)
     jobs["ct"] = ct_id
     jobs["publication"] = publication_id
     submission = {
@@ -1244,7 +1300,7 @@ def submit_workflow(workflow_root: Path) -> Path:
         "record_type": "cgl_lf_stage_i_corrected_downstream_submission",
         "workflow": workflow_binding,
         "jobs": jobs,
-        "publication_dependency": sorted(set(upstream_ids)),
+        "publication_dependency": publication_dependencies,
     }
     path = Path(str(workflow["workflow_root"])) / "submission.json"
     write_immutable_json(path, submission)
@@ -1252,12 +1308,182 @@ def submit_workflow(workflow_root: Path) -> Path:
     return path
 
 
-def zero_exit(job_dir: Path, label: str) -> None:
+def publication_stage(workflow: dict[str, object]) -> dict[str, object]:
+    return require_dict(
+        require_dict(workflow.get("commands"), "workflow commands").get("publication"),
+        "publication stage",
+    )
+
+
+def publication_attempt_directories(workflow: dict[str, object]) -> list[Path]:
+    initial = Path(
+        require_text(publication_stage(workflow).get("job_dir"), "publication job")
+    )
+    if initial.name != "attempt-000":
+        raise CorrectedDownstreamError(
+            "initial publication job directory must be attempt-000"
+        )
+    return sorted(
+        path
+        for path in initial.parent.glob("attempt-[0-9][0-9][0-9]")
+        if path.is_dir() and ATTEMPT_PATTERN.fullmatch(path.name) is not None
+    )
+
+
+def publication_contract_manifest(
+    workflow: dict[str, object],
+    context: dict[str, object],
+    template: dict[str, object],
+    attempt: Path,
+) -> dict[str, object]:
+    stage = publication_stage(workflow)
+    return generic_job_manifest(
+        "publication",
+        attempt,
+        [
+            require_text(value, "publication command argument")
+            for value in require_list(stage.get("command"), "publication command")
+        ],
+        context,
+        require_dict(workflow.get("tools"), "workflow tools"),
+        require_text(template.get("account"), "publication account"),
+        require_text(template.get("partition"), "publication partition"),
+        require_text(template.get("walltime"), "publication walltime"),
+        int(template["cpus_per_task"]),
+    )
+
+
+def publication_template_manifest(
+    workflow: dict[str, object], context: dict[str, object]
+) -> dict[str, object]:
+    stage = publication_stage(workflow)
+    initial = Path(require_text(stage.get("job_dir"), "publication job"))
+    manifest, _ = load_bound_json(initial / "manifest.json", "publication template")
+    cpus_per_task = manifest.get("cpus_per_task")
+    if (
+        not isinstance(cpus_per_task, int)
+        or isinstance(cpus_per_task, bool)
+        or cpus_per_task < 1
+    ):
+        raise CorrectedDownstreamError(
+            "publication template cpus_per_task must be positive"
+        )
+    expected = publication_contract_manifest(workflow, context, manifest, initial)
+    if any(
+        manifest.get(key) != value
+        for key, value in expected.items()
+        if key != "job_id"
+    ):
+        raise CorrectedDownstreamError(
+            "initial publication job differs from the corrected workflow contract"
+        )
+    if manifest.get("job_id") is not None:
+        require_job_id(manifest.get("job_id"), "publication template job ID")
+    return manifest
+
+
+def publication_attempt_matches(
+    workflow: dict[str, object],
+    context: dict[str, object],
+    template: dict[str, object],
+    attempt: Path,
+    manifest: dict[str, object],
+) -> bool:
+    expected = publication_contract_manifest(workflow, context, template, attempt)
+    return all(
+        manifest.get(key) == value
+        for key, value in expected.items()
+        if key != "job_id"
+    )
+
+
+def publication_attempt_dependency_ids(manifest: dict[str, object]) -> list[str]:
+    return require_job_ids(
+        manifest.get("dependency_job_ids"), "publication dependency job IDs"
+    )
+
+
+def bound_job_id(
+    binding_value: object, expected_path: Path | None, label: str
+) -> str:
+    declared = require_dict(binding_value, f"{label} binding")
+    path = Path(require_text(declared.get("path"), f"{label} path"))
+    if expected_path is not None and path.resolve() != expected_path.resolve():
+        raise CorrectedDownstreamError(f"{label} manifest path differs")
+    manifest, current = load_bound_json(path, label)
+    if not same_binding(declared, current, label):
+        raise CorrectedDownstreamError(f"{label} binding differs")
+    return require_job_id(manifest.get("job_id"), f"{label} job ID")
+
+
+def successful_upstream_job_ids(
+    hyper: dict[str, object],
+    analysis: dict[str, object],
+    ct: dict[str, object],
+) -> list[str]:
+    job_ids: list[str] = []
+    for stage, records in (("hyperbolicity", hyper), ("analysis", analysis)):
+        for case_id, value in sorted(records.items()):
+            record = require_dict(value, f"{case_id} {stage} completion")
+            attempt = Path(
+                require_text(record.get("attempt"), f"{case_id} {stage} attempt")
+            )
+            job_ids.append(
+                bound_job_id(
+                    record.get("manifest"),
+                    attempt / "manifest.json",
+                    f"{case_id} {stage} manifest",
+                )
+            )
+    job_ids.append(bound_job_id(ct.get("job_manifest"), None, "CT job manifest"))
+    if len(set(job_ids)) != len(job_ids):
+        raise CorrectedDownstreamError(
+            "successful upstream attempts contain duplicate job IDs"
+        )
+    return sorted(job_ids)
+
+
+def matching_publication_attempt(
+    workflow: dict[str, object],
+    context: dict[str, object],
+    dependencies: list[str],
+) -> tuple[Path, dict[str, object], dict[str, object]]:
+    template = publication_template_manifest(workflow, context)
+    for attempt in reversed(publication_attempt_directories(workflow)):
+        manifest_path = attempt / "manifest.json"
+        if not manifest_path.is_file():
+            continue
+        manifest, binding = load_bound_json(
+            manifest_path, "publication attempt manifest"
+        )
+        if not publication_attempt_matches(
+            workflow, context, template, attempt, manifest
+        ):
+            continue
+        if publication_attempt_dependency_ids(manifest) != dependencies:
+            continue
+        require_job_id(manifest.get("job_id"), "publication attempt job ID")
+        if not (attempt / "exit_code.txt").is_file():
+            raise CorrectedDownstreamError(
+                f"matching publication attempt is still pending: {attempt}"
+            )
+        if job_exit_code(attempt, "publication") == 0:
+            return attempt, manifest, binding
+    raise CorrectedDownstreamError(
+        "publication lacks a successful attempt matching current upstream jobs"
+    )
+
+
+def job_exit_code(job_dir: Path, label: str) -> int:
     path = job_dir / "exit_code.txt"
     try:
-        value = int(path.read_text(encoding="utf-8").strip())
+        return int(path.read_text(encoding="utf-8").strip())
     except (OSError, ValueError) as error:
         raise CorrectedDownstreamError(f"{label} lacks a valid exit code") from error
+
+
+def zero_exit(job_dir: Path, label: str) -> None:
+    value = job_exit_code(job_dir, label)
     if value != 0:
         raise CorrectedDownstreamError(f"{label} failed with exit code {value}")
 
@@ -1385,6 +1611,68 @@ def completed_ct(
     return {"job_manifest": artifact_binding(job_dir / "manifest.json"), "audit": binding}
 
 
+def retry_publication(workflow_root: Path) -> Path:
+    workflow, _ = load_workflow(workflow_root)
+    context = workflow_context(workflow)
+    hyper = completed_hyperbolicity(workflow, context)
+    analysis = completed_analysis(workflow, context)
+    ct = completed_ct(workflow, context)
+    dependencies = successful_upstream_job_ids(hyper, analysis, ct)
+    template = publication_template_manifest(workflow, context)
+
+    for attempt in reversed(publication_attempt_directories(workflow)):
+        manifest_path = attempt / "manifest.json"
+        if not manifest_path.is_file():
+            continue
+        manifest, _ = load_bound_json(manifest_path, "publication attempt manifest")
+        if not publication_attempt_matches(
+            workflow, context, template, attempt, manifest
+        ):
+            continue
+        if publication_attempt_dependency_ids(manifest) != dependencies:
+            continue
+        job_id = manifest.get("job_id")
+        if job_id is None:
+            if (attempt / "exit_code.txt").exists():
+                raise CorrectedDownstreamError(
+                    f"unsubmitted publication attempt has an exit code: {attempt}"
+                )
+            submit_manifest_job(attempt, dependencies)
+            print(f"submitted prepared publication retry: {attempt}")
+            return attempt
+        require_job_id(job_id, "publication retry job ID")
+        if not (attempt / "exit_code.txt").is_file():
+            raise CorrectedDownstreamError(
+                f"matching publication attempt is still pending: {attempt}"
+            )
+        if job_exit_code(attempt, "publication") != 0:
+            break
+        raise CorrectedDownstreamError(
+            f"matching publication attempt already succeeded: {attempt}"
+        )
+
+    attempts = publication_attempt_directories(workflow)
+    last_index = max(
+        int(ATTEMPT_PATTERN.fullmatch(attempt.name).group(1))
+        for attempt in attempts
+    )
+    if last_index >= 999:
+        raise CorrectedDownstreamError("publication attempt namespace is exhausted")
+    attempt = attempts[0].parent / f"attempt-{last_index + 1:03d}"
+    try:
+        attempt.mkdir()
+    except FileExistsError as error:
+        raise CorrectedDownstreamError(
+            f"publication retry attempt appeared concurrently: {attempt}"
+        ) from error
+    manifest = publication_contract_manifest(workflow, context, template, attempt)
+    manifest["dependency_job_ids"] = dependencies
+    prepare_generic_job(manifest)
+    submit_manifest_job(attempt, dependencies)
+    print(f"prepared and submitted fresh publication retry: {attempt}")
+    return attempt
+
+
 def completed_publication(
     workflow: dict[str, object],
     context: dict[str, object],
@@ -1392,12 +1680,11 @@ def completed_publication(
     analysis: dict[str, object],
     ct: dict[str, object],
 ) -> dict[str, object]:
-    stage = require_dict(
-        require_dict(workflow["commands"], "workflow commands")["publication"],
-        "publication stage",
+    dependencies = successful_upstream_job_ids(hyper, analysis, ct)
+    job_dir, _, job_binding = matching_publication_attempt(
+        workflow, context, dependencies
     )
-    job_dir = Path(str(stage["job_dir"]))
-    zero_exit(job_dir, "publication")
+    stage = publication_stage(workflow)
     manifest_path = Path(str(stage["output"])) / "manifest.json"
     manifest, binding = load_bound_json(manifest_path, "publication manifest")
     if (
@@ -1425,7 +1712,9 @@ def completed_publication(
     for value in require_list(manifest.get("products"), "publication products"):
         verify_binding(value, "publication product")
     return {
-        "job_manifest": artifact_binding(job_dir / "manifest.json"),
+        "attempt": str(job_dir),
+        "job_manifest": job_binding,
+        "dependency_job_ids": dependencies,
         "manifest": binding,
     }
 
@@ -1529,6 +1818,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name, help_text in (
         ("submit", "explicitly submit a previously prepared workflow"),
+        (
+            "retry-publication",
+            "validate current upstream outputs and submit a fresh publication attempt",
+        ),
         ("complete", "validate all outputs and write corrected-only pointers"),
         ("validate", "revalidate an existing corrected-only completion pointer"),
     ):
@@ -1549,6 +1842,8 @@ def main(argv: list[str] | None = None) -> int:
             prepare_workflow(args)
         elif args.command == "submit":
             submit_workflow(args.workflow_root)
+        elif args.command == "retry-publication":
+            retry_publication(args.workflow_root)
         elif args.command == "complete":
             complete_workflow(args.workflow_root)
         elif args.command == "validate":
