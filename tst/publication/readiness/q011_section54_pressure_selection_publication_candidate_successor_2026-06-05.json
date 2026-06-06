@@ -72,15 +72,15 @@
     ],
     "source_test_closure": {
       "file_count": 10,
-      "closure_sha256": "730e6c05c10bbee6695062bea3ce938c48012cafa1c75d837a81b3d968b56139",
+      "closure_sha256": "b907aa6aaee07ede68e0dbafea825dd01c0850ccb2b6520964cd238186217dd0",
       "files": [
         {
           "path": "tst/publication/publish_q011_section54_pressure_selection.py",
-          "sha256": "5581f109bde765ff56c079b43bf4845e548497b8fedcc508db5c31378864014e"
+          "sha256": "36d7f63c52c441b4bee82ccb02e88acd11b3a698ade8ae4da1624f6fd1145dfd"
         },
         {
           "path": "tst/publication/test_publish_q011_section54_pressure_selection.py",
-          "sha256": "24e338ddaf232a99d5539d307cac552e33fb32bdd42f55d982aa80f865918684"
+          "sha256": "f14b01793c48078392b1bc05f19afff0c97d7c2781c54aca325ea8e4c4d4dd05"
         },
         {
           "path": "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
@@ -96,11 +96,11 @@
         },
         {
           "path": "tst/publication/frontier_control_plane/README.md",
-          "sha256": "708f19b30a22dbcfa2930a0bdd1c34a2d7de5f3b1aa43c960ac352310484d9fa"
+          "sha256": "b2aa1f5101584d4b3162eab8b3d3ddee1bb6dfb33b82c3c613ea70d3b7f640fb"
         },
         {
           "path": "tst/publication/test_pic_readiness_registry.py",
-          "sha256": "a5c53167d92a0ccd2813469dbb0b81e24b007591b2d51678369b94c786968120"
+          "sha256": "5bb6f3e478d0dda96e1c3f77b329cd1a4204308337c384b5ed6137f7da8f8798"
         },
         {
           "path": "tst/publication/readiness/README.md",
@@ -118,8 +118,8 @@
     }
   },
   "source_local_validation": {
-    "focused_publisher_tests_passed": 39,
-    "related_pressure_gate_tests_passed": 102,
+    "focused_publisher_tests_passed": 63,
+    "related_pressure_gate_tests_passed": 126,
     "readiness_registry_status": "pending_candidate_successor_finalization",
     "full_publication_suite_status": "pending_clean_committed_worker",
     "independent_rereview_status": "in_progress"
@@ -140,6 +140,7 @@
       "commit_and_push_stage4_publication_candidate",
       "pass_exact_clean_committed_pressure_gate_worker",
       "close_independent_security_integration_and_science_rereviews",
+      "recover_reviewed_exact_empty_inherited_setgid_pressure_gate_attestation_root",
       "prepare_machine_reanalysis_from_authenticated_committed_source_snapshot",
       "stop_for_explicit_post_reanalysis_human_pressure_selection",
       "seal_human_selection_and_publish_from_same_authenticated_source_snapshot",

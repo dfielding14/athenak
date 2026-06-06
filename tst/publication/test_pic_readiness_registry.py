@@ -1475,8 +1475,8 @@ def _validate_q011_stage4_pressure_selection_candidate_successor(
     if not _exact_json_equal(
         value["source_local_validation"],
         {
-            "focused_publisher_tests_passed": 39,
-            "related_pressure_gate_tests_passed": 102,
+            "focused_publisher_tests_passed": 63,
+            "related_pressure_gate_tests_passed": 126,
             "readiness_registry_status": "pending_candidate_successor_finalization",
             "full_publication_suite_status": "pending_clean_committed_worker",
             "independent_rereview_status": "in_progress",
@@ -1517,6 +1517,7 @@ def _validate_q011_stage4_pressure_selection_candidate_successor(
                 "commit_and_push_stage4_publication_candidate",
                 "pass_exact_clean_committed_pressure_gate_worker",
                 "close_independent_security_integration_and_science_rereviews",
+                "recover_reviewed_exact_empty_inherited_setgid_pressure_gate_attestation_root",
                 "prepare_machine_reanalysis_from_authenticated_committed_source_snapshot",
                 "stop_for_explicit_post_reanalysis_human_pressure_selection",
                 "seal_human_selection_and_publish_from_same_authenticated_source_snapshot",

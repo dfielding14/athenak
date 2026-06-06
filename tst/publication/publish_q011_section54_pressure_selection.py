@@ -79,9 +79,29 @@ STAGE4_PREPARATION_RECORD_TYPE = (
 CANDIDATE_AUTHORIZATION_RECORD_TYPE = (
     "q011_section54_pressure_selection_candidate_publication_authorization"
 )
+PRIVATE_ROOT_RECOVERY_RECORD_TYPE = (
+    "q011_section54_pressure_selection_private_root_recovery"
+)
+PRIVATE_ROOT_RECOVERY_QUALIFICATION_EFFECT = (
+    "none_no_reanalysis_no_human_selection_no_science_or_launch_authority"
+)
 QUALIFICATION_EFFECT = (
     "human_pressure_selection_publication_only_no_science_launch_authority"
 )
+REVIEWED_PRESSURE_GATE_PIC_ROOT_IDENTITY = (135357496, 720587399016531307)
+REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_IDENTITY = (
+    135357496,
+    720587399016566207,
+)
+REVIEWED_PRESSURE_GATE_ROOT_UID = 18664
+REVIEWED_PRESSURE_GATE_ROOT_GID = 31114
+REVIEWED_PRESSURE_GATE_PIC_ROOT_MODE = 0o2755
+REVIEWED_PRESSURE_GATE_PIC_ROOT_XATTR_BINDINGS = {
+    "lustre.lov": "9515362ca4e79572770dbd3776266a495b08bb6eb3c9fe58da74ca19f91ab883"
+}
+REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_XATTR_BINDINGS = {
+    "lustre.lov": "9515362ca4e79572770dbd3776266a495b08bb6eb3c9fe58da74ca19f91ab883"
+}
 REVIEWED_SELECTED_CASE = {
     "case_id": "ps_p0_1p00",
     "problem_ps_p0": 1.0,
@@ -114,6 +134,8 @@ _FILE_FLAGS = (
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 _OPERATOR_ID_PATTERN = re.compile(r"[a-z][a-z0-9._-]{2,63}")
+_PRIVATE_ROOT_ACL_XATTRS = {"system.posix_acl_access", "system.posix_acl_default"}
+_PRIVATE_ROOT_ALLOWED_XATTRS = {"lustre.lov"}
 PUBLISHER_SOURCE_PATHS = tuple(
     sorted(
         {
@@ -1655,6 +1677,7 @@ def _write_controller_state_attestation_at(
 
 def _open_or_create_private_root(
     pic_root: Path,
+    parent_descriptor: int,
     name: str,
     label: str,
 ) -> tuple[Path, int]:
@@ -1663,36 +1686,599 @@ def _open_or_create_private_root(
         f"{label} name is invalid",
     )
     root = pic_root / name
-    parent_descriptor = pilot_publisher._open_absolute_directory(pic_root)
     descriptor: int | None = None
+    created = False
+    created_identity: tuple[int, int] | None = None
     try:
-        pilot_publisher._require_same_directory(
-            pic_root, parent_descriptor, "authorized PIC root"
+        _require_private_root_parent(pic_root, parent_descriptor)
+        parent_xattr_bindings = _private_root_parent_xattr_bindings(
+            parent_descriptor, "authorized PIC root"
         )
         try:
             os.mkdir(name, mode=0o700, dir_fd=parent_descriptor)
         except FileExistsError:
             pass
         else:
-            pilot_publisher._fsync_descriptor(parent_descriptor)
+            created = True
         descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor)
         metadata = os.fstat(descriptor)
+        identity = (metadata.st_dev, metadata.st_ino)
+        if created:
+            created_identity = identity
+            pilot_publisher._require_same_directory_at(
+                parent_descriptor, name, descriptor, label
+            )
+            pilot_publisher._fsync_descriptor(parent_descriptor)
+        parent_metadata = os.fstat(parent_descriptor)
+        _require(
+            _private_root_parent_xattr_bindings(
+                parent_descriptor, "authorized PIC root"
+            )
+            == parent_xattr_bindings,
+            "authorized PIC root xattr bindings changed during private-root creation",
+        )
         _require(
             stat.S_ISDIR(metadata.st_mode)
-            and stat.S_IMODE(metadata.st_mode) == 0o700
             and metadata.st_uid == os.geteuid(),
-            f"{label} must be one private directory with mode 0700",
+            f"{label} must be one same-account private directory",
+        )
+        _require(
+            metadata.st_gid == parent_metadata.st_gid,
+            f"{label} group differs from the authorized PIC root",
         )
         pilot_publisher._require_same_directory_at(
             parent_descriptor, name, descriptor, label
         )
+        if created:
+            _require(
+                stat.S_IMODE(metadata.st_mode) in {0o700, 0o2700}
+                and os.listdir(descriptor) == [],
+                f"{label} fresh checkpoint is not exact and empty",
+            )
+            os.fchmod(descriptor, 0o700)
+            _remove_inherited_private_root_acl_xattrs(descriptor)
+            os.fchmod(descriptor, 0o700)
+            os.fsync(descriptor)
+            pilot_publisher._fsync_descriptor(parent_descriptor)
+        metadata = os.fstat(descriptor)
+        _require(
+            stat.S_ISDIR(metadata.st_mode)
+            and (metadata.st_dev, metadata.st_ino) == identity
+            and stat.S_IMODE(metadata.st_mode) == 0o700
+            and metadata.st_uid == os.geteuid()
+            and metadata.st_gid == parent_metadata.st_gid,
+            f"{label} must be one private directory with mode 0700",
+        )
+        _require(
+            _private_root_xattr_bindings(descriptor, label) == parent_xattr_bindings,
+            f"{label} xattr bindings differ from the authorized PIC root",
+        )
+        if created:
+            _require(
+                os.listdir(descriptor) == [],
+                f"{label} gained members during fresh normalization",
+            )
+        _require_private_root_binding(
+            pic_root,
+            parent_descriptor,
+            name,
+            descriptor,
+            label,
+        )
         return root, descriptor
-    except BaseException:
+    except BaseException as error:
+        cleanup_error: BaseException | None = None
+        if created:
+            if descriptor is None:
+                try:
+                    descriptor = os.open(
+                        name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor
+                    )
+                except BaseException as observed:
+                    cleanup_error = observed
+            if created_identity is None and descriptor is not None:
+                try:
+                    metadata = os.fstat(descriptor)
+                    created_identity = (metadata.st_dev, metadata.st_ino)
+                except BaseException as observed:
+                    cleanup_error = observed
+            if created_identity is not None:
+                try:
+                    _remove_owned_fresh_private_root_at(
+                        parent_descriptor,
+                        name,
+                        descriptor,
+                        created_identity,
+                        label,
+                    )
+                except BaseException as observed:
+                    cleanup_error = observed
+            elif cleanup_error is None:
+                cleanup_error = PressureSelectionPublicationError(
+                    f"{label} fresh checkpoint could not be retained for cleanup"
+                )
         if descriptor is not None:
             os.close(descriptor)
+        if cleanup_error is not None:
+            raise PressureSelectionPublicationError(
+                f"{label} fresh checkpoint cleanup failed; reviewed recovery required"
+            ) from error
         raise
+
+
+def _remove_owned_fresh_private_root_at(
+    parent_descriptor: int,
+    name: str,
+    descriptor: int | None,
+    identity: tuple[int, int],
+    label: str,
+) -> None:
+    owned_descriptor = descriptor
+    close_owned_descriptor = False
+    if owned_descriptor is None:
+        owned_descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_descriptor)
+        close_owned_descriptor = True
+    try:
+        metadata = os.fstat(owned_descriptor)
+        _require(
+            stat.S_ISDIR(metadata.st_mode)
+            and (metadata.st_dev, metadata.st_ino) == identity
+            and metadata.st_uid == os.geteuid()
+            and os.listdir(owned_descriptor) == [],
+            f"{label} fresh checkpoint is no longer an exact owned empty directory",
+        )
+        pilot_publisher._require_same_directory_at(
+            parent_descriptor, name, owned_descriptor, label
+        )
+        os.rmdir(name, dir_fd=parent_descriptor)
+        pilot_publisher._fsync_descriptor(parent_descriptor)
+        try:
+            os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise PressureSelectionPublicationError(
+                f"{label} fresh checkpoint cleanup did not remove the namespace entry"
+            )
     finally:
-        os.close(parent_descriptor)
+        if close_owned_descriptor:
+            os.close(owned_descriptor)
+
+
+def _private_root_identity(metadata: os.stat_result) -> dict[str, int]:
+    return {"device": metadata.st_dev, "inode": metadata.st_ino}
+
+
+def _require_private_root_parent(pic_root: Path, descriptor: int) -> None:
+    pilot_publisher._require_same_directory(
+        pic_root, descriptor, "authorized PIC root"
+    )
+    pilot_publisher._require_same_account_isolated_parent(descriptor)
+    _private_root_parent_xattr_bindings(descriptor, "authorized PIC root")
+
+
+def _private_root_xattrs(descriptor: int) -> set[str]:
+    return set(os.listxattr(descriptor))
+
+
+def _private_root_parent_xattr_bindings(
+    descriptor: int, label: str
+) -> dict[str, str]:
+    names = _private_root_xattrs(descriptor)
+    _require(
+        "system.posix_acl_access" not in names,
+        f"{label} retains an access ACL xattr",
+    )
+    unexpected = names.difference(
+        _PRIVATE_ROOT_ALLOWED_XATTRS | {"system.posix_acl_default"}
+    )
+    _require(
+        not unexpected,
+        f"{label} has unexpected xattrs: {sorted(unexpected)}",
+    )
+    return {
+        name: _sha256(os.getxattr(descriptor, name))
+        for name in sorted(names.intersection(_PRIVATE_ROOT_ALLOWED_XATTRS))
+    }
+
+
+def _require_private_root_xattr_closure(descriptor: int, label: str) -> list[str]:
+    names = _private_root_xattrs(descriptor)
+    _require(
+        not names.intersection(_PRIVATE_ROOT_ACL_XATTRS),
+        f"{label} retains ACL xattrs",
+    )
+    unexpected = names.difference(_PRIVATE_ROOT_ALLOWED_XATTRS)
+    _require(
+        not unexpected,
+        f"{label} has unexpected xattrs: {sorted(unexpected)}",
+    )
+    return sorted(names)
+
+
+def _private_root_xattr_bindings(descriptor: int, label: str) -> dict[str, str]:
+    return {
+        name: _sha256(os.getxattr(descriptor, name))
+        for name in _require_private_root_xattr_closure(descriptor, label)
+    }
+
+
+def _require_private_root_binding(
+    pic_root: Path,
+    parent_descriptor: int,
+    name: str,
+    descriptor: int,
+    label: str,
+) -> None:
+    _require_private_root_parent(pic_root, parent_descriptor)
+    parent_metadata = os.fstat(parent_descriptor)
+    metadata = os.fstat(descriptor)
+    _require(
+        stat.S_ISDIR(metadata.st_mode)
+        and stat.S_IMODE(metadata.st_mode) == 0o700
+        and metadata.st_uid == os.geteuid()
+        and metadata.st_gid == parent_metadata.st_gid,
+        f"{label} must remain one same-account private directory with mode 0700",
+    )
+    _require(
+        _private_root_xattr_bindings(descriptor, label)
+        == _private_root_parent_xattr_bindings(
+            parent_descriptor, "authorized PIC root"
+        ),
+        f"{label} xattr bindings differ from the authorized PIC root",
+    )
+    pilot_publisher._require_same_directory_at(
+        parent_descriptor, name, descriptor, label
+    )
+    _require_private_root_parent(pic_root, parent_descriptor)
+
+
+def _remove_inherited_private_root_acl_xattrs(descriptor: int) -> None:
+    inherited = _private_root_xattrs(descriptor).intersection(_PRIVATE_ROOT_ACL_XATTRS)
+    for name in sorted(inherited):
+        os.removexattr(descriptor, name)
+
+
+def _private_root_state(descriptor: int, label: str) -> dict[str, object]:
+    metadata = os.fstat(descriptor)
+    _require(stat.S_ISDIR(metadata.st_mode), f"{label} is not a directory")
+    return {
+        "identity": _private_root_identity(metadata),
+        "uid": metadata.st_uid,
+        "gid": metadata.st_gid,
+        "mode": f"{stat.S_IMODE(metadata.st_mode):04o}",
+        "entries": sorted(os.listdir(descriptor)),
+        "xattr_bindings": _private_root_xattr_bindings(descriptor, label),
+    }
+
+
+def _require_private_root_recovery_namespace(
+    pic_descriptor: int,
+    publication_descriptor: int,
+    acceptance_descriptor: int,
+) -> None:
+    pilot_publisher._require_absent_at(
+        pic_descriptor,
+        PRESSURE_GATE_HUMAN_DECISION_ROOT_NAME,
+        "human pressure-selection decision root",
+    )
+    pilot_publisher._require_absent_at(
+        pic_descriptor,
+        PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+        "pressure-selection candidate root",
+    )
+    pilot_publisher._require_absent_at(
+        publication_descriptor,
+        CANONICAL_RECEIPT_NAME,
+        "pressure-selection receipt",
+    )
+    pilot_publisher._require_publication_guard_absent_at(
+        publication_descriptor,
+        CANONICAL_RECEIPT_NAME,
+        "pressure-selection receipt",
+    )
+    pilot_publisher._require_absent_at(
+        acceptance_descriptor,
+        _selection_success_seal_name(CANONICAL_RECEIPT_NAME),
+        "pressure-selection durable success seal",
+    )
+
+
+def _require_private_root_recovery_roots(
+    *,
+    transaction_anchor: Path,
+    transaction_descriptor: int,
+    acceptance_root: Path,
+    acceptance_descriptor: int,
+    publication_root: Path,
+    publication_descriptor: int,
+    pic_root: Path,
+    pic_descriptor: int,
+) -> None:
+    pilot_publisher._require_same_directory(
+        transaction_anchor,
+        transaction_descriptor,
+        "stable publication transaction anchor",
+    )
+    pilot_publisher._require_same_directory(
+        acceptance_root,
+        acceptance_descriptor,
+        "authorized PIC publication acceptance root",
+    )
+    pilot_publisher._require_same_directory(
+        publication_root,
+        publication_descriptor,
+        "authorized PIC publication root",
+    )
+    pilot_publisher._require_same_directory(
+        pic_root,
+        pic_descriptor,
+        "authorized PIC root",
+    )
+
+
+def _require_reviewed_pressure_gate_pic_root(pic_descriptor: int) -> None:
+    metadata = os.fstat(pic_descriptor)
+    _require(
+        (metadata.st_dev, metadata.st_ino) == REVIEWED_PRESSURE_GATE_PIC_ROOT_IDENTITY
+        and metadata.st_uid == REVIEWED_PRESSURE_GATE_ROOT_UID
+        and metadata.st_gid == REVIEWED_PRESSURE_GATE_ROOT_GID
+        and stat.S_IMODE(metadata.st_mode) == REVIEWED_PRESSURE_GATE_PIC_ROOT_MODE
+        and _private_root_xattr_bindings(pic_descriptor, "authorized PIC root")
+        == REVIEWED_PRESSURE_GATE_PIC_ROOT_XATTR_BINDINGS,
+        "authorized PIC root differs from the reviewed private-root checkpoint",
+    )
+
+
+def _require_private_root_recovery_final_state(
+    *,
+    transaction_anchor: Path,
+    transaction_descriptor: int,
+    acceptance_root: Path,
+    acceptance_descriptor: int,
+    publication_root: Path,
+    publication_descriptor: int,
+    pic_root: Path,
+    pic_descriptor: int,
+    archive_descriptor: int,
+    expected_archive_state: Mapping[str, object],
+) -> None:
+    # Repeat the coupled final snapshot so mutations during one pass are
+    # detected by the next pass before a success result can be returned.
+    for _ in range(2):
+        _require(
+            _private_root_state(archive_descriptor, "pressure-gate attestation root")
+            == expected_archive_state,
+            "pressure-gate attestation root changed after final controller capture",
+        )
+        _require_private_root_recovery_roots(
+            transaction_anchor=transaction_anchor,
+            transaction_descriptor=transaction_descriptor,
+            acceptance_root=acceptance_root,
+            acceptance_descriptor=acceptance_descriptor,
+            publication_root=publication_root,
+            publication_descriptor=publication_descriptor,
+            pic_root=pic_root,
+            pic_descriptor=pic_descriptor,
+        )
+        _require_reviewed_pressure_gate_pic_root(pic_descriptor)
+        _require_private_root_recovery_namespace(
+            pic_descriptor,
+            publication_descriptor,
+            acceptance_descriptor,
+        )
+        pilot_publisher._require_same_directory_at(
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            archive_descriptor,
+            "pressure-gate attestation root",
+        )
+
+
+def recover_pressure_gate_attestation_root(
+    *,
+    expected_git_commit: str,
+    reconcile_exact_empty_normalized_root: bool = False,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+) -> dict[str, object]:
+    """Recover only the reviewed exact empty inherited-setgid attestation root."""
+    pic_root = Path(os.path.abspath(authorized_pic_root))
+    project_root = Path(os.path.abspath(authorized_project_home_root))
+    _require(
+        pic_root == AUTHORIZED_PIC_ROOT and project_root == AUTHORIZED_PROJECT_HOME_ROOT,
+        "production private-root recovery requires the authorized roots",
+    )
+    publisher_source_authentication = _runtime_publisher_source_authentication(
+        expected_git_commit
+    )
+    pic_descriptor: int | None = None
+    archive_descriptor: int | None = None
+    publication_descriptor: int | None = None
+    acceptance_descriptor: int | None = None
+    transaction_descriptor: int | None = None
+    try:
+        pic_root, publication_root = pilot_publisher._publication_root(pic_root)
+        acceptance_root = pilot_publisher._publication_acceptance_root(pic_root)
+        transaction_anchor = pilot_publisher._canonical_existing_directory(
+            control_plane_common.stable_serialization_anchor(pic_root),
+            "stable publication transaction anchor",
+        )
+        transaction_descriptor = pilot_publisher._open_absolute_directory(
+            transaction_anchor
+        )
+        acceptance_descriptor = pilot_publisher._open_absolute_directory(acceptance_root)
+        publication_descriptor = pilot_publisher._open_absolute_directory(publication_root)
+        pic_descriptor = pilot_publisher._open_absolute_directory(pic_root)
+        pilot_publisher._lock_publication_transaction(
+            transaction_descriptor, acceptance_descriptor
+        )
+        _require_private_root_recovery_roots(
+            transaction_anchor=transaction_anchor,
+            transaction_descriptor=transaction_descriptor,
+            acceptance_root=acceptance_root,
+            acceptance_descriptor=acceptance_descriptor,
+            publication_root=publication_root,
+            publication_descriptor=publication_descriptor,
+            pic_root=pic_root,
+            pic_descriptor=pic_descriptor,
+        )
+        before_capture = _capture_live_controller_state(
+            authorized_pic_root=pic_root,
+            authorized_project_home_root=project_root,
+        )
+        _require_private_root_recovery_roots(
+            transaction_anchor=transaction_anchor,
+            transaction_descriptor=transaction_descriptor,
+            acceptance_root=acceptance_root,
+            acceptance_descriptor=acceptance_descriptor,
+            publication_root=publication_root,
+            publication_descriptor=publication_descriptor,
+            pic_root=pic_root,
+            pic_descriptor=pic_descriptor,
+        )
+        _require_reviewed_pressure_gate_pic_root(pic_descriptor)
+        _require_private_root_recovery_namespace(
+            pic_descriptor,
+            publication_descriptor,
+            acceptance_descriptor,
+        )
+        lexical = os.stat(
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            dir_fd=pic_descriptor,
+            follow_symlinks=False,
+        )
+        _require(
+            stat.S_ISDIR(lexical.st_mode)
+            and (lexical.st_dev, lexical.st_ino)
+            == REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_IDENTITY,
+            "pressure-gate attestation root differs from the reviewed checkpoint",
+        )
+        archive_descriptor = os.open(
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            _DIRECTORY_FLAGS,
+            dir_fd=pic_descriptor,
+        )
+        pilot_publisher._require_same_directory_at(
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            archive_descriptor,
+            "pressure-gate attestation root",
+        )
+        action = (
+            "reconciled_exact_empty_normalized_root"
+            if reconcile_exact_empty_normalized_root
+            else "recovered_exact_empty_inherited_setgid_root"
+        )
+        before = _private_root_state(archive_descriptor, "pressure-gate attestation root")
+        expected_before = {
+            "identity": {
+                "device": REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_IDENTITY[0],
+                "inode": REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_IDENTITY[1],
+            },
+            "uid": REVIEWED_PRESSURE_GATE_ROOT_UID,
+            "gid": REVIEWED_PRESSURE_GATE_ROOT_GID,
+            "mode": "0700" if reconcile_exact_empty_normalized_root else "2700",
+            "entries": [],
+            "xattr_bindings": dict(
+                REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_XATTR_BINDINGS
+            ),
+        }
+        _require(
+            before == expected_before,
+            "pressure-gate attestation root is not the exact recoverable checkpoint",
+        )
+        _require_private_root_recovery_roots(
+            transaction_anchor=transaction_anchor,
+            transaction_descriptor=transaction_descriptor,
+            acceptance_root=acceptance_root,
+            acceptance_descriptor=acceptance_descriptor,
+            publication_root=publication_root,
+            publication_descriptor=publication_descriptor,
+            pic_root=pic_root,
+            pic_descriptor=pic_descriptor,
+        )
+        _require_reviewed_pressure_gate_pic_root(pic_descriptor)
+        _require_private_root_recovery_namespace(
+            pic_descriptor,
+            publication_descriptor,
+            acceptance_descriptor,
+        )
+        pilot_publisher._require_same_directory_at(
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            archive_descriptor,
+            "pressure-gate attestation root",
+        )
+        if not reconcile_exact_empty_normalized_root:
+            os.fchmod(archive_descriptor, 0o700)
+        os.fsync(archive_descriptor)
+        pilot_publisher._fsync_descriptor(pic_descriptor)
+        pilot_publisher._require_same_directory_at(
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            archive_descriptor,
+            "pressure-gate attestation root",
+        )
+        after = _private_root_state(archive_descriptor, "pressure-gate attestation root")
+        _require(
+            after == {**expected_before, "mode": "0700"},
+            "pressure-gate attestation root changed during durable recovery",
+        )
+        after_capture = _capture_live_controller_state(
+            authorized_pic_root=pic_root,
+            authorized_project_home_root=project_root,
+        )
+        _require(
+            after_capture == before_capture,
+            "controller state changed during pressure-gate private-root recovery",
+        )
+        result = {
+            "schema_version": 1,
+            "record_type": PRIVATE_ROOT_RECOVERY_RECORD_TYPE,
+            "action": action,
+            "authority": "none",
+            "qualification_effect": PRIVATE_ROOT_RECOVERY_QUALIFICATION_EFFECT,
+            "publisher_source_authentication": publisher_source_authentication,
+            "pic_root": str(pic_root),
+            "pressure_gate_attestation_root": str(
+                pic_root / PRESSURE_GATE_ATTESTATION_ROOT_NAME
+            ),
+            "descriptor_relative_operation": True,
+            "before": before,
+            "after": after,
+            "child_and_parent_synced": True,
+            "controller_state": copy.deepcopy(before_capture["controller_state"]),
+        }
+        _require_private_root_recovery_final_state(
+            transaction_anchor=transaction_anchor,
+            transaction_descriptor=transaction_descriptor,
+            acceptance_root=acceptance_root,
+            acceptance_descriptor=acceptance_descriptor,
+            publication_root=publication_root,
+            publication_descriptor=publication_descriptor,
+            pic_root=pic_root,
+            pic_descriptor=pic_descriptor,
+            archive_descriptor=archive_descriptor,
+            expected_archive_state=after,
+        )
+        return result
+    except PressureSelectionPublicationError:
+        raise
+    except (OSError, TypeError, ValueError) as error:
+        raise PressureSelectionPublicationError(
+            "pressure-gate private-root recovery failed closed"
+        ) from error
+    finally:
+        pilot_publisher._close_descriptors(
+            (
+                archive_descriptor,
+                pic_descriptor,
+                publication_descriptor,
+                acceptance_descriptor,
+                transaction_descriptor,
+            )
+        )
 
 
 def _write_single_file_attestation_at(
@@ -2812,26 +3398,47 @@ def prepare_pressure_reanalysis(
     publisher_source_authentication = _runtime_publisher_source_authentication(
         expected_git_commit
     )
-    archive_root, archive_descriptor = _open_or_create_private_root(
-        pic_root,
-        PRESSURE_GATE_ATTESTATION_ROOT_NAME,
-        "pressure-gate attestation archive root",
-    )
-    decision_root, decision_descriptor = _open_or_create_private_root(
-        pic_root,
-        PRESSURE_GATE_HUMAN_DECISION_ROOT_NAME,
-        "human pressure-selection decision root",
-    )
-    acceptance_root = pilot_publisher._publication_acceptance_root(pic_root)
-    acceptance_descriptor = pilot_publisher._open_absolute_directory(acceptance_root)
-    transaction_anchor = pilot_publisher._canonical_existing_directory(
-        control_plane_common.stable_serialization_anchor(pic_root),
-        "stable publication transaction anchor",
-    )
-    transaction_descriptor = pilot_publisher._open_absolute_directory(transaction_anchor)
+    acceptance_descriptor: int | None = None
+    transaction_descriptor: int | None = None
+    pic_descriptor: int | None = None
+    archive_descriptor: int | None = None
+    decision_descriptor: int | None = None
     try:
+        acceptance_root = pilot_publisher._publication_acceptance_root(pic_root)
+        transaction_anchor = pilot_publisher._canonical_existing_directory(
+            control_plane_common.stable_serialization_anchor(pic_root),
+            "stable publication transaction anchor",
+        )
+        acceptance_descriptor = pilot_publisher._open_absolute_directory(acceptance_root)
+        transaction_descriptor = pilot_publisher._open_absolute_directory(
+            transaction_anchor
+        )
+        pic_descriptor = pilot_publisher._open_absolute_directory(pic_root)
         pilot_publisher._lock_publication_transaction(
             transaction_descriptor, acceptance_descriptor
+        )
+        pilot_publisher._require_same_directory(
+            transaction_anchor,
+            transaction_descriptor,
+            "stable publication transaction anchor",
+        )
+        pilot_publisher._require_same_directory(
+            acceptance_root,
+            acceptance_descriptor,
+            "authorized PIC publication acceptance root",
+        )
+        _require_private_root_parent(pic_root, pic_descriptor)
+        archive_root, archive_descriptor = _open_or_create_private_root(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            "pressure-gate attestation archive root",
+        )
+        decision_root, decision_descriptor = _open_or_create_private_root(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_HUMAN_DECISION_ROOT_NAME,
+            "human pressure-selection decision root",
         )
         _require(
             os.listdir(decision_descriptor) == [],
@@ -2841,6 +3448,7 @@ def prepare_pressure_reanalysis(
             authorized_pic_root=pic_root,
             authorized_project_home_root=project_root,
         )
+        _require_private_root_parent(pic_root, pic_descriptor)
         state = capture["controller_state"]
         assert isinstance(state, dict)
         source_authorization, archive_files = _candidate_reanalysis_source_authorization(
@@ -2909,7 +3517,7 @@ def prepare_pressure_reanalysis(
             consumed_preparation["attestation"] == stage4_preparation,
             "Stage-4 preparation attestation drifted after sealing",
         )
-        return {
+        prepared = {
             "authoritative_reanalysis_attestation": reanalysis_binding,
             "stage4_preparation_attestation": stage4_preparation_binding,
             "human_decision_root": str(decision_root),
@@ -2924,6 +3532,39 @@ def prepare_pressure_reanalysis(
             "publisher_source_authentication": publisher_source_authentication,
             "qualification_effect": verifier.PRESSURE_REANALYSIS_QUALIFICATION_EFFECT,
         }
+        _require_private_root_binding(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            archive_descriptor,
+            "pressure-gate attestation archive root",
+        )
+        _require_private_root_binding(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_HUMAN_DECISION_ROOT_NAME,
+            decision_descriptor,
+            "human pressure-selection decision root",
+        )
+        _require(
+            os.listdir(decision_descriptor) == [],
+            "human pressure-selection decision root changed during reanalysis",
+        )
+        _require_private_root_binding(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            archive_descriptor,
+            "pressure-gate attestation archive root",
+        )
+        _require_private_root_binding(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_HUMAN_DECISION_ROOT_NAME,
+            decision_descriptor,
+            "human pressure-selection decision root",
+        )
+        return prepared
     except PressureSelectionPublicationError:
         raise
     except BaseException as error:
@@ -2937,6 +3578,7 @@ def prepare_pressure_reanalysis(
                 acceptance_descriptor,
                 decision_descriptor,
                 archive_descriptor,
+                pic_descriptor,
             )
         )
 
@@ -2970,31 +3612,53 @@ def seal_human_pressure_selection(
         decision.get("stage4_preparation_attestation"),
         "human decision Stage-4 preparation attestation",
     )
-    archive_root, archive_descriptor = _open_or_create_private_root(
-        pic_root,
-        PRESSURE_GATE_ATTESTATION_ROOT_NAME,
-        "pressure-gate attestation archive root",
-    )
-    candidate_root, candidate_descriptor = _open_or_create_private_root(
-        pic_root,
-        PRESSURE_GATE_CANDIDATE_ROOT_NAME,
-        "pressure-gate candidate root",
-    )
-    acceptance_root = pilot_publisher._publication_acceptance_root(pic_root)
-    acceptance_descriptor = pilot_publisher._open_absolute_directory(acceptance_root)
-    transaction_anchor = pilot_publisher._canonical_existing_directory(
-        control_plane_common.stable_serialization_anchor(pic_root),
-        "stable publication transaction anchor",
-    )
-    transaction_descriptor = pilot_publisher._open_absolute_directory(transaction_anchor)
+    acceptance_descriptor: int | None = None
+    transaction_descriptor: int | None = None
+    pic_descriptor: int | None = None
+    archive_descriptor: int | None = None
+    candidate_descriptor: int | None = None
     try:
+        acceptance_root = pilot_publisher._publication_acceptance_root(pic_root)
+        transaction_anchor = pilot_publisher._canonical_existing_directory(
+            control_plane_common.stable_serialization_anchor(pic_root),
+            "stable publication transaction anchor",
+        )
+        acceptance_descriptor = pilot_publisher._open_absolute_directory(acceptance_root)
+        transaction_descriptor = pilot_publisher._open_absolute_directory(
+            transaction_anchor
+        )
+        pic_descriptor = pilot_publisher._open_absolute_directory(pic_root)
         pilot_publisher._lock_publication_transaction(
             transaction_descriptor, acceptance_descriptor
+        )
+        pilot_publisher._require_same_directory(
+            transaction_anchor,
+            transaction_descriptor,
+            "stable publication transaction anchor",
+        )
+        pilot_publisher._require_same_directory(
+            acceptance_root,
+            acceptance_descriptor,
+            "authorized PIC publication acceptance root",
+        )
+        _require_private_root_parent(pic_root, pic_descriptor)
+        archive_root, archive_descriptor = _open_or_create_private_root(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+            "pressure-gate attestation archive root",
+        )
+        candidate_root, candidate_descriptor = _open_or_create_private_root(
+            pic_root,
+            pic_descriptor,
+            PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+            "pressure-gate candidate root",
         )
         _capture_live_controller_state(
             authorized_pic_root=pic_root,
             authorized_project_home_root=project_root,
         )
+        _require_private_root_parent(pic_root, pic_descriptor)
         packet, evidence, reanalysis = _consume_reanalysis_binding(
             reanalysis_binding, authorized_pic_root=pic_root, now=now
         )
@@ -3098,7 +3762,7 @@ def seal_human_pressure_selection(
         candidate_authorization_binding = _write_candidate_authorization_at(
             candidate_root, candidate_descriptor, candidate_authorization
         )
-        return {
+        sealed = {
             "candidate_pressure_selection_receipt": candidate_binding,
             "candidate_publication_authorization": candidate_authorization_binding,
             "human_decision": decision_binding,
@@ -3110,6 +3774,22 @@ def seal_human_pressure_selection(
             "publisher_source_authentication": publisher_source_authentication,
             "qualification_effect": QUALIFICATION_EFFECT,
         }
+        for _ in range(2):
+            _require_private_root_binding(
+                pic_root,
+                pic_descriptor,
+                PRESSURE_GATE_ATTESTATION_ROOT_NAME,
+                archive_descriptor,
+                "pressure-gate attestation archive root",
+            )
+            _require_private_root_binding(
+                pic_root,
+                pic_descriptor,
+                PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                candidate_descriptor,
+                "pressure-gate candidate root",
+            )
+        return sealed
     except PressureSelectionPublicationError:
         raise
     except BaseException as error:
@@ -3123,6 +3803,7 @@ def seal_human_pressure_selection(
                 acceptance_descriptor,
                 candidate_descriptor,
                 archive_descriptor,
+                pic_descriptor,
             )
         )
 
@@ -4124,6 +4805,12 @@ def _load_json(path: Path, label: str) -> dict[str, object]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
+    recover_root_parser = subparsers.add_parser(
+        "recover-pressure-gate-attestation-root"
+    )
+    reconcile_root_parser = subparsers.add_parser(
+        "reconcile-pressure-gate-attestation-root"
+    )
     prepare_parser = subparsers.add_parser("prepare-reanalysis")
     prepare_parser.add_argument("--reanalysis-operator-id", required=True)
     human_parser = subparsers.add_parser("seal-human-selection")
@@ -4147,6 +4834,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     reconcile_parser.add_argument("--controller-state-attestation", required=True, type=Path)
     reconcile_parser.add_argument("--expected-controller-state-sha256", required=True)
     for command_parser in (
+        recover_root_parser,
+        reconcile_root_parser,
         prepare_parser,
         human_parser,
         publish_parser,
@@ -4154,6 +4843,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ):
         command_parser.add_argument("--expected-git-commit", required=True)
     for command_parser in (
+        recover_root_parser,
+        reconcile_root_parser,
         prepare_parser,
         human_parser,
         publish_parser,
@@ -4170,7 +4861,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     args = parser.parse_args(argv)
     try:
-        if args.command == "prepare-reanalysis":
+        if args.command in {
+            "recover-pressure-gate-attestation-root",
+            "reconcile-pressure-gate-attestation-root",
+        }:
+            result = recover_pressure_gate_attestation_root(
+                expected_git_commit=args.expected_git_commit,
+                reconcile_exact_empty_normalized_root=(
+                    args.command == "reconcile-pressure-gate-attestation-root"
+                ),
+                authorized_pic_root=args.authorized_pic_root,
+                authorized_project_home_root=args.authorized_project_home_root,
+            )
+        elif args.command == "prepare-reanalysis":
             result = prepare_pressure_reanalysis(
                 reanalysis_operator_id=args.reanalysis_operator_id,
                 expected_git_commit=args.expected_git_commit,
@@ -4238,6 +4941,8 @@ __all__ = [
     "CONTROLLER_STATE_RECORD_TYPE",
     "HUMAN_DECISION_RECORD_TYPE",
     "HUMAN_DECISION_STATEMENT",
+    "PRIVATE_ROOT_RECOVERY_QUALIFICATION_EFFECT",
+    "PRIVATE_ROOT_RECOVERY_RECORD_TYPE",
     "PressureSelectionPublicationError",
     "QUALIFICATION_EFFECT",
     "REVIEWED_RATIONALE",
@@ -4252,6 +4957,7 @@ __all__ = [
     "prepare_pressure_reanalysis",
     "publish_pressure_selection",
     "reconcile_pressure_selection_publication",
+    "recover_pressure_gate_attestation_root",
     "seal_human_pressure_selection",
     "verify_published_pressure_selection_live_state",
     "verify_published_pressure_selection_receipt",

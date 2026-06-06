@@ -3413,6 +3413,7 @@ PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 PROJECT_HOME_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
 PROJECT_LEDGER_ROOT=/ccs/proj/ast207/proj-shared/PIC
 PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
 
 trusted_git() {
   /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
@@ -3434,7 +3435,13 @@ test "$(/usr/bin/sha256sum "$PIC_ROOT/policy/active_promotion.json" | /usr/bin/a
   = ef11cb301ec4917cd32aaca8af56e4f2d753367682c6ba28fc048c004904613e
 test "$(/usr/bin/sha256sum "$PIC_ROOT/clean_candidates/83dce7b7-0b03-4be2-b6da-17bb211d1fd4/clean_candidate_manifest.json" | /usr/bin/awk '{print $1}')" \
   = ea5f295096b04d7e5f338873c2a29213f173677568fd33220e1e34ea239739e4
-test -z "$(/usr/bin/squeue -u "$USER" -h -o '%i|%j|%t|%Z' | /usr/bin/grep -Ei 'pic|q011|athena' || true)"
+PRE_RECOVERY_QUEUE_SNAPSHOT=$(
+  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+    -h -o '%i|%j|%a|%q|%T|%Z|%o'
+)
+printf '%s\n' "$PRE_RECOVERY_QUEUE_SNAPSHOT"
+test -z "$(printf '%s\n' "$PRE_RECOVERY_QUEUE_SNAPSHOT" |
+  /usr/bin/grep -Ei 'pic|q011|athena' || true)"
 test ! -e "$PIC_ROOT/ledger/pending_submission.json"
 test ! -e "$PIC_ROOT/ledger/pending_manual_accounting.json"
 test ! -e "$PROJECT_LEDGER_ROOT/ledger/pending_manual_accounting.json"
@@ -3461,21 +3468,99 @@ run_stage4() {
     "$@"
 }
 
+PRIVATE_ROOT_RECOVERY_JSON=$(
+  /usr/bin/mktemp "${TMPDIR:-/tmp}/pic-q011-stage4-private-root-recovery.XXXXXXXX.json"
+)
+REANALYSIS_JSON=$(
+  /usr/bin/mktemp "${TMPDIR:-/tmp}/pic-q011-stage4-reanalysis.XXXXXXXX.json"
+)
+/usr/bin/chmod 0600 "$PRIVATE_ROOT_RECOVERY_JSON" "$REANALYSIS_JSON"
+
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+PRESSURE_GATE_ATTESTATION_ROOT="$PIC_ROOT/pressure_gate_attestations"
+test -d "$PRESSURE_GATE_ATTESTATION_ROOT"
+test "$(/usr/bin/stat -c '%d|%i|%u|%g' "$PRESSURE_GATE_ATTESTATION_ROOT")" \
+  = '135357496|720587399016566207|18664|31114'
+test -z "$(/usr/bin/find "$PRESSURE_GATE_ATTESTATION_ROOT" -mindepth 1 -print -quit)"
+test ! -e "$PIC_ROOT/pressure_gate_human_decisions"
+test ! -e "$PIC_ROOT/pressure_gate_candidates"
+test ! -e "$PIC_ROOT/publication/q011_section54_pressure_selection_receipt.json"
+case "$(/usr/bin/stat -c '%a' "$PRESSURE_GATE_ATTESTATION_ROOT")" in
+  2700)
+    PRIVATE_ROOT_COMMAND=recover-pressure-gate-attestation-root
+    PRIVATE_ROOT_ACTION=recovered_exact_empty_inherited_setgid_root
+    ;;
+  700)
+    PRIVATE_ROOT_COMMAND=reconcile-pressure-gate-attestation-root
+    PRIVATE_ROOT_ACTION=reconciled_exact_empty_normalized_root
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+run_stage4 \
+  "$PRIVATE_ROOT_COMMAND" \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --authorized-pic-root "$PIC_ROOT" \
+  --authorized-project-home-root "$PROJECT_HOME_ROOT" \
+  | /usr/bin/tee "$PRIVATE_ROOT_RECOVERY_JSON"
+test "$(/usr/bin/jq -r '.action' "$PRIVATE_ROOT_RECOVERY_JSON")" \
+  = "$PRIVATE_ROOT_ACTION"
+test "$(/usr/bin/jq -r '.authority' "$PRIVATE_ROOT_RECOVERY_JSON")" \
+  = none
+test "$(/usr/bin/jq -r '.qualification_effect' "$PRIVATE_ROOT_RECOVERY_JSON")" \
+  = none_no_reanalysis_no_human_selection_no_science_or_launch_authority
+test "$(/usr/bin/stat -c '%d|%i|%u|%g|%a' "$PRESSURE_GATE_ATTESTATION_ROOT")" \
+  = '135357496|720587399016566207|18664|31114|700'
+test -z "$(/usr/bin/find "$PRESSURE_GATE_ATTESTATION_ROOT" -mindepth 1 -print -quit)"
+test ! -e "$PIC_ROOT/pressure_gate_human_decisions"
+test ! -e "$PIC_ROOT/pressure_gate_candidates"
+test ! -e "$PIC_ROOT/publication/q011_section54_pressure_selection_receipt.json"
+
 run_stage4 \
   prepare-reanalysis \
   --reanalysis-operator-id codex \
   --expected-git-commit "$FULL_GIT_COMMIT" \
   --authorized-pic-root "$PIC_ROOT" \
   --authorized-project-home-root "$PROJECT_HOME_ROOT" \
-  | /usr/bin/tee /tmp/pic-q011-stage4-reanalysis.json
+  | /usr/bin/tee "$REANALYSIS_JSON"
 
-test -z "$(/usr/bin/squeue -u "$USER" -h -o '%i|%j|%t|%Z' | /usr/bin/grep -Ei 'pic|q011|athena' || true)"
+POST_REANALYSIS_QUEUE_SNAPSHOT=$(
+  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+    -h -o '%i|%j|%a|%q|%T|%Z|%o'
+)
+printf '%s\n' "$POST_REANALYSIS_QUEUE_SNAPSHOT"
+test -z "$(printf '%s\n' "$POST_REANALYSIS_QUEUE_SNAPSHOT" |
+  /usr/bin/grep -Ei 'pic|q011|athena' || true)"
 test ! -e "$PIC_ROOT/ledger/pending_submission.json"
 test ! -e "$PIC_ROOT/ledger/pending_manual_accounting.json"
 test ! -e "$PROJECT_LEDGER_ROOT/ledger/pending_manual_accounting.json"
-test "$(/usr/bin/jq -r '.candidate_pressure_selection_receipt // empty' /tmp/pic-q011-stage4-reanalysis.json)" = ""
-test "$(/usr/bin/jq -r '.reviewer_attestation // empty' /tmp/pic-q011-stage4-reanalysis.json)" = ""
+test "$(/usr/bin/jq -r '.candidate_pressure_selection_receipt // empty' "$REANALYSIS_JSON")" = ""
+test "$(/usr/bin/jq -r '.reviewer_attestation // empty' "$REANALYSIS_JSON")" = ""
+printf 'private_root_recovery_json=%s\n' "$PRIVATE_ROOT_RECOVERY_JSON"
+printf 'reanalysis_json=%s\n' "$REANALYSIS_JSON"
 ```
+
+The private-root command immediately before `prepare-reanalysis` is the
+incident-specific recovery boundary for the retained empty
+`pressure_gate_attestations` inode that inherited exact mode `02700` from the
+setgid PIC root. It changes only that retained inode to `0700`, emits
+`authority=none`, and cannot prepare reanalysis, create a human decision or
+candidate, publish a receipt, or grant science or launch authority. Ordinary
+Stage-4 commands continue to reject a pre-existing `02700` private root.
+Fresh private roots created by those commands remove inherited ACLs and
+normalize only the inode created by that same invocation. If recovery is
+interrupted after normalization, inspect the exact empty retained inode and
+rerun only the explicit reconciliation command shown by the mode branch; never
+use shell `chmod`, delete/recreate the root, or pass recovery behavior into
+`prepare-reanalysis`. The publication locks coordinate cooperating Stage-4
+tools; they cannot exclude a non-cooperating process running as the same Unix
+identity. The reviewed process and scheduler snapshots immediately before
+recovery are therefore a mandatory operational authority boundary.
 
 **Stop here for the human pressure-selection gate.** The reviewer must inspect
 the immutable pressure-review packet and the exact sealed reanalysis, then

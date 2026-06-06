@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from contextlib import redirect_stderr, redirect_stdout
 import copy
 from datetime import datetime, timedelta, timezone
+import fcntl
 import hashlib
 import io
 import inspect
@@ -562,6 +563,53 @@ class PressureSelectionPublisherTests(unittest.TestCase):
         path = directories[0] / "attestation.json"
         return {"path": str(path), "sha256": _sha256(path.read_bytes())}
 
+    def _remove_human_decision_checkpoint(self) -> None:
+        decision_path = Path(self.human_decision_binding["path"])
+        decision_path.chmod(0o600)
+        decision_path.unlink()
+        decision_path.parent.rmdir()
+
+    @contextmanager
+    def _private_root_recovery_context(self) -> Iterator[None]:
+        pic_status = self.pic_root.stat()
+        archive_status = self.archive_root.stat()
+        with self._verification_context(), mock.patch.object(
+            publisher, "AUTHORIZED_PIC_ROOT", self.pic_root
+        ), mock.patch.object(
+            publisher, "AUTHORIZED_PROJECT_HOME_ROOT", self.project_home_root
+        ), mock.patch.object(
+            publisher,
+            "REVIEWED_PRESSURE_GATE_PIC_ROOT_IDENTITY",
+            (pic_status.st_dev, pic_status.st_ino),
+        ), mock.patch.object(
+            publisher,
+            "REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_IDENTITY",
+            (archive_status.st_dev, archive_status.st_ino),
+        ), mock.patch.object(
+            publisher, "REVIEWED_PRESSURE_GATE_ROOT_UID", archive_status.st_uid
+        ), mock.patch.object(
+            publisher, "REVIEWED_PRESSURE_GATE_ROOT_GID", archive_status.st_gid
+        ), mock.patch.object(
+            publisher,
+            "REVIEWED_PRESSURE_GATE_PIC_ROOT_MODE",
+            stat.S_IMODE(pic_status.st_mode),
+        ), mock.patch.object(
+            publisher,
+            "REVIEWED_PRESSURE_GATE_PIC_ROOT_XATTR_BINDINGS",
+            {
+                name: _sha256(os.getxattr(self.pic_root, name))
+                for name in os.listxattr(self.pic_root)
+            },
+        ), mock.patch.object(
+            publisher,
+            "REVIEWED_PRESSURE_GATE_ATTESTATION_ROOT_XATTR_BINDINGS",
+            {
+                name: _sha256(os.getxattr(self.archive_root, name))
+                for name in os.listxattr(self.archive_root)
+            },
+        ):
+            yield
+
     def _guard_path(self) -> Path:
         return self.publication_root / publisher.pilot_publisher._publication_guard_name(
             publisher.CANONICAL_RECEIPT_NAME
@@ -641,9 +689,9 @@ class PressureSelectionPublisherTests(unittest.TestCase):
     def test_machine_reanalysis_cannot_create_reviewer_or_candidate_and_human_can_seal(
         self,
     ) -> None:
-        setup_decision = Path(self.human_decision_binding["path"])
-        setup_decision.chmod(0o600)
-        setup_decision.unlink()
+        self._remove_human_decision_checkpoint()
+        self.archive_root.rmdir()
+        self.pic_root.chmod(0o2755)
         result = {
             "packet_receipt_sha256": "2" * 64,
             "aggregate_receipt_sha256": "1" * 64,
@@ -722,6 +770,8 @@ class PressureSelectionPublisherTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(preparation_path.parent.stat().st_mode), 0o500)
             decision_root = Path(prepared["human_decision_root"])
             self.assertEqual(list(decision_root.iterdir()), [])
+            self.assertEqual(stat.S_IMODE(self.archive_root.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(decision_root.stat().st_mode), 0o700)
             decision_path = decision_root / "dfielding-p0-1p0.json"
             self._write_readonly(
                 decision_path,
@@ -755,6 +805,12 @@ class PressureSelectionPublisherTests(unittest.TestCase):
         candidate = Path(sealed["candidate_pressure_selection_receipt"]["path"])
         candidate_authorization = Path(
             sealed["candidate_publication_authorization"]["path"]
+        )
+        self.assertEqual(
+            stat.S_IMODE(
+                (self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME).stat().st_mode
+            ),
+            0o700,
         )
         self.assertEqual(stat.S_IMODE(candidate.stat().st_mode), 0o400)
         self.assertEqual(stat.S_IMODE(candidate_authorization.stat().st_mode), 0o400)
@@ -794,6 +850,948 @@ class PressureSelectionPublisherTests(unittest.TestCase):
         self.assertEqual(
             sealed["human_decision"],
             {"path": str(decision_path), "sha256": _sha256(decision_path.read_bytes())},
+        )
+
+    def test_existing_inherited_setgid_private_root_is_not_implicitly_recovered(
+        self,
+    ) -> None:
+        candidate_root = self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME
+        self.pic_root.chmod(0o2755)
+        pic_descriptor = publisher.pilot_publisher._open_absolute_directory(
+            self.pic_root
+        )
+        try:
+            root, descriptor = publisher._open_or_create_private_root(
+                self.pic_root,
+                pic_descriptor,
+                publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                "pressure-selection candidate root",
+            )
+            os.close(descriptor)
+        finally:
+            os.close(pic_descriptor)
+        self.assertEqual(root, candidate_root)
+        retained_identity = (candidate_root.stat().st_dev, candidate_root.stat().st_ino)
+        self.assertEqual(stat.S_IMODE(candidate_root.stat().st_mode), 0o700)
+        candidate_root.chmod(0o2700)
+        pic_descriptor = publisher.pilot_publisher._open_absolute_directory(
+            self.pic_root
+        )
+        try:
+            with self.assertRaisesRegex(
+                publisher.PressureSelectionPublicationError,
+                "must be one private directory with mode 0700",
+            ):
+                publisher._open_or_create_private_root(
+                    self.pic_root,
+                    pic_descriptor,
+                    publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                    "pressure-selection candidate root",
+                )
+        finally:
+            os.close(pic_descriptor)
+        self.assertEqual(
+            (candidate_root.stat().st_dev, candidate_root.stat().st_ino),
+            retained_identity,
+        )
+        self.assertEqual(stat.S_IMODE(candidate_root.stat().st_mode), 0o2700)
+
+    def test_private_root_creation_occurs_only_after_publication_lock(self) -> None:
+        helper_source = inspect.getsource(publisher._open_or_create_private_root)
+        self.assertIn("parent_descriptor: int", helper_source)
+        self.assertNotIn("_open_absolute_directory(pic_root)", helper_source)
+        for function in (
+            publisher.prepare_pressure_reanalysis,
+            publisher.seal_human_pressure_selection,
+        ):
+            with self.subTest(function=function.__name__):
+                source = inspect.getsource(function)
+                self.assertLess(
+                    source.index("_lock_publication_transaction"),
+                    source.index("_open_or_create_private_root"),
+                )
+
+    def test_private_root_creation_is_blocked_by_competing_publication_lock(
+        self,
+    ) -> None:
+        decision_path = Path(self.human_decision_binding["path"])
+        decision_payload = decision_path.read_bytes()
+        self._remove_human_decision_checkpoint()
+        self.archive_root.rmdir()
+        self.pic_root.chmod(0o2755)
+        anchor = publisher.pilot_publisher._open_absolute_directory(self.root)
+        fcntl.flock(anchor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            with self._verification_context(), mock.patch.object(
+                publisher, "AUTHORIZED_PIC_ROOT", self.pic_root
+            ), mock.patch.object(
+                publisher, "AUTHORIZED_PROJECT_HOME_ROOT", self.project_home_root
+            ), self.assertRaisesRegex(
+                publisher.PressureSelectionPublicationError,
+                "pressure-selection preparation failed closed",
+            ):
+                publisher.prepare_pressure_reanalysis(
+                    reanalysis_operator_id="codex",
+                    expected_git_commit="e" * 40,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    now=self.now,
+                )
+            self.assertFalse(self.archive_root.exists())
+            self.assertFalse(decision_path.parent.exists())
+
+            self.archive_root.mkdir(mode=0o700)
+            decision_path.parent.mkdir(mode=0o700)
+            decision_path.parent.chmod(0o700)
+            self._write_readonly(decision_path, decision_payload)
+            decision_path.chmod(0o400)
+            with self._verification_context(), mock.patch.object(
+                publisher, "AUTHORIZED_PIC_ROOT", self.pic_root
+            ), mock.patch.object(
+                publisher, "AUTHORIZED_PROJECT_HOME_ROOT", self.project_home_root
+            ), self.assertRaisesRegex(
+                publisher.PressureSelectionPublicationError,
+                "human pressure-selection sealing failed closed",
+            ):
+                publisher.seal_human_pressure_selection(
+                    human_decision_path=decision_path,
+                    expected_git_commit="e" * 40,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    now=self.now,
+                )
+            self.assertFalse(
+                (self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME).exists()
+            )
+        finally:
+            fcntl.flock(anchor, fcntl.LOCK_UN)
+            os.close(anchor)
+
+    def test_private_root_creation_rejects_writable_pic_parent(self) -> None:
+        candidate_root = self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME
+        for mode in (0o2775, 0o2777):
+            with self.subTest(mode=f"{mode:04o}"):
+                self.pic_root.chmod(mode)
+                retained = publisher.pilot_publisher._open_absolute_directory(
+                    self.pic_root
+                )
+                try:
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "same-account isolated parent",
+                    ):
+                        publisher._open_or_create_private_root(
+                            self.pic_root,
+                            retained,
+                            publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                            "pressure-selection candidate root",
+                        )
+                finally:
+                    os.close(retained)
+                self.assertFalse(candidate_root.exists())
+
+    def test_private_root_creation_strips_inherited_default_acl(self) -> None:
+        candidate_root = self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME
+        self.pic_root.chmod(0o2755)
+        parent_inode = self.pic_root.stat().st_ino
+        xattrs: dict[int, dict[str, bytes]] = {
+            parent_inode: {
+                "lustre.lov": b"reviewed-layout",
+                "system.posix_acl_default": b"parent-default-acl",
+            }
+        }
+        removed: list[str] = []
+
+        def inode_xattrs(descriptor: int) -> dict[str, bytes]:
+            inode = os.fstat(descriptor).st_ino
+            return xattrs.setdefault(
+                inode,
+                {
+                    "lustre.lov": b"reviewed-layout",
+                    "system.posix_acl_access": b"inherited-access-acl",
+                    "system.posix_acl_default": b"inherited-default-acl",
+                },
+            )
+
+        def remove_xattr(descriptor: int, name: str) -> None:
+            removed.append(name)
+            del inode_xattrs(descriptor)[name]
+
+        retained = publisher.pilot_publisher._open_absolute_directory(self.pic_root)
+        try:
+            with mock.patch.object(
+                publisher.os,
+                "listxattr",
+                side_effect=lambda descriptor: list(inode_xattrs(descriptor)),
+            ), mock.patch.object(
+                publisher.os,
+                "getxattr",
+                side_effect=lambda descriptor, name: inode_xattrs(descriptor)[name],
+            ), mock.patch.object(
+                publisher.os,
+                "removexattr",
+                side_effect=remove_xattr,
+            ):
+                root, descriptor = publisher._open_or_create_private_root(
+                    self.pic_root,
+                    retained,
+                    publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                    "pressure-selection candidate root",
+                )
+                os.close(descriptor)
+        finally:
+            os.close(retained)
+        self.assertEqual(root, candidate_root)
+        self.assertEqual(
+            removed,
+            ["system.posix_acl_access", "system.posix_acl_default"],
+        )
+        self.assertEqual(stat.S_IMODE(candidate_root.stat().st_mode), 0o700)
+
+    def test_private_root_creation_rejects_parent_access_acl_before_mutation(
+        self,
+    ) -> None:
+        candidate_root = self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME
+        retained = publisher.pilot_publisher._open_absolute_directory(self.pic_root)
+        try:
+            with mock.patch.object(
+                publisher.os,
+                "listxattr",
+                return_value=["system.posix_acl_access"],
+            ), self.assertRaisesRegex(
+                publisher.PressureSelectionPublicationError,
+                "access ACL xattr",
+            ):
+                publisher._open_or_create_private_root(
+                    self.pic_root,
+                    retained,
+                    publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                    "pressure-selection candidate root",
+                )
+        finally:
+            os.close(retained)
+        self.assertFalse(candidate_root.exists())
+
+    def test_private_root_creation_rejects_storage_xattr_drift(self) -> None:
+        self.pic_root.chmod(0o2755)
+        parent_inode = self.pic_root.stat().st_ino
+        scenarios = (
+            ("missing-layout", {}, "xattr bindings differ"),
+            (
+                "mismatched-layout",
+                {"lustre.lov": b"different-layout"},
+                "xattr bindings differ",
+            ),
+            (
+                "unexpected-xattr",
+                {"lustre.lov": b"reviewed-layout", "user.unexpected": b"value"},
+                "unexpected xattrs",
+            ),
+        )
+        for name, child_xattrs, message in scenarios:
+            with self.subTest(name=name):
+                private_name = f"private-root-{name}"
+                retained = publisher.pilot_publisher._open_absolute_directory(
+                    self.pic_root
+                )
+
+                def inode_xattrs(descriptor: int) -> dict[str, bytes]:
+                    if os.fstat(descriptor).st_ino == parent_inode:
+                        return {"lustre.lov": b"reviewed-layout"}
+                    return child_xattrs
+
+                try:
+                    with mock.patch.object(
+                        publisher.os,
+                        "listxattr",
+                        side_effect=lambda descriptor: list(inode_xattrs(descriptor)),
+                    ), mock.patch.object(
+                        publisher.os,
+                        "getxattr",
+                        side_effect=lambda descriptor, xattr: inode_xattrs(descriptor)[
+                            xattr
+                        ],
+                    ), self.assertRaisesRegex(
+                        publisher.PressureSelectionPublicationError,
+                        message,
+                    ):
+                        publisher._open_or_create_private_root(
+                            self.pic_root,
+                            retained,
+                            private_name,
+                            "pressure-selection private root",
+                        )
+                finally:
+                    os.close(retained)
+                created = self.pic_root / private_name
+                self.assertFalse(created.exists())
+
+    def test_private_root_creation_removes_interrupted_fresh_checkpoint(self) -> None:
+        self.pic_root.chmod(0o2755)
+        original_parent_fsync = publisher.pilot_publisher._fsync_descriptor
+        original_fsync = os.fsync
+        original_open = os.open
+        original_stat = os.stat
+        for failure in (
+            "descriptor-open",
+            "identity-path-stat",
+            "parent-fsync",
+            "child-fsync",
+        ):
+            with self.subTest(failure=failure):
+                private_name = f"private-root-{failure}"
+                private_root = self.pic_root / private_name
+                retained = publisher.pilot_publisher._open_absolute_directory(
+                    self.pic_root
+                )
+                failed = False
+
+                def fail_parent_fsync(descriptor: int) -> None:
+                    nonlocal failed
+                    if not failed:
+                        failed = True
+                        raise OSError("injected parent sync failure")
+                    original_parent_fsync(descriptor)
+
+                def fail_child_fsync(descriptor: int) -> None:
+                    nonlocal failed
+                    if descriptor != retained and not failed:
+                        failed = True
+                        raise OSError("injected child sync failure")
+                    original_fsync(descriptor)
+
+                def fail_identity_path_stat(
+                    path: object, *args: object, **kwargs: object
+                ) -> os.stat_result:
+                    nonlocal failed
+                    if (
+                        path == private_name
+                        and kwargs.get("dir_fd") == retained
+                        and not failed
+                    ):
+                        failed = True
+                        raise OSError("injected identity path-stat failure")
+                    return original_stat(path, *args, **kwargs)
+
+                def fail_descriptor_open(
+                    path: object, flags: int, *args: object, **kwargs: object
+                ) -> int:
+                    nonlocal failed
+                    if (
+                        path == private_name
+                        and kwargs.get("dir_fd") == retained
+                        and not failed
+                    ):
+                        failed = True
+                        raise OSError("injected descriptor open failure")
+                    return original_open(path, flags, *args, **kwargs)
+
+                patcher = (
+                    mock.patch.object(
+                        publisher.pilot_publisher,
+                        "_fsync_descriptor",
+                        side_effect=fail_parent_fsync,
+                    )
+                    if failure == "parent-fsync"
+                    else (
+                        mock.patch.object(
+                            publisher.os,
+                            "fsync",
+                            side_effect=fail_child_fsync,
+                        )
+                        if failure == "child-fsync"
+                        else mock.patch.object(
+                            publisher.os,
+                            "open" if failure == "descriptor-open" else "stat",
+                            side_effect=(
+                                fail_descriptor_open
+                                if failure == "descriptor-open"
+                                else fail_identity_path_stat
+                            ),
+                        )
+                    )
+                )
+                try:
+                    with patcher, self.assertRaises((OSError, ValueError)):
+                        publisher._open_or_create_private_root(
+                            self.pic_root,
+                            retained,
+                            private_name,
+                            "pressure-selection private root",
+                        )
+                finally:
+                    os.close(retained)
+                self.assertTrue(failed)
+                self.assertFalse(private_root.exists())
+
+    def test_private_root_creation_rejects_replaced_pic_path(self) -> None:
+        retained = publisher.pilot_publisher._open_absolute_directory(self.pic_root)
+        displaced = self.root / "displaced-pic"
+        self.pic_root.rename(displaced)
+        self.pic_root.mkdir()
+        try:
+            with self.assertRaisesRegex(
+                ValueError,
+                "authorized PIC root changed",
+            ):
+                publisher._open_or_create_private_root(
+                    self.pic_root,
+                    retained,
+                    publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                    "pressure-selection candidate root",
+                )
+        finally:
+            os.close(retained)
+        self.assertFalse(
+            (self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME).exists()
+        )
+
+    def test_private_root_binding_rejects_replaced_child_path(self) -> None:
+        retained = publisher.pilot_publisher._open_absolute_directory(self.pic_root)
+        displaced = self.pic_root / "displaced-candidate-root"
+        root, descriptor = publisher._open_or_create_private_root(
+            self.pic_root,
+            retained,
+            publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+            "pressure-selection candidate root",
+        )
+        root.rename(displaced)
+        root.mkdir(mode=0o700)
+        try:
+            with self.assertRaisesRegex(
+                ValueError,
+                "changed during publication",
+            ):
+                publisher._require_private_root_binding(
+                    self.pic_root,
+                    retained,
+                    publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                    descriptor,
+                    "pressure-selection candidate root",
+                )
+        finally:
+            os.close(descriptor)
+            os.close(retained)
+
+    def test_preparation_and_sealing_close_descriptors_when_pic_open_fails(
+        self,
+    ) -> None:
+        original_open = publisher.pilot_publisher._open_absolute_directory
+        decision_root = Path(self.human_decision_binding["path"]).parent
+        operations = (
+            (
+                "prepare",
+                lambda: publisher.prepare_pressure_reanalysis(
+                    reanalysis_operator_id="codex",
+                    expected_git_commit="e" * 40,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    now=self.now,
+                ),
+            ),
+            (
+                "seal",
+                lambda: publisher.seal_human_pressure_selection(
+                    human_decision_path=Path(self.human_decision_binding["path"]),
+                    expected_git_commit="e" * 40,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    now=self.now,
+                ),
+            ),
+        )
+        for label, operation in operations:
+            with self.subTest(operation=label):
+                retained: list[int] = []
+
+                def fail_pic_open(path: Path) -> int:
+                    if Path(path) == self.pic_root:
+                        raise OSError("injected PIC-root open failure")
+                    descriptor = original_open(path)
+                    if Path(path) != decision_root:
+                        retained.append(descriptor)
+                    return descriptor
+
+                with self._verification_context(), mock.patch.object(
+                    publisher, "AUTHORIZED_PIC_ROOT", self.pic_root
+                ), mock.patch.object(
+                    publisher, "AUTHORIZED_PROJECT_HOME_ROOT", self.project_home_root
+                ), mock.patch.object(
+                    publisher.pilot_publisher,
+                    "_open_absolute_directory",
+                    side_effect=fail_pic_open,
+                ), self.assertRaisesRegex(
+                    publisher.PressureSelectionPublicationError,
+                    "failed closed",
+                ):
+                    operation()
+                self.assertEqual(len(retained), 2)
+                for descriptor in retained:
+                    with self.assertRaises(OSError):
+                        os.fstat(descriptor)
+
+    def test_explicit_private_root_recovery_and_reconciliation_preserve_inode(
+        self,
+    ) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        retained_identity = (
+            self.archive_root.stat().st_dev,
+            self.archive_root.stat().st_ino,
+        )
+        with self._private_root_recovery_context():
+            recovered = publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+            with self.assertRaisesRegex(
+                publisher.PressureSelectionPublicationError,
+                "not the exact recoverable checkpoint",
+            ):
+                publisher.recover_pressure_gate_attestation_root(
+                    expected_git_commit="e" * 40,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+            reconciled = publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                reconcile_exact_empty_normalized_root=True,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+        self.assertEqual(
+            recovered["action"], "recovered_exact_empty_inherited_setgid_root"
+        )
+        self.assertEqual(
+            reconciled["action"], "reconciled_exact_empty_normalized_root"
+        )
+        self.assertEqual(recovered["authority"], "none")
+        self.assertEqual(
+            recovered["qualification_effect"],
+            publisher.PRIVATE_ROOT_RECOVERY_QUALIFICATION_EFFECT,
+        )
+        self.assertEqual(recovered["before"]["mode"], "2700")
+        self.assertEqual(recovered["after"]["mode"], "0700")
+        self.assertEqual(
+            (self.archive_root.stat().st_dev, self.archive_root.stat().st_ino),
+            retained_identity,
+        )
+        self.assertEqual(stat.S_IMODE(self.archive_root.stat().st_mode), 0o700)
+        self.assertEqual(list(self.archive_root.iterdir()), [])
+        self.assertFalse(
+            (self.pic_root / publisher.PRESSURE_GATE_HUMAN_DECISION_ROOT_NAME).exists()
+        )
+        self.assertFalse(
+            (self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME).exists()
+        )
+        self.assertFalse(self.receipt_path.exists())
+
+    def test_explicit_private_root_recovery_rejects_nonempty_checkpoint(self) -> None:
+        self._remove_human_decision_checkpoint()
+        marker = self.archive_root / "unexpected"
+        marker.write_text("not recoverable\n", encoding="utf-8")
+        marker.chmod(0o400)
+        self.archive_root.chmod(0o2700)
+        with self._private_root_recovery_context(), self.assertRaisesRegex(
+            publisher.PressureSelectionPublicationError,
+            "not the exact recoverable checkpoint",
+        ):
+            publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(stat.S_IMODE(self.archive_root.stat().st_mode), 0o2700)
+        self.assertTrue(marker.is_file())
+
+    def test_explicit_private_root_recovery_rejects_namespace_blocker(self) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        blockers = (
+            (
+                "human decision root",
+                self.pic_root / publisher.PRESSURE_GATE_HUMAN_DECISION_ROOT_NAME,
+                True,
+            ),
+            (
+                "candidate root",
+                self.pic_root / publisher.PRESSURE_GATE_CANDIDATE_ROOT_NAME,
+                True,
+            ),
+            ("canonical receipt", self.receipt_path, False),
+            ("publication guard", self._guard_path(), False),
+            ("durable success seal", self._seal_path(), False),
+        )
+        for label, blocker, directory in blockers:
+            with self.subTest(blocker=label):
+                if directory:
+                    blocker.mkdir(mode=0o700)
+                else:
+                    blocker.write_text("authority blocker\n", encoding="utf-8")
+                    blocker.chmod(0o400)
+                try:
+                    with self._private_root_recovery_context(), self.assertRaisesRegex(
+                        publisher.PressureSelectionPublicationError,
+                        "pressure-gate private-root recovery failed closed",
+                    ):
+                        publisher.recover_pressure_gate_attestation_root(
+                            expected_git_commit="e" * 40,
+                            authorized_pic_root=self.pic_root,
+                            authorized_project_home_root=self.project_home_root,
+                        )
+                    self.assertEqual(
+                        stat.S_IMODE(self.archive_root.stat().st_mode), 0o2700
+                    )
+                finally:
+                    if directory:
+                        blocker.rmdir()
+                    else:
+                        blocker.chmod(0o600)
+                        blocker.unlink()
+
+    def test_explicit_private_root_recovery_rejects_competing_lock(self) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        anchor = publisher.pilot_publisher._open_absolute_directory(self.root)
+        fcntl.flock(anchor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            with self._private_root_recovery_context(), self.assertRaisesRegex(
+                publisher.PressureSelectionPublicationError,
+                "private-root recovery failed closed",
+            ):
+                publisher.recover_pressure_gate_attestation_root(
+                    expected_git_commit="e" * 40,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        finally:
+            fcntl.flock(anchor, fcntl.LOCK_UN)
+            os.close(anchor)
+        self.assertEqual(stat.S_IMODE(self.archive_root.stat().st_mode), 0o2700)
+
+    def test_explicit_private_root_recovery_rejects_controller_state_drift(
+        self,
+    ) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        original_capture = publisher._capture_live_controller_state
+        capture_count = 0
+
+        def drift_second_capture(**kwargs: object) -> dict[str, object]:
+            nonlocal capture_count
+            capture_count += 1
+            result = original_capture(**kwargs)
+            if capture_count == 2:
+                result = copy.deepcopy(result)
+                result["controller_state"]["pending_submission_marker"] = "drifted"
+            return result
+
+        with self._private_root_recovery_context(), mock.patch.object(
+            publisher,
+            "_capture_live_controller_state",
+            side_effect=drift_second_capture,
+        ), self.assertRaisesRegex(
+            publisher.PressureSelectionPublicationError,
+            "controller state changed",
+        ):
+            publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(stat.S_IMODE(self.archive_root.stat().st_mode), 0o700)
+
+    def test_private_root_xattr_bindings_hash_values(self) -> None:
+        with mock.patch.object(
+            publisher.os, "listxattr", return_value=["lustre.lov"]
+        ), mock.patch.object(
+            publisher.os, "getxattr", return_value=b"reviewed-layout"
+        ) as getxattr:
+            bindings = publisher._private_root_xattr_bindings(
+                -1, "pressure-gate attestation root"
+            )
+        self.assertEqual(bindings, {"lustre.lov": _sha256(b"reviewed-layout")})
+        getxattr.assert_called_once_with(-1, "lustre.lov")
+
+    def test_private_root_recovery_rejects_final_path_replacement(self) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        retained_identity = (
+            self.archive_root.stat().st_dev,
+            self.archive_root.stat().st_ino,
+        )
+        displaced = self.pic_root / "displaced-pressure-gate-attestations"
+        original_capture = publisher._capture_live_controller_state
+        capture_count = 0
+
+        def replace_during_second_capture(**kwargs: object) -> dict[str, object]:
+            nonlocal capture_count
+            capture_count += 1
+            result = original_capture(**kwargs)
+            if capture_count == 2:
+                self.archive_root.rename(displaced)
+                self.archive_root.mkdir(mode=0o700)
+            return result
+
+        with self._private_root_recovery_context(), mock.patch.object(
+            publisher,
+            "_capture_live_controller_state",
+            side_effect=replace_during_second_capture,
+        ), self.assertRaisesRegex(
+            publisher.PressureSelectionPublicationError,
+            "private-root recovery failed closed",
+        ):
+            publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertNotEqual(
+            (self.archive_root.stat().st_dev, self.archive_root.stat().st_ino),
+            retained_identity,
+        )
+        self.assertEqual(
+            (displaced.stat().st_dev, displaced.stat().st_ino),
+            retained_identity,
+        )
+
+    def test_private_root_recovery_rejects_final_pic_root_mode_drift(self) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        original_capture = publisher._capture_live_controller_state
+        capture_count = 0
+
+        def drift_during_second_capture(**kwargs: object) -> dict[str, object]:
+            nonlocal capture_count
+            capture_count += 1
+            result = original_capture(**kwargs)
+            if capture_count == 2:
+                self.pic_root.chmod(0o2777)
+            return result
+
+        with self._private_root_recovery_context(), mock.patch.object(
+            publisher,
+            "_capture_live_controller_state",
+            side_effect=drift_during_second_capture,
+        ), self.assertRaisesRegex(
+            publisher.PressureSelectionPublicationError,
+            "reviewed private-root checkpoint",
+        ):
+            publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_private_root_recovery_rebinds_path_after_final_state_read(self) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        retained_identity = (
+            self.archive_root.stat().st_dev,
+            self.archive_root.stat().st_ino,
+        )
+        displaced = self.pic_root / "displaced-after-final-state"
+        original_state = publisher._private_root_state
+        state_count = 0
+
+        def replace_after_final_state(
+            descriptor: int, label: str
+        ) -> dict[str, object]:
+            nonlocal state_count
+            state_count += 1
+            result = original_state(descriptor, label)
+            if state_count == 3:
+                self.archive_root.rename(displaced)
+                self.archive_root.mkdir(mode=0o700)
+            return result
+
+        with self._private_root_recovery_context(), mock.patch.object(
+            publisher,
+            "_private_root_state",
+            side_effect=replace_after_final_state,
+        ), self.assertRaisesRegex(
+            publisher.PressureSelectionPublicationError,
+            "private-root recovery failed closed",
+        ):
+            publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(
+            (displaced.stat().st_dev, displaced.stat().st_ino),
+            retained_identity,
+        )
+
+    def test_interrupted_private_root_recovery_requires_explicit_reconciliation(
+        self,
+    ) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        with self._private_root_recovery_context(), mock.patch.object(
+            publisher.pilot_publisher,
+            "_fsync_descriptor",
+            side_effect=OSError("injected post-normalization sync failure"),
+        ), self.assertRaisesRegex(
+            publisher.PressureSelectionPublicationError,
+            "private-root recovery failed closed",
+        ):
+            publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(stat.S_IMODE(self.archive_root.stat().st_mode), 0o700)
+        with self._private_root_recovery_context(), self.assertRaisesRegex(
+            publisher.PressureSelectionPublicationError,
+            "not the exact recoverable checkpoint",
+        ):
+            publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self._private_root_recovery_context():
+            reconciled = publisher.recover_pressure_gate_attestation_root(
+                expected_git_commit="e" * 40,
+                reconcile_exact_empty_normalized_root=True,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(
+            reconciled["action"], "reconciled_exact_empty_normalized_root"
+        )
+
+    def test_private_root_recovery_cli_never_dispatches_preparation(self) -> None:
+        result = {
+            "schema_version": 1,
+            "record_type": publisher.PRIVATE_ROOT_RECOVERY_RECORD_TYPE,
+            "action": "recovered_exact_empty_inherited_setgid_root",
+        }
+        for command, reconcile in (
+            ("recover-pressure-gate-attestation-root", False),
+            ("reconcile-pressure-gate-attestation-root", True),
+        ):
+            with self.subTest(command=command), mock.patch.object(
+                publisher,
+                "recover_pressure_gate_attestation_root",
+                return_value=result,
+            ) as recovery, mock.patch.object(
+                publisher, "prepare_pressure_reanalysis"
+            ) as preparation, redirect_stdout(io.StringIO()) as stdout:
+                status = publisher.main(
+                    [
+                        command,
+                        "--expected-git-commit",
+                        "e" * 40,
+                        "--authorized-pic-root",
+                        str(self.pic_root),
+                        "--authorized-project-home-root",
+                        str(self.project_home_root),
+                    ]
+                )
+            self.assertEqual(status, 0)
+            preparation.assert_not_called()
+            recovery.assert_called_once_with(
+                expected_git_commit="e" * 40,
+                reconcile_exact_empty_normalized_root=reconcile,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+            self.assertEqual(json.loads(stdout.getvalue()), result)
+
+    def test_private_root_recovery_cli_enforces_exact_mode_matrix(self) -> None:
+        self._remove_human_decision_checkpoint()
+        self.archive_root.chmod(0o2700)
+        arguments = [
+            "--expected-git-commit",
+            "e" * 40,
+            "--authorized-pic-root",
+            str(self.pic_root),
+            "--authorized-project-home-root",
+            str(self.project_home_root),
+        ]
+        cases = (
+            (
+                "recover-pressure-gate-attestation-root",
+                0o2700,
+                0,
+                "recovered_exact_empty_inherited_setgid_root",
+                0o700,
+            ),
+            (
+                "recover-pressure-gate-attestation-root",
+                0o700,
+                2,
+                None,
+                0o700,
+            ),
+            (
+                "reconcile-pressure-gate-attestation-root",
+                0o700,
+                0,
+                "reconciled_exact_empty_normalized_root",
+                0o700,
+            ),
+            (
+                "reconcile-pressure-gate-attestation-root",
+                0o2700,
+                2,
+                None,
+                0o2700,
+            ),
+        )
+        for command, initial_mode, status, action, final_mode in cases:
+            with self.subTest(command=command, initial_mode=f"{initial_mode:04o}"):
+                self.archive_root.chmod(initial_mode)
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with self._private_root_recovery_context(), redirect_stdout(
+                    stdout
+                ), redirect_stderr(stderr):
+                    observed = publisher.main([command, *arguments])
+                self.assertEqual(observed, status)
+                self.assertEqual(stat.S_IMODE(self.archive_root.stat().st_mode), final_mode)
+                if action is None:
+                    self.assertEqual(stdout.getvalue(), "")
+                    failure = json.loads(stderr.getvalue())
+                    self.assertEqual(failure["status"], "failed_closed")
+                    self.assertEqual(failure["command"], command)
+                else:
+                    self.assertEqual(stderr.getvalue(), "")
+                    self.assertEqual(json.loads(stdout.getvalue())["action"], action)
+
+    def test_private_root_recovery_cli_wraps_root_resolution_failure(self) -> None:
+        stderr = io.StringIO()
+        with self._verification_context(), mock.patch.object(
+            publisher, "AUTHORIZED_PIC_ROOT", self.pic_root
+        ), mock.patch.object(
+            publisher, "AUTHORIZED_PROJECT_HOME_ROOT", self.project_home_root
+        ), mock.patch.object(
+            publisher.pilot_publisher,
+            "_publication_root",
+            side_effect=publisher.pilot_publisher.PressurePilotPublicationError(
+                "injected root resolution failure"
+            ),
+        ), redirect_stderr(stderr):
+            status = publisher.main(
+                [
+                    "recover-pressure-gate-attestation-root",
+                    "--expected-git-commit",
+                    "e" * 40,
+                    "--authorized-pic-root",
+                    str(self.pic_root),
+                    "--authorized-project-home-root",
+                    str(self.project_home_root),
+                ]
+            )
+        self.assertEqual(status, 2)
+        failure = json.loads(stderr.getvalue())
+        self.assertEqual(failure["status"], "failed_closed")
+        self.assertEqual(
+            failure["message"], "pressure-gate private-root recovery failed closed"
         )
 
     def test_human_decision_must_be_strictly_later_than_reanalysis(self) -> None:
