@@ -632,6 +632,22 @@ class RegisteredLaunchMaterializerTests(unittest.TestCase):
                     readiness_contract=path,
                 )
 
+    def test_rejects_writable_external_readiness_contract(self) -> None:
+        with _fixture() as fixture:
+            readiness = json.loads(materializer.READINESS_CONTRACT.read_text())
+            path = _put(
+                fixture["root"] / "readiness.json", _json_bytes(readiness), mode=0o644
+            )
+            with self.assertRaisesRegex(
+                materializer.RegisteredLaunchMaterializationError, "must be read-only"
+            ):
+                materializer.materialize_registered_launch_review_bundle(
+                    selected_bindings=fixture["selected"],
+                    output_root=fixture["output"],
+                    authorized_pic_root=fixture["pic_root"],
+                    readiness_contract=path,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

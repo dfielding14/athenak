@@ -168,8 +168,12 @@ def _stable_regular_bytes(
         os.close(descriptor)
 
 
-def _read_canonical_json(path: Path, *, label: str) -> tuple[Path, bytes, dict[str, Any]]:
-    lexical, payload = _stable_regular_bytes(path, label=label)
+def _read_canonical_json(
+    path: Path, *, label: str, require_read_only: bool = True
+) -> tuple[Path, bytes, dict[str, Any]]:
+    lexical, payload = _stable_regular_bytes(
+        path, label=label, require_read_only=require_read_only
+    )
     value = _decode_json(payload, label=label)
     _require(type(value) is dict, f"{label} must be one JSON object")
     _require(payload == _json_bytes(value), f"{label} must use canonical JSON bytes")
@@ -210,9 +214,13 @@ def _binding(
     return {"path": str(lexical), "sha256": digest}, payload
 
 
-def _readiness_contract(path: Path) -> tuple[dict[str, str], dict[str, Any]]:
+def _readiness_contract(
+    path: Path, *, require_read_only: bool = True
+) -> tuple[dict[str, str], dict[str, Any]]:
     lexical, payload, value = _read_canonical_json(
-        path, label="registered-launch readiness contract"
+        path,
+        label="registered-launch readiness contract",
+        require_read_only=require_read_only,
     )
     expected = {
         "record_type": "q011_section54_registered_launch_orchestration_preregistration",
@@ -794,7 +802,13 @@ def materialize_registered_launch_review_bundle(
         not _protected_live_output(output_root, authorized_pic_root),
         "review bundle cannot be materialized in a live PIC control namespace",
     )
-    readiness_binding, readiness = _readiness_contract(readiness_contract)
+    readiness_binding, readiness = _readiness_contract(
+        readiness_contract,
+        # Git does not preserve non-executable permission bits.  The exact
+        # built-in source contract is instead protected by the full schema
+        # equality check below; caller-supplied contracts remain read-only.
+        require_read_only=readiness_contract != READINESS_CONTRACT,
+    )
     selected_path, selected_payload, selected = _read_canonical_json(
         selected_bindings, label="selected registered-launch bindings"
     )
