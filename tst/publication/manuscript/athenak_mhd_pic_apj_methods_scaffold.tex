@@ -1,0 +1,665 @@
+\documentclass[twocolumn]{aastex701}
+
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{xspace}
+\usepackage{url}
+
+\hypersetup{hypertexnames=false}
+
+\shorttitle{AthenaK MHD-PIC Methods Scaffold}
+\shortauthors{AthenaK Collaboration}
+
+\newcommand{\athenak}{\texttt{AthenaK}\xspace}
+\newcommand{\mhdpic}{MHD-PIC\xspace}
+\newcommand{\runtime}{\texttt{paper\_mhd\_pic\_vl2\_tsc}\xspace}
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\VERIFY}[1]{\textcolor{orange}{\textbf{[VERIFY: #1]}}}
+\newcommand{\GATE}[1]{\textcolor{magenta}{\textbf{[GATE: #1]}}}
+\newcommand{\AUTHOR}[1]{\textcolor{blue}{\textbf{[AUTHOR DECISION: #1]}}}
+\newcommand{\placeholder}{\textcolor{red}{\textbf{[VALUE NEEDED]}}}
+\newcommand{\claimid}[1]{\texttt{#1}}
+\newcommand{\qgate}[1]{\texttt{#1}}
+
+\begin{document}
+
+\title{AthenaK MHD-PIC: Numerical Method, Verification, and Qualification
+Envelope\\
+\large Internal ApJ Methods-Paper Scaffold}
+
+\author{AthenaK Collaboration}
+\affiliation{\AUTHOR{Insert verified author list, affiliations, and contribution
+statement.}}
+\email{\AUTHOR{Insert corresponding-author email.}}
+
+\begin{abstract}
+Astrophysical systems containing energetic particles span scales that are
+difficult to resolve with fully kinetic methods.
+\TODO{Add verified primary citations and state the specific scale-separation
+problem addressed by this paper.}
+We describe the \athenak \mhdpic implementation, in which the thermal plasma is
+evolved as magnetohydrodynamic gas and the energetic-particle population is
+advanced kinetically.
+The active paper-reproduction candidate uses mass-normalized particle momentum,
+a relativistic Boris pusher, triangular-shaped-cloud interpolation and
+deposition, ideal-MHD induction, and conservative particle--gas exchange in its
+documented applicability envelope.
+
+\TODO{Replace this paragraph with the final quantitative results only after the
+claim-evidence ledger identifies the exact figures, tables, artifacts,
+uncertainties, and reviewer dispositions.}
+Current repository evidence includes bounded analytical and engineering
+verification, selected registered GPU oracles, and preregistered campaigns.
+It does not yet establish the complete paper-reproduction bundle, nonlinear
+Bell saturation, the Section~5.4 parallel-shock result, or production-scale
+performance.
+\GATE{The abstract must not claim those outcomes until their named gates close.}
+\end{abstract}
+
+\keywords{magnetohydrodynamics (1964) --- cosmic rays (329) ---
+plasma astrophysics (1261) --- computational methods (1965) ---
+\TODO{Verify ApJ keyword choices and identifiers.}}
+
+\section{Introduction}
+\label{sec:introduction}
+
+\paragraph{Reader orientation.}
+This paper should answer one question: under what documented physical and
+numerical conditions can \athenak evolve kinetic cosmic rays coupled to an MHD
+background with quantitatively verified accuracy, portability, and
+reproducibility?
+
+\TODO{Write the introduction around the unresolved method problem, not around
+the chronology of implementation.}
+\TODO{Add verified primary citations for MHD-PIC, cosmic-ray acceleration,
+gyro-resonant instabilities, delta-$f$ methods, expanding-box methods, AMR, and
+GPU-portable astrophysical codes.}
+\TODO{State the contribution relative to prior Athena/Athena++ MHD-PIC work and
+other independently mapped methods. Do not claim cross-code agreement until
+\qgate{Q-022}, \qgate{Q-030}, and \qgate{Q-040} close.}
+
+\paragraph{Proposed central claim.}
+\AUTHOR{Approve or revise: ``Within a precisely stated non-Hall, non-relativistic
+MHD applicability envelope, \athenak provides a performance-portable MHD-PIC
+implementation whose particle mechanics, coupling, mesh operations, and
+selected physical benchmarks can be evaluated through an auditable hierarchy of
+analytical, numerical, and campaign-level gates.''}
+\GATE{The final central claim must be narrowed to the closed claim IDs and
+reviewed evidence available at submission.}
+
+\paragraph{Dominant uncertainty.}
+The present dominant uncertainty is the transition from bounded local and
+selected GPU verification to complete long-horizon physical qualification,
+broad MPI/GPU portability, nonlinear saturation, Section~5.4 shock results, and
+production-scale performance.
+
+\section{Scope, Runtime Identity, and Claim Discipline}
+\label{sec:scope}
+
+The method must be interpreted through an explicit runtime identity. New
+paper-facing coupled runs use \runtime. Historical engineering and pre-VL2
+identities are not interchangeable with this candidate.
+
+\begin{table*}[htbp]
+\centering
+\caption{Claim-evidence ledger scaffold. ``Open'' means that the intended claim
+must not appear as a paper result. Replace placeholders only from immutable
+evidence and record the named reviewer disposition.}
+\label{tab:claim-evidence}
+\small
+\begin{tabular}{p{0.18\textwidth} p{0.23\textwidth} p{0.25\textwidth}
+                p{0.22\textwidth} p{0.06\textwidth}}
+\toprule
+Claim ID & Intended claim & Current admissible evidence & Required closure
+before result wording & Status \\
+\midrule
+\claimid{CLAIM-PAPER-GYRO-001} &
+Paper-faithful relativistic gyro motion &
+Bounded analytical convergence and selected registered GPU oracle &
+\qgate{Q-003}, \qgate{Q-025}, \qgate{Q-026}; insert final figure, uncertainty,
+artifact manifest, and review &
+Open \\
+\claimid{CLAIM-PAPER-BELL-LINEAR-001} &
+Bell phase and growth versus analytical dispersion in 1D/2D/3D &
+Paper-value preparation, estimator contract, initialization and restart smoke;
+existing growth proxy is not qualifying evidence &
+\qgate{Q-003}, \qgate{Q-004}, \qgate{Q-005}, \qgate{Q-023},
+\qgate{Q-025}, \qgate{Q-026} &
+Open \\
+\claimid{CLAIM-PROD-BELL-NONLINEAR-NOHALL-001} &
+Nonlinear Bell evolution and saturation in the tested non-Hall regime &
+No qualifying nonlinear result currently available &
+\qgate{Q-019}, \qgate{Q-023}, \qgate{Q-025}, \qgate{Q-026},
+\qgate{Q-028}; see explicit gate in Section~\ref{sec:bell} &
+Open \\
+\claimid{CLAIM-PAPER-OSCILLATION-001} &
+Gas plus electron/positron oscillation on uniform, SMR, and AMR grids &
+Bounded local mechanics carriers and short-horizon residual diagnostics &
+\qgate{Q-004}, \qgate{Q-006}, \qgate{Q-009}, \qgate{Q-025},
+\qgate{Q-026}; long-horizon and true-AMR qualification &
+Open \\
+\claimid{CLAIM-PAPER-CRSI-LINEAR-001} and
+\claimid{CLAIM-PAPER-CRPAI-LINEAR-001} &
+Polarization-resolved linear growth and spectra with physical delta-$f$ &
+Initialization, static-oracle preparation, and bounded CRSI mechanics replay &
+\qgate{Q-003}, \qgate{Q-004}, \qgate{Q-007}, \qgate{Q-023},
+\qgate{Q-025}, \qgate{Q-026}; theory comparison and long-horizon campaigns &
+Open \\
+\claimid{CLAIM-PAPER-CRPAI-DRIVEN-001} &
+Driven expanding/compressing-box CRPAI evolution &
+Bounded expanding-box mechanics, CPAW preparation, and restart checks &
+\qgate{Q-007}, \qgate{Q-008}, \qgate{Q-023}, \qgate{Q-025},
+\qgate{Q-026}; driven physical campaign &
+Open \\
+\claimid{CLAIM-PAPER-SHOCK-001} &
+Section~5.4 parallel-shock morphology, spectra, and AMR comparison &
+Preparation-only deck, bounded injection/provenance diagnostics, engineering
+pressure pilots, and a human-selected $p_0=1.0$ baseline &
+\qgate{Q-003}, \qgate{Q-004}, \qgate{Q-009}, \qgate{Q-011},
+\qgate{Q-016}, \qgate{Q-023}, \qgate{Q-025}, \qgate{Q-026},
+\qgate{Q-027}; see Section~\ref{sec:shock} &
+Open \\
+\claimid{CLAIM-RELEASE-PAPER-MHD-PIC-001} &
+Production-ready bounded paper-mode release &
+Individual bounded gates and selected registered slices only &
+All selected production-profile gates and terminal \qgate{Q-014} review &
+Open \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Applicability Envelope}
+\label{sec:applicability}
+
+The intended paper-mode envelope uses non-relativistic ideal MHD for the
+background gas and kinetic energetic particles. The paper-mode induction
+electric field excludes a CR Hall term. Hall-capable behavior belongs to a
+separately named extension and requires separate qualification.
+
+\begin{itemize}
+\item Included candidate: mass-normalized relativistic particle momentum,
+relativistic Boris rotation, TSC interpolation/deposition, ideal-MHD induction,
+and documented particle--gas feedback.
+\item Explicitly excluded from paper-mode claims: full electromagnetic PIC,
+relativistic MHD background fluid, thermal-pool injection, oblique-shock
+generality, and Hall-dominated Bell or shock-front inference.
+\item \TODO{Insert final supported boundary-condition, AMR, decomposition,
+restart, and toolchain matrix after all linked gates close.}
+\end{itemize}
+
+\section{Physical Model and Notation}
+\label{sec:model}
+
+This section must first state the continuum model, then identify the discrete
+choices that materially affect interpretation.
+
+\subsection{Energetic-Particle State and Equation of Motion}
+
+The paper-mode particle state stores mass-normalized momentum
+$\boldsymbol{w}\equiv\boldsymbol{p}/m$. The derived Lorentz factor, velocity,
+and kinetic energy per unit mass are
+\begin{align}
+\gamma &=
+\left(1+\frac{|\boldsymbol{w}|^2}{\mathbb{C}^2}\right)^{1/2},
+\label{eq:gamma}\\
+\boldsymbol{v} &= \frac{\boldsymbol{w}}{\gamma},
+\label{eq:velocity}\\
+\epsilon_{\rm kin} &= (\gamma-1)\mathbb{C}^2.
+\label{eq:kinetic-energy}
+\end{align}
+Here $\mathbb{C}$ is the configured artificial cosmic-ray light speed.
+\VERIFY{Confirm final notation, dimensions, normalization, and correspondence
+to code parameters and the governing reference before release.}
+
+The particle equations advanced in paper mode are
+\begin{align}
+\frac{d\boldsymbol{x}}{dt} &= \boldsymbol{v},
+\label{eq:particle-position}\\
+\frac{d\boldsymbol{w}}{dt} &=
+\frac{q}{mc}\left(c\boldsymbol{E}+\boldsymbol{v}\times\boldsymbol{B}\right),
+\label{eq:particle-momentum}\\
+c\boldsymbol{E} &= -\boldsymbol{u}\times\boldsymbol{B}.
+\label{eq:ideal-electric-field}
+\end{align}
+\TODO{Insert verified citations and explain the artificial-light-speed validity
+condition and timestep constraints.}
+\TODO{Add the exact Boris update equations only after a source-to-manuscript
+derivation audit.}
+
+\subsection{MHD Equations and Particle Backreaction}
+
+\TODO{Insert the exact MHD conservation equations, equation of state, and
+particle source terms used by \runtime. Define every source term and sign.}
+\TODO{Insert the verified cell-resolved discrete momentum and kinetic-energy
+exchange equations. Demonstrate how the particle change is applied with the
+opposite sign to the ideal-MHD gas update.}
+\VERIFY{Keep the exact-isothermal momentum-only feedback boundary separate from
+ideal-MHD momentum-and-energy feedback.}
+
+\subsection{Delta-$f$ Representation}
+
+For physical delta-$f$ operation, the implementation evolves a perturbation
+weight derived from the initial and evolving analytical background
+distributions. A notation placeholder is
+\begin{equation}
+\delta w =
+1-\frac{f_0(t,\boldsymbol{x},\boldsymbol{p})}
+        {f_0(0,\boldsymbol{x}_0,\boldsymbol{p}_0)}.
+\label{eq:deltaf-placeholder}
+\end{equation}
+\VERIFY{Replace Equation~\ref{eq:deltaf-placeholder} with the exact paper and
+implementation notation after confirming sampling weights, macro-particle
+weights, deposited moments, and restart semantics.}
+
+\subsection{Expanding and Compressing Coordinates}
+
+\TODO{Insert the verified expanding-box coordinate map, particle momentum
+source, MHD conserved-variable map, magnetic-flux representation, and limiting
+analytic solutions.}
+\VERIFY{Explain which quantities are comoving, which are physical views, and
+which source-package compositions fail closed.}
+
+\begin{table*}[htbp]
+\centering
+\caption{Notation and normalization audit scaffold. Every entry requires a
+verified definition, units, code parameter, and authoritative source before
+release.}
+\label{tab:notation}
+\small
+\begin{tabular}{p{0.10\textwidth} p{0.22\textwidth} p{0.23\textwidth}
+                p{0.25\textwidth} p{0.10\textwidth}}
+\toprule
+Symbol & Intended meaning & Normalization or units & Code/configuration binding
+& Audit status \\
+\midrule
+$\mathbb{C}$ & Artificial cosmic-ray light speed &
+\TODO{State units and scale-separation condition} &
+\texttt{particles/pic\_cr\_light\_speed} &
+Verify \\
+$\boldsymbol{w}$ & Mass-normalized particle momentum $\boldsymbol{p}/m$ &
+\TODO{State units} & Particle state slots under paper/extension identities &
+Verify \\
+$\boldsymbol{u}$ & MHD gas velocity & \TODO{State units} &
+\TODO{Bind source fields} & Verify \\
+$\boldsymbol{B}$ & Magnetic field & \TODO{State units and energy convention} &
+\TODO{Bind face/cell views} & Verify \\
+$q/(mc)$ & Configured charge-to-mass factor & AthenaK normalized units &
+\TODO{Bind species parameter} & Verify \\
+$w_{\rm macro}$ & Macro-particle weight & \TODO{State normalization} &
+\texttt{macro\_weight}/\texttt{IPWT} outputs & Verify \\
+$\delta w$ & Physical delta-$f$ perturbation weight &
+\TODO{State sign and deposition convention} &
+\texttt{deltaf\_weight}/\texttt{IPDFWT} outputs & Verify \\
+$a_i(t)$ & Directional box scale factor & \TODO{State law and units} &
+\TODO{Bind expansion parameters} & Verify \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Numerical Integration and Software Architecture}
+\label{sec:numerics}
+
+\subsection{Second-Order Coupled Stage Sequence}
+
+The intended coupled sequence is:
+\begin{enumerate}
+\item Deposit initial-position particle moments required by the gas predictor.
+\item Advance particle positions to the midpoint.
+\item Advance the MHD predictor and apply documented particle source terms.
+\item Interpolate midpoint gas velocity and magnetic field to particles.
+\item Form Equation~\ref{eq:ideal-electric-field} and advance momentum with the
+relativistic Boris update.
+\item Record particle momentum and kinetic-energy changes.
+\item Advance particle positions to the final state.
+\item Deposit recorded changes and apply the opposite gas update.
+\item Apply physical boundaries, migration, synchronization, and constrained
+transport in the documented task order.
+\end{enumerate}
+\TODO{Add an algorithm figure that maps these conceptual stages to the actual
+AthenaK task graph.}
+\VERIFY{Trace the final figure and prose against the implementation and
+task-stage tests; this list is a contract, not proof that every composition is
+qualified.}
+
+\subsection{Interpolation, Deposition, and Refinement Interfaces}
+
+\TODO{Describe TSC interpolation/deposition and define the receiver-resolution
+\texttt{paper\_smooth} refinement-interface target.}
+\GATE{Do not claim paper-faithful AMR deposition until the receiver-resolution
+TSC interface oracle and required AMR/MPI/HIP lifetime matrices close
+\qgate{Q-009}.}
+
+\subsection{Particle Provenance, Output, and Restart}
+
+\TODO{Describe persistent particle identifiers, species/source cohorts,
+macro-particle weights, birth times, physical delta-$f$ fields, typed PVTK
+output, and independently reconstructed spectra.}
+\TODO{Describe restart fingerprints, atomic publication, completion markers,
+and the exact tested recovery envelope.}
+\GATE{Separate bounded serial/two-rank evidence from broad MPI, AMR, HIP, and
+Frontier-filesystem qualification.}
+
+\subsection{Performance Portability}
+
+\TODO{Describe the Kokkos execution model, particle data layout, communication,
+sorting, stage timers, memory accounting, and particle-aware load balancing.}
+\GATE{Do not claim production scaling or memory efficiency until
+\qgate{Q-010}, \qgate{Q-017}, \qgate{Q-025}, \qgate{Q-027}, and the registered
+scaling campaign close with retained evidence.}
+
+\section{Verification and Qualification Design}
+\label{sec:verification-design}
+
+The verification hierarchy must distinguish narrow implementation invariants
+from physical validation, paper reproduction, and production qualification.
+
+\begin{enumerate}
+\item Analytical and manufactured tests isolate equations and discrete
+operators.
+\item Decomposition, restart, boundary, AMR, and portability tests determine
+whether those operators remain valid across execution configurations.
+\item Paper-reproduction campaigns compare specified observables with frozen
+parameters, deterministic analysis, preregistered tolerances, and archived raw
+outputs.
+\item Production claims additionally require nonlinear behavior, resilience,
+performance, usability, limitations, and named external review.
+\end{enumerate}
+
+\TODO{Insert the final evidence-class table and explain why a positive trend,
+stable output, or serial/MPI overlay is insufficient for physics validation.}
+\TODO{Describe seed policy, uncertainty intervals, exclusions, fit-window
+selection, independent recomputation, and discrepancy reporting.}
+
+\begin{table*}[htbp]
+\centering
+\caption{Simulation and analysis matrix scaffold. Fill this table only from
+frozen campaign registrations and immutable result manifests.}
+\label{tab:simulation-matrix}
+\small
+\begin{tabular}{p{0.16\textwidth} p{0.14\textwidth} p{0.16\textwidth}
+                p{0.19\textwidth} p{0.19\textwidth} p{0.08\textwidth}}
+\toprule
+Experiment & Runtime mode & Parameter matrix & Primary observable/oracle &
+Required sensitivity and portability & Status \\
+\midrule
+Relativistic gyro & \TODO{Bind} & \TODO{Bind} &
+Orbit phase, energy, velocity error & Timestep, $\mathbb{C}$, CPU/GPU &
+Open \\
+Paper coupling & \runtime & \TODO{Bind} &
+Momentum/energy exchange and induction isolation & Decomposition, GPU, restart &
+Open \\
+Bell linear & \runtime & \TODO{Bind 1D/2D/3D matrix} &
+Signed phase and growth versus dispersion & Resolution, timestep, PPC, seed,
+MPI/GPU & Open \\
+Bell nonlinear & \runtime & \TODO{Bind Q-019 campaign} &
+Amplification, spectra, morphology, energy partition, saturation &
+Resolution, timestep, PPC, box, dimension, seed, independent comparison &
+Blocked \\
+Multispecies oscillation & \runtime & \TODO{Bind} &
+Frequency and residuals on uniform/SMR/AMR & Long horizon, true AMR, MPI/GPU &
+Open \\
+CRSI/CRPAI linear & \runtime & \TODO{Bind} &
+Polarization spectra and growth versus theory & Delta-$f$ envelope, resolution,
+PPC, seed, MPI/GPU & Open \\
+Driven CRPAI & \runtime & \TODO{Bind} &
+Anisotropy, spectra, distribution evolution & Drive rate, restart, MPI/GPU &
+Open \\
+Section~5.4 shock & \runtime & \TODO{Bind qualifying registration} &
+Morphology, field amplification, downstream spectra, AMR comparison &
+Paired seeds, coarse/AMR/fine, restart, MPI/GPU, load balance & Blocked \\
+Scaling & \TODO{Bind profiles} & \TODO{Bind} &
+Stage time, throughput, memory, communication, load balance &
+Node/rank/GPU/PPC/resolution matrix & Open \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Verification Results}
+\label{sec:verification-results}
+
+\subsection{Relativistic Particle Mechanics}
+
+\TODO{Insert the final gyro-convergence figure and quantitative table only after
+\claimid{CLAIM-PAPER-GYRO-001} receives the required disposition.}
+\TODO{Report the tested $\mathbb{C}$ values, timestep sequence, observed order,
+energy/phase metrics, CPU/GPU scope, and uncertainty.}
+
+\subsection{Coupled Momentum and Energy Exchange}
+
+\TODO{Insert the final conservation and coefficient-invariance results.}
+\VERIFY{Distinguish the ideal-MHD energy-feedback path from exact-isothermal
+momentum-only carriers.}
+
+\subsection{Mesh Hierarchy, Decomposition, and Restart}
+
+\TODO{Report uniform, SMR, and true-AMR results with separately identified
+physical convergence, decomposition consistency, interface behavior, and
+restart continuity.}
+\GATE{Do not promote short-horizon carriers or engineering proxies into the
+Section~5.3 reproduction claim.}
+
+\subsection{Expanding-Box Analytical Verification}
+
+\TODO{Insert complete CPAW amplitude/phase histories, resolution convergence,
+expanding-box gyro histories, and the final solver/dimensionality matrix.}
+\VERIFY{Current bounded preparation trends are not independent physical-model
+validation or production qualification.}
+
+\section{Coupled Physical Benchmarks}
+\label{sec:physical-benchmarks}
+
+\subsection{Bell Instability}
+\label{sec:bell}
+
+\paragraph{Linear gate.}
+\TODO{Insert the paper-faithful 1D/2D/3D phase and growth comparison only after
+\claimid{CLAIM-PAPER-BELL-LINEAR-001} closes. Include signed phase, analytical
+dispersion, convergence, exact fit windows, uncertainty, MPI/GPU scope, and raw
+artifact provenance.}
+
+\paragraph{Explicit nonlinear-saturation gate.}
+\GATE{\claimid{CLAIM-PROD-BELL-NONLINEAR-NOHALL-001} is open. No nonlinear Bell
+saturation result may be written or plotted as a production result until
+\qgate{Q-019}, \qgate{Q-023}, \qgate{Q-025}, \qgate{Q-026}, and \qgate{Q-028}
+close.}
+\paragraph{Current admissible statement.}
+A source-local high-rigidity, fixed-current-like foundation deck and bounded
+analyzer define diagnostics for magnetic amplification, scale migration, gas
+acceleration, and the amplified-field Alfv\'en speed. They do not measure a
+locked current, establish self-consistent CR-deflection or anisotropic-pressure
+saturation, authorize execution, or support a production result.
+\TODO{Run and analyze the preregistered nonlinear sensitivity matrix covering
+particle count, resolution, timestep, box size, dimensionality, and seed.}
+\TODO{Report magnetic amplification, mode spectra, filament/cavity morphology,
+energy partition, saturation amplitude, saturation time, and independent
+comparison with an explicit discrepancy ledger.}
+\TODO{State that any accepted result is non-Hall and must not be transferred to
+Hall-dominated shock-front conditions.}
+
+\subsection{Multispecies Oscillation}
+
+\TODO{Insert long-horizon uniform, SMR, and true-AMR frequency and residual
+comparisons. Explain the dominant mesh-transition uncertainty.}
+
+\subsection{CR Streaming and Pressure-Anisotropy Instabilities}
+
+\TODO{Insert polarization-resolved spectra and growth rates against verified
+theory only after the linear CRSI and CRPAI claims close.}
+\TODO{Separate linear reproduction, nonlinear saturation, driven evolution, and
+physical-damping transport calibration into distinct claims and subsections.}
+
+\section{Section 5.4 Parallel-Shock Demonstration}
+\label{sec:shock}
+
+\paragraph{Current admissible statement.}
+A human-only pressure-selection receipt records
+\texttt{problem/ps\_p0=1.0} as the provenance-first baseline. The short pressure
+pilots are engineering calibration only. They do not establish pressure
+independence, a physics-preferred Bell/DSA baseline, a qualifying launch, or a
+Section~5.4 result. A staged preproduction resource-scaling design exists, but
+its strong-scaling, reduced-transverse, and held-out validation measurements
+remain open.
+
+\paragraph{Explicit result gate.}
+\GATE{\claimid{CLAIM-PAPER-SHOCK-001} remains open. Do not insert shock
+morphology, magnetic amplification, downstream spectra, acceleration slope,
+AMR-agreement, or load-balancing conclusions until \qgate{Q-003},
+\qgate{Q-004}, \qgate{Q-009}, \qgate{Q-011}, \qgate{Q-016}, \qgate{Q-023},
+\qgate{Q-025}, \qgate{Q-026}, and \qgate{Q-027} close and a named reviewer
+accepts the evidence.}
+
+\TODO{Bind the final campaign registration, selected pressure receipt, exact
+source/executable manifests, paired seeds, and coarse/AMR/fine configurations.}
+\TODO{Insert shock morphology at the preregistered times, clearly marking the
+ideal injection surface and separately detected shock front.}
+\TODO{Insert upstream magnetic amplification and downstream particle spectra,
+including the preregistered fixed bins, fit window, uncertainty, exclusions,
+and overflow accounting.}
+\TODO{Insert paired-seed AMR-versus-fine residuals and state what agreement does
+and does not establish.}
+\TODO{Report restart, MPI/GPU, particle provenance, load-balance, runtime, and
+memory evidence for the same qualifying campaign.}
+\TODO{State the simplified injection prescription and the exclusions of
+thermal-pool injection and oblique-shock generality.}
+
+\section{Performance and Scalability}
+\label{sec:performance}
+
+\TODO{Insert registered Frontier timing, throughput, memory, communication,
+sorting, and load-balance measurements.}
+\TODO{Report exact hardware, software environment, node/rank/GPU mapping,
+problem sizes, particles per cell, repeated measurements, uncertainty, and
+failed or excluded runs.}
+\GATE{Selected one-rank GPU or metadata slices do not establish production
+scaling.}
+
+\section{Discussion: Applicability, Failure Modes, and Limitations}
+\label{sec:discussion}
+
+\TODO{Synthesize what is robust, what depends on stated assumptions, and what
+remains unqualified. Do not repeat the results section.}
+\TODO{Address the strongest objection: bounded local and selected GPU checks do
+not by themselves establish long-horizon physical fidelity or production
+operation.}
+
+\begin{itemize}
+\item The paper-mode formulation excludes CR Hall induction; Hall behavior is a
+separate extension.
+\item MHD-PIC does not resolve thermal-pool injection physics in the Section~5.4
+shock setup.
+\item Physical damping and calibrated transport coefficients require separately
+qualified extensions.
+\item AMR-interface, broad MPI/HIP, resilience, performance, archive, and
+external-review boundaries must remain explicit.
+\item \TODO{Update this list from the final closed and open claim manifests.}
+\end{itemize}
+
+\section{Reproducibility and Evidence Provenance}
+\label{sec:reproducibility}
+
+\TODO{Provide the final code commit, source tree, submodule state, executable
+digest, runtime profiles, input decks, campaign registrations, artifact roots,
+analysis revisions, figure-generation commands, claim manifests, reviewer
+dispositions, and data/code availability statement.}
+\TODO{State the retention limitation and final archive disposition.}
+\GATE{A result is not a manuscript result until its raw output, deterministic
+analysis, figure/table reconstruction, scope, and reviewer disposition are
+traceable.}
+
+\section{Conclusions}
+\label{sec:conclusions}
+
+\TODO{Write the conclusion only after the central claim and dominant limitation
+are fixed. Leave the reader with the verified method result, its applicability
+envelope, and the next decisive test.}
+
+\appendix
+
+\section{Manuscript Evidence Inventory}
+\label{app:evidence-inventory}
+
+\begin{table*}[htbp]
+\centering
+\caption{Authoritative source inventory for drafting. These files constrain
+manuscript claims but are not automatically reader-facing evidence.}
+\label{tab:evidence-inventory}
+\small
+\begin{tabular}{p{0.38\textwidth} p{0.30\textwidth} p{0.20\textwidth}}
+\toprule
+Source & Role & Manuscript-use boundary \\
+\midrule
+\path{tst/publication/PIC_PRODUCTION_READINESS_PLAN.md} &
+Controlling claims, gates, and execution/evidence boundaries &
+Authoritative internal interpretation layer \\
+\path{tst/publication/readiness/claims_registry.json} &
+Stable claim IDs and dispositions &
+No open claim may be written as a result \\
+\path{docs/source/engineering/pic_mhd_model_contract.md} &
+Runtime identities, equations, stage ordering, and extension boundaries &
+Verify every equation against source before release \\
+\path{docs/source/engineering/pic_amr_lifetime_and_interface_policy.md} &
+AMR lifetime and refinement-interface evidence boundary &
+Do not imply full AMR qualification \\
+\path{docs/source/engineering/pic_q016_particle_provenance_spectra.md} &
+Particle provenance and bounded spectrum semantics &
+Do not imply a qualifying shock campaign \\
+\path{docs/source/engineering/pic_supported_toolchains.md} &
+Declared build/toolchain scope &
+Build success is not scientific qualification \\
+\path{STATUS_UPDATE.md} &
+Bounded local-readiness results and limitations &
+Historical snapshot; reconcile with current plan \\
+\path{/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/} &
+Published pressure-pilot and human pressure-selection records &
+Engineering calibration and selection only \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Equation and Figure Release Checklist}
+\label{app:release-checklist}
+
+\begin{enumerate}
+\item Verify every equation's derivation or authoritative source, notation,
+dimensions, sign, normalization, limiting behavior, and code binding.
+\item Verify every quantitative value from immutable artifacts and deterministic
+analysis.
+\item For every figure, record the raw artifact root, generating script,
+analysis revision, selections, exclusions, units, normalization, uncertainty,
+and claim ID.
+\item For every table, verify every value, label, unit, footnote, scope, and
+review disposition.
+\item Ensure captions state what is shown, what is compared, what conclusion is
+supported, and what limitation remains.
+\item Remove no visible TODO or gate until its acceptance condition is met.
+\item Require final independent scientific, provenance, consistency, and render
+review before release.
+\end{enumerate}
+
+\section{Planned Figure and Table Bundle}
+\label{app:planned-bundle}
+
+\begin{enumerate}
+\item Method and task-order schematic.
+\item Runtime-mode and applicability-envelope table.
+\item Relativistic gyro convergence and invariant errors.
+\item Coupled momentum/energy conservation and induction isolation.
+\item TSC deposition and refinement-interface validation.
+\item Uniform/SMR/AMR multispecies oscillation comparison.
+\item Expanding-box CPAW and gyro analytical verification.
+\item Bell linear dispersion comparison.
+\item \GATE{Bell nonlinear saturation figure only after the Section~\ref{sec:bell}
+gate closes.}
+\item CRSI/CRPAI polarization and theory comparison.
+\item \GATE{Section~5.4 shock morphology, profiles, spectra, and AMR comparison
+only after the Section~\ref{sec:shock} gate closes.}
+\item Frontier performance, scaling, memory, and load-balance results.
+\item Final claim-evidence and reproducibility tables.
+\end{enumerate}
+
+\TODO{Add a verified bibliography only after every citation is checked against
+the cited source.}
+
+\end{document}
