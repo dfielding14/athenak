@@ -41,7 +41,7 @@ Snapshot date: 2026-06-06. Recheck before every substantive manuscript revision.
 | Frontier accounting | Latest reconciled cumulative consumed node-hours: `1.3019444444444446`; project cap: `10000` | Budget headroom exists, but no campaign-specific node-hour sizing or authorization follows from it |
 | Active science freeze | An older clean candidate is authorized by active policy | It does not bind the current timing/retention source candidate |
 | Target manuscript scope | Core implementation, corrected Bell linear/nonlinear, Section 5.4 shock, reproducibility, and measured performance | Standalone oscillation, CRSI, CRPAI, driven-box, physical-damping, and calibrated-transport results are outside this target paper; their claims remain open |
-| Bell current normalization | Exact closure: `deposited J_CR/c = PPC * deposit_qscale * (q/(mc)) * v_CR / V_root_cell = 2 B_g k_0`; historical preparation targeted `2 B_g C k_0` and held `PPC * deposit_qscale` fixed without the root-cell-volume factor | Historical volume-blind/artificial-`C` Bell evidence changes current with dimension/resolution and is invalid; corrected dimension/resolution/decomposition oracle and complete reruns are required |
+| Bell current normalization | Exact closure: `deposited J_CR/c = PPC * deposit_qscale * species_charge * v_CR / V_root_cell = 2 B_g k_0`; replacing `species_charge` by `q/(mc)` is valid only for the present unit-species-mass decks. Historical preparation targeted `2 B_g C k_0` and held `PPC * deposit_qscale` fixed without the root-cell-volume factor | Historical volume-blind/artificial-`C` Bell evidence changes current with dimension/resolution and is invalid; corrected cycle-one dimension/resolution/decomposition/artificial-`C` oracle and complete reruns are required |
 | Section 5.4 pressure selection | Human-only receipt selected `ps_p0_1p00`, `problem_ps_p0=1`; receipt SHA-256 `e5c1492cfc67d5cfad0110e7d772bf75f9d6d2e1fd90b0d5d8dd3338965905cc` | May state only that `p0=1.0` is the provenance-first baseline |
 | Q011 future campaign policy | Three grid variants, eight paired seeds, 24 expected baseline attempts; nominal-slot/observed-time rules and all-attempt retention are frozen in a policy-only successor | Planning evidence only; no execution authorization or result |
 | Q011 resource-scaling plan | Excluded preproduction pilots and a three-seed paired core with resource-gated complete-triad expansion are designed under a 500-node-hour pilot ceiling | Does not change the historical eight-seed preregistration; measured sizing and authorization remain open |
@@ -64,8 +64,10 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
 ### Current Admissible Evidence
 
 - Source and deposited-current audit confirms the exact AthenaK closure:
-  `deposited J_CR/c = PPC * deposit_qscale * (q/(mc)) * v_CR / V_root_cell`,
-  where `V_root_cell` is determined by global root-mesh extents and counts.
+  `deposited J_CR/c = PPC * deposit_qscale * species_charge * v_CR /
+  V_root_cell`, where `V_root_cell` is determined by global root-mesh extents
+  and counts. The shorthand `species_charge=q/(mc)` applies only when the
+  configured species mass is one.
 - The historical Bell preparation targeted `J_CR/c = 2 B_g C k_0` rather than
   `2 B_g k_0` and held `PPC * deposit_qscale` fixed without the
   root-cell-volume factor. Artificial-`C` multiplication changes the physical
@@ -96,7 +98,7 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
 
 | Required item | Acceptance condition | Current status | Next action |
 |---|---|---|---|
-| Corrected Bell current normalization | Source, deck, analyzer, and direct deposited-current oracle bind `PPC * deposit_qscale * (q/(mc)) * v_CR / V_root_cell = 2 B_g k_0`; reject artificial-`C` multiplication; and demonstrate invariant physical current across the registered dimension, root-resolution, meshblock/rank-decomposition, and artificial-`C` matrix | Historical Q023 preparation is invalid; corrected qualifying evidence absent | Supersede every affected Bell source/deck/analyzer/design binding and archive an invalidated-artifact inventory |
+| Corrected Bell current normalization | Source, deck, analyzer, and direct cycle-one deposited-current oracle bind `PPC * deposit_qscale * species_charge * v_CR / V_root_cell = 2 B_g k_0`; reject artificial-`C` multiplication; and demonstrate invariant physical current across the registered dimension, root-resolution, meshblock/rank-decomposition, and artificial-`C` matrix | Historical Q023 preparation and cycle-zero proxy evidence are invalid; corrected qualifying evidence absent | Supersede every affected Bell source/deck/analyzer/design binding and archive an invalidated-artifact inventory |
 | Q003/Q004/Q005 prerequisites | Required mechanics, coupling, and corrected paper-faithful linear Bell gates close | Open; historical Bell linear evidence invalidated | Complete the corrected qualifying linear Bell convergence, MPI/GPU, independent-recompute, and review matrix |
 | Exact physical regime | Corrected fiducial normalization, parameters, dimensional scope, exclusions, and artifact root frozen before qualifying output | Current design inherits invalid normalization | Issue and review a corrected Q019 successor before registration |
 | Qualifying decks | Exact corrected deck matrix and checksums frozen | Historical source-local foundation invalid for qualification; corrected matrix absent | Implement and review a separately named corrected Q019 source and exact pilot matrix |

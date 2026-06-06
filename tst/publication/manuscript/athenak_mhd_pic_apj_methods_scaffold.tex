@@ -253,14 +253,16 @@ For a uniform streaming carrier, the exact AthenaK deposited-current closure is
 \begin{equation}
 \left(\frac{J_{\rm CR}}{c}\right)_{\rm dep}
 =
-\frac{{\rm PPC}\,q_{\rm scale}\,[q/(mc)]\,v_{\rm CR}}
+\frac{{\rm PPC}\,q_{\rm scale}\,q_s\,v_{\rm CR}}
      {V_{\rm root\,cell}}
 =2B_gk_0,
 \label{eq:bell-deposited-current}
 \end{equation}
 where ${\rm PPC}$ is particles per root cell, $q_{\rm scale}$ is
-\texttt{deposit\_qscale}, and $V_{\rm root\,cell}$ is computed from the global
-root-mesh extents and counts. A fixed ${\rm PPC}\,q_{\rm scale}$ therefore
+\texttt{deposit\_qscale}, $q_s$ is the configured species charge, and
+$V_{\rm root\,cell}$ is computed from the global root-mesh extents and counts.
+The replacement $q_s=q/(mc)$ is valid only for the present unit-species-mass
+decks. A fixed ${\rm PPC}\,q_{\rm scale}$ therefore
 changes the physical current when dimension or root resolution changes unless
 the volume dependence is included. Changing only meshblock/rank decomposition
 must leave Equation~\ref{eq:bell-deposited-current} invariant.
@@ -269,8 +271,8 @@ The historical Bell preparation omitted $V_{\rm root\,cell}$ from its closure
 and targeted $2B_g\mathbb{C}k_0$ rather than $2B_gk_0$. Both errors change the
 physical Bell problem and invalidate every inherited historical Bell artifact
 for qualification.
-\GATE{No corrected Bell result may be inserted until a direct deposited-current
-oracle demonstrates Equation~\ref{eq:bell-deposited-current} across the
+\GATE{No corrected Bell result may be inserted until a direct cycle-one
+deposited-current oracle demonstrates Equation~\ref{eq:bell-deposited-current} across the
 registered dimension, root-resolution, meshblock/rank-decomposition, and
 artificial-$\mathbb{C}$ matrix.}
 
@@ -310,6 +312,9 @@ $\boldsymbol{B}$ & Magnetic field & \TODO{State units and energy convention} &
 \TODO{Bind face/cell views} & Verify \\
 $q/(mc)$ & Configured charge-to-mass factor & AthenaK normalized units &
 \TODO{Bind species parameter} & Verify \\
+$q_s$ & Configured species charge used by macro-charge deposition &
+\TODO{State units and relation to species mass and $q/(mc)$} &
+\texttt{species*/charge} & Verify \\
 $V_{\rm root\,cell}$ & Global root-cell volume &
 Global root-mesh extents divided by global root-mesh counts &
 \TODO{Bind mesh geometry source} & Verify \\

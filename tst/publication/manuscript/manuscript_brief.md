@@ -107,9 +107,10 @@ verified.
 `CLAIM-PROD-BELL-NONLINEAR-NOHALL-001` is an explicit central-result gate.
 
 The exact AthenaK deposited-current closure is
-`deposited J_CR/c = PPC * deposit_qscale * (q/(mc)) * v_CR / V_root_cell
-= 2 B_g k_0`, where `V_root_cell` is determined from the global root-mesh
-extents and counts. The historical Bell preparation instead targeted
+`deposited J_CR/c = PPC * deposit_qscale * species_charge * v_CR /
+V_root_cell = 2 B_g k_0`, where `V_root_cell` is determined from the global
+root-mesh extents and counts. Replacing `species_charge` by `q/(mc)` is valid
+only for the present unit-species-mass decks. The historical Bell preparation instead targeted
 `2 B_g C k_0` and treated fixed `PPC * deposit_qscale` as sufficient without
 the root-cell-volume factor. Multiplication by artificial light speed `C`
 changes the physical Bell mode, while fixed `PPC * deposit_qscale` makes the
@@ -124,9 +125,9 @@ Until Q-019, Q-023, Q-025, Q-026, and Q-028 close with a named reviewer:
 
 - no historical volume-blind or artificial-`C`-multiplied Bell artifact may
   support a linear or nonlinear result;
-- no corrected nonlinear Bell campaign may qualify before the deposited-current
-  dimension/resolution/decomposition oracle and corrected linear predecessor
-  close;
+- no corrected nonlinear Bell campaign may qualify before the cycle-one
+  deposited-current dimension/resolution/decomposition/artificial-`C` oracle
+  and corrected linear predecessor close;
 - no nonlinear Bell saturation result may appear in the abstract, conclusions,
   results narrative, or reader-facing figure bundle;
 - no claim may transfer a non-Hall result to Hall-dominated shock-front

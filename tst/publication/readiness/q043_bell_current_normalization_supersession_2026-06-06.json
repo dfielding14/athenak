@@ -1,0 +1,401 @@
+{
+  "record_type": "bell_current_normalization_supersession",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "campaign_id": "Q043-BELL-CURRENT-NORMALIZATION-SUPERSESSION",
+  "status": "legacy_q023_q019_q029_bell_current_relation_invalidated",
+  "qualification_effect": "source_local_invalidation_only_no_execution_authorization_no_policy_mutation_no_claim_closure",
+  "scope": "Additive source-local readiness record preserving the historical Q-023, Q-019, and Q-029 Bell artifacts while prohibiting their physical execution or qualification under the legacy current relation. This record does not edit historical artifacts, authorize a launch, mutate the active execution policy, or implement the required corrected successor.",
+  "authority": {
+    "physical_execution_authorized": false,
+    "scientific_qualification_authorized": false,
+    "publication_claim_authorized": false,
+    "scheduler_submission_performed": false,
+    "simulation_executed": false,
+    "active_policy_modified": false,
+    "historical_artifacts_modified": false
+  },
+  "normalization_supersession": {
+    "legacy_relation": "PPC*deposit_qscale*species_charge*v=2*B0*C*k0",
+    "legacy_relation_status": "invalid_for_physical_bell_execution_or_qualification",
+    "exact_volume_aware_closure": "PPC*deposit_qscale*species_charge*v/V_root_cell=2*B0*k0",
+    "unit_species_mass_shorthand": "species_charge=species_mass*(q/mc); only_for_species_mass_1_may_species_charge_be_replaced_by_q_over_mc",
+    "root_cell_volume_definition": "V_root_cell=product_d((xmax_d-xmin_d)/nx_d)",
+    "deposited_moment_semantics": "prtcl_j_is_j_CR_over_c",
+    "physical_current_mapping": "external_normalization_required_artificial_CR_light_speed_is_not_a_source_level_conversion_factor",
+    "legacy_runtime_overcurrent_factor": "C/V_root_cell",
+    "effective_bell_scale_relation": "k0_effective/k0_configured=C/V_root_cell",
+    "dependencies": {
+      "PPC": "number_of_macro_particles_per_root_grid_cell",
+      "deposit_qscale": "extensive_root_grid_macro_charge_and_macro_mass_scale",
+      "species_charge": "configured_species_charge_used_directly_in_macro_charge_deposition",
+      "species_mass": "configured_species_mass; species_charge_divided_by_species_mass_is_q_over_mc_in_paper_mode",
+      "q_over_mc": "unit_species_mass_shorthand_only_unless_species_mass_is_included_explicitly",
+      "v": "derived_physical_particle_velocity",
+      "V_root_cell": "root_grid_cell_volume_including_all_mesh_axes",
+      "B0": "guide_field_magnitude",
+      "k0": "intended_fastest_mode_wavenumber",
+      "C": "artificial_CR_light_speed_not_present_in_the_deposited_j_CR_over_c_target"
+    },
+    "independent_defects": [
+      {
+        "id": "extra_artificial_light_speed",
+        "legacy_effect": "binds_the_deposited_j_CR_over_c_moment_to_physical_j_CR"
+      },
+      {
+        "id": "missing_root_cell_volume",
+        "legacy_effect": "treats_extensive_macro_charge_as_a_density_and_makes_current_dimension_and_resolution_dependent"
+      }
+    ]
+  },
+  "source_local_execution_and_qualification_prohibition": {
+    "applies_to": [
+      "Q023-PAPER-BELL-LINEAR",
+      "Q023-PROD-BELL-NONLINEAR",
+      "Q019-HR-FIXED-CURRENT-LIKE-NOHALL",
+      "Q029-HALL-BELL-LINEAR"
+    ],
+    "legacy_relation_physical_execution": "prohibited",
+    "legacy_relation_scientific_qualification": "prohibited",
+    "legacy_relation_publication_evidence": "prohibited",
+    "prohibited_actions": [
+      "launch_or_continue_a_physical_Q023_Q019_or_Q029_Bell_run_using_the_legacy_relation",
+      "promote_legacy_Q023_Q019_or_Q029_Bell_outputs_as_physical_or_qualifying_evidence",
+      "interpret_configured_k0_as_the_actual_Bell_fastest_mode_without_the_output_level_oracle",
+      "compare_dimensions_resolutions_or_PPC_rows_as_the_same_physical_current_when_deposit_qscale_omits_V_root_cell",
+      "silently_relabel_or_overwrite_the_legacy_generators_decks_analyzers_or_readiness_records_as_corrected"
+    ],
+    "permitted_legacy_use": [
+      "read_only_historical_audit",
+      "chronology_only_artifact_retention",
+      "nonphysical_source_local_generator_restart_or_additive_CT_source_mechanics_checks_explicitly_labeled_nonqualifying",
+      "development_and_unit_testing_of_a_uniquely_named_corrected_successor_without_simulation_launch"
+    ],
+    "release_condition": "all_required_corrected_successor_and_output_level_deposited_current_oracle_requirements_must_close_before_any_physical_execution_or_qualification"
+  },
+  "campaign_consequences": {
+    "Q023": {
+      "physical_status": "linear_and_nonlinear_physical_execution_and_qualification_prohibited_under_legacy_relation",
+      "retained_scope": "historical_eigenmode_geometry_restart_and_cycle_zero_mechanics_only",
+      "dependency_consequence": "the_seeded_k0_is_not_the_actual_fastest_mode_and_dimension_resolution_PPC_comparisons_do_not_share_one_physical_current"
+    },
+    "Q019": {
+      "physical_status": "high_rigidity_nonlinear_campaign_execution_and_qualification_prohibited",
+      "retained_scope": "historical_design_chronology_only",
+      "dependency_consequence": "the_inherited_PPC_times_deposit_qscale_equals_2e9_contract_and_all_dependent_horizons_windows_mechanism_gates_and_resource_estimates_require_rebase"
+    },
+    "Q029": {
+      "physical_status": "physical_Hall_Bell_execution_and_qualification_prohibited_under_legacy_relation",
+      "retained_scope": "synthetic_additive_CT_source_and_restart_mechanics_only",
+      "dependency_consequence": "the_physical_Hall_parameter_and_Bell_current_mapping_require_rederivation_from_the_corrected_deposited_j_CR_over_c"
+    }
+  },
+  "interim_cycle_zero_oracle_consequence": {
+    "campaign_id": "Q023-BELL-JOVERC-DEPOSITED-CURRENT-ORACLE",
+    "status": "preserved_non_authorizing_chronology_invalid_as_raw_deposited_current_evidence",
+    "reason": "the_decks_stop_at_cycle_zero_and_initial_output_precedes_particle_moment_deposition",
+    "permitted_use": "deck_arithmetic_and_analyzer_development_only",
+    "prohibited_use": "runtime_deposited_current_oracle_or_scientific_qualification",
+    "artifact_bindings": {
+      "inputs/tests/q023_bell_joverc_deposited_current_oracle/deck_manifest.json": "cd5308392142c8c4a016005bfe71a10c678424bfd2e83ec9286312345e637066",
+      "tst/publication/q023_bell_joverc_deposited_current_oracle.py": "6090f52be8846355f48378086babdaadae3d802424cd64ea5018db49f735a3ee",
+      "tst/publication/readiness/q023_bell_joverc_deposited_current_oracle_source_local_2026-06-06.json": "7b2863f1a22b13cf854820b3bd266ec2d3464447bfe88ac225d5aff479c239a2",
+      "tst/publication/test_q023_bell_joverc_deposited_current_oracle.py": "fb6f5cddff72700e18ff0b673fad6bd318726b5a63839ff2323a8e273f3c9f77"
+    }
+  },
+  "required_corrected_successor": {
+    "implementation_status": "not_implemented_by_this_readiness_task",
+    "campaign_id": "Q043-BELL-CURRENT-VOLUME-AWARE",
+    "generator_name": "q043_bell_current_volume_aware",
+    "readiness_record_prefix": "q043_bell_current_volume_aware_successor",
+    "must_be_uniquely_named": true,
+    "must_not_silently_modify_or_relabel_legacy_artifacts": true,
+    "legacy_generator_names_forbidden_for_successor": [
+      "q023_paper_bell_linear",
+      "q029_hall_bell_linear"
+    ],
+    "required_source_contracts": [
+      "bind_the_exact_volume_aware_closure",
+      "compute_V_root_cell_from_the_runtime_root_mesh_geometry",
+      "preserve_species_charge_and_species_mass_and_bind_q_over_mc_as_their_ratio",
+      "treat_deposited_prtcl_j_as_j_CR_over_c",
+      "scale_deposit_qscale_with_root_cell_volume_and_inverse_PPC_for_a_fixed_physical_current",
+      "reject_dimension_resolution_PPC_or_mesh_changes_that_drift_the_intended_physical_current"
+    ],
+    "required_requalification_order": [
+      "output_level_deposited_current_oracle",
+      "corrected_linear_Bell_dispersion_predecessor",
+      "corrected_high_rigidity_nonlinear_Bell_campaign",
+      "separately_rederived_physical_Hall_Bell_successor",
+      "separately_named_finite_rigidity_CR_deflection_branch"
+    ]
+  },
+  "required_output_level_deposited_current_oracle": {
+    "oracle_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+    "status": "required_not_implemented",
+    "source_of_truth": "raw_output_level_deposited_current_not_deck_arithmetic_or_generator_preflight",
+    "required_observation_cycle": 1,
+    "cycle_zero_evidence_status": "prohibited_initial_output_precedes_particle_moment_deposition",
+    "required_outputs": [
+      "prtcl_rho",
+      "prtcl_jx",
+      "prtcl_jy",
+      "prtcl_jz"
+    ],
+    "output_semantics": "deposited_j_CR_over_c",
+    "measurement": "cell_volume_weighted_volume_average_of_raw_prtcl_j_vector",
+    "expected_vector": "volume_average(prtcl_j)=2*B0*k0*b_hat_stream",
+    "parallel_closure": "dot(volume_average(prtcl_j),b_hat_stream)=2*B0*k0",
+    "transverse_closure": "norm(volume_average(prtcl_j)-2*B0*k0*b_hat_stream)=0_within_a_preregistered_numerical_tolerance",
+    "required_matrix": {
+      "geometries": [
+        "transverse_invariant_thin_2d3v_1d_carrier",
+        "native_2d3v",
+        "native_3d"
+      ],
+      "minimum_resolution_values_per_geometry": 2,
+      "minimum_PPC_values_per_geometry": 2,
+      "decompositions": [
+        "serial",
+        "MPI"
+      ],
+      "artificial_C_over_v_CR": [
+        100,
+        1000,
+        10000
+      ],
+      "required_invariance": "same_measured_physical_deposited_current_for_all_rows"
+    },
+    "must_fail_if": [
+      "the_oracle_uses_only_deck_arithmetic_or_a_generator_guard",
+      "the_oracle_uses_cycle_zero_output_before_particle_moment_deposition",
+      "the_measured_target_contains_C",
+      "V_root_cell_is_absent_from_the_source_closure",
+      "any_required_current_component_output_is_absent",
+      "the_measured_current_changes_with_dimension_resolution_PPC_or_decomposition_beyond_the_preregistered_tolerance"
+    ],
+    "qualification_effect": "none_until_executed_from_a_corrected_successor_and_independently_recomputed"
+  },
+  "affected_artifacts": {
+    "Q023": {
+      "status": "historical_artifacts_preserved_physical_Bell_use_invalidated",
+      "artifacts": [
+        {
+          "path": "src/pgen/tests/q023_paper_bell_linear.cpp",
+          "sha256": "66a1bb952ca8b9d91d17896c1ebb94b18fa276be24767a99f635466cbe8638eb"
+        },
+        {
+          "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate.athinput",
+          "sha256": "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5"
+        },
+        {
+          "path": "inputs/tests/pic_q023_paper_bell_linear_1d_candidate_vl2_tsc.athinput",
+          "sha256": "b77689de8e683d918cbfda2d13adac77ca7aa85b7f5cb7f998fb1dfc02ce1cba"
+        },
+        {
+          "path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate.athinput",
+          "sha256": "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c"
+        },
+        {
+          "path": "inputs/tests/pic_q023_paper_bell_linear_2d_candidate_vl2_tsc.athinput",
+          "sha256": "1877445adcecd24dbc91aeda80e5f11a4529fd4ab68049ef000e7cdda79b3524"
+        },
+        {
+          "path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate.athinput",
+          "sha256": "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103"
+        },
+        {
+          "path": "inputs/tests/pic_q023_paper_bell_linear_3d_candidate_vl2_tsc.athinput",
+          "sha256": "e30e44d1566e4acaf1201c46db8cf37537101c79c2d325a48dbe4ae9288556ad"
+        },
+        {
+          "path": "inputs/tests/pic_q023_prod_bell_nonlinear_foundation_vl2_tsc.athinput",
+          "sha256": "8715918dd0aef26aa14b44f5ee8a294434f0ea95b149ebfc12b0d143d50d80dc"
+        },
+        {
+          "path": "tst/publication/analyze_q023_paper_bell_linear.py",
+          "sha256": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6"
+        },
+        {
+          "path": "tst/publication/analyze_q023_paper_bell_linear_vl2_tsc.py",
+          "sha256": "241b791959cf5a6d8d4a4e9e2c982049846fba4e8970b2ea39ba578e84a2bcb0"
+        },
+        {
+          "path": "tst/publication/materialize_q023_paper_bell_linear_variants.py",
+          "sha256": "8705a120ba237b651e16dfcf79fd6dbcbb649a3351c286b3f31ca1698517ca22"
+        },
+        {
+          "path": "tst/publication/analyze_q023_prod_bell_nonlinear_foundation.py",
+          "sha256": "f237e63540cf3f3f26e8fd94f887afd8f0d534561f17e13ede0140bbcec43cda"
+        },
+        {
+          "path": "tst/publication/q023_paper_bell_linear_host_harness.cpp",
+          "sha256": "895df9ed44e3ecc8290698424d004b14ade5d7e7997e6c84bf941b0387ca43b4"
+        },
+        {
+          "path": "tst/publication/test_analyze_q023_paper_bell_linear.py",
+          "sha256": "fa3ad774f2b70abe79d5eac1c2c8adc66c4bb3607cde89d08ba4c949e4328bc6"
+        },
+        {
+          "path": "tst/publication/test_materialize_q023_paper_bell_linear_variants.py",
+          "sha256": "3bcd300d92fc569924dfd18eaeb86e2e5121a2061a7f317621b12fea92c47d09"
+        },
+        {
+          "path": "tst/publication/test_q023_paper_bell_linear_host_harness.py",
+          "sha256": "22c5d643c5213ad68372e821f0a2cc5e62ef912790fb964fda89b58dee394e92"
+        },
+        {
+          "path": "tst/publication/test_analyze_q023_prod_bell_nonlinear_foundation.py",
+          "sha256": "c41afedb90ec939d43fa7a18c54f4c6fdf812251735c501fc7263ab9b45f3948"
+        },
+        {
+          "path": "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_2026-05-30.json",
+          "sha256": "ba261d8d3e249e9f23148eab5087f4d8ab723dca0188113286bbb98a973531cd"
+        },
+        {
+          "path": "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_2026-05-31.json",
+          "sha256": "e173692087b8da457a918733364541335727391052727a24b5cf58f233cfb450"
+        },
+        {
+          "path": "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_v2_2026-05-31.json",
+          "sha256": "356bfcf396a35cf5f25c10d919221ffc3e48b0908bc9c1f07bd3205947b575cb"
+        },
+        {
+          "path": "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_v3_2026-06-01.json",
+          "sha256": "9524d1da25924aeb2d93254638ac2c13348010405fb08de699aefaaf966d4539"
+        },
+        {
+          "path": "tst/publication/readiness/q023_paper_bell_linear_materialized_variants_local_2026-05-30.json",
+          "sha256": "0d7d1f3a6f81a4efc80a6fd1e8390c7cba9987b7c33bea4ab9793eb6d64f67de"
+        },
+        {
+          "path": "tst/publication/readiness/q023_prod_bell_nonlinear_source_local_foundation_2026-06-06.json",
+          "sha256": "df3b2a56d0ecf3f821bf5d861287671f4db28a47e236ce41d517a3ac4646e4c5"
+        },
+        {
+          "path": "tst/publication/readiness/q023_campaign_drafts_2026-05-30.json",
+          "sha256": "752bb6c151ddd0f192bbd290d1bd43ab25735e2569bdab6f4f538b648581e224"
+        }
+      ],
+      "generated_variant_scope": {
+        "binding_record": "tst/publication/readiness/q023_paper_bell_linear_materialized_variants_local_2026-05-30.json",
+        "affected_materialized_deck_count": 405,
+        "status": "all_described_variants_invalid_for_physical_execution_or_qualification_and_preserved_as_historical_preparation_chronology"
+      }
+    },
+    "Q019": {
+      "status": "historical_design_preserved_execution_and_qualification_invalidated",
+      "artifacts": [
+        {
+          "path": "tst/publication/readiness/q019_nonlinear_bell_saturation_campaign_design_2026-06-06.json",
+          "sha256": "ad0e06525a535e4b28cdbfaf51063218466d400270262a50544bc8701081417c"
+        },
+        {
+          "path": "tst/publication/readiness/q019_nonlinear_bell_saturation_campaign_design_2026-06-06.md",
+          "sha256": "617eeea8f845ac51cc1fc2a134a595381dfce319a36a0f62dd971afd19d63842"
+        }
+      ]
+    },
+    "Q029": {
+      "status": "historical_source_preparation_preserved_physical_Hall_Bell_use_invalidated",
+      "artifacts": [
+        {
+          "path": "src/pgen/tests/q029_hall_bell_linear.cpp",
+          "sha256": "bbe003dc3621e5dd0ff5bf8905d4898947a9c92277a36bda371a0b24c0da072c"
+        },
+        {
+          "path": "inputs/tests/pic_q029_hall_bell_linear_1d_candidate.athinput",
+          "sha256": "6a72d8f557d540cd4916353df665aa309c6bc0f900fa8fb0ec04549d5ac0acc9"
+        },
+        {
+          "path": "inputs/tests/pic_q029_hall_bell_linear_2d_candidate.athinput",
+          "sha256": "72ba6d20676cd0fd24f02c34669f00b54801d05060cb4b0a2395a65fa71f3d1c"
+        },
+        {
+          "path": "inputs/tests/pic_q029_hall_bell_linear_3d_candidate.athinput",
+          "sha256": "488c5ed3ee121d98dca9291c1a188bd5cb65c8af256057739b18c4d11a7c0a28"
+        },
+        {
+          "path": "tst/publication/analyze_q029_hall_bell_linear.py",
+          "sha256": "5a8d713b344873ef0cd74efb529d3ba5d638c2f1f5d8ffb834fe8ac14f9a4aa4"
+        },
+        {
+          "path": "tst/publication/analyze_q029_hall_bell_linear_raw.py",
+          "sha256": "b997abf10d11a336e8167ea7c4a400ff9f19fa69aa0ca10fa4e87c7c522548e6"
+        },
+        {
+          "path": "tst/publication/q029_hall_bell_linear_host_harness.cpp",
+          "sha256": "670292a0b81e353f93aa8e4212bb4fda7cf29b487bbdfeeec9d0d87156c6e3d3"
+        },
+        {
+          "path": "tst/publication/test_analyze_q029_hall_bell_linear.py",
+          "sha256": "5da8ec52e77a2f471a5f0a0570b57930f4f34330cf9ec9aa68b6a555843e223e"
+        },
+        {
+          "path": "tst/publication/test_analyze_q029_hall_bell_linear_raw.py",
+          "sha256": "2c7de332e5cd02681824c0fd199bab7dd7d877eb95729787a10d099ca049b085"
+        },
+        {
+          "path": "tst/publication/test_q029_hall_bell_linear_host_harness.py",
+          "sha256": "d5c67e07c50a40e6695051862e297ed0f0f9823ba76716daa7933887ed1e0f7b"
+        },
+        {
+          "path": "tst/publication/readiness/q029_experimental_hall_normalization_derivation_2026-05-30.md",
+          "sha256": "3d5c6cfd9e0e4e06cf28d836935e3b5175b931983da377e8b1c2bfb2a80e7b74"
+        },
+        {
+          "path": "tst/publication/readiness/q029_hall_bell_linear_source_local_preparation_2026-05-30.json",
+          "sha256": "ff6da49895b60f0977e16231c78881e13261529e386ac795a0dee0503c92de88"
+        },
+        {
+          "path": "tst/publication/readiness/q029_hall_bell_linear_raw_extractor_source_local_2026-05-30.json",
+          "sha256": "8b6190cca78f6c00bdc1436316ae0b141d0e6de4a8b2c34520174fa44fa39102"
+        },
+        {
+          "path": "tst/publication/readiness/q029_hall_bell_q022_prerequisite_successor_2026-05-30.json",
+          "sha256": "9d2808462ef533b4f061ab10c950ebf64aff92baee4de646e8b4e26ef2b872f8"
+        }
+      ]
+    }
+  },
+  "source_evidence_consulted_not_modified": [
+    {
+      "path": "docs/source/engineering/pic_mhd_model_contract.md",
+      "locator": "lines_52_70",
+      "evidence": "paper_mode_species_charge_divided_by_species_mass_is_q_over_mc_and_deposited_feedback_is_applied_to_MHD"
+    },
+    {
+      "path": "docs/source/modules/particles.md",
+      "locator": "lines_76_80_and_156_159",
+      "evidence": "PPC_is_particles_per_cell_and_deposit_qscale_is_an_extensive_root_grid_macro_scale"
+    },
+    {
+      "path": "src/particles/particles.cpp",
+      "locator": "lines_1667_1670_and_1796_1798",
+      "evidence": "root_cell_volume_and_refinement_consistent_particle_weight_definition"
+    },
+    {
+      "path": "src/particles/particles_moments.cpp",
+      "locator": "lines_372_419_and_861_865",
+      "evidence": "q_macro_is_divided_by_cell_volume_before_depositing_q_density_times_velocity"
+    },
+    {
+      "path": "src/outputs/derived_variables.cpp",
+      "locator": "lines_2617_2649",
+      "evidence": "prtcl_j_outputs_expose_the_deposited_current_moment"
+    }
+  ],
+  "control_documents_consulted_not_modified": [
+    "tst/publication/PIC_PRODUCTION_READINESS_PLAN.md"
+  ],
+  "required_before_any_physical_execution_or_qualification": [
+    "implement_and_review_the_uniquely_named_Q043_volume_aware_successor",
+    "replace_the_legacy_current_relation_with_the_exact_volume_aware_closure",
+    "execute_and_independently_recompute_the_output_level_deposited_current_oracle",
+    "demonstrate_dimension_resolution_PPC_decomposition_and_artificial_C_invariance_from_cycle_one_raw_output",
+    "rerun_and_qualify_the_corrected_linear_Bell_predecessor",
+    "rebase_Q019_and_rederive_Q029_before_their_separate_physical_campaigns",
+    "bind_any_future_launch_through_the_existing_controlling_policy_without_mutating_it_in_this_task"
+  ],
+  "disposition": "legacy_Bell_normalization_preserved_as_history_physical_execution_and_qualification_fail_closed_pending_Q043_volume_aware_successor_and_raw_deposited_current_oracle"
+}
