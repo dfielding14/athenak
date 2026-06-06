@@ -21,7 +21,7 @@ from typing import Mapping
 PREREGISTRATION = (
     Path(__file__).resolve().parent
     / "readiness"
-    / "q011_section54_restart_continuation_preregistration_2026-06-01.json"
+    / "q011_section54_restart_continuation_preregistration_successor_2026-06-06.json"
 )
 
 PIC_RESTART_MAGIC = 0x5049435253543031
@@ -113,7 +113,7 @@ _COMPARISON_FIELD_KINDS = {
     "prtcl_all_pvtk_integer_payload": "integer",
     "prtcl_all_pvtk_float_payload": "float",
 }
-_RETAINED_OUTPUT_SCHEDULE = [
+_RETAINED_OUTPUT_NOMINAL_SLOTS = [
     600.0,
     700.0,
     800.0,
@@ -125,8 +125,8 @@ _RETAINED_OUTPUT_SCHEDULE = [
 
 _EXPECTED_PREREGISTRATION = {
     "record_type": "q011_section54_restart_continuation_preregistration",
-    "schema_version": 1,
-    "date": "2026-06-01",
+    "schema_version": 2,
+    "date": "2026-06-06",
     "gate": "Q-011",
     "claim_id": "CLAIM-PAPER-SHOCK-001",
     "qualification_effect": (
@@ -134,14 +134,18 @@ _EXPECTED_PREREGISTRATION = {
     ),
     "predecessor_record": (
         "tst/publication/readiness/"
-        "q011_section54_qualifying_campaign_preregistration_successor_v2_2026-06-01.json"
+        "q011_section54_restart_continuation_preregistration_2026-06-01.json"
+    ),
+    "predecessor_sha256": (
+        "c3360694dc90d391c5ccf7a0620ae576733e87beea3fa974c69602c82dd866ab"
     ),
     "scope": (
-        "Bounded additive preregistration for one future Q-011 Section 5.4 "
-        "restart-continuation carrier. This record freezes the restart payload "
-        "probe, startup shock-ledger extraction, checkpoint, retained "
-        "post-checkpoint schedule and deterministic parity tolerances before "
-        "any execution. It contains no result and authorizes no scheduler call."
+        "Versioned bounded successor for one future Q-011 Section 5.4 "
+        "restart-continuation carrier. It selects the checkpoint and paired "
+        "continued outputs by preregistered nominal slots while binding exact "
+        "canonical observed committed cycle and time metadata. Payload "
+        "tolerances remain payload-only. This record contains no result and "
+        "authorizes no scheduler call."
     ),
     "schema_contract": {
         "schema_style": "self_contained_exact_key_policy",
@@ -185,10 +189,31 @@ _EXPECTED_PREREGISTRATION = {
         ),
     },
     "continuation_contract": {
-        "checkpoint_time_omega0_inverse": 500.0,
-        "retained_output_schedule_after_checkpoint_omega0_inverse": list(
-            _RETAINED_OUTPUT_SCHEDULE
+        "checkpoint_nominal_slot_omega0_inverse": 500.0,
+        "checkpoint_selection_policy": (
+            "select_the_committed_checkpoint_assigned_to_nominal_slot_500_and_"
+            "bind_its_exact_canonical_observed_committed_cycle_and_time"
         ),
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": list(
+            _RETAINED_OUTPUT_NOMINAL_SLOTS
+        ),
+        "retained_output_pairing_policy": (
+            "pair_uninterrupted_and_continued_outputs_by_nominal_slot_and_"
+            "require_exact_observed_committed_cycle_and_time_parity_before_"
+            "payload_comparison"
+        ),
+        "observed_commit_metadata_contract": {
+            "cycle": "canonical_nonnegative_integer",
+            "time_omega0_inverse": "canonical_nonnegative_finite_float",
+            "sequence": (
+                "strictly_increasing_after_checkpoint_and_across_retained_"
+                "nominal_slots"
+            ),
+            "parity": (
+                "exact_typed_identity_between_uninterrupted_and_continued_"
+                "paired_outputs"
+            ),
+        },
         "comparison_tolerances_max_absolute_difference": dict(
             _COMPARISON_TOLERANCES
         ),
@@ -197,27 +222,39 @@ _EXPECTED_PREREGISTRATION = {
             "caller_supplied_deterministically_ordered_flat_values_per_field"
         ),
         "comparison_policy": (
-            "require_identical_restart_schema_startup_cohort_ledger_retained_"
-            "output_schedule_and_tolerances_before_field_comparison"
+            "require_identical_checkpoint_observed_commit_restart_schema_"
+            "startup_cohort_ledger_retained_nominal_slots_and_tolerances_then_"
+            "exact_paired_output_observed_commit_parity_before_payload_field_"
+            "comparison"
         ),
         "tolerance_boundary": (
-            "These are AthenaK deterministic restart-continuation release "
-            "screens selected before execution, not manuscript tolerances."
+            "These are AthenaK deterministic restart-continuation payload-only "
+            "release screens selected before execution, not manuscript "
+            "tolerances. They never apply to nominal slots, observed committed "
+            "cycles or observed committed times."
         ),
     },
     "execution_policy": {
-        "status": "blocked_until_immutable_execution_record_binds_all_fields",
-        "required_before_execution": [
-            "checkpoint_time_omega0_inverse",
+        "status": (
+            "blocked_until_immutable_execution_record_binds_continuation_"
+            "execution_fields"
+        ),
+        "required_before_continuation_execution": [
+            "checkpoint_nominal_slot_omega0_inverse",
+            "checkpoint_observed_committed_cycle",
+            "checkpoint_observed_committed_time_omega0_inverse",
             "restart_schema",
             "startup_shock_ledger",
-            "retained_output_schedule_after_checkpoint_omega0_inverse",
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse",
             "comparison_tolerances_max_absolute_difference",
             "clean_candidate_git_commit",
             "clean_frontier_executable_sha256",
             "qualifying_input_deck_sha256",
             "authorized_orion_campaign_root",
             "registered_frontier_submission_policy",
+        ],
+        "required_after_execution_before_parity_result": [
+            "paired_output_observed_committed_cycle_and_time",
         ],
         "campaign_results_inspected": False,
         "scheduler_calls_authorized_by_this_record": False,
@@ -231,14 +268,21 @@ _EXPECTED_PREREGISTRATION = {
 }
 
 _BINDING_KEYS = {
-    "checkpoint_time_omega0_inverse",
+    "checkpoint_nominal_slot_omega0_inverse",
+    "checkpoint_observed_committed_cycle",
+    "checkpoint_observed_committed_time_omega0_inverse",
     "restart_schema",
     "startup_shock_ledger",
-    "retained_output_schedule_after_checkpoint_omega0_inverse",
+    "retained_output_nominal_slots_after_checkpoint_omega0_inverse",
     "comparison_tolerances_max_absolute_difference",
 }
 _OBSERVATION_KEYS = {"binding", "outputs_after_checkpoint"}
-_OUTPUT_KEYS = {"time_omega0_inverse", "fields"}
+_OUTPUT_KEYS = {
+    "nominal_slot_omega0_inverse",
+    "observed_committed_cycle",
+    "observed_committed_time_omega0_inverse",
+    "fields",
+}
 
 
 class RestartPolicyError(ValueError):
@@ -286,6 +330,19 @@ def _strict_equal(actual: object, expected: object, label: str) -> None:
         _require(actual == expected, f"{label}: numeric drift")
     else:
         _require(actual == expected, f"{label}: value drift")
+
+
+def _canonical_observed_cycle(value: object, label: str) -> int:
+    _require(type(value) is int, f"{label}: expected canonical integer")
+    _require(value >= 0, f"{label}: expected nonnegative cycle")
+    return value
+
+
+def _canonical_observed_time(value: object, label: str) -> float:
+    _require(type(value) is float, f"{label}: expected canonical float")
+    _require(math.isfinite(value), f"{label}: expected finite float")
+    _require(value >= 0.0, f"{label}: expected nonnegative time")
+    return value
 
 
 def _reject_json_constant(value: str) -> None:
@@ -565,9 +622,17 @@ def validate_checkpoint_binding(
     binding_mapping = _keys(binding, _BINDING_KEYS, "checkpoint binding")
     contract = policy["continuation_contract"]
     _strict_equal(
-        binding_mapping["checkpoint_time_omega0_inverse"],
-        contract["checkpoint_time_omega0_inverse"],
-        "checkpoint binding/checkpoint_time_omega0_inverse",
+        binding_mapping["checkpoint_nominal_slot_omega0_inverse"],
+        contract["checkpoint_nominal_slot_omega0_inverse"],
+        "checkpoint binding/checkpoint_nominal_slot_omega0_inverse",
+    )
+    _canonical_observed_cycle(
+        binding_mapping["checkpoint_observed_committed_cycle"],
+        "checkpoint binding/checkpoint_observed_committed_cycle",
+    )
+    _canonical_observed_time(
+        binding_mapping["checkpoint_observed_committed_time_omega0_inverse"],
+        "checkpoint binding/checkpoint_observed_committed_time_omega0_inverse",
     )
     _strict_equal(
         binding_mapping["restart_schema"],
@@ -579,9 +644,9 @@ def validate_checkpoint_binding(
         "checkpoint binding/startup_shock_ledger",
     )
     _strict_equal(
-        binding_mapping["retained_output_schedule_after_checkpoint_omega0_inverse"],
-        contract["retained_output_schedule_after_checkpoint_omega0_inverse"],
-        "checkpoint binding/retained_output_schedule_after_checkpoint_omega0_inverse",
+        binding_mapping["retained_output_nominal_slots_after_checkpoint_omega0_inverse"],
+        contract["retained_output_nominal_slots_after_checkpoint_omega0_inverse"],
+        "checkpoint binding/retained_output_nominal_slots_after_checkpoint_omega0_inverse",
     )
     _strict_equal(
         binding_mapping["comparison_tolerances_max_absolute_difference"],
@@ -593,8 +658,10 @@ def validate_checkpoint_binding(
 def bind_checkpoint_for_continuation(
     restart_payload: bytes,
     *,
-    checkpoint_time_omega0_inverse: object,
-    retained_output_schedule_after_checkpoint_omega0_inverse: object,
+    checkpoint_nominal_slot_omega0_inverse: object,
+    checkpoint_observed_committed_cycle: object,
+    checkpoint_observed_committed_time_omega0_inverse: object,
+    retained_output_nominal_slots_after_checkpoint_omega0_inverse: object,
     comparison_tolerances_max_absolute_difference: object,
     preregistration: Mapping[str, object] | None = None,
     source: str = "<restart-bytes>",
@@ -604,11 +671,15 @@ def bind_checkpoint_for_continuation(
     probe = probe_schema7_restart_payload(restart_payload, source=source)
     ledger = extract_startup_shock_ledger(restart_payload, source=source)
     binding = {
-        "checkpoint_time_omega0_inverse": checkpoint_time_omega0_inverse,
+        "checkpoint_nominal_slot_omega0_inverse": checkpoint_nominal_slot_omega0_inverse,
+        "checkpoint_observed_committed_cycle": checkpoint_observed_committed_cycle,
+        "checkpoint_observed_committed_time_omega0_inverse": (
+            checkpoint_observed_committed_time_omega0_inverse
+        ),
         "restart_schema": probe.restart_schema,
         "startup_shock_ledger": ledger,
-        "retained_output_schedule_after_checkpoint_omega0_inverse": (
-            retained_output_schedule_after_checkpoint_omega0_inverse
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": (
+            retained_output_nominal_slots_after_checkpoint_omega0_inverse
         ),
         "comparison_tolerances_max_absolute_difference": (
             comparison_tolerances_max_absolute_difference
@@ -640,23 +711,50 @@ def _validate_observation(
         observation_mapping["binding"], preregistration=policy
     )
     contract = policy["continuation_contract"]
-    schedule = contract["retained_output_schedule_after_checkpoint_omega0_inverse"]
+    nominal_slots = contract[
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+    ]
     outputs = observation_mapping["outputs_after_checkpoint"]
     _require(type(outputs) is list, f"{label}/outputs_after_checkpoint: expected list")
     _require(
-        len(outputs) == len(schedule),
+        len(outputs) == len(nominal_slots),
         f"{label}/outputs_after_checkpoint: schedule length drift",
     )
     field_kinds = contract["comparison_field_kinds"]
     expected_fields = set(field_kinds)
-    for output_index, (output, expected_time) in enumerate(zip(outputs, schedule)):
+    previous_cycle = observation_mapping["binding"][
+        "checkpoint_observed_committed_cycle"
+    ]
+    previous_time = observation_mapping["binding"][
+        "checkpoint_observed_committed_time_omega0_inverse"
+    ]
+    for output_index, (output, nominal_slot) in enumerate(zip(outputs, nominal_slots)):
         output_label = f"{label}/outputs_after_checkpoint[{output_index}]"
         output_mapping = _keys(output, _OUTPUT_KEYS, output_label)
         _strict_equal(
-            output_mapping["time_omega0_inverse"],
-            expected_time,
-            f"{output_label}/time_omega0_inverse",
+            output_mapping["nominal_slot_omega0_inverse"],
+            nominal_slot,
+            f"{output_label}/nominal_slot_omega0_inverse",
         )
+        observed_cycle = _canonical_observed_cycle(
+            output_mapping["observed_committed_cycle"],
+            f"{output_label}/observed_committed_cycle",
+        )
+        observed_time = _canonical_observed_time(
+            output_mapping["observed_committed_time_omega0_inverse"],
+            f"{output_label}/observed_committed_time_omega0_inverse",
+        )
+        _require(
+            observed_cycle > previous_cycle,
+            f"{output_label}/observed_committed_cycle: sequence is not strictly increasing",
+        )
+        _require(
+            observed_time > previous_time,
+            f"{output_label}/observed_committed_time_omega0_inverse: "
+            "sequence is not strictly increasing",
+        )
+        previous_cycle = observed_cycle
+        previous_time = observed_time
         fields = _keys(output_mapping["fields"], expected_fields, f"{output_label}/fields")
         for field, kind in field_kinds.items():
             _validated_values(fields[field], kind, f"{output_label}/fields/{field}")
@@ -681,6 +779,21 @@ def compare_deterministic_continuation_parity(
     for output_index, (expected_output, actual_output) in enumerate(
         zip(reference["outputs_after_checkpoint"], candidate["outputs_after_checkpoint"])
     ):
+        _strict_equal(
+            actual_output["nominal_slot_omega0_inverse"],
+            expected_output["nominal_slot_omega0_inverse"],
+            f"paired outputs[{output_index}]/nominal slot parity",
+        )
+        _strict_equal(
+            actual_output["observed_committed_cycle"],
+            expected_output["observed_committed_cycle"],
+            f"paired outputs[{output_index}]/observed committed cycle parity",
+        )
+        _strict_equal(
+            actual_output["observed_committed_time_omega0_inverse"],
+            expected_output["observed_committed_time_omega0_inverse"],
+            f"paired outputs[{output_index}]/observed committed time parity",
+        )
         for field, tolerance in tolerances.items():
             expected_values = expected_output["fields"][field]
             actual_values = actual_output["fields"][field]
@@ -704,13 +817,29 @@ def compare_deterministic_continuation_parity(
             )
     return {
         "result": "pass_deterministic_continuation_parity",
-        "checkpoint_time_omega0_inverse": reference["binding"][
-            "checkpoint_time_omega0_inverse"
+        "checkpoint_nominal_slot_omega0_inverse": reference["binding"][
+            "checkpoint_nominal_slot_omega0_inverse"
         ],
-        "retained_output_schedule_after_checkpoint_omega0_inverse": copy.deepcopy(
+        "checkpoint_observed_committed_cycle": reference["binding"][
+            "checkpoint_observed_committed_cycle"
+        ],
+        "checkpoint_observed_committed_time_omega0_inverse": reference["binding"][
+            "checkpoint_observed_committed_time_omega0_inverse"
+        ],
+        "retained_output_nominal_slots_after_checkpoint_omega0_inverse": copy.deepcopy(
             reference["binding"][
-                "retained_output_schedule_after_checkpoint_omega0_inverse"
+                "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
             ]
         ),
+        "paired_output_observed_commits": [
+            {
+                "nominal_slot_omega0_inverse": output["nominal_slot_omega0_inverse"],
+                "observed_committed_cycle": output["observed_committed_cycle"],
+                "observed_committed_time_omega0_inverse": output[
+                    "observed_committed_time_omega0_inverse"
+                ],
+            }
+            for output in reference["outputs_after_checkpoint"]
+        ],
         "maximum_absolute_difference_by_field": maxima,
     }

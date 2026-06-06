@@ -35,6 +35,8 @@ _VALID_LEDGER = {
     "ps_injection_tag_floor": "10",
     "ps_next_tag": "14",
 }
+_CHECKPOINT_OBSERVED_CYCLE = 5001
+_CHECKPOINT_OBSERVED_TIME = 500.05
 
 
 def _restart_payload(
@@ -94,9 +96,13 @@ def _binding(payload: bytes | None = None) -> dict[str, object]:
     contract = policy["continuation_contract"]
     return restart.bind_checkpoint_for_continuation(
         payload or _restart_payload(),
-        checkpoint_time_omega0_inverse=contract["checkpoint_time_omega0_inverse"],
-        retained_output_schedule_after_checkpoint_omega0_inverse=contract[
-            "retained_output_schedule_after_checkpoint_omega0_inverse"
+        checkpoint_nominal_slot_omega0_inverse=contract[
+            "checkpoint_nominal_slot_omega0_inverse"
+        ],
+        checkpoint_observed_committed_cycle=_CHECKPOINT_OBSERVED_CYCLE,
+        checkpoint_observed_committed_time_omega0_inverse=_CHECKPOINT_OBSERVED_TIME,
+        retained_output_nominal_slots_after_checkpoint_omega0_inverse=contract[
+            "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
         ],
         comparison_tolerances_max_absolute_difference=contract[
             "comparison_tolerances_max_absolute_difference"
@@ -107,12 +113,15 @@ def _binding(payload: bytes | None = None) -> dict[str, object]:
 
 def _observation(binding: dict[str, object]) -> dict[str, object]:
     outputs = []
-    for index, time in enumerate(
-        binding["retained_output_schedule_after_checkpoint_omega0_inverse"]
+    for index, nominal_slot in enumerate(
+        binding["retained_output_nominal_slots_after_checkpoint_omega0_inverse"]
     ):
         outputs.append(
             {
-                "time_omega0_inverse": time,
+                "nominal_slot_omega0_inverse": nominal_slot,
+                "observed_committed_cycle": _CHECKPOINT_OBSERVED_CYCLE
+                + 100 * (index + 1),
+                "observed_committed_time_omega0_inverse": nominal_slot + 0.05,
                 "fields": {
                     "rho_bin": [1.0, 2.0 + index],
                     "bmag_bin": [3.0, 4.0 + index],
@@ -130,14 +139,38 @@ class Q011Section54RestartPolicyTests(unittest.TestCase):
     def test_checked_in_preregistration_is_exact_and_non_executing(self) -> None:
         policy = restart.load_preregistration()
         self.assertEqual(
-            policy["continuation_contract"]["checkpoint_time_omega0_inverse"],
+            policy["continuation_contract"][
+                "checkpoint_nominal_slot_omega0_inverse"
+            ],
             500.0,
         )
         self.assertEqual(
             policy["continuation_contract"][
-                "retained_output_schedule_after_checkpoint_omega0_inverse"
+                "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
             ],
             [600.0, 700.0, 800.0, 900.0, 1000.0, 1100.0, 1200.0],
+        )
+        self.assertEqual(policy["schema_version"], 2)
+        self.assertEqual(policy["date"], "2026-06-06")
+        self.assertEqual(
+            policy["continuation_contract"][
+                "comparison_tolerances_max_absolute_difference"
+            ]["prtcl_all_pvtk_float_payload"],
+            1.0e-6,
+        )
+        self.assertIn(
+            "checkpoint_observed_committed_time_omega0_inverse",
+            policy["execution_policy"]["required_before_continuation_execution"],
+        )
+        self.assertNotIn(
+            "paired_output_observed_committed_cycle_and_time",
+            policy["execution_policy"]["required_before_continuation_execution"],
+        )
+        self.assertEqual(
+            policy["execution_policy"][
+                "required_after_execution_before_parity_result"
+            ],
+            ["paired_output_observed_committed_cycle_and_time"],
         )
         self.assertFalse(
             policy["execution_policy"]["scheduler_calls_authorized_by_this_record"]
@@ -227,9 +260,13 @@ class Q011Section54ContinuationParityTests(unittest.TestCase):
             (
                 "checkpoint",
                 {
-                    "checkpoint_time_omega0_inverse": 600.0,
-                    "retained_output_schedule_after_checkpoint_omega0_inverse": contract[
-                        "retained_output_schedule_after_checkpoint_omega0_inverse"
+                    "checkpoint_nominal_slot_omega0_inverse": 600.0,
+                    "checkpoint_observed_committed_cycle": _CHECKPOINT_OBSERVED_CYCLE,
+                    "checkpoint_observed_committed_time_omega0_inverse": (
+                        _CHECKPOINT_OBSERVED_TIME
+                    ),
+                    "retained_output_nominal_slots_after_checkpoint_omega0_inverse": contract[
+                        "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
                     ],
                     "comparison_tolerances_max_absolute_difference": contract[
                         "comparison_tolerances_max_absolute_difference"
@@ -239,10 +276,14 @@ class Q011Section54ContinuationParityTests(unittest.TestCase):
             (
                 "schedule",
                 {
-                    "checkpoint_time_omega0_inverse": contract[
-                        "checkpoint_time_omega0_inverse"
+                    "checkpoint_nominal_slot_omega0_inverse": contract[
+                        "checkpoint_nominal_slot_omega0_inverse"
                     ],
-                    "retained_output_schedule_after_checkpoint_omega0_inverse": [
+                    "checkpoint_observed_committed_cycle": _CHECKPOINT_OBSERVED_CYCLE,
+                    "checkpoint_observed_committed_time_omega0_inverse": (
+                        _CHECKPOINT_OBSERVED_TIME
+                    ),
+                    "retained_output_nominal_slots_after_checkpoint_omega0_inverse": [
                         700.0,
                         800.0,
                         900.0,
@@ -258,11 +299,15 @@ class Q011Section54ContinuationParityTests(unittest.TestCase):
             (
                 "tolerances",
                 {
-                    "checkpoint_time_omega0_inverse": contract[
-                        "checkpoint_time_omega0_inverse"
+                    "checkpoint_nominal_slot_omega0_inverse": contract[
+                        "checkpoint_nominal_slot_omega0_inverse"
                     ],
-                    "retained_output_schedule_after_checkpoint_omega0_inverse": contract[
-                        "retained_output_schedule_after_checkpoint_omega0_inverse"
+                    "checkpoint_observed_committed_cycle": _CHECKPOINT_OBSERVED_CYCLE,
+                    "checkpoint_observed_committed_time_omega0_inverse": (
+                        _CHECKPOINT_OBSERVED_TIME
+                    ),
+                    "retained_output_nominal_slots_after_checkpoint_omega0_inverse": contract[
+                        "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
                     ],
                     "comparison_tolerances_max_absolute_difference": {
                         **contract["comparison_tolerances_max_absolute_difference"],
@@ -279,6 +324,63 @@ class Q011Section54ContinuationParityTests(unittest.TestCase):
                         preregistration=policy,
                         **values,
                     )
+
+    def test_observed_commit_metadata_must_be_canonical_and_increasing(self) -> None:
+        policy = restart.load_preregistration()
+        contract = policy["continuation_contract"]
+        with self.assertRaisesRegex(restart.RestartPolicyError, "canonical integer"):
+            restart.bind_checkpoint_for_continuation(
+                _restart_payload(),
+                checkpoint_nominal_slot_omega0_inverse=contract[
+                    "checkpoint_nominal_slot_omega0_inverse"
+                ],
+                checkpoint_observed_committed_cycle=True,
+                checkpoint_observed_committed_time_omega0_inverse=(
+                    _CHECKPOINT_OBSERVED_TIME
+                ),
+                retained_output_nominal_slots_after_checkpoint_omega0_inverse=contract[
+                    "retained_output_nominal_slots_after_checkpoint_omega0_inverse"
+                ],
+                comparison_tolerances_max_absolute_difference=contract[
+                    "comparison_tolerances_max_absolute_difference"
+                ],
+                preregistration=policy,
+            )
+
+        observation = _observation(_binding())
+        observation["outputs_after_checkpoint"][2]["observed_committed_time_omega0_inverse"] = (
+            observation["outputs_after_checkpoint"][1][
+                "observed_committed_time_omega0_inverse"
+            ]
+        )
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "sequence is not strictly increasing"
+        ):
+            restart.compare_deterministic_continuation_parity(observation, observation)
+
+    def test_observed_cycle_and_time_parity_mismatches_fail_closed(self) -> None:
+        binding = _binding()
+        uninterrupted = _observation(binding)
+
+        continued = _observation(binding)
+        continued["outputs_after_checkpoint"][1]["observed_committed_cycle"] += 1
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "observed committed cycle parity"
+        ):
+            restart.compare_deterministic_continuation_parity(
+                uninterrupted, continued
+            )
+
+        continued = _observation(binding)
+        continued["outputs_after_checkpoint"][4][
+            "observed_committed_time_omega0_inverse"
+        ] += 5.0e-7
+        with self.assertRaisesRegex(
+            restart.RestartPolicyError, "observed committed time parity"
+        ):
+            restart.compare_deterministic_continuation_parity(
+                uninterrupted, continued
+            )
 
     def test_binding_identity_and_tolerance_failures_fail_closed(self) -> None:
         binding = _binding()
@@ -312,7 +414,23 @@ class Q011Section54ContinuationParityTests(unittest.TestCase):
             uninterrupted, continued
         )
         self.assertEqual(result["result"], "pass_deterministic_continuation_parity")
-        self.assertEqual(result["checkpoint_time_omega0_inverse"], 500.0)
+        self.assertEqual(result["checkpoint_nominal_slot_omega0_inverse"], 500.0)
+        self.assertEqual(
+            result["checkpoint_observed_committed_cycle"],
+            _CHECKPOINT_OBSERVED_CYCLE,
+        )
+        self.assertEqual(
+            result["checkpoint_observed_committed_time_omega0_inverse"],
+            _CHECKPOINT_OBSERVED_TIME,
+        )
+        self.assertEqual(
+            result["paired_output_observed_commits"][0],
+            {
+                "nominal_slot_omega0_inverse": 600.0,
+                "observed_committed_cycle": 5101,
+                "observed_committed_time_omega0_inverse": 600.05,
+            },
+        )
         self.assertAlmostEqual(
             result["maximum_absolute_difference_by_field"][
                 "prtcl_all_pvtk_float_payload"
