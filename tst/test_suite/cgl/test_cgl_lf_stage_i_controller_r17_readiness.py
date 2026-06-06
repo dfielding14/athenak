@@ -163,6 +163,218 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def write_stable_json(path: Path, value: object, mode: int = 0o444) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    path.chmod(mode)
+
+
+def immutable_publication_binding(path: Path) -> dict[str, object]:
+    return {
+        "path": str(path),
+        "sha256": sha256(path),
+        "mode": "0444",
+        "links": 1,
+    }
+
+
+def managed_clearance_fixture(module, tmp_path, monkeypatch, checkpoint=120):
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    paths = paths_for(module, root)
+    controller = tmp_path / "controller.py"
+    controller.write_text("# retained controller\n")
+    controller.chmod(0o644)
+    monkeypatch.setattr(module, "retained_controller_source_path", lambda: controller)
+
+    source_paths = [
+        root / relative
+        for relative in module.SHARED_ROOT_CLEARANCE_SOURCE_AUTHORITY_RELATIVES
+    ]
+    for index, path in enumerate(source_paths):
+        write_stable_json(path, {"source_authority": index})
+    legacy_paths = [
+        root / relative for relative in module.SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES
+    ]
+    for index, path in enumerate(legacy_paths):
+        write_stable_json(path, {"legacy_clearance": index})
+
+    stage_namespace = root / "runs/mks24-stage-i" / module.EXECUTION_EPOCH
+    stale_namespace = root / "runs" / module.SHARED_ROOT_STALE_CAMPAIGN_ID
+    stage_namespace.mkdir(parents=True, exist_ok=True)
+    stale_manifest = stale_namespace / "manifest/prepared_run.json"
+    write_stable_json(
+        stale_manifest,
+        {
+            "campaign_id": module.SHARED_ROOT_STALE_CAMPAIGN_ID,
+            "slurm_job_id": module.SHARED_ROOT_STALE_JOB_ID,
+            "state": "running",
+        },
+        mode=0o644,
+    )
+    artifact_path, review_path, audit_path, audit_review_path = (
+        module.managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+    )
+    generated = datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+    artifact = module.build_managed_shared_root_clearance_refresh(
+        paths, checkpoint, now=generated
+    )
+    write_stable_json(artifact_path, artifact)
+    review = {
+        "schema_version": 1,
+        "record_type": "stage-i-managed-shared-root-isolation-clearance-review",
+        "checkpoint": f"F-{checkpoint}",
+        "execution_epoch": module.EXECUTION_EPOCH,
+        "reviewed_utc": (generated + timedelta(minutes=1)).isoformat(),
+        "decision": "approved",
+        "reviewer": {"role": "independent security reviewer", "reviewer_id": "reviewer-1"},
+        "independent_of_implementation": True,
+        "candidate": immutable_publication_binding(artifact_path),
+    }
+    write_stable_json(review_path, review)
+    audit = {
+        "schema_version": 1,
+        "record_type": (
+            "stage-i-managed-shared-root-isolation-clearance-publication-audit"
+        ),
+        "checkpoint": f"F-{checkpoint}",
+        "execution_epoch": module.EXECUTION_EPOCH,
+        "published_utc": (generated + timedelta(minutes=2)).isoformat(),
+        "artifact": immutable_publication_binding(artifact_path),
+        "independent_review": immutable_publication_binding(review_path),
+        "authority": {
+            "binding_refresh_only": True,
+            "scope_expanded": False,
+            "bypasses_controller_preflights": False,
+        },
+    }
+    write_stable_json(audit_path, audit)
+    audit_review = {
+        "schema_version": 1,
+        "record_type": (
+            "stage-i-managed-shared-root-isolation-clearance-"
+            "publication-audit-review"
+        ),
+        "checkpoint": f"F-{checkpoint}",
+        "execution_epoch": module.EXECUTION_EPOCH,
+        "reviewed_utc": (generated + timedelta(minutes=3)).isoformat(),
+        "decision": "approved-for-publication",
+        "reviewer": {
+            "role": "independent publication reviewer",
+            "reviewer_id": "reviewer-2",
+        },
+        "independent_of_implementation": True,
+        "candidate": immutable_publication_binding(audit_path),
+    }
+    write_stable_json(audit_review_path, audit_review)
+    return {
+        "paths": paths,
+        "controller": controller,
+        "source_paths": source_paths,
+        "artifact_path": artifact_path,
+        "review_path": review_path,
+        "audit_path": audit_path,
+        "audit_review_path": audit_review_path,
+        "now": generated + timedelta(minutes=4),
+    }
+
+
+def test_managed_shared_root_clearance_authenticates_exact_refresh_chain(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    assert all(
+        "F118_current_source_authority" in str(path)
+        for path in fixture["source_paths"]
+    )
+    assert not any("F116_current_source_authority" in str(path)
+                   for path in fixture["source_paths"])
+    retained = module.require_managed_shared_root_clearance(
+        fixture["paths"],
+        {module.SHARED_ROOT_STALE_CAMPAIGN_ID},
+        now=fixture["now"],
+    )
+    assert retained["checkpoint"] == "F-120"
+    assert retained["artifact"]["sha256"] == sha256(fixture["artifact_path"])
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("controller_inode", "source_authority", "review", "same_reviewer"),
+)
+def test_managed_shared_root_clearance_rejects_changed_exact_binding(
+    tmp_path, monkeypatch, mutation
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    if mutation == "controller_inode":
+        fixture["controller"].unlink()
+        fixture["controller"].write_text("# retained controller\n")
+        fixture["controller"].chmod(0o644)
+        match = "controller.*inode"
+    elif mutation == "source_authority":
+        source = fixture["source_paths"][0]
+        source.chmod(0o644)
+        source.write_text('{"changed": true}\n')
+        source.chmod(0o444)
+        match = "source authority publication 0"
+    elif mutation == "review":
+        review = fixture["review_path"]
+        value = json.loads(review.read_text())
+        value["candidate"]["sha256"] = "0" * 64
+        review.chmod(0o644)
+        write_stable_json(review, value)
+        match = "review candidate"
+    else:
+        audit_review = fixture["audit_review_path"]
+        value = json.loads(audit_review.read_text())
+        value["reviewer"]["reviewer_id"] = "reviewer-1"
+        audit_review.chmod(0o644)
+        write_stable_json(audit_review, value)
+        match = "review chain"
+    with pytest.raises(ValueError, match=match):
+        module.require_managed_shared_root_clearance(
+            fixture["paths"],
+            {module.SHARED_ROOT_STALE_CAMPAIGN_ID},
+            now=fixture["now"],
+        )
+
+
+def test_render_managed_shared_root_clearance_refresh_supersedes_prior_chain(
+    tmp_path, monkeypatch, capsys
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    root = fixture["paths"]["root"]
+    monkeypatch.setattr(module, "require_root", lambda *_args: root)
+    args = SimpleNamespace(root=str(root), allow_local_root=True, checkpoint=121)
+    assert module.render_managed_shared_root_clearance_refresh(args) == 0
+    candidate = json.loads(capsys.readouterr().out)
+    assert candidate["checkpoint"] == "F-121"
+    assert len(candidate["supersedes"]) == (
+        len(module.SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES) + 4
+    )
+    assert not any(
+        path.exists()
+        for path in module.managed_shared_root_clearance_chain_paths(
+            root / "accounting", 121
+        )
+    )
+
+
+def test_managed_shared_root_clearance_rejects_arbitrary_campaign(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="exactly the retained campaign"):
+        module.require_managed_shared_root_clearance(
+            fixture["paths"], {"other-campaign"}, now=fixture["now"]
+        )
+
+
 def load_live_frozen_e03_manifest(path: Path) -> dict[str, object]:
     if not path.is_file():
         pytest.skip(f"live frozen-E03 clean partial is unavailable: {path}")
@@ -3676,6 +3888,69 @@ def test_submission_preflight_invokes_authority_reauthentication(
     with pytest.raises(RuntimeError, match="submission authority reauthenticated"):
         module.submission_preflight(
             SimpleNamespace(allow_local_root=False),
+            manifest_path,
+            manifest,
+            run_slurm_test=False,
+        )
+
+
+def test_submission_preflight_requires_managed_clearance_for_production_overlap(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    root = tmp_path / "root"
+    paths = paths_for(module, root)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = {
+        "execution_epoch": EPOCH,
+        "project_root": str(root),
+        "state": "prepared",
+        "command": {},
+    }
+    reservation = {
+        "manifest": str(manifest_path),
+        "case_id": "R16",
+        "state": "prepared",
+    }
+    monkeypatch.setattr(module, "require_current_epoch", lambda *_args: None)
+    monkeypatch.setattr(module, "require_root", lambda *_args: root)
+    monkeypatch.setattr(module, "is_offline_local_root", lambda *_args: False)
+    monkeypatch.setattr(module, "layout", lambda _root: paths)
+    monkeypatch.setattr(module, "validate_submission_fixture_options", lambda *_args: None)
+    for name in (
+        "require_existing_layout",
+        "require_no_pending_transactions",
+        "require_no_orphaned_segment_runs",
+        "require_reconciled_store_consistency",
+        "require_reserved_execution_intent",
+        "authenticate_prepared_execution",
+        "reauthenticate_submission_authority",
+        "prepared_time_tlim_target",
+    ):
+        monkeypatch.setattr(module, name, lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "read_reservations", lambda _paths: [reservation])
+    monkeypatch.setattr(
+        module, "reservation_for_manifest", lambda *_args: reservation
+    )
+    monkeypatch.setattr(
+        module, "require_active_reservation_policy", lambda *_args: [reservation]
+    )
+    monkeypatch.setattr(module, "reservation_usage", lambda *_args: (0.0, 0.0))
+    monkeypatch.setattr(
+        module, "authenticated_production_queue_evidence", lambda *_args: {}
+    )
+
+    def reached(_paths, requested):
+        assert requested == {module.SHARED_ROOT_STALE_CAMPAIGN_ID}
+        raise RuntimeError("managed clearance reached")
+
+    monkeypatch.setattr(module, "require_managed_shared_root_clearance", reached)
+    with pytest.raises(RuntimeError, match="managed clearance reached"):
+        module.submission_preflight(
+            SimpleNamespace(
+                allow_local_root=False,
+                allow_shared_root_campaign=[module.SHARED_ROOT_STALE_CAMPAIGN_ID],
+            ),
             manifest_path,
             manifest,
             run_slurm_test=False,

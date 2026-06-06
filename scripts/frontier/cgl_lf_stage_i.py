@@ -106,6 +106,31 @@ F118_PLASMA_REVIEW_RELATIVE = Path(
 F118_PUBLICATION_AUDIT_RELATIVE = Path(
     f"{F118_CURRENT_SOURCE_AUTHORITY_RELATIVE}.publication_audit.json"
 )
+SHARED_ROOT_STALE_CAMPAIGN_ID = "beta25-accel05-gamma10001-purecgl-256"
+SHARED_ROOT_STALE_JOB_ID = "4743106"
+SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_PATTERN = re.compile(
+    rf"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F(?P<checkpoint>[0-9]+)_"
+    r"shared_root_isolation_clearance_refresh\.json\.publication_audit\.json"
+)
+SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES = tuple(
+    Path("accounting") / name
+    for name in (
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance.json",
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance.json.independent_review.json",
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance.json.publication_audit.json",
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance.json.publication_audit.json.independent_review.json",
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance_supersession.json",
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance_supersession.json.independent_review.json",
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance_supersession.json.publication_audit.json",
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_standing_shared_root_isolation_clearance_supersession.json.publication_audit.json.independent_review.json",
+    )
+)
+SHARED_ROOT_CLEARANCE_SOURCE_AUTHORITY_RELATIVES = (
+    F118_CURRENT_SOURCE_AUTHORITY_RELATIVE,
+    F118_PROVENANCE_REVIEW_RELATIVE,
+    F118_PLASMA_REVIEW_RELATIVE,
+    F118_PUBLICATION_AUDIT_RELATIVE,
+)
 F116_SOURCE_AUTHORITY_TRANSACTION_ID_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{6}\+0000-[0-9a-f]{32}"
 )
@@ -4763,6 +4788,14 @@ def initial_controller_source_path() -> Path:
     return source.resolve(strict=True)
 
 
+def retained_controller_source_path() -> Path:
+    """Return the named controller source retained across authenticated reexec."""
+
+    if SELF_SOURCE_ENV in os.environ:
+        return inherited_reexec_path(SELF_SOURCE_ENV, "source path")
+    return initial_controller_source_path()
+
+
 def require_reexec_source_relationship(source: Path, repository: Path) -> None:
     """Bind private reexec metadata to the exact controller repository path."""
 
@@ -9326,6 +9359,7 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
         "initial_queue_authentication",
         "final_queue_authentication",
         "batch_script",
+        "shared_root_isolation_clearance",
     }
     if not required.issubset(value) or not frozenset(value).issubset(required | optional):
         raise ValueError("submission journal has invalid submission audit columns")
@@ -9350,6 +9384,71 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
     )
     if value["offline_local_root"] is not offline_local_root:
         raise ValueError("submission journal root mode differs from submission audit")
+    clearance = value.get("shared_root_isolation_clearance")
+    if clearance is not None:
+        clearance = require_r17_exact_keys(
+            clearance,
+            {
+                "checkpoint", "artifact", "independent_review",
+                "publication_audit", "publication_audit_review",
+                "source_authority_publications", "supersedes",
+            },
+            "submission audit shared-root clearance",
+        )
+        require_r17_nonempty_string(
+            clearance["checkpoint"], "submission audit shared-root clearance checkpoint"
+        )
+        for key in (
+            "artifact", "independent_review", "publication_audit",
+            "publication_audit_review",
+        ):
+            binding = require_r17_exact_keys(
+                clearance[key],
+                {"path", "sha256", "mode", "links"},
+                f"submission audit shared-root clearance {key}",
+            )
+            require_r17_nonempty_string(
+                binding["path"], f"submission audit shared-root clearance {key} path"
+            )
+            require_r17_sha256(
+                binding["sha256"],
+                f"submission audit shared-root clearance {key} SHA-256",
+            )
+            if binding["mode"] != "0444" or binding["links"] != 1:
+                raise ValueError(
+                    f"submission audit shared-root clearance {key} profile differs"
+                )
+        for key in ("source_authority_publications", "supersedes"):
+            if not isinstance(clearance[key], list) or not clearance[key]:
+                raise ValueError(
+                    f"submission audit shared-root clearance {key} must not be empty"
+                )
+            for index, binding in enumerate(clearance[key]):
+                binding = require_r17_exact_keys(
+                    binding,
+                    {"path", "sha256", "mode", "links"},
+                    f"submission audit shared-root clearance {key} {index}",
+                )
+                require_r17_nonempty_string(
+                    binding["path"],
+                    f"submission audit shared-root clearance {key} {index} path",
+                )
+                require_r17_sha256(
+                    binding["sha256"],
+                    f"submission audit shared-root clearance {key} {index} SHA-256",
+                )
+                if binding["mode"] != "0444" or binding["links"] != 1:
+                    raise ValueError(
+                        f"submission audit shared-root clearance {key} profile differs"
+                    )
+    acknowledged = value["acknowledged_shared_root_campaigns"]
+    if (
+        not offline_local_root
+        and bool(acknowledged) != (clearance is not None)
+    ):
+        raise ValueError(
+            "production shared-root acknowledgement and managed clearance differ"
+        )
     for key in ("initial_queue_authentication", "final_queue_authentication"):
         if key in value:
             validate_queue_authentication_evidence(value[key], key)
@@ -12446,6 +12545,560 @@ def scheduler_test_only_output(script: dict[str, object] | Path) -> str:
     ).stdout
 
 
+def require_clearance_file_binding(value: object, path: Path, label: str, *,
+                                   mode: int) -> str:
+    """Authenticate one exact path, digest, and inode bound by a clearance."""
+
+    binding = require_r17_exact_keys(
+        value, {"path", "sha256", "mode", "links", "device", "inode"}, label
+    )
+    expected_digest = require_r17_sha256(binding["sha256"], f"{label} SHA-256")
+    if (
+        binding["path"] != str(path)
+        or binding["mode"] != f"{mode:04o}"
+        or binding["links"] != 1
+    ):
+        raise ValueError(f"{label} differs from its exact retained path profile")
+    retained = read_r17_evidence_bytes(
+        path,
+        label,
+        mode=mode,
+        owner_controlled=True,
+        symlink_free=True,
+    )
+    profile = path.lstat()
+    if (
+        binding["device"] != profile.st_dev
+        or binding["inode"] != profile.st_ino
+        or hashlib.sha256(retained).hexdigest() != expected_digest
+    ):
+        raise ValueError(f"{label} differs from its exact retained inode or bytes")
+    return expected_digest
+
+
+def require_clearance_directory_binding(value: object, path: Path,
+                                        label: str) -> None:
+    """Authenticate one exact non-writable shared-root namespace inode."""
+
+    binding = require_r17_exact_keys(
+        value, {"path", "mode", "device", "inode"}, label
+    )
+    require_owner_symlink_free_path(path, label)
+    profile = path.lstat()
+    if (
+        not stat.S_ISDIR(profile.st_mode)
+        or stat.S_IMODE(profile.st_mode) & 0o022
+        or binding != {
+            "path": str(path),
+            "mode": f"{stat.S_IMODE(profile.st_mode):04o}",
+            "device": profile.st_dev,
+            "inode": profile.st_ino,
+        }
+    ):
+        raise ValueError(f"{label} differs from its exact retained directory inode")
+
+
+def require_clearance_publication_bindings(value: object, expected: list[Path],
+                                           label: str
+                                           ) -> list[dict[str, object]]:
+    """Authenticate an ordered list of exact immutable publications."""
+
+    if not isinstance(value, list) or len(value) != len(expected):
+        raise ValueError(f"{label} must bind every exact retained publication")
+    retained = []
+    for index, path in enumerate(expected):
+        _, digest = read_controller_publication_json(
+            path, f"{label} publication {index}", mode=0o444
+        )
+        require_r17_declared_publication(
+            value[index], path, digest, f"{label} publication {index}"
+        )
+        retained.append({
+            "path": str(path),
+            "sha256": digest,
+            "mode": "0444",
+            "links": 1,
+        })
+    return retained
+
+
+def require_clearance_review(
+    path: Path,
+    *,
+    checkpoint: str,
+    candidate_path: Path,
+    candidate_sha: str,
+    record_type: str,
+    decision: str,
+    label: str,
+) -> tuple[str, str, datetime]:
+    """Authenticate one exact independent clearance or publication review."""
+
+    review, review_sha = read_controller_publication_json(path, label, mode=0o444)
+    review = require_r17_exact_keys(
+        review,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "reviewed_utc", "decision", "reviewer",
+            "independent_of_implementation", "candidate",
+        },
+        label,
+    )
+    reviewer = require_r17_exact_keys(
+        review["reviewer"], {"role", "reviewer_id"}, f"{label} reviewer"
+    )
+    reviewer_id = require_r17_nonempty_string(
+        reviewer["reviewer_id"], f"{label} reviewer ID"
+    )
+    require_r17_nonempty_string(reviewer["role"], f"{label} reviewer role")
+    if (
+        review["schema_version"] != 1
+        or review["record_type"] != record_type
+        or review["checkpoint"] != checkpoint
+        or review["execution_epoch"] != EXECUTION_EPOCH
+        or review["decision"] != decision
+        or review["independent_of_implementation"] is not True
+    ):
+        raise ValueError(f"{label} decision or authority differs")
+    require_r17_declared_publication(
+        review["candidate"], candidate_path, candidate_sha, f"{label} candidate"
+    )
+    return reviewer_id, review_sha, require_r17_utc(
+        review["reviewed_utc"], f"{label} review time"
+    )
+
+
+def managed_shared_root_clearance_chain_paths(
+    accounting: Path, checkpoint: int
+) -> tuple[Path, Path, Path, Path]:
+    """Return the four canonical paths for one managed clearance checkpoint."""
+
+    artifact = accounting / (
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F{checkpoint}_"
+        "shared_root_isolation_clearance_refresh.json"
+    )
+    review = Path(f"{artifact}.independent_review.json")
+    audit = Path(f"{artifact}.publication_audit.json")
+    audit_review = Path(f"{audit}.independent_review.json")
+    return artifact, review, audit, audit_review
+
+
+def managed_shared_root_clearance_scope(paths: dict[str, Path]) -> dict[str, object]:
+    """Return the fixed non-broadening authority of a managed refresh."""
+
+    return {
+        "authorized_actions": ["check-submit", "submit"],
+        "authorized_case_ids": [f"R{number:02d}" for number in range(3, 18)],
+        "authorized_execution_epoch": EXECUTION_EPOCH,
+        "authorized_stage_i_namespace": str(
+            paths["root"] / "runs/mks24-stage-i" / EXECUTION_EPOCH
+        ),
+        "all_controller_preflights_required": True,
+        "all_user_queue_authentication_required": True,
+        "root_locked_submit_required": True,
+        "exact_controller_authenticated_manifest_required": True,
+        "prepare_authorized": False,
+        "direct_sbatch_authorized": False,
+        "other_campaign_acknowledgement_authorized": False,
+        "outside_namespace_authorized": False,
+        "r17_last_policy_unchanged": True,
+        "binding_refresh_only": True,
+    }
+
+
+def managed_shared_root_clearance_publication_requirements() -> dict[str, bool]:
+    """Return the fixed independent-review requirements of a refresh."""
+
+    return {
+        "independent_review_required": True,
+        "publication_audit_required": True,
+        "independent_publication_review_required": True,
+        "distinct_reviewers_required": True,
+    }
+
+
+def current_clearance_file_binding(path: Path, label: str, *,
+                                   mode: int) -> dict[str, object]:
+    """Return one exact current path, digest, and inode binding."""
+
+    retained = read_r17_evidence_bytes(
+        path,
+        label,
+        mode=mode,
+        owner_controlled=True,
+        symlink_free=True,
+    )
+    profile = path.lstat()
+    return {
+        "path": str(path),
+        "sha256": hashlib.sha256(retained).hexdigest(),
+        "mode": f"{mode:04o}",
+        "links": 1,
+        "device": profile.st_dev,
+        "inode": profile.st_ino,
+    }
+
+
+def current_clearance_publication_binding(path: Path,
+                                          label: str) -> dict[str, object]:
+    """Return one exact current immutable-publication binding."""
+
+    _, digest = read_controller_publication_json(path, label, mode=0o444)
+    return {"path": str(path), "sha256": digest, "mode": "0444", "links": 1}
+
+
+def current_clearance_directory_binding(path: Path,
+                                        label: str) -> dict[str, object]:
+    """Return one exact current non-writable directory-inode binding."""
+
+    require_owner_symlink_free_path(path, label)
+    profile = path.lstat()
+    if not stat.S_ISDIR(profile.st_mode) or stat.S_IMODE(profile.st_mode) & 0o022:
+        raise ValueError(f"{label} is not an owner-controlled non-writable directory")
+    return {
+        "path": str(path),
+        "mode": f"{stat.S_IMODE(profile.st_mode):04o}",
+        "device": profile.st_dev,
+        "inode": profile.st_ino,
+    }
+
+
+def managed_shared_root_clearance_checkpoints(accounting: Path) -> list[int]:
+    """Return all canonically published managed-clearance checkpoint numbers."""
+
+    checkpoints = []
+    for entry in trusted_directory_entries(
+        accounting, "managed shared-root clearance accounting directory"
+    ):
+        match = SHARED_ROOT_CLEARANCE_REFRESH_AUDIT_PATTERN.fullmatch(entry)
+        if match is not None:
+            checkpoints.append(int(match.group("checkpoint")))
+    return sorted(set(checkpoints))
+
+
+def build_managed_shared_root_clearance_refresh(
+    paths: dict[str, Path], checkpoint: int, *,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Build a read-only exact-binding candidate for independent review."""
+
+    checkpoint = require_r17_integer(
+        checkpoint, "managed shared-root clearance checkpoint", minimum=1
+    )
+    accounting = paths["root"] / "accounting"
+    existing = managed_shared_root_clearance_checkpoints(accounting)
+    if existing and checkpoint <= max(existing):
+        raise ValueError(
+            "managed shared-root clearance checkpoint must exceed every publication"
+        )
+    chain_paths = managed_shared_root_clearance_chain_paths(accounting, checkpoint)
+    if any(path.exists() for path in chain_paths):
+        raise ValueError("managed shared-root clearance checkpoint already exists")
+
+    source_paths = [
+        paths["root"] / relative
+        for relative in SHARED_ROOT_CLEARANCE_SOURCE_AUTHORITY_RELATIVES
+    ]
+    prior_paths = [
+        paths["root"] / relative for relative in SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES
+    ]
+    for prior_checkpoint in existing:
+        prior_paths.extend(
+            managed_shared_root_clearance_chain_paths(accounting, prior_checkpoint)
+        )
+    stale_namespace = paths["root"] / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
+    stale_manifest = stale_namespace / "manifest/prepared_run.json"
+    stale = read_manifest(stale_manifest)
+    if (
+        stale.get("campaign_id") != SHARED_ROOT_STALE_CAMPAIGN_ID
+        or stale.get("slurm_job_id") != SHARED_ROOT_STALE_JOB_ID
+        or stale.get("state") != "running"
+    ):
+        raise ValueError("managed shared-root clearance stale campaign differs")
+    stage_namespace = paths["root"] / "runs/mks24-stage-i" / EXECUTION_EPOCH
+    stage_binding = current_clearance_directory_binding(
+        stage_namespace, "managed shared-root clearance Stage I namespace"
+    )
+    stale_binding = current_clearance_directory_binding(
+        stale_namespace, "managed shared-root clearance stale namespace"
+    )
+    if (
+        stage_namespace == stale_namespace
+        or stage_namespace in stale_namespace.parents
+        or stale_namespace in stage_namespace.parents
+    ):
+        raise ValueError("managed shared-root clearance namespaces are not disjoint")
+    generated = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
+    return {
+        "schema_version": 1,
+        "record_type": "stage-i-managed-shared-root-isolation-clearance-refresh",
+        "checkpoint": f"F-{checkpoint}",
+        "execution_epoch": EXECUTION_EPOCH,
+        "generated_utc": generated.isoformat(),
+        "requested_acknowledgement": SHARED_ROOT_STALE_CAMPAIGN_ID,
+        "scope": managed_shared_root_clearance_scope(paths),
+        "controller_binding": current_clearance_file_binding(
+            retained_controller_source_path(),
+            "managed shared-root clearance controller",
+            mode=0o644,
+        ),
+        "source_authority_publications": [
+            current_clearance_publication_binding(
+                path, f"managed shared-root clearance source authority {index}"
+            )
+            for index, path in enumerate(source_paths)
+        ],
+        "supersedes": [
+            current_clearance_publication_binding(
+                path, f"managed shared-root clearance superseded publication {index}"
+            )
+            for index, path in enumerate(prior_paths)
+        ],
+        "stale_campaign": {
+            "campaign_id": SHARED_ROOT_STALE_CAMPAIGN_ID,
+            "job_id": SHARED_ROOT_STALE_JOB_ID,
+            "retained_state": "running",
+            "manifest": current_clearance_file_binding(
+                stale_manifest,
+                "managed shared-root clearance stale manifest",
+                mode=0o644,
+            ),
+        },
+        "isolation": {
+            "stage_i_namespace": stage_binding,
+            "stale_namespace": stale_binding,
+            "lexically_disjoint": True,
+        },
+        "publication_requirements": (
+            managed_shared_root_clearance_publication_requirements()
+        ),
+    }
+
+
+def render_managed_shared_root_clearance_refresh(args: argparse.Namespace) -> int:
+    """Print one canonical-JSON managed clearance candidate without mutation."""
+
+    root = require_root(Path(args.root), args.allow_local_root)
+    candidate = build_managed_shared_root_clearance_refresh(
+        layout(root), args.checkpoint
+    )
+    print(json.dumps(candidate, indent=2, sort_keys=True))
+    return 0
+
+
+def require_managed_shared_root_clearance(
+    paths: dict[str, Path], requested_campaigns: set[str], *,
+    now: datetime | None = None,
+) -> dict[str, object] | None:
+    """Require the latest fully reviewed clearance for a production overlap."""
+
+    if not requested_campaigns:
+        return None
+    if requested_campaigns != {SHARED_ROOT_STALE_CAMPAIGN_ID}:
+        raise ValueError(
+            "managed shared-root clearance authorizes exactly the retained campaign"
+        )
+    accounting = paths["root"] / "accounting"
+    checkpoints = managed_shared_root_clearance_checkpoints(accounting)
+    if not checkpoints:
+        raise ValueError("managed shared-root clearance is not canonically published")
+    checkpoint_number = max(checkpoints)
+    checkpoint = f"F-{checkpoint_number}"
+    artifact_path, review_path, audit_path, audit_review_path = (
+        managed_shared_root_clearance_chain_paths(accounting, checkpoint_number)
+    )
+    artifact, artifact_sha = read_controller_publication_json(
+        artifact_path, "managed shared-root clearance", mode=0o444
+    )
+    artifact = require_r17_exact_keys(
+        artifact,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "generated_utc", "requested_acknowledgement", "scope",
+            "controller_binding", "source_authority_publications", "supersedes",
+            "stale_campaign", "isolation", "publication_requirements",
+        },
+        "managed shared-root clearance",
+    )
+    scope = managed_shared_root_clearance_scope(paths)
+    publication_requirements = managed_shared_root_clearance_publication_requirements()
+    generated = require_r17_utc(
+        artifact["generated_utc"], "managed shared-root clearance generation time"
+    )
+    if (
+        artifact["schema_version"] != 1
+        or artifact["record_type"]
+        != "stage-i-managed-shared-root-isolation-clearance-refresh"
+        or artifact["checkpoint"] != checkpoint
+        or artifact["execution_epoch"] != EXECUTION_EPOCH
+        or artifact["requested_acknowledgement"] != SHARED_ROOT_STALE_CAMPAIGN_ID
+        or artifact["scope"] != scope
+        or artifact["publication_requirements"] != publication_requirements
+    ):
+        raise ValueError("managed shared-root clearance scope or identity differs")
+
+    controller_path = retained_controller_source_path()
+    require_clearance_file_binding(
+        artifact["controller_binding"],
+        controller_path,
+        "managed shared-root clearance controller",
+        mode=0o644,
+    )
+    source_authority = require_clearance_publication_bindings(
+        artifact["source_authority_publications"],
+        [
+            paths["root"] / relative
+            for relative in SHARED_ROOT_CLEARANCE_SOURCE_AUTHORITY_RELATIVES
+        ],
+        "managed shared-root clearance source authority",
+    )
+    prior_paths = [paths["root"] / relative for relative in SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES]
+    for prior_checkpoint in sorted(set(checkpoints)):
+        if prior_checkpoint >= checkpoint_number:
+            continue
+        prior_paths.extend(
+            managed_shared_root_clearance_chain_paths(accounting, prior_checkpoint)
+        )
+    supersedes = require_clearance_publication_bindings(
+        artifact["supersedes"], prior_paths, "managed shared-root clearance supersedes"
+    )
+
+    stale = require_r17_exact_keys(
+        artifact["stale_campaign"],
+        {"campaign_id", "job_id", "retained_state", "manifest"},
+        "managed shared-root clearance stale campaign",
+    )
+    stale_manifest = (
+        paths["root"] / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
+        / "manifest/prepared_run.json"
+    )
+    require_clearance_file_binding(
+        stale["manifest"],
+        stale_manifest,
+        "managed shared-root clearance stale manifest",
+        mode=0o644,
+    )
+    retained_stale = read_manifest(stale_manifest)
+    if (
+        stale["campaign_id"] != SHARED_ROOT_STALE_CAMPAIGN_ID
+        or stale["job_id"] != SHARED_ROOT_STALE_JOB_ID
+        or stale["retained_state"] != "running"
+        or retained_stale.get("campaign_id") != SHARED_ROOT_STALE_CAMPAIGN_ID
+        or retained_stale.get("slurm_job_id") != SHARED_ROOT_STALE_JOB_ID
+        or retained_stale.get("state") != "running"
+    ):
+        raise ValueError("managed shared-root clearance stale campaign differs")
+
+    isolation = require_r17_exact_keys(
+        artifact["isolation"],
+        {"stage_i_namespace", "stale_namespace", "lexically_disjoint"},
+        "managed shared-root clearance isolation",
+    )
+    stage_namespace = paths["root"] / "runs/mks24-stage-i" / EXECUTION_EPOCH
+    stale_namespace = paths["root"] / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
+    require_clearance_directory_binding(
+        isolation["stage_i_namespace"], stage_namespace,
+        "managed shared-root clearance Stage I namespace",
+    )
+    require_clearance_directory_binding(
+        isolation["stale_namespace"], stale_namespace,
+        "managed shared-root clearance stale namespace",
+    )
+    if (
+        isolation["lexically_disjoint"] is not True
+        or stage_namespace == stale_namespace
+        or stage_namespace in stale_namespace.parents
+        or stale_namespace in stage_namespace.parents
+    ):
+        raise ValueError("managed shared-root clearance namespaces are not disjoint")
+
+    reviewer_id, review_sha, reviewed = require_clearance_review(
+        review_path,
+        checkpoint=checkpoint,
+        candidate_path=artifact_path,
+        candidate_sha=artifact_sha,
+        record_type="stage-i-managed-shared-root-isolation-clearance-review",
+        decision="approved",
+        label="managed shared-root clearance independent review",
+    )
+    audit, audit_sha = read_controller_publication_json(
+        audit_path, "managed shared-root clearance publication audit", mode=0o444
+    )
+    audit = require_r17_exact_keys(
+        audit,
+        {
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "published_utc", "artifact", "independent_review", "authority",
+        },
+        "managed shared-root clearance publication audit",
+    )
+    authority = {
+        "binding_refresh_only": True,
+        "scope_expanded": False,
+        "bypasses_controller_preflights": False,
+    }
+    if (
+        audit["schema_version"] != 1
+        or audit["record_type"]
+        != "stage-i-managed-shared-root-isolation-clearance-publication-audit"
+        or audit["checkpoint"] != checkpoint
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or audit["authority"] != authority
+    ):
+        raise ValueError("managed shared-root clearance publication audit differs")
+    require_r17_declared_publication(
+        audit["artifact"], artifact_path, artifact_sha,
+        "managed shared-root clearance publication audit artifact",
+    )
+    require_r17_declared_publication(
+        audit["independent_review"], review_path, review_sha,
+        "managed shared-root clearance publication audit review",
+    )
+    published = require_r17_utc(
+        audit["published_utc"], "managed shared-root clearance publication time"
+    )
+    audit_reviewer_id, audit_review_sha, audit_reviewed = require_clearance_review(
+        audit_review_path,
+        checkpoint=checkpoint,
+        candidate_path=audit_path,
+        candidate_sha=audit_sha,
+        record_type=(
+            "stage-i-managed-shared-root-isolation-clearance-"
+            "publication-audit-review"
+        ),
+        decision="approved-for-publication",
+        label="managed shared-root clearance publication-audit review",
+    )
+    current = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
+    if (
+        reviewer_id == audit_reviewer_id
+        or not generated <= reviewed <= published <= audit_reviewed
+        or audit_reviewed > current + timedelta(minutes=5)
+    ):
+        raise ValueError("managed shared-root clearance review chain differs")
+    return {
+        "checkpoint": checkpoint,
+        "artifact": {
+            "path": str(artifact_path), "sha256": artifact_sha,
+            "mode": "0444", "links": 1,
+        },
+        "independent_review": {
+            "path": str(review_path), "sha256": review_sha,
+            "mode": "0444", "links": 1,
+        },
+        "publication_audit": {
+            "path": str(audit_path), "sha256": audit_sha,
+            "mode": "0444", "links": 1,
+        },
+        "publication_audit_review": {
+            "path": str(audit_review_path), "sha256": audit_review_sha,
+            "mode": "0444", "links": 1,
+        },
+        "source_authority_publications": source_authority,
+        "supersedes": supersedes,
+    }
+
+
 def shared_root_campaign_conflicts(root: Path,
                                    allowed: set[str]) -> list[str]:
     """Return top-level CGL campaigns requiring an explicit overlap review."""
@@ -12727,9 +13380,13 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
     initial_queue_authentication = authenticated_production_queue_evidence(
         args, paths, reservations, offline_local_root
     )
-    conflicts = shared_root_campaign_conflicts(
-        root, set(getattr(args, "allow_shared_root_campaign", []))
-    )
+    requested_campaigns = set(getattr(args, "allow_shared_root_campaign", []))
+    shared_root_clearance = None
+    if not offline_local_root and requested_campaigns:
+        shared_root_clearance = require_managed_shared_root_clearance(
+            paths, requested_campaigns
+        )
+    conflicts = shared_root_campaign_conflicts(root, requested_campaigns)
     if conflicts:
         raise ValueError(
             "shared-root campaign records require explicit review; pass "
@@ -12756,12 +13413,12 @@ def submission_preflight(args: argparse.Namespace, manifest_path: Path,
             "offline_local_root": offline_local_root,
             "skip_slurm_test": bool(getattr(args, "skip_slurm_test", False)),
             "slurm_test_only": slurm_test_outcome,
-            "acknowledged_shared_root_campaigns": sorted(
-                set(getattr(args, "allow_shared_root_campaign", []))
-            ),
+            "acknowledged_shared_root_campaigns": sorted(requested_campaigns),
             "initial_queue_authentication": initial_queue_authentication,
             "batch_script": script["binding"],
         }
+        if shared_root_clearance is not None:
+            audit["shared_root_isolation_clearance"] = shared_root_clearance
         return paths, script, audit
     except BaseException:
         close_authenticated_batch_script(script)
@@ -16053,6 +16710,14 @@ def parser() -> argparse.ArgumentParser:
                 "Queued user jobs still fail closed."
             ),
         )
+    clearance_refresh = actions.add_parser(
+        "render-shared-root-clearance-refresh",
+        help=(
+            "Print a read-only exact-binding shared-root clearance candidate "
+            "for independent review and immutable publication."
+        ),
+    )
+    clearance_refresh.add_argument("--checkpoint", type=int, required=True)
     submitted_atomically.add_argument(
         "--sbatch-output-file",
         help="Use retained sbatch --parsable output only for offline validation.",
@@ -16160,6 +16825,8 @@ def main() -> int:
             return check_submit(args)
         if args.action == "submit":
             return submit(args)
+        if args.action == "render-shared-root-clearance-refresh":
+            return render_managed_shared_root_clearance_refresh(args)
         if args.action == "mark-submitted":
             return mark_submitted(args)
         if args.action == "recover-submit":
