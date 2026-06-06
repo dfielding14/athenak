@@ -71,6 +71,142 @@ F115_CANONICAL_SHA256 = {
     "provenance_review": "6fcd19f9267f36332742f1f103968098216bd8e6b42fa9821964ab8df704bacd",
     "plasma_review": "a78357ed90e593809b1a82a641d2b40d651b16569ec943fc1781940e569b8440",
 }
+F115_F114_SEGMENT = "s01_rankio_t0p312823_t0p5"
+F115_SEGMENT = "s02_rankio_t0p312823_t0p5"
+F115_F114_BUNDLE_RELATIVE = Path(
+    "source-archives/athenak-feature-cgl-through-c7e4fa30e.bundle"
+)
+F115_F114_BUNDLE_SHA256 = (
+    "d94d559108470157f07981c9da8fec343a992128c0c4333df87181b81f0c505e"
+)
+F115_PROFILE_STATIC = {
+    "athena_walltime": "01:50:00",
+    "case_id": "R03",
+    "cpus_per_task": 7,
+    "executable": (
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/build/"
+        "frontier-hip-9e07542281e4-cpe25.09-cce20-rocm6.4.2/src/athena"
+    ),
+    "executable_revision": "9e07542281e4e6d125582f253df3ad2e3b8b154d",
+    "executable_sha256": "68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c",
+    "matrix": (
+        "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-e03-9e075422/"
+        "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
+    ),
+    "matrix_sha256": "bf31b88b985d1ad4ffe823108dd7c1132bdfa4d5e4a6abde51f66bb7778415c9",
+    "nodes": 1,
+    "override": "time/tlim=0.5",
+    "parent_job_id": "4762472",
+    "parent_result": "clean_partial",
+    "parent_segment": "s00_rankio_t0_t0p5",
+    "ranks_per_node": 8,
+    "restart_file": (
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/runs/mks24-stage-i/"
+        "E03-forcing-policy/R03/s00_rankio_t0_t0p5/output/rst/rank_00000000/"
+        "E03_forcing_policy_paper_standard_active_alfvenic_beta100_"
+        "s00_rankio_t0_t0p5.00001.rst"
+    ),
+    "restart_time": 0.31282347945569927,
+    "segment": F115_SEGMENT,
+    "source_dir": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-e03-9e075422",
+    "time_tlim_target": 0.5,
+    "walltime": "02:00:00",
+}
+F115_SCOPE_DOES_NOT_CHANGE = [
+    "R03 scientific parent job 4762472 and clean_partial result",
+    "binary-authenticated restart state at exact t=0.31282347945569927",
+    "time/tlim target 0.5",
+    "one-node 02:00:00 Slurm and 01:50:00 Athena limits",
+    "qualified executable revision and bytes",
+    "F-113 bounded-concurrency and 1400-node-hour policy",
+]
+F115_PUBLICATION_REQUIREMENTS = [
+    "Obtain independent approval of these exact candidate bytes before canonical publication.",
+    (
+        "Publish this F-115 evidence and its publication audit as owner-controlled "
+        "mode 0444 single-link files under the canonical Stage I lock."
+    ),
+    "Do not reuse cancelled job 4766485 or the retained s01 directory.",
+    (
+        "Prepare only the sole s02 R03 continuation profile after F-115 publication "
+        "and clean reconciliation."
+    ),
+    "Use the controller check-submit and submit paths; do not invoke direct sbatch.",
+]
+F115_ENFORCEMENT_CHAIN = [
+    (
+        "Before prepare, this immutable F115 evidence plus its immutable independent "
+        "reviews and publication audit procedurally authorize only the exact embedded profile."
+    ),
+    (
+        "The lead execution agent must invoke controller-mediated prepare with arguments "
+        "exactly matching the embedded profile."
+    ),
+    (
+        "After successful prepare, the authenticated prepared manifest and reservation "
+        "become the machine-enforced execution intent for check-submit, submit, replay, "
+        "and accounting."
+    ),
+    (
+        "Controller check-submit and submit retain all-user queue preflight; direct "
+        "sbatch is not authorized."
+    ),
+]
+F115_PROVENANCE_REVIEWER = {
+    "agent_id": "019e9618-899e-7142-a748-ba57bf3efdd3",
+    "identity": "OpenAI Codex independent read-only F115 provenance-security reviewer",
+}
+F115_PROVENANCE_REVIEW_SCOPE = [
+    "Exact reviewed F115 candidate bytes and exact published F115 byte binding.",
+    "All 19 declared F115 path, SHA-256, mode, and link bindings.",
+    (
+        "Replacement source bundle identity, complete-history verification, strict object "
+        "validation, active catalog integrity, and corrupt-C7 exclusion."
+    ),
+    (
+        "Submitted-cancellation no-start evidence, immutable authorization packet, "
+        "cancellation replay, retained cancelled s01 identity, and prohibition on job or "
+        "segment reuse."
+    ),
+    (
+        "Canonical reconciliation counts, zero-active-reservation state, zero-pending-"
+        "transaction state, and qualification binding."
+    ),
+    (
+        "F114-to-F115 source-binding and segment-identity supersession, sole-next-segment "
+        "profile, prepare-only boundary, and non-broadening authorization."
+    ),
+]
+F115_PLASMA_REVIEWER = {
+    "agent_id": "openai-codex-gpt-5",
+    "identity": "OpenAI Codex, GPT-5 coding agent",
+    "role": "independent read-only plasma/scientific continuation reviewer",
+}
+F115_PLASMA_AUTHORIZATION_LIMITATIONS = {
+    "authorization_broadening": False,
+    "limitations": [
+        (
+            "Approval is limited to publication of the exact reviewed F-115 candidate "
+            "bytes and preparation of only the sole authorized R03 s02 continuation "
+            "after publication and clean reconciliation."
+        ),
+        (
+            "Approval does not authorize reuse of cancelled job 4766485 or the retained "
+            "s01 directory."
+        ),
+        (
+            "Approval does not change the R03 parent, restart state, target, resources, "
+            "executable, input, matrix, qualification, or F-113 bounded-concurrency and "
+            "1400-node-hour policy."
+        ),
+        (
+            "Submission must use the controller check-submit and submit paths; direct "
+            "sbatch is not authorized."
+        ),
+    ],
+    "sole_authorized_case": "R03",
+    "sole_authorized_segment": F115_SEGMENT,
+}
 F116_CANONICAL_SHA256 = {
     "evidence": "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a",
     "provenance_review": "e9731aab8305505e058c68ae8bb61c9ec5ff4885bde1bee3162719c41ab9bafd",
@@ -4277,6 +4413,237 @@ def read_source_authority_record_set(
     return loaded
 
 
+def expected_historical_f115_sole_profile(
+    root: Path, bundle_relative: PurePosixPath, bundle_digest: str
+) -> dict[str, object]:
+    """Return the exact immutable F115 R03 continuation profile."""
+
+    return {
+        **F115_PROFILE_STATIC,
+        "source_bundle": str(root / bundle_relative.as_posix()),
+        "source_bundle_sha256": bundle_digest,
+    }
+
+
+def validate_f115_declared_binding(
+    value: object, label: str, *, mode: str
+) -> dict[str, object]:
+    """Require one exact single-link F115 declaration."""
+
+    retained = require_exact_keys(value, {"path", "sha256", "mode", "links"}, label)
+    require_nonempty_string(retained["path"], f"{label} path")
+    require_sha256(retained["sha256"], f"{label} SHA-256")
+    if retained["mode"] != mode or retained["links"] != 1:
+        raise ValueError(f"{label} mode or links differ")
+    return retained
+
+
+def validate_historical_f115_plasma_verified(
+    value: object, sole: dict[str, object], bundle_head: str
+) -> None:
+    """Require the complete non-broadening plasma-review verification schema."""
+
+    verified = require_exact_keys(
+        value,
+        {
+            "authorization_limitations",
+            "executable",
+            "input",
+            "matrix",
+            "parent",
+            "resources",
+            "restart",
+            "s02",
+            "source_bundle",
+            "target",
+        },
+        "schema-2 historical F115 plasma verification",
+    )
+    if verified["authorization_limitations"] != F115_PLASMA_AUTHORIZATION_LIMITATIONS:
+        raise ValueError("schema-2 historical F115 plasma verification over-authorizes")
+    expected = {
+        "executable": {
+            "path": sole["executable"],
+            "revision": sole["executable_revision"],
+            "sha256": sole["executable_sha256"],
+        },
+        "parent": {
+            "case_id": sole["case_id"],
+            "job_id": sole["parent_job_id"],
+            "result": sole["parent_result"],
+            "segment": sole["parent_segment"],
+        },
+        "resources": {
+            "athena_walltime": sole["athena_walltime"],
+            "cpus_per_task": sole["cpus_per_task"],
+            "nodes": sole["nodes"],
+            "ranks_per_node": sole["ranks_per_node"],
+            "walltime": sole["walltime"],
+        },
+        "s02": {
+            "cancelled_s01_job_id": "4766485",
+            "cancelled_s01_no_start": True,
+            "cancelled_s01_reusable": False,
+            "segment": sole["segment"],
+            "valid": True,
+        },
+        "source_bundle": {
+            "complete_history": True,
+            "head": bundle_head,
+            "path": sole["source_bundle"],
+            "sha256": sole["source_bundle_sha256"],
+        },
+        "target": {
+            "override": sole["override"],
+            "restart_time": sole["restart_time"],
+            "time_tlim_target": sole["time_tlim_target"],
+        },
+    }
+    if any(verified[key] != expected_value for key, expected_value in expected.items()):
+        raise ValueError("schema-2 historical F115 plasma verification rebinds the sole profile")
+    matrix = require_exact_keys(
+        verified["matrix"],
+        {"path", "r03_input", "r03_resolution", "sha256"},
+        "schema-2 historical F115 plasma matrix verification",
+    )
+    if (
+        matrix["path"] != sole["matrix"]
+        or matrix["sha256"] != sole["matrix_sha256"]
+        or matrix["r03_input"]
+        != "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta100.athinput"
+        or matrix["r03_resolution"] != "192x192x384"
+    ):
+        raise ValueError("schema-2 historical F115 plasma matrix verification differs")
+    input_binding = require_exact_keys(
+        verified["input"],
+        {"case_name", "path", "revision", "sha256"},
+        "schema-2 historical F115 plasma input verification",
+    )
+    if (
+        input_binding["case_name"] != "paper_standard_active_alfvenic_beta100"
+        or input_binding["revision"] != sole["executable_revision"]
+        or not require_nonempty_string(
+            input_binding["path"], "schema-2 historical F115 plasma input path"
+        )
+        or require_sha256(
+            input_binding["sha256"], "schema-2 historical F115 plasma input SHA-256"
+        )
+        == "0" * 64
+    ):
+        raise ValueError("schema-2 historical F115 plasma input verification differs")
+    restart = require_exact_keys(
+        verified["restart"],
+        {
+            "all_eight_siblings_authenticated",
+            "binary_time",
+            "marker_mode",
+            "rank_count",
+            "siblings",
+            "terminal_restart",
+        },
+        "schema-2 historical F115 plasma restart verification",
+    )
+    terminal = require_exact_keys(
+        restart["terminal_restart"],
+        {"path", "sha256"},
+        "schema-2 historical F115 terminal restart",
+    )
+    siblings = restart["siblings"]
+    if (
+        restart["all_eight_siblings_authenticated"] is not True
+        or restart["binary_time"] != sole["restart_time"]
+        or restart["marker_mode"] != "legacy_default_precision"
+        or restart["rank_count"] != 8
+        or not isinstance(siblings, list)
+        or len(siblings) != 8
+        or any(
+            set(item) != {"path", "sha256"}
+            or not isinstance(item["path"], str)
+            or SHA256_PATTERN.fullmatch(str(item["sha256"])) is None
+            for item in siblings
+        )
+        or terminal != siblings[0]
+        or terminal["path"] != sole["restart_file"]
+    ):
+        raise ValueError("schema-2 historical F115 plasma restart verification differs")
+
+
+def historical_f116_catalog_readme_block(
+    bridge: dict[str, object], current: dict[str, object]
+) -> bytes:
+    """Return the exact source-authority F116 README append."""
+
+    current_name = Path(str(current["path"])).name
+    bridge_name = Path(str(bridge["path"])).name
+    return (
+        f"`{current_name}` records complete history through commit `{current['head']}` "
+        f"(`{current['subject']}`). It is the sole current Stage I source-selection "
+        "bundle after independently reviewed F-116 publication. It preserves F-115 as "
+        "immutable historical R03 s02 authority and does not itself authorize prepare "
+        f"or submission. Its SHA-256 is `{current['sha256']}`.\n\n"
+        f"`{bridge_name}` records complete history through commit `{bridge['head']}`. "
+        "It is retained and cataloged as a non-current branch-ref bridge between F-115 "
+        "and the final F-116 tooling revision; it is never selected as current source "
+        f"authority. Its SHA-256 is `{bridge['sha256']}`.\n\n"
+    ).encode()
+
+
+def validate_historical_f116_catalog_transition(
+    root: Path,
+    readme: bytes,
+    sums: bytes,
+    historical_f115: dict[str, object],
+    bridge: dict[str, object],
+    current: dict[str, object],
+) -> None:
+    """Prove F116 is exactly the F115 catalog plus its two declared archives."""
+
+    marker = b"## AthenaK\n\n"
+    block = historical_f116_catalog_readme_block(bridge, current)
+    if readme.count(marker) != 1 or readme.count(block) != 1:
+        raise ValueError("schema-2 historical F116 README is not the exact F115 append")
+    predecessor_readme = readme.replace(marker + block, marker, 1)
+    f115_catalog = historical_f115["catalog_before_f116"]
+    if (
+        predecessor_readme == readme
+        or sha256_bytes(predecessor_readme) != f115_catalog["readme_sha256"]
+    ):
+        raise ValueError("schema-2 historical F116 README does not derive exactly from F115")
+
+    bridge_name = Path(str(bridge["path"])).name
+    current_name = Path(str(current["path"])).name
+    suffix = (
+        f"{bridge['sha256']}  {bridge_name}\n"
+        f"{current['sha256']}  {current_name}\n"
+    ).encode()
+    if not sums.endswith(suffix):
+        raise ValueError("schema-2 historical F116 SHA256SUMS is not the exact F115 append")
+    predecessor_sums = sums[: -len(suffix)]
+    if (
+        sha256_bytes(predecessor_sums) != f115_catalog["sha256sums_sha256"]
+    ):
+        raise ValueError("schema-2 historical F116 SHA256SUMS does not derive exactly from F115")
+    predecessor_entries = parse_source_archive_sha256sums(
+        predecessor_sums, "schema-2 historical F115 predecessor SHA256SUMS"
+    )
+    after_entries = parse_source_archive_sha256sums(
+        sums, "schema-2 historical F116 reconstructed SHA256SUMS"
+    )
+    if after_entries != predecessor_entries + [
+        (str(bridge["sha256"]), bridge_name),
+        (str(current["sha256"]), current_name),
+    ]:
+        raise ValueError("schema-2 historical F116 checksum-ledger policy differs")
+    for digest, name in predecessor_entries:
+        read_confined_file_sha256(
+            root,
+            f"source-archives/{name}",
+            digest,
+            f"schema-2 historical F115 preserved source archive {name}",
+            expected_mode=0o644,
+        )
+
+
 def validate_historical_f115_authority(
     root: Path,
     repository: Path,
@@ -4294,20 +4661,76 @@ def validate_historical_f115_authority(
         root, bindings, relatives, F115_CANONICAL_SHA256, "schema-2 historical F115"
     )
     evidence, evidence_digest, evidence_path = loaded["evidence"]
+    evidence = require_exact_keys(
+        evidence,
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "generated_utc",
+            "scope",
+            "predecessors",
+            "incident",
+            "cancelled_submission",
+            "implementation",
+            "authorization",
+            "validation",
+            "publication_requirements",
+        },
+        "schema-2 historical F115 evidence",
+    )
     if (
-        evidence.get("schema_version") != 1
-        or evidence.get("record_type")
+        evidence["schema_version"] != 1
+        or evidence["record_type"]
         != "stage-i-source-bundle-recovery-supersession-evidence"
-        or evidence.get("checkpoint") != "F-115"
-        or evidence.get("execution_epoch") != EXECUTION_EPOCH
+        or evidence["checkpoint"] != "F-115"
+        or evidence["execution_epoch"] != EXECUTION_EPOCH
+        or evidence["publication_requirements"] != F115_PUBLICATION_REQUIREMENTS
     ):
         raise ValueError("schema-2 historical F115 evidence identity differs")
-    implementation = evidence.get("implementation")
-    if not isinstance(implementation, dict) or not isinstance(
-        implementation.get("source_bundle"), dict
+    generated = parse_utc_timestamp(
+        evidence["generated_utc"], "schema-2 historical F115 generation"
+    )
+    scope = require_exact_keys(
+        evidence["scope"],
+        {"relationship", "summary", "does_not_change"},
+        "schema-2 historical F115 scope",
+    )
+    if (
+        scope["relationship"]
+        != "source-bundle-binding-and-cancelled-segment-identity-supersession"
+        or not require_nonempty_string(scope["summary"], "schema-2 historical F115 summary")
+        or scope["does_not_change"] != F115_SCOPE_DOES_NOT_CHANGE
     ):
-        raise ValueError("schema-2 historical F115 source-bundle implementation is missing")
-    bundle = implementation["source_bundle"]
+        raise ValueError("schema-2 historical F115 scope differs or broadens authority")
+    implementation = require_exact_keys(
+        evidence["implementation"],
+        {
+            "commit",
+            "cpu_regression_suite",
+            "parent_commit",
+            "source_archive_catalog",
+            "source_bundle",
+            "stage_i_helper",
+            "subject",
+            "tree",
+        },
+        "schema-2 historical F115 implementation",
+    )
+    bundle = require_exact_keys(
+        implementation["source_bundle"],
+        {
+            "complete_history",
+            "head",
+            "links",
+            "mode",
+            "path",
+            "sha256",
+            "verified_revisions",
+        },
+        "schema-2 historical F115 source-bundle implementation",
+    )
     path_text = require_nonempty_string(
         bundle.get("path"), "schema-2 historical F115 bundle path"
     )
@@ -4322,6 +4745,8 @@ def validate_historical_f115_authority(
         or (match := BUNDLE_NAME_PATTERN.fullmatch(relative.name)) is None
         or match.group(1) != head[:9]
         or bundle.get("complete_history") is not True
+        or bundle.get("mode") != "0644"
+        or bundle.get("links") != 1
         or not isinstance(revisions, list)
         or not revisions
     ):
@@ -4354,8 +4779,48 @@ def validate_historical_f115_authority(
         commit != head
         or subject
         != git_revision_subject(repository, head, "schema-2 historical F115 source")
+        or require_git_revision(
+            implementation["parent_commit"], "schema-2 historical F115 parent commit"
+        )
+        == head
+        or require_git_revision(implementation["tree"], "schema-2 historical F115 tree")
+        == head
     ):
         raise ValueError("schema-2 historical F115 implementation subject differs")
+    for key, expected_suffix in (
+        ("stage_i_helper", STAGE_I_RELATIVE.as_posix()),
+        ("cpu_regression_suite", "tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py"),
+    ):
+        binding = validate_f115_declared_binding(
+            implementation[key], f"schema-2 historical F115 {key}", mode="0644"
+        )
+        if not str(binding["path"]).endswith(expected_suffix):
+            raise ValueError(f"schema-2 historical F115 {key} path differs")
+    catalog = require_exact_keys(
+        implementation["source_archive_catalog"],
+        {
+            "b0d3_bundle_retained",
+            "corrupt_c7_bundle_absent_from_active_ledger",
+            "new_bundle_present_exactly_once",
+            "readme",
+            "sha256sums",
+        },
+        "schema-2 historical F115 source-archive catalog",
+    )
+    readme_binding = validate_f115_declared_binding(
+        catalog["readme"], "schema-2 historical F115 catalog README", mode="0644"
+    )
+    sums_binding = validate_f115_declared_binding(
+        catalog["sha256sums"], "schema-2 historical F115 catalog SHA256SUMS", mode="0644"
+    )
+    if (
+        catalog["b0d3_bundle_retained"] is not True
+        or catalog["corrupt_c7_bundle_absent_from_active_ledger"] is not True
+        or catalog["new_bundle_present_exactly_once"] is not True
+        or readme_binding["path"] != "source-archives/README.md"
+        or sums_binding["path"] != "source-archives/SHA256SUMS"
+    ):
+        raise ValueError("schema-2 historical F115 source-archive catalog differs")
 
     authorization = require_exact_keys(
         evidence.get("authorization"),
@@ -4366,8 +4831,9 @@ def validate_historical_f115_authority(
         "schema-2 historical F115 authorization",
     )
     sole = authorization["sole_next_segment_profile"]
-    if not isinstance(sole, dict) or not sole:
-        raise ValueError("schema-2 historical F115 sole-next profile is missing")
+    expected_sole = expected_historical_f115_sole_profile(root, relative, bundle_digest)
+    if sole != expected_sole:
+        raise ValueError("schema-2 historical F115 sole-next profile differs")
     supersession = require_exact_keys(
         authorization["supersedes_f114_profile_only_where_explicitly_listed"],
         {"segment", "source_bundle", "source_bundle_sha256"},
@@ -4389,40 +4855,205 @@ def validate_historical_f115_authority(
         "schema-2 historical F115 source-bundle digest supersession",
     )
     expected_bundle_path = str(root / relative.as_posix())
+    expected_supersession = {
+        "segment": {
+            "from": F115_F114_SEGMENT,
+            "reason": "s01 is an immutable cancelled no-start manifest and directory",
+            "to": F115_SEGMENT,
+        },
+        "source_bundle": {
+            "from": str(root / F115_F114_BUNDLE_RELATIVE),
+            "to": expected_bundle_path,
+        },
+        "source_bundle_sha256": {
+            "from": F115_F114_BUNDLE_SHA256,
+            "to": bundle_digest,
+        },
+    }
     if (
-        require_nonempty_string(segment["from"], "schema-2 historical F115 prior segment")
-        == require_nonempty_string(segment["to"], "schema-2 historical F115 next segment")
-        or segment["reason"]
-        != "s01 is an immutable cancelled no-start manifest and directory"
-        or require_nonempty_string(
-            source_bundle["from"], "schema-2 historical F115 prior source bundle"
-        )
-        == require_nonempty_string(
-            source_bundle["to"], "schema-2 historical F115 next source bundle"
-        )
-        or source_bundle["to"] != expected_bundle_path
-        or require_sha256(
-            source_digest["from"], "schema-2 historical F115 prior source-bundle SHA-256"
-        )
-        == require_sha256(
-            source_digest["to"], "schema-2 historical F115 next source-bundle SHA-256"
-        )
-        or source_digest["to"] != bundle_digest
-        or sole.get("segment") != segment["to"]
-        or sole.get("source_bundle") != expected_bundle_path
-        or sole.get("source_bundle_sha256") != bundle_digest
+        supersession != expected_supersession
+        or segment != expected_supersession["segment"]
+        or source_bundle != expected_supersession["source_bundle"]
+        or source_digest != expected_supersession["source_bundle_sha256"]
     ):
         raise ValueError("schema-2 historical F115 authorization broadens or rebinds authority")
+    predecessors = require_exact_keys(
+        evidence["predecessors"],
+        {
+            "f113_controller_transition",
+            "f114_clean_partial_recost",
+            "f114_publication_audit",
+            "reviewed_intermediate_recovery_bundle",
+        },
+        "schema-2 historical F115 predecessors",
+    )
+    for key, value in predecessors.items():
+        validate_f115_declared_binding(
+            value, f"schema-2 historical F115 predecessor {key}", mode="0644"
+        )
+    incident = require_exact_keys(
+        evidence["incident"],
+        {
+            "corrupt_live_bundle",
+            "evidence",
+            "expected_sha256",
+            "observed_sha256",
+            "resolution",
+        },
+        "schema-2 historical F115 incident",
+    )
+    validate_f115_declared_binding(
+        incident["corrupt_live_bundle"],
+        "schema-2 historical F115 corrupt bundle",
+        mode="0644",
+    )
+    validate_f115_declared_binding(
+        incident["evidence"], "schema-2 historical F115 incident evidence", mode="0444"
+    )
+    if (
+        require_sha256(incident["expected_sha256"], "schema-2 historical F115 expected SHA-256")
+        != F115_F114_BUNDLE_SHA256
+        or require_sha256(
+            incident["observed_sha256"], "schema-2 historical F115 observed SHA-256"
+        )
+        == incident["expected_sha256"]
+        or incident["resolution"]
+        != "superseded without changing or deleting immutable incident evidence"
+    ):
+        raise ValueError("schema-2 historical F115 incident semantics differ")
+    cancelled = require_exact_keys(
+        evidence["cancelled_submission"],
+        {
+            "allocated_nodes",
+            "elapsed_seconds",
+            "evidence",
+            "exit_code",
+            "job_id",
+            "reusable",
+            "state",
+        },
+        "schema-2 historical F115 cancelled submission",
+    )
+    cancelled_evidence = require_exact_keys(
+        cancelled["evidence"],
+        {
+            "authorization",
+            "live_cancelled_manifest",
+            "post_cancel_sacct",
+            "post_cancel_squeue",
+            "pre_cancel_hold",
+            "publication_audit",
+            "scheduler_batch_script",
+            "submitted_manifest",
+        },
+        "schema-2 historical F115 cancellation evidence",
+    )
+    for key, value in cancelled_evidence.items():
+        validate_f115_declared_binding(
+            value,
+            f"schema-2 historical F115 cancellation evidence {key}",
+            mode="0644" if key == "live_cancelled_manifest" else "0444",
+        )
+    if (
+        cancelled["allocated_nodes"] != 0
+        or cancelled["elapsed_seconds"] != 0
+        or cancelled["exit_code"] != "0:0"
+        or cancelled["job_id"] != "4766485"
+        or cancelled["reusable"] is not False
+        or cancelled["state"] != "CANCELLED"
+    ):
+        raise ValueError("schema-2 historical F115 cancellation/no-reuse semantics differ")
+    validation = require_exact_keys(
+        evidence["validation"],
+        {
+            "canonical_reconcile",
+            "focused_stage_i_tests",
+            "full_active_source_archive_checksum_ledger",
+            "isolated_clone_strict_fsck",
+            "scheduler_queue_observation",
+            "source_bundle_verify",
+            "targeted_cancellation_replay_tests",
+        },
+        "schema-2 historical F115 validation",
+    )
+    reconcile = require_exact_keys(
+        validation["canonical_reconcile"],
+        {"consistent", "controller_commit", "counts", "issues"},
+        "schema-2 historical F115 reconciliation",
+    )
+    counts = require_exact_keys(
+        reconcile["counts"],
+        {"active_reservations", "ledger_rows", "manifests", "reservations", "transactions"},
+        "schema-2 historical F115 reconciliation counts",
+    )
+    scheduler = require_exact_keys(
+        validation["scheduler_queue_observation"],
+        {"cgl_workflow_jobs", "effect", "observed_utc", "unrelated_user_jobs"},
+        "schema-2 historical F115 scheduler observation",
+    )
+    if (
+        validation["full_active_source_archive_checksum_ledger"] != "passed"
+        or validation["isolated_clone_strict_fsck"] != "passed"
+        or validation["source_bundle_verify"] != "complete history passed"
+        or reconcile["consistent"] is not True
+        or reconcile["controller_commit"] != head
+        or reconcile["issues"] != []
+        or counts["active_reservations"] != 0
+        or counts["transactions"] != 0
+        or scheduler["cgl_workflow_jobs"] != []
+        or parse_utc_timestamp(
+            scheduler["observed_utc"], "schema-2 historical F115 scheduler observation"
+        )
+        != generated
+        or not isinstance(scheduler["unrelated_user_jobs"], list)
+    ):
+        raise ValueError("schema-2 historical F115 validation semantics differ")
 
-    audit = loaded["publication_audit"][0]
+    audit = require_exact_keys(
+        loaded["publication_audit"][0],
+        {
+            "artifact",
+            "audit_generated_utc",
+            "authority_and_enforcement",
+            "checkpoint",
+            "exact_state_snapshot_before_prepare",
+            "execution_epoch",
+            "independent_reviews",
+            "prior_rejected_audit_candidates",
+            "publication",
+            "published_utc",
+            "record_type",
+            "reproducible_implementation_authority",
+            "review_requirement",
+            "schema_version",
+            "source_archive_catalog",
+            "validation",
+        },
+        "schema-2 historical F115 publication audit",
+    )
     if (
         audit.get("schema_version") != 1
         or audit.get("record_type")
         != "stage-i-source-bundle-recovery-supersession-publication-audit"
         or audit.get("checkpoint") != "F-115"
         or audit.get("execution_epoch") != EXECUTION_EPOCH
+        or audit["publication"]
+        != "atomic-write-fsync-rename-fsync-under-canonical-stage-i-lock"
+        or audit["review_requirement"]
+        != (
+            "Obtain independent approval of these exact final publication-audit "
+            "candidate bytes before canonical audit publication."
+        )
     ):
         raise ValueError("schema-2 historical F115 publication audit identity differs")
+    published = parse_utc_timestamp(
+        audit["published_utc"], "schema-2 historical F115 artifact publication"
+    )
+    audit_generated = parse_utc_timestamp(
+        audit["audit_generated_utc"], "schema-2 historical F115 audit generation"
+    )
+    if not generated <= published <= audit_generated:
+        raise ValueError("schema-2 historical F115 publication chronology differs")
     exact_publication_binding(
         audit.get("artifact"),
         evidence_path,
@@ -4463,9 +5094,7 @@ def validate_historical_f115_authority(
         ]
         is not True
         or authority["sole_next_segment_profile"] != sole
-        or not isinstance(enforcement, list)
-        or not enforcement
-        or any(not isinstance(item, str) or not item for item in enforcement)
+        or enforcement != F115_ENFORCEMENT_CHAIN
     ):
         raise ValueError("schema-2 historical F115 publication audit over-authorizes")
     reviews = require_exact_keys(
@@ -4479,7 +5108,157 @@ def validate_historical_f115_authority(
     )
     if reviews["reviews_bind_exact_published_f115_sha256"] != evidence_digest:
         raise ValueError("schema-2 historical F115 review digest binding differs")
+    audit_catalog = require_exact_keys(
+        audit["source_archive_catalog"],
+        {
+            "corrupt_c7_absent_from_active_checksum_ledger",
+            "corrupt_c7_retained_as_incident_evidence",
+            "full_active_checksum_ledger",
+            "new_bundle_present_exactly_once",
+            "readme",
+            "sha256sums",
+        },
+        "schema-2 historical F115 audit source-archive catalog",
+    )
+    audit_readme = validate_f115_declared_binding(
+        audit_catalog["readme"], "schema-2 historical F115 audit catalog README", mode="0644"
+    )
+    audit_sums = validate_f115_declared_binding(
+        audit_catalog["sha256sums"],
+        "schema-2 historical F115 audit catalog SHA256SUMS",
+        mode="0644",
+    )
+    if (
+        audit_catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
+        or audit_catalog["corrupt_c7_retained_as_incident_evidence"] is not True
+        or audit_catalog["full_active_checksum_ledger"] != "passed"
+        or audit_catalog["new_bundle_present_exactly_once"] is not True
+        or audit_readme["path"] != str(root / "source-archives/README.md")
+        or audit_sums["path"] != str(root / "source-archives/SHA256SUMS")
+        or audit_readme["sha256"] != readme_binding["sha256"]
+        or audit_sums["sha256"] != sums_binding["sha256"]
+    ):
+        raise ValueError("schema-2 historical F115 audit catalog semantics differ")
+    reproducible = require_exact_keys(
+        audit["reproducible_implementation_authority"],
+        {
+            "authoritative_source_bundle",
+            "committed_cpu_regression_suite",
+            "committed_stage_i_helper",
+            "f115_live_cpu_suite_observation",
+        },
+        "schema-2 historical F115 reproducible implementation",
+    )
+    authoritative_bundle = require_exact_keys(
+        reproducible["authoritative_source_bundle"],
+        {"complete_history", "head", "links", "mode", "path", "sha256"},
+        "schema-2 historical F115 authoritative source bundle",
+    )
+    if authoritative_bundle != {
+        "complete_history": True,
+        "head": head,
+        "links": 1,
+        "mode": "0644",
+        "path": expected_bundle_path,
+        "sha256": bundle_digest,
+    }:
+        raise ValueError("schema-2 historical F115 reproducible bundle differs")
+    for key in ("committed_cpu_regression_suite", "committed_stage_i_helper"):
+        retained = require_exact_keys(
+            reproducible[key],
+            {"path", "sha256"},
+            f"schema-2 historical F115 reproducible {key}",
+        )
+        require_nonempty_string(retained["path"], f"schema-2 historical F115 {key} path")
+        require_sha256(retained["sha256"], f"schema-2 historical F115 {key} SHA-256")
+    observation = require_exact_keys(
+        reproducible["f115_live_cpu_suite_observation"],
+        {"interpretation", "sha256"},
+        "schema-2 historical F115 live CPU observation",
+    )
+    if (
+        "non-authorizing" not in str(observation["interpretation"])
+        or observation["sha256"] != implementation["cpu_regression_suite"]["sha256"]
+    ):
+        raise ValueError("schema-2 historical F115 live CPU observation over-authorizes")
+    prior = audit["prior_rejected_audit_candidates"]
+    if (
+        not isinstance(prior, list)
+        or not prior
+        or any(
+            set(item) != {"closed_findings", "published", "sha256"}
+            or item["published"] is not False
+            or not isinstance(item["closed_findings"], list)
+            or not item["closed_findings"]
+            or SHA256_PATTERN.fullmatch(str(item["sha256"])) is None
+            for item in prior
+        )
+    ):
+        raise ValueError("schema-2 historical F115 rejected audit history differs")
+    snapshot = require_exact_keys(
+        audit["exact_state_snapshot_before_prepare"],
+        {
+            "manifest_inventory",
+            "manifest_inventory_sha256",
+            "node_hours_ledger",
+            "qualification_approval",
+            "reconcile_observation",
+            "reconcile_observation_sha256",
+            "reservations",
+        },
+        "schema-2 historical F115 exact state snapshot",
+    )
+    for key in ("node_hours_ledger", "qualification_approval", "reservations"):
+        validate_f115_declared_binding(
+            snapshot[key], f"schema-2 historical F115 snapshot {key}", mode="0644"
+        )
+    if (
+        not isinstance(snapshot["manifest_inventory"], list)
+        or not snapshot["manifest_inventory"]
+        or any(
+            set(item) != {"path", "sha256"}
+            or not isinstance(item["path"], str)
+            or SHA256_PATTERN.fullmatch(str(item["sha256"])) is None
+            for item in snapshot["manifest_inventory"]
+        )
+        or require_sha256(
+            snapshot["manifest_inventory_sha256"],
+            "schema-2 historical F115 manifest inventory SHA-256",
+        )
+        == "0" * 64
+        or snapshot["reconcile_observation"] != reconcile
+        or require_sha256(
+            snapshot["reconcile_observation_sha256"],
+            "schema-2 historical F115 reconcile observation SHA-256",
+        )
+        == "0" * 64
+    ):
+        raise ValueError("schema-2 historical F115 exact state snapshot differs")
+    audit_validation = require_exact_keys(
+        audit["validation"],
+        {
+            "declared_f115_bindings_authenticated",
+            "focused_stage_i_tests",
+            "full_active_source_archive_checksum_ledger",
+            "git_bundle_verify",
+            "isolated_clone_strict_fsck",
+            "scheduler_queue_observation",
+            "targeted_cancellation_replay_tests",
+        },
+        "schema-2 historical F115 audit validation",
+    )
+    if (
+        audit_validation["declared_f115_bindings_authenticated"] != 19
+        or audit_validation["full_active_source_archive_checksum_ledger"] != "passed"
+        or audit_validation["git_bundle_verify"] != "passed"
+        or audit_validation["isolated_clone_strict_fsck"] != "passed"
+        or not isinstance(audit_validation["scheduler_queue_observation"], dict)
+    ):
+        raise ValueError("schema-2 historical F115 audit validation differs")
+
     agents = set()
+    reviewed_candidate = None
+    reviewed_times = []
     for key, audit_key, kind, decision in (
         ("provenance_review", "provenance_security", "provenance-security",
          "approved-for-publication"),
@@ -4487,14 +5266,51 @@ def validate_historical_f115_authority(
          "plasma-scientific-continuation", "approved"),
     ):
         review, review_digest, review_path = loaded[key]
-        reviewer = review.get("reviewer")
-        if not isinstance(reviewer, dict):
-            raise ValueError(f"schema-2 historical F115 {key} reviewer is missing")
+        expected_keys = {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "review_kind",
+            "decision",
+            "reviewed_candidate",
+            "published_f115",
+            "reviewer",
+            "reviewed_utc",
+        }
+        expected_keys |= (
+            {"scope", "findings", "limitations"}
+            if kind == "provenance-security"
+            else {"verified"}
+        )
+        review = require_exact_keys(
+            review, expected_keys, f"schema-2 historical F115 {key}"
+        )
+        candidate = require_exact_keys(
+            review["reviewed_candidate"],
+            {"path", "sha256"},
+            f"schema-2 historical F115 {key} candidate",
+        )
+        candidate_path = require_normalized_absolute_path(
+            candidate["path"], f"schema-2 historical F115 {key} candidate path"
+        )
+        candidate_digest = require_sha256(
+            candidate["sha256"], f"schema-2 historical F115 {key} candidate SHA-256"
+        )
+        candidate_identity = (str(candidate_path), candidate_digest)
+        if reviewed_candidate is None:
+            reviewed_candidate = candidate_identity
+        reviewer = require_exact_keys(
+            review["reviewer"],
+            set(expected_reviewer := (
+                F115_PROVENANCE_REVIEWER
+                if kind == "provenance-security"
+                else F115_PLASMA_REVIEWER
+            )),
+            f"schema-2 historical F115 {key} reviewer",
+        )
         agent = require_nonempty_string(
             reviewer.get("agent_id"), f"schema-2 historical F115 {key} reviewer agent"
-        )
-        require_nonempty_string(
-            reviewer.get("identity"), f"schema-2 historical F115 {key} reviewer identity"
         )
         if (
             review.get("schema_version") != 1
@@ -4504,11 +5320,41 @@ def validate_historical_f115_authority(
             or review.get("execution_epoch") != EXECUTION_EPOCH
             or review.get("review_kind") != kind
             or review.get("decision") != decision
+            or reviewer != expected_reviewer
+            or candidate_identity != reviewed_candidate
+            or candidate_digest != evidence_digest
             or review.get("published_f115")
             != {"path": str(evidence_path), "sha256": evidence_digest}
             or agent in agents
         ):
             raise ValueError(f"schema-2 historical F115 {key} identity differs")
+        if kind == "provenance-security":
+            findings = review["findings"]
+            limitations = review["limitations"]
+            if (
+                review["scope"] != F115_PROVENANCE_REVIEW_SCOPE
+                or not isinstance(findings, list)
+                or not findings
+                or any(
+                    set(item) != {"severity", "summary"}
+                    or item["severity"] != "none"
+                    or not isinstance(item["summary"], str)
+                    or not item["summary"]
+                    for item in findings
+                )
+                or not isinstance(limitations, list)
+                or not limitations
+                or any(not isinstance(item, str) or not item for item in limitations)
+            ):
+                raise ValueError("schema-2 historical F115 provenance review scope differs")
+        else:
+            validate_historical_f115_plasma_verified(review["verified"], sole, head)
+        reviewed = parse_utc_timestamp(
+            review["reviewed_utc"], f"schema-2 historical F115 {key} review"
+        )
+        if not published <= reviewed <= audit_generated:
+            raise ValueError(f"schema-2 historical F115 {key} chronology differs")
+        reviewed_times.append(reviewed)
         agents.add(agent)
         exact_publication_binding(
             reviews[audit_key],
@@ -4517,6 +5363,8 @@ def validate_historical_f115_authority(
             f"schema-2 historical F115 {key} audit binding",
             mode="0444",
         )
+    if len(reviewed_times) != 2:
+        raise ValueError("schema-2 historical F115 independent reviews are incomplete")
     return {
         "digests": {
             "evidence_sha256": evidence_digest,
@@ -4530,6 +5378,10 @@ def validate_historical_f115_authority(
             "head": head,
             "subject": subject,
             "verified_revisions": normalized_revisions,
+        },
+        "catalog_before_f116": {
+            "readme_sha256": readme_binding["sha256"],
+            "sha256sums_sha256": sums_binding["sha256"],
         },
     }
 
@@ -5040,10 +5892,11 @@ def validate_f118_catalog_transition(
     bridge_name = Path(str(bridge["path"])).name
     predecessor_name = Path(str(predecessor["path"])).name
     current_name = Path(str(current["path"])).name
-    f115_name = Path(str(historical_f115["path"])).name
-    f115_digest = str(historical_f115["sha256"])
-    f115_head = str(historical_f115["head"])
-    f115_subject = str(historical_f115["subject"])
+    f115_bundle = historical_f115["bundle"]
+    f115_name = Path(str(f115_bundle["path"])).name
+    f115_digest = str(f115_bundle["sha256"])
+    f115_head = str(f115_bundle["head"])
+    f115_subject = str(f115_bundle["subject"])
     if (
         bridge_name.encode() not in old_readme
         or predecessor_name.encode() not in old_readme
@@ -5068,6 +5921,14 @@ def validate_f118_catalog_transition(
     old_sums = sums[: -len(final_line)]
     if sha256_bytes(old_sums) != before["sha256sums_sha256"]:
         raise ValueError("schema-2 F118 live SHA256SUMS does not derive from F116 catalog_after")
+    validate_historical_f116_catalog_transition(
+        root,
+        old_readme,
+        old_sums,
+        historical_f115,
+        bridge,
+        predecessor,
+    )
     old_entries = parse_source_archive_sha256sums(
         old_sums, "schema-2 F118 predecessor SHA256SUMS"
     )
@@ -5298,7 +6159,7 @@ def validate_complete_f118_source_authority(
         current,
         bridge,
         predecessor,
-        historical["historical_f115"]["bundle"],
+        historical["historical_f115"],
         before,
         after,
     )
