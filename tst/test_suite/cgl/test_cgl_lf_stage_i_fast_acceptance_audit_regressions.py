@@ -344,18 +344,64 @@ class FakeAcceptance:
         }
 
     @staticmethod
+    def analyzer_metrics(
+        _diagnostics: dict[str, object],
+        _name: str,
+        _policy: dict[str, object],
+        _minimum_block_duration: float,
+    ) -> dict[str, object]:
+        return {}
+
+    @staticmethod
+    def convergence_products(
+        _diagnostics: dict[str, object],
+        _name: str,
+    ) -> dict[str, object]:
+        return {
+            "velocity_spectrum_shape": {
+                "x": [1.0, 2.0, 3.0],
+                "y": [3.0, 2.0, 1.0],
+            },
+        }
+
+    @staticmethod
+    def active_energy_closure_gate(
+        _policy: dict[str, object],
+        case_id: str,
+        _mhd: dict[str, list[float]],
+        _user: dict[str, list[float]],
+    ) -> dict[str, object]:
+        return {
+            "name": "active_energy_closure",
+            "result": "pass",
+            "reason": f"fixture active-energy closure passed for {case_id}",
+            "observations": {},
+        }
+
+    @staticmethod
+    def history_delta(
+        _history: dict[str, list[float]],
+        _column: str,
+        _start: float,
+        _end: float,
+    ) -> float:
+        return 1.0
+
+    @staticmethod
     def gate(
         name: str,
         result: str,
         *,
         reason: str,
         observations: object = None,
+        limits: object = None,
     ) -> dict[str, object]:
         return {
             "name": name,
             "result": result,
             "reason": reason,
             "observations": observations,
+            "limits": limits,
         }
 
     @staticmethod
@@ -386,6 +432,145 @@ class FakeAcceptance:
         return {"mean": 2.0, "standard_error": 0.01, "standard_deviation": 0.1}
 
 
+class FakeSnapshotAnalyzer:
+    """Replay fixture for one retained snapshot ensemble."""
+
+    def __init__(self, ensemble: dict[str, object]):
+        self.ensemble = ensemble
+
+    def average_snapshot_records(
+        self, _records: dict[str, object]
+    ) -> dict[str, object]:
+        return dict(self.ensemble)
+
+
+class FakeReport:
+    """Replay fixture for direct-fast history and snapshot diagnostics."""
+
+    def __init__(
+        self, windows: dict[str, object], ensemble: dict[str, object]
+    ):
+        self.windows = windows
+        self.analyzer = FakeSnapshotAnalyzer(ensemble)
+
+    def load_pure_analyzer(self) -> FakeSnapshotAnalyzer:
+        return self.analyzer
+
+    def window_summaries(self, *_args) -> dict[str, object]:
+        return self.windows
+
+
+def write_complete_diagnostics(
+    fast_acceptance,
+    case_dir: Path,
+    lineage: dict[str, object],
+) -> FakeReport:
+    """Write one fully bound direct-fast diagnostics fixture."""
+
+    lineage_path = case_dir / "lineage.json"
+    snapshot_index = case_dir / "snapshots.json"
+    snapshot_source = case_dir / "snapshot.athdf"
+    snapshot_source.write_bytes(b"snapshot fixture\n")
+    write_json(snapshot_index, {"schema_version": 1, "snapshots": ["fixture"]})
+    source_binding = fast_acceptance.binding(snapshot_source)
+    files = [source_binding]
+    provenance = {
+        "files": files,
+        "expected_rank_count": 1,
+        "aggregate_sha256": hashlib.sha256(
+            fast_acceptance.canonical_json_bytes(files)
+        ).hexdigest(),
+    }
+    windows = {"fixture": "replayed history diagnostics"}
+    ensemble = {
+        "snapshot_count": 1,
+        "time_start": 8.0,
+        "time_end": 10.0,
+        "spectra": {
+            "velocity": {
+                "k": [1.0, 2.0, 3.0],
+                "power_per_dk": [3.0, 2.0, 1.0],
+            },
+        },
+    }
+    write_json(
+        case_dir / "diagnostics.json",
+        {
+            "schema_version": 1,
+            "case_id": lineage["case_id"],
+            "case_name": lineage["case_name"],
+            "analysis_status": "complete",
+            "snapshot_analysis_status": "complete",
+            "windows": windows,
+            "snapshots": {
+                "fixture": {
+                    "snapshot_provenance": provenance,
+                },
+            },
+            "snapshot_ensemble": ensemble,
+            "compat": {
+                "snapshot_ensemble": ensemble,
+            },
+            "provenance": {
+                "lineage": fast_acceptance.binding(lineage_path),
+                "snapshot_index": fast_acceptance.binding(snapshot_index),
+                "merged_mhd_history": lineage["histories"]["mhd"]["binding"],
+                "merged_user_history": lineage["histories"]["user"]["binding"],
+                "analyzer": fast_acceptance.binding(fast_acceptance.PAPER_ANALYZER),
+                "adapter": fast_acceptance.binding(
+                    fast_acceptance.FAST_REPORT_UTILITY
+                ),
+            },
+        },
+    )
+    return FakeReport(windows, ensemble)
+
+
+def add_r15_strict_failure_fixture(
+    root: Path,
+    lineage: dict[str, object],
+    *,
+    variant: str | None = "standard",
+) -> None:
+    """Retain one exact strict R15 hard-bound failure beside a variant lineage."""
+
+    segment = root / "runs/strict/R15/fast_s000_t0_to_t10"
+    manifest = segment / "manifest/fast_run.json"
+    write_json(
+        manifest,
+        {
+            "schema_version": 1,
+            "root": str(root.absolute()),
+            "case_id": "R15",
+            "case_name": matrix_cases()["R15"]["name"],
+            "job_id": "4771183",
+            "variant": variant,
+            "command_line_overrides": [],
+            "input_sha256": lineage["lineage_identities"]["input_sha256"][0],
+            "matrix_sha256": lineage["lineage_identities"]["matrix_sha256"][0],
+        },
+    )
+    (segment / "manifest/run_exit_code").write_text("143\n", encoding="utf-8")
+    log = root / "logs/slurm-fast/cglf_R15_s000.4771183.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        "elapsed=1 cycle=10030 time=1.275643e+00 dt=1e-4\n"
+        "CGL Landau-fluid strict admissibility failed after a split stage: "
+        "sweep=post stage=1/19 dfloor=0 pfloor=0 nonfinite=0 "
+        "nonpositive=0 hard_bound=2\n",
+        encoding="utf-8",
+    )
+    lineage["unselected_lineages"] = [{
+        "segments": [{
+            "segment": str(segment.absolute()),
+            "variant": variant,
+            "command_line_overrides": [],
+            "job_id": "4771183",
+            "state": "failed",
+        }],
+    }]
+
+
 def summarize(
     fast_acceptance,
     tmp_path: Path,
@@ -393,14 +578,23 @@ def summarize(
     lineage: dict[str, object],
     *,
     policy: dict[str, object] | None = None,
+    complete_diagnostics: bool = False,
+    monkeypatch=None,
 ) -> tuple[dict[str, object], dict[str, object] | None]:
     selected_policy = policy or policy_fixture([case_id])
+    case_dir = tmp_path / "report" / "cases" / case_id
+    lineage_path = case_dir / "lineage.json"
+    write_json(lineage_path, lineage)
+    if complete_diagnostics:
+        assert monkeypatch is not None
+        report = write_complete_diagnostics(fast_acceptance, case_dir, lineage)
+        monkeypatch.setattr(fast_acceptance, "load_report_module", lambda: report)
     return fast_acceptance.summarize_case(
         FakeAcceptance(selected_policy),
         selected_policy,
         case_id,
         lineage,
-        {"path": "fixture-lineage.json", "sha256": "a" * 64},
+        fast_acceptance.binding(lineage_path),
         "fixture",
         tmp_path / "acceptance" / "cases" / case_id,
     )
@@ -660,6 +854,221 @@ def test_complete_case_statistics_use_authenticated_forcing_tcorr(
         "statistics"
     ]
     assert statistics["method"]["required_block_duration"] == pytest.approx(2.0)
+
+
+def test_complete_direct_fast_science_is_claim_grade_without_canonical_package(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R02")
+
+    summary, comparison = summarize(
+        fast_acceptance,
+        tmp_path,
+        "R02",
+        lineage,
+        complete_diagnostics=True,
+        monkeypatch=monkeypatch,
+    )
+
+    evidence = json.loads(
+        (
+            tmp_path
+            / "acceptance/cases/R02/reviewed_case_evidence.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert summary["result"] == "pass"
+    assert comparison is not None and comparison["result"] == "pass"
+    assert evidence["result"] == "pass"
+    assert evidence["authority"] == "non-authorizing-direct-fast-scientific-assessment"
+    assert evidence["release_authorizing"] is False
+    assert evidence["campaign_authority_eligible"] is False
+    assert evidence["evaluation_inputs"]["accepted_bundle_manifest"] is None
+    assert evidence["evaluation_inputs"]["diagnostics"]["direct_fast_complete"][
+        "sha256"
+    ] == sha256(tmp_path / "report/cases/R02/diagnostics.json")
+
+
+def test_direct_fast_claim_grade_uses_reviewed_active_energy_gate(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R02")
+    policy = policy_fixture(["R02"])
+    policy["criteria"]["active_energy_policy"] = {"revision_id": "fixture"}
+    policy["criteria"]["family_gates"]["active_passive"].update({
+        "active_cases": ["R02"],
+        "passive_cases": [],
+        "activity_absolute_gt": 0.0,
+    })
+
+    summary, _comparison = summarize(
+        fast_acceptance,
+        tmp_path,
+        "R02",
+        lineage,
+        policy=policy,
+        complete_diagnostics=True,
+        monkeypatch=monkeypatch,
+    )
+    evidence = json.loads(
+        (
+            tmp_path
+            / "acceptance/cases/R02/reviewed_case_evidence.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert summary["result"] == "pass"
+    assert {
+        gate["name"]: gate["result"] for gate in evidence["gates"]
+    }["active_energy_closure"] == "pass"
+
+
+def test_stale_direct_fast_diagnostics_cannot_become_claim_grade(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R02")
+    case_dir = tmp_path / "report/cases/R02"
+    write_json(case_dir / "lineage.json", lineage)
+    report = write_complete_diagnostics(fast_acceptance, case_dir, lineage)
+    monkeypatch.setattr(fast_acceptance, "load_report_module", lambda: report)
+    diagnostics_path = case_dir / "diagnostics.json"
+    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+    diagnostics["provenance"]["merged_user_history"]["sha256"] = "0" * 64
+    write_json(diagnostics_path, diagnostics)
+
+    summary, comparison = fast_acceptance.summarize_case(
+        FakeAcceptance(policy_fixture(["R02"])),
+        policy_fixture(["R02"]),
+        "R02",
+        lineage,
+        fast_acceptance.binding(case_dir / "lineage.json"),
+        "fixture",
+        tmp_path / "acceptance/cases/R02",
+    )
+
+    assert summary["result"] == "inconclusive"
+    assert summary["reviewed_case_evidence"]["binding"] is None
+    assert "declared binding differs" in summary["reviewed_case_evidence"]["reason"]
+    assert comparison is not None and comparison["result"] == "pass"
+
+
+def test_r10_remains_exploratory_with_complete_direct_fast_science(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R10")
+
+    summary, comparison = summarize(
+        fast_acceptance,
+        tmp_path,
+        "R10",
+        lineage,
+        complete_diagnostics=True,
+        monkeypatch=monkeypatch,
+    )
+    evidence = json.loads(
+        (
+            tmp_path
+            / "acceptance/cases/R10/reviewed_case_evidence.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert evidence["result"] == "pass"
+    assert summary["result"] == "inconclusive"
+    assert summary["scope"]["classification"] == "exploratory_only"
+    assert comparison is None
+
+
+def test_exact_r15_nonfatal_variant_is_scoped_and_preserves_strict_failure(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(
+        tmp_path / "lineage",
+        case_id="R15",
+        strict=False,
+        variants=["finite_limiter_hard_bound_diagnostic_nonfatal"],
+        overrides=["mhd/cgl_lf_strict_admissibility=false"],
+    )
+    add_r15_strict_failure_fixture(tmp_path / "campaign", lineage)
+
+    summary, comparison = summarize(
+        fast_acceptance,
+        tmp_path,
+        "R15",
+        lineage,
+        complete_diagnostics=True,
+        monkeypatch=monkeypatch,
+    )
+    evidence = json.loads(
+        (
+            tmp_path
+            / "acceptance/cases/R15/reviewed_case_evidence.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert summary["result"] == "pass"
+    assert comparison is not None and comparison["result"] == "pass"
+    assert summary["scope"]["classification"] == "scoped_nonfatal_hard_bound_variant"
+    assert summary["scope"]["uniform_strict_diagnostics_eligible"] is False
+    assert "uniform strict-admissibility compliance" in summary["scope"][
+        "excluded_claims"
+    ]
+    retained = evidence["retained_strict_failure_evidence"]
+    assert retained[0]["job_id"] == "4771183"
+    assert retained[0]["failure_time"] == pytest.approx(1.275643)
+    assert retained[0]["failure_counters"]["lf_hardbd"] == 2
+    assert {
+        gate["name"]: gate["result"] for gate in evidence["gates"]
+    }["r15_prior_strict_failure_retained"] == "pass"
+
+
+@pytest.mark.parametrize("variant", [None, "standard"])
+def test_r15_strict_failure_accepts_only_exact_standard_variant_representations(
+    fast_acceptance, tmp_path, variant
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R15")
+    add_r15_strict_failure_fixture(tmp_path / "campaign", lineage, variant=variant)
+
+    records = fast_acceptance.retained_strict_failure_evidence("R15", lineage)
+
+    assert len(records) == 1
+    assert records[0]["job_id"] == "4771183"
+    assert records[0]["failure_time"] == pytest.approx(1.275643)
+    assert records[0]["failure_counters"]["lf_hardbd"] == 2
+
+
+def test_r15_strict_failure_rejects_nonstandard_variant(
+    fast_acceptance, tmp_path
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R15")
+    add_r15_strict_failure_fixture(
+        tmp_path / "campaign", lineage, variant="attacker_variant"
+    )
+
+    assert fast_acceptance.retained_strict_failure_evidence("R15", lineage) == []
+
+
+def test_r15_nonfatal_variant_without_retained_strict_failure_is_inconclusive(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(
+        tmp_path / "lineage",
+        case_id="R15",
+        strict=False,
+        variants=["finite_limiter_hard_bound_diagnostic_nonfatal"],
+        overrides=["mhd/cgl_lf_strict_admissibility=false"],
+    )
+
+    summary, comparison = summarize(
+        fast_acceptance,
+        tmp_path,
+        "R15",
+        lineage,
+        complete_diagnostics=True,
+        monkeypatch=monkeypatch,
+    )
+
+    assert summary["result"] == "inconclusive"
+    assert summary["reviewed_case_evidence"]["result"] == "inconclusive"
+    assert comparison is not None and comparison["result"] == "inconclusive"
 
 
 def test_rerun_removes_stale_reviewed_case_evidence(fast_acceptance, tmp_path):

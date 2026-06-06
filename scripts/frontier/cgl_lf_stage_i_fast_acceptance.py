@@ -8,9 +8,11 @@ and evidence sealing.  Partial cases are retained as inconclusive evidence
 instead of aborting the campaign assessment.
 
 R10 is always exploratory-only because the qualified executable regularizes a
-non-hyperbolic CGL fast-speed discriminant.  R14 is admitted only as the
-explicit finite-limiter, nonfatal-hard-bound variant when that variant is
-recorded in the selected fast-report lineage.
+non-hyperbolic CGL fast-speed discriminant.  R14 and R15 are admitted only as
+explicit finite-limiter, nonfatal-hard-bound variants when those variants are
+recorded in the selected fast-report lineage.  The observed strict R15 failure
+remains retained evidence and is never converted into strict-admissibility
+support by the diagnostic variant.
 """
 
 from __future__ import annotations
@@ -38,6 +40,8 @@ DEFAULT_INVENTORY = DEFAULT_CAMPAIGN_ROOT / (
 ACCEPTANCE_UTILITY = (
     REPO_ROOT / "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py"
 )
+FAST_REPORT_UTILITY = REPO_ROOT / "scripts/frontier/cgl_lf_stage_i_fast_report.py"
+PAPER_ANALYZER = REPO_ROOT / "scripts/analyze_cgl_lf_paper.py"
 WORKFLOW_UTILITY = REPO_ROOT / "scripts/cgl_lf_workflow.py"
 DEFAULT_CRITERIA = REPO_ROOT / (
     "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json"
@@ -49,8 +53,15 @@ CASE_ID_PATTERN = re.compile(r"R(?:0[2-9]|1[0-7])")
 TIME_TOLERANCE = 1.0e-12
 FATAL_COUNTERS = ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos")
 HARD_BOUND_COUNTER = "lf_hardbd"
-R14_NONFATAL_VARIANT = "finite_limiter_hard_bound_diagnostic_nonfatal"
-R14_OVERRIDE = "mhd/cgl_lf_strict_admissibility=false"
+NONFATAL_HARD_BOUND_VARIANT = "finite_limiter_hard_bound_diagnostic_nonfatal"
+NONFATAL_HARD_BOUND_OVERRIDE = "mhd/cgl_lf_strict_admissibility=false"
+SCOPED_NONFATAL_CASES = ("R14", "R15")
+STRICT_FAILURE_PATTERN = re.compile(
+    r"CGL Landau-fluid strict admissibility failed.*?"
+    r"dfloor=(\d+)\s+pfloor=(\d+)\s+nonfinite=(\d+)\s+"
+    r"nonpositive=(\d+)\s+hard_bound=(\d+)"
+)
+LOG_TIME_PATTERN = re.compile(r"\btime=([0-9.eE+-]+)\b")
 
 
 class FastAcceptanceError(RuntimeError):
@@ -90,6 +101,18 @@ def stable_json_bytes(value: object) -> bytes:
     return (
         json.dumps(json_safe(value), indent=2, sort_keys=True, allow_nan=False)
         + "\n"
+    ).encode("utf-8")
+
+
+def canonical_json_bytes(value: object) -> bytes:
+    """Return compact deterministic JSON bytes."""
+
+    return json.dumps(
+        json_safe(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
     ).encode("utf-8")
 
 
@@ -179,6 +202,24 @@ def load_workflow_module() -> object:
     spec = importlib.util.spec_from_file_location(module_name, WORKFLOW_UTILITY)
     if spec is None or spec.loader is None:
         raise FastAcceptanceError(f"cannot import workflow utility: {WORKFLOW_UTILITY}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_report_module() -> object:
+    """Import the direct-fast report adapter by exact path."""
+
+    module_name = "_cgl_lf_stage_i_report_for_direct_fast_acceptance"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    spec = importlib.util.spec_from_file_location(module_name, FAST_REPORT_UTILITY)
+    if spec is None or spec.loader is None:
+        raise FastAcceptanceError(
+            f"cannot import direct-fast report utility: {FAST_REPORT_UTILITY}"
+        )
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
@@ -304,6 +345,119 @@ def selected_variant_metadata(lineage: dict[str, object]) -> dict[str, list[str]
     }
 
 
+def candidate_segment_summaries(lineage: dict[str, object]) -> list[dict[str, object]]:
+    """Return selected and unselected fast-lineage segment summaries."""
+
+    result: list[dict[str, object]] = []
+    for key in ("selected_fast_lineage",):
+        record = lineage.get(key)
+        segments = record.get("segments") if isinstance(record, dict) else None
+        if isinstance(segments, list):
+            result.extend(value for value in segments if isinstance(value, dict))
+    unselected = lineage.get("unselected_lineages")
+    if isinstance(unselected, list):
+        for record in unselected:
+            segments = record.get("segments") if isinstance(record, dict) else None
+            if isinstance(segments, list):
+                result.extend(value for value in segments if isinstance(value, dict))
+    return result
+
+
+def retained_strict_failure_evidence(
+    case_id: str,
+    lineage: dict[str, object],
+) -> list[dict[str, object]]:
+    """Authenticate retained strict-run failures relevant to a scoped variant."""
+
+    if case_id != "R15":
+        return []
+    records: list[dict[str, object]] = []
+    seen: set[Path] = set()
+    identities = lineage.get("lineage_identities")
+    expected_identities = {
+        key: {str(value) for value in values}
+        for key in ("input_sha256", "matrix_sha256", "executable_sha256")
+        if isinstance(identities, dict)
+        and isinstance((values := identities.get(key)), list)
+        and values
+    }
+    for segment in candidate_segment_summaries(lineage):
+        if (
+            segment.get("variant") not in (None, "standard")
+            or segment.get("command_line_overrides", []) != []
+            or not isinstance(segment.get("segment"), str)
+        ):
+            continue
+        segment_path = Path(str(segment["segment"])).resolve(strict=False)
+        if segment_path in seen:
+            continue
+        seen.add(segment_path)
+        manifest_path = segment_path / "manifest/fast_run.json"
+        exit_path = segment_path / "manifest/run_exit_code"
+        try:
+            manifest = load_json(manifest_path)
+            manifest_binding = binding(manifest_path)
+            exit_binding = binding(exit_path)
+            exit_code = int(exit_path.read_text(encoding="utf-8").strip())
+            if (
+                manifest.get("case_id") != case_id
+                or manifest.get("variant") not in (None, "standard")
+                or manifest.get("command_line_overrides") not in (None, [])
+                or exit_code == 0
+                or any(
+                    str(manifest.get(key)) not in values
+                    for key, values in expected_identities.items()
+                )
+            ):
+                continue
+            job_id = str(manifest.get("job_id") or "")
+            root = Path(str(manifest.get("root") or ""))
+            logs = sorted((root / "logs/slurm-fast").glob(f"*.{job_id}.log"))
+            if len(logs) != 1:
+                continue
+            log_path = logs[0]
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+            failures = list(STRICT_FAILURE_PATTERN.finditer(text))
+            if not failures:
+                continue
+            times = [
+                float(value)
+                for value in LOG_TIME_PATTERN.findall(text[: failures[-1].start()])
+            ]
+            if not times:
+                continue
+            counts = [int(value) for value in failures[-1].groups()]
+            if counts[-1] <= 0:
+                continue
+            records.append({
+                "schema_version": 1,
+                "record_type": "cgl-lf-stage-i-retained-strict-failure-evidence",
+                "case_id": case_id,
+                "job_id": job_id,
+                "result": "fail",
+                "reason": (
+                    "strict-admissibility run terminated after a hard-bound event"
+                ),
+                "failure_time": times[-1],
+                "failure_counters": {
+                    "lf_dfloor": counts[0],
+                    "lf_pfloor": counts[1],
+                    "lf_nonfin": counts[2],
+                    "lf_nonpos": counts[3],
+                    "lf_hardbd": counts[4],
+                },
+                "strict_admissibility_evidence": True,
+                "provenance": {
+                    "manifest": manifest_binding,
+                    "run_exit_code": exit_binding,
+                    "slurm_log": binding(log_path),
+                },
+            })
+        except (FastAcceptanceError, OSError, ValueError):
+            continue
+    return sorted(records, key=lambda value: str(value["job_id"]))
+
+
 def strict_model_value(lineage: dict[str, object]) -> str | None:
     """Return the normalized effective strict-admissibility model choice."""
 
@@ -335,6 +489,54 @@ def current_declared_binding(
     if comparable_binding(current) != declared:
         return current, [f"{label} declared binding differs from current bytes"]
     return current, []
+
+
+def require_same_current_binding(
+    declared: object,
+    expected: object,
+    label: str,
+) -> dict[str, object]:
+    """Verify two bindings identify the same current regular file."""
+
+    current, errors = current_declared_binding(declared, label)
+    if current is None or errors:
+        raise FastAcceptanceError("; ".join(errors))
+    if comparable_binding(current) != comparable_binding(expected):
+        raise FastAcceptanceError(f"{label} does not bind the selected current artifact")
+    return current
+
+
+def recursive_file_bindings(value: object) -> list[dict[str, object]]:
+    """Return every nested path/SHA/size file binding."""
+
+    result: list[dict[str, object]] = []
+    if isinstance(value, dict):
+        if (
+            isinstance(value.get("path"), str)
+            and "sha256" in value
+            and "size_bytes" in value
+        ):
+            result.append(value)
+        for child in value.values():
+            result.extend(recursive_file_bindings(child))
+    elif isinstance(value, list):
+        for child in value:
+            result.extend(recursive_file_bindings(child))
+    return result
+
+
+def verify_recursive_bindings(value: object, label: str) -> None:
+    """Verify every unique nested regular-file binding."""
+
+    seen: set[tuple[str, str]] = set()
+    for index, item in enumerate(recursive_file_bindings(value)):
+        key = (str(item.get("path")), str(item.get("sha256")))
+        if key in seen:
+            continue
+        seen.add(key)
+        _current, errors = current_declared_binding(item, f"{label} binding {index}")
+        if errors:
+            raise FastAcceptanceError("; ".join(errors))
 
 
 def authoritative_matrix_case(
@@ -511,13 +713,23 @@ def lineage_identity_errors(
 
     selected = selected_variant_metadata(lineage)
     strict = strict_model_value(lineage)
-    if case_id == "R14":
-        if selected["variants"] != [R14_NONFATAL_VARIANT]:
-            errors.append("R14 selected variant list is not the exact admitted variant")
-        if selected["command_line_overrides"] != [R14_OVERRIDE]:
-            errors.append("R14 override list is not exactly the admitted false override")
+    scoped_nonfatal = (
+        case_id in SCOPED_NONFATAL_CASES
+        and selected["variants"] == [NONFATAL_HARD_BOUND_VARIANT]
+    )
+    if case_id == "R14" or (case_id == "R15" and selected["variants"]):
+        if not scoped_nonfatal:
+            errors.append(
+                f"{case_id} selected variant list is not the exact admitted variant"
+            )
+        if selected["command_line_overrides"] != [NONFATAL_HARD_BOUND_OVERRIDE]:
+            errors.append(
+                f"{case_id} override list is not exactly the admitted false override"
+            )
         if strict != "false":
-            errors.append("R14 effective strict-admissibility model choice is not false")
+            errors.append(
+                f"{case_id} effective strict-admissibility model choice is not false"
+            )
     else:
         if selected["variants"]:
             errors.append(f"standard case has unexpected variants: {selected['variants']}")
@@ -532,7 +744,11 @@ def lineage_identity_errors(
     return errors
 
 
-def scientific_scope(case_id: str, lineage: dict[str, object]) -> dict[str, object]:
+def scientific_scope(
+    case_id: str,
+    lineage: dict[str, object],
+    strict_failure_evidence: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     """Return the explicit direct-fast claim scope for one case."""
 
     selected = selected_variant_metadata(lineage)
@@ -557,10 +773,10 @@ def scientific_scope(case_id: str, lineage: dict[str, object]) -> dict[str, obje
             ],
             **selected,
         }
-    if case_id == "R14":
+    if case_id in SCOPED_NONFATAL_CASES and selected["variants"]:
         admitted = (
-            selected["variants"] == [R14_NONFATAL_VARIANT]
-            and selected["command_line_overrides"] == [R14_OVERRIDE]
+            selected["variants"] == [NONFATAL_HARD_BOUND_VARIANT]
+            and selected["command_line_overrides"] == [NONFATAL_HARD_BOUND_OVERRIDE]
             and strict_model_value(lineage) == "false"
         )
         return {
@@ -573,11 +789,11 @@ def scientific_scope(case_id: str, lineage: dict[str, object]) -> dict[str, obje
             "uniform_strict_diagnostics_eligible": False,
             "hard_bound_is_fatal": not admitted,
             "reason": (
-                "R14 is admitted for the finite-rate limiter comparison with every "
-                "hard-bound event retained as a nonfatal science diagnostic."
+                f"{case_id} is admitted only for the finite-rate limiter comparison "
+                "with every hard-bound event retained as a nonfatal science diagnostic."
                 if admitted
                 else (
-                    "R14 lacks the exact recorded nonfatal-hard-bound variant "
+                    f"{case_id} lacks the exact recorded nonfatal-hard-bound variant "
                     "and override."
                 )
             ),
@@ -594,6 +810,22 @@ def scientific_scope(case_id: str, lineage: dict[str, object]) -> dict[str, obje
                 "hard-bound-free evolution",
                 "pure pressure-limiter comparison independent of LF transport",
             ],
+            "retained_strict_failure_evidence": strict_failure_evidence or [],
+            **selected,
+        }
+    if case_id == "R15" and strict_failure_evidence:
+        return {
+            "classification": "strict_admissibility_failure_evidence",
+            "campaign_interpretation_eligible": False,
+            "uniform_strict_diagnostics_eligible": True,
+            "hard_bound_is_fatal": True,
+            "reason": "strict R15 terminated on an authenticated hard-bound failure",
+            "allowed_claims": ["observed strict-admissibility failure"],
+            "excluded_claims": [
+                "successful strict-admissibility evolution",
+                "finite-limiter comparison from the failed strict trajectory",
+            ],
+            "retained_strict_failure_evidence": strict_failure_evidence,
             **selected,
         }
     return {
@@ -853,54 +1085,648 @@ def available_history_statistics(
     return metrics, errors
 
 
+def direct_fast_diagnostics_path(
+    case_id: str,
+    lineage_binding: dict[str, object] | None,
+) -> Path:
+    """Return the diagnostics sibling of an authenticated case lineage."""
+
+    current, errors = current_declared_binding(
+        lineage_binding, f"{case_id} direct-fast lineage"
+    )
+    if current is None or errors:
+        raise FastAcceptanceError("; ".join(errors))
+    lineage_path = Path(str(current["path"]))
+    if lineage_path.name != "lineage.json" or lineage_path.parent.name != case_id:
+        raise FastAcceptanceError(
+            f"{case_id} direct-fast lineage is not the expected case artifact"
+        )
+    return lineage_path.parent / "diagnostics.json"
+
+
+def snapshot_provenance_errors(
+    diagnostics: dict[str, object], case_id: str
+) -> list[str]:
+    """Return authentication errors for retained direct-fast snapshot records."""
+
+    errors: list[str] = []
+    snapshots = diagnostics.get("snapshots")
+    if not isinstance(snapshots, dict):
+        return [f"{case_id} snapshot records are malformed"]
+    ensemble = diagnostics.get("snapshot_ensemble")
+    expected_count = (
+        ensemble.get("snapshot_count") if isinstance(ensemble, dict) else None
+    )
+    if (
+        not isinstance(expected_count, int)
+        or isinstance(expected_count, bool)
+        or expected_count <= 0
+        or len(snapshots) != expected_count
+    ):
+        errors.append(f"{case_id} snapshot record count differs from its ensemble")
+    for source, record in sorted(snapshots.items()):
+        provenance = record.get("snapshot_provenance") if isinstance(record, dict) else None
+        files = provenance.get("files") if isinstance(provenance, dict) else None
+        if not isinstance(files, list) or not files:
+            errors.append(f"{case_id} snapshot provenance lacks files: {source}")
+            continue
+        if provenance.get("expected_rank_count") != len(files):
+            errors.append(f"{case_id} snapshot rank count differs: {source}")
+        digest = hashlib.sha256(canonical_json_bytes(files)).hexdigest()
+        if provenance.get("aggregate_sha256") != digest:
+            errors.append(f"{case_id} snapshot aggregate digest differs: {source}")
+        try:
+            verify_recursive_bindings(files, f"{case_id} snapshot {source}")
+        except FastAcceptanceError as error:
+            errors.append(str(error))
+    return errors
+
+
+def authenticated_complete_diagnostics(
+    acceptance: object,
+    policy: dict[str, object],
+    case_id: str,
+    lineage: dict[str, object],
+    lineage_binding: dict[str, object] | None,
+    history_bindings: dict[str, dict[str, object]],
+) -> tuple[dict[str, object] | None, dict[str, object] | None, str | None]:
+    """Authenticate and replay one complete direct-fast diagnostics artifact."""
+
+    try:
+        path = direct_fast_diagnostics_path(case_id, lineage_binding)
+        if not path.is_file():
+            return None, None, "complete direct-fast diagnostics are unavailable"
+        diagnostics = load_json(path)
+        diagnostics_binding = binding(path)
+        expected_name = acceptance.case_name(policy, case_id)
+        if (
+            diagnostics.get("schema_version") != 1
+            or diagnostics.get("case_id") != case_id
+            or diagnostics.get("case_name") != expected_name
+        ):
+            raise FastAcceptanceError(f"{case_id} direct-fast diagnostics identity differs")
+        if diagnostics.get("analysis_status") != "complete":
+            return None, None, "direct-fast history diagnostics are not complete"
+        if diagnostics.get("snapshot_analysis_status") != "complete":
+            return None, None, "direct-fast snapshot diagnostics are not complete"
+
+        provenance = diagnostics.get("provenance")
+        if not isinstance(provenance, dict):
+            raise FastAcceptanceError(f"{case_id} direct-fast diagnostics lack provenance")
+        require_same_current_binding(
+            provenance.get("lineage"), lineage_binding, f"{case_id} diagnostics lineage"
+        )
+        for kind in ("mhd", "user"):
+            require_same_current_binding(
+                provenance.get(f"merged_{kind}_history"),
+                history_bindings.get(kind),
+                f"{case_id} diagnostics merged {kind} history",
+            )
+        snapshot_index = path.parent / "snapshots.json"
+        require_same_current_binding(
+            provenance.get("snapshot_index"),
+            binding(snapshot_index),
+            f"{case_id} diagnostics snapshot index",
+        )
+        require_same_current_binding(
+            provenance.get("adapter"),
+            binding(FAST_REPORT_UTILITY),
+            f"{case_id} diagnostics report adapter",
+        )
+        require_same_current_binding(
+            provenance.get("analyzer"),
+            binding(PAPER_ANALYZER),
+            f"{case_id} diagnostics analyzer",
+        )
+        verify_recursive_bindings(provenance, f"{case_id} diagnostics provenance")
+
+        snapshot_errors = snapshot_provenance_errors(diagnostics, case_id)
+        if snapshot_errors:
+            raise FastAcceptanceError("; ".join(snapshot_errors))
+        ensemble = diagnostics.get("snapshot_ensemble")
+        compat = diagnostics.get("compat")
+        compat_ensemble = (
+            compat.get("snapshot_ensemble") if isinstance(compat, dict) else None
+        )
+        if canonical_json_bytes(compat_ensemble) != canonical_json_bytes(ensemble):
+            raise FastAcceptanceError(
+                f"{case_id} compat and primary snapshot ensembles differ"
+            )
+
+        report = load_report_module()
+        analyzer = report.load_pure_analyzer()
+        recomputed_windows = report.window_summaries(
+            analyzer,
+            Path(str(history_bindings["user"]["path"])),
+            Path(str(history_bindings["mhd"]["path"])),
+            lineage["model_choices"],
+        )
+        if canonical_json_bytes(recomputed_windows) != canonical_json_bytes(
+            diagnostics.get("windows")
+        ):
+            raise FastAcceptanceError(
+                f"{case_id} direct-fast history diagnostics replay differs"
+            )
+        recomputed_ensemble = analyzer.average_snapshot_records(diagnostics["snapshots"])
+        recomputed_ensemble["time_start"] = ensemble.get("time_start")
+        recomputed_ensemble["time_end"] = ensemble.get("time_end")
+        firehose = recomputed_ensemble.get("firehose_threshold_occupancy")
+        if isinstance(firehose, dict):
+            analysis_window = firehose.get("analysis_window")
+            if isinstance(analysis_window, dict):
+                analysis_window.update({
+                    "requested_time_start": ensemble.get("time_start"),
+                    "requested_time_end": ensemble.get("time_end"),
+                })
+        if canonical_json_bytes(recomputed_ensemble) != canonical_json_bytes(ensemble):
+            raise FastAcceptanceError(
+                f"{case_id} snapshot ensemble differs from retained records"
+            )
+        if not isinstance(compat, dict):
+            raise FastAcceptanceError(f"{case_id} direct-fast diagnostics lack compat data")
+        wrapped = {"cases": {expected_name: compat}}
+        return wrapped, diagnostics_binding, None
+    except (
+        acceptance.AcceptanceError,
+        FastAcceptanceError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as error:
+        return None, None, f"{type(error).__name__}: {error}"
+
+
+def direct_fast_family_gates(
+    acceptance: object,
+    policy: dict[str, object],
+    case_id: str,
+    histories: dict[str, dict[str, list[float]]],
+    metrics: dict[str, object],
+    minimum_block_duration: float,
+) -> list[dict[str, object]]:
+    """Evaluate applicable per-case physics gates with reviewed kernels."""
+
+    family = policy["criteria"].get("family_gates")
+    windows = policy["criteria"]["analysis_windows"]
+    if not isinstance(family, dict):
+        raise FastAcceptanceError("reviewed family-gate policy is malformed")
+    mhd = histories["mhd"]
+    user = histories["user"]
+    full_start, full_end = (float(value) for value in windows["full"])
+    early_start, early_end = (float(value) for value in windows["early"])
+    late_start, late_end = (float(value) for value in windows["late"])
+    gates: list[dict[str, object]] = []
+
+    finite = family.get("finite_limiter")
+    if isinstance(finite, dict) and case_id in finite.get("cases", []):
+        hardwall_zero = acceptance.exact_zero_window(
+            mhd, "lf_hwproj", full_start, full_end
+        )
+        nu_late = metrics["nu_eff"]["late"]
+        occupancy = acceptance.combine_occupancy_series(user)
+        occupancy_stats = acceptance.metric_statistics(
+            user,
+            occupancy,
+            "unstable_occupancy",
+            policy,
+            kind="occupancy",
+            minimum_block_duration=minimum_block_duration,
+        )
+        minimum_occupancy = float(finite["minimum_occupancy"])
+        occupied = all(
+            float(occupancy_stats[name]["mean"]) > minimum_occupancy
+            for name in ("early", "late")
+        )
+        passed = (
+            hardwall_zero
+            and float(nu_late["confidence_interval_95"][0]) > 0.0
+            and occupied
+        )
+        gates.append(acceptance.gate(
+            "finite_limiter_semantics",
+            "pass" if passed else "fail",
+            reason=(
+                "finite limiter semantic gates passed"
+                if passed
+                else "finite limiter semantic gate failed"
+            ),
+            observations={
+                "hardwall_projection_exact_zero": hardwall_zero,
+                "late_nu_eff_lower_95": nu_late["confidence_interval_95"][0],
+                "occupancy": occupancy_stats,
+                "occupancy_active_both_comparison_windows": occupied,
+            },
+            limits={"minimum_occupancy": minimum_occupancy},
+        ))
+
+    hardwall = family.get("hardwall")
+    if isinstance(hardwall, dict) and case_id in hardwall.get("cases", []):
+        early_delta = acceptance.history_delta(
+            mhd, "lf_hwproj", early_start, early_end
+        )
+        late_delta = acceptance.history_delta(
+            mhd, "lf_hwproj", late_start, late_end
+        )
+        occupancy = acceptance.combine_occupancy_series(user)
+        occupancy_stats = acceptance.metric_statistics(
+            user,
+            occupancy,
+            "unstable_occupancy",
+            policy,
+            kind="occupancy",
+            minimum_block_duration=minimum_block_duration,
+        )
+        occupancy_mean = float(occupancy_stats["full"]["mean"])
+        hard_zero = acceptance.exact_zero_window(
+            user, "hard_vol", full_start, full_end
+        )
+        minimum_occupancy = float(hardwall["minimum_occupancy"])
+        passed = (
+            early_delta > 0.0
+            and late_delta > 0.0
+            and occupancy_mean > minimum_occupancy
+            and hard_zero
+        )
+        gates.append(acceptance.gate(
+            "hardwall_activation",
+            "pass" if passed else "fail",
+            reason=(
+                "hardwall activation gates passed"
+                if passed
+                else "hardwall activation gate failed"
+            ),
+            observations={
+                "early_projection_increment": early_delta,
+                "late_projection_increment": late_delta,
+                "occupancy_mean": occupancy_mean,
+                "hard_vol_exact_zero": hard_zero,
+            },
+            limits={"minimum_occupancy": minimum_occupancy},
+        ))
+
+    lf_strength = family.get("lf_strength")
+    if isinstance(lf_strength, dict) and case_id in lf_strength.get("cases", []):
+        qface = acceptance.history_delta(mhd, "lf_qface", full_start, full_end)
+        qpr = acceptance.history_delta(mhd, "lf_qprwrk", full_start, full_end)
+        qpe = acceptance.history_delta(mhd, "lf_qpewrk", full_start, full_end)
+        state_scale = max(
+            abs(float(metrics["kinetic"]["full"]["mean"])),
+            abs(float(metrics["magnetic"]["full"]["mean"])),
+            1.0,
+        )
+        absolute = max(abs(qpr), abs(qpe))
+        normalized = absolute / state_scale
+        absolute_limit = float(lf_strength["activity_absolute_gt"])
+        normalized_limit = float(lf_strength["activity_state_normalized_gt"])
+        passed = (
+            qface > 0.0
+            and absolute > absolute_limit
+            and normalized > normalized_limit
+        )
+        gates.append(acceptance.gate(
+            "landau_fluid_activity",
+            "pass" if passed else "fail",
+            reason=(
+                "LF face and applied-work activity gates passed"
+                if passed
+                else "LF activity gate failed"
+            ),
+            observations={
+                "lf_qface_increment": qface,
+                "lf_qprwrk_increment": qpr,
+                "lf_qpewrk_increment": qpe,
+                "maximum_absolute_work": absolute,
+                "state_normalized_work": normalized,
+            },
+            limits={
+                "activity_absolute_gt": absolute_limit,
+                "activity_state_normalized_gt": normalized_limit,
+            },
+        ))
+
+    active_passive = family.get("active_passive")
+    if isinstance(active_passive, dict):
+        passive = set(str(value) for value in active_passive.get("passive_cases", []))
+        active = set(str(value) for value in active_passive.get("active_cases", []))
+        if (
+            case_id in active
+            and policy["criteria"].get("active_energy_policy") is not None
+        ):
+            active_energy_gate = getattr(
+                acceptance, "active_energy_closure_gate", None
+            )
+            if not callable(active_energy_gate):
+                raise FastAcceptanceError(
+                    "reviewed active-energy closure kernel is unavailable"
+                )
+            gates.append(active_energy_gate(policy, case_id, mhd, user))
+        if case_id in passive:
+            cp_zero = acceptance.exact_zero_window(
+                mhd, "lf_cpwrk", full_start, full_end
+            )
+            ca_zero = acceptance.exact_zero_window(
+                mhd, "lf_cawrk", full_start, full_end
+            )
+            gates.append(acceptance.gate(
+                "passive_pressure_work_exact_zero",
+                "pass" if cp_zero and ca_zero else "fail",
+                reason=(
+                    "passive pressure-work diagnostics are exactly zero"
+                    if cp_zero and ca_zero
+                    else "passive pressure-work diagnostics advanced"
+                ),
+                observations={
+                    "lf_cpwrk_exact_zero": cp_zero,
+                    "lf_cawrk_exact_zero": ca_zero,
+                },
+            ))
+        elif case_id in active:
+            cp = acceptance.history_delta(mhd, "lf_cpwrk", full_start, full_end)
+            ca = acceptance.history_delta(mhd, "lf_cawrk", full_start, full_end)
+            activity = max(abs(cp), abs(ca))
+            limit = float(active_passive["activity_absolute_gt"])
+            gates.append(acceptance.gate(
+                "active_pressure_work_activity",
+                "pass" if activity > limit else "fail",
+                reason=(
+                    "active pressure work exceeded the preregistered floor"
+                    if activity > limit
+                    else "active pressure work did not exceed the preregistered floor"
+                ),
+                observations={"lf_cpwrk_increment": cp, "lf_cawrk_increment": ca},
+                limits={"activity_absolute_gt": limit},
+            ))
+
+    forcing = family.get("forcing")
+    if isinstance(forcing, dict) and case_id in [
+        *forcing.get("alfvenic_cases", []),
+        *forcing.get("random_cases", []),
+    ]:
+        if "force_prp2" not in user or "force_prl2" not in user:
+            raise FastAcceptanceError("user history lacks force_prp2 or force_prl2")
+        fraction = [
+            parallel / max(parallel + perpendicular, 1.0e-300)
+            for perpendicular, parallel in zip(
+                user["force_prp2"], user["force_prl2"]
+            )
+        ]
+        fraction_stats = acceptance.metric_statistics(
+            user,
+            fraction,
+            "parallel_forcing_fraction",
+            policy,
+            kind="scalar",
+            minimum_block_duration=minimum_block_duration,
+        )
+        full_fraction = fraction_stats["full"]
+        if case_id in forcing.get("alfvenic_cases", []):
+            passed = float(full_fraction["mean"]) <= float(
+                forcing["alfvenic_parallel_fraction_lte"]
+            )
+            reason = "Alfvenic forcing remained effectively perpendicular"
+        else:
+            passed = float(full_fraction["confidence_interval_95"][0]) > float(
+                forcing["random_parallel_fraction_lower_95_gt"]
+            )
+            reason = "random forcing retained a resolved parallel component"
+        gates.append(acceptance.gate(
+            "forcing_geometry",
+            "pass" if passed else "fail",
+            reason=reason if passed else "forcing geometry gate failed",
+            observations=fraction_stats,
+            limits={
+                "alfvenic_parallel_fraction_lte": forcing[
+                    "alfvenic_parallel_fraction_lte"
+                ],
+                "random_parallel_fraction_lower_95_gt": forcing[
+                    "random_parallel_fraction_lower_95_gt"
+                ],
+            },
+        ))
+    return gates
+
+
 def reviewed_complete_case_evidence(
     acceptance: object,
     policy: dict[str, object],
     case_id: str,
     lineage: dict[str, object],
     health: dict[str, object],
+    *,
+    lineage_binding: dict[str, object] | None = None,
+    scope: dict[str, object] | None = None,
+    histories: dict[str, dict[str, list[float]]] | None = None,
+    history_bindings: dict[str, dict[str, object]] | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Evaluate one target-complete case only with an authenticated canonical bundle."""
+    """Build sealed claim-grade evidence from authenticated direct-fast products."""
 
     if health.get("result") != "pass":
         return None, "case does not pass direct-fast numerical health"
-    mhd_path = history_path(lineage, "mhd")
-    user_path = history_path(lineage, "user")
-    if mhd_path is None or user_path is None:
-        return None, "assembled MHD or user history is unavailable"
-    canonical = acceptance.canonical_bundle_path(case_id)
-    retained_segments = lineage.get("lineage")
-    retained_manifests: list[Path] = []
-    if isinstance(retained_segments, list):
-        for segment in retained_segments:
-            manifest = segment.get("manifest") if isinstance(segment, dict) else None
-            if (
-                isinstance(segment, dict)
-                and segment.get("kind") == "accepted_r02_bundle"
-                and isinstance(manifest, dict)
-                and isinstance(manifest.get("path"), str)
-            ):
-                retained_manifests.append(
-                    Path(str(manifest["path"])).resolve(strict=True)
-                )
-    if canonical.resolve(strict=False) not in retained_manifests:
-        return None, (
-            "no authenticated canonical accepted bundle is retained; "
-            "direct-fast exact-window evidence remains non-authorizing"
-        )
-    try:
-        evidence = acceptance.evaluate_case(
+    selected_histories = histories or {}
+    selected_bindings = history_bindings or {}
+    if set(selected_histories) != {"mhd", "user"} or set(selected_bindings) != {
+        "mhd",
+        "user",
+    }:
+        return None, "authenticated assembled MHD and user histories are unavailable"
+    diagnostics, diagnostics_binding, diagnostics_error = (
+        authenticated_complete_diagnostics(
+            acceptance,
             policy,
             case_id,
-            mhd_path,
-            user_path,
-            None,
-            None,
-            canonical,
+            lineage,
+            lineage_binding,
+            selected_bindings,
         )
-    except (acceptance.AcceptanceError, OSError) as error:
+    )
+    if diagnostics is None or diagnostics_binding is None:
+        return None, diagnostics_error
+
+    tcorr = forcing_tcorr(lineage)
+    if tcorr <= 0.0:
+        return None, "effective forcing correlation time is unavailable"
+    metrics: dict[str, object] = {}
+    gates: list[dict[str, object]] = []
+    try:
+        windows = policy["criteria"]["analysis_windows"]
+        coverage = all(
+            window_is_covered(
+                selected_histories[kind]["time"],
+                float(limits[0]),
+                float(limits[1]),
+            )
+            for kind in ("mhd", "user")
+            for limits in windows.values()
+        )
+        gates.append(acceptance.gate(
+            "history_exact_window_coverage",
+            "pass" if coverage else "inconclusive",
+            reason=(
+                "authenticated direct histories cover every reviewed exact window"
+                if coverage
+                else "authenticated direct histories do not cover every reviewed window"
+            ),
+            observations={
+                kind: [
+                    selected_histories[kind]["time"][0],
+                    selected_histories[kind]["time"][-1],
+                ]
+                for kind in ("mhd", "user")
+            },
+        ))
+        gates.append(acceptance.gate(
+            "direct_fast_complete_diagnostics",
+            "pass",
+            reason=(
+                "complete direct-fast history and snapshot diagnostics authenticated "
+                "and replayed"
+            ),
+            observations={"diagnostics": diagnostics_binding},
+        ))
+        if case_id == "R15" and scope and scope.get("classification") == (
+            "scoped_nonfatal_hard_bound_variant"
+        ):
+            strict_failures = scope.get("retained_strict_failure_evidence")
+            retained = isinstance(strict_failures, list) and bool(strict_failures)
+            gates.append(acceptance.gate(
+                "r15_prior_strict_failure_retained",
+                "pass" if retained else "inconclusive",
+                reason=(
+                    "the prior strict R15 hard-bound termination remains authenticated "
+                    "failure evidence"
+                    if retained
+                    else "the prior strict R15 failure is not retained"
+                ),
+                observations=strict_failures,
+            ))
+        for metric, spec in sorted(policy["criteria"]["case_metrics"].items()):
+            source = str(spec["history"])
+            column = str(spec["column"])
+            history = selected_histories.get(source)
+            if history is None or column not in history:
+                raise FastAcceptanceError(
+                    f"{metric}: required authenticated history column is unavailable"
+                )
+            record = acceptance.metric_statistics(
+                history,
+                history[column],
+                str(metric),
+                policy,
+                kind=str(spec["stationarity_kind"]),
+                minimum_block_duration=tcorr,
+            )
+            metrics[str(metric)] = record
+            sampling = record.get("sampling_adequacy")
+            stationarity = (
+                record.get("stationarity", {}).get("result")
+                if isinstance(record.get("stationarity"), dict)
+                else None
+            )
+            result = (
+                "inconclusive"
+                if sampling != "pass"
+                else "fail"
+                if stationarity == "fail"
+                else "pass"
+            )
+            gates.append(acceptance.gate(
+                f"stationarity:{metric}",
+                result,
+                reason=(
+                    "early/late stationarity and effective-sample gates passed"
+                    if result == "pass"
+                    else "stationarity failed"
+                    if result == "fail"
+                    else "effective sample or independent time-block count is insufficient"
+                ),
+                observations=record,
+            ))
+        gates.extend(
+            direct_fast_family_gates(
+                acceptance,
+                policy,
+                case_id,
+                selected_histories,
+                metrics,
+                tcorr,
+            )
+        )
+        name = acceptance.case_name(policy, case_id)
+        analyzer_metrics = acceptance.analyzer_metrics(
+            diagnostics, name, policy, tcorr
+        )
+        convergence_products = acceptance.convergence_products(diagnostics, name)
+        gates.append(acceptance.gate(
+            "direct_fast_snapshot_science_products",
+            "pass" if convergence_products else "inconclusive",
+            reason=(
+                "reviewed interfaces extracted direct-fast snapshot science products"
+                if convergence_products
+                else "complete diagnostics lack reviewed snapshot science products"
+            ),
+            observations={"products": sorted(convergence_products)},
+        ))
+    except (
+        acceptance.AcceptanceError,
+        FastAcceptanceError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as error:
         return None, f"{type(error).__name__}: {error}"
-    return evidence, None
+    evidence = {
+        "schema_version": 1,
+        "record_type": "stage-i-scientific-case-evidence",
+        "authority": "non-authorizing-direct-fast-scientific-assessment",
+        "non_authorizing_statement": (
+            "This direct-fast case evidence supports scoped scientific claims only; "
+            "it grants neither release nor campaign authority."
+        ),
+        "case_id": case_id,
+        "case_name": name,
+        "result": acceptance.aggregate_gate_result(gates),
+        "criteria_review_status": policy.get("review_status"),
+        "release_authorizing": False,
+        "campaign_authority_eligible": False,
+        "analysis_windows": windows,
+        "claim_scope": scope,
+        "retained_strict_failure_evidence": (
+            scope.get("retained_strict_failure_evidence", [])
+            if isinstance(scope, dict)
+            else []
+        ),
+        "evaluation_inputs": {
+            "mhd_history": selected_bindings["mhd"],
+            "user_history": selected_bindings["user"],
+            "accepted_bundle_manifest": None,
+            "diagnostics": {"direct_fast_complete": diagnostics_binding},
+            "ct_evidence": None,
+        },
+        "provenance": {
+            "criteria": policy["criteria_binding"],
+            "criteria_review": policy["review_binding"],
+            "acceptance_utility": binding(ACCEPTANCE_UTILITY),
+            "direct_fast_acceptance_driver": binding(Path(__file__)),
+            "direct_fast_report_adapter": binding(FAST_REPORT_UTILITY),
+            "direct_fast_analyzer": binding(PAPER_ANALYZER),
+            "inputs": [
+                policy["criteria_binding"],
+                policy["review_binding"],
+                lineage_binding,
+                selected_bindings["mhd"],
+                selected_bindings["user"],
+                diagnostics_binding,
+            ],
+        },
+        "metrics": metrics,
+        "analyzer_metrics": analyzer_metrics,
+        "convergence_products": convergence_products,
+        "panel_products": [],
+        "gates": gates,
+    }
+    return acceptance.seal_evidence(evidence), None
 
 
 def comparison_case_evidence(
@@ -931,12 +1757,19 @@ def comparison_case_evidence(
             and record["stationarity"].get("result") == "pass"
             for record in metrics.values()
         )
+        comparison_result = (
+            "pass"
+            if adequate and reviewed.get("result") == "pass"
+            else "fail"
+            if reviewed.get("result") == "fail"
+            else "inconclusive"
+        )
         return {
             "schema_version": 1,
             "record_type": "cgl-lf-stage-i-direct-fast-comparison-evidence",
             "authority": "non-authorizing-direct-fast-scientific-assessment",
             "case_id": case_id,
-            "result": "pass" if adequate else "inconclusive",
+            "result": comparison_result,
             "minimum_block_duration": tcorr,
             "metrics": metrics,
             "analyzer_metrics": reviewed.get("analyzer_metrics", {}),
@@ -1023,8 +1856,10 @@ def direct_fast_case_result(
         return "fail", "direct-fast structural or numerical health failed"
     if case_id == "R10":
         return "inconclusive", "R10 is deliberately exploratory-only"
-    if case_id == "R14" and scope["campaign_interpretation_eligible"] is not True:
-        return "fail", "R14 lacks its exact admitted nonfatal-hard-bound variant"
+    if case_id in SCOPED_NONFATAL_CASES and (
+        scope["campaign_interpretation_eligible"] is not True
+    ):
+        return "fail", f"{case_id} lacks its exact admitted nonfatal-hard-bound variant"
     if health["result"] != "pass":
         return "inconclusive", "case is incomplete or required histories are unavailable"
     if reviewed is None:
@@ -1080,13 +1915,22 @@ def summarize_case(
     identity_errors = lineage_identity_errors(
         acceptance, policy, case_id, lineage, lineage_binding
     )
-    scope = scientific_scope(case_id, lineage)
+    strict_failures = retained_strict_failure_evidence(case_id, lineage)
+    scope = scientific_scope(case_id, lineage, strict_failures)
     histories, history_bindings, history_errors = load_histories(acceptance, lineage)
     health = numerical_health(
         case_id, lineage, scope, histories, history_errors, identity_errors
     )
     reviewed, reviewed_error = reviewed_complete_case_evidence(
-        acceptance, policy, case_id, lineage, health
+        acceptance,
+        policy,
+        case_id,
+        lineage,
+        health,
+        lineage_binding=lineage_binding,
+        scope=scope,
+        histories=histories,
+        history_bindings=history_bindings,
     )
     comparison, comparison_error = comparison_case_evidence(
         acceptance, policy, case_id, lineage, scope, health, histories, reviewed
@@ -1142,6 +1986,12 @@ def summarize_case(
         "provenance": {
             "lineage": lineage_binding,
             "histories": history_bindings,
+            "diagnostics": (
+                reviewed.get("evaluation_inputs", {}).get("diagnostics")
+                if isinstance(reviewed, dict)
+                and isinstance(reviewed.get("evaluation_inputs"), dict)
+                else None
+            ),
         },
     }
     write_json(case_output / "case_acceptance.json", summary)
@@ -1209,17 +2059,19 @@ def finite_limiter_gate(
 ) -> dict[str, object]:
     """Build the scoped R15 greater-than R14 finite-limiter ordering gate."""
 
-    scope = case_summaries.get("R14", {}).get("scope")
-    admitted = (
-        isinstance(scope, dict)
-        and scope.get("classification") == "scoped_nonfatal_hard_bound_variant"
+    r14_scope = case_summaries.get("R14", {}).get("scope")
+    r15_scope = case_summaries.get("R15", {}).get("scope")
+    admitted = all(
+        isinstance(value, dict)
+        and value.get("classification") == "scoped_nonfatal_hard_bound_variant"
+        for value in (r14_scope, r15_scope)
     )
     if not admitted:
         return campaign_gate(
             acceptance,
             "finite_limiter_ordering:R15_gt_R14",
             "inconclusive",
-            "R14 exact nonfatal-hard-bound variant is unavailable",
+            "R14 or R15 exact nonfatal-hard-bound variant is unavailable",
         )
     r14_evidence = comparison_cases.get("R14")
     r15_evidence = comparison_cases.get("R15")
@@ -1260,7 +2112,8 @@ def finite_limiter_gate(
         {
             "R15_minus_R14": difference,
             "lower_95": lower_95,
-            "R14_scope": scope,
+            "R14_scope": r14_scope,
+            "R15_scope": r15_scope,
         },
     )
 
@@ -1373,7 +2226,7 @@ def build_campaign_evidence(
             acceptance,
             "explicit_claim_scope",
             "pass",
-            "R10 exploratory and R14 nonfatal-hard-bound scopes are explicit",
+            "R10 exploratory and R14/R15 nonfatal-hard-bound scopes are explicit",
             {
                 "claim_grade_cases": claim_grade_cases,
                 "exploratory_cases": exploratory,
@@ -1397,6 +2250,7 @@ def build_campaign_evidence(
             "scoped_variants": scoped_variants,
             "R10": case_summaries.get("R10", {}).get("scope"),
             "R14": case_summaries.get("R14", {}).get("scope"),
+            "R15": case_summaries.get("R15", {}).get("scope"),
         },
         "gates": gates,
         "provenance": {
