@@ -3826,15 +3826,107 @@ def validate_f118_source_authority_binding(
         "verified_revisions": args.expected_source_bundle_verified_revisions_json,
     }:
         raise ValueError("schema-2 F118 final source bundle binding differs")
-    validate_f118_committed_tools(payloads["evidence"], final_binding, root)
-    validate_complete_f118_source_authority(payloads, digests, final_binding, root)
+    historical = validate_f118_committed_tools(payloads["evidence"], final_binding, root)
+    validate_complete_f118_source_authority(
+        payloads, digests, final_binding, root, historical
+    )
     normalized["final_source_bundle"] = final_binding
+    return normalized
+
+
+def git_revision_subject(repository: Path, revision: str, label: str) -> str:
+    """Return one exact retained Git commit subject."""
+
+    completed = git_run(
+        repository, ["show", "-s", "--format=%s", revision], capture_output=True
+    )
+    if completed.returncode:
+        raise ValueError(f"cannot inspect {label} subject")
+    try:
+        subject = completed.stdout.decode("utf-8").rstrip("\n")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{label} subject is not UTF-8") from error
+    return require_nonempty_string(subject, f"{label} subject")
+
+
+def validate_source_authority_tool_vector(
+    tools: object,
+    publisher_value: object,
+    head: str,
+    repository: Path,
+    label: str,
+) -> list[dict[str, object]]:
+    """Authenticate the exact seven-tool source-authority contract at one revision."""
+
+    expected_paths = sorted(F118_REQUIRED_TOOLS)
+    if not isinstance(tools, list) or len(tools) != len(expected_paths):
+        raise ValueError(f"{label} committed_tools must contain exactly seven tools")
+    normalized = []
+    for index, expected_path in enumerate(expected_paths):
+        tool = require_exact_keys(
+            tools[index],
+            {"path", "revision", "sha256", "mode"},
+            f"{label} committed tool {index}",
+        )
+        expected_mode = F118_REQUIRED_TOOLS[expected_path]
+        if (
+            tool["path"] != expected_path
+            or tool["revision"] != head
+            or tool["mode"] != expected_mode
+        ):
+            raise ValueError(
+                f"{label} committed tool {index} path, revision, or mode differs"
+            )
+        digest = require_sha256(tool["sha256"], f"{label} committed tool {index} SHA-256")
+        require_committed_revision_bytes(
+            repository,
+            Path(expected_path),
+            head,
+            digest,
+            f"{label} committed tool {index}",
+        )
+        tree = git_run(
+            repository,
+            ["ls-tree", head, "--", expected_path],
+            capture_output=True,
+        )
+        expected_git_mode = "100755" if expected_mode == "0755" else "100644"
+        try:
+            tree_fields = tree.stdout.decode("ascii").strip().split()
+        except UnicodeDecodeError as error:
+            raise ValueError(
+                f"{label} committed tool {index} tree mode is not ASCII"
+            ) from error
+        if (
+            tree.returncode
+            or len(tree_fields) != 4
+            or tree_fields[0] != expected_git_mode
+            or tree_fields[1] != "blob"
+            or tree_fields[3] != expected_path
+        ):
+            raise ValueError(f"{label} committed tool {index} Git mode differs")
+        normalized.append(
+            {
+                "path": expected_path,
+                "revision": head,
+                "sha256": digest,
+                "mode": expected_mode,
+            }
+        )
+    publisher = require_exact_keys(
+        publisher_value,
+        {"path", "revision", "sha256", "mode"},
+        f"{label} publisher",
+    )
+    publisher_tool = normalized[expected_paths.index(F118_PUBLISHER_RELATIVE)]
+    if publisher != publisher_tool:
+        raise ValueError(f"{label} publisher differs from committed_tools")
     return normalized
 
 
 def validate_f118_committed_tools(
     payload: bytes, final_binding: dict[str, object], root: Path
-) -> None:
+) -> dict[str, object]:
     """Validate F118 current tools and its immutable exact F116 predecessor."""
 
     try:
@@ -3993,6 +4085,22 @@ def validate_f118_committed_tools(
         },
         "schema-2 historical F116 current source bundle",
     )
+    historical_bridge = require_exact_keys(
+        historical_implementation["intermediate_36140_bundle"],
+        {
+            "path",
+            "sha256",
+            "complete_history",
+            "head",
+            "advertised_tip",
+            "verified_revisions",
+            "selected_as_current",
+            "role",
+        },
+        "schema-2 historical F116 bridge bundle",
+    )
+    if implementation["intermediate_36140_bundle"] != historical_bridge:
+        raise ValueError("schema-2 F118 bridge does not exactly preserve F116")
     predecessor = require_exact_keys(
         implementation["predecessor_current_source_bundle"],
         {
@@ -4015,73 +4123,78 @@ def validate_f118_committed_tools(
     if predecessor != expected_predecessor:
         raise ValueError("schema-2 F118 predecessor does not exactly preserve F116")
 
-    tools = implementation["committed_tools"]
-    expected_paths = sorted(F118_REQUIRED_TOOLS)
-    if not isinstance(tools, list) or len(tools) != len(expected_paths):
-        raise ValueError("schema-2 F118 committed_tools must contain exactly seven tools")
     repository = repository_root(initial_source_path())
-    normalized = []
-    for index, expected_path in enumerate(expected_paths):
-        tool = require_exact_keys(
-            tools[index],
-            {"path", "revision", "sha256", "mode"},
-            f"schema-2 F118 committed tool {index}",
-        )
-        expected_mode = F118_REQUIRED_TOOLS[expected_path]
-        if (
-            tool["path"] != expected_path
-            or tool["revision"] != head
-            or tool["mode"] != expected_mode
-        ):
-            raise ValueError(
-                f"schema-2 F118 committed tool {index} path, revision, or mode differs"
-            )
-        digest = require_sha256(
-            tool["sha256"], f"schema-2 F118 committed tool {index} SHA-256"
-        )
-        require_committed_revision_bytes(
-            repository,
-            Path(expected_path),
-            head,
-            digest,
-            f"schema-2 F118 committed tool {index}",
-        )
-        tree = git_run(
-            repository,
-            ["ls-tree", head, "--", expected_path],
-            capture_output=True,
-        )
-        expected_git_mode = "100755" if expected_mode == "0755" else "100644"
-        try:
-            tree_fields = tree.stdout.decode("ascii").strip().split()
-        except UnicodeDecodeError as error:
-            raise ValueError(
-                f"schema-2 F118 committed tool {index} tree mode is not ASCII"
-            ) from error
-        if (
-            tree.returncode
-            or len(tree_fields) != 4
-            or tree_fields[0] != expected_git_mode
-            or tree_fields[1] != "blob"
-            or tree_fields[3] != expected_path
-        ):
-            raise ValueError(f"schema-2 F118 committed tool {index} Git mode differs")
-        normalized.append(
-            {
-                "path": expected_path,
-                "revision": head,
-                "sha256": digest,
-                "mode": expected_mode,
-            }
-        )
-    publisher = require_exact_keys(
-        implementation["publisher"],
-        {"path", "revision", "sha256", "mode"},
-        "schema-2 F118 publisher",
+    validate_source_authority_tool_vector(
+        historical_implementation["committed_tools"],
+        historical_implementation["publisher"],
+        require_nonempty_string(
+            historical_current["head"], "schema-2 historical F116 current HEAD"
+        ),
+        repository,
+        "schema-2 historical F116",
     )
-    publisher_tool = normalized[expected_paths.index(F118_PUBLISHER_RELATIVE)]
-    if publisher != publisher_tool:
-        raise ValueError("schema-2 F118 publisher differs from committed_tools")
+    validate_source_authority_tool_vector(
+        implementation["committed_tools"],
+        implementation["publisher"],
+        head,
+        repository,
+        "schema-2 F118",
+    )
+    if current["subject"] != git_revision_subject(repository, head, "schema-2 F118 final HEAD"):
+        raise ValueError("schema-2 F118 final HEAD subject differs")
+    revisions = current["verified_revisions"]
+    if (
+        not isinstance(revisions, list)
+        or not revisions
+        or len(set(revisions)) != len(revisions)
+        or any(
+            not isinstance(revision, str) or REVISION_PATTERN.fullmatch(revision) is None
+            for revision in revisions
+        )
+    ):
+        raise ValueError("schema-2 F118 final verified revisions differ")
+    required_revisions = {
+        head,
+        require_nonempty_string(historical_current["head"], "historical F116 current HEAD"),
+        require_nonempty_string(historical_bridge["head"], "historical F116 bridge HEAD"),
+        *historical_current["verified_revisions"],
+        *historical_bridge["verified_revisions"],
+    }
+    if not required_revisions.issubset(set(revisions)):
+        raise ValueError("schema-2 F118 final verified revisions omit F116 history")
+    historical_catalog = require_exact_keys(
+        historical["source_archive_catalog"],
+        {"before", "after"},
+        "schema-2 historical F116 source-archive catalog",
+    )
+    historical_after = require_exact_keys(
+        historical_catalog["after"],
+        {
+            "readme_sha256",
+            "sha256sums_sha256",
+            "bridge_listed_exactly_once",
+            "final_bundle_listed_exactly_once",
+            "corrupt_c7_listed",
+            "historical_f115_preserved",
+            "sole_current_source_bundle",
+        },
+        "schema-2 historical F116 source-archive catalog after",
+    )
+    for key in ("readme_sha256", "sha256sums_sha256"):
+        require_sha256(historical_after[key], f"schema-2 historical F116 catalog {key}")
+    if (
+        historical_after["bridge_listed_exactly_once"] is not True
+        or historical_after["final_bundle_listed_exactly_once"] is not True
+        or historical_after["corrupt_c7_listed"] is not False
+        or historical_after["historical_f115_preserved"] is not True
+        or historical_after["sole_current_source_bundle"] != historical_current["path"]
+    ):
+        raise ValueError("schema-2 historical F116 source-archive catalog differs")
+    return {
+        "bridge": historical_bridge,
+        "current": historical_current,
+        "catalog_after": historical_after,
+    }
 
 
 def canonical_json_object(payload: bytes, label: str) -> dict[str, object]:
@@ -4169,11 +4282,125 @@ def validate_f118_catalog_snapshot(value: object, label: str, *, after: bool
     return retained
 
 
+def parse_source_archive_sha256sums(payload: bytes, label: str) -> list[tuple[str, str]]:
+    """Parse the exact structured source-archive checksum ledger."""
+
+    if not payload.endswith(b"\n"):
+        raise ValueError(f"{label} must end with newline")
+    try:
+        lines = payload.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{label} is not UTF-8") from error
+    entries: list[tuple[str, str]] = []
+    names: set[str] = set()
+    for line in lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
+        if match is None:
+            raise ValueError(f"{label} row is malformed: {line}")
+        digest, name = match.groups()
+        if name in names:
+            raise ValueError(f"{label} duplicates {name}")
+        names.add(name)
+        entries.append((digest, name))
+    if not entries:
+        raise ValueError(f"{label} is empty")
+    return entries
+
+
+def f118_catalog_readme_block(current: dict[str, object]) -> bytes:
+    """Return the exact source-authority F118 README append block."""
+
+    name = Path(str(current["path"])).name
+    return (
+        f"`{name}` records complete history through commit `{current['head']}` "
+        f"(`{current['subject']}`). It is the sole current Stage I source-selection "
+        "bundle after independently reviewed F-118 publication. It preserves the "
+        "immutable four-part F-116 authority and every prior active source-archive "
+        "catalog entry; it does not itself authorize prepare or submission. "
+        f"Its SHA-256 is `{current['sha256']}`.\n\n"
+    ).encode()
+
+
+def validate_f118_catalog_transition(
+    root: Path,
+    current: dict[str, object],
+    bridge: dict[str, object],
+    predecessor: dict[str, object],
+    before: dict[str, object],
+    after: dict[str, object],
+) -> None:
+    """Prove the live catalog is exactly F116 plus the deterministic F118 append."""
+
+    _, readme = read_confined_file_sha256(
+        root,
+        "source-archives/README.md",
+        str(after["readme_sha256"]),
+        "schema-2 F118 live source-archive README",
+        expected_mode=0o644,
+    )
+    _, sums = read_confined_file_sha256(
+        root,
+        "source-archives/SHA256SUMS",
+        str(after["sha256sums_sha256"]),
+        "schema-2 F118 live source-archive SHA256SUMS",
+        expected_mode=0o644,
+    )
+    marker = b"## AthenaK\n\n"
+    block = f118_catalog_readme_block(current)
+    if readme.count(marker) != 1 or readme.count(block) != 1:
+        raise ValueError("schema-2 F118 live README lacks the exact single append block")
+    old_readme = readme.replace(marker + block, marker, 1)
+    if (
+        old_readme == readme
+        or sha256_bytes(old_readme) != before["readme_sha256"]
+    ):
+        raise ValueError("schema-2 F118 live README does not derive from F116 catalog_after")
+    bridge_name = Path(str(bridge["path"])).name
+    predecessor_name = Path(str(predecessor["path"])).name
+    current_name = Path(str(current["path"])).name
+    if (
+        bridge_name.encode() not in old_readme
+        or predecessor_name.encode() not in old_readme
+        or current_name.encode() in old_readme
+    ):
+        raise ValueError("schema-2 F118 predecessor README entries differ")
+
+    entries = parse_source_archive_sha256sums(sums, "schema-2 F118 live SHA256SUMS")
+    expected_final = (str(current["sha256"]), current_name)
+    if entries[-1] != expected_final:
+        raise ValueError("schema-2 F118 current bundle is not the exact final checksum entry")
+    final_line = f"{expected_final[0]}  {expected_final[1]}\n".encode()
+    if not sums.endswith(final_line):
+        raise ValueError("schema-2 F118 checksum-ledger append bytes differ")
+    old_sums = sums[: -len(final_line)]
+    if sha256_bytes(old_sums) != before["sha256sums_sha256"]:
+        raise ValueError("schema-2 F118 live SHA256SUMS does not derive from F116 catalog_after")
+    old_entries = parse_source_archive_sha256sums(
+        old_sums, "schema-2 F118 predecessor SHA256SUMS"
+    )
+    old_names = [name for _, name in old_entries]
+    if (
+        old_names.count(bridge_name) != 1
+        or old_names.count(predecessor_name) != 1
+        or current_name in old_names
+    ):
+        raise ValueError("schema-2 F118 predecessor checksum entries differ")
+    for digest, name in old_entries:
+        read_confined_file_sha256(
+            root,
+            f"source-archives/{name}",
+            digest,
+            f"schema-2 F118 preserved source archive {name}",
+            expected_mode=0o644,
+        )
+
+
 def validate_complete_f118_source_authority(
     payloads: dict[str, bytes],
     digests: dict[str, str],
     final_binding: dict[str, object],
     root: Path,
+    historical: dict[str, object],
 ) -> None:
     """Validate the complete F118 evidence, independent reviews, and audit."""
 
@@ -4330,14 +4557,48 @@ def validate_complete_f118_source_authority(
         {"before", "after"},
         "schema-2 F118 evidence source-archive catalog",
     )
-    validate_f118_catalog_snapshot(
+    before = validate_f118_catalog_snapshot(
         catalog["before"], "schema-2 F118 catalog before", after=False
     )
     after = validate_f118_catalog_snapshot(
         catalog["after"], "schema-2 F118 catalog after", after=True
     )
-    if after["sole_current_source_bundle"] != current["path"]:
-        raise ValueError("schema-2 F118 evidence sole current source bundle differs")
+    historical_after = require_exact_keys(
+        historical["catalog_after"],
+        {
+            "readme_sha256",
+            "sha256sums_sha256",
+            "bridge_listed_exactly_once",
+            "final_bundle_listed_exactly_once",
+            "corrupt_c7_listed",
+            "historical_f115_preserved",
+            "sole_current_source_bundle",
+        },
+        "schema-2 authenticated historical F116 catalog_after",
+    )
+    expected_before = {
+        "readme_sha256": historical_after["readme_sha256"],
+        "sha256sums_sha256": historical_after["sha256sums_sha256"],
+        "bridge_listed_exactly_once": historical_after["bridge_listed_exactly_once"],
+        "predecessor_current_source_bundle_listed_exactly_once": (
+            historical_after["final_bundle_listed_exactly_once"]
+        ),
+        "final_bundle_listed": False,
+        "corrupt_c7_listed": historical_after["corrupt_c7_listed"],
+        "historical_f115_preserved": historical_after["historical_f115_preserved"],
+    }
+    expected_predecessor = dict(historical["current"])
+    expected_predecessor.pop("candidate_path")
+    expected_predecessor["selected_as_current"] = False
+    expected_predecessor["role"] = "retained-non-current-predecessor"
+    if (
+        before != expected_before
+        or bridge != historical["bridge"]
+        or predecessor != expected_predecessor
+        or after["sole_current_source_bundle"] != current["path"]
+    ):
+        raise ValueError("schema-2 F118 catalog predecessor authority differs")
+    validate_f118_catalog_transition(root, current, bridge, predecessor, before, after)
 
     verified = {
         "authorization_broadening": False,
@@ -4352,6 +4613,7 @@ def validate_complete_f118_source_authority(
     }
     reviewers: set[str] = set()
     reviewed_times: list[datetime] = []
+    reviewed_candidate_path = None
     for key, review_kind, decision in (
         ("provenance_review", "provenance-security", "approved-for-publication"),
         ("plasma_review", "plasma-scientific-continuation", "approved"),
@@ -4385,6 +4647,17 @@ def validate_complete_f118_source_authority(
             {"agent_id", "identity"},
             f"schema-2 F118 {key} reviewer",
         )
+        candidate_path = require_nonempty_string(
+            candidate["path"], f"schema-2 F118 {key} candidate path"
+        )
+        selected_candidate = Path(candidate_path)
+        if (
+            not selected_candidate.is_absolute()
+            or selected_candidate != absolute_path(selected_candidate)
+        ):
+            raise ValueError(f"schema-2 F118 {key} candidate path is not absolute normalized")
+        if reviewed_candidate_path is None:
+            reviewed_candidate_path = candidate_path
         if (
             review["schema_version"] != 1
             or review["record_type"]
@@ -4393,10 +4666,8 @@ def validate_complete_f118_source_authority(
             or review["execution_epoch"] != EXECUTION_EPOCH
             or review["review_kind"] != review_kind
             or review["decision"] != decision
-            or require_nonempty_string(
-                candidate["path"], f"schema-2 F118 {key} candidate path"
-            )
-            == str(root / F118_RELATIVE)
+            or candidate_path == str(root / F118_RELATIVE)
+            or candidate_path != reviewed_candidate_path
             or candidate["sha256"] != digests["evidence"]
             or review["published_f118"]
             != {"path": str(root / F118_RELATIVE), "sha256": digests["evidence"]}
@@ -5085,6 +5356,16 @@ def validate_f119_failed_f117_predecessor(
 ) -> None:
     """Require the exact retained-F114/failed-F117 predecessor only for F119."""
 
+    predecessor_path = root / "accounting" / LEGACY_F114_RECOST_NAME
+    audit_path = predecessor_path.with_name(f"{predecessor_path.name}.publication_audit.json")
+    expected_request_predecessor = {
+        "path": predecessor_path.relative_to(root).as_posix(),
+        "sha256": LEGACY_F114_RECOST_SHA256,
+    }
+    expected_request_audit = {
+        "path": audit_path.relative_to(root).as_posix(),
+        "sha256": LEGACY_F114_PUBLICATION_AUDIT_SHA256,
+    }
     has_failed_f117_marker = (
         isinstance(value, dict)
         and (
@@ -5092,9 +5373,35 @@ def validate_f119_failed_f117_predecessor(
             or "superseded_failed_attempt" in value
         )
     )
+    has_legacy_f114_identity = (
+        isinstance(value, dict)
+        and (
+            value.get("path") == str(predecessor_path)
+            or value.get("artifact_name") == LEGACY_F114_RECOST_NAME
+            or value.get("sha256") == LEGACY_F114_RECOST_SHA256
+            or value.get("publication_audit_path") == str(audit_path)
+            or value.get("publication_audit_sha256")
+            == LEGACY_F114_PUBLICATION_AUDIT_SHA256
+            or value.get("checkpoint") == "F-114"
+        )
+    ) or (
+        isinstance(request_inputs, dict)
+        and (
+            request_inputs.get("predecessor_recost") == expected_request_predecessor
+            or request_inputs.get("predecessor_recost_publication_audit")
+            == expected_request_audit
+        )
+    ) or (
+        isinstance(provenance, dict)
+        and (
+            provenance.get("predecessor_recost_sha256") == LEGACY_F114_RECOST_SHA256
+            or provenance.get("predecessor_recost_publication_audit_sha256")
+            == LEGACY_F114_PUBLICATION_AUDIT_SHA256
+        )
+    )
     if checkpoint != "F-119" or artifact_name != F119_ARTIFACT_NAME:
-        if has_failed_f117_marker:
-            raise ValueError("failed-F117 predecessor supersession is restricted to exact F119")
+        if has_failed_f117_marker or has_legacy_f114_identity:
+            raise ValueError("legacy F114 predecessor consumption is restricted to exact F119")
         return
     request_inputs = require_exact_keys(
         request_inputs,
@@ -5139,16 +5446,6 @@ def validate_f119_failed_f117_predecessor(
         },
         "schema-2 F119 predecessor recost",
     )
-    predecessor_path = root / "accounting" / LEGACY_F114_RECOST_NAME
-    audit_path = predecessor_path.with_name(f"{predecessor_path.name}.publication_audit.json")
-    expected_request_predecessor = {
-        "path": predecessor_path.relative_to(root).as_posix(),
-        "sha256": LEGACY_F114_RECOST_SHA256,
-    }
-    expected_request_audit = {
-        "path": audit_path.relative_to(root).as_posix(),
-        "sha256": LEGACY_F114_PUBLICATION_AUDIT_SHA256,
-    }
     if (
         predecessor["path"] != str(predecessor_path)
         or predecessor["artifact_name"] != LEGACY_F114_RECOST_NAME

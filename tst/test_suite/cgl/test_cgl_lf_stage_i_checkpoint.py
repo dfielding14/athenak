@@ -1091,6 +1091,40 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
         cwd=repository,
         check=True,
     )
+    historical_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    historical_tools = [
+        {
+            "path": relative,
+            "revision": historical_head,
+            "sha256": sha256(repository / relative),
+            "mode": module.F116_REQUIRED_TOOLS[relative],
+        }
+        for relative in sorted(module.F116_REQUIRED_TOOLS)
+    ]
+    marker = repository / "F118-current-source.marker"
+    marker.write_text("fixture F118 current source revision\n")
+    subprocess.run(["git", "add", "."], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=F118 checkpoint fixture",
+            "-c",
+            "user.email=f118-checkpoint@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Commit exact F118 tools",
+        ],
+        cwd=repository,
+        check=True,
+    )
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=repository,
@@ -1121,21 +1155,31 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
         (bridge_path, b"fixture bridge bundle\n"),
         (historical_path, b"fixture historical F116 bundle\n"),
         (current_path, b"fixture current F118 bundle\n"),
-        (readme, b"fixture current F118 source archive\n"),
-        (sums, b"fixture current F118 source archive checksums\n"),
     ):
         path.write_bytes(payload)
         path.chmod(0o644)
+    old_readme = (
+        "## AthenaK\n\n"
+        f"Retained bridge `{bridge_path.name}` and F116 current `{historical_path.name}`.\n"
+    ).encode()
+    old_sums = (
+        f"{sha256(bridge_path)}  {bridge_path.name}\n"
+        f"{sha256(historical_path)}  {historical_path.name}\n"
+    ).encode()
+    readme.write_bytes(old_readme)
+    sums.write_bytes(old_sums)
+    readme.chmod(0o644)
+    sums.chmod(0o644)
     bridge = {
         "path": bridge_path.relative_to(root).as_posix(),
         "sha256": sha256(bridge_path),
         "complete_history": True,
-        "head": head,
+        "head": historical_head,
         "advertised_tip": {
-            "revision": head,
+            "revision": historical_head,
             "name": "refs/heads/feature/cgl-landau-fluid",
         },
-        "verified_revisions": [head],
+        "verified_revisions": [historical_head],
         "selected_as_current": False,
         "role": "retained-non-current-bridge",
     }
@@ -1143,9 +1187,9 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
         "path": historical_path.relative_to(root).as_posix(),
         "sha256": sha256(historical_path),
         "complete_history": True,
-        "head": head,
-        "advertised_tip": {"revision": head, "name": "HEAD"},
-        "verified_revisions": [head],
+        "head": historical_head,
+        "advertised_tip": {"revision": historical_head, "name": "HEAD"},
+        "verified_revisions": [historical_head],
         "selected_as_current": True,
         "candidate_path": str(tmp_path / "f116.bundle.candidate"),
         "subject": "Commit exact historical F116 tools",
@@ -1161,13 +1205,26 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
         "predecessor_authorities": {},
         "implementation": {
             "publisher": next(
-                item for item in tools if item["path"] == module.F116_PUBLISHER_RELATIVE
+                item
+                for item in historical_tools
+                if item["path"] == module.F116_PUBLISHER_RELATIVE
             ),
-            "committed_tools": tools,
+            "committed_tools": historical_tools,
             "intermediate_36140_bundle": bridge,
             "current_source_bundle": historical_current,
         },
-        "source_archive_catalog": {},
+        "source_archive_catalog": {
+            "before": {},
+            "after": {
+                "readme_sha256": hashlib.sha256(old_readme).hexdigest(),
+                "sha256sums_sha256": hashlib.sha256(old_sums).hexdigest(),
+                "bridge_listed_exactly_once": True,
+                "final_bundle_listed_exactly_once": True,
+                "corrupt_c7_listed": False,
+                "historical_f115_preserved": True,
+                "sole_current_source_bundle": historical_current["path"],
+            },
+        },
         "authorization": {},
         "validation": {},
         "publication_requirements": {},
@@ -1198,20 +1255,30 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
         "complete_history": True,
         "head": head,
         "advertised_tip": {"revision": head, "name": "HEAD"},
-        "verified_revisions": [head],
+        "verified_revisions": [historical_head, head],
         "selected_as_current": True,
         "candidate_path": str(tmp_path / "f118.bundle.candidate"),
         "subject": "Commit exact F118 tools",
     }
     catalog_before = {
-        "readme_sha256": "a" * 64,
-        "sha256sums_sha256": "b" * 64,
+        "readme_sha256": hashlib.sha256(old_readme).hexdigest(),
+        "sha256sums_sha256": hashlib.sha256(old_sums).hexdigest(),
         "bridge_listed_exactly_once": True,
         "predecessor_current_source_bundle_listed_exactly_once": True,
         "final_bundle_listed": False,
         "corrupt_c7_listed": False,
         "historical_f115_preserved": True,
     }
+    new_readme = old_readme.replace(
+        b"## AthenaK\n\n",
+        b"## AthenaK\n\n" + module.f118_catalog_readme_block(current),
+        1,
+    )
+    new_sums = old_sums + f"{current['sha256']}  {current_path.name}\n".encode()
+    readme.write_bytes(new_readme)
+    sums.write_bytes(new_sums)
+    readme.chmod(0o644)
+    sums.chmod(0o644)
     catalog_after = {
         "readme_sha256": sha256(readme),
         "sha256sums_sha256": sha256(sums),
@@ -1295,7 +1362,7 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
                 "review_kind": kind,
                 "decision": decision,
                 "reviewed_candidate": {
-                    "path": str(tmp_path / f"{key}.candidate.json"),
+                    "path": str(tmp_path / "f118-evidence.candidate.json"),
                     "sha256": sha256(evidence_path),
                 },
                 "published_f118": {
@@ -1367,7 +1434,7 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
                     "sha256": sha256(bridge_path),
                     "mode": "0644",
                     "links": 1,
-                    "head": head,
+                    "head": historical_head,
                     "role": "retained-non-current-bridge",
                     "selected_as_current": False,
                 },
@@ -1376,7 +1443,7 @@ def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
                     "sha256": sha256(historical_path),
                     "mode": "0644",
                     "links": 1,
-                    "head": head,
+                    "head": historical_head,
                     "role": "retained-non-current-predecessor",
                     "selected_as_current": False,
                 },
@@ -1444,6 +1511,57 @@ def mutate_f118_probe_record(root: Path, binding: dict[str, object], key: str, m
     write_json(path, value)
     path.chmod(0o444)
     binding[key]["sha256"] = sha256(path)
+
+
+def rebind_f118_probe_chain(root: Path, binding: dict[str, object]) -> None:
+    """Refresh exact F118 review/audit digest bindings after one adversarial mutation."""
+
+    evidence = root / binding["evidence"]["path"]
+    evidence_digest = sha256(evidence)
+    binding["evidence"]["sha256"] = evidence_digest
+    for key in ("provenance_review", "plasma_review"):
+        path = root / binding[key]["path"]
+        value = json.loads(path.read_text())
+        value["reviewed_candidate"]["sha256"] = evidence_digest
+        value["published_f118"]["sha256"] = evidence_digest
+        write_json(path, value)
+        path.chmod(0o444)
+        binding[key]["sha256"] = sha256(path)
+    audit_path = root / binding["publication_audit"]["path"]
+    audit = json.loads(audit_path.read_text())
+    audit["artifact"]["sha256"] = evidence_digest
+    audit["independent_reviews"]["reviews_bind_exact_published_f118_sha256"] = (
+        evidence_digest
+    )
+    audit["independent_reviews"]["provenance_security"]["sha256"] = binding[
+        "provenance_review"
+    ]["sha256"]
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = binding[
+        "plasma_review"
+    ]["sha256"]
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    binding["publication_audit"]["sha256"] = sha256(audit_path)
+
+
+def rebind_f118_live_catalog(root: Path, binding: dict[str, object]) -> None:
+    """Rebind declared F118 after-state digests to adversarial live catalog bytes."""
+
+    readme = root / "source-archives/README.md"
+    sums = root / "source-archives/SHA256SUMS"
+    evidence_path = root / binding["evidence"]["path"]
+    evidence = json.loads(evidence_path.read_text())
+    evidence["source_archive_catalog"]["after"]["readme_sha256"] = sha256(readme)
+    evidence["source_archive_catalog"]["after"]["sha256sums_sha256"] = sha256(sums)
+    write_json(evidence_path, evidence)
+    evidence_path.chmod(0o444)
+    audit_path = root / binding["publication_audit"]["path"]
+    audit = json.loads(audit_path.read_text())
+    audit["source_archive_catalog"]["readme"]["sha256"] = sha256(readme)
+    audit["source_archive_catalog"]["sha256sums"]["sha256"] = sha256(sums)
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    rebind_f118_probe_chain(root, binding)
 
 
 def f119_failed_f117_predecessor_probe(tmp_path: Path, monkeypatch):
@@ -1704,6 +1822,69 @@ def test_checkpoint_rejects_f118_current_bundle_tip_role_drift(tmp_path, monkeyp
         module.validate_f118_source_authority_binding(binding, root, args)
 
 
+def test_checkpoint_rejects_f118_current_bundle_subject_drift(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    evidence["implementation"]["current_source_bundle"]["subject"] = "forged subject"
+    with pytest.raises(ValueError, match="final HEAD subject differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_f118_bridge_drift_from_historical_f116(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    bridge = evidence["implementation"]["intermediate_36140_bundle"]
+    current_head = evidence["implementation"]["current_source_bundle"]["head"]
+    bridge["head"] = current_head
+    bridge["advertised_tip"]["revision"] = current_head
+    bridge["verified_revisions"] = [current_head]
+    with pytest.raises(ValueError, match="bridge does not exactly preserve F116"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_f118_required_revision_coverage_drift(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    current = evidence["implementation"]["current_source_bundle"]
+    current["verified_revisions"] = [current["head"]]
+    final_binding["verified_revisions"] = [current["head"]]
+    with pytest.raises(ValueError, match="omit F116 history"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_historical_f116_publisher_contract_drift(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    historical_path = root / module.F116_RELATIVE
+    historical = json.loads(historical_path.read_text())
+    historical["implementation"]["publisher"]["sha256"] = "0" * 64
+    write_json(historical_path, historical)
+    historical_path.chmod(0o444)
+    evidence["predecessor_authorities"]["historical_f116"]["evidence"]["sha256"] = (
+        sha256(historical_path)
+    )
+    with pytest.raises(ValueError, match="historical F116 publisher differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
 @pytest.mark.parametrize(
     ("review_key", "decision"),
     (("provenance_review", "rejected"), ("plasma_review", "changes-required")),
@@ -1769,6 +1950,81 @@ def test_checkpoint_rejects_f118_audit_review_digest_drift(tmp_path, monkeypatch
         ),
     )
     with pytest.raises(ValueError, match="provenance review publication differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_distinct_f118_review_candidate_paths(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "plasma_review",
+        lambda value: value["reviewed_candidate"].__setitem__(
+            "path", str(tmp_path / "different-f118-evidence.candidate.json")
+        ),
+    )
+    audit_path = root / binding["publication_audit"]["path"]
+    audit = json.loads(audit_path.read_text())
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = binding[
+        "plasma_review"
+    ]["sha256"]
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    binding["publication_audit"]["sha256"] = sha256(audit_path)
+    with pytest.raises(ValueError, match="identity or decision differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_false_f118_catalog_before_digest(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "evidence",
+        lambda value: value["source_archive_catalog"]["before"].__setitem__(
+            "readme_sha256", "0" * 64
+        ),
+    )
+    rebind_f118_probe_chain(root, binding)
+    with pytest.raises(ValueError, match="catalog predecessor authority differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_rebound_f118_live_readme(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    readme = root / "source-archives/README.md"
+    readme.write_text("## AthenaK\n\nRebound arbitrary current-source catalog.\n")
+    readme.chmod(0o644)
+    rebind_f118_live_catalog(root, binding)
+    with pytest.raises(ValueError, match="exact single append block"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_non_append_only_f118_live_sha256sums(
+    tmp_path, monkeypatch
+):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    sums = root / "source-archives/SHA256SUMS"
+    lines = sums.read_bytes().splitlines(keepends=True)
+    extra = root / "source-archives/rebound-extra.bundle"
+    extra.write_bytes(b"rebound arbitrary source archive\n")
+    extra.chmod(0o644)
+    sums.write_bytes(
+        b"".join(lines[:-1])
+        + f"{sha256(extra)}  {extra.name}\n".encode()
+        + lines[-1]
+    )
+    sums.chmod(0o644)
+    rebind_f118_live_catalog(root, binding)
+    with pytest.raises(ValueError, match="does not derive from F116 catalog_after"):
         module.validate_f118_source_authority_binding(binding, root, args)
 
 
@@ -1842,6 +2098,35 @@ def test_checkpoint_f119_rejects_extended_request_input_schema(tmp_path, monkeyp
     probe["request_inputs"]["unreviewed_authority"] = True
     with pytest.raises(ValueError, match="schema-2 F119 request inputs schema differs"):
         validate_f119_probe(probe)
+
+
+@pytest.mark.parametrize("identity_source", ("predecessor", "request", "provenance"))
+def test_checkpoint_non_f119_rejects_unmarked_legacy_f114_identity(
+    tmp_path, monkeypatch, identity_source
+):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    probe["predecessor"].pop("bootstrap")
+    probe["predecessor"].pop("superseded_failed_attempt")
+    if identity_source != "predecessor":
+        probe["predecessor"] = {}
+    if identity_source != "request":
+        probe["request_inputs"]["predecessor_recost"] = {
+            "path": "accounting/not-legacy.json",
+            "sha256": "0" * 64,
+        }
+        probe["request_inputs"]["predecessor_recost_publication_audit"] = {
+            "path": "accounting/not-legacy.json.publication_audit.json",
+            "sha256": "0" * 64,
+        }
+    if identity_source != "provenance":
+        probe["provenance"]["predecessor_recost_sha256"] = "0" * 64
+        probe["provenance"]["predecessor_recost_publication_audit_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="restricted to exact F119"):
+        validate_f119_probe(
+            probe,
+            checkpoint="F-118",
+            artifact_name="mks24_stage_i_E03_forcing_policy_F118_recost_evidence.json",
+        )
 
 
 @pytest.mark.parametrize("checkpoint_number", (116, 117, 118, 120, 200))
@@ -5994,6 +6279,8 @@ def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
     def write_exact_source_authority_publisher(path, value):
         if path.name in {recost_test.F116_NAME, recost_test.F118_NAME}:
             value = json.loads(json.dumps(value))
+            root = path.parent.parent
+            repository = root.parent / "repository"
             tools = value["implementation"]["committed_tools"]
             value["implementation"]["publisher"] = next(
                 item
@@ -6006,14 +6293,66 @@ def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
             value["implementation"]["current_source_bundle"]["advertised_tip"][
                 "name"
             ] = "HEAD"
+        if path.name == recost_test.F116_NAME:
+            bridge = value["implementation"]["intermediate_36140_bundle"]
+            current = value["implementation"]["current_source_bundle"]
+            readme = root / "source-archives/README.md"
+            sums = root / "source-archives/SHA256SUMS"
+            old_readme = (
+                "## AthenaK\n\n"
+                f"Retained bridge `{Path(bridge['path']).name}` and F116 current "
+                f"`{Path(current['path']).name}`.\n"
+            ).encode()
+            old_sums = (
+                f"{bridge['sha256']}  {Path(bridge['path']).name}\n"
+                f"{current['sha256']}  {Path(current['path']).name}\n"
+            ).encode()
+            readme.write_bytes(old_readme)
+            sums.write_bytes(old_sums)
+            readme.chmod(0o644)
+            sums.chmod(0o644)
+            value["source_archive_catalog"] = {
+                "before": {},
+                "after": {
+                    "readme_sha256": sha256(readme),
+                    "sha256sums_sha256": sha256(sums),
+                    "bridge_listed_exactly_once": True,
+                    "final_bundle_listed_exactly_once": True,
+                    "corrupt_c7_listed": False,
+                    "historical_f115_preserved": True,
+                    "sole_current_source_bundle": current["path"],
+                },
+            }
         if path.name == recost_test.F118_NAME:
-            root = path.parent.parent
             current = value["implementation"]["current_source_bundle"]
             value["implementation"]["predecessor_current_source_bundle"][
                 "advertised_tip"
             ]["name"] = "HEAD"
+            current["subject"] = subprocess.run(
+                ["git", "show", "-s", "--format=%s", current["head"]],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.rstrip("\n")
             readme = root / "source-archives/README.md"
             sums = root / "source-archives/SHA256SUMS"
+            old_readme = readme.read_bytes()
+            old_sums = sums.read_bytes()
+            readme.write_bytes(
+                old_readme.replace(
+                    b"## AthenaK\n\n",
+                    b"## AthenaK\n\n"
+                    + checkpoint_contract.f118_catalog_readme_block(current),
+                    1,
+                )
+            )
+            sums.write_bytes(
+                old_sums
+                + f"{current['sha256']}  {Path(current['path']).name}\n".encode()
+            )
+            readme.chmod(0o644)
+            sums.chmod(0o644)
             value["scope"] = {
                 "relationship": "current-source-selection-only-supersession",
                 "summary": "Select exact committed final tooling source without execution authority.",
@@ -6022,8 +6361,8 @@ def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
             }
             value["source_archive_catalog"] = {
                 "before": {
-                    "readme_sha256": "a" * 64,
-                    "sha256sums_sha256": "b" * 64,
+                    "readme_sha256": hashlib.sha256(old_readme).hexdigest(),
+                    "sha256sums_sha256": hashlib.sha256(old_sums).hexdigest(),
                     "bridge_listed_exactly_once": True,
                     "predecessor_current_source_bundle_listed_exactly_once": True,
                     "final_bundle_listed": False,
