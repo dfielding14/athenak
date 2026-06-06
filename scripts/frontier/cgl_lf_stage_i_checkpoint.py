@@ -99,6 +99,84 @@ F116_REQUIRED_TOOLS = {
 F116_PUBLISHER_RELATIVE = "scripts/frontier/cgl_lf_stage_i_source_authority.py"
 F118_REQUIRED_TOOLS = F116_REQUIRED_TOOLS
 F118_PUBLISHER_RELATIVE = F116_PUBLISHER_RELATIVE
+F118_AUTHORIZATION = {
+    "current_source_selection_authorized": True,
+    "source_authority_publication_authorized": True,
+    "prepare_authorized": False,
+    "submit_authorized": False,
+    "direct_sbatch_authorized": False,
+    "scheduler_mutation_authorized": False,
+    "stage_i_execution_state_mutation_authorized": False,
+    "scientific_configuration_change_authorized": False,
+    "historical_manifest_rebinding_authorized": False,
+}
+F118_PRESERVES = [
+    "The immutable F-116 evidence, reviews, publication audit, selected source bundle, and nested F-115 historical authority.",
+    "The qualified executable, frozen source revision, inputs, matrix, restart lineages, targets, resources, qualification, and Stage I budget policy.",
+    "Every prior active source-archive checksum-ledger entry and the corrupt-C7 incident-evidence exclusion.",
+]
+F118_DOES_NOT_AUTHORIZE = [
+    "prepare",
+    "submit",
+    "direct sbatch",
+    "scheduler mutation",
+    "Stage I execution-state mutation",
+    "scientific configuration change",
+    "historical manifest rebinding",
+]
+F118_PUBLICATION_REQUIREMENTS = {
+    "published_evidence_mode": "0444",
+    "published_review_mode": "0444",
+    "published_audit_mode": "0444",
+    "published_links": 1,
+    "publication_audit_is_authority_commit_marker": True,
+    "recovery_required_after_interruption": True,
+}
+F118_VALIDATION_CLAIMS = {
+    "historical_f116_chain": "passed",
+    "historical_f115_chain": "passed",
+    "bridge_bundle_complete_history": "passed",
+    "predecessor_current_source_bundle_complete_history": "passed",
+    "final_bundle_complete_history": "passed",
+    "final_bundle_single_head_tip": "passed",
+    "final_bundle_required_revisions": "passed",
+    "committed_tool_bytes": "passed",
+    "corrupt_c7_exclusion_preserved": True,
+}
+LEGACY_F114_RECOST_NAME = (
+    "mks24_stage_i_E03_forcing_policy_R03_s00_clean_partial_recost_evidence.json"
+)
+LEGACY_F114_RECOST_SHA256 = (
+    "27dd154b8594693afe0308f4de63a7faaed6daf81a396ab31166bb70a8c43b86"
+)
+LEGACY_F114_PUBLICATION_AUDIT_SHA256 = (
+    "3bf50ef1359f7f1798da945185d42b61488cb98779d5a6942839c03e3eb6bc73"
+)
+F117_FAILED_ATTEMPT_RELATIVES = {
+    "packet": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_recost_draft_packet.json"
+    ),
+    "request": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_recost_request.json"
+    ),
+    "reconciliation": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_reconciliation_evidence.json"
+    ),
+    "storage": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_storage_evidence.json"
+    ),
+}
+F117_FAILED_ATTEMPT_SHA256 = {
+    "packet": "8abceb6b2e3031a21b87f95b19053f2bf2b35f30d642c7a86bc4d9c6614071ad",
+    "request": "5dea85b34b4f09cb3a926927ad73b4443e2f8ce4fdd2b2a1b1f84b70294bc632",
+    "reconciliation": "677547889992d700e05559e322d95e7df6078a736bb2fbdff27ada38410c83e6",
+    "storage": "637e43a3cd12f3051e1eae1d3102a2106d0445e26ac500b8946f8fea2064f218",
+}
+F119_ARTIFACT_NAME = "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json"
+F119_LEGACY_BOOTSTRAP = (
+    "exact-retained-legacy-F114-after-authenticated-F117-failed-attempt"
+)
+STORAGE_PROJECTION_METHOD = "observed-stage-i-output-byte-rate-v1"
 INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION = (
     "Reviewer roles, agent identifiers, and process separation are retained "
     "declarations; exact artifact digests authenticate reviewed bytes but do not "
@@ -3707,7 +3785,8 @@ def validate_f118_source_authority_binding(
         "publication_audit": F118_PUBLICATION_AUDIT_RELATIVE,
     }
     normalized: dict[str, object] = {"checkpoint": "F-118"}
-    evidence_payload = b""
+    payloads: dict[str, bytes] = {}
+    digests: dict[str, str] = {}
     for key, expected_path in paths.items():
         binding = require_v2_input_binding(
             retained[key], f"schema-2 F118 {key} binding"
@@ -3721,8 +3800,8 @@ def validate_f118_source_authority_binding(
             f"schema-2 F118 {key}",
             expected_mode=0o444,
         )
-        if key == "evidence":
-            evidence_payload = payload
+        payloads[key] = payload
+        digests[key] = binding["sha256"]
         normalized[key] = binding
     final = require_exact_keys(
         retained["final_source_bundle"],
@@ -3747,7 +3826,8 @@ def validate_f118_source_authority_binding(
         "verified_revisions": args.expected_source_bundle_verified_revisions_json,
     }:
         raise ValueError("schema-2 F118 final source bundle binding differs")
-    validate_f118_committed_tools(evidence_payload, final_binding, root)
+    validate_f118_committed_tools(payloads["evidence"], final_binding, root)
+    validate_complete_f118_source_authority(payloads, digests, final_binding, root)
     normalized["final_source_bundle"] = final_binding
     return normalized
 
@@ -4004,6 +4084,499 @@ def validate_f118_committed_tools(
         raise ValueError("schema-2 F118 publisher differs from committed_tools")
 
 
+def canonical_json_object(payload: bytes, label: str) -> dict[str, object]:
+    """Parse one stable canonical JSON object."""
+
+    try:
+        value = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{label} is not valid JSON") from error
+    if (
+        not isinstance(value, dict)
+        or (json.dumps(value, indent=2, sort_keys=True) + "\n").encode() != payload
+    ):
+        raise ValueError(f"{label} must be stable canonical JSON")
+    return value
+
+
+def exact_publication_binding(
+    value: object,
+    path: Path,
+    digest: str,
+    label: str,
+    *,
+    mode: str,
+) -> dict[str, object]:
+    """Require one exact single-link publication binding."""
+
+    retained = require_exact_keys(
+        value, {"path", "sha256", "mode", "links"}, label
+    )
+    if retained != {
+        "path": str(path),
+        "sha256": digest,
+        "mode": mode,
+        "links": 1,
+    }:
+        raise ValueError(f"{label} differs")
+    return retained
+
+
+def validate_f118_catalog_snapshot(value: object, label: str, *, after: bool
+                                   ) -> dict[str, object]:
+    """Require the exact F118 before/after source-catalog claim schema."""
+
+    keys = {
+        "readme_sha256",
+        "sha256sums_sha256",
+        "bridge_listed_exactly_once",
+        "predecessor_current_source_bundle_listed_exactly_once",
+        "corrupt_c7_listed",
+        "historical_f115_preserved",
+    }
+    if after:
+        keys |= {
+            "final_bundle_listed_exactly_once",
+            "historical_f116_preserved",
+            "all_prior_checksum_entries_preserved",
+            "sole_current_source_bundle",
+        }
+    else:
+        keys.add("final_bundle_listed")
+    retained = require_exact_keys(value, keys, label)
+    require_sha256(retained["readme_sha256"], f"{label} README SHA-256")
+    require_sha256(retained["sha256sums_sha256"], f"{label} SHA256SUMS SHA-256")
+    expected = {
+        "bridge_listed_exactly_once": True,
+        "predecessor_current_source_bundle_listed_exactly_once": True,
+        "corrupt_c7_listed": False,
+        "historical_f115_preserved": True,
+    }
+    if after:
+        expected |= {
+            "final_bundle_listed_exactly_once": True,
+            "historical_f116_preserved": True,
+            "all_prior_checksum_entries_preserved": True,
+        }
+        require_nonempty_string(
+            retained["sole_current_source_bundle"],
+            f"{label} sole current source bundle",
+        )
+    else:
+        expected["final_bundle_listed"] = False
+    if any(retained[key] != expected_value for key, expected_value in expected.items()):
+        raise ValueError(f"{label} authority claims differ")
+    return retained
+
+
+def validate_complete_f118_source_authority(
+    payloads: dict[str, bytes],
+    digests: dict[str, str],
+    final_binding: dict[str, object],
+    root: Path,
+) -> None:
+    """Validate the complete F118 evidence, independent reviews, and audit."""
+
+    if set(payloads) != {"evidence", "provenance_review", "plasma_review", "publication_audit"}:
+        raise ValueError("schema-2 F118 retained record set is incomplete")
+    if set(digests) != set(payloads):
+        raise ValueError("schema-2 F118 retained digest set is incomplete")
+    loaded = {
+        key: canonical_json_object(payload, f"schema-2 F118 {key}")
+        for key, payload in payloads.items()
+    }
+    evidence = require_exact_keys(
+        loaded["evidence"],
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "generated_utc",
+            "scope",
+            "predecessor_authorities",
+            "implementation",
+            "source_archive_catalog",
+            "authorization",
+            "validation",
+            "publication_requirements",
+        },
+        "schema-2 F118 evidence",
+    )
+    generated = parse_utc_timestamp(evidence["generated_utc"], "schema-2 F118 generation")
+    if (
+        evidence["schema_version"] != 1
+        or evidence["record_type"]
+        != "stage-i-current-source-authority-supersession-evidence"
+        or evidence["checkpoint"] != "F-118"
+        or evidence["execution_epoch"] != EXECUTION_EPOCH
+        or evidence["authorization"] != F118_AUTHORIZATION
+        or evidence["validation"] != F118_VALIDATION_CLAIMS
+        or evidence["publication_requirements"] != F118_PUBLICATION_REQUIREMENTS
+    ):
+        raise ValueError("schema-2 F118 evidence identity or authority differs")
+    scope = require_exact_keys(
+        evidence["scope"],
+        {"relationship", "summary", "preserves", "does_not_authorize"},
+        "schema-2 F118 scope",
+    )
+    if (
+        scope["relationship"] != "current-source-selection-only-supersession"
+        or not require_nonempty_string(scope["summary"], "schema-2 F118 scope summary")
+        or scope["preserves"] != F118_PRESERVES
+        or scope["does_not_authorize"] != F118_DOES_NOT_AUTHORIZE
+    ):
+        raise ValueError("schema-2 F118 scope differs or broadens authority")
+    implementation = require_exact_keys(
+        evidence["implementation"],
+        {
+            "publisher",
+            "committed_tools",
+            "intermediate_36140_bundle",
+            "predecessor_current_source_bundle",
+            "current_source_bundle",
+        },
+        "schema-2 F118 implementation",
+    )
+    current = require_exact_keys(
+        implementation["current_source_bundle"],
+        {
+            "path",
+            "sha256",
+            "complete_history",
+            "head",
+            "advertised_tip",
+            "verified_revisions",
+            "selected_as_current",
+            "candidate_path",
+            "subject",
+        },
+        "schema-2 F118 current source bundle",
+    )
+    current_head = require_nonempty_string(current["head"], "schema-2 F118 current head")
+    if (
+        current["complete_history"] is not True
+        or current["selected_as_current"] is not True
+        or current_head not in current["verified_revisions"]
+        or not require_nonempty_string(current["candidate_path"], "schema-2 F118 candidate")
+        or not require_nonempty_string(current["subject"], "schema-2 F118 subject")
+        or require_exact_keys(
+            current["advertised_tip"],
+            {"revision", "name"},
+            "schema-2 F118 advertised tip",
+        )
+        != {"revision": current_head, "name": "HEAD"}
+        or {
+            "path": current["path"],
+            "sha256": current["sha256"],
+            "verified_revisions": current["verified_revisions"],
+        }
+        != final_binding
+    ):
+        raise ValueError("schema-2 F118 current source bundle authority differs")
+    bridge = require_exact_keys(
+        implementation["intermediate_36140_bundle"],
+        {
+            "path",
+            "sha256",
+            "complete_history",
+            "head",
+            "advertised_tip",
+            "verified_revisions",
+            "selected_as_current",
+            "role",
+        },
+        "schema-2 F118 bridge bundle",
+    )
+    predecessor = require_exact_keys(
+        implementation["predecessor_current_source_bundle"],
+        {
+            "path",
+            "sha256",
+            "complete_history",
+            "head",
+            "advertised_tip",
+            "verified_revisions",
+            "selected_as_current",
+            "role",
+            "subject",
+        },
+        "schema-2 F118 predecessor source bundle",
+    )
+    for bundle, role, tip_name, label in (
+        (
+            bridge,
+            "retained-non-current-bridge",
+            "refs/heads/feature/cgl-landau-fluid",
+            "bridge",
+        ),
+        (predecessor, "retained-non-current-predecessor", "HEAD", "predecessor"),
+    ):
+        if (
+            bundle["complete_history"] is not True
+            or bundle["selected_as_current"] is not False
+            or bundle["role"] != role
+            or require_exact_keys(
+                bundle["advertised_tip"],
+                {"revision", "name"},
+                f"schema-2 F118 {label} advertised tip",
+            )
+            != {"revision": bundle["head"], "name": tip_name}
+        ):
+            raise ValueError(f"schema-2 F118 {label} source bundle authority differs")
+        require_sha256(bundle["sha256"], f"schema-2 F118 {label} bundle SHA-256")
+    catalog = require_exact_keys(
+        evidence["source_archive_catalog"],
+        {"before", "after"},
+        "schema-2 F118 evidence source-archive catalog",
+    )
+    validate_f118_catalog_snapshot(
+        catalog["before"], "schema-2 F118 catalog before", after=False
+    )
+    after = validate_f118_catalog_snapshot(
+        catalog["after"], "schema-2 F118 catalog after", after=True
+    )
+    if after["sole_current_source_bundle"] != current["path"]:
+        raise ValueError("schema-2 F118 evidence sole current source bundle differs")
+
+    verified = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": current["sha256"],
+        "final_head": current_head,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+    }
+    reviewers: set[str] = set()
+    reviewed_times: list[datetime] = []
+    for key, review_kind, decision in (
+        ("provenance_review", "provenance-security", "approved-for-publication"),
+        ("plasma_review", "plasma-scientific-continuation", "approved"),
+    ):
+        review = require_exact_keys(
+            loaded[key],
+            {
+                "schema_version",
+                "record_type",
+                "checkpoint",
+                "execution_epoch",
+                "review_kind",
+                "decision",
+                "reviewed_candidate",
+                "published_f118",
+                "reviewer",
+                "reviewed_utc",
+                "findings",
+                "limitations",
+                "verified",
+            },
+            f"schema-2 F118 {key}",
+        )
+        candidate = require_exact_keys(
+            review["reviewed_candidate"],
+            {"path", "sha256"},
+            f"schema-2 F118 {key} candidate",
+        )
+        reviewer = require_exact_keys(
+            review["reviewer"],
+            {"agent_id", "identity"},
+            f"schema-2 F118 {key} reviewer",
+        )
+        if (
+            review["schema_version"] != 1
+            or review["record_type"]
+            != "stage-i-current-source-authority-supersession-independent-review"
+            or review["checkpoint"] != "F-118"
+            or review["execution_epoch"] != EXECUTION_EPOCH
+            or review["review_kind"] != review_kind
+            or review["decision"] != decision
+            or require_nonempty_string(
+                candidate["path"], f"schema-2 F118 {key} candidate path"
+            )
+            == str(root / F118_RELATIVE)
+            or candidate["sha256"] != digests["evidence"]
+            or review["published_f118"]
+            != {"path": str(root / F118_RELATIVE), "sha256": digests["evidence"]}
+            or review["verified"] != verified
+        ):
+            raise ValueError(f"schema-2 F118 {key} identity or decision differs")
+        agent = require_nonempty_string(
+            reviewer["agent_id"], f"schema-2 F118 {key} reviewer agent"
+        )
+        require_nonempty_string(
+            reviewer["identity"], f"schema-2 F118 {key} reviewer identity"
+        )
+        if agent in reviewers:
+            raise ValueError("schema-2 F118 independent reviews reuse one reviewer")
+        reviewers.add(agent)
+        for field in ("findings", "limitations"):
+            if (
+                not isinstance(review[field], list)
+                or not review[field]
+                or any(not isinstance(item, str) or not item for item in review[field])
+            ):
+                raise ValueError(f"schema-2 F118 {key} {field} differ")
+        if INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION not in review["limitations"]:
+            raise ValueError(
+                f"schema-2 F118 {key} omits the reviewer identity limitation"
+            )
+        reviewed = parse_utc_timestamp(review["reviewed_utc"], f"schema-2 F118 {key}")
+        if reviewed < generated:
+            raise ValueError(f"schema-2 F118 {key} predates evidence")
+        reviewed_times.append(reviewed)
+
+    audit = require_exact_keys(
+        loaded["publication_audit"],
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "execution_epoch",
+            "published_utc",
+            "artifact",
+            "independent_reviews",
+            "historical_f116_authority",
+            "source_archive_catalog",
+            "authority_and_enforcement",
+            "publication",
+        },
+        "schema-2 F118 publication audit",
+    )
+    historical = require_exact_keys(
+        evidence["predecessor_authorities"],
+        {"historical_f116"},
+        "schema-2 F118 predecessor authorities",
+    )["historical_f116"]
+    historical_bindings = require_exact_keys(
+        historical,
+        {"evidence", "publication_audit", "provenance_review", "plasma_review"},
+        "schema-2 F118 historical F116 bindings",
+    )
+    historical_digests = {
+        f"{key}_sha256": require_v2_input_binding(
+            historical_bindings[key], f"schema-2 F118 historical F116 {key}"
+        )["sha256"]
+        for key in historical_bindings
+    }
+    published = parse_utc_timestamp(audit["published_utc"], "schema-2 F118 publication")
+    if (
+        audit["schema_version"] != 1
+        or audit["record_type"]
+        != "stage-i-current-source-authority-supersession-publication-audit"
+        or audit["checkpoint"] != "F-118"
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or audit["historical_f116_authority"] != historical_digests
+        or audit["authority_and_enforcement"] != F118_AUTHORIZATION
+        or audit["publication"]
+        != "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
+        or published < generated
+        or any(published < reviewed for reviewed in reviewed_times)
+    ):
+        raise ValueError("schema-2 F118 publication audit identity or authority differs")
+    exact_publication_binding(
+        audit["artifact"],
+        root / F118_RELATIVE,
+        digests["evidence"],
+        "schema-2 F118 publication artifact",
+        mode="0444",
+    )
+    reviews = require_exact_keys(
+        audit["independent_reviews"],
+        {
+            "reviews_bind_exact_published_f118_sha256",
+            "provenance_security",
+            "plasma_scientific_continuation",
+        },
+        "schema-2 F118 publication reviews",
+    )
+    if reviews["reviews_bind_exact_published_f118_sha256"] != digests["evidence"]:
+        raise ValueError("schema-2 F118 publication review digest binding differs")
+    exact_publication_binding(
+        reviews["provenance_security"],
+        root / F118_PROVENANCE_REVIEW_RELATIVE,
+        digests["provenance_review"],
+        "schema-2 F118 provenance review publication",
+        mode="0444",
+    )
+    exact_publication_binding(
+        reviews["plasma_scientific_continuation"],
+        root / F118_PLASMA_REVIEW_RELATIVE,
+        digests["plasma_review"],
+        "schema-2 F118 plasma review publication",
+        mode="0444",
+    )
+    audit_catalog = require_exact_keys(
+        audit["source_archive_catalog"],
+        {
+            "readme",
+            "sha256sums",
+            "bridge_bundle",
+            "predecessor_current_source_bundle",
+            "current_source_bundle",
+            "corrupt_c7_absent_from_active_checksum_ledger",
+            "sole_current_source_bundle",
+        },
+        "schema-2 F118 publication source-archive catalog",
+    )
+    for key, relative, digest_key in (
+        ("readme", Path("source-archives/README.md"), "readme_sha256"),
+        ("sha256sums", Path("source-archives/SHA256SUMS"), "sha256sums_sha256"),
+    ):
+        exact_publication_binding(
+            audit_catalog[key],
+            root / relative,
+            str(after[digest_key]),
+            f"schema-2 F118 publication catalog {key}",
+            mode="0644",
+        )
+        read_confined_file_sha256(
+            root,
+            relative.as_posix(),
+            str(after[digest_key]),
+            f"schema-2 F118 publication catalog {key}",
+            expected_mode=0o644,
+        )
+    expected_bundles = (
+        (
+            "bridge_bundle",
+            bridge,
+            {"role": "retained-non-current-bridge", "selected_as_current": False},
+        ),
+        (
+            "predecessor_current_source_bundle",
+            predecessor,
+            {"role": "retained-non-current-predecessor", "selected_as_current": False},
+        ),
+        ("current_source_bundle", current, {"selected_as_current": True}),
+    )
+    for key, bundle, extra in expected_bundles:
+        expected = {
+            "path": str(root / safe_relative_path(str(bundle["path"]), f"F118 {key} path")),
+            "sha256": bundle["sha256"],
+            "mode": "0644",
+            "links": 1,
+            "head": bundle["head"],
+            **extra,
+        }
+        if audit_catalog[key] != expected:
+            raise ValueError(f"schema-2 F118 publication catalog {key} differs")
+        read_confined_file_sha256(
+            root,
+            str(bundle["path"]),
+            str(bundle["sha256"]),
+            f"schema-2 F118 publication catalog {key}",
+            expected_mode=0o644,
+        )
+    if (
+        audit_catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
+        or audit_catalog["sole_current_source_bundle"] != str(root / Path(str(current["path"])))
+    ):
+        raise ValueError("schema-2 F118 publication catalog authority differs")
+
+
 def require_v2_repository_binding(value: object, label: str) -> dict[str, str]:
     """Require one exact repository path, revision, and digest binding."""
 
@@ -4210,6 +4783,458 @@ def schema2_independent_review(root: Path, artifact_name: str,
     }
 
 
+def authenticate_f117_failed_attempt_for_f119(root: Path) -> dict[str, object]:
+    """Authenticate the exact unpromoted F117 quartet superseded only by F119."""
+
+    allowed_names = {relative.name for relative in F117_FAILED_ATTEMPT_RELATIVES.values()}
+    with absolute_descriptor(
+        root / "accounting",
+        "schema-2 F119 accounting directory",
+        flags=os.O_RDONLY | os.O_DIRECTORY,
+    ) as descriptor:
+        names = sorted(entry.name for entry in os.scandir(descriptor))
+        unexpected = sorted(
+            name
+            for name in names
+            if name.startswith(f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F117_")
+            and name not in allowed_names
+        )
+        prior_schema2 = sorted(
+            name
+            for name in names
+            if name.endswith("_recost_evidence.json.publication_audit.json")
+            and name
+            not in {
+                f"{LEGACY_F114_RECOST_NAME}.publication_audit.json",
+                f"{F119_ARTIFACT_NAME}.publication_audit.json",
+            }
+        )
+    if unexpected:
+        raise ValueError(
+            "schema-2 F119 supersession requires no F117 artifact, review, audit, "
+            f"or extra prerequisite: {unexpected}"
+        )
+    if prior_schema2:
+        raise ValueError(
+            "schema-2 F119 retained F114 predecessor was already superseded by "
+            f"another publication: {prior_schema2}"
+        )
+
+    records: dict[str, dict[str, object]] = {}
+    for key, relative in F117_FAILED_ATTEMPT_RELATIVES.items():
+        _, payload = read_confined_file_sha256(
+            root,
+            relative.as_posix(),
+            F117_FAILED_ATTEMPT_SHA256[key],
+            f"schema-2 F119 retained failed F117 {key}",
+            expected_mode=0o644,
+        )
+        records[key] = canonical_json_object(
+            payload, f"schema-2 F119 retained failed F117 {key}"
+        )
+
+    packet = require_exact_keys(
+        records["packet"],
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "artifact_name",
+            "execution_epoch",
+            "generated_utc",
+            "expires_utc",
+            "requested_by",
+            "scope",
+            "barrier",
+            "inputs",
+            "recommendations",
+            "draft_policy",
+        },
+        "schema-2 F119 retained failed F117 packet",
+    )
+    request = require_exact_keys(
+        records["request"],
+        {
+            "schema_version",
+            "record_type",
+            "checkpoint",
+            "artifact_name",
+            "execution_epoch",
+            "generated_utc",
+            "expires_utc",
+            "requested_by",
+            "scope",
+            "barrier",
+            "inputs",
+            "recommendations",
+        },
+        "schema-2 F119 retained failed F117 request",
+    )
+    failed_artifact = "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json"
+    if (
+        packet["schema_version"] != 1
+        or packet["record_type"] != "stage-i-recost-request-draft-packet"
+        or request["schema_version"] != 2
+        or request["record_type"] != "stage-i-recost-recommendation-request"
+        or packet["checkpoint"] != "F-117"
+        or request["checkpoint"] != "F-117"
+        or packet["artifact_name"] != failed_artifact
+        or request["artifact_name"] != failed_artifact
+        or packet["execution_epoch"] != EXECUTION_EPOCH
+        or request["execution_epoch"] != EXECUTION_EPOCH
+    ):
+        raise ValueError("schema-2 F119 retained failed F117 identity differs")
+    policy = require_exact_keys(
+        packet["draft_policy"],
+        {
+            "independent_review_created",
+            "self_approved",
+            "scheduler_mutation_authorized",
+            "canonical_mutation_authorized",
+            "required_storage_safety_bytes",
+        },
+        "schema-2 F119 retained failed F117 draft policy",
+    )
+    if (
+        policy["independent_review_created"] is not False
+        or policy["self_approved"] is not False
+        or policy["scheduler_mutation_authorized"] is not False
+        or policy["canonical_mutation_authorized"] is not False
+    ):
+        raise ValueError("schema-2 F119 retained failed F117 packet over-authorizes")
+    require_integer(
+        policy["required_storage_safety_bytes"],
+        "schema-2 F119 retained failed F117 safety bytes",
+        minimum=1,
+    )
+    for key in (
+        "checkpoint",
+        "artifact_name",
+        "execution_epoch",
+        "generated_utc",
+        "expires_utc",
+        "requested_by",
+        "scope",
+        "barrier",
+        "recommendations",
+    ):
+        if packet[key] != request[key]:
+            raise ValueError(
+                f"schema-2 F119 retained failed F117 packet/request {key} differs"
+            )
+    parse_utc_timestamp(packet["generated_utc"], "schema-2 F119 failed F117 generation")
+    parse_utc_timestamp(packet["expires_utc"], "schema-2 F119 failed F117 expiry")
+    require_nonempty_string(packet["requested_by"], "schema-2 F119 failed F117 author")
+    require_nonempty_string(packet["scope"], "schema-2 F119 failed F117 scope")
+    require_exact_keys(
+        packet["barrier"], {"recorded_segments"}, "schema-2 F119 failed F117 barrier"
+    )
+    require_exact_keys(
+        packet["recommendations"],
+        {"mode", "max_wave_nodes", "profiles"},
+        "schema-2 F119 failed F117 recommendations",
+    )
+    packet_inputs = packet["inputs"]
+    request_inputs = request["inputs"]
+    expected_input_keys = {
+        "reconciliation",
+        "ledger",
+        "reservations",
+        "manifests",
+        "scheduler_evidence",
+        "storage_evidence",
+        "source_bundle",
+        "matrix",
+        "stage_i_helper",
+        "ceiling_evidence",
+        "ceiling_publication_audit",
+        "source_authority",
+        "qualification_approval",
+        "predecessor_recost",
+        "predecessor_recost_independent_review",
+        "predecessor_recost_publication_audit",
+        "r17_readiness_evidence",
+        "r17_readiness_independent_review",
+        "r17_readiness_publication_audit",
+    }
+    packet_inputs = require_exact_keys(
+        packet_inputs, expected_input_keys, "schema-2 F119 failed F117 packet inputs"
+    )
+    request_inputs = require_exact_keys(
+        request_inputs, expected_input_keys, "schema-2 F119 failed F117 request inputs"
+    )
+    live_keys = {
+        "reconciliation",
+        "ledger",
+        "reservations",
+        "manifests",
+        "scheduler_evidence",
+        "storage_evidence",
+    }
+    if any(packet_inputs[key] is not None for key in live_keys):
+        raise ValueError("schema-2 F119 failed F117 packet retains live bindings")
+    if any(
+        packet_inputs[key] != request_inputs[key]
+        for key in expected_input_keys - live_keys
+    ):
+        raise ValueError("schema-2 F119 failed F117 authority bindings differ")
+    expected_legacy = {
+        "path": f"accounting/{LEGACY_F114_RECOST_NAME}",
+        "sha256": LEGACY_F114_RECOST_SHA256,
+    }
+    expected_legacy_audit = {
+        "path": f"accounting/{LEGACY_F114_RECOST_NAME}.publication_audit.json",
+        "sha256": LEGACY_F114_PUBLICATION_AUDIT_SHA256,
+    }
+    if (
+        request_inputs["predecessor_recost"] != expected_legacy
+        or request_inputs["predecessor_recost_independent_review"] is not None
+        or request_inputs["predecessor_recost_publication_audit"]
+        != expected_legacy_audit
+        or not isinstance(request_inputs["source_authority"], dict)
+        or request_inputs["source_authority"].get("checkpoint") != "F-116"
+    ):
+        raise ValueError("schema-2 F119 failed F117 predecessor or authority differs")
+    for input_key, record_key in (
+        ("reconciliation", "reconciliation"),
+        ("storage_evidence", "storage"),
+    ):
+        if request_inputs[input_key] != {
+            "path": F117_FAILED_ATTEMPT_RELATIVES[record_key].as_posix(),
+            "sha256": F117_FAILED_ATTEMPT_SHA256[record_key],
+        }:
+            raise ValueError(f"schema-2 F119 failed F117 {input_key} binding differs")
+
+    reconciliation = records["reconciliation"]
+    counts = reconciliation.get("counts")
+    if (
+        reconciliation.get("execution_epoch") != EXECUTION_EPOCH
+        or reconciliation.get("root") != str(root)
+        or reconciliation.get("consistent") is not True
+        or reconciliation.get("issues") != []
+        or not isinstance(counts, dict)
+        or any(
+            isinstance(counts.get(key), bool)
+            or not isinstance(counts.get(key), int)
+            or counts.get(key) < 0
+            for key in COUNT_KEYS
+        )
+        or counts.get("transactions") != 0
+        or counts.get("active_reservations") != 0
+    ):
+        raise ValueError("schema-2 F119 retained failed F117 reconciliation is not clean")
+    storage = require_exact_keys(
+        records["storage"],
+        {
+            "schema_version",
+            "record_type",
+            "execution_epoch",
+            "root",
+            "measured_utc",
+            "available_bytes",
+            "retained_stage_i_bytes",
+            "required_safety_bytes",
+            "projected_authorized_wave_growth_bytes",
+            "projection_method",
+            "profile_projections_sha256",
+        },
+        "schema-2 F119 retained failed F117 storage",
+    )
+    if (
+        storage["schema_version"] != 1
+        or storage["record_type"] != "stage-i-storage-evidence"
+        or storage["execution_epoch"] != EXECUTION_EPOCH
+        or storage["root"] != str(root)
+        or storage["measured_utc"] != request["generated_utc"]
+        or storage["projection_method"] != STORAGE_PROJECTION_METHOD
+    ):
+        raise ValueError("schema-2 F119 retained failed F117 storage identity differs")
+    require_integer(storage["available_bytes"], "schema-2 F119 failed F117 available bytes", minimum=1)
+    require_integer(storage["retained_stage_i_bytes"], "schema-2 F119 failed F117 retained bytes")
+    require_integer(storage["required_safety_bytes"], "schema-2 F119 failed F117 safety bytes", minimum=1)
+    require_integer(
+        storage["projected_authorized_wave_growth_bytes"],
+        "schema-2 F119 failed F117 projected growth",
+        minimum=1,
+    )
+    require_sha256(
+        storage["profile_projections_sha256"],
+        "schema-2 F119 failed F117 profile projection SHA-256",
+    )
+    return {
+        "checkpoint": "F-117",
+        **{
+            key: {
+                "path": relative.as_posix(),
+                "sha256": F117_FAILED_ATTEMPT_SHA256[key],
+            }
+            for key, relative in F117_FAILED_ATTEMPT_RELATIVES.items()
+        },
+        "status": "authenticated-unpromoted-failed-attempt",
+    }
+
+
+def validate_f119_failed_f117_predecessor(
+    value: object,
+    request_inputs: dict[str, object],
+    provenance: dict[str, object],
+    root: Path,
+    artifact_name: str,
+    checkpoint: str,
+    request_generated_utc: object,
+) -> None:
+    """Require the exact retained-F114/failed-F117 predecessor only for F119."""
+
+    has_failed_f117_marker = (
+        isinstance(value, dict)
+        and (
+            value.get("bootstrap") == F119_LEGACY_BOOTSTRAP
+            or "superseded_failed_attempt" in value
+        )
+    )
+    if checkpoint != "F-119" or artifact_name != F119_ARTIFACT_NAME:
+        if has_failed_f117_marker:
+            raise ValueError("failed-F117 predecessor supersession is restricted to exact F119")
+        return
+    request_inputs = require_exact_keys(
+        request_inputs,
+        {
+            "reconciliation",
+            "ledger",
+            "reservations",
+            "manifests",
+            "scheduler_evidence",
+            "storage_evidence",
+            "source_bundle",
+            "matrix",
+            "stage_i_helper",
+            "ceiling_evidence",
+            "ceiling_publication_audit",
+            "source_authority",
+            "qualification_approval",
+            "predecessor_recost",
+            "predecessor_recost_independent_review",
+            "predecessor_recost_publication_audit",
+            "r17_readiness_evidence",
+            "r17_readiness_independent_review",
+            "r17_readiness_publication_audit",
+        },
+        "schema-2 F119 request inputs",
+    )
+    predecessor = require_exact_keys(
+        value,
+        {
+            "path",
+            "artifact_name",
+            "sha256",
+            "publication_audit_path",
+            "publication_audit_sha256",
+            "independent_review_path",
+            "independent_review_sha256",
+            "checkpoint",
+            "generated_utc",
+            "published_utc",
+            "bootstrap",
+            "superseded_failed_attempt",
+        },
+        "schema-2 F119 predecessor recost",
+    )
+    predecessor_path = root / "accounting" / LEGACY_F114_RECOST_NAME
+    audit_path = predecessor_path.with_name(f"{predecessor_path.name}.publication_audit.json")
+    expected_request_predecessor = {
+        "path": predecessor_path.relative_to(root).as_posix(),
+        "sha256": LEGACY_F114_RECOST_SHA256,
+    }
+    expected_request_audit = {
+        "path": audit_path.relative_to(root).as_posix(),
+        "sha256": LEGACY_F114_PUBLICATION_AUDIT_SHA256,
+    }
+    if (
+        predecessor["path"] != str(predecessor_path)
+        or predecessor["artifact_name"] != LEGACY_F114_RECOST_NAME
+        or predecessor["sha256"] != LEGACY_F114_RECOST_SHA256
+        or predecessor["publication_audit_path"] != str(audit_path)
+        or predecessor["publication_audit_sha256"]
+        != LEGACY_F114_PUBLICATION_AUDIT_SHA256
+        or predecessor["independent_review_path"] is not None
+        or predecessor["independent_review_sha256"] is not None
+        or predecessor["checkpoint"] != "F-114"
+        or predecessor["bootstrap"] != F119_LEGACY_BOOTSTRAP
+        or request_inputs.get("predecessor_recost") != expected_request_predecessor
+        or request_inputs.get("predecessor_recost_independent_review") is not None
+        or request_inputs.get("predecessor_recost_publication_audit")
+        != expected_request_audit
+        or provenance.get("predecessor_recost_sha256") != LEGACY_F114_RECOST_SHA256
+        or provenance.get("predecessor_recost_independent_review_sha256") is not None
+        or provenance.get("predecessor_recost_publication_audit_sha256")
+        != LEGACY_F114_PUBLICATION_AUDIT_SHA256
+    ):
+        raise ValueError("schema-2 F119 predecessor identity or request binding differs")
+    _, predecessor_payload = read_confined_file_sha256(
+        root,
+        predecessor_path.relative_to(root).as_posix(),
+        LEGACY_F114_RECOST_SHA256,
+        "schema-2 F119 retained legacy F114 predecessor",
+        expected_mode=0o644,
+    )
+    _, audit_payload = read_confined_file_sha256(
+        root,
+        audit_path.relative_to(root).as_posix(),
+        LEGACY_F114_PUBLICATION_AUDIT_SHA256,
+        "schema-2 F119 retained legacy F114 predecessor audit",
+        expected_mode=0o644,
+    )
+    try:
+        retained_predecessor = json.loads(predecessor_payload)
+        retained_audit = json.loads(audit_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("schema-2 F119 retained legacy F114 predecessor is not JSON") from error
+    if (
+        not isinstance(retained_predecessor, dict)
+        or retained_predecessor.get("schema_version") != 1
+        or retained_predecessor.get("record_type")
+        != "stage-i-clean-partial-recost-checkpoint"
+        or retained_predecessor.get("checkpoint") != "F-114"
+        or retained_predecessor.get("execution_epoch") != EXECUTION_EPOCH
+    ):
+        raise ValueError("schema-2 F119 retained legacy F114 predecessor identity differs")
+    generated = parse_utc_timestamp(
+        retained_predecessor.get("generated_utc"),
+        "schema-2 F119 retained legacy F114 generation",
+    )
+    request_generated = parse_utc_timestamp(
+        request_generated_utc, "schema-2 F119 request generation"
+    )
+    if (
+        not isinstance(retained_audit, dict)
+        or retained_audit.get("schema_version") != 1
+        or retained_audit.get("record_type") != "observed-publication"
+        or retained_audit.get("execution_epoch") != EXECUTION_EPOCH
+        or retained_audit.get("artifact")
+        != {
+            "path": str(predecessor_path),
+            "sha256": LEGACY_F114_RECOST_SHA256,
+            "mode": "0644",
+            "links": 1,
+        }
+    ):
+        raise ValueError("schema-2 F119 retained legacy F114 publication audit differs")
+    published = parse_utc_timestamp(
+        retained_audit.get("published_utc"),
+        "schema-2 F119 retained legacy F114 publication",
+    )
+    if (
+        predecessor["generated_utc"] != generated.isoformat()
+        or predecessor["published_utc"] != published.isoformat()
+        or published < generated
+        or request_generated < published
+    ):
+        raise ValueError("schema-2 F119 retained legacy F114 chronology differs")
+    failed_f117 = authenticate_f117_failed_attempt_for_f119(root)
+    if predecessor["superseded_failed_attempt"] != failed_f117:
+        raise ValueError("schema-2 F119 failed-F117 supersession binding differs")
+
+
 def schema2_publication_context(value: dict[str, object], path: Path,
                                 args: argparse.Namespace,
                                 scheduler: list[dict[str, object]], *,
@@ -4365,6 +5390,15 @@ def schema2_publication_context(value: dict[str, object], path: Path,
     )
     if provenance["source_authority"] != source_authority:
         raise ValueError("schema-2 artifact F118 source authority binding differs")
+    validate_f119_failed_f117_predecessor(
+        value.get("predecessor_recost"),
+        request_inputs,
+        provenance,
+        root,
+        artifact_name,
+        checkpoint,
+        request["generated_utc"],
+    )
     for key, expected in (
         ("request_sha256", args.expected_request_sha256),
         ("generator_sha256", args.expected_generator_sha256),
