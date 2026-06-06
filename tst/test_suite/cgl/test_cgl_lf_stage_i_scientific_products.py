@@ -16,13 +16,15 @@ import pytest
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_products.py"
+ACCEPTANCE_UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py"
+PAPER_ANALYZER = REPOSITORY / "scripts/analyze_cgl_lf_paper.py"
 
 
-def load_utility():
-    """Load the standalone utility without importing the dirty analyzer."""
+def load_utility(path: Path = UTILITY, name: str = "cgl_lf_stage_i_scientific_products"):
+    """Load one standalone Stage I utility without importing the dirty analyzer."""
 
     spec = importlib.util.spec_from_file_location(
-        "cgl_lf_stage_i_scientific_products", UTILITY
+        name, path
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -32,6 +34,10 @@ def load_utility():
 
 
 products = load_utility()
+acceptance = load_utility(
+    ACCEPTANCE_UTILITY, "cgl_lf_stage_i_scientific_acceptance_for_products"
+)
+paper_analyzer = load_utility(PAPER_ANALYZER, "analyze_cgl_lf_paper_for_products")
 
 
 def sha256(path: Path) -> str:
@@ -481,6 +487,548 @@ def synthetic_fields(shape: tuple[int, int, int] = (16, 16, 16)) -> dict[str, np
     }
 
 
+def synthetic_eddy_fields(
+    shape: tuple[int, int, int] = (16, 16, 16),
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """Return the analyzer's finite local-field eddy synthetic vector fields."""
+
+    z, y, x = np.meshgrid(
+        (np.arange(shape[0]) + 0.5) * 2.0 / shape[0],
+        (np.arange(shape[1]) + 0.5) / shape[1],
+        (np.arange(shape[2]) + 0.5) / shape[2],
+        indexing="ij",
+    )
+    velocity = [
+        np.sin(2.0 * math.pi * x) + np.sin(math.pi * z),
+        np.sin(2.0 * math.pi * y) + np.sin(math.pi * z),
+        np.zeros(shape),
+    ]
+    magnetic = [
+        0.1 * velocity[0],
+        0.1 * velocity[1],
+        np.ones(shape),
+    ]
+    return velocity, magnetic
+
+
+def test_pressure_transfer_has_exact_paper_analyzer_semantic_parity():
+    """Stage I preserves the paper analyzer's transfer values and reference curve."""
+
+    fields = synthetic_fields()
+    density = fields["dens"]
+    velocity = [fields["velx"], fields["vely"], fields["velz"]]
+    magnetic = [fields["bcc1"], fields["bcc2"], fields["bcc3"]]
+    delta_p = fields["p_perp"] - fields["eint"]
+    lengths = (1.0, 1.0, 2.0)
+    dk = math.pi
+    expected = paper_analyzer.pressure_transfer(
+        density, velocity, magnetic, delta_p, lengths, dk
+    )
+    actual = products.pressure_transfer(
+        density, velocity, magnetic, delta_p, lengths, dk
+    )
+    for key in (
+        "dk",
+        "k_perp",
+        "transfer",
+        "normalization_available",
+        "normalization_definition",
+        "kinetic_energy",
+        "velocity_rms",
+        "perpendicular_outer_scale",
+        "total_transfer_rate",
+        "transfer_normalized_by_total",
+        "direct_real_space",
+        "shell_sum",
+        "closure_error",
+    ):
+        if isinstance(expected[key], list):
+            if key == "k_perp":
+                np.testing.assert_array_equal(actual[key], expected[key])
+            else:
+                np.testing.assert_allclose(
+                    actual[key], expected[key], rtol=1.0e-12, atol=2.0e-15
+                )
+        elif key in ("shell_sum", "closure_error"):
+            assert actual[key] == pytest.approx(expected[key], rel=1.0e-12, abs=2.0e-15)
+        else:
+            assert actual[key] == expected[key]
+
+    actual_ensemble = {"result": "pass", "pressure_transfer": actual}
+    expected_ensemble = {"pressure_transfer": expected}
+    context = products.BundleContext.__new__(products.BundleContext)
+    for product in (
+        "pressure_transfer.transfer",
+        "pressure_transfer.transfer_normalized_by_total",
+    ):
+        expected_x, expected_y = paper_analyzer.analyzed_product_curve(
+            expected_ensemble, product
+        )
+        actual_x, actual_y = products.curve_from_product(
+            context, actual_ensemble, product
+        )
+        np.testing.assert_array_equal(actual_x, expected_x)
+        np.testing.assert_allclose(actual_y, expected_y, rtol=1.0e-12, atol=2.0e-15)
+        reference_x = np.linspace(expected_x[0], expected_x[-1], 11)
+        np.testing.assert_allclose(
+            products.interpolate_curve(reference_x, actual_x, actual_y, "linear"),
+            paper_analyzer.interpolate_analysis_curve(
+                reference_x, expected_x, expected_y, "linear"
+            ),
+            rtol=1.0e-12,
+            atol=2.0e-15,
+        )
+
+
+def test_local_field_eddy_anisotropy_has_exact_paper_analyzer_semantic_parity():
+    """Stage I preserves paper-analyzer eddy sampling, scales, and reference curves."""
+
+    velocity, magnetic = synthetic_eddy_fields()
+    lengths = (1.0, 1.0, 2.0)
+    expected = paper_analyzer.local_field_eddy_anisotropy(
+        velocity, magnetic, lengths, 200_000, 10, 731
+    )
+    actual = products.local_field_eddy_anisotropy(
+        velocity, magnetic, lengths, 200_000, 10, 731
+    )
+    for key in (
+        "computed",
+        "available",
+        "definition",
+        "conditioning",
+        "separation_coordinate",
+        "normalization_definition",
+        "lperp",
+        "angle_degrees",
+        "samples_requested",
+        "samples_retained",
+        "seed",
+        "bins",
+        "bin_centers_over_lperp",
+    ):
+        if isinstance(expected[key], list):
+            np.testing.assert_array_equal(actual[key], expected[key])
+        else:
+            assert actual[key] == expected[key]
+    for field in ("velocity_perp", "magnetic_perp"):
+        for key in (
+            "available",
+            "ell_perp_over_lperp",
+            "ell_parallel_over_lperp",
+            "perpendicular_structure_function",
+            "parallel_structure_function",
+            "perpendicular_sample_counts",
+            "parallel_sample_counts",
+        ):
+            if isinstance(expected[field][key], list):
+                np.testing.assert_array_equal(actual[field][key], expected[field][key])
+            else:
+                assert actual[field][key] == expected[field][key]
+
+    actual_ensemble = {"result": "pass", "eddy_anisotropy": actual}
+    expected_ensemble = {"eddy_anisotropy": expected}
+    context = products.BundleContext.__new__(products.BundleContext)
+    for field in ("velocity_perp", "magnetic_perp"):
+        product = f"eddy_anisotropy.{field}"
+        expected_x, expected_y = paper_analyzer.analyzed_product_curve(
+            expected_ensemble, product
+        )
+        actual_x, actual_y = products.curve_from_product(
+            context, actual_ensemble, product
+        )
+        np.testing.assert_array_equal(actual_x, expected_x)
+        np.testing.assert_array_equal(actual_y, expected_y)
+        reference_x = np.linspace(expected_x[0], expected_x[-1], 11)
+        np.testing.assert_array_equal(
+            products.interpolate_curve(reference_x, actual_x, actual_y, "linear"),
+            paper_analyzer.interpolate_analysis_curve(
+                reference_x, expected_x, expected_y, "linear"
+            ),
+        )
+
+
+def test_pressure_transfer_known_sign_shell_closure_and_product_curve():
+    """The MKS24 CGL stress transfer has known sign and closes over k_perp."""
+
+    shape = (16, 16, 16)
+    z = np.broadcast_to(
+        ((np.arange(shape[0]) + 0.5) * 2.0 / shape[0])[:, None, None],
+        shape,
+    )
+    zero = np.zeros(shape)
+    density = np.ones(shape)
+    velocity = [zero, zero, np.cos(math.pi * z)]
+    magnetic = [zero, zero, np.ones(shape)]
+    transfer = products.pressure_transfer(
+        density,
+        velocity,
+        magnetic,
+        np.sin(math.pi * z),
+        (1.0, 1.0, 2.0),
+        math.pi,
+    )
+    assert transfer["direct_real_space"] > 0.0
+    assert transfer["shell_sum"] == pytest.approx(transfer["direct_real_space"], abs=1.0e-14)
+    assert transfer["closure_error"] == pytest.approx(0.0, abs=1.0e-14)
+    assert transfer["transfer"][0] == pytest.approx(transfer["direct_real_space"])
+    assert np.max(np.abs(transfer["transfer"][1:])) < 1.0e-14
+    assert transfer["normalization_available"] is True
+
+    context = products.BundleContext.__new__(products.BundleContext)
+    x, y = products.curve_from_product(
+        context,
+        {"result": "pass", "pressure_transfer": transfer},
+        "pressure_transfer.transfer_normalized_by_total",
+    )
+    assert x.tolist() == transfer["k_perp"]
+    assert y.tolist() == transfer["transfer_normalized_by_total"]
+
+
+def test_pressure_transfer_rejects_nonpositive_density_and_unavailable_normalization():
+    """Pressure transfer fails closed on invalid density or a zero normalization."""
+
+    fields = synthetic_fields((8, 8, 8))
+    velocity = [fields["velx"], fields["vely"], fields["velz"]]
+    magnetic = [fields["bcc1"], fields["bcc2"], fields["bcc3"]]
+    density = np.array(fields["dens"], copy=True)
+    density[0, 0, 0] = 0.0
+    with pytest.raises(products.UnsupportedProduct, match="positive density"):
+        products.pressure_transfer(
+            density,
+            velocity,
+            magnetic,
+            fields["p_perp"] - fields["eint"],
+            (1.0, 1.0, 2.0),
+            math.pi,
+        )
+
+    context = products.BundleContext.__new__(products.BundleContext)
+    with pytest.raises(products.UnsupportedProduct, match="normalization is unavailable"):
+        products.curve_from_product(
+            context,
+            {
+                "result": "pass",
+                "pressure_transfer": {
+                    "normalization_available": False,
+                    "k_perp": [0.0, 1.0],
+                    "transfer_normalized_by_total": None,
+                },
+            },
+            "pressure_transfer.transfer_normalized_by_total",
+        )
+
+
+def test_local_field_eddy_anisotropy_is_deterministic_and_count_weighted():
+    """Fixed sampling yields replay-identical finite Figure 5(b) products."""
+
+    assert (
+        products.EDDY_SAMPLES,
+        products.EDDY_BINS,
+        products.EDDY_SEED,
+        products.EDDY_ANGLE_DEGREES,
+    ) == (2_000_000, 24, 731, 15.0)
+    velocity, magnetic = synthetic_eddy_fields()
+    first = products.local_field_eddy_anisotropy(
+        velocity, magnetic, (1.0, 1.0, 2.0), 200_000, 10, 731
+    )
+    second = products.local_field_eddy_anisotropy(
+        velocity, magnetic, (1.0, 1.0, 2.0), 200_000, 10, 731
+    )
+    assert first == second
+    assert first["available"] is True
+    assert first["velocity_perp"]["available"] is True
+    assert first["magnetic_perp"]["available"] is True
+
+    ensemble = products.mean_eddy_anisotropy([first, second])
+    assert ensemble["samples_retained"] == 2 * first["samples_retained"]
+    for name in ("velocity_perp", "magnetic_perp"):
+        assert ensemble[name]["ell_perp_over_lperp"] == first[name]["ell_perp_over_lperp"]
+        assert ensemble[name]["ell_parallel_over_lperp"] == pytest.approx(
+            first[name]["ell_parallel_over_lperp"]
+        )
+        assert ensemble[name]["parallel_sample_counts"] == pytest.approx(
+            2.0 * np.asarray(first[name]["parallel_sample_counts"])
+        )
+    context = products.BundleContext.__new__(products.BundleContext)
+    x, y = products.curve_from_product(
+        context,
+        {"result": "pass", "eddy_anisotropy": ensemble},
+        "eddy_anisotropy.velocity_perp",
+    )
+    assert x.tolist() == ensemble["velocity_perp"]["ell_perp_over_lperp"]
+    assert y.tolist() == ensemble["velocity_perp"]["ell_parallel_over_lperp"]
+
+
+def test_eddy_anisotropy_rejects_nonfinite_input_and_unavailable_curve():
+    """Hostile fields and unavailable equal-power inversions fail closed."""
+
+    velocity, magnetic = synthetic_eddy_fields((8, 8, 8))
+    velocity[0] = np.array(velocity[0], copy=True)
+    velocity[0][0, 0, 0] = np.nan
+    with pytest.raises(products.UnsupportedProduct, match="nonfinite"):
+        products.local_field_eddy_anisotropy(
+            velocity, magnetic, (1.0, 1.0, 2.0), 10_000, 8, 731
+        )
+
+    context = products.BundleContext.__new__(products.BundleContext)
+    with pytest.raises(products.UnsupportedProduct, match="do not overlap"):
+        products.curve_from_product(
+            context,
+            {
+                "result": "pass",
+                "eddy_anisotropy": {
+                    "velocity_perp": {
+                        "available": False,
+                        "reason": "structure functions do not overlap",
+                    }
+                },
+            },
+            "eddy_anisotropy.velocity_perp",
+        )
+
+
+def test_new_product_reference_semantics_are_stage_i_provenance_bound(
+    tmp_path, monkeypatch
+):
+    """A product-name substitution cannot reuse an admitted reference identity."""
+
+    references = tmp_path / "references"
+    curve = references / "transfer.csv"
+    write_curve(curve, [(0.25, 0.025, 0.01), (1.75, 0.175, 0.01)])
+    manifest = references / "curves.json"
+    write_json(manifest, {
+        "schema_version": 1,
+        "curves": [
+            {
+                "id": "fixture_transfer",
+                "case": "fixture_case",
+                "product": "pressure_transfer.transfer_normalized_by_total",
+                "data_file": curve.name,
+                "data_sha256": sha256(curve),
+                "interpolation": "linear",
+            }
+        ],
+        "surfaces": [],
+    })
+    stage_manifest = {
+        "panel_status": {
+            "analysis_case_aliases": {},
+            "reference_manifests": {
+                "fixture": {"path": manifest.name, "sha256": sha256(manifest)}
+            },
+            "reference_product_bindings": {
+                "fixture_transfer": {
+                    "kind": "curve",
+                    "case": "fixture_case",
+                    "product": "pressure_transfer.transfer_normalized_by_total",
+                    "data_file": curve.name,
+                    "data_sha256": sha256(curve),
+                    "reference_manifest": "fixture",
+                }
+            },
+            "panels": [{"id": "fig7bottom", "reference_products": ["fixture_transfer"]}],
+        }
+    }
+    context = products.BundleContext.__new__(products.BundleContext)
+    context.stage_manifest = stage_manifest
+    context.reference_root = references.resolve()
+    context.case_name = "fixture_case"
+    ensemble = {
+        "result": "pass",
+        "pressure_transfer": {
+            "normalization_available": True,
+            "k_perp": [0.0, 1.0, 2.0],
+            "transfer_normalized_by_total": [0.0, 0.1, 0.2],
+        },
+    }
+    comparisons, bindings, deferred = products.reference_products_for_case(context, ensemble)
+    comparison = comparisons["fixture_transfer"]
+    assert comparison["available"] is True
+    assert comparison["stage_i_binding_validated"] is True
+    assert comparison["reference_data_file"] == curve.name
+    assert comparison["reference_manifest_sha256"] == sha256(manifest)
+    assert comparison["data_file"] == str(curve.resolve())
+    assert comparison["data_sha256"] == sha256(curve)
+    assert comparison["reference_y"] == comparison["reference_values"]
+    assert comparison["simulated_y"] == comparison["simulated_values"]
+    assert comparison["rms_normalized_by_reported_uncertainty"] == pytest.approx(
+        comparison["normalized_residual_rms"]
+    )
+    assert len(bindings) == 2
+    assert deferred == []
+    binding = stage_manifest["panel_status"]["reference_product_bindings"][
+        "fixture_transfer"
+    ]
+    monkeypatch.setattr(
+        acceptance,
+        "verified_reference_product",
+        lambda *_: {
+            "manifest_sha256": sha256(manifest),
+            "data_path": str(curve.resolve()),
+            "interpolation": "linear",
+            "x": [0.25, 1.75],
+            "reference": [0.025, 0.175],
+            "uncertainty": [0.01, 0.01],
+        },
+    )
+    rms, maximum, simulated = acceptance.normalized_reference_metrics(
+        {}, "fixture_transfer", comparison, binding, "fixture_case"
+    )
+    assert rms == pytest.approx(0.0)
+    assert maximum == pytest.approx(0.0)
+    assert simulated == pytest.approx([0.025, 0.175])
+
+    stage_manifest["panel_status"]["reference_product_bindings"]["fixture_transfer"][
+        "product"
+    ] = "eddy_anisotropy.velocity_perp"
+    with pytest.raises(products.ScientificProductsError, match="differs from Stage I binding"):
+        products.reference_products_for_case(context, ensemble)
+
+
+def test_snapshot_analysis_rejects_mixed_authenticated_grids(monkeypatch):
+    """Snapshots with differing physical grids cannot be averaged into one product."""
+
+    def group(time: float) -> products.SnapshotGroup:
+        return products.SnapshotGroup(
+            time=time,
+            representative=Path(f"/retained/{time:g}/rank_00000000/snapshot.bin"),
+            rank_files=(),
+            segment=f"s{int(time)}",
+        )
+
+    context = products.BundleContext.__new__(products.BundleContext)
+    context.snapshots = [group(8.0), group(9.0)]
+    context.case_name = "fixture_case"
+    context.stage_manifest = {
+        "panel_status": {
+            "analysis_case_aliases": {},
+            "reference_product_bindings": {},
+        }
+    }
+    fields = synthetic_fields((8, 8, 8))
+    monkeypatch.setattr(
+        products,
+        "read_snapshot_group",
+        lambda value, _: (
+            {name: np.array(field, copy=True) for name, field in fields.items()},
+            (1.0, 1.0, 2.0 if value.time == 8.0 else 3.0),
+            [],
+        ),
+    )
+    ensemble, bindings, declared = products.analyze_snapshots(
+        context, 8.0, 10.0, 16, [1, 2], 1_000_000, "auto"
+    )
+    assert ensemble["result"] == "inconclusive"
+    assert "do not share one uniform analysis grid" in ensemble["reason"]
+    assert bindings == []
+    assert len(declared) == 2
+
+
+def test_snapshot_analysis_derives_products_for_admitted_case_roles(monkeypatch):
+    """Authenticated admitted roles trigger both new deterministic reductions."""
+
+    group = products.SnapshotGroup(
+        time=9.0,
+        representative=Path("/retained/9/rank_00000000/snapshot.bin"),
+        rank_files=(),
+        segment="s09",
+    )
+    context = products.BundleContext.__new__(products.BundleContext)
+    context.snapshots = [group]
+    context.case_name = "fixture_case"
+    context.stage_manifest = {
+        "panel_status": {
+            "analysis_case_aliases": {},
+            "reference_product_bindings": {
+                "fixture_transfer": {
+                    "kind": "curve",
+                    "case": "fixture_case",
+                    "product": "pressure_transfer.transfer_normalized_by_total",
+                },
+                "fixture_eddy": {
+                    "kind": "curve",
+                    "case": "fixture_case",
+                    "product": "eddy_anisotropy.velocity_perp",
+                },
+            },
+        }
+    }
+    fields = synthetic_fields()
+    velocity, magnetic = synthetic_eddy_fields()
+    for name, value in zip(("velx", "vely", "velz"), velocity):
+        fields[name] = value
+    for name, value in zip(("bcc1", "bcc2", "bcc3"), magnetic):
+        fields[name] = value
+    monkeypatch.setattr(
+        products,
+        "read_snapshot_group",
+        lambda *_: (
+            {name: np.array(field, copy=True) for name, field in fields.items()},
+            (1.0, 1.0, 2.0),
+            [],
+        ),
+    )
+    monkeypatch.setattr(products, "EDDY_SAMPLES", 200_000)
+    monkeypatch.setattr(products, "EDDY_BINS", 10)
+    ensemble, bindings, declared = products.analyze_snapshots(
+        context, 8.0, 10.0, 16, [1, 2, 4], 1_000_000, "auto"
+    )
+    assert ensemble["result"] == "pass"
+    assert ensemble["pressure_transfer"]["normalization_available"] is True
+    assert ensemble["eddy_anisotropy"]["velocity_perp"]["available"] is True
+    assert ensemble["admitted_curve_products"] == [
+        "eddy_anisotropy.velocity_perp",
+        "pressure_transfer.transfer_normalized_by_total",
+    ]
+    assert bindings == []
+    assert len(declared) == 1
+
+
+def test_snapshot_analysis_reports_reducer_rejection_as_inconclusive(monkeypatch):
+    """A hostile ensemble reduction cannot escape as an unstructured failure."""
+
+    group = products.SnapshotGroup(
+        time=9.0,
+        representative=Path("/retained/9/rank_00000000/snapshot.bin"),
+        rank_files=(),
+        segment="s09",
+    )
+    context = products.BundleContext.__new__(products.BundleContext)
+    context.snapshots = [group]
+    context.case_name = "fixture_case"
+    context.stage_manifest = {
+        "panel_status": {
+            "analysis_case_aliases": {},
+            "reference_product_bindings": {
+                "fixture_transfer": {
+                    "kind": "curve",
+                    "case": "fixture_case",
+                    "product": "pressure_transfer.transfer_normalized_by_total",
+                }
+            },
+        }
+    }
+    fields = synthetic_fields((8, 8, 8))
+    monkeypatch.setattr(
+        products,
+        "read_snapshot_group",
+        lambda *_: (
+            {name: np.array(field, copy=True) for name, field in fields.items()},
+            (1.0, 1.0, 2.0),
+            [],
+        ),
+    )
+    def reject_ensemble(_):
+        raise products.UnsupportedProduct("hostile pressure-transfer ensemble")
+
+    monkeypatch.setattr(products, "mean_pressure_transfer", reject_ensemble)
+    ensemble, _, _ = products.analyze_snapshots(
+        context, 8.0, 10.0, 16, [1, 2], 1_000_000, "auto"
+    )
+    assert ensemble["result"] == "inconclusive"
+    assert ensemble["reason"] == "hostile pressure-transfer ensemble"
+
+
 def test_snapshot_reductions_emit_physical_k_convergence():
     """Supported reductions produce physical-k curves over reviewed k_perp/pi."""
 
@@ -578,21 +1126,6 @@ def test_skip_preserves_declared_snapshot_inventory():
     assert ensemble["selected_snapshot_count"] == 1
     assert bindings == []
     assert declared == ensemble["declared_snapshot_inventory"]
-
-
-def test_intrinsically_deferred_product_reason_precedes_snapshot_status():
-    """Unsupported product families retain their precise blocker."""
-
-    context = products.BundleContext.__new__(products.BundleContext)
-    with pytest.raises(
-        products.UnsupportedProduct,
-        match="pressure-transfer shell filtering is deferred",
-    ):
-        products.curve_from_product(
-            context,
-            {"result": "inconclusive"},
-            "pressure_transfer.transfer_normalized_by_total",
-        )
 
 
 def fake_raw(

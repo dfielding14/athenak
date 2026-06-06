@@ -8,11 +8,11 @@ self-digested evidence record.  Verification ignores claimed products,
 recomputes the complete record from its bound request, and byte-compares it
 with the retained evidence.
 
-The initial implementation supports the products needed for scalar
-scientific-acceptance inputs, density/anisotropy PDFs, pressure-density
-surfaces, selected-shell alignment PDFs, peak-alignment curves, and
-R16/R02/R17 velocity/magnetic spectral-shape convergence.  Pressure-transfer
-and eddy-anisotropy products are explicitly deferred.
+The implementation supports the products needed for scalar scientific-
+acceptance inputs, density/anisotropy PDFs, pressure-density surfaces,
+pressure-anisotropy transfer, local-field eddy anisotropy, selected-shell
+alignment PDFs, peak-alignment curves, and R16/R02/R17 velocity/magnetic
+spectral-shape convergence.
 """
 
 from __future__ import annotations
@@ -59,6 +59,10 @@ HISTORY_LABEL = re.compile(r"\[(\d+)\]=(\S+)")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 CASE_ID = re.compile(r"R(?:0[2-9]|1[0-7])")
 RANK_DIRECTORY = re.compile(r"rank_(\d{8})")
+EDDY_ANGLE_DEGREES = 15.0
+EDDY_SAMPLES = 2_000_000
+EDDY_BINS = 24
+EDDY_SEED = 731
 REQUIRED_FIELDS = (
     "dens",
     "velx",
@@ -94,23 +98,15 @@ SUPPORTED_REFERENCE_CURVES = {
     "pdf.density_fluctuation",
     "pdf.beta_delta",
     "alignment_peak.cos_theta",
+    "pressure_transfer.transfer",
+    "pressure_transfer.transfer_normalized_by_total",
+    "eddy_anisotropy.velocity_perp",
+    "eddy_anisotropy.magnetic_perp",
 }
 SUPPORTED_REFERENCE_SURFACES = {
     "pressure_density_joint.parallel",
     "pressure_density_joint.perpendicular",
 }
-DEFERRED_PRODUCT_REASONS = {
-    "pressure_transfer": (
-        "pressure-transfer shell filtering is deferred from the initial "
-        "deterministic generator"
-    ),
-    "eddy_anisotropy": (
-        "local-field eddy-anisotropy sampling is deferred from the initial "
-        "deterministic generator"
-    ),
-}
-
-
 class ScientificProductsError(RuntimeError):
     """Raised when authentication or deterministic replay fails."""
 
@@ -1200,6 +1196,546 @@ def periodic_gradient(
     )
 
 
+def pressure_transfer(
+    density: np.ndarray,
+    velocity: list[np.ndarray],
+    magnetic: list[np.ndarray],
+    delta_p: np.ndarray,
+    lengths: tuple[float, float, float],
+    dk: float,
+) -> dict[str, object]:
+    """Return the MKS24 CGL pressure-stress transfer shell partition.
+
+    This is integral <sqrt(rho) u>_k dot [(B/sqrt(rho)) dot grad
+    ((Delta p/B^2) B)], filtered in k_perp shells and normalized by the
+    MKS24 Kolmogorov estimate T_total ~= E_K (2 pi u_rms / L_perp).
+    """
+
+    if len(velocity) != 3 or len(magnetic) != 3:
+        raise UnsupportedProduct("pressure transfer requires three-vector fields")
+    arrays = [density, *velocity, *magnetic, delta_p]
+    if any(value.shape != density.shape for value in arrays[1:]):
+        raise UnsupportedProduct("pressure-transfer fields have inconsistent shapes")
+    if any(not np.isfinite(value).all() for value in arrays):
+        raise UnsupportedProduct("pressure-transfer fields are nonfinite")
+    if np.any(density <= 0.0):
+        raise UnsupportedProduct("pressure-transfer normalization requires positive density")
+    if any(not math.isfinite(value) or value <= 0.0 for value in lengths):
+        raise UnsupportedProduct("pressure-transfer domain lengths are invalid")
+    if not math.isfinite(dk) or dk <= 0.0:
+        raise UnsupportedProduct("pressure-transfer shell spacing is invalid")
+
+    b2 = sum(component * component for component in magnetic)
+    safe_b2 = np.maximum(b2, np.finfo(float).tiny)
+    root_density = np.sqrt(density)
+    weighted_velocity = [root_density * component for component in velocity]
+    stress_vector = [delta_p * component / safe_b2 for component in magnetic]
+    directional = []
+    for component in stress_vector:
+        gradient = periodic_gradient(component, lengths)
+        directional.append(
+            sum(magnetic[index] * gradient[index] for index in range(3))
+            / root_density
+        )
+    volume = math.prod(lengths)
+    direct = volume * float(np.mean(sum(
+        weighted_velocity[index] * directional[index] for index in range(3)
+    )))
+    shells = shell_indices(density.shape, lengths, dk)
+    shell_2d = np.asarray(shells[0])
+    shell_count = int(shell_2d.max()) + 1
+    shell_cross_power = np.zeros(shell_count, dtype=np.float64)
+    for weighted_component, directional_component in zip(
+        weighted_velocity, directional
+    ):
+        weighted_fourier = np.fft.fftn(weighted_component)
+        directional_fourier = np.fft.fftn(directional_component)
+        np.conj(directional_fourier, out=directional_fourier)
+        weighted_fourier *= directional_fourier
+        shell_cross_power += np.bincount(
+            shell_2d.ravel(),
+            weights=np.sum(weighted_fourier.real, axis=0).ravel(),
+            minlength=shell_count,
+        )
+    # Parseval's theorem is exactly the analyzer's shell-filtered real-space
+    # product, without hundreds of inverse transforms on production grids.
+    transfer = (
+        volume * shell_cross_power / float(density.size ** 2)
+    ).tolist()
+    kinetic_energy = volume * float(np.mean(
+        0.5 * density * sum(component * component for component in velocity)
+    ))
+    velocity_rms = float(np.sqrt(np.mean(
+        sum(component * component for component in velocity)
+    )))
+    lperp = math.sqrt(lengths[0] * lengths[1])
+    total_transfer_rate = kinetic_energy * (2.0 * math.pi * velocity_rms / lperp)
+    normalization_available = bool(
+        math.isfinite(total_transfer_rate)
+        and total_transfer_rate > np.finfo(float).tiny
+    )
+    shell_sum = float(sum(transfer))
+    if not all(math.isfinite(value) for value in (
+        *transfer,
+        kinetic_energy,
+        velocity_rms,
+        total_transfer_rate,
+        direct,
+        shell_sum,
+        shell_sum - direct,
+    )):
+        raise UnsupportedProduct("pressure-transfer reduction is nonfinite")
+    return {
+        "definition": (
+            "integral <sqrt(rho) u>_k dot [(B/sqrt(rho)) dot grad "
+            "((Delta p/B^2) B)] over each perpendicular Fourier shell"
+        ),
+        "delta_p_definition": "Delta p = p_perp - p_parallel",
+        "discretization": (
+            "second-order centered periodic real-space gradients; full three-dimensional "
+            "FFT Parseval cross-spectrum binned by k_perp shell"
+        ),
+        "dk": dk,
+        "k_perp": (np.arange(len(transfer), dtype=np.float64) * dk).tolist(),
+        "transfer": transfer,
+        "normalization_available": normalization_available,
+        "normalization_definition": (
+            "T_total ~= E_K (2 pi u_rms / L_perp), with "
+            "E_K = integral[0.5 rho |u|^2] dV, "
+            "u_rms = sqrt(<|u|^2>), and L_perp = sqrt(Lx Ly)"
+        ),
+        "kinetic_energy": kinetic_energy,
+        "velocity_rms": velocity_rms,
+        "perpendicular_outer_scale": lperp,
+        "total_transfer_rate": total_transfer_rate,
+        "transfer_normalized_by_total": (
+            [value / total_transfer_rate for value in transfer]
+            if normalization_available else None
+        ),
+        "direct_real_space": direct,
+        "shell_sum": shell_sum,
+        "closure_error": shell_sum - direct,
+    }
+
+
+def eddy_anisotropy_curve(
+    bin_centers: np.ndarray, perpendicular: np.ndarray, parallel: np.ndarray
+) -> dict[str, object]:
+    """Invert perpendicular and parallel structure functions at common power."""
+
+    if (
+        bin_centers.ndim != 1
+        or perpendicular.shape != bin_centers.shape
+        or parallel.shape != bin_centers.shape
+        or not np.isfinite(bin_centers).all()
+        or np.any(bin_centers <= 0.0)
+        or np.any(np.diff(bin_centers) <= 0.0)
+    ):
+        raise UnsupportedProduct("eddy-anisotropy structure-function grid is invalid")
+    parallel_valid = np.isfinite(parallel) & (parallel > 0.0)
+    perpendicular_valid = np.isfinite(perpendicular) & (perpendicular > 0.0)
+    parallel_length = bin_centers[parallel_valid]
+    parallel_power = parallel[parallel_valid]
+    monotonic: list[int] = []
+    maximum = -math.inf
+    for index, value in enumerate(parallel_power):
+        if value > maximum:
+            monotonic.append(index)
+            maximum = float(value)
+    if len(monotonic) < 2:
+        return {
+            "available": False,
+            "reason": "parallel structure function has fewer than two increasing bins",
+        }
+    parallel_length = parallel_length[monotonic]
+    parallel_power = parallel_power[monotonic]
+    selected = perpendicular_valid & (perpendicular >= parallel_power[0]) & (
+        perpendicular <= parallel_power[-1]
+    )
+    if np.count_nonzero(selected) < 2:
+        return {
+            "available": False,
+            "reason": "structure functions do not overlap on at least two bins",
+        }
+    ell_perp = bin_centers[selected]
+    ell_parallel = np.exp(np.interp(
+        np.log(perpendicular[selected]),
+        np.log(parallel_power),
+        np.log(parallel_length),
+    ))
+    return {
+        "available": True,
+        "ell_perp_over_lperp": ell_perp.tolist(),
+        "ell_parallel_over_lperp": ell_parallel.tolist(),
+    }
+
+
+def local_field_eddy_anisotropy(
+    velocity: list[np.ndarray],
+    magnetic: list[np.ndarray],
+    lengths: tuple[float, float, float],
+    samples: int,
+    bins: int,
+    seed: int,
+) -> dict[str, object]:
+    """Return deterministic local-field-conditioned three-point eddy scales."""
+
+    definition = (
+        "solve S2(phi; ell_perp) = S2(phi; ell_parallel), where "
+        "S2 = <|phi(x+ell) - 2 phi(x) + phi(x-ell)|^2>"
+    )
+    if len(velocity) != 3 or len(magnetic) != 3:
+        raise UnsupportedProduct("eddy anisotropy requires three-vector fields")
+    shape = velocity[0].shape
+    vectors = [*velocity, *magnetic]
+    if any(value.shape != shape for value in vectors[1:]):
+        raise UnsupportedProduct("eddy-anisotropy fields have inconsistent shapes")
+    if len(shape) != 3 or any(value <= 1 for value in shape):
+        raise UnsupportedProduct("eddy anisotropy requires a three-dimensional grid")
+    if any(not np.isfinite(value).all() for value in vectors):
+        raise UnsupportedProduct("eddy-anisotropy fields are nonfinite")
+    if samples <= 0 or bins < 2 or seed < 0:
+        raise UnsupportedProduct("eddy-anisotropy sampling controls are invalid")
+    if any(not math.isfinite(value) or value <= 0.0 for value in lengths):
+        raise UnsupportedProduct("eddy-anisotropy domain lengths are invalid")
+
+    nz, ny, nx = shape
+    lx, ly, lz = lengths
+    lperp = math.sqrt(lx * ly)
+    spacing_xyz = np.asarray((lx / nx, ly / ny, lz / nz), dtype=np.float64)
+    minimum = max(float(np.min(spacing_xyz)), np.finfo(float).tiny)
+    maximum = 0.5 * min(lx, ly)
+    if maximum <= minimum:
+        return {
+            "computed": False,
+            "available": False,
+            "definition": definition,
+            "reason": "snapshot has insufficient perpendicular scale separation",
+        }
+    edges = np.geomspace(minimum, maximum, bins + 1)
+    centers = np.sqrt(edges[:-1] * edges[1:]) / lperp
+    per_bin = max(1, int(math.ceil(samples / bins)))
+    generated = per_bin * bins
+    generator = np.random.Generator(np.random.PCG64(seed))
+    source_bins = np.repeat(np.arange(bins), per_bin)
+    radius = np.exp(generator.uniform(
+        np.log(edges[source_bins]), np.log(edges[source_bins + 1])
+    ))
+    directions = generator.normal(size=(generated, 3))
+    direction_norm = np.linalg.norm(directions, axis=1)
+    if np.any(direction_norm <= np.finfo(float).tiny):
+        raise UnsupportedProduct("eddy-anisotropy direction sampling is degenerate")
+    directions /= direction_norm[:, None]
+    offsets_xyz = np.rint(
+        directions * radius[:, None] / spacing_xyz[None, :]
+    ).astype(int)
+    separation_xyz = offsets_xyz * spacing_xyz[None, :]
+    separation = np.linalg.norm(separation_xyz, axis=1)
+    retained = (separation >= edges[0]) & (separation <= edges[-1])
+    retained &= np.any(offsets_xyz != 0, axis=1)
+    offsets_xyz = offsets_xyz[retained]
+    separation_xyz = separation_xyz[retained]
+    separation = separation[retained]
+    sample_bins = np.searchsorted(edges, separation, side="right") - 1
+    valid_bins = (sample_bins >= 0) & (sample_bins < bins)
+    offsets_xyz = offsets_xyz[valid_bins]
+    separation_xyz = separation_xyz[valid_bins]
+    separation = separation[valid_bins]
+    sample_bins = sample_bins[valid_bins]
+    count = len(sample_bins)
+    center_z = generator.integers(0, nz, size=count)
+    center_y = generator.integers(0, ny, size=count)
+    center_x = generator.integers(0, nx, size=count)
+    offset_x = offsets_xyz[:, 0]
+    offset_y = offsets_xyz[:, 1]
+    offset_z = offsets_xyz[:, 2]
+    plus = (
+        (center_z + offset_z) % nz,
+        (center_y + offset_y) % ny,
+        (center_x + offset_x) % nx,
+    )
+    center = (center_z, center_y, center_x)
+    minus = (
+        (center_z - offset_z) % nz,
+        (center_y - offset_y) % ny,
+        (center_x - offset_x) % nx,
+    )
+    local_field = [
+        (component[plus] + component[center] + component[minus]) / 3.0
+        for component in magnetic
+    ]
+    field_norm = np.sqrt(sum(component * component for component in local_field))
+    valid_field = field_norm > np.finfo(float).tiny
+    bhat = [
+        component / np.maximum(field_norm, np.finfo(float).tiny)
+        for component in local_field
+    ]
+    separation_hat = separation_xyz / separation[:, None]
+    cosine = np.abs(sum(
+        separation_hat[:, index] * bhat[index] for index in range(3)
+    ))
+    radians = math.radians(EDDY_ANGLE_DEGREES)
+    parallel_selected = valid_field & (cosine >= math.cos(radians))
+    perpendicular_selected = valid_field & (cosine <= math.sin(radians))
+
+    def second_order_perp(vector: list[np.ndarray]) -> np.ndarray:
+        sampled = [
+            [component[location] for component in vector]
+            for location in (plus, center, minus)
+        ]
+        perpendicular_values = []
+        for values in sampled:
+            field_parallel = sum(values[index] * bhat[index] for index in range(3))
+            perpendicular_values.append([
+                values[index] - field_parallel * bhat[index] for index in range(3)
+            ])
+        return sum(
+            (
+                perpendicular_values[0][index]
+                - 2.0 * perpendicular_values[1][index]
+                + perpendicular_values[2][index]
+            ) ** 2
+            for index in range(3)
+        )
+
+    def conditioned_mean(
+        values: np.ndarray, selected: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        counts = np.bincount(sample_bins[selected], minlength=bins)
+        sums = np.bincount(
+            sample_bins[selected], weights=values[selected], minlength=bins
+        )
+        mean = np.zeros(bins, dtype=np.float64)
+        populated = counts > 0
+        mean[populated] = sums[populated] / counts[populated]
+        return mean, counts
+
+    output: dict[str, object] = {
+        "computed": True,
+        "available": True,
+        "definition": definition,
+        "conditioning": (
+            "three-point local mean magnetic field; separation vectors within "
+            f"{EDDY_ANGLE_DEGREES:g} degrees of parallel or perpendicular"
+        ),
+        "sampling": (
+            "deterministic NumPy PCG64 random lattice separations, logarithmically "
+            "balanced over normalized separation bins"
+        ),
+        "bit_generator": "numpy.random.PCG64",
+        "separation_coordinate": (
+            "|ell|/L_perp binned within each angular cone; the selected "
+            "parallel or perpendicular projection differs by at most "
+            "1 - cos(15 degrees)"
+        ),
+        "normalization_definition": "lengths divided by L_perp = sqrt(Lx Ly)",
+        "lperp": lperp,
+        "angle_degrees": EDDY_ANGLE_DEGREES,
+        "samples_requested": samples,
+        "samples_generated": generated,
+        "samples_retained": int(count),
+        "seed": seed,
+        "bins": bins,
+        "bin_centers_over_lperp": centers.tolist(),
+    }
+    for name, vector in (
+        ("velocity_perp", velocity),
+        ("magnetic_perp", magnetic),
+    ):
+        values = second_order_perp(vector)
+        perpendicular, perpendicular_counts = conditioned_mean(
+            values, perpendicular_selected
+        )
+        parallel, parallel_counts = conditioned_mean(values, parallel_selected)
+        if not np.isfinite(perpendicular).all() or not np.isfinite(parallel).all():
+            raise UnsupportedProduct("eddy-anisotropy structure functions are nonfinite")
+        product = eddy_anisotropy_curve(centers, perpendicular, parallel)
+        product.update({
+            "perpendicular_structure_function": perpendicular.tolist(),
+            "parallel_structure_function": parallel.tolist(),
+            "perpendicular_sample_counts": perpendicular_counts.tolist(),
+            "parallel_sample_counts": parallel_counts.tolist(),
+        })
+        output[name] = product
+    output["available"] = bool(
+        output["velocity_perp"]["available"]
+        or output["magnetic_perp"]["available"]
+    )
+    if not output["available"]:
+        output["reason"] = (
+            "no eddy-anisotropy product has overlapping structure functions"
+        )
+    return output
+
+
+def mean_pressure_transfer(records: list[dict[str, object]]) -> dict[str, object]:
+    """Average compatible pressure-transfer records over retained snapshots."""
+
+    if not records:
+        raise UnsupportedProduct("pressure-transfer ensemble is empty")
+    first = records[0]
+    for record in records[1:]:
+        for key in (
+            "definition",
+            "delta_p_definition",
+            "discretization",
+            "dk",
+            "k_perp",
+            "normalization_definition",
+            "perpendicular_outer_scale",
+        ):
+            if record.get(key) != first.get(key):
+                raise UnsupportedProduct("pressure-transfer snapshot coordinates differ")
+    normalization_available = all(
+        bool(record.get("normalization_available")) for record in records
+    )
+    return {
+        "definition": first["definition"],
+        "delta_p_definition": first["delta_p_definition"],
+        "discretization": first["discretization"],
+        "temporal_averaging": (
+            "arithmetic mean of per-snapshot shell transfer and per-snapshot "
+            "MKS24-normalized transfer"
+        ),
+        "dk": first["dk"],
+        "k_perp": first["k_perp"],
+        "transfer": weighted_array(
+            [record["transfer"] for record in records],
+            [1.0 / len(records)] * len(records),
+        ),
+        "normalization_available": normalization_available,
+        "normalization_definition": first["normalization_definition"],
+        "kinetic_energy_mean": float(np.mean([
+            require_finite(record.get("kinetic_energy"), "pressure-transfer kinetic energy")
+            for record in records
+        ])),
+        "velocity_rms_mean": float(np.mean([
+            require_finite(record.get("velocity_rms"), "pressure-transfer velocity RMS")
+            for record in records
+        ])),
+        "perpendicular_outer_scale": first["perpendicular_outer_scale"],
+        "total_transfer_rate_mean": float(np.mean([
+            require_finite(record.get("total_transfer_rate"), "pressure-transfer total rate")
+            for record in records
+        ])),
+        "transfer_normalized_by_total": (
+            weighted_array(
+                [record["transfer_normalized_by_total"] for record in records],
+                [1.0 / len(records)] * len(records),
+            )
+            if normalization_available else None
+        ),
+        "direct_real_space_mean": float(np.mean([
+            require_finite(record.get("direct_real_space"), "pressure-transfer direct value")
+            for record in records
+        ])),
+        "shell_sum_mean": float(np.mean([
+            require_finite(record.get("shell_sum"), "pressure-transfer shell sum")
+            for record in records
+        ])),
+        "closure_error_mean": float(np.mean([
+            require_finite(record.get("closure_error"), "pressure-transfer closure error")
+            for record in records
+        ])),
+    }
+
+
+def mean_eddy_anisotropy(records: list[dict[str, object]]) -> dict[str, object]:
+    """Combine sampled structure functions and invert the ensemble result."""
+
+    computed = [record for record in records if bool(record.get("computed"))]
+    if not computed:
+        return {
+            "computed": False,
+            "available": False,
+            "reason": "eddy anisotropy was not computed for selected snapshots",
+        }
+    metadata = (
+        "definition",
+        "conditioning",
+        "sampling",
+        "separation_coordinate",
+        "normalization_definition",
+        "lperp",
+        "angle_degrees",
+        "samples_requested",
+        "samples_generated",
+        "bit_generator",
+        "seed",
+        "bins",
+        "bin_centers_over_lperp",
+    )
+    if any(
+        any(record.get(key) != computed[0].get(key) for key in metadata)
+        for record in computed[1:]
+    ):
+        raise UnsupportedProduct("eddy-anisotropy snapshot sampling contracts differ")
+    centers = np.asarray(computed[0]["bin_centers_over_lperp"], dtype=np.float64)
+    output = {name: computed[0][name] for name in metadata if name != "bin_centers_over_lperp"}
+    output.update({
+        "computed": True,
+        "snapshot_count": len(computed),
+        "ensemble_aggregation": (
+            "sample-count-weighted parallel and perpendicular structure functions "
+            "followed by equal-power scale inversion"
+        ),
+        "samples_retained": int(sum(
+            require_int(record.get("samples_retained"), "eddy samples retained")
+            for record in computed
+        )),
+        "bin_centers_over_lperp": centers.tolist(),
+    })
+    for name in ("velocity_perp", "magnetic_perp"):
+        product: dict[str, np.ndarray] = {}
+        for direction in ("perpendicular", "parallel"):
+            count_name = f"{direction}_sample_counts"
+            value_name = f"{direction}_structure_function"
+            counts = np.sum([
+                np.asarray(require_dict(record.get(name), f"eddy {name}").get(count_name),
+                           dtype=np.float64)
+                for record in computed
+            ], axis=0)
+            values = [
+                np.asarray(require_dict(record.get(name), f"eddy {name}").get(value_name),
+                           dtype=np.float64)
+                for record in computed
+            ]
+            if (
+                counts.shape != centers.shape
+                or any(value.shape != centers.shape for value in values)
+                or not np.isfinite(counts).all()
+                or np.any(counts < 0.0)
+                or any(not np.isfinite(value).all() for value in values)
+            ):
+                raise UnsupportedProduct("eddy-anisotropy snapshot samples are invalid")
+            weighted = np.sum([
+                value * np.asarray(
+                    require_dict(record.get(name), f"eddy {name}").get(count_name),
+                    dtype=np.float64,
+                )
+                for value, record in zip(values, computed)
+            ], axis=0)
+            mean = np.zeros(counts.shape, dtype=np.float64)
+            populated = counts > 0.0
+            mean[populated] = weighted[populated] / counts[populated]
+            product[value_name] = mean
+            product[count_name] = counts
+        curve = eddy_anisotropy_curve(
+            centers,
+            product["perpendicular_structure_function"],
+            product["parallel_structure_function"],
+        )
+        curve.update({key: value.tolist() for key, value in product.items()})
+        output[name] = curve
+    output["available"] = bool(
+        output["velocity_perp"]["available"]
+        or output["magnetic_perp"]["available"]
+    )
+    if not output["available"]:
+        output["reason"] = "no ensemble eddy-anisotropy curve could be inverted"
+    return output
+
+
 def alignment_histograms(
     fields: dict[str, np.ndarray],
     lengths: tuple[float, float, float],
@@ -1257,6 +1793,29 @@ def weighted_array(records: list[object], weights: list[float]) -> list[float]:
     return np.asarray(result, dtype=np.float64).tolist()
 
 
+def admitted_curve_products(context: BundleContext) -> frozenset[str]:
+    """Return curve products admitted for the authenticated Stage I case."""
+
+    status = require_dict(context.stage_manifest.get("panel_status"), "panel_status")
+    aliases = {
+        require_text(key, "analysis case alias"): require_text(value, "analysis case")
+        for key, value in require_dict(
+            status.get("analysis_case_aliases"), "analysis_case_aliases"
+        ).items()
+    }
+    products: set[str] = set()
+    for product_id, value in require_dict(
+        status.get("reference_product_bindings"), "reference_product_bindings"
+    ).items():
+        binding = require_dict(value, f"reference binding {product_id}")
+        case = require_text(binding.get("case"), f"{product_id} case")
+        if aliases.get(case, case) != context.case_name:
+            continue
+        if require_text(binding.get("kind"), f"{product_id} kind") == "curve":
+            products.add(require_text(binding.get("product"), f"{product_id} product"))
+    return frozenset(products)
+
+
 def analyze_snapshots(
     context: BundleContext,
     start: float,
@@ -1295,15 +1854,38 @@ def analyze_snapshots(
             "declared_snapshot_inventory": [],
         }, [], []
 
+    admitted_products = admitted_curve_products(context)
+    pressure_transfer_required = any(
+        product == "pressure_transfer"
+        or product.startswith("pressure_transfer.")
+        for product in admitted_products
+    )
+    eddy_anisotropy_required = any(
+        product == "eddy_anisotropy"
+        or product.startswith("eddy_anisotropy.")
+        for product in admitted_products
+    )
     bindings: list[dict[str, object]] = []
     extrema: dict[str, tuple[float, float]] = {}
     joint_extrema: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {}
-    first_pass: list[tuple[SnapshotGroup, tuple[float, float, float]]] = []
+    first_pass: list[
+        tuple[SnapshotGroup, tuple[float, float, float], tuple[int, int, int]]
+    ] = []
+    common_lengths: tuple[float, float, float] | None = None
+    common_shape: tuple[int, int, int] | None = None
     try:
         for group in selected:
             fields, lengths, current_bindings = read_snapshot_group(group, max_cells)
             bindings.extend(current_bindings)
-            first_pass.append((group, lengths))
+            shape = tuple(int(value) for value in fields["dens"].shape)
+            if common_lengths is None:
+                common_lengths = lengths
+                common_shape = shape
+            elif lengths != common_lengths or shape != common_shape:
+                raise UnsupportedProduct(
+                    "authenticated snapshots do not share one uniform analysis grid"
+                )
+            first_pass.append((group, lengths, shape))
             for name, value in snapshot_scalar_fields(fields).items():
                 low = float(np.min(value))
                 high = float(np.max(value))
@@ -1331,15 +1913,20 @@ def analyze_snapshots(
             del fields
         records: list[dict[str, object]] = []
         second_bindings: list[dict[str, object]] = []
-        for group, expected_lengths in first_pass:
+        for group, expected_lengths, expected_shape in first_pass:
             fields, lengths, current_bindings = read_snapshot_group(group, max_cells)
             second_bindings.extend(current_bindings)
-            if lengths != expected_lengths:
-                raise ScientificProductsError("snapshot lengths changed between passes")
+            if (
+                lengths != expected_lengths
+                or tuple(int(value) for value in fields["dens"].shape) != expected_shape
+            ):
+                raise ScientificProductsError("snapshot grid changed between analysis passes")
             scalar = snapshot_scalar_fields(fields)
             pressure = pressure_density_fields(fields)
             dk = 2.0 * math.pi / lengths[2]
-            records.append({
+            velocity = [fields["velx"], fields["vely"], fields["velz"]]
+            magnetic = [fields["bcc1"], fields["bcc2"], fields["bcc3"]]
+            record: dict[str, object] = {
                 "time": group.time,
                 "pdf": {
                     name: histogram(value, bins, padded_range(*extrema[name]))
@@ -1359,14 +1946,33 @@ def analyze_snapshots(
                 },
                 "spectra": {
                     "velocity": shell_spectrum(
-                        [fields["velx"], fields["vely"], fields["velz"]], lengths, dk
+                        velocity, lengths, dk
                     ),
                     "magnetic_fluctuation": shell_spectrum(
-                        [fields["bcc1"], fields["bcc2"], fields["bcc3"]], lengths, dk
+                        magnetic, lengths, dk
                     ),
                 },
                 "alignment": alignment_histograms(fields, lengths, shells, bins),
-            })
+            }
+            if pressure_transfer_required:
+                record["pressure_transfer"] = pressure_transfer(
+                    fields["dens"],
+                    velocity,
+                    magnetic,
+                    fields["p_perp"] - fields["eint"],
+                    lengths,
+                    dk,
+                )
+            if eddy_anisotropy_required:
+                record["eddy_anisotropy"] = local_field_eddy_anisotropy(
+                    velocity,
+                    magnetic,
+                    lengths,
+                    EDDY_SAMPLES,
+                    EDDY_BINS,
+                    EDDY_SEED,
+                )
+            records.append(record)
             del fields
         if bindings != second_bindings:
             raise ScientificProductsError("snapshot bindings changed between analysis passes")
@@ -1387,6 +1993,29 @@ def analyze_snapshots(
     alignment_names = set(records[0]["alignment"].keys())
     for record in records[1:]:
         alignment_names.intersection_update(record["alignment"].keys())
+    try:
+        pressure_transfer_ensemble = (
+            mean_pressure_transfer([
+                require_dict(record.get("pressure_transfer"), "pressure transfer")
+                for record in records
+            ])
+            if pressure_transfer_required else None
+        )
+        eddy_anisotropy_ensemble = (
+            mean_eddy_anisotropy([
+                require_dict(record.get("eddy_anisotropy"), "eddy anisotropy")
+                for record in records
+            ])
+            if eddy_anisotropy_required else None
+        )
+    except (UnsupportedProduct, MemoryError, ValueError, np.linalg.LinAlgError) as error:
+        return {
+            "result": "inconclusive",
+            "reason": str(error),
+            "selected_snapshot_count": len(selected),
+            "declared_snapshot_inventory": declared,
+            "verified_rank_file_count_before_inconclusive": len(bindings),
+        }, bindings, declared
     ensemble = {
         "result": "pass",
         "reason": "supported snapshot products derived from authenticated raw rank files",
@@ -1434,6 +2063,15 @@ def analyze_snapshots(
             }
             for name in sorted(alignment_names, key=int)
         },
+        **(
+            {"pressure_transfer": pressure_transfer_ensemble}
+            if pressure_transfer_required else {}
+        ),
+        **(
+            {"eddy_anisotropy": eddy_anisotropy_ensemble}
+            if eddy_anisotropy_required else {}
+        ),
+        "admitted_curve_products": sorted(admitted_products),
         "declared_snapshot_inventory": declared,
     }
     return ensemble, bindings, declared
@@ -1456,9 +2094,6 @@ def curve_from_product(
             )
         ]
         return np.asarray(user["time"]), np.asarray(values)
-    for family, reason in DEFERRED_PRODUCT_REASONS.items():
-        if product == family or product.startswith(f"{family}."):
-            raise UnsupportedProduct(reason)
     if ensemble.get("result") != "pass":
         raise UnsupportedProduct("snapshot products are inconclusive")
     family, _, name = product.partition(".")
@@ -1478,6 +2113,40 @@ def curve_from_product(
         return 0.5 * (edges[1:] + edges[:-1]), np.asarray(record["density"], dtype=np.float64)
     if product == "alignment_peak.cos_theta":
         return alignment_peak_curve(ensemble)
+    if family == "pressure_transfer":
+        record = require_dict(
+            ensemble.get("pressure_transfer"), "ensemble pressure transfer"
+        )
+        if name == "transfer":
+            values = record.get("transfer")
+        elif name == "transfer_normalized_by_total":
+            if not bool(record.get("normalization_available")):
+                raise UnsupportedProduct(
+                    "pressure-transfer normalization is unavailable"
+                )
+            values = record.get("transfer_normalized_by_total")
+        else:
+            raise UnsupportedProduct(f"unsupported reference curve product: {product}")
+        if not isinstance(values, list):
+            raise UnsupportedProduct(f"derived reference curve is missing: {product}")
+        return (
+            np.asarray(record.get("k_perp"), dtype=np.float64),
+            np.asarray(values, dtype=np.float64),
+        )
+    if family == "eddy_anisotropy":
+        ensemble_eddy = require_dict(
+            ensemble.get("eddy_anisotropy"), "ensemble eddy anisotropy"
+        )
+        record = require_dict(ensemble_eddy.get(name), f"eddy anisotropy {name}")
+        if not bool(record.get("available")):
+            raise UnsupportedProduct(require_text(
+                record.get("reason", ensemble_eddy.get("reason", "eddy curve is unavailable")),
+                f"eddy anisotropy {name} reason",
+            ))
+        return (
+            np.asarray(record.get("ell_perp_over_lperp"), dtype=np.float64),
+            np.asarray(record.get("ell_parallel_over_lperp"), dtype=np.float64),
+        )
     raise UnsupportedProduct(f"unsupported reference curve product: {product}")
 
 
@@ -1510,9 +2179,6 @@ def surface_from_product(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return one supported derived surface."""
 
-    for family, reason in DEFERRED_PRODUCT_REASONS.items():
-        if product == family or product.startswith(f"{family}."):
-            raise UnsupportedProduct(reason)
     if ensemble.get("result") != "pass":
         raise UnsupportedProduct("snapshot products are inconclusive")
     prefix, _, name = product.partition(".")
@@ -1715,6 +2381,22 @@ def reference_products_for_case(
                 coordinate_record = {"x": x.tolist(), "y": y.tolist()}
             residual = simulated - reference
             normalized = residual / uncertainty
+            interpolation = str(
+                entry.get("interpolation", "bilinear" if kind == "surface" else "linear")
+            )
+            value_record = (
+                {
+                    "reference_y": reference.tolist(),
+                    "reference_y_uncertainty": uncertainty.tolist(),
+                    "simulated_y": simulated.tolist(),
+                }
+                if kind == "curve"
+                else {
+                    "reference_z": reference.tolist(),
+                    "reference_z_uncertainty": uncertainty.tolist(),
+                    "simulated_z": simulated.tolist(),
+                }
+            )
             comparisons[str(product_id)] = {
                 "available": True,
                 "panel_id": panel_by_product.get(str(product_id)),
@@ -1722,9 +2404,19 @@ def reference_products_for_case(
                 "case": reference_case,
                 "analysis_case": context.case_name,
                 "product": product,
+                "stage_i_binding_validated": True,
+                "reference_data_file": require_text(
+                    entry.get("data_file"), f"{product_id} data_file"
+                ),
+                "reference_manifest_sha256": manifest_binding["sha256"],
+                "data_file": data_binding["path"],
+                "data_sha256": data_binding["sha256"],
+                "interpolation": interpolation,
+                "sample_count": int(reference.size),
                 "reference_manifest": manifest_binding,
                 "reference_data": data_binding,
                 **coordinate_record,
+                **value_record,
                 "reference_values": reference.tolist(),
                 "reference_uncertainty": uncertainty.tolist(),
                 "simulated_values": simulated.tolist(),
@@ -1732,6 +2424,11 @@ def reference_products_for_case(
                 "normalized_residual": normalized.tolist(),
                 "normalized_residual_rms": float(np.sqrt(np.mean(normalized ** 2))),
                 "maximum_absolute_normalized_residual": float(np.max(np.abs(normalized))),
+                "rms_residual": float(np.sqrt(np.mean(residual ** 2))),
+                "maximum_absolute_residual": float(np.max(np.abs(residual))),
+                "rms_normalized_by_reported_uncertainty": float(
+                    np.sqrt(np.mean(normalized ** 2))
+                ),
             }
         except UnsupportedProduct as error:
             record = {
@@ -2006,16 +2703,34 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
         "scientific_acceptance_convergence": convergence,
         "deferred_products": deferred,
         "implementation_scope": {
-            "deferred_product_families": [
+            "implemented_product_families": [
                 {
-                    "product": product,
-                    "reason": reason,
-                }
-                for product, reason in sorted(DEFERRED_PRODUCT_REASONS.items())
+                    "product": "pressure_transfer",
+                    "definition": (
+                        "MKS24 perpendicular-shell partition of the CGL "
+                        "pressure-anisotropy stress transfer"
+                    ),
+                    "selection": "computed for admitted Stage I case roles",
+                },
+                {
+                    "product": "eddy_anisotropy",
+                    "definition": (
+                        "three-point local-field-conditioned perpendicular-vector "
+                        "structure functions with equal-power scale inversion"
+                    ),
+                    "selection": "computed for admitted Stage I case roles",
+                    "sampling": {
+                        "angle_degrees": EDDY_ANGLE_DEGREES,
+                        "samples_per_snapshot": EDDY_SAMPLES,
+                        "bins": EDDY_BINS,
+                        "seed": EDDY_SEED,
+                    },
+                },
             ],
+            "deferred_product_families": [],
             "status_effect": (
-                "A deferred family is a case blocker only when it appears in "
-                "deferred_products for an admitted case product."
+                "An admitted product is a case blocker only when its deterministic "
+                "derivation or exact reference comparison appears in deferred_products."
             ),
         },
         "input_bindings": inputs,
