@@ -53,6 +53,23 @@ CASE_NODES = {
     "R16": 1,
     "R17": 8,
 }
+CASE_INPUT_SHA256 = {
+    "R03": "997f449abb3c2e4d1de50509efffa127c6230e3ecb2632612200010b8fa6c0b0",
+    "R04": "571eea2ccec5d069ccb1b49d132ba4c5b8bdac7ce15ee8d8a04c92327c453137",
+    "R05": "6527a2072105d515287701c904c3af2cebb07e10ab0b45c3fb41f29d3467622c",
+    "R06": "c6e038c198b23bf20a7cf1e2a90fa82e83e5ec544492ddc64e1cf2bb535a38ae",
+    "R07": "72ed6a3b38342d00855f34a7c7eb67102b44cd22b6c12ff2448ddb6f141e5145",
+    "R08": "3535aca5e3d47dc383e353cff262d79c56cf3c083a3ac6024d04ddaa5d353780",
+    "R09": "2ec05b247d917259c8306911cfd31d6be4e1c2772d6cdea544db883edfc35f2c",
+    "R10": "93d7ed9b0846019f59bce34feeb9b22b098afffdfc2dbaa59aaf5913655cd705",
+    "R11": "ab0dba23f80ea2d6c173ecbb724dbcb332b13d3b1751b8776ad05313f9ccaf6c",
+    "R12": "98ddea4b4f7fec18cc40abdbf5f7c8ba5b583a91f84f4dae00e1411f23d42e7c",
+    "R13": "a190129ee34c46a4fe83a392a19120a58b9a9a4064742ac58511441370c59c35",
+    "R14": "2b8d5837f8a7f3070ca2ef56f8b44e53d048839918185a8eef155cb084736578",
+    "R15": "9a698a60bef4c558ccee4635d69c3acbf3fea478401bd633d09bbc0526d943d8",
+    "R16": "c0ac4b54248e8f8dfb0f5fd34c0cfb4414b5330529cbf2836961c5277af3f2d1",
+    "R17": "cc1092404b82129f807308a64f7585a6da31f45f41f1d2263acad0c8d30a7e04",
+}
 CASE_SEEDS = {
     "R03": {
         "time": 0.5,
@@ -157,6 +174,8 @@ def expand_cases(values: Iterable[str]) -> list[str]:
         match = re.fullmatch(r"R(\d{2})-R(\d{2})", value)
         if match:
             start, stop = (int(item) for item in match.groups())
+            if start > stop:
+                raise FastRunError(f"descending case range is invalid: {value}")
             result.extend(f"R{number:02d}" for number in range(start, stop + 1))
         else:
             result.extend(item for item in value.split(",") if item)
@@ -429,7 +448,8 @@ def prepare_segment(
     nodes = CASE_NODES[case_id]
     ranks = nodes * RANKS_PER_NODE
     input_path = FROZEN_SOURCE / str(case["input"])
-    input_sha = sha256_file(input_path)
+    input_sha = CASE_INPUT_SHA256[case_id]
+    require_sha(input_path, input_sha, f"{case_id} frozen input")
     if restart is not None:
         if restart_sha is None:
             restart_sha = sha256_file(restart)
@@ -491,9 +511,10 @@ def submit_segment(segment: Path) -> str:
         text=True,
         capture_output=True,
     )
-    job_id = completed.stdout.strip().split(";", 1)[0]
-    if not re.fullmatch(r"[1-9][0-9]*", job_id):
+    response = completed.stdout.strip()
+    if not re.fullmatch(r"[1-9][0-9]*(?:;[A-Za-z0-9_.-]+)?", response):
         raise FastRunError(f"unexpected sbatch response: {completed.stdout!r}")
+    job_id = response.split(";", 1)[0]
     manifest["job_id"] = job_id
     manifest["submitted_utc"] = utc_now()
     write_json(manifest_path, manifest)
@@ -560,6 +581,12 @@ def launch_case(root: Path, case_id: str, *, submit: bool) -> Path | None:
         latest = segments[-1]
         manifest = load_json(segment_manifest(latest))
         job_id = manifest.get("job_id")
+        if job_id is None:
+            if submit:
+                submit_segment(latest)
+            else:
+                print(latest)
+            return latest
         if job_id is not None and job_state(str(job_id)) in {
             "PENDING",
             "RUNNING",
