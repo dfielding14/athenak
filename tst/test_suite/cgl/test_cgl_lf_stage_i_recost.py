@@ -2193,7 +2193,7 @@ def test_generator_emits_deterministic_checkpoint_compatible_sole_artifact(recos
     )
     assert artifact["predecessor_recost"]["checkpoint"] == "F-199"
     assert artifact["barrier"]["job_ids"] == ["12345"]
-    assert artifact["budget"]["method"] == "observed-stage-i-node-hour-rate-v1"
+    assert artifact["budget"]["method"] == "observed-stage-i-scoped-node-hour-rate-v2"
     assert artifact["budget"]["measurement_basis"]["job_id"] == "12345"
     assert float(artifact["budget"]["computed_stage_i_total_node_hours"]) > 500
     assert (
@@ -6035,12 +6035,16 @@ def test_budget_treats_historical_r12_as_inventory_only_but_preserves_accounting
         },
         [],
         Decimal("0"),
-        Decimal("1000"),
-        Decimal("1000"),
+        Decimal("10000"),
+        Decimal("10000"),
     )
 
     assert budget["actual_stage_i_node_hours"] == "101"
     assert budget["measurement_basis"]["job_id"] == "5000000"
+    assert (
+        budget["case_breakdown"]["R12"]["projection_measurement_basis"]["job_id"]
+        == "4766856"
+    )
     assert budget["case_breakdown"]["R12"]["authenticated_progress_fraction"] == "0"
     assert budget["case_breakdown"]["R12"]["remaining_simulation_time"] == "10.0"
 
@@ -6058,19 +6062,219 @@ def test_budget_uses_fresh_r12_for_throughput_and_progress(monkeypatch):
         [
             {"job_id": "4766856", "actual_node_hours": "100"},
             {"job_id": "5000001", "actual_node_hours": "1"},
+            {"job_id": "5000002", "actual_node_hours": "1"},
         ],
-        {"R12": [fresh_r12]},
-        {"R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")}},
+        {
+            "R03": [{
+                "identity": ("5000002", "R03", "s00_rankio_t0_t0p25", "accepted"),
+                "final_time": 0.25,
+            }],
+            "R12": [fresh_r12],
+        },
+        {
+            "R03": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+            "R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+        },
         [],
         Decimal("0"),
         Decimal("1000"),
         Decimal("1000"),
     )
 
-    assert budget["actual_stage_i_node_hours"] == "101"
-    assert budget["measurement_basis"]["job_id"] == "5000001"
+    assert budget["actual_stage_i_node_hours"] == "102"
+    assert budget["measurement_basis"]["job_id"] == "5000002"
+    assert (
+        budget["case_breakdown"]["R12"]["projection_measurement_basis"]["job_id"]
+        == "5000001"
+    )
     assert budget["case_breakdown"]["R12"]["authenticated_progress_fraction"] == "0.012"
     assert budget["case_breakdown"]["R12"]["remaining_simulation_time"] == "9.8800"
+
+
+def test_budget_does_not_exclude_different_r12_job_lookalike(monkeypatch):
+    module = load_recost_module()
+    identity = ("4766857", "R12", "s00_rankio_t0_t0p25", "clean_partial")
+    manifest = {"identity": identity, "final_time": 0.25}
+    monkeypatch.setattr(module, "manifest_identity", lambda value: value["identity"])
+    monkeypatch.setattr(module, "final_time", lambda value: value["final_time"])
+
+    budget = module.calculate_budget(
+        [
+            {"job_id": "5000000", "actual_node_hours": "0.1"},
+            {"job_id": identity[0], "actual_node_hours": "1"},
+        ],
+        {
+            "R03": [{
+                "identity": ("5000000", "R03", "s00_rankio_t0_t0p25", "accepted"),
+                "final_time": 0.25,
+            }],
+            "R12": [manifest],
+        },
+        {
+            "R03": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+            "R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+        },
+        [],
+        Decimal("0"),
+        Decimal("100"),
+        Decimal("100"),
+    )
+
+    assert budget["measurement_basis"]["job_id"] == "5000000"
+    assert (
+        budget["case_breakdown"]["R12"]["projection_measurement_basis"]["job_id"]
+        == identity[0]
+    )
+    assert budget["case_breakdown"]["R12"]["authenticated_progress_fraction"] == "0.025"
+
+
+@pytest.mark.parametrize(
+    "identity",
+    (
+        ("4766856", "R11", "s00_rankio_t0_t0p25", "clean_partial"),
+        ("4766856", "R12", "s00_rankio_t0_t0p25", "accepted"),
+        ("4766856", "R12", "s00_rankio_t0_t0p5", "clean_partial"),
+    ),
+)
+def test_budget_rejects_partial_historical_r12_identity_collisions(monkeypatch, identity):
+    module = load_recost_module()
+    monkeypatch.setattr(module, "manifest_identity", lambda value: value["identity"])
+    monkeypatch.setattr(module, "final_time", lambda value: value["final_time"])
+
+    with pytest.raises(ValueError, match="historical R12 inventory identity partially collides"):
+        module.calculate_budget(
+            [
+                {"job_id": "5000000", "actual_node_hours": "0.1"},
+                {"job_id": "4766856", "actual_node_hours": "1"},
+            ],
+            {
+                "R03": [{
+                    "identity": ("5000000", "R03", "s00_rankio_t0_t0p25", "accepted"),
+                    "final_time": 0.25,
+                }],
+                "R12": [{"identity": identity, "final_time": 0.25}],
+            },
+            {
+                "R03": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+                "R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+            },
+            [],
+            Decimal("0"),
+            Decimal("100"),
+            Decimal("100"),
+        )
+
+
+def test_budget_live_projection_allows_exact_fresh_r12_calibration_above_envelope(
+    monkeypatch,
+):
+    module = load_recost_module()
+    standard_cells = 192 * 192 * 384
+    rows = [
+        {"job_id": "R02-total", "actual_node_hours": "23.996113"},
+        {"job_id": "R03-total", "actual_node_hours": "2.942500"},
+        {"job_id": "4766847", "actual_node_hours": "1.511111"},
+        {"job_id": "4766856", "actual_node_hours": "7.396667"},
+        {"job_id": "4766866", "actual_node_hours": "0.730833"},
+    ]
+    manifests = {
+        "R02": [{"identity": ("R02-total", "R02", "s00_rankio_t0_t10", "accepted"),
+                 "final_time": 10.0}],
+        "R03": [{"identity": ("R03-total", "R03", "s00_rankio_t0_t0p5", "accepted"),
+                 "final_time": 0.5}],
+        "R04": [{"identity": ("4766847", "R04", "s01_rankio_t0_t0p25", "accepted"),
+                 "final_time": 0.25}],
+        "R12": [{"identity": module.R12_HISTORICAL_INVENTORY_IDENTITY,
+                 "final_time": 0.1371931229426507}],
+        "R16": [{"identity": ("4766866", "R16", "s00_rankio_t0_t1p5", "accepted"),
+                 "final_time": 1.5}],
+    }
+    matrix = {
+        f"R{case:02d}": {
+            "_cell_count": (
+                96 * 96 * 192 if case == 16
+                else 384 * 384 * 768 if case == 17
+                else standard_cells
+            ),
+            "_estimated_node_hours": Decimal("1"),
+        }
+        for case in range(2, 18)
+    }
+    profiles = [
+        {"case_id": "R03", "nodes": 1, "walltime": "02:00:00"},
+        {"case_id": "R04", "nodes": 4, "walltime": "02:00:00"},
+        {
+            "case_id": "R12",
+            "segment": "s01_rankio_t0_t0p12",
+            "nodes": 4,
+            "ranks_per_node": 8,
+            "walltime": "02:00:00",
+            "athena_walltime": "01:50:00",
+            "time_tlim_target": 0.12,
+        },
+        {"case_id": "R16", "nodes": 1, "walltime": "02:00:00"},
+    ]
+    monkeypatch.setattr(module, "manifest_identity", lambda value: value["identity"])
+    monkeypatch.setattr(module, "final_time", lambda value: value["final_time"])
+
+    budget = module.calculate_budget(
+        rows,
+        manifests,
+        matrix,
+        profiles,
+        Decimal("20"),
+        Decimal("1400"),
+        Decimal("4000"),
+    )
+
+    assert budget["measurement_basis"]["job_id"] == "4766847"
+    assert (
+        budget["case_breakdown"]["R12"]["projection_measurement_basis"]["job_id"]
+        == "4766856"
+    )
+    assert budget["actual_stage_i_node_hours"] == "36.577224"
+    assert budget["case_breakdown"]["R12"]["authenticated_progress_fraction"] == "0"
+    assert Decimal(budget["computed_remaining_stage_i_node_hours"]) == Decimal(
+        "1749.920383467427316981173717"
+    )
+    assert Decimal(budget["computed_stage_i_total_node_hours"]) == Decimal(
+        "1786.497607467427316981173717"
+    )
+    assert Decimal(budget["computed_stage_i_margin_node_hours"]) == Decimal(
+        "-386.497607467427316981173717"
+    )
+
+
+def test_budget_above_envelope_fails_without_exact_fresh_r12_calibration(monkeypatch):
+    module = load_recost_module()
+    monkeypatch.setattr(module, "manifest_identity", lambda value: value["identity"])
+    monkeypatch.setattr(module, "final_time", lambda value: value["final_time"])
+
+    with pytest.raises(ValueError, match="projection exceeds the promoted envelope"):
+        module.calculate_budget(
+            [
+                {"job_id": "5000000", "actual_node_hours": "1"},
+                {"job_id": "4766856", "actual_node_hours": "10"},
+            ],
+            {
+                "R03": [{
+                    "identity": ("5000000", "R03", "s00_rankio_t0_t0p25", "accepted"),
+                    "final_time": 0.25,
+                }],
+                "R12": [{
+                    "identity": module.R12_HISTORICAL_INVENTORY_IDENTITY,
+                    "final_time": 0.1,
+                }],
+            },
+            {
+                "R03": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+                "R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+            },
+            [],
+            Decimal("0"),
+            Decimal("100"),
+            Decimal("2000"),
+        )
 
 
 def test_authoritative_lineage_allows_only_authenticated_non_scientific_index_gaps(

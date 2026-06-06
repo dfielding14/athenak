@@ -108,6 +108,12 @@ R17_CASE_ID = "R17"
 R17_PREDECESSOR_CASE_IDS = tuple(f"R{number:02d}" for number in range(2, 17))
 R12_HISTORICAL_JOB_ID = "4766856"
 R12_HISTORICAL_SEGMENT = "s00_rankio_t0_t0p25"
+R12_HISTORICAL_INVENTORY_IDENTITY = (
+    R12_HISTORICAL_JOB_ID,
+    "R12",
+    R12_HISTORICAL_SEGMENT,
+    "clean_partial",
+)
 R12_FRESH_RERUN_SEGMENT = "s01_rankio_t0_t0p12"
 R12_FRESH_RERUN_NODES = 4
 R12_FRESH_RERUN_RANKS_PER_NODE = 8
@@ -188,7 +194,7 @@ AUTHORIZATION_MAX_LIFETIME = timedelta(hours=24)
 SCHEDULER_TIME_TOLERANCE = timedelta(minutes=5)
 MAX_NORMALIZED_CT_DIVB = Decimal("1e-12")
 STORAGE_PROJECTION_METHOD = "observed-stage-i-output-byte-rate-v1"
-NODE_HOUR_PROJECTION_METHOD = "observed-stage-i-node-hour-rate-v1"
+NODE_HOUR_PROJECTION_METHOD = "observed-stage-i-scoped-node-hour-rate-v2"
 F113_REVIEW_AUTHORITY = "campaign-authorized-independent-review"
 F113_AUTHORIZED_REVIEWERS = frozenset(
     {
@@ -5093,13 +5099,7 @@ def authenticated_case_lineages(
         r12_historical_inventory = [
             item
             for item in candidates
-            if manifest_identity(item)
-            == (
-                R12_HISTORICAL_JOB_ID,
-                "R12",
-                R12_HISTORICAL_SEGMENT,
-                "clean_partial",
-            )
+            if manifest_identity(item) == R12_HISTORICAL_INVENTORY_IDENTITY
         ]
         if (
             case_id == "R12"
@@ -7080,13 +7080,7 @@ def require_authoritative_r12_fresh_rerun(
 
     if (
         case_id != "R12"
-        or terminal_identity
-        != (
-            R12_HISTORICAL_JOB_ID,
-            "R12",
-            R12_HISTORICAL_SEGMENT,
-            "clean_partial",
-        )
+        or terminal_identity != R12_HISTORICAL_INVENTORY_IDENTITY
     ):
         return False
     if (
@@ -7685,12 +7679,6 @@ def calculate_budget(
 ) -> dict[str, object]:
     """Project remaining use from authenticated observed Stage I node-hour rates."""
 
-    r12_historical_inventory = (
-        R12_HISTORICAL_JOB_ID,
-        "R12",
-        R12_HISTORICAL_SEGMENT,
-        "clean_partial",
-    )
     actual = sum(
         (require_decimal(row["actual_node_hours"], "ledger actual node-hours") for row in rows),
         Decimal("0"),
@@ -7714,13 +7702,19 @@ def calculate_budget(
 
     rows_by_job = {row["job_id"]: row for row in rows}
     measurements: list[tuple[Decimal, dict[str, object]]] = []
+    r12_measurements: list[tuple[Decimal, dict[str, object]]] = []
+    historical_r12_inventory_count = 0
     for case_id, lineage in sorted(lineages.items()):
         cells = require_integer(matrix[case_id]["_cell_count"], f"{case_id} matrix cells", minimum=1)
         for manifest in lineage:
             identity = manifest_identity(manifest)
             job_id, _, segment, _ = identity
-            if identity == r12_historical_inventory:
-                continue
+            if job_id == R12_HISTORICAL_JOB_ID:
+                if identity != R12_HISTORICAL_INVENTORY_IDENTITY:
+                    raise ValueError("historical R12 inventory identity partially collides")
+                historical_r12_inventory_count += 1
+                if historical_r12_inventory_count > 1:
+                    raise ValueError("historical R12 inventory identity is duplicated")
             row = rows_by_job[job_id]
             actual_job = require_decimal(row["actual_node_hours"], f"ledger job {job_id} actual")
             _, start, _ = parse_segment(segment, f"ledger job {job_id} segment")
@@ -7730,36 +7724,46 @@ def calculate_budget(
             if actual_job <= 0:
                 continue
             normalized_rate = actual_job / Decimal(cells) / interval
-            measurements.append(
-                (
-                    normalized_rate,
-                    {
-                        "job_id": job_id,
-                        "case_id": case_id,
-                        "segment": segment,
-                        "actual_node_hours": decimal_string(actual_job),
-                        "observed_cells": cells,
-                        "observed_simulation_interval": decimal_string(interval),
-                        "normalized_node_hours_per_cell_per_simulation_time": (
-                            decimal_string(normalized_rate)
-                        ),
-                    },
-                )
+            measurement = (
+                normalized_rate,
+                {
+                    "job_id": job_id,
+                    "case_id": case_id,
+                    "segment": segment,
+                    "actual_node_hours": decimal_string(actual_job),
+                    "observed_cells": cells,
+                    "observed_simulation_interval": decimal_string(interval),
+                    "normalized_node_hours_per_cell_per_simulation_time": (
+                        decimal_string(normalized_rate)
+                    ),
+                },
             )
+            if case_id == "R12":
+                r12_measurements.append(measurement)
+            else:
+                measurements.append(measurement)
     if not measurements:
-        raise ValueError("ledger contains no positive observed node-hour measurement")
+        raise ValueError("ledger contains no positive non-R12 observed node-hour measurement")
     normalized_rate, basis = max(
         measurements, key=lambda item: (item[0], str(item[1]["job_id"]))
     )
+    r12_rate, r12_basis = (
+        max(r12_measurements, key=lambda item: (item[0], str(item[1]["job_id"])))
+        if r12_measurements
+        else (normalized_rate, basis)
+    )
 
     remaining = Decimal("0")
-    breakdown: dict[str, dict[str, str]] = {}
+    breakdown: dict[str, dict[str, object]] = {}
     for case_id, case in sorted(matrix.items()):
         estimated = case["_estimated_node_hours"]
         assert isinstance(estimated, Decimal)
         lineage = lineages.get(case_id, [])
         progress = Decimal("0")
-        if lineage and manifest_identity(lineage[-1]) != r12_historical_inventory:
+        if (
+            lineage
+            and manifest_identity(lineage[-1]) != R12_HISTORICAL_INVENTORY_IDENTITY
+        ):
             progress = Decimal(str(final_time(lineage[-1]))) / Decimal(
                 str(REQUIRED_CASE_FINAL_TIME)
             )
@@ -7768,7 +7772,9 @@ def calculate_budget(
         remaining_time = Decimal(str(REQUIRED_CASE_FINAL_TIME)) * (
             Decimal("1") - progress
         )
-        observed_projection = normalized_rate * Decimal(cells) * remaining_time
+        projection_rate = r12_rate if case_id == "R12" else normalized_rate
+        projection_basis = r12_basis if case_id == "R12" else basis
+        observed_projection = projection_rate * Decimal(cells) * remaining_time
         authorized_reserved = reserved_by_case.get(case_id, Decimal("0"))
         projected_remaining = max(observed_projection, authorized_reserved)
         remaining += projected_remaining
@@ -7777,6 +7783,7 @@ def calculate_budget(
             "authenticated_progress_fraction": decimal_string(progress),
             "remaining_simulation_time": decimal_string(remaining_time),
             "projected_cells": str(cells),
+            "projection_measurement_basis": projection_basis,
             "observed_rate_projected_remaining_node_hours": decimal_string(
                 observed_projection
             ),
@@ -7786,7 +7793,31 @@ def calculate_budget(
     projected = actual + remaining
     if projected < committed:
         raise ValueError("computed Stage I projection is below actual plus authorized wave")
-    if projected > envelope:
+    r12_lineage = lineages.get("R12", [])
+    historical_r12_requires_fresh_calibration = (
+        len(r12_lineage) == 1
+        and manifest_identity(r12_lineage[0]) == R12_HISTORICAL_INVENTORY_IDENTITY
+    )
+    fresh_r12_profiles = []
+    for profile in profiles:
+        try:
+            target = Decimal(str(profile.get("time_tlim_target")))
+        except InvalidOperation:
+            target = None
+        if (
+            profile.get("case_id") == "R12"
+            and profile.get("segment") == R12_FRESH_RERUN_SEGMENT
+            and profile.get("nodes") == R12_FRESH_RERUN_NODES
+            and profile.get("ranks_per_node") == R12_FRESH_RERUN_RANKS_PER_NODE
+            and profile.get("walltime") == R12_FRESH_RERUN_WALLTIME
+            and profile.get("athena_walltime") == R12_FRESH_RERUN_ATHENA_WALLTIME
+            and target == Decimal(str(R12_FRESH_RERUN_TARGET))
+        ):
+            fresh_r12_profiles.append(profile)
+    provisional_r12_calibration = (
+        historical_r12_requires_fresh_calibration and len(fresh_r12_profiles) == 1
+    )
+    if projected > envelope and not provisional_r12_calibration:
         raise ValueError("computed Stage I projection exceeds the promoted envelope")
     if projected > project:
         raise ValueError("computed Stage I projection exceeds the project ceiling")
