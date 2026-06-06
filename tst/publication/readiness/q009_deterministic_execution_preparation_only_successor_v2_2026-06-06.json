@@ -1,0 +1,273 @@
+{
+  "record_type": "q009_deterministic_execution_preparation_only_successor_readiness",
+  "schema_version": 2,
+  "successor_id": "q009_deterministic_execution_preparation_only_successor_v2",
+  "date": "2026-06-06",
+  "base_source_commit": "9db61e545adc4c6c7558bac1e6288b510849fd87",
+  "extracted_from_review_blocked_commit": "ec4804cf1384f86edafe80d241004d989227d8e0",
+  "integrated_contract_commit": "8113f8f0b",
+  "status": "deterministic_execution_preparation_complete_execution_blocked",
+  "qualification_effect": "source_local_execution_preparation_only_no_launch_no_policy_no_q009_no_dynamic_amr_science_no_receipt_no_admission_no_q011_no_publication_authority",
+  "authority_semantics": "none_source_local_review_input_only_never_launch_admission_evidence_or_publication_authority_regardless_of_content",
+  "threat_model": {
+    "contract": "trusted_cpython_process_source_local_preparation_only",
+    "privileged_same_process_python_trusted": true,
+    "privileged_same_process_python_resisted": false,
+    "closure_or_code_object_mutation_resisted": false,
+    "mapping_proxy_backing_dict_recovery_resisted": false,
+    "os_or_process_isolation_present": false,
+    "external_sha256_receipt_verifier_present": false,
+    "in_process_integrity_guards_role": "ordinary_accidental_drift_detection_only",
+    "all_public_outputs_authoritative": false,
+    "all_public_outputs_can_grant_authority": false
+  },
+  "scope": "Additive source-local Q009 successor that prepares the five logical cases and seven serial stages only in memory as deterministic decks, non-authorizing launch-contract syntax, structurally incomplete policy review candidates, and launch-prohibited restart-continuation handoffs. The trusted-process implementation caches one import-time preparation graph and retains useful exact-comparison and ordinary accidental-drift checks. These in-process checks are explicitly not an authority boundary: privileged same-process CPython can mutate closure cells and code objects and recover mapping-proxy backing dictionaries. Every public result is a source-local review input with no launch, admission, evidence, or publication authority regardless of its contents. The module has no scheduler, live-policy mutation, receipt, admission, persistent-publication, filesystem-write, destructive-cleanup, or CLI surface. Any future authority requires a separately reviewed external process, SHA-256-bound inputs and outputs, receipts, and admission.",
+  "source_bindings": {
+    "deterministic_execution_preparation_source": {
+      "path": "tst/publication/q009_deterministic_execution_preparation_only_successor_v2.py",
+      "sha256": "863a1ada1fdca4d5054930b265410acd4a456e3b0cedb4d6e07665290a03331a"
+    },
+    "focused_preparation_only_tests": {
+      "path": "tst/publication/test_q009_deterministic_execution_preparation_only_successor_v2.py",
+      "sha256": "059fbd6e399b5908f7aa3e008859047b0ed66d5d8a2a65479b50bf140534747a"
+    }
+  },
+  "foundation_bindings": {
+    "integrated_q009_contract": {
+      "path": "tst/publication/q009_dynamic_amr_load_balance_registered_pilot_contract_v1.json",
+      "sha256": "2567bd9490e1e643c37cc63973307eead271a781b6ebbe8abc60edfefbb71450"
+    },
+    "integrated_q009_contract_validator": {
+      "path": "tst/publication/q009_dynamic_amr_load_balance_registered_pilot_contract_v1.py",
+      "sha256": "3f64dd6f9b70e4dea6f0b335ebfbf03d008fbd174f775f393f0d24571acd6e72"
+    },
+    "captured_control_plane_launch_syntax_reference_not_executed": {
+      "path": "tst/publication/frontier_control_plane/control_plane_common.py",
+      "sha256": "58172c6fa7798eba8d91673e3c39aface1bef54b70ef27692a6973ba3a2348be"
+    }
+  },
+  "non_authorizing_external_rejection_probe_bindings": {
+    "paired_installed_control_plane_version": "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246",
+    "orion_live_storage_policy": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+      "sha256": "aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1"
+    },
+    "project_home_live_storage_policy": {
+      "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+      "sha256": "aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1"
+    },
+    "orion_paired_installed_control_plane_common": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246/control_plane_common.py",
+      "sha256": "8f2d0e38c3ae79a69caf87c98490d77f7c5e9a540903bd3917049b752aa83b52"
+    },
+    "project_home_paired_installed_control_plane_common": {
+      "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/control_plane/930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246/control_plane_common.py",
+      "sha256": "8f2d0e38c3ae79a69caf87c98490d77f7c5e9a540903bd3917049b752aa83b52"
+    }
+  },
+  "exact_matrix": {
+    "logical_case_count": 5,
+    "scheduler_stage_count": 7,
+    "minimal_projection_launch_contract_syntax_candidate_count": 5,
+    "launch_prohibited_restart_continuation_stage_count": 2,
+    "one_logical_attempt_per_case": true,
+    "maximum_retries_per_case": 0,
+    "maximum_live_q009_submissions": 1,
+    "serial_prior_stage_closure_required": true
+  },
+  "resource_ceiling": {
+    "contract_hard_cap_node_hours": 100.0,
+    "contract_hard_cap_artifact_storage_gib": 200.0,
+    "fresh_empty_user_queue_required_before_each_serial_submission": true,
+    "fresh_live_ledger_reserve_and_storage_preflight_required": true
+  },
+  "materialized_output_contract": {
+    "generated_member_count": 25,
+    "deck_count": 7,
+    "non_authorizing_launch_review_candidate_count": 7,
+    "non_authorizing_policy_review_candidate_count": 7,
+    "launch_prohibited_restart_handoff_count": 2,
+    "budget_input_count": 1,
+    "policy_review_fragment_count": 1,
+    "deterministic_in_memory_preparation_graph_supported": true,
+    "import_time_preparation_graph_cached": true,
+    "import_time_preparation_graph_authoritative": false,
+    "privileged_same_process_mutation_resisted": false,
+    "privileged_same_process_mutation_outside_contract": true,
+    "in_process_validation_can_produce_authority": false,
+    "external_isolated_verifier_present": false,
+    "persistent_filesystem_publication_supported": false,
+    "persistent_publication_api_present": false,
+    "persistence_helpers_present": false,
+    "filesystem_write_calls_present": false,
+    "retained_write_capable_file_primitive": false,
+    "retained_exec_or_compile_construction_surface": false,
+    "post_freeze_construction_or_repository_read_helpers_exposed": false,
+    "post_freeze_mutable_primitive_verification_roots_exposed": false,
+    "retained_module_local_callable_count": 7,
+    "repository_input_reads_are_read_only": true,
+    "kernel_enforced_post_verification_immutability_required_before_persistent_publication": true,
+    "arbitrary_output_root_supported": false,
+    "symlink_traversal_supported": false,
+    "post_final_stat_or_scan_rewrite_window_reachable": false,
+    "destructive_failure_cleanup_implemented": false,
+    "name_based_unlink_or_rmdir_reachable_from_publication_or_cleanup": false,
+    "rename_in_replacements_are_not_chmodded_or_deleted": true
+  },
+  "minimal_structured_syntax_compatibility": {
+    "run_topology": "runs/<campaign>/<submission-id>",
+    "minimal_validator_identity": "_q009_preparation_minimal_structured_launch_syntax",
+    "captured_control_plane_reference_role": "captured_verified_reference_not_executed",
+    "captured_control_plane_reference_executed": false,
+    "captured_contract_validator_executed": false,
+    "exact_contract_json_parsed_by_internal_digest_bound_decoder": true,
+    "exposed_minimal_surfaces": [
+      "validate_launch_contract",
+      "launch_contract_sha256"
+    ],
+    "operational_control_plane_module_exposed": false,
+    "returned_callable_globals_contain_operational_control_plane_namespace": false,
+    "returned_callable_globals_contain_module_objects": false,
+    "returned_callable_globals_contain_external_python_function_namespaces": false,
+    "transitive_sys_modules_imports_used_by_minimal_validator": false,
+    "importable_standard_modules_used_by_preparation": false,
+    "preimport_hashlib_sys_modules_poisoning_affects_minimal_validator": false,
+    "preimport_standard_module_sys_modules_poisoning_affects_preparation": false,
+    "preimport_nonstandard_builtin_primitives_fail_closed": true,
+    "minimal_validator_uses_captured_builtin_primitives": true,
+    "post_import_runtime_builtin_primitive_drift_fails_closed": true,
+    "privileged_same_process_can_synchronize_guard_roots": true,
+    "spoofed_heap_type_static_builtin_wrappers_fail_before_execution": true,
+    "retained_mutable_trusted_primitive_globals_present": false,
+    "post_freeze_construction_or_repository_read_helpers_exposed": false,
+    "post_freeze_mutable_primitive_verification_roots_exposed": false,
+    "retained_module_local_callable_count": 7,
+    "retained_runtime_guard_uses_identity_pinned_non_write_non_exec_primitives": true,
+    "minimal_validator_builtin_mapping_rejects_ordinary_assignment": true,
+    "minimal_validator_builtin_mapping_recoverable_and_mutable_by_privileged_same_process_python": true,
+    "minimal_validator_namespace_and_code_identity_checks_present": true,
+    "reachable_internal_guard_code_identity_checks_present": true,
+    "in_process_integrity_guards_are_authority_boundary": false,
+    "in_process_integrity_guards_role": "ordinary_accidental_drift_detection_only",
+    "validator_process_isolation_present": false,
+    "authoritative_output_or_receipt_produced": false,
+    "all_public_outputs_non_authoritative_review_inputs": true,
+    "authority_requires_separate_external_verifier_and_admission": true,
+    "non_exact_json_rejected_before_coercion_or_protocol_calls": true,
+    "cyclic_or_aliased_container_graphs_rejected_as_non_json": true,
+    "hostile_loader_file_rejected_before_protocol_calls": true,
+    "fresh_import_hostile_build_class_wrapper_called": false,
+    "preverification_imports_or_class_definitions_present": false,
+    "main_and_checkpoint_launch_review_candidates_pass_minimal_projection_syntax_validation": true,
+    "generated_launch_contracts_and_digests_match_captured_checked_in_reference": true,
+    "paired_installed_live_storage_policy_baseline_validated_without_mutation": true,
+    "all_seven_policy_review_candidates_rejected_by_paired_installed_live_storage_policy_validator": true,
+    "operational_binding_input_supported": false,
+    "exact_launch_candidate_validator_present": false,
+    "trusted_unique_rst_restart_launching_supported": false,
+    "contract_complete_event_per_rank_per_level_telemetry_present": false,
+    "pairwise_lb_on_off_acceptance_present": false,
+    "hardened_external_completion_root_inventory_receipts_present": false,
+    "receipt_producer_validator_present": false,
+    "admission_bridge_present": false,
+    "migration_case_design_closes_required_events": false,
+    "restart_continuation_handoffs_fail_closed": true
+  },
+  "absent_capabilities": {
+    "operational_binding_input_implemented": false,
+    "exact_launch_candidate_validator_implemented": false,
+    "runtime_telemetry_implemented": false,
+    "pairwise_lb_on_off_acceptance_implemented": false,
+    "trusted_unique_rst_restart_launching_implemented": false,
+    "hardened_external_completion_root_inventory_receipts_implemented": false,
+    "receipt_producer_validator_implemented": false,
+    "admission_bridge_implemented": false,
+    "persistent_review_bundle_publication_implemented": false
+  },
+  "explicit_blockers": [
+    "migration_cases_require_redesign_to_produce_contract_required_repeated_refine_derefine_and_inter_rank_migration_events",
+    "contract_complete_event_per_rank_per_level_runtime_telemetry_implemented_and_bound",
+    "pairwise_lb_on_off_operational_acceptance_implemented_and_bound",
+    "trusted_unique_rst_restart_snapshot_launching_not_implemented_or_bound",
+    "hardened_external_completion_root_and_inventory_receipts_installed_and_bound",
+    "final_clean_candidate_source_archive_executable_and_environment_bound",
+    "paired_installed_control_plane_generation_bound_and_independently_verified",
+    "separate_reviewed_registered_science_policy_slice_promoted_for_exact_stage",
+    "project_wide_node_hour_ledger_other_campaign_reserves_and_storage_bound",
+    "fresh_empty_user_queue_proved_immediately_before_each_serial_submission",
+    "one_logical_attempt_per_case_and_zero_retries_enforced",
+    "forbidden_physical_field_and_particle_inspection_not_performed",
+    "separate_external_process_sha256_bound_receipts_and_admission_required_before_any_authority",
+    "persistent_review_bundle_publication_requires_kernel_enforced_immutability_not_provided_by_the_same_principal_mutable_source_tree"
+  ],
+  "explicitly_omitted_unsafe_surfaces": [
+    "caller_supplied_final_or_operational_bindings",
+    "exact_installed_schema_launch_candidate_validator",
+    "executing_the_full_operational_control_plane_for_source_local_syntax_validation",
+    "transitive_imports_in_the_minimal_launch_syntax_validator",
+    "importable_hashing_modules_in_the_minimal_launch_syntax_validator",
+    "runtime_standard_library_imports_in_the_preparation_module",
+    "preverification_imports_or_class_definitions",
+    "retained_mutable_trusted_primitive_globals",
+    "post_freeze_construction_and_repository_read_helpers",
+    "claim_that_in_process_guards_resist_privileged_same_process_python",
+    "claim_that_mapping_proxy_backing_dictionaries_are_immutable",
+    "claim_that_closure_cells_or_code_objects_are_immutable",
+    "in_process_launch_admission_evidence_or_publication_authority",
+    "coercion_of_non_exact_json_input",
+    "cyclic_or_aliased_non_json_container_graphs",
+    "non_exact_loader_file_protocol_calls",
+    "persistent_review_bundle_publication_api_and_helpers",
+    "filesystem_write_or_destructive_cleanup_paths",
+    "persistent_review_bundle_publication_without_kernel_enforced_immutability",
+    "arbitrary_or_operational_output_roots",
+    "symlinked_output_path_components",
+    "aggregate_receipt_schema",
+    "aggregate_receipt_producer_or_validator",
+    "receipt_admission_bridge",
+    "runtime_telemetry_implementation_claim",
+    "operational_acceptance_implementation_claim"
+  ],
+  "historical_immutability": {
+    "shared_control_plane_modified": false,
+    "integrated_q009_contract_modified": false,
+    "live_policy_modified": false,
+    "scheduler_called": false,
+    "historical_artifacts_modified": false,
+    "primary_worktree_modified": false,
+    "implementation_policy": "additive_disjoint_q009_trusted_process_in_memory_preparation_only_successor_with_no_authority_or_persistence_surface"
+  },
+  "authorization": {
+    "launch_authorized": false,
+    "scheduler_submission_authorized": false,
+    "policy_mutation_authorized": false,
+    "frontier_execution_authorized": false,
+    "receipt_production_authorized": false,
+    "admission_authorized": false,
+    "operational_acceptance_authorized": false,
+    "runtime_telemetry_claim_authorized": false,
+    "q009_qualified": false,
+    "dynamic_amr_science_qualified": false,
+    "exact_amr_conservation_claim_authorized": false,
+    "q011_production_authorized": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false
+  },
+  "verification": {
+    "focused_preparation_only_tests": "32 passed",
+    "integrated_q009_plus_preparation_only_tests": "62 passed",
+    "privileged_same_process_adversarial_boundary_probe": "passed_forgery_demonstrated_outside_non_authoritative_contract",
+    "python_compilation": "passed",
+    "json_validation": "passed",
+    "whitespace_check": "passed",
+    "jobs_launched": 0
+  },
+  "remaining_blockers": [
+    "Redesign the migration cases so one accepted logical attempt can demonstrate the contract-required repeated refine, derefine, and inter-rank migration events.",
+    "Implement contract-complete event-sequence and per-rank/per-level telemetry plus pairwise LB-on/off operational acceptance.",
+    "Implement trusted unique .rst restart-snapshot launching for the two continuation stages.",
+    "Bind execution to independently hardened external completion, original-run-root, and complete artifact-inventory receipts.",
+    "Establish any future authority only in a separately reviewed external verifier and admission process with SHA-256-bound inputs and outputs.",
+    "Freeze the final candidate and installed control plane, promote separately reviewed policy slices, and satisfy fresh queue, ledger, reserve, and storage gates."
+  ]
+}
