@@ -115,6 +115,7 @@ particle_dpydt = 0.0
 particle_dpzdt = 0.0
 particle_dedt = 0.0
 particle_ebdot = 0.0
+duplicate_ptag_pair = false
 deposit_manual_records_at_startup = false
 require_interface_mpi_split = false
 required_remote_receiver_mpi_split = none

@@ -167,28 +167,35 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
   const Real particle_dpzdt = pin->GetOrAddReal("problem", "particle_dpzdt", 0.0);
   const Real particle_dedt = pin->GetOrAddReal("problem", "particle_dedt", 0.0);
   const Real particle_ebdot = pin->GetOrAddReal("problem", "particle_ebdot", 0.0);
+  const bool duplicate_ptag_pair =
+      pin->GetOrAddBoolean("problem", "duplicate_ptag_pair", false);
+  const int particles_on_owner = duplicate_ptag_pair ? 2 : 1;
   const int m = FindLocalParticleMeshBlock(pmbp, particle_x, particle_y, particle_z);
   if (m >= 0) {
-    HostArray2D<int> h_pi("paper_smooth_tsc_interface_pi", ppart->nidata, 1);
-    HostArray2D<Real> h_pr("paper_smooth_tsc_interface_pr", ppart->nrdata, 1);
-    for (int n = 0; n < ppart->nidata; ++n) h_pi(n, 0) = 0;
-    for (int n = 0; n < ppart->nrdata; ++n) h_pr(n, 0) = 0.0;
+    HostArray2D<int> h_pi(
+        "paper_smooth_tsc_interface_pi", ppart->nidata, particles_on_owner);
+    HostArray2D<Real> h_pr(
+        "paper_smooth_tsc_interface_pr", ppart->nrdata, particles_on_owner);
+    for (int p = 0; p < particles_on_owner; ++p) {
+      for (int n = 0; n < ppart->nidata; ++n) h_pi(n, p) = 0;
+      for (int n = 0; n < ppart->nrdata; ++n) h_pr(n, p) = 0.0;
 
-    h_pi(PGID, 0) = pmbp->gids + m;
-    h_pi(PTAG, 0) = 0;
-    h_pi(PSP, 0) = 0;
-    h_pi(PCRSOURCE, 0) = static_cast<int>(CRParticleSource::initial);
+      h_pi(PGID, p) = pmbp->gids + m;
+      h_pi(PTAG, p) = 0;
+      h_pi(PSP, p) = 0;
+      h_pi(PCRSOURCE, p) = static_cast<int>(CRParticleSource::initial);
 
-    h_pr(IPX, 0) = particle_x;
-    h_pr(IPY, 0) = particle_y;
-    h_pr(IPZ, 0) = particle_z;
-    h_pr(IPVX, 0) = particle_vx;
-    h_pr(IPVY, 0) = particle_vy;
-    h_pr(IPVZ, 0) = particle_vz;
-    h_pr(IPM, 0) = 1.0;
-    h_pr(IPWT, 0) = 1.0;
-    h_pr(IPF0, 0) = 1.0;
-    h_pr(IPDFWT, 0) = 0.0;
+      h_pr(IPX, p) = particle_x;
+      h_pr(IPY, p) = particle_y;
+      h_pr(IPZ, p) = particle_z;
+      h_pr(IPVX, p) = particle_vx;
+      h_pr(IPVY, p) = particle_vy;
+      h_pr(IPVZ, p) = particle_vz;
+      h_pr(IPM, p) = 1.0;
+      h_pr(IPWT, p) = duplicate_ptag_pair ? static_cast<Real>(p + 1) : 1.0;
+      h_pr(IPF0, p) = 1.0;
+      h_pr(IPDFWT, p) = 0.0;
+    }
     if (ppart->UsesDeltaF()) {
       if (particle_df_weight == 1.0) {
         AbortInterfaceRegression("requires problem/particle_df_weight != 1.");
@@ -200,26 +207,31 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
           ppart->pic_deltaf_aniso_x1, ppart->pic_deltaf_aniso_x2,
           ppart->pic_deltaf_aniso_x3, 1.0, 1.0, 1.0,
           particle_vx, particle_vy, particle_vz);
-      h_pr(IPF0, 0) = f0/(1.0 - particle_df_weight);
-      h_pr(IPDFWT, 0) = particle_df_weight;
+      for (int p = 0; p < particles_on_owner; ++p) {
+        h_pr(IPF0, p) = f0/(1.0 - particle_df_weight);
+        h_pr(IPDFWT, p) = particle_df_weight;
+      }
     }
-    h_pr(IPDPX, 0) = particle_dpxdt;
-    h_pr(IPDPY, 0) = particle_dpydt;
-    h_pr(IPDPZ, 0) = particle_dpzdt;
-    h_pr(IPDE, 0) = particle_dedt;
-    h_pr(IPEBDOT, 0) = particle_ebdot;
-    h_pr(IPT_BIRTH, 0) = pm->time;
+    for (int p = 0; p < particles_on_owner; ++p) {
+      h_pr(IPDPX, p) = particle_dpxdt;
+      h_pr(IPDPY, p) = particle_dpydt;
+      h_pr(IPDPZ, p) = particle_dpzdt;
+      h_pr(IPDE, p) = particle_dedt;
+      h_pr(IPEBDOT, p) = particle_ebdot;
+      h_pr(IPT_BIRTH, p) = pm->time;
+    }
 
-    Kokkos::resize(ppart->prtcl_idata, ppart->nidata, 1);
-    Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, 1);
+    Kokkos::resize(ppart->prtcl_idata, ppart->nidata, particles_on_owner);
+    Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, particles_on_owner);
     Kokkos::deep_copy(ppart->prtcl_idata, h_pi);
     Kokkos::deep_copy(ppart->prtcl_rdata, h_pr);
-    ppart->nprtcl_thispack = 1;
+    ppart->nprtcl_thispack = particles_on_owner;
   }
 
   pm->CountParticles();
-  if (pm->nprtcl_total != 1) {
-    AbortInterfaceRegression("requires exactly one global manually allocated particle.");
+  if (pm->nprtcl_total != particles_on_owner) {
+    AbortInterfaceRegression(
+        "did not allocate the requested global manual-particle count.");
   }
   if (pin->GetOrAddBoolean("problem", "deposit_manual_records_at_startup", false)) {
     ppart->ZeroMoments(nullptr, 2);

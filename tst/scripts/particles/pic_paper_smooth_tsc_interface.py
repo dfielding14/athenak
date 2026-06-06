@@ -28,6 +28,8 @@ _DOMAIN_LENGTH_Z = 4.0
 _ATOL = 1.0e-6
 _RESULTS = {}
 _RECORD_RESULTS = {}
+_DUPLICATE_PTAG_RESULTS = {}
+_DUPLICATE_PTAG_WEIGHT_SUM = 3.0
 _RUNTIME_PARTICLES = {
     label: (particle_x, _PARTICLE_Y, 0.0)
     for label, particle_x in oracle.PARTICLES.items()
@@ -160,7 +162,8 @@ def _latest_output_file(basename, output_id='prtcl_rho'):
 
 
 def _run_case(mode, label, nproc, require_split=False,
-              required_remote_receiver='none', manual_records=False):
+              required_remote_receiver='none', manual_records=False,
+              duplicate_ptag_pair=False):
     basename = 'pic_paper_smooth_tsc_interface_' + mode + '_' + label
     args = [
         'job/basename=' + basename,
@@ -177,6 +180,8 @@ def _run_case(mode, label, nproc, require_split=False,
     args.extend(_RUNTIME_OVERRIDES.get(label, []))
     if manual_records:
         args.extend(_MANUAL_RECORD_OVERRIDES)
+    if duplicate_ptag_pair:
+        args.append('problem/duplicate_ptag_pair=true')
     command = ['./athena', '-i', _athena_input_path(label)] + args
     if nproc > 1:
         command = [_MPIEXEC, '-n', str(nproc)] + command
@@ -320,8 +325,11 @@ def run(**kwargs):
     oracle.validate_oracle()
     _RESULTS.clear()
     _RECORD_RESULTS.clear()
+    _DUPLICATE_PTAG_RESULTS.clear()
     for label in _RUNTIME_PARTICLES:
         _RESULTS['serial_' + label] = _run_case('serial', label, 1)
+    _DUPLICATE_PTAG_RESULTS['serial_g'] = _run_case(
+        'duplicate_ptag_serial', 'g', 1, duplicate_ptag_pair=True)
 
     if _athena_mpi_enabled():
         for label in _RUNTIME_PARTICLES:
@@ -334,6 +342,10 @@ def run(**kwargs):
             _RESULTS['mpi3_' + label] = _run_case(
                 'mpi3', label, 3,
                 required_remote_receiver='j_periodic_x1_x3_edge')
+        _DUPLICATE_PTAG_RESULTS['mpi2_g'] = _run_case(
+            'duplicate_ptag_mpi2', 'g', 2,
+            required_remote_receiver='g_periodic_x1',
+            duplicate_ptag_pair=True)
     else:
         logger.info('Skipping mpi2 cases: Athena build has MPI parallelism OFF')
     for label in _RECORD_LABELS:
@@ -381,6 +393,33 @@ def analyze():
                     weighted_key + ':deltaf_scale',
                     _RESULTS[weighted_key]['actual_cells'],
                     scale * _RESULTS[reference_key]['actual_cells']) and ok
+    for case, result in _DUPLICATE_PTAG_RESULTS.items():
+        reference = _RESULTS[case]
+        ok = _check_close(
+            case + ':duplicate_ptag_pair_cells',
+            result['actual_cells'],
+            _DUPLICATE_PTAG_WEIGHT_SUM * reference['actual_cells']) and ok
+        ok = _check_close(
+            case + ':duplicate_ptag_pair_collapsed_x',
+            result['actual_x'],
+            _DUPLICATE_PTAG_WEIGHT_SUM * reference['actual_x']) and ok
+        ok = _check_close(
+            case + ':duplicate_ptag_pair_total',
+            result['total'],
+            _DUPLICATE_PTAG_WEIGHT_SUM * reference['total']) and ok
+    if 'mpi2_g' in _DUPLICATE_PTAG_RESULTS:
+        geometry = (2.0, 4.0, -2.0, 2.0, -0.5, 0.5)
+        center = (3.5, -0.5, 0.0)
+        duplicate = _DUPLICATE_PTAG_RESULTS['mpi2_g']
+        reference = _RESULTS['mpi2_g']
+        ok = _check_close(
+            'mpi2_g:duplicate_ptag_pair_remote_receiver_block',
+            duplicate['block_totals'][geometry],
+            _DUPLICATE_PTAG_WEIGHT_SUM * reference['block_totals'][geometry]) and ok
+        ok = _check_close(
+            'mpi2_g:duplicate_ptag_pair_remote_receiver_cell',
+            duplicate['cell_charges'][center],
+            _DUPLICATE_PTAG_WEIGHT_SUM * reference['cell_charges'][center]) and ok
     for mode in ('serial', 'mpi2', 'mpi3'):
         for label, (reference, scale) in _RECORD_ROUTES.items():
             case_key = mode + '_' + label

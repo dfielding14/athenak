@@ -86,6 +86,8 @@ constexpr bool PaperSmoothImageCodeValid(const std::uint32_t code) {
 struct PaperSmoothMomentRecord {
   std::int32_t dest_gid;
   std::int32_t ptag;
+  std::int32_t source_rank;
+  std::int32_t source_index; // unique with source_rank during one deposition stage
   std::uint32_t deposit_flags;
   std::uint32_t reserved; // periodic receiver-image code; zero is the native image
   Real x, y, z;

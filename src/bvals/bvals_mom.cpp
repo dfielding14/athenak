@@ -28,7 +28,7 @@ static_assert(std::is_trivial<Record>::value,
               "paper_smooth moment record must remain trivial");
 static_assert(std::is_trivially_copyable<Record>::value,
               "paper_smooth moment record must be byte-copyable");
-static_assert(sizeof(Record) == 4*sizeof(std::uint32_t) + 12*sizeof(Real),
+static_assert(sizeof(Record) == 6*sizeof(std::uint32_t) + 12*sizeof(Real),
               "paper_smooth moment record must not contain implicit padding");
 
 #if MPI_PARALLEL_ENABLED
@@ -121,7 +121,8 @@ PaperSmoothRecordStatus PaperSmoothMomentRecordTransport::Queue(
 
 PaperSmoothRecordStatus PaperSmoothMomentRecordTransport::QueueReceiver(
     const PaperSmoothMomentRecord &record, const int dest_rank) {
-  if (record.dest_gid < 0 || record.ptag < 0 ||
+  if (record.dest_gid < 0 || record.ptag < 0 || record.source_rank < 0 ||
+      record.source_rank >= nranks_ || record.source_index < 0 ||
       !PaperSmoothImageCodeValid(record.reserved)) {
     return PaperSmoothRecordStatus::invalid;
   }
@@ -233,11 +234,12 @@ std::uint64_t PaperSmoothMomentRecordTransport::AllocationBytes() const {
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief Pack the stable particle provenance key and destination GID for deduplication.
+//! \brief Pack stage-local source identity and destination GID for deduplication.
 
 PaperSmoothMomentRecordTransport::RecordKey
 PaperSmoothMomentRecordTransport::MakeKey(const PaperSmoothMomentRecord &record) {
-  return {static_cast<std::uint32_t>(record.ptag),
+  return {static_cast<std::uint32_t>(record.source_rank),
+          static_cast<std::uint32_t>(record.source_index),
           static_cast<std::uint32_t>(record.dest_gid), record.reserved};
 }
 
@@ -245,7 +247,9 @@ PaperSmoothMomentRecordTransport::MakeKey(const PaperSmoothMomentRecord &record)
 //! \brief Hash a packed record key using the SplitMix64 finalizer.
 
 std::uint64_t PaperSmoothMomentRecordTransport::HashKey(const RecordKey &record_key) {
-  std::uint64_t key = record_key.ptag;
+  std::uint64_t key = record_key.source_rank;
+  key ^= static_cast<std::uint64_t>(record_key.source_index) +
+         UINT64_C(0x9e3779b97f4a7c15) + (key << 6) + (key >> 2);
   key ^= static_cast<std::uint64_t>(record_key.dest_gid) +
          UINT64_C(0x9e3779b97f4a7c15) + (key << 6) + (key >> 2);
   key ^= static_cast<std::uint64_t>(record_key.image_code) +
@@ -256,11 +260,12 @@ std::uint64_t PaperSmoothMomentRecordTransport::HashKey(const RecordKey &record_
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief Compare stable particle, receiver, and periodic-image record identities.
+//! \brief Compare stage-local source, receiver, and periodic-image record identities.
 
 bool PaperSmoothMomentRecordTransport::KeysEqual(const RecordKey &lhs,
                                                  const RecordKey &rhs) {
-  return lhs.ptag == rhs.ptag && lhs.dest_gid == rhs.dest_gid &&
+  return lhs.source_rank == rhs.source_rank &&
+         lhs.source_index == rhs.source_index && lhs.dest_gid == rhs.dest_gid &&
          lhs.image_code == rhs.image_code;
 }
 
@@ -268,7 +273,7 @@ bool PaperSmoothMomentRecordTransport::KeysEqual(const RecordKey &lhs,
 //! \brief Return true for an unused open-addressing table slot.
 
 bool PaperSmoothMomentRecordTransport::IsEmptyKey(const RecordKey &key) {
-  return key.ptag == empty_key_component_;
+  return key.source_rank == empty_key_component_;
 }
 
 //----------------------------------------------------------------------------------------
@@ -277,7 +282,7 @@ bool PaperSmoothMomentRecordTransport::IsEmptyKey(const RecordKey &key) {
 void PaperSmoothMomentRecordTransport::RehashKeys(std::vector<RecordKey> &table,
                                                   const std::size_t new_size) {
   const RecordKey empty_key{empty_key_component_, empty_key_component_,
-                            empty_key_component_};
+                            empty_key_component_, empty_key_component_};
   std::vector<RecordKey> new_table(new_size, empty_key);
   for (const RecordKey &key : table) {
     if (IsEmptyKey(key)) continue;
@@ -316,17 +321,18 @@ bool PaperSmoothMomentRecordTransport::InsertKey(std::vector<RecordKey> &table,
 void PaperSmoothMomentRecordTransport::ResetKeys(std::vector<RecordKey> &table,
                                                  std::size_t &count) {
   const RecordKey empty_key{empty_key_component_, empty_key_component_,
-                            empty_key_component_};
+                            empty_key_component_, empty_key_component_};
   std::fill(table.begin(), table.end(), empty_key);
   count = 0;
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief Retain a local or received record once per provenance key and destination GID.
+//! \brief Retain a local or received record once per source particle and destination GID.
 
 PaperSmoothRecordStatus PaperSmoothMomentRecordTransport::AddRecord(
     const PaperSmoothMomentRecord &record) {
-  if (record.dest_gid < 0 || record.ptag < 0 ||
+  if (record.dest_gid < 0 || record.ptag < 0 || record.source_rank < 0 ||
+      record.source_rank >= nranks_ || record.source_index < 0 ||
       !PaperSmoothImageCodeValid(record.reserved)) {
     return PaperSmoothRecordStatus::invalid;
   }

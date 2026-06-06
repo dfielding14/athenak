@@ -631,7 +631,7 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
                           h_pr(IPVX, p), h_pr(IPVY, p), h_pr(IPVZ, p),
                           vx, vy, vz);
       PaperSmoothMomentRecord record{
-          owner_gid, ptag, deposit_flags, 0U,
+          owner_gid, ptag, global_variable::my_rank, p, deposit_flags, 0U,
           h_pr(IPX, p), h_pr(IPY, p), h_pr(IPZ, p),
           physical_boundary_scale*deposit_qscale*weight*df_weight*h_qspecies(sp),
           vx, vy, vz, physical_boundary_scale*h_pr(IPEBDOT, p),

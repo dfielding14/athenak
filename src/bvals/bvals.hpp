@@ -266,7 +266,8 @@ class PaperSmoothMomentRecordTransport {
   };
 
   struct RecordKey {
-    std::uint32_t ptag;
+    std::uint32_t source_rank;
+    std::uint32_t source_index;
     std::uint32_t dest_gid;
     std::uint32_t image_code;
   };
