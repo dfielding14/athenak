@@ -10,6 +10,7 @@ if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
     raise SystemExit("Run installed control-plane tools through run_control_plane.py")
 
 import argparse
+import base64
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
@@ -23,13 +24,18 @@ from typing import Callable, Iterator
 import uuid
 
 from control_plane_common import AUTHORIZED_PIC_ROOT, AUTHORIZED_PROJECT_HOME_ROOT
+from control_plane_common import atomic_write_bytes_at
 from control_plane_common import durable_mkdir_parents
 from control_plane_common import PinnedDirectoryAncestry
+from control_plane_common import launch_contract_sha256
 from control_plane_common import read_json_bytes, record_for_role, require_ledger_paths
 from control_plane_common import require_same_directory, validate_launch_contract
 from control_plane_common import stable_serialization_anchor
 from control_plane_common import utc_datetime
 from control_plane_common import verify_snapshot_files
+from ledger import append_primary_event_locked, latest_reservations, ledger_lock
+from ledger import repair_mirrored_state_locked, transition_payload
+from ledger import validate_mirrored_state
 from validate_and_reserve_frontier_job import _require_run_artifact_dir
 from validate_and_reserve_frontier_job import executable_reservation_bound_manifest
 
@@ -51,6 +57,13 @@ _TIMEOUT_MARGIN_KEYS = {
     "measured_utc",
     "expires_utc",
 }
+TRAMPOLINE_COMPLETION_NAMESPACE = Path("ledger/trampoline_completion_receipts")
+TRAMPOLINE_COMPLETION_NAME = "trampoline_completion_receipt.json"
+TRAMPOLINE_COMPLETION_RECORD_TYPE = "trusted_trampoline_completion_receipt"
+TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE = (
+    "trusted_trampoline_completion_ledger_binding"
+)
+Q043_REGISTERED_CAMPAIGN = "q043_registered_execution_raw_oracle_successor_v1"
 _TASK_LOCAL_EXEC = r"""
 import hashlib
 import os
@@ -155,6 +168,14 @@ ATHENA_ARGS = [
 ]
 os.execve(executable_fd, [EXECUTABLE, *ATHENA_ARGS], os.environ)
 """
+
+
+def _canonical_sha256(value: object) -> str:
+    payload = (
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 @contextmanager
@@ -1055,12 +1076,549 @@ def _publish_frozen_artifact_inventory(
         )
 
 
+def _open_frozen_artifact_member_at(
+    artifact_dir_fd: int, relative: str
+) -> tuple[int, int, str]:
+    parts = PurePosixPath(relative).parts
+    if (
+        not relative
+        or PurePosixPath(relative).is_absolute()
+        or PurePosixPath(relative).as_posix() != relative
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        raise ValueError("Trampoline completion artifact path is unsafe")
+    parent_fd = os.dup(artifact_dir_fd)
+    try:
+        for part in parts[:-1]:
+            child_fd = os.open(part, _DIRECTORY_OPEN_FLAGS, dir_fd=parent_fd)
+            child = os.fstat(child_fd)
+            entry = os.stat(part, dir_fd=parent_fd, follow_symlinks=False)
+            if (
+                not stat.S_ISDIR(child.st_mode)
+                or child.st_mode & 0o222
+                or (entry.st_dev, entry.st_ino) != (child.st_dev, child.st_ino)
+            ):
+                os.close(child_fd)
+                raise ValueError(
+                    f"Trampoline completion artifact directory changed: {relative}"
+                )
+            os.close(parent_fd)
+            parent_fd = child_fd
+        descriptor = os.open(
+            parts[-1],
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_fd,
+        )
+        return parent_fd, descriptor, parts[-1]
+    except BaseException:
+        os.close(parent_fd)
+        raise
+
+
+def _read_retained_completion_artifact(
+    parent_fd: int,
+    descriptor: int,
+    name: str,
+    *,
+    relative: str,
+    expected_sha256: str | None = None,
+    expected_size: int | None = None,
+) -> tuple[bytes, dict[str, int]]:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    before = os.fstat(descriptor)
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+        or before.st_mode & 0o222
+    ):
+        raise ValueError(f"Trampoline completion artifact is not immutable: {relative}")
+    payload = bytearray()
+    while chunk := os.read(descriptor, 1024 * 1024):
+        payload.extend(chunk)
+    after = os.fstat(descriptor)
+    entry = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    stable = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "st_nlink",
+        "st_size",
+        "st_mtime_ns",
+        "st_ctime_ns",
+    )
+    digest = hashlib.sha256(payload).hexdigest()
+    if (
+        any(getattr(before, field) != getattr(after, field) for field in stable)
+        or (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino)
+        or len(payload) != after.st_size
+        or (expected_sha256 is not None and digest != expected_sha256)
+        or (expected_size is not None and len(payload) != expected_size)
+    ):
+        raise ValueError(f"Trampoline completion artifact changed: {relative}")
+    return bytes(payload), {"device": after.st_dev, "inode": after.st_ino}
+
+
+def _completion_receipt_paths(
+    submission_id: str,
+    *,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+) -> tuple[Path, Path]:
+    relative = (
+        TRAMPOLINE_COMPLETION_NAMESPACE
+        / submission_id
+        / TRAMPOLINE_COMPLETION_NAME
+    )
+    return authorized_pic_root / relative, authorized_project_home_root / relative
+
+
+def _publish_exact_completion_receipt_at(
+    path: Path,
+    payload: bytes,
+    *,
+    ancestry: PinnedDirectoryAncestry,
+) -> tuple[int, int]:
+    metadata = os.fstat(ancestry.descriptor)
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) not in {0o500, 0o700}
+    ):
+        raise ValueError("Trampoline completion receipt directory is not private")
+    try:
+        descriptor = os.open(
+            path.name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=ancestry.descriptor,
+        )
+    except FileNotFoundError:
+        atomic_write_bytes_at(
+            ancestry.descriptor,
+            path.name,
+            payload,
+            mode=0o444,
+            replace=False,
+            post_publish_check=ancestry.require_same,
+        )
+        descriptor = os.open(
+            path.name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=ancestry.descriptor,
+        )
+    try:
+        observed, identity = _read_retained_completion_artifact(
+            ancestry.descriptor,
+            descriptor,
+            path.name,
+            relative=str(path),
+            expected_sha256=hashlib.sha256(payload).hexdigest(),
+            expected_size=len(payload),
+        )
+        if observed != payload:
+            raise ValueError("Trampoline completion receipt retry bytes differ")
+    finally:
+        os.close(descriptor)
+    os.fchmod(ancestry.descriptor, 0o500)
+    os.fsync(ancestry.descriptor)
+    ancestry.require_same()
+    if os.fstat(ancestry.descriptor).st_mode & 0o222:
+        raise ValueError("Trampoline completion receipt directory remains mutable")
+    return identity["device"], identity["inode"]
+
+
+def _prepare_completion_receipt_ancestry(
+    path: Path, *, root: Path
+) -> PinnedDirectoryAncestry:
+    durable_mkdir_parents(path.parent, mode=0o700, root=root)
+    ancestry = PinnedDirectoryAncestry(
+        path.parent, root=Path(os.path.abspath(root))
+    )
+    try:
+        metadata = os.fstat(ancestry.descriptor)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) not in {0o500, 0o700}
+        ):
+            raise ValueError("Trampoline completion receipt directory is not private")
+        ancestry.require_same()
+        return ancestry
+    except BaseException:
+        ancestry.close()
+        raise
+
+
+def _publish_trampoline_completion_receipt_at(
+    artifact_dir_fd: int,
+    artifact_dir: Path,
+    manifest: dict[str, object],
+    *,
+    manifest_path: Path,
+    manifest_sha256: str,
+    reservation_id: str,
+    submission_id: str,
+    slurm_job_id: str,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+) -> dict[str, object]:
+    """Publish a paired immutable receipt while the original run tree is pinned."""
+    trusted_anchor = stable_serialization_anchor(authorized_pic_root)
+    require_same_directory(artifact_dir, artifact_dir_fd, root=trusted_anchor)
+    root_metadata = os.fstat(artifact_dir_fd)
+    if (
+        not stat.S_ISDIR(root_metadata.st_mode)
+        or root_metadata.st_mode & 0o222
+    ):
+        raise ValueError("Trampoline completion run root is not frozen")
+
+    inventory_parent_fd, inventory_fd, inventory_name = _open_frozen_artifact_member_at(
+        artifact_dir_fd, "artifact_inventory.json"
+    )
+    retained: list[tuple[int, int, str, str, dict[str, object]]] = []
+    try:
+        inventory_payload, inventory_identity = _read_retained_completion_artifact(
+            inventory_parent_fd,
+            inventory_fd,
+            inventory_name,
+            relative="artifact_inventory.json",
+        )
+        inventory = read_json_bytes(
+            inventory_payload, label="trampoline completion artifact inventory"
+        )
+        records = inventory.get("files")
+        if (
+            set(inventory) != {"schema_version", "files"}
+            or inventory.get("schema_version") != 1
+            or not isinstance(records, list)
+        ):
+            raise ValueError("Trampoline completion artifact inventory is malformed")
+        completion_records = []
+        for raw in records:
+            if (
+                not isinstance(raw, dict)
+                or set(raw) != {"path", "sha256", "size"}
+                or not isinstance(raw["path"], str)
+                or not isinstance(raw["sha256"], str)
+                or re.fullmatch(r"[0-9a-f]{64}", raw["sha256"]) is None
+                or type(raw["size"]) is not int
+                or raw["size"] < 0
+            ):
+                raise ValueError("Trampoline completion artifact record is malformed")
+            parent_fd, descriptor, name = _open_frozen_artifact_member_at(
+                artifact_dir_fd, raw["path"]
+            )
+            retained.append((parent_fd, descriptor, name, raw["path"], raw))
+            _, identity = _read_retained_completion_artifact(
+                parent_fd,
+                descriptor,
+                name,
+                relative=raw["path"],
+                expected_sha256=raw["sha256"],
+                expected_size=raw["size"],
+            )
+            completion_records.append(
+                {
+                    "path": raw["path"],
+                    "sha256": raw["sha256"],
+                    "byte_count": raw["size"],
+                    "filesystem_identity": identity,
+                }
+            )
+        contract = validate_launch_contract(manifest.get("launch_contract"))
+        mandatory_stdio = sorted(
+            {
+                str(action[key])
+                for action in contract["actions"]
+                for key in ("stdout_artifact", "stderr_artifact")
+            }
+        )
+        indexed = {record["path"]: record for record in completion_records}
+        if any(path not in indexed for path in mandatory_stdio):
+            raise ValueError("Trampoline completion receipt lacks mandatory stdout/stderr")
+        orion_path, project_home_path = _completion_receipt_paths(
+            submission_id,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        with _prepare_completion_receipt_ancestry(
+            orion_path, root=authorized_pic_root
+        ) as orion_ancestry, _prepare_completion_receipt_ancestry(
+            project_home_path, root=authorized_project_home_root
+        ) as project_home_ancestry:
+            orion_parent = os.fstat(orion_ancestry.descriptor)
+            project_home_parent = os.fstat(project_home_ancestry.descriptor)
+            receipt = {
+                "schema_version": 1,
+                "record_type": TRAMPOLINE_COMPLETION_RECORD_TYPE,
+                "receipt_role": "paired_immutable_pre_reconciliation_execution_anchor",
+                "authority": {
+                    "launch_authorized": False,
+                    "scientific_claim_authorized": False,
+                    "publication_authorized": False,
+                },
+                "paired_paths": {
+                    "orion": str(orion_path),
+                    "project_home": str(project_home_path),
+                },
+                "receipt_parent_identities": {
+                    "orion": {
+                        "device": orion_parent.st_dev,
+                        "inode": orion_parent.st_ino,
+                    },
+                    "project_home": {
+                        "device": project_home_parent.st_dev,
+                        "inode": project_home_parent.st_ino,
+                    },
+                },
+                "manifest_path": str(manifest_path),
+                "manifest_sha256": manifest_sha256,
+                "reservation_id": reservation_id,
+                "submission_id": submission_id,
+                "slurm_job_id": slurm_job_id,
+                "control_plane_version": manifest["control_plane_version"],
+                "campaign": manifest["campaign"],
+                "test_id": manifest["test_id"],
+                "registered_science_authorization_id": manifest.get(
+                    "registered_science_authorization_id"
+                ),
+                "artifact_dir": str(artifact_dir),
+                "artifact_root_identity": {
+                    "device": root_metadata.st_dev,
+                    "inode": root_metadata.st_ino,
+                },
+                "artifact_inventory": {
+                    "path": str(artifact_dir / "artifact_inventory.json"),
+                    "sha256": hashlib.sha256(inventory_payload).hexdigest(),
+                    "byte_count": len(inventory_payload),
+                    "filesystem_identity": inventory_identity,
+                    "payload_base64": base64.b64encode(inventory_payload).decode("ascii"),
+                },
+                "artifact_records": completion_records,
+                "mandatory_stdout_stderr": [
+                    indexed[path] for path in mandatory_stdio
+                ],
+                "execution_binding": {
+                    "launch_contract_sha256": launch_contract_sha256(contract),
+                    "job_script_sha256": record_for_role(manifest, "job-script")[
+                        "sha256"
+                    ],
+                    "executable_sha256": record_for_role(manifest, "executable")[
+                        "sha256"
+                    ],
+                    "input_deck_sha256": record_for_role(manifest, "input-deck")[
+                        "sha256"
+                    ],
+                },
+            }
+            payload = (
+                json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n"
+            ).encode("utf-8")
+            orion_identity = _publish_exact_completion_receipt_at(
+                orion_path, payload, ancestry=orion_ancestry
+            )
+            project_home_identity = _publish_exact_completion_receipt_at(
+                project_home_path, payload, ancestry=project_home_ancestry
+            )
+            if orion_identity == project_home_identity:
+                raise ValueError(
+                    "Trampoline completion receipts reuse one filesystem object"
+                )
+            if (
+                _publish_exact_completion_receipt_at(
+                    orion_path, payload, ancestry=orion_ancestry
+                )
+                != orion_identity
+                or _publish_exact_completion_receipt_at(
+                    project_home_path, payload, ancestry=project_home_ancestry
+                )
+                != project_home_identity
+            ):
+                raise ValueError("Trampoline completion receipt identity changed")
+        require_same_directory(artifact_dir, artifact_dir_fd, root=trusted_anchor)
+        if _read_retained_completion_artifact(
+            inventory_parent_fd,
+            inventory_fd,
+            inventory_name,
+            relative="artifact_inventory.json",
+            expected_sha256=receipt["artifact_inventory"]["sha256"],
+            expected_size=receipt["artifact_inventory"]["byte_count"],
+        )[0] != inventory_payload:
+            raise ValueError("Trampoline completion inventory changed after publication")
+        for parent_fd, descriptor, name, relative, raw in retained:
+            _read_retained_completion_artifact(
+                parent_fd,
+                descriptor,
+                name,
+                relative=relative,
+                expected_sha256=str(raw["sha256"]),
+                expected_size=int(raw["size"]),
+            )
+        require_same_directory(artifact_dir, artifact_dir_fd, root=trusted_anchor)
+        receipt_sha256 = hashlib.sha256(payload).hexdigest()
+        ledger_binding = {
+            "schema_version": 1,
+            "record_type": TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE,
+            "authority": receipt["authority"],
+            "receipt_sha256": receipt_sha256,
+            "receipt_byte_count": len(payload),
+            "paired_receipts": {
+                "orion": {
+                    "path": str(orion_path),
+                    "parent_identity": receipt["receipt_parent_identities"]["orion"],
+                    "filesystem_identity": {
+                        "device": orion_identity[0],
+                        "inode": orion_identity[1],
+                    },
+                },
+                "project_home": {
+                    "path": str(project_home_path),
+                    "parent_identity": receipt["receipt_parent_identities"][
+                        "project_home"
+                    ],
+                    "filesystem_identity": {
+                        "device": project_home_identity[0],
+                        "inode": project_home_identity[1],
+                    },
+                },
+            },
+            "artifact_root_identity": receipt["artifact_root_identity"],
+            "artifact_inventory": {
+                key: receipt["artifact_inventory"][key]
+                for key in ("sha256", "byte_count", "filesystem_identity")
+            },
+            "artifact_records_sha256": _canonical_sha256(completion_records),
+            "mandatory_stdout_stderr_sha256": _canonical_sha256(
+                receipt["mandatory_stdout_stderr"]
+            ),
+        }
+        return {
+            "orion_path": str(orion_path),
+            "project_home_path": str(project_home_path),
+            "sha256": receipt_sha256,
+            "byte_count": len(payload),
+            "ledger_binding": ledger_binding,
+        }
+    finally:
+        for parent_fd, descriptor, *_ in reversed(retained):
+            os.close(descriptor)
+            os.close(parent_fd)
+        os.close(inventory_fd)
+        os.close(inventory_parent_fd)
+
+
+def _append_trampoline_completion_event(
+    reservation: dict[str, object],
+    ledger_binding: dict[str, object],
+    *,
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    authorized_pic_root: Path,
+) -> dict[str, object]:
+    """Append or recover exactly one completion event after receipt publication."""
+    ledger_csv = Path(os.path.abspath(authorized_pic_root)) / "ledger" / "node_hours.csv"
+    completion_event = transition_payload(reservation)
+    completion_event.update(
+        {
+            "event_type": "trampoline_completion",
+            "trampoline_completion": ledger_binding,
+        }
+    )
+    reservation_id = str(reservation["reservation_id"])
+    for attempt in range(2):
+        try:
+            with ledger_lock(ledger_jsonl, mirror_jsonl):
+                try:
+                    records = validate_mirrored_state(
+                        ledger_jsonl, receipts_jsonl, mirror_jsonl
+                    )
+                except ValueError:
+                    repair_mirrored_state_locked(
+                        ledger_jsonl,
+                        ledger_csv,
+                        receipts_jsonl,
+                        mirror_jsonl,
+                        mirror_transport="filesystem_copy",
+                    )
+                    records = validate_mirrored_state(
+                        ledger_jsonl, receipts_jsonl, mirror_jsonl
+                    )
+                latest = latest_reservations(records).get(reservation_id)
+                if latest is None:
+                    raise ValueError(
+                        "Trampoline completion reservation disappeared before append"
+                    )
+                if latest.get("event_type") == "trampoline_completion":
+                    if transition_payload(latest) != transition_payload(completion_event):
+                        raise ValueError(
+                            "Existing trampoline completion differs from retry"
+                        )
+                    return latest
+                if transition_payload(latest) != transition_payload(reservation):
+                    raise ValueError(
+                        "Trampoline completion reservation changed before append"
+                    )
+                return append_primary_event_locked(
+                    ledger_jsonl,
+                    ledger_csv,
+                    receipts_jsonl,
+                    mirror_jsonl,
+                    completion_event,
+                    mirror_transport="filesystem_copy",
+                )
+        except Exception:
+            if attempt:
+                raise
+    raise AssertionError("unreachable trampoline completion append retry")
+
+
 def _profile_environment() -> dict[str, str]:
     return {
         "LC_ALL": "C",
         "PATH": "/usr/bin:/bin",
         "PIC_FRONTIER_PROFILE": "frontier_minimum_supported",
     }
+
+
+def _q043_trusted_wrapper_evidence_bytes(
+    manifest: dict[str, object],
+    action: dict[str, object],
+    stdout_payload: bytes,
+) -> bytes:
+    """Return aggregate Q043 success evidence after exact task-rank verification."""
+    if manifest.get("campaign") != Q043_REGISTERED_CAMPAIGN:
+        return b""
+    case_id = manifest.get("test_id")
+    resources = action.get("resources")
+    if (
+        not isinstance(case_id, str)
+        or not re.fullmatch(r"q043-current-oracle-[a-z0-9_-]+", case_id)
+        or not isinstance(resources, dict)
+        or type(resources.get("tasks")) is not int
+        or int(resources["tasks"]) <= 0
+    ):
+        raise ValueError("Q043 trusted-wrapper manifest identity is malformed")
+    try:
+        lines = stdout_payload.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise ValueError("Q043 trusted-wrapper stdout is not UTF-8") from error
+    pattern = re.compile(
+        r"^PIC trusted GPU launch: rank=([0-9]+) host=\S+ "
+        r"ROCR_VISIBLE_DEVICES=[0-9]+ "
+        r"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa$"
+    )
+    observed = [
+        int(match.group(1))
+        for line in lines
+        if (match := pattern.fullmatch(line)) is not None
+    ]
+    expected = list(range(int(resources["tasks"])))
+    if sorted(observed) != expected or len(observed) != len(expected):
+        raise ValueError("Q043 trusted-wrapper task-rank evidence is incomplete or duplicated")
+    return (
+        f"Q043_REGISTERED_EXECUTION case_id={case_id} "
+        f"mpi_world_size={len(expected)} "
+        f"rank_ids={','.join(str(rank) for rank in expected)}\n"
+        "Q043_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+    ).encode("utf-8")
 
 
 def _create_artifact_directory(
@@ -1109,6 +1667,7 @@ def _require_read_only_regular_at(directory_descriptor: int, name: str) -> None:
 def _launch_actions(
     manifest: dict[str, object],
     *,
+    reservation: dict[str, object],
     executable: _PinnedSnapshot,
     input_deck: _PinnedSnapshot,
     athena_timeout_arguments: tuple[str, str],
@@ -1116,6 +1675,15 @@ def _launch_actions(
     control_plane_dir_fd: int,
     slurm_job_id: str,
     runner: Callable[..., object],
+    manifest_path: Path,
+    manifest_sha256: str,
+    reservation_id: str,
+    submission_id: str,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
 ) -> None:
     raw_contract = manifest.get("launch_contract")
     _require_no_action_timeout_override(raw_contract)
@@ -1209,6 +1777,19 @@ def _launch_actions(
                                 control_plane_dir_fd,
                             ),
                         )
+                        stdout.flush()
+                        os.fsync(stdout.fileno())
+                        wrapper_evidence = _q043_trusted_wrapper_evidence_bytes(
+                            manifest,
+                            action,
+                            _read_artifact_bytes(
+                                artifact_dir_fd, artifact_dir, stdout_path
+                            ),
+                        )
+                        if wrapper_evidence:
+                            stdout.write(wrapper_evidence)
+                            stdout.flush()
+                            os.fsync(stdout.fileno())
                     finally:
                         require_artifact_directory()
                         _capture_artifact_directory_identities_at(
@@ -1235,6 +1816,29 @@ def _launch_actions(
             artifact_dir,
             directory_identities=launch_directory_identities,
         )
+        require_artifact_directory()
+        completion = _publish_trampoline_completion_receipt_at(
+            artifact_dir_fd,
+            artifact_dir,
+            manifest,
+            manifest_path=manifest_path,
+            manifest_sha256=manifest_sha256,
+            reservation_id=reservation_id,
+            submission_id=submission_id,
+            slurm_job_id=slurm_job_id,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        appended = _append_trampoline_completion_event(
+            reservation,
+            completion["ledger_binding"],
+            ledger_jsonl=ledger_jsonl,
+            receipts_jsonl=receipts_jsonl,
+            mirror_jsonl=mirror_jsonl,
+            authorized_pic_root=authorized_pic_root,
+        )
+        if appended.get("trampoline_completion") != completion["ledger_binding"]:
+            raise ValueError("Trampoline completion ledger anchor differs after append")
         require_artifact_directory()
     finally:
         try:
@@ -1391,6 +1995,7 @@ def launch(
             with _deterministic_artifact_umask():
                 _launch_actions(
                     manifest,
+                    reservation=reservation,
                     executable=pinned_executable,
                     input_deck=pinned_input_deck,
                     athena_timeout_arguments=athena_timeout_arguments,
@@ -1398,6 +2003,15 @@ def launch(
                     control_plane_dir_fd=control_plane_dir_fd,
                     slurm_job_id=slurm_job_id,
                     runner=runner,
+                    manifest_path=manifest_path,
+                    manifest_sha256=manifest_sha256,
+                    reservation_id=reservation_id,
+                    submission_id=submission_id,
+                    authorized_pic_root=authorized_pic_root,
+                    authorized_project_home_root=authorized_project_home_root,
+                    ledger_jsonl=ledger_jsonl,
+                    receipts_jsonl=receipts_jsonl,
+                    mirror_jsonl=mirror_jsonl,
                 )
         require_same_directory(
             control_plane_dir, control_plane_dir_fd, root=trusted_anchor

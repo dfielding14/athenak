@@ -14,6 +14,7 @@ from contextvars import ContextVar
 import csv
 import ctypes
 from datetime import datetime, timezone
+import errno
 import fcntl
 import hashlib
 import io
@@ -239,6 +240,7 @@ MIRROR_RECEIPT_FIELDS = {
 REGISTERED_RESERVATION_EVENT_TYPES = {
     "reservation",
     "job_id_attached",
+    "trampoline_completion",
     "reservation_cancelled",
     "reconciliation",
 }
@@ -267,6 +269,9 @@ REGISTERED_ATTACHMENT_CHANGES = {
 REGISTERED_CANCELLATION_CHANGES = {
     "state",
     "notes",
+}
+REGISTERED_TRAMPOLINE_COMPLETION_CHANGES = {
+    "trampoline_completion",
 }
 REGISTERED_RECONCILIATION_CHANGES = {
     "state",
@@ -556,6 +561,80 @@ def _is_lowercase_sha256(value: object) -> bool:
     )
 
 
+def _require_trampoline_completion_binding(value: object) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "schema_version",
+        "record_type",
+        "authority",
+        "receipt_sha256",
+        "receipt_byte_count",
+        "paired_receipts",
+        "artifact_root_identity",
+        "artifact_inventory",
+        "artifact_records_sha256",
+        "mandatory_stdout_stderr_sha256",
+    }:
+        raise ValueError("Trampoline-completion ledger binding is malformed")
+    if (
+        value["schema_version"] != 1
+        or value["record_type"] != "trusted_trampoline_completion_ledger_binding"
+        or value["authority"]
+        != {
+            "launch_authorized": False,
+            "scientific_claim_authorized": False,
+            "publication_authorized": False,
+        }
+        or not _is_lowercase_sha256(value["receipt_sha256"])
+        or type(value["receipt_byte_count"]) is not int
+        or value["receipt_byte_count"] <= 0
+        or not _is_lowercase_sha256(value["artifact_records_sha256"])
+        or not _is_lowercase_sha256(value["mandatory_stdout_stderr_sha256"])
+    ):
+        raise ValueError("Trampoline-completion ledger binding is invalid")
+
+    def require_identity(identity: object) -> tuple[int, int]:
+        if (
+            not isinstance(identity, dict)
+            or set(identity) != {"device", "inode"}
+            or any(type(identity.get(key)) is not int or identity[key] < 0 for key in identity)
+        ):
+            raise ValueError("Trampoline-completion filesystem identity is invalid")
+        return identity["device"], identity["inode"]
+
+    paired = value["paired_receipts"]
+    if not isinstance(paired, dict) or set(paired) != {"orion", "project_home"}:
+        raise ValueError("Trampoline-completion paired receipt binding is malformed")
+    receipt_identities = []
+    receipt_paths = []
+    for root_name in ("orion", "project_home"):
+        binding = paired[root_name]
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"path", "parent_identity", "filesystem_identity"}
+            or not isinstance(binding["path"], str)
+            or not os.path.isabs(binding["path"])
+            or binding["path"] != os.path.abspath(binding["path"])
+        ):
+            raise ValueError("Trampoline-completion paired receipt binding is invalid")
+        require_identity(binding["parent_identity"])
+        receipt_identities.append(require_identity(binding["filesystem_identity"]))
+        receipt_paths.append(binding["path"])
+    if len(set(receipt_paths)) != 2 or len(set(receipt_identities)) != 2:
+        raise ValueError("Trampoline-completion paired receipts are not independent")
+
+    require_identity(value["artifact_root_identity"])
+    inventory = value["artifact_inventory"]
+    if (
+        not isinstance(inventory, dict)
+        or set(inventory) != {"sha256", "byte_count", "filesystem_identity"}
+        or not _is_lowercase_sha256(inventory["sha256"])
+        or type(inventory["byte_count"]) is not int
+        or inventory["byte_count"] <= 0
+    ):
+        raise ValueError("Trampoline-completion inventory binding is invalid")
+    require_identity(inventory["filesystem_identity"])
+
+
 def _registered_event_field_bounds(event_type: str) -> tuple[set[str], set[str]]:
     base = CHAIN_EVENT_FIELDS | RESERVATION_PAYLOAD_BASE_FIELDS
     optional = RESERVATION_PAYLOAD_OPTIONAL_FIELDS
@@ -571,6 +650,14 @@ def _registered_event_field_bounds(event_type: str) -> tuple[set[str], set[str]]
             | {"attached_by_control_plane_version"}
             | TERMINAL_RECOVERY_FIELDS
         )
+    if event_type == "trampoline_completion":
+        required = base | {"job_id", "trampoline_completion"}
+        return required, (
+            required
+            | optional
+            | {"attached_by_control_plane_version"}
+            | TERMINAL_RECOVERY_FIELDS
+        )
     if event_type == "reconciliation":
         required = base | {"job_id"} | RECONCILIATION_PAYLOAD_FIELDS
         return required, (
@@ -580,6 +667,7 @@ def _registered_event_field_bounds(event_type: str) -> tuple[set[str], set[str]]
                 "attached_by_control_plane_version",
                 "reconciled_by_control_plane_version",
                 "scheduler_exit_code",
+                "trampoline_completion",
             }
             | TERMINAL_RECOVERY_FIELDS
         )
@@ -592,6 +680,7 @@ def _require_closed_primary_event_schema(record: dict[str, object]) -> None:
         "genesis",
         "reservation",
         "job_id_attached",
+        "trampoline_completion",
         "reservation_cancelled",
         "reconciliation",
         "manual_allocation_reconciliation",
@@ -1026,6 +1115,8 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
         event_type = record.get("event_type")
         if "reconciled" in record and type(record["reconciled"]) is not bool:
             raise ValueError("Ledger reconciled status must be boolean")
+        if "trampoline_completion" in record:
+            _require_trampoline_completion_binding(record["trampoline_completion"])
         if "reserved_node_hours" in record:
             _nonnegative_finite_number(
                 record, "reserved_node_hours", label="Ledger reservation"
@@ -1085,6 +1176,22 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
                     raise ValueError("Registered cancellation transition is invalid")
                 _require_registered_transition_payload(
                     prior, record, allowed_changes=REGISTERED_CANCELLATION_CHANGES
+                )
+            elif event_type == "trampoline_completion":
+                if (
+                    prior is None
+                    or prior.get("event_type") != "job_id_attached"
+                    or prior.get("state") != "submitted"
+                    or prior.get("reconciled") is not False
+                    or prior.get("job_id") != record.get("job_id")
+                    or record.get("state") != "submitted"
+                    or record.get("reconciled") is not False
+                ):
+                    raise ValueError("Registered trampoline-completion transition is invalid")
+                _require_registered_transition_payload(
+                    prior,
+                    record,
+                    allowed_changes=REGISTERED_TRAMPOLINE_COMPLETION_CHANGES,
                 )
             elif event_type != "reconciliation":
                 raise ValueError("Unknown reservation-bearing ledger event")
@@ -1170,7 +1277,8 @@ def _validate_accounting_records(records: list[dict[str, object]]) -> None:
             _require_canonical_scheduler_job_id(record.get("job_id"))
             if (
                 prior is None
-                or prior.get("event_type") != "job_id_attached"
+                or prior.get("event_type")
+                not in {"job_id_attached", "trampoline_completion"}
                 or prior.get("reconciled", False) is not False
                 or prior.get("job_id") != record.get("job_id")
             ):
@@ -1370,6 +1478,90 @@ def _pinned_parent_directories(
             os.close(descriptor)
 
 
+_FLOCK_UNAVAILABLE_ERRNOS = {
+    errno.ENOSYS,
+    errno.EOPNOTSUPP,
+    getattr(errno, "ENOTSUP", errno.EOPNOTSUPP),
+    524,
+}
+
+
+def _acquire_exclusive_lock(
+    descriptor: int,
+) -> tuple[str, int, str | None, tuple[int, int] | None]:
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        return "flock", descriptor, None, None
+    except OSError as error:
+        if error.errno not in _FLOCK_UNAVAILABLE_ERRNOS:
+            raise
+    fallback_name = None
+    locked_descriptor = descriptor
+    identity = None
+    if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+        fallback_name = ".pic-ledger-posix.lock"
+        locked_descriptor = os.open(
+            fallback_name,
+            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=descriptor,
+        )
+        metadata = os.fstat(locked_descriptor)
+        current = os.stat(fallback_name, dir_fd=descriptor, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or (metadata.st_dev, metadata.st_ino)
+            != (current.st_dev, current.st_ino)
+        ):
+            os.close(locked_descriptor)
+            raise ValueError("POSIX ledger lock is not one stable regular file")
+        identity = metadata.st_dev, metadata.st_ino
+        os.fsync(descriptor)
+    try:
+        fcntl.lockf(locked_descriptor, fcntl.LOCK_EX)
+        if fallback_name is not None:
+            current = os.stat(
+                fallback_name, dir_fd=descriptor, follow_symlinks=False
+            )
+            if (current.st_dev, current.st_ino) != identity:
+                raise ValueError("POSIX ledger lock path changed while acquiring")
+        return "lockf", locked_descriptor, fallback_name, identity
+    except BaseException:
+        if locked_descriptor != descriptor:
+            os.close(locked_descriptor)
+        raise
+
+
+def _release_exclusive_lock(
+    descriptor: int,
+    lock: tuple[str, int, str | None, tuple[int, int] | None],
+) -> None:
+    method, locked_descriptor, fallback_name, identity = lock
+    if method == "flock":
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+    elif method == "lockf":
+        try:
+            if fallback_name is not None:
+                metadata = os.fstat(locked_descriptor)
+                current = os.stat(
+                    fallback_name, dir_fd=descriptor, follow_symlinks=False
+                )
+                if (
+                    (metadata.st_dev, metadata.st_ino) != identity
+                    or (current.st_dev, current.st_ino) != identity
+                ):
+                    raise ValueError("POSIX ledger lock path changed while held")
+        finally:
+            try:
+                fcntl.lockf(locked_descriptor, fcntl.LOCK_UN)
+            finally:
+                if locked_descriptor != descriptor:
+                    os.close(locked_descriptor)
+    else:
+        raise ValueError("Ledger lock method is invalid")
+
+
 @contextmanager
 def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
     ledger_parent = Path(os.path.abspath(ledger_jsonl.parent))
@@ -1384,7 +1576,7 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
     )
     try:
-        fcntl.flock(stable_parent_descriptor, fcntl.LOCK_EX)
+        stable_parent_lock = _acquire_exclusive_lock(stable_parent_descriptor)
         try:
             _require_same_directory(stable_parent, stable_parent_descriptor)
             ledger_parent_descriptor = os.open(
@@ -1393,7 +1585,7 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
                 dir_fd=stable_parent_descriptor,
             )
             try:
-                fcntl.flock(ledger_parent_descriptor, fcntl.LOCK_EX)
+                ledger_parent_lock = _acquire_exclusive_lock(ledger_parent_descriptor)
                 try:
                     _require_same_directory(stable_parent, stable_parent_descriptor)
                     _require_same_directory(ledger_parent, ledger_parent_descriptor)
@@ -1403,7 +1595,9 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
                         flags=os.O_APPEND | os.O_CREAT | os.O_WRONLY,
                         dir_fd=stable_parent_descriptor,
                     ) as anchored_lock_stream:
-                        fcntl.flock(anchored_lock_stream.fileno(), fcntl.LOCK_EX)
+                        anchored_lock = _acquire_exclusive_lock(
+                            anchored_lock_stream.fileno()
+                        )
                         try:
                             _require_same_regular_file_at(
                                 stable_parent_descriptor,
@@ -1419,7 +1613,9 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
                                 flags=os.O_APPEND | os.O_CREAT | os.O_WRONLY,
                                 dir_fd=ledger_parent_descriptor,
                             ) as lock_stream:
-                                fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+                                historical_lock = _acquire_exclusive_lock(
+                                    lock_stream.fileno()
+                                )
                                 try:
                                     _require_same_directory(
                                         stable_parent, stable_parent_descriptor
@@ -1461,8 +1657,8 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
                                             label="Historical ledger lock",
                                         )
                                     finally:
-                                        fcntl.flock(
-                                            lock_stream.fileno(), fcntl.LOCK_UN
+                                        _release_exclusive_lock(
+                                            lock_stream.fileno(), historical_lock
                                         )
                         finally:
                             _require_same_directory(
@@ -1476,8 +1672,8 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
                                     label="Anchored ledger lock",
                                 )
                             finally:
-                                fcntl.flock(
-                                    anchored_lock_stream.fileno(), fcntl.LOCK_UN
+                                _release_exclusive_lock(
+                                    anchored_lock_stream.fileno(), anchored_lock
                                 )
                 finally:
                     try:
@@ -1488,14 +1684,18 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
                             ledger_parent, ledger_parent_descriptor
                         )
                     finally:
-                        fcntl.flock(ledger_parent_descriptor, fcntl.LOCK_UN)
+                        _release_exclusive_lock(
+                            ledger_parent_descriptor, ledger_parent_lock
+                        )
             finally:
                 os.close(ledger_parent_descriptor)
         finally:
             try:
                 _require_same_directory(stable_parent, stable_parent_descriptor)
             finally:
-                fcntl.flock(stable_parent_descriptor, fcntl.LOCK_UN)
+                _release_exclusive_lock(
+                    stable_parent_descriptor, stable_parent_lock
+                )
     finally:
         os.close(stable_parent_descriptor)
 
@@ -1516,7 +1716,7 @@ def _ledger_lock_within_serialization_anchor(
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
     )
     try:
-        fcntl.flock(mirror_parent_descriptor, fcntl.LOCK_EX)
+        mirror_parent_lock = _acquire_exclusive_lock(mirror_parent_descriptor)
         try:
             _require_same_directory(mirror_parent, mirror_parent_descriptor)
             with _local_ledger_lock(ledger_jsonl):
@@ -1527,7 +1727,9 @@ def _ledger_lock_within_serialization_anchor(
             try:
                 _require_same_directory(mirror_parent, mirror_parent_descriptor)
             finally:
-                fcntl.flock(mirror_parent_descriptor, fcntl.LOCK_UN)
+                _release_exclusive_lock(
+                    mirror_parent_descriptor, mirror_parent_lock
+                )
     finally:
         os.close(mirror_parent_descriptor)
 
@@ -1932,7 +2134,7 @@ def ledger_lock(
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
     )
     try:
-        fcntl.flock(anchor_descriptor, fcntl.LOCK_EX)
+        anchor_lock = _acquire_exclusive_lock(anchor_descriptor)
         try:
             _require_same_directory(anchor, anchor_descriptor)
             with _ledger_lock_within_serialization_anchor(ledger_jsonl, mirror_jsonl):
@@ -1947,7 +2149,7 @@ def ledger_lock(
             try:
                 _require_same_directory(anchor, anchor_descriptor)
             finally:
-                fcntl.flock(anchor_descriptor, fcntl.LOCK_UN)
+                _release_exclusive_lock(anchor_descriptor, anchor_lock)
     finally:
         os.close(anchor_descriptor)
 

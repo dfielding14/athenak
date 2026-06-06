@@ -29,6 +29,7 @@ CONTROL_PLANE_FILES = [
     "control_plane_common.py",
     "create_clean_candidate_freeze.py",
     "create_pre_submit_manifest.py",
+    "frontier_job.sh",
     "frontier_pic_environment.sh",
     "initialize_frontier_ledger.py",
     "launch_trampoline.py",

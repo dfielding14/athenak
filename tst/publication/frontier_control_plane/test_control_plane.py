@@ -33,6 +33,7 @@ import ledger
 import promote_active_policy
 import q011_pressure_review_packet_verifier as pressure_packet_verifier
 import reconcile_frontier_job
+import reconcile_q043_registered_execution
 import reconcile_manual_frontier_allocations
 import revalidate_clean_candidate
 import terminal_recovery_handoff
@@ -6669,9 +6670,260 @@ class SnapshotTests(unittest.TestCase):
                 authorized_project_home_root=self.project_home_root,
             )
         self.assertAlmostEqual(float(result["consumed_node_hours"]), 1.0 / 12.0)
+        self.assertNotIn("trampoline_completion", result)
         totals = accounting(validate_primary_chain(self.ledger))
         self.assertAlmostEqual(totals["cumulative_consumed_node_hours"], 1.0 / 12.0)
         self.assertEqual(totals["currently_reserved_node_hours"], 0.0)
+
+    def test_reconcile_preserves_trampoline_completion_binding(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        self._launch(manifest_path, reservation, runner=lambda *args, **kwargs: None)
+        launched = validate_primary_chain(self.ledger)[-1]
+        self.assertEqual(launched["event_type"], "trampoline_completion")
+        completion_binding = launched["trampoline_completion"]
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("COMPLETED", 300, 1, "0:0"),
+        ):
+            result = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(result["event_type"], "reconciliation")
+        self.assertEqual(result["trampoline_completion"], completion_binding)
+
+    def test_trampoline_completion_anchor_rejects_dual_receipt_directory_replacement(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        self._launch(manifest_path, reservation, runner=lambda *args, **kwargs: None)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        completion = records[-1]
+        self.assertEqual(completion["event_type"], "trampoline_completion")
+        mirror_receipts = ledger.validate_receipts(
+            self.receipts,
+            records,
+            mirror_jsonl=self.mirror,
+            mirror_transport="filesystem_copy",
+        )
+        self.assertEqual(
+            sum(
+                receipt["mirrored_event_sha256"] == completion["event_sha256"]
+                for receipt in mirror_receipts
+            ),
+            1,
+        )
+        paired = completion["trampoline_completion"]["paired_receipts"]
+        original_receipt = json.loads(
+            Path(str(paired["orion"]["path"])).read_text(encoding="utf-8")
+        )
+        original_receipt["artifact_root_identity"]["inode"] += 1
+        malicious = (
+            json.dumps(original_receipt, indent=2, sort_keys=True, allow_nan=False)
+            + "\n"
+        ).encode("utf-8")
+        for root_name in ("orion", "project_home"):
+            receipt_path = Path(str(paired[root_name]["path"]))
+            directory = receipt_path.parent
+            directory.rename(directory.with_name(f"{directory.name}.original"))
+            shutil.copytree(
+                directory.with_name(f"{directory.name}.original"),
+                directory,
+                copy_function=shutil.copy2,
+            )
+            receipt_path.chmod(0o644)
+            receipt_path.write_bytes(malicious)
+            receipt_path.chmod(0o444)
+            directory.chmod(0o500)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        with self.assertRaisesRegex(ValueError, "canonical mirrored-ledger anchor"):
+            reconcile_q043_registered_execution._trusted_trampoline_completion(
+                manifest,
+                completion,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_trampoline_completion_append_retries_before_primary_write(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        real_append = launch_trampoline.append_primary_event_locked
+        attempts = 0
+
+        def fail_once_before_append(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("interrupted before completion append")
+            return real_append(*args, **kwargs)
+
+        with patch(
+            "launch_trampoline.append_primary_event_locked",
+            side_effect=fail_once_before_append,
+        ):
+            self._launch(manifest_path, reservation, runner=lambda *args, **kwargs: None)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        self.assertEqual(attempts, 2)
+        self.assertEqual(
+            sum(record.get("event_type") == "trampoline_completion" for record in records),
+            1,
+        )
+
+    def test_trampoline_completion_append_retry_recognizes_committed_event(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        real_append = launch_trampoline.append_primary_event_locked
+        append_calls = 0
+
+        def append_then_signal(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal append_calls
+            append_calls += 1
+            result = real_append(*args, **kwargs)
+            raise RuntimeError("interrupted after completion append")
+
+        with patch(
+            "launch_trampoline.append_primary_event_locked",
+            side_effect=append_then_signal,
+        ):
+            self._launch(manifest_path, reservation, runner=lambda *args, **kwargs: None)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        self.assertEqual(append_calls, 1)
+        self.assertEqual(
+            sum(record.get("event_type") == "trampoline_completion" for record in records),
+            1,
+        )
+
+    def test_trampoline_completion_append_repairs_orion_only_suffix(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        real_append_jsonl = ledger._append_jsonl
+        interrupted = False
+
+        def interrupt_before_completion_mirror(
+            path: Path, record: dict[str, object]
+        ) -> None:
+            nonlocal interrupted
+            if (
+                not interrupted
+                and path == self.mirror
+                and record.get("event_type") == "trampoline_completion"
+            ):
+                interrupted = True
+                raise RuntimeError("interrupted before completion mirror append")
+            real_append_jsonl(path, record)
+
+        with patch("ledger._append_jsonl", side_effect=interrupt_before_completion_mirror):
+            self._launch(manifest_path, reservation, runner=lambda *args, **kwargs: None)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        self.assertTrue(interrupted)
+        self.assertEqual(
+            sum(record.get("event_type") == "trampoline_completion" for record in records),
+            1,
+        )
+
+    def test_trampoline_completion_binds_only_successful_execution(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+
+        def failed_runner(command: list[str], **kwargs: object) -> None:
+            raise subprocess.CalledProcessError(1, command)
+
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._launch(manifest_path, reservation, runner=failed_runner)
+        records = ledger.validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )
+        self.assertFalse(
+            any(record.get("event_type") == "trampoline_completion" for record in records)
+        )
+        for root in (self.pic_root, self.project_home_root):
+            self.assertFalse(
+                (
+                    root
+                    / launch_trampoline.TRAMPOLINE_COMPLETION_NAMESPACE
+                    / self.submission_id
+                ).exists()
+            )
+
+    def test_q043_trusted_wrapper_evidence_requires_exact_successful_rank_set(self) -> None:
+        manifest = {
+            "campaign": launch_trampoline.Q043_REGISTERED_CAMPAIGN,
+            "test_id": "q043-current-oracle-d2-coarse-ppc1-split_x1-cvr100",
+        }
+        action = {"resources": {"tasks": 2}}
+        task_lines = (
+            b"PIC trusted GPU launch: rank=0 host=nid000001 ROCR_VISIBLE_DEVICES=0 "
+            b"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+            b"PIC trusted GPU launch: rank=1 host=nid000001 ROCR_VISIBLE_DEVICES=1 "
+            b"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+        )
+        self.assertEqual(
+            launch_trampoline._q043_trusted_wrapper_evidence_bytes(
+                manifest, action, task_lines
+            ),
+            (
+                b"Q043_REGISTERED_EXECUTION "
+                b"case_id=q043-current-oracle-d2-coarse-ppc1-split_x1-cvr100 "
+                b"mpi_world_size=2 rank_ids=0,1\n"
+                b"Q043_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+            ),
+        )
+        for bad in (
+            task_lines.splitlines(keepends=True)[0],
+            task_lines + task_lines.splitlines(keepends=True)[0],
+        ):
+            with self.assertRaisesRegex(ValueError, "incomplete or duplicated"):
+                launch_trampoline._q043_trusted_wrapper_evidence_bytes(
+                    manifest, action, bad
+                )
+        self.assertEqual(
+            launch_trampoline._q043_trusted_wrapper_evidence_bytes(
+                {"campaign": "legacy"}, action, b""
+            ),
+            b"",
+        )
+
+    def test_q043_reservation_rejects_any_nonempty_same_user_queue(self) -> None:
+        case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"
+        self._write_science_config(
+            authorize=True,
+            campaign=launch_trampoline.Q043_REGISTERED_CAMPAIGN,
+            test_id=case_id,
+            registered_science_authorization_id="q043-empty-queue-gate-v1",
+            evidence_class="q043_registered_execution_test",
+            physical_mode="paper_mhd_pic_vl2_tsc",
+            artifact_dir=str(
+                self.pic_root
+                / "runs"
+                / launch_trampoline.Q043_REGISTERED_CAMPAIGN
+                / self.submission_id
+            ),
+        )
+        self._write(
+            "queue.txt",
+            "98765|batch|normal|RUNNING|unrelated-same-user-job|not-a-pic-tag\n",
+        )
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(
+            ValueError, "same-user Frontier queue to be completely empty"
+        ):
+            self._reserve(manifest_path)
 
     def test_trampoline_reverifies_reserved_snapshot_and_binds_executable(self) -> None:
         manifest_path = self._create_manifest()

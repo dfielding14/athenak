@@ -104,7 +104,7 @@ AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS = {
         "b6dae64b28dbcc7ce82877ad25d53bc4f0637016c4bd274431c1a4ba947ec94b"
     ),
     "runner_sha256": (
-        "44d8071ef8fc48cd859bd421b0741f9faeb797f91715390e360b238de7136cf8"
+        "fe2a2b89b34c5a830df82025a157c6d99fc5a02a58982dcf42d274571b8d7bb9"
     ),
     "schema_sha256": (
         "348b80f6b56fa56da57a4d30932b41784c939f5a2b1bf49c82d3a6acd024ee3f"
@@ -517,6 +517,7 @@ CONTROL_PLANE_FILES = [
     "control_plane_common.py",
     "create_clean_candidate_freeze.py",
     "create_pre_submit_manifest.py",
+    "frontier_job.sh",
     "frontier_pic_environment.sh",
     "initialize_frontier_ledger.py",
     "launch_trampoline.py",
@@ -1021,6 +1022,22 @@ def prepared_artifact_manifest_from_source_archive(
                 and path.endswith(".athinput")
                 and "/" not in path[len("inputs/tests/") :]
             ),
+            *(
+                path
+                for path in source_files
+                if path.startswith(
+                    "inputs/tests/"
+                    "q043_bell_current_volume_aware_deposited_current_oracle/"
+                )
+                and path.endswith(".athinput")
+                and "/"
+                not in path[
+                    len(
+                        "inputs/tests/"
+                        "q043_bell_current_volume_aware_deposited_current_oracle/"
+                    ) :
+                ]
+            ),
             *PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS,
         ]
     )
@@ -1034,7 +1051,8 @@ def prepared_artifact_manifest_from_source_archive(
     if [record["path"] for record in paper_decks] != expected_paper_decks:
         raise ValueError(
             "Prepared paper-deck inventory must exactly cover archived "
-            "inputs/tests/pic*.athinput and required publication decks"
+            "inputs/tests/pic*.athinput, the nested Q043 matrix, and required "
+            "publication decks"
         )
     if [record["path"] for record in analyzers] != expected_analyzers:
         raise ValueError(

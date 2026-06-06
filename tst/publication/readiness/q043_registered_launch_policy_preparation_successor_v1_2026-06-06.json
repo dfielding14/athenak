@@ -3,17 +3,17 @@
   "schema_version": 1,
   "successor_id": "q043_registered_launch_policy_preparation_successor_v1",
   "date": "2026-06-06",
-  "status": "source_local_preparation_complete_registration_and_launch_blocked",
+  "status": "complete_non_authorizing_q043_config_and_promotable_policy_preparation_live_launch_blocked",
   "qualification_effect": "source_local_launch_policy_preparation_only_no_launch_no_policy_no_q043_no_q023_no_q019_no_science_no_publication_authority",
-  "scope": "Additive disjoint source-local successor that deterministically prepares exact launch-contract and policy-slice review candidates for every checked-in Q043 registered-execution raw-oracle case. It binds exact case identities, decompositions, ranks, commands, environment placeholders, Orion artifact/raw path templates, wrapper evidence, raw-shard topology, resource/storage/retry ceilings, batch budget inputs, and the future installed reconcile_q043_registered_execution.py paired-receipt interface. It does not edit Q043 oracle/admission files, control-plane core, live policy, or historical artifacts.",
+  "scope": "Non-authorizing integrated Q043 launch preparation that deterministically prepares exact launch-contract and policy-slice review candidates for every checked-in Q043 registered-execution raw-oracle case, materializes one complete exact-hyphenated-ID pre-submit config, and builds a complete 132-slice storage-policy successor that must pass the installed full-policy validator. It binds the installed directive-only frontier_job.sh template, installed reconciler, paired installed generation, exact nested deck inventory, trusted-rank wrapper evidence, timeout margin, generic run-root topology, resource/storage/retry ceilings, and the Q043-specific empty same-user queue gate. It does not promote live policy, submit, launch, qualify Q043, authorize a scientific claim, or authorize publication.",
   "source_bindings": {
     "materializer": {
       "path": "tst/publication/q043_registered_launch_policy_preparation_successor_v1.py",
-      "sha256": "42ef2a3df1a6468d82a340050feba5fa9892028d3f49f80688aeb68b8ada61a1"
+      "sha256": "1254fac04811be8a9cc065b8a303a278462f74d98f2797cd9910f84d13debcd3"
     },
     "focused_tests": {
       "path": "tst/publication/test_q043_registered_launch_policy_preparation_successor_v1.py",
-      "sha256": "4ad313399849c2733d190428d30efb66e5a261203a14e984c3fe0322c9434c2e"
+      "sha256": "02d9584272d1e480290738e45c0ce6470990903d7667a85abcc384df8437ac9d"
     },
     "checked_in_deck_manifest": {
       "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json",
@@ -21,7 +21,43 @@
     },
     "checked_in_launch_contract_schema_source": {
       "path": "tst/publication/frontier_control_plane/control_plane_common.py",
-      "sha256": "58172c6fa7798eba8d91673e3c39aface1bef54b70ef27692a6973ba3a2348be"
+      "sha256": "04d78ad62ae16f77e523e693a506860bd3315cd60c743ea7fe50d17eb7511304"
+    },
+    "installed_control_plane_inventory": {
+      "path": "tst/publication/frontier_control_plane/run_control_plane.py",
+      "sha256": "fe2a2b89b34c5a830df82025a157c6d99fc5a02a58982dcf42d274571b8d7bb9"
+    },
+    "installed_frontier_job_template": {
+      "path": "tst/publication/frontier_control_plane/frontier_job.sh",
+      "sha256": "5a47839870c726446f836108f3968260dd7500d96b628bbce73b694da4bdbc18"
+    },
+    "installed_q043_reconciler": {
+      "path": "tst/publication/frontier_control_plane/reconcile_q043_registered_execution.py",
+      "sha256": "e2d9fe866108b81d3afba54115d4d58270e89e6d95a8574b7a399c99161b2ceb"
+    },
+    "trusted_launch_trampoline": {
+      "path": "tst/publication/frontier_control_plane/launch_trampoline.py",
+      "sha256": "af9a8698e2cd0767c00d8f572ff0b45df09ed8b22a775f630a9b1d79118fbb0b"
+    },
+    "q043_empty_queue_reservation_gate": {
+      "path": "tst/publication/frontier_control_plane/validate_and_reserve_frontier_job.py",
+      "sha256": "5e8f9b113a79bd1f4ec313b4143d505e232994864e3f85910d47c6fbc90d50a7"
+    },
+    "prepared_artifact_inventory_generator": {
+      "path": "tst/publication/frontier_control_plane/generate_prepared_pic_artifact_inventory.py",
+      "sha256": "6277274d84d30e6bbf163af26700e83b8bc9af10a7d2265bf5387c774e0857b6"
+    },
+    "prepared_artifact_inventory": {
+      "path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
+      "sha256": "34eed0911e12ba53fbb16b731447c976c5a0be5d33fa76c997cc3fb355a93617"
+    },
+    "synthetic_controller_to_admission_e2e": {
+      "path": "tst/publication/test_q043_registered_execution_raw_oracle_qualification_successor_v1.py",
+      "sha256": "bc36263c70650ba7f13ebbfe83874ab92d67f427d24d627e9e2422f9966bc9e5"
+    },
+    "shared_control_plane_tests": {
+      "path": "tst/publication/frontier_control_plane/test_control_plane.py",
+      "sha256": "11070b1b7cd3e75e4e34df7cde3064ab3b82a332a5e041df9d02ca12a5372844"
     }
   },
   "exact_matrix": {
@@ -42,7 +78,7 @@
     "maximum_batch_storage_cap_bytes": 274877906944,
     "fresh_live_ledger_and_storage_preflight_required": true
   },
-  "future_trusted_reconciliation_interface": {
+  "integrated_trusted_reconciliation_interface": {
     "producer": "reconcile_q043_registered_execution.py",
     "installed_paired_control_plane_generation_required": true,
     "run_only_after_canonical_mirrored_ledger_reconciliation": true,
@@ -52,7 +88,7 @@
     "final_receipt_digest_assumed_by_this_successor": false
   },
   "materialized_output_contract": {
-    "deterministic_manifest_sha256": "da8f169c1b69e09e5b11f74d858613f24510ea0365c1a9f4b71d775c1c175fbb",
+    "deterministic_manifest_sha256": "cff1a8a1d117d4dcfe6002711784c4da67f49e9084a8a9b723ecc7229af28564",
     "generated_member_count": 267,
     "launch_candidate_count": 132,
     "policy_candidate_count": 132,
@@ -66,19 +102,18 @@
     "empty_user_queue_proved_at_fresh_reservation_boundary",
     "final_clean_candidate_manifest_source_archive_and_executable_bound",
     "final_paired_installed_control_plane_generation_bound_and_independently_verified",
-    "installed_reconcile_q043_registered_execution_py_producer_bound",
     "exact_registered_policy_slice_promoted_by_installed_control_plane",
     "fresh_live_ledger_budget_and_storage_preflight_passed",
     "fresh_pre_manifest_pre_submit_wrapper_and_timeout_margin_attestations_bound",
     "fresh_submission_id_and_reservation_id_bound_once",
-    "trusted_stdout_wrapper_evidence_support_installed",
-    "paired_byte_identical_orion_and_canonical_project_home_receipts_required"
+    "paired_byte_identical_orion_and_canonical_project_home_receipts_required_after_live_execution",
+    "all_132_registered_cases_executed_reconciled_and_admitted"
   ],
   "post_final_digest_rule": "The default source-local preparation contains explicit PENDING_FINAL_* clean-candidate, analysis-script, and installed-control-plane placeholders. Once a final-digest binding record is supplied, every PENDING_FINAL_* value is forbidden; fresh submission, reservation, queue, ledger, timeout, and reconciliation receipt bindings remain separately required.",
   "historical_immutability": {
-    "q043_oracle_modified": false,
-    "q043_registered_admission_modified": false,
-    "control_plane_core_modified": false,
+    "q043_oracle_modified": true,
+    "q043_registered_admission_modified": true,
+    "control_plane_core_modified": true,
     "live_policy_modified": false,
     "historical_artifacts_modified": false
   },
@@ -94,9 +129,8 @@
     "publication_authorized": false
   },
   "remaining_blockers": [
-    "Integrate and independently review the trusted reconcile_q043_registered_execution.py installed-control-plane producer.",
-    "Freeze the final clean candidate and paired installed control-plane generation.",
-    "Prove the user queue empty and promote exact registered-science policy slices through the installed control plane.",
-    "Execute and reconcile all 132 cases within the declared ceilings."
+    "Independently review and install the final paired control-plane generation and freeze the final clean candidate.",
+    "Capture fresh live queue, ledger, storage, timeout, and operator-attestation evidence and promote the exact validated 132-slice policy.",
+    "Execute, reconcile, admit, and independently review all 132 registered cases within the declared ceilings."
   ]
 }

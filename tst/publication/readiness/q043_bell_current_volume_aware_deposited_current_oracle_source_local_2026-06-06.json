@@ -136,7 +136,7 @@
   ],
   "artifact_bindings": {
     "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
-    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "f0a8db7fb47798d4bdc9ec742cef09e5ae0c69ff3ccb2f25d065602b23a26bed",
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "b7a8d226b00a06d6ab658e52888ffd3ae1ba5c69370160811b7770faac6cd273",
     "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "578245ade8e0d0e94c64c3f8a5ce3ae3b36e11e13c331fa03b5c98602272ed91"
   },
   "open_dependencies": [

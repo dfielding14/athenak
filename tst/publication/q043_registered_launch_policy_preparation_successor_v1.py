@@ -10,6 +10,8 @@ calls a scheduler, consumes a final clean candidate, or grants authority.
 from __future__ import annotations
 
 import argparse
+import copy
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -19,6 +21,7 @@ import shutil
 import stat
 import sys
 from typing import Any, Mapping, Sequence
+import uuid
 
 from tst.publication import (
     q043_bell_current_volume_aware_deposited_current_oracle as oracle,
@@ -33,6 +36,7 @@ from control_plane_common import (  # type: ignore[import-not-found]
     TRUSTED_LAUNCH_EXECUTOR,
     launch_contract_sha256,
     validate_launch_contract,
+    validate_storage_policy,
 )
 
 
@@ -42,7 +46,7 @@ AUTHORIZED_ORION_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 CANONICAL_PROJECT_HOME_ROOT = Path("/autofs/nccs-svm1_proj/ast207/proj-shared/PIC")
 RUN_NAMESPACE = "runs/q043_registered_execution_raw_oracle_successor_v1"
 PROJECT_HOME_RECEIPT_NAMESPACE = (
-    "receipts/q043_registered_execution_raw_oracle_successor_v1"
+    "ledger/q043_registered_execution_receipts"
 )
 DECK_ROOT = (
     REPO_ROOT / "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle"
@@ -78,6 +82,8 @@ AUTHORIZED_TOTAL_NODE_HOUR_CAP = 10000.0
 MAXIMUM_RAW_ARTIFACT_BYTES = 64 * 1024 * 1024
 MAXIMUM_NON_RAW_CASE_BYTES = 64 * 1024 * 1024
 MAXIMUM_BATCH_STORAGE_BYTES = 256 * 1024 * 1024 * 1024
+Q043_ATHENA_WALLTIME_SECONDS = 480
+QUEUE_SNAPSHOT_FORMAT = "%i|%P|%q|%T|%j|%k"
 
 SUBMISSION_ID_TEMPLATE = "{submission_id}"
 RESERVATION_ID_TEMPLATE = "{reservation_id}"
@@ -165,7 +171,32 @@ AUTHORIZATION_BOUNDARY = {
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
 _SAFE_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,127}")
+_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?Z"
+)
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+_TIMEOUT_MARGIN_KEYS = {
+    "athena_walltime_seconds",
+    "scheduler_walltime_seconds",
+    "environment_profile_sha256",
+    "measured_utc",
+    "expires_utc",
+}
+_STORAGE_POLICY_REQUIRED_KEYS = {
+    "schema_version",
+    "frontier",
+    "science_submission_freeze",
+    "registered_science_slices",
+    "frontier_admission_smoke",
+    "olcf_side_storage",
+    "long_term_storage",
+}
+_STORAGE_POLICY_ALLOWED_KEYS = _STORAGE_POLICY_REQUIRED_KEYS | {
+    "authorization_date",
+    "authorized_by",
+    "reviewer",
+}
 
 
 class PreparationError(ValueError):
@@ -206,6 +237,166 @@ def _sha256_bytes(payload: bytes) -> str:
 
 def _sha256_file(path: Path) -> str:
     return _sha256_bytes(path.read_bytes())
+
+
+def _stable_regular_bytes(
+    path: Path,
+    *,
+    label: str,
+    require_read_only: bool = True,
+    require_executable: bool = False,
+) -> tuple[Path, bytes]:
+    path = Path(os.path.abspath(path))
+    _require(path.is_absolute(), f"{label} path is not absolute")
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise PreparationError(f"{label} is not an openable regular file") from error
+    try:
+        before = os.fstat(descriptor)
+        _require(stat.S_ISREG(before.st_mode), f"{label} is not a regular file")
+        if require_read_only:
+            _require(not before.st_mode & _WRITE_BITS, f"{label} is not read-only")
+        if require_executable:
+            _require(bool(before.st_mode & 0o111), f"{label} is not executable")
+        payload = bytearray()
+        while chunk := os.read(descriptor, 1024 * 1024):
+            payload.extend(chunk)
+        after = os.fstat(descriptor)
+        entry = os.stat(path, follow_symlinks=False)
+        stable = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_nlink",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        _require(
+            all(getattr(before, field) == getattr(after, field) for field in stable)
+            and (entry.st_dev, entry.st_ino) == (after.st_dev, after.st_ino)
+            and len(payload) == after.st_size,
+            f"{label} changed while reading",
+        )
+        return path, bytes(payload)
+    finally:
+        os.close(descriptor)
+
+
+def _utc_datetime(value: object, *, label: str) -> datetime:
+    _require(
+        isinstance(value, str) and _TIMESTAMP.fullmatch(value) is not None,
+        f"{label} must be one canonical UTC timestamp",
+    )
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as error:
+        raise PreparationError(f"{label} is invalid") from error
+    _require(parsed.tzinfo == timezone.utc, f"{label} must use UTC")
+    return parsed
+
+
+def _canonical_submission_id(value: object, *, case_id: str) -> str:
+    _require(isinstance(value, str), f"{case_id}: submission ID is malformed")
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError as error:
+        raise PreparationError(f"{case_id}: submission ID is malformed") from error
+    _require(str(parsed) == value, f"{case_id}: submission ID is not canonical")
+    return value
+
+
+def _selected_case(case_id: object) -> tuple[int, dict[str, object]]:
+    _require(isinstance(case_id, str), "one Q043 case ID is required")
+    matches = [
+        (index, dict(case))
+        for index, case in enumerate(oracle.expected_cases(), 1)
+        if case["case_id"] == case_id
+    ]
+    _require(len(matches) == 1, f"unknown Q043 case ID: {case_id}")
+    return matches[0]
+
+
+def _validate_bound_file(
+    path: object,
+    digest: object,
+    *,
+    label: str,
+    executable: bool = False,
+) -> tuple[Path, bytes]:
+    _require(
+        isinstance(path, str)
+        and isinstance(digest, str)
+        and _SHA256.fullmatch(digest) is not None,
+        f"{label} binding is malformed",
+    )
+    lexical, payload = _stable_regular_bytes(
+        Path(path),
+        label=label,
+        require_executable=executable,
+    )
+    _require(_sha256_bytes(payload) == digest, f"{label} digest drifted")
+    return lexical, payload
+
+
+def validate_final_binding_files(value: object) -> dict[str, object]:
+    """Verify final Q043 files and paired installed members before materialization."""
+    final = validate_final_bindings(value)
+    for path_key, digest_key, label, executable in (
+        ("source_archive_path", "source_archive_sha256", "source archive", False),
+        (
+            "clean_candidate_manifest_path",
+            "clean_candidate_manifest_sha256",
+            "clean-candidate manifest",
+            False,
+        ),
+        ("executable_path", "executable_sha256", "clean-candidate executable", True),
+        (
+            "environment_profile_path",
+            "environment_profile_sha256",
+            "installed environment profile",
+            False,
+        ),
+        ("job_script_path", "job_script_sha256", "installed Frontier job template", False),
+        (
+            "reconcile_q043_registered_execution_path",
+            "reconcile_q043_registered_execution_sha256",
+            "installed Q043 reconciler",
+            False,
+        ),
+    ):
+        _validate_bound_file(
+            final[path_key],
+            final[digest_key],
+            label=label,
+            executable=executable,
+        )
+    for index, (path, digest) in enumerate(
+        zip(final["analysis_script_paths"], final["analysis_script_sha256"])
+    ):
+        _validate_bound_file(path, digest, label=f"analysis script {index}")
+    orion = Path(str(final["orion_installed_control_plane_root"]))
+    project = Path(str(final["project_home_installed_control_plane_root"]))
+    for name, digest_key in (
+        ("frontier_pic_environment.sh", "environment_profile_sha256"),
+        ("frontier_job.sh", "job_script_sha256"),
+        (
+            "reconcile_q043_registered_execution.py",
+            "reconcile_q043_registered_execution_sha256",
+        ),
+    ):
+        orion_path, orion_payload = _validate_bound_file(
+            str(orion / name), final[digest_key], label=f"Orion installed {name}"
+        )
+        project_path, project_payload = _validate_bound_file(
+            str(project / name), final[digest_key], label=f"Project Home installed {name}"
+        )
+        _require(
+            orion_payload == project_payload and orion_path != project_path,
+            f"paired installed {name} differs or reuses one path",
+        )
+    return final
 
 
 def _binding(path: str, payload: bytes) -> dict[str, object]:
@@ -275,10 +466,9 @@ def validate_final_bindings(value: object) -> dict[str, object]:
     _require(
         type(analysis_paths) is list
         and type(analysis_sha256) is list
-        and 1 <= len(analysis_paths) == len(analysis_sha256) <= 16
-        and all(_is_absolute_normalized_path(path) for path in analysis_paths)
-        and all(type(digest) is str and _SHA256.fullmatch(digest) is not None for digest in analysis_sha256),
-        "final analysis-script bindings are malformed",
+        and analysis_paths == [result["reconcile_q043_registered_execution_path"]]
+        and analysis_sha256 == [result["reconcile_q043_registered_execution_sha256"]],
+        "final analysis support must bind the immutable installed Q043 reconciler",
     )
     version = str(result["installed_control_plane_version"])
     orion_controller = AUTHORIZED_ORION_ROOT / "control_plane" / version
@@ -358,7 +548,8 @@ def _checked_in_deck_manifest() -> dict[str, object]:
 
 
 def _case_root_template(case_id: str) -> str:
-    return str(AUTHORIZED_ORION_ROOT / RUN_NAMESPACE / case_id / SUBMISSION_ID_TEMPLATE)
+    _require(_SAFE_ID.fullmatch(case_id) is not None, "Q043 case ID is unsafe")
+    return str(AUTHORIZED_ORION_ROOT / RUN_NAMESPACE / SUBMISSION_ID_TEMPLATE)
 
 
 def _raw_root_template(case_id: str) -> str:
@@ -366,21 +557,35 @@ def _raw_root_template(case_id: str) -> str:
 
 
 def _artifact_root_template(case_id: str) -> str:
-    return f"{_case_root_template(case_id)}/artifacts"
+    return _case_root_template(case_id)
+
+
+def _input_deck_snapshot_template(case_id: str) -> str:
+    return str(
+        AUTHORIZED_ORION_ROOT
+        / "manifests"
+        / CAMPAIGN
+        / SUBMISSION_ID_TEMPLATE
+        / "snapshot"
+        / f"{case_id}.athinput"
+    )
 
 
 def _project_home_receipt_template(case_id: str) -> str:
+    _require(_SAFE_ID.fullmatch(case_id) is not None, "Q043 case ID is unsafe")
     return str(
         CANONICAL_PROJECT_HOME_ROOT
         / PROJECT_HOME_RECEIPT_NAMESPACE
-        / case_id
         / SUBMISSION_ID_TEMPLATE
-        / "registered_execution_receipt.json"
+        / "q043_registered_execution_receipt.json"
     )
 
 
 def _orion_receipt_template(case_id: str) -> str:
-    return f"{_artifact_root_template(case_id)}/registration/registered_execution_receipt.json"
+    return (
+        f"{_artifact_root_template(case_id)}/analysis/"
+        "q043_registered_execution_receipt.json"
+    )
 
 
 def _raw_relative_path(case: Mapping[str, object], field: str, cycle: int, rank: int) -> str:
@@ -450,6 +655,7 @@ def _launch_contract(case: Mapping[str, object]) -> dict[str, object]:
                     {"snapshot_role": "input-deck"},
                     {"literal": "-d"},
                     {"artifact_directory": "raw"},
+                    {"literal": "time/nlim=1"},
                 ],
                 "stdout_artifact": "athena_stdout.txt",
                 "stderr_artifact": "athena_stderr.txt",
@@ -479,7 +685,6 @@ def _expected_command(
     case: Mapping[str, object], final_bindings: Mapping[str, object]
 ) -> list[str]:
     ranks = int(case["mpi_ranks"])
-    artifact_root = _artifact_root_template(str(case["case_id"]))
     return [
         "srun",
         "--nodes=1",
@@ -490,9 +695,10 @@ def _expected_command(
         "--gpu-bind=closest",
         str(final_bindings["executable_path"]),
         "-i",
-        f"{artifact_root}/registration/input_deck.athinput",
+        _input_deck_snapshot_template(str(case["case_id"])),
         "-d",
         _raw_root_template(str(case["case_id"])),
+        "time/nlim=1",
     ]
 
 
@@ -700,7 +906,7 @@ def _policy_candidate(launch: Mapping[str, object]) -> dict[str, object]:
             "authorization_id": identity["authorization_id"],
             "status": "review_required_not_authorized",
             "campaign": CAMPAIGN,
-            "test_id": str(identity["case_id"]).replace("-", "_"),
+            "test_id": identity["case_id"],
             "evidence_class": EVIDENCE_CLASS,
             "physical_mode": PHYSICAL_MODE,
             "runtime_profile": RUNTIME_PROFILE,
@@ -871,6 +1077,249 @@ def validate_budget_accounting(
         "budget accounting acquired authority or assumed fresh live state",
     )
     return dict(value)
+
+
+def materialize_q043_timeout_margin(
+    *,
+    final_bindings: Mapping[str, object],
+    measured_utc: str,
+    expires_utc: str,
+) -> dict[str, object]:
+    """Build one exact fresh Q043 timeout margin without granting launch authority."""
+    final = validate_final_bindings(final_bindings)
+    measured = _utc_datetime(measured_utc, label="timeout-margin measured_utc")
+    expires = _utc_datetime(expires_utc, label="timeout-margin expires_utc")
+    _require(measured < expires, "timeout-margin validity interval is empty")
+    _require(
+        (expires - measured).total_seconds() <= 24 * 60 * 60,
+        "timeout-margin validity interval exceeds 24 hours",
+    )
+    return {
+        "athena_walltime_seconds": Q043_ATHENA_WALLTIME_SECONDS,
+        "scheduler_walltime_seconds": MAXIMUM_WALLTIME_SECONDS_PER_CASE,
+        "environment_profile_sha256": final["environment_profile_sha256"],
+        "measured_utc": measured_utc,
+        "expires_utc": expires_utc,
+    }
+
+
+def validate_q043_timeout_margin_artifact(
+    path: Path,
+    *,
+    final_bindings: Mapping[str, object],
+    now: datetime | None = None,
+) -> str:
+    """Require one retained exact Q043 timeout artifact bound to the final profile."""
+    final = validate_final_bindings(final_bindings)
+    path, payload = _stable_regular_bytes(path, label="Q043 timeout-margin artifact")
+    try:
+        value = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise PreparationError("Q043 timeout-margin artifact is not UTF-8 JSON") from error
+    _require(
+        type(value) is dict and set(value) == _TIMEOUT_MARGIN_KEYS,
+        "Q043 timeout-margin artifact schema drifted",
+    )
+    _require(
+        value["scheduler_walltime_seconds"] == MAXIMUM_WALLTIME_SECONDS_PER_CASE
+        and type(value["scheduler_walltime_seconds"]) is int
+        and value["athena_walltime_seconds"] == Q043_ATHENA_WALLTIME_SECONDS
+        and type(value["athena_walltime_seconds"]) is int
+        and value["environment_profile_sha256"]
+        == final["environment_profile_sha256"],
+        "Q043 timeout-margin walltime or environment binding drifted",
+    )
+    measured = _utc_datetime(value["measured_utc"], label="timeout-margin measured_utc")
+    expires = _utc_datetime(value["expires_utc"], label="timeout-margin expires_utc")
+    checked = datetime.now(timezone.utc) if now is None else now
+    _require(
+        measured < expires
+        and (expires - measured).total_seconds() <= 24 * 60 * 60
+        and measured <= checked < expires,
+        "Q043 timeout-margin artifact is stale, premature, or overlong",
+    )
+    return str(path)
+
+
+def _validate_empty_queue_snapshot(path: Path) -> str:
+    path, payload = _stable_regular_bytes(path, label="Q043 six-field queue snapshot")
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise PreparationError("Q043 six-field queue snapshot is not UTF-8") from error
+    _require(not payload, "Q043 pre-submit queue snapshot is not empty")
+    _require(
+        all(len(line.split("|")) == 6 for line in text.splitlines()),
+        "Q043 six-field queue snapshot is malformed",
+    )
+    return str(path)
+
+
+def _validate_pre_manifest_attestation_path(path: Path) -> str:
+    path, _ = _stable_regular_bytes(path, label="Q043 pre-manifest attestation")
+    expected_root = AUTHORIZED_ORION_ROOT / "operator_attestations"
+    _require(
+        path.name == "attestation.json"
+        and path.parent.parent == expected_root
+        and path.parent.name.endswith("-pre_manifest"),
+        "Q043 pre-manifest attestation path is outside the trusted namespace",
+    )
+    return str(path)
+
+
+def materialize_q043_pre_submit_config(
+    *,
+    case_id: str,
+    submission_id: str,
+    final_bindings: Mapping[str, object],
+    pre_manifest_attestation: Path,
+    timeout_margin_artifact: Path,
+    queue_snapshot: Path,
+    site_policy_checked_utc: str,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Build one complete Q043 config for the generic installed manifest creator."""
+    final = validate_final_binding_files(final_bindings)
+    index, case = _selected_case(case_id)
+    identifier = _canonical_submission_id(submission_id, case_id=case_id)
+    checked = _utc_datetime(site_policy_checked_utc, label="site-policy checked UTC")
+    current = datetime.now(timezone.utc) if now is None else now
+    _require(
+        0.0 <= (current - checked).total_seconds() <= 24 * 60 * 60,
+        "Q043 site-policy check is stale or in the future",
+    )
+    timeout = validate_q043_timeout_margin_artifact(
+        timeout_margin_artifact, final_bindings=final, now=current
+    )
+    queue = _validate_empty_queue_snapshot(queue_snapshot)
+    attestation = _validate_pre_manifest_attestation_path(pre_manifest_attestation)
+    deck_manifest = _checked_in_deck_manifest()
+    records = {
+        str(record["case_id"]): record for record in deck_manifest["cases"]
+    }
+    deck = _deck_binding(case, records[case_id])
+    return {
+        "pic_root": str(AUTHORIZED_ORION_ROOT),
+        "campaign": CAMPAIGN,
+        "test_id": case_id,
+        "submission_scope": "registered_science",
+        "registered_science_authorization_id": _case_identity(case, index)[
+            "authorization_id"
+        ],
+        "pre_manifest_attestation": attestation,
+        "submission_id": identifier,
+        "git_commit": final["source_commit"],
+        "evidence_class": EVIDENCE_CLASS,
+        "physical_mode": PHYSICAL_MODE,
+        "selected_qos": "normal",
+        "qos_selection_reason": "normal_required_by_registered_campaign",
+        "site_policy_checked_utc": site_policy_checked_utc,
+        "registered_short_nonproduction": False,
+        "artifact_dir": str(AUTHORIZED_ORION_ROOT / RUN_NAMESPACE / identifier),
+        "job_script_executable_env": "PIC_EXECUTABLE",
+        "job_script": final["job_script_path"],
+        "executable": final["executable_path"],
+        "input_deck": str(REPO_ROOT / str(deck["path"])),
+        "environment_profile": final["environment_profile_path"],
+        "timeout_margin_artifact": timeout,
+        "analysis_scripts": list(final["analysis_script_paths"]),
+        "queue_snapshot": queue,
+        "prior_case_closures": [],
+        "clean_candidate_manifest": final["clean_candidate_manifest_path"],
+        "launch_contract": _launch_contract(case),
+    }
+
+
+def materialize_q043_promotable_policy(
+    *,
+    baseline_policy: Mapping[str, object],
+    final_bindings: Mapping[str, object],
+) -> dict[str, object]:
+    """Build a complete 132-slice policy successor without promoting it."""
+    final = validate_final_binding_files(final_bindings)
+    _require(
+        type(baseline_policy) is dict
+        and _STORAGE_POLICY_REQUIRED_KEYS <= set(baseline_policy)
+        and set(baseline_policy) <= _STORAGE_POLICY_ALLOWED_KEYS
+        and baseline_policy.get("schema_version") == SCHEMA_VERSION,
+        "Q043 baseline storage policy root schema drifted",
+    )
+    _require(
+        baseline_policy.get("registered_science_slices") == [],
+        "Q043 promotable policy requires an empty baseline registered allowlist",
+    )
+    _require(
+        baseline_policy.get("frontier_admission_smoke") == {"status": "closed_after_pass"},
+        "Q043 promotable policy requires closed Frontier admission smoke",
+    )
+    storage = baseline_policy.get("olcf_side_storage")
+    _require(
+        type(storage) is dict
+        and storage.get("installed_control_plane_version")
+        == final["installed_control_plane_version"]
+        and storage.get("staged_control_plane_candidate_version")
+        == final["installed_control_plane_version"]
+        and storage.get("installed_control_plane_lifecycle")
+        == "paired_installed_reviewed_generation",
+        "Q043 baseline policy does not bind the selected paired installed generation",
+    )
+    try:
+        validate_storage_policy(
+            copy.deepcopy(dict(baseline_policy)),
+            control_plane_version=str(final["installed_control_plane_version"]),
+            authorized_pic_root=AUTHORIZED_ORION_ROOT,
+            authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
+        )
+    except ValueError as error:
+        raise PreparationError(
+            "Q043 baseline storage policy is not valid for promotion"
+        ) from error
+    manifest, files = build_materialization(final)
+    slices = []
+    for record in manifest["case_records"]:
+        candidate = json.loads(files[record["policy_candidate"]["path"]])
+        policy_slice = dict(candidate["policy_slice_candidate"])
+        policy_slice["status"] = "authorized"
+        slices.append(policy_slice)
+    _require(
+        len(slices) == EXPECTED_CASE_COUNT
+        and len({item["authorization_id"] for item in slices}) == EXPECTED_CASE_COUNT
+        and all(
+            item["clean_candidate_manifest_sha256"]
+            == final["clean_candidate_manifest_sha256"]
+            for item in slices
+        ),
+        "Q043 promotable policy slice matrix drifted",
+    )
+    successor = copy.deepcopy(baseline_policy)
+    successor["science_submission_freeze"] = {
+        "status": "authorized",
+        "manifest_path": final["clean_candidate_manifest_path"],
+        "manifest_sha256": final["clean_candidate_manifest_sha256"],
+        "build_profile_control_plane_version": final["installed_control_plane_version"],
+    }
+    successor["registered_science_slices"] = slices
+    _require(
+        not _contains_final_placeholder(successor)
+        and all(
+            not value
+            for key, value in AUTHORIZATION_BOUNDARY.items()
+            if key.endswith("_authorized")
+        ),
+        "Q043 promotable policy retained placeholders or changed source authority",
+    )
+    try:
+        validate_storage_policy(
+            copy.deepcopy(successor),
+            control_plane_version=str(final["installed_control_plane_version"]),
+            authorized_pic_root=AUTHORIZED_ORION_ROOT,
+            authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
+        )
+    except ValueError as error:
+        raise PreparationError(
+            "Q043 132-slice successor policy is not valid for promotion"
+        ) from error
+    return successor
 
 
 def build_materialization(

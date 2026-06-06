@@ -277,7 +277,6 @@ def _decomposition(
 
 
 def expected_cases() -> tuple[dict[str, object], ...]:
-    """Return the exact dimension-valid source-local oracle matrix."""
     cases: list[dict[str, object]] = []
     for dimension in DIMENSIONS:
         geometry = _GEOMETRY[dimension]
@@ -993,14 +992,13 @@ def _validate_runtime_dataset(
     )
 
 
-def _raw_binding(path: Path, *, field: str, shard_index: int) -> dict[str, object]:
-    resolved = path.resolve(strict=True)
-    _require(resolved.is_file(), f"raw {field} shard is not a regular file")
-    payload = resolved.read_bytes()
+def _raw_binding_bytes(
+    source: str, payload: bytes, *, field: str, shard_index: int
+) -> dict[str, object]:
     return {
         "field": field,
         "shard_index": shard_index,
-        "path": str(resolved),
+        "path": source,
         "size": len(payload),
         "sha256": _sha256_bytes(payload),
     }
@@ -1023,24 +1021,53 @@ def _representation_tolerance(variable_size: int) -> float:
 def analyze_raw_case(
     case_id: str, field_paths: Mapping[str, Sequence[Path]]
 ) -> dict[str, object]:
-    """Analyze one post-step raw-output case and bind all raw provenance."""
+    """Capture each path once, then analyze only the captured raw bytes."""
+    snapshots: dict[str, list[tuple[str, bytes]]] = {}
+    for field, paths in field_paths.items():
+        snapshots[field] = []
+        for path in paths:
+            resolved = path.resolve(strict=True)
+            _require(resolved.is_file(), f"raw {field} shard is not a regular file")
+            snapshots[field].append((str(resolved), resolved.read_bytes()))
+    return analyze_raw_case_bytes(case_id, snapshots)
+
+
+def analyze_raw_case_bytes(
+    case_id: str,
+    field_snapshots: Mapping[str, Sequence[tuple[str, bytes]]],
+) -> dict[str, object]:
+    """Analyze exact caller-retained raw bytes and bind their source labels."""
     cases = _case_map()
     _require(case_id in cases, "unknown deposited-current oracle case")
     case = cases[case_id]
-    _require(set(field_paths) == set(FIELDS), f"{case_id}: raw field set drifted")
+    _require(set(field_snapshots) == set(FIELDS), f"{case_id}: raw field set drifted")
     shard_count = int(case["mpi_ranks"])
     merged: dict[str, binary.AthenaBinaryDataset] = {}
     grids: dict[str, binary.CompositeGrid] = {}
     provenance = []
     for field in FIELDS:
-        paths = list(field_paths[field])
-        _require(len(paths) == shard_count, f"{case_id}: {field} shard count drifted")
-        _require(len({str(path) for path in paths}) == len(paths), f"{case_id}: duplicate shard path")
+        snapshots = list(field_snapshots[field])
+        _require(
+            len(snapshots) == shard_count,
+            f"{case_id}: {field} shard count drifted",
+        )
+        _require(
+            len({source for source, _ in snapshots}) == len(snapshots),
+            f"{case_id}: duplicate shard path",
+        )
         datasets = []
-        for shard_index, path in enumerate(paths):
-            provenance.append(_raw_binding(path, field=field, shard_index=shard_index))
+        for shard_index, (source, payload) in enumerate(snapshots):
+            _require(
+                type(source) is str and bool(source) and type(payload) is bytes,
+                f"{case_id}: malformed retained raw {field} snapshot",
+            )
+            provenance.append(
+                _raw_binding_bytes(
+                    source, payload, field=field, shard_index=shard_index
+                )
+            )
             try:
-                dataset = binary.read_athenak_binary(path)
+                dataset = binary.parse_athenak_binary_bytes(payload, source=source)
             except binary.AnalysisError as error:
                 raise ContractError(f"{case_id}: malformed raw {field} output") from error
             _validate_runtime_dataset(dataset, case=case, field=field)

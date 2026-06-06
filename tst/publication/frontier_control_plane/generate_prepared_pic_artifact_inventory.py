@@ -17,6 +17,9 @@ else:
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
 DEFAULT_OUTPUT = SCRIPT_DIR / "prepared_pic_artifact_inventory.json"
+Q043_DECK_ROOT = (
+    REPO_ROOT / "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -34,6 +37,7 @@ def prepared_artifact_inventory() -> dict[str, object]:
     paper_decks = sorted(
         [
             *(REPO_ROOT / "inputs/tests").glob("pic*.athinput"),
+            *Q043_DECK_ROOT.glob("*.athinput"),
             *(
                 REPO_ROOT / path
                 for path in PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS

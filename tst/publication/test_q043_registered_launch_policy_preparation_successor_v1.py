@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tst.publication import (
     q043_registered_launch_policy_preparation_successor_v1 as preparation,
@@ -50,14 +52,30 @@ def _final_bindings() -> dict[str, object]:
         "job_script_path": str(controller / "frontier_job.sh"),
         "job_script_sha256": "2" * 64,
         "analysis_script_paths": [
-            str(candidate / "q043_registered_execution_raw_oracle_qualification_successor_v1.py"),
-            str(candidate / "q043_bell_current_volume_aware_deposited_current_oracle.py"),
+            str(controller / "reconcile_q043_registered_execution.py")
         ],
-        "analysis_script_sha256": ["4" * 64, "5" * 64],
+        "analysis_script_sha256": ["3" * 64],
         "reconcile_q043_registered_execution_path": str(
             controller / "reconcile_q043_registered_execution.py"
         ),
         "reconcile_q043_registered_execution_sha256": "3" * 64,
+    }
+
+
+def _baseline_policy() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "frontier": {"preserved": True},
+        "science_submission_freeze": {"status": "pending_clean_candidate_freeze"},
+        "registered_science_slices": [],
+        "frontier_admission_smoke": {"status": "closed_after_pass"},
+        "olcf_side_storage": {
+            "installed_control_plane_version": "a" * 64,
+            "staged_control_plane_candidate_version": "a" * 64,
+            "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
+        },
+        "long_term_storage": {"preserved": True},
+        "reviewer": "preserved reviewer",
     }
 
 
@@ -171,7 +189,10 @@ class Q043RegisteredLaunchPolicyPreparationTests(unittest.TestCase):
                 str(preparation.CANONICAL_PROJECT_HOME_ROOT),
                 reconcile["canonical_project_home_receipt_path_template"],
             )
-            self.assertIn(case_id, reconcile["orion_receipt_path_template"])
+            self.assertIn(
+                f"/{preparation.CAMPAIGN}/{{submission_id}}/analysis/",
+                reconcile["orion_receipt_path_template"],
+            )
 
     def test_budget_inputs_are_exact_and_fail_closed(self) -> None:
         budget = _json(self.files["batch_budget_accounting_input.json"])
@@ -310,6 +331,144 @@ class Q043RegisteredLaunchPolicyPreparationTests(unittest.TestCase):
         self.assertFalse(
             fragment["execution_boundary"]["live_policy_mutation_authorized"]
         )
+
+    def test_complete_config_preserves_exact_case_id_and_installed_roles(self) -> None:
+        case_id = "q043-current-oracle-d2-coarse-ppc1-split_x1-cvr100"
+        final = _final_bindings()
+        now = datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+        with (
+            patch.object(
+                preparation, "validate_final_binding_files", return_value=final
+            ),
+            patch.object(
+                preparation,
+                "validate_q043_timeout_margin_artifact",
+                return_value="/trusted/timeout.json",
+            ),
+            patch.object(
+                preparation,
+                "_validate_empty_queue_snapshot",
+                return_value="/trusted/empty-queue.txt",
+            ),
+            patch.object(
+                preparation,
+                "_validate_pre_manifest_attestation_path",
+                return_value="/trusted/attestation.json",
+            ),
+        ):
+            config = preparation.materialize_q043_pre_submit_config(
+                case_id=case_id,
+                submission_id="804dca3d-f89f-4357-9407-e59804961ad7",
+                final_bindings=final,
+                pre_manifest_attestation=Path("/trusted/attestation.json"),
+                timeout_margin_artifact=Path("/trusted/timeout.json"),
+                queue_snapshot=Path("/trusted/empty-queue.txt"),
+                site_policy_checked_utc="2026-06-06T12:00:00Z",
+                now=now,
+            )
+        self.assertEqual(config["test_id"], case_id)
+        self.assertNotIn(case_id.replace("-", "_"), json.dumps(config))
+        self.assertEqual(config["job_script"], final["job_script_path"])
+        self.assertTrue(str(config["job_script"]).endswith("/frontier_job.sh"))
+        self.assertEqual(
+            config["analysis_scripts"],
+            [final["reconcile_q043_registered_execution_path"]],
+        )
+        self.assertEqual(
+            config["artifact_dir"],
+            str(
+                preparation.AUTHORIZED_ORION_ROOT
+                / preparation.RUN_NAMESPACE
+                / config["submission_id"]
+            ),
+        )
+        self.assertEqual(config["selected_qos"], "normal")
+        self.assertIn(
+            {"literal": "time/nlim=1"},
+            config["launch_contract"]["actions"][0]["arguments"],
+        )
+
+    def test_complete_132_slice_policy_is_validated_and_preserves_baseline(self) -> None:
+        final = _final_bindings()
+        baseline = _baseline_policy()
+        observed: list[dict[str, object]] = []
+
+        def validate_policy(
+            policy: dict[str, object], **_: object
+        ) -> dict[str, object]:
+            observed.append(copy.deepcopy(policy))
+            return policy
+
+        with (
+            patch.object(
+                preparation, "validate_final_binding_files", return_value=final
+            ),
+            patch.object(
+                preparation, "validate_storage_policy", side_effect=validate_policy
+            ),
+        ):
+            policy = preparation.materialize_q043_promotable_policy(
+                baseline_policy=baseline,
+                final_bindings=final,
+            )
+        self.assertEqual(len(observed), 2)
+        self.assertEqual(observed[0], baseline)
+        self.assertEqual(observed[1], policy)
+        self.assertEqual(len(policy["registered_science_slices"]), 132)
+        expected_ids = [case["case_id"] for case in preparation.oracle.expected_cases()]
+        self.assertEqual(
+            [item["test_id"] for item in policy["registered_science_slices"]],
+            expected_ids,
+        )
+        self.assertTrue(
+            all(
+                item["status"] == "authorized"
+                and item["job_script_sha256"] == final["job_script_sha256"]
+                and item["analysis_script_sha256"]
+                == final["analysis_script_sha256"]
+                for item in policy["registered_science_slices"]
+            )
+        )
+        self.assertEqual(policy["frontier"], baseline["frontier"])
+        self.assertEqual(policy["long_term_storage"], baseline["long_term_storage"])
+        self.assertEqual(baseline["registered_science_slices"], [])
+
+    def test_timeout_and_empty_queue_materializers_fail_closed(self) -> None:
+        final = _final_bindings()
+        now = datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+        timeout = preparation.materialize_q043_timeout_margin(
+            final_bindings=final,
+            measured_utc="2026-06-06T11:59:00Z",
+            expires_utc="2026-06-06T12:59:00Z",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            timeout_path = root / "timeout.json"
+            timeout_path.write_bytes(preparation._json_bytes(timeout))
+            timeout_path.chmod(0o444)
+            self.assertEqual(
+                preparation.validate_q043_timeout_margin_artifact(
+                    timeout_path, final_bindings=final, now=now
+                ),
+                str(timeout_path),
+            )
+            with self.assertRaisesRegex(preparation.PreparationError, "stale"):
+                preparation.validate_q043_timeout_margin_artifact(
+                    timeout_path,
+                    final_bindings=final,
+                    now=now + timedelta(hours=2),
+                )
+            queue = root / "queue.txt"
+            queue.write_bytes(b"")
+            queue.chmod(0o444)
+            self.assertEqual(preparation._validate_empty_queue_snapshot(queue), str(queue))
+            queue.chmod(0o644)
+            queue.write_bytes(
+                b"98765|batch|normal|RUNNING|unrelated-same-user-job|not-a-pic-tag\n"
+            )
+            queue.chmod(0o444)
+            with self.assertRaisesRegex(preparation.PreparationError, "not empty"):
+                preparation._validate_empty_queue_snapshot(queue)
 
     def test_materialized_bundle_is_read_only_and_non_authorizing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -136,6 +136,41 @@ class LedgerTests(unittest.TestCase):
             event.update(self._operator_attestation_quartet(authorization_id))
         return event
 
+    def _trampoline_completion_binding(self) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "record_type": "trusted_trampoline_completion_ledger_binding",
+            "authority": {
+                "launch_authorized": False,
+                "scientific_claim_authorized": False,
+                "publication_authorized": False,
+            },
+            "receipt_sha256": "1" * 64,
+            "receipt_byte_count": 1024,
+            "paired_receipts": {
+                "orion": {
+                    "path": str(self.root / "orion/ledger/completion/submission-1.json"),
+                    "parent_identity": {"device": 1, "inode": 2},
+                    "filesystem_identity": {"device": 1, "inode": 3},
+                },
+                "project_home": {
+                    "path": str(
+                        self.root / "project_home/ledger/completion/submission-1.json"
+                    ),
+                    "parent_identity": {"device": 4, "inode": 5},
+                    "filesystem_identity": {"device": 4, "inode": 6},
+                },
+            },
+            "artifact_root_identity": {"device": 7, "inode": 8},
+            "artifact_inventory": {
+                "sha256": "2" * 64,
+                "byte_count": 512,
+                "filesystem_identity": {"device": 7, "inode": 9},
+            },
+            "artifact_records_sha256": "3" * 64,
+            "mandatory_stdout_stderr_sha256": "4" * 64,
+        }
+
     def _operator_attestation_quartet(
         self, authorization_id: str = "test-authorization"
     ) -> dict[str, str]:
@@ -398,6 +433,65 @@ class LedgerTests(unittest.TestCase):
             rows[-1]["registered_science_authorization_id"], "f1-clean-gyro-v1"
         )
         self.assertEqual(rows[-1]["clean_candidate_manifest_sha256"], "a" * 64)
+
+    def test_registered_reconciliation_preserves_trampoline_completion_binding(
+        self,
+    ) -> None:
+        reservation = self.append(self._reservation_event())
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {"event_type": "job_id_attached", "job_id": "1234", "state": "submitted"}
+        )
+        attachment = self.append(attachment)
+        completion_binding = self._trampoline_completion_binding()
+        completion = transition_payload(attachment)
+        completion.update(
+            {
+                "event_type": "trampoline_completion",
+                "trampoline_completion": completion_binding,
+            }
+        )
+        completion = self.append(completion)
+        reconciliation = transition_payload(completion)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "COMPLETED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 60,
+                "consumed_node_hours": 1.0 / 60.0,
+                "cumulative_consumed_node_hours": 1.0 / 60.0,
+            }
+        )
+        reconciled = self.append(reconciliation)
+        self.assertEqual(reconciled["trampoline_completion"], completion_binding)
+
+    def test_registered_reconciliation_allows_legacy_attachment_without_completion(
+        self,
+    ) -> None:
+        reservation = self.append(self._reservation_event())
+        attachment = transition_payload(reservation)
+        attachment.update(
+            {"event_type": "job_id_attached", "job_id": "1234", "state": "submitted"}
+        )
+        attachment = self.append(attachment)
+        reconciliation = transition_payload(attachment)
+        reconciliation.update(
+            {
+                "event_type": "reconciliation",
+                "state": "COMPLETED",
+                "reconciled": True,
+                "scheduler_reported_allocated_nodes": 1,
+                "billed_nodes": 1,
+                "elapsed_seconds": 60,
+                "consumed_node_hours": 1.0 / 60.0,
+                "cumulative_consumed_node_hours": 1.0 / 60.0,
+            }
+        )
+        reconciled = self.append(reconciliation)
+        self.assertNotIn("trampoline_completion", reconciled)
 
     def test_manual_direct_srun_reconciliation_counts_toward_consumed_budget(
         self,
@@ -1690,6 +1784,15 @@ class LedgerTests(unittest.TestCase):
                     fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             finally:
                 os.close(descriptor)
+
+    def test_ledger_lock_posix_fallback_rejects_lock_path_replacement(self) -> None:
+        anchor = stable_serialization_anchor(self.ledger.parent.parent)
+        lock_path = anchor / ".pic-ledger-posix.lock"
+        with patch("ledger.fcntl.flock", side_effect=OSError(524, "unsupported")):
+            with self.assertRaisesRegex(ValueError, "POSIX ledger lock path changed"):
+                with ledger_lock(self.ledger):
+                    lock_path.unlink()
+                    lock_path.write_text("replacement\n", encoding="utf-8")
 
     def test_mirror_parent_swap_fails_closed_while_held(self) -> None:
         mirror_parent = self.mirror.parent

@@ -30,11 +30,11 @@
     },
     {
       "path": "tst/publication/analyze_q011_section54_campaign.py",
-      "sha256": "ff4276e13cc676d24483c8166cff1fbc3374fe8a6b1ddc57eb71e5b1dae6e099"
+      "sha256": "524f7d835c978176623016e225138b3754b8ec8967d43b688d71851078dfa87e"
     },
     {
       "path": "tst/publication/analyze_q011_section54_numerical_qualification.py",
-      "sha256": "2c857a402db4517465962426fb25b767cad44f94c50e46c21b975db242fc36e5"
+      "sha256": "ccbf3474da5737f68395b606510bdbe43d96570fa28d623594f8b9ee605890e0"
     },
     {
       "path": "tst/publication/analyze_q011_section54_outputs.py",
@@ -53,8 +53,16 @@
       "sha256": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6"
     },
     {
+      "path": "tst/publication/analyze_q023_paper_bell_linear_joverc.py",
+      "sha256": "1162ea7090ff508f469370aa4295e548f9dd9e3d94cc1f931d9e5a8bb143a2ea"
+    },
+    {
       "path": "tst/publication/analyze_q023_paper_bell_linear_vl2_tsc.py",
       "sha256": "241b791959cf5a6d8d4a4e9e2c982049846fba4e8970b2ea39ba578e84a2bcb0"
+    },
+    {
+      "path": "tst/publication/analyze_q023_prod_bell_nonlinear_foundation.py",
+      "sha256": "f237e63540cf3f3f26e8fd94f887afd8f0d534561f17e13ede0140bbcec43cda"
     },
     {
       "path": "tst/publication/analyze_q029_hall_bell_linear.py",
@@ -79,6 +87,10 @@
     {
       "path": "tst/publication/analyze_q033_crpai_transport_runtime_local.py",
       "sha256": "0e027541ff3e6764ddbbb86b3750ad66ee3a6a0339d0e9cb74c6eeb2616348d7"
+    },
+    {
+      "path": "tst/publication/analyze_q043_bell_current_volume_aware.py",
+      "sha256": "8a381d4f6075bc3a1b3987a802018a010ed8c34c22af2ec9e5b92f1c36a79d7e"
     }
   ],
   "paper_decks": [
@@ -459,6 +471,10 @@
       "sha256": "e30e44d1566e4acaf1201c46db8cf37537101c79c2d325a48dbe4ae9288556ad"
     },
     {
+      "path": "inputs/tests/pic_q023_prod_bell_nonlinear_foundation_vl2_tsc.athinput",
+      "sha256": "8715918dd0aef26aa14b44f5ee8a294434f0ea95b149ebfc12b0d143d50d80dc"
+    },
+    {
       "path": "inputs/tests/pic_q029_extended_hall_normalization_candidate.athinput",
       "sha256": "dc159e5f9a80aec8bb94723b69f5de9edaafd624889ac7ea9a88518b46e6bb80"
     },
@@ -491,6 +507,18 @@
       "sha256": "ce60c5dc8c98499f6abb7913bbed6ce12ae5d95807aa2108bf2e09bfe6ffc4df"
     },
     {
+      "path": "inputs/tests/pic_q043_bell_current_volume_aware_1d_candidate_vl2_tsc.athinput",
+      "sha256": "b4ed5ad811c2db81d2c424b055c3b4d7421360f1db1e9d343f593ecc65a7725f"
+    },
+    {
+      "path": "inputs/tests/pic_q043_bell_current_volume_aware_2d_candidate_vl2_tsc.athinput",
+      "sha256": "a6a053eb4d6f889e480f9c115d9591b950922ba301bd292d7fe6f10e6d17023d"
+    },
+    {
+      "path": "inputs/tests/pic_q043_bell_current_volume_aware_3d_candidate_vl2_tsc.athinput",
+      "sha256": "71b080a8a8112108b37856811bfb00e76633dd8da2b95d2b9010e66e472cc2c3"
+    },
+    {
       "path": "inputs/tests/pic_refinement_boundary_amr_proxy.athinput",
       "sha256": "05235701f265acecbec59bb2e8738dd000dbefb405edf1b62d0c9ad80e768179"
     },
@@ -521,6 +549,534 @@
     {
       "path": "inputs/tests/pic_weibel_growth_publication.athinput",
       "sha256": "8a5c959cd2d6ef037e449bb6078dd11ce0323064fb8f746d204b174c68a45155"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc1-single-cvr100.athinput",
+      "sha256": "949cf7962afbaebe500bc6c02211a8fdce0638e7e7a71973ed7cbcd34d584dc9"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc1-single-cvr1000.athinput",
+      "sha256": "7b480b5d812d55e7ccff6153c05ed5025198c31f9e3d548d532a4e6a8145f673"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc1-single-cvr10000.athinput",
+      "sha256": "dff9809d5718e3e00a2ea80453d793a73dee9072f722ab9fec1bda8271ebce65"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc1-split_x1-cvr100.athinput",
+      "sha256": "c207f422e877daca265b14ce7aa495edc6b4260e9edf3180c1b24dd6e44a48b6"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc1-split_x1-cvr1000.athinput",
+      "sha256": "c46d4ac22a9b87e29c1c2d4be616307f354238e99457bc25c52c17da6118e680"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc1-split_x1-cvr10000.athinput",
+      "sha256": "061f7375a1cb04404e3a2e9dea7cde0a6e488531e095614c3996d70d611bb60a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc4-single-cvr100.athinput",
+      "sha256": "4cd46a78d403ff78019b8c65a86eeb7265bf50b07d72d682d60d8525c81d0f56"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc4-single-cvr1000.athinput",
+      "sha256": "3a9b7ad363570c94908cd35c7c8df8e609edf8cd24ad17e3b81827d97bad2bad"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc4-single-cvr10000.athinput",
+      "sha256": "28c3323262526d87cfab78d4fed4b554729dce3f8744b482b8422c584ba8bd09"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc4-split_x1-cvr100.athinput",
+      "sha256": "53a8e8777fd391a16a6e598241d5f70f5dcbecf716a4a3d707fe571d00c63ad5"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc4-split_x1-cvr1000.athinput",
+      "sha256": "d5b2f8faf2629cbd7dbaa4a24fe82822bf04e5f4d193f705a0c66ab079457e7a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-coarse-ppc4-split_x1-cvr10000.athinput",
+      "sha256": "14d38a7eabd085ffdbc2bb8fb5731c947431eac2e26c561f479a4827a2c31e9a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc1-single-cvr100.athinput",
+      "sha256": "629dbe80e10dba2118771b5e1518f3e11a5f2f7aaa4b3ab92172d9be5fcdee8c"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc1-single-cvr1000.athinput",
+      "sha256": "dded1f238fcca1535cd31c987c804119fae4f8d5708fa2e98738624c6de7170f"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc1-single-cvr10000.athinput",
+      "sha256": "7b5faebee24a9d22a7b771d63d3236d81fa7ab6345dca8f58e97d85cddfb0a94"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc1-split_x1-cvr100.athinput",
+      "sha256": "1fc4e7faeeba226baa9f00ccfb223c4e71a6c6f9c50da01b308db084b5f8f18d"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc1-split_x1-cvr1000.athinput",
+      "sha256": "cb8df03d46127946ec7d3aa00850d024ca591e3f8c6a70455e5bba1f0157454a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc1-split_x1-cvr10000.athinput",
+      "sha256": "8a3966f6eda1fda41bcf0443adbe03632d75b3800788a62709fc45a45eddd345"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc4-single-cvr100.athinput",
+      "sha256": "b0d062bbe5fa88cd1cb74a263efbe2f01742f1830d7f65e382f7c130e6468d95"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc4-single-cvr1000.athinput",
+      "sha256": "1015157150b243e0060e3e6ac70848c494a20345d74f1f7bd5156ee10ecad195"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc4-single-cvr10000.athinput",
+      "sha256": "afa417ea462906a67f44a5fdc78b4af698757042683b47789d1ab3f169fd8249"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc4-split_x1-cvr100.athinput",
+      "sha256": "8d2231b9385a99cb3b417ea2f25c484082f33dc43f22562c6953e77096235b9d"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc4-split_x1-cvr1000.athinput",
+      "sha256": "632e914760cfff848fe9ea148ad37328a409a5d01abc109536847976c83e68e4"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d1-fine-ppc4-split_x1-cvr10000.athinput",
+      "sha256": "bed44607f7eb909e698db61809d9360b5b6ab75a7f159a48731e14e0ae6980fd"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-single-cvr100.athinput",
+      "sha256": "bc6e257b655980892bab63fe7f826b0645fdbf317d9689c0ea7baab329fd0fcc"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-single-cvr1000.athinput",
+      "sha256": "2569fa3793a042e1761bf3b92135f5cf016144acfd3b926fe8a5d9f75d10431e"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-single-cvr10000.athinput",
+      "sha256": "5579b36a92f937d4858e4c3380b8b7c480c608c969006a4313780dd3e5d4ee91"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x1-cvr100.athinput",
+      "sha256": "35456690411234c89c68990e5627cf9d8bb5b5d20e935a3b17960989fd083028"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x1-cvr1000.athinput",
+      "sha256": "ea8edcf0432079ab28ac9cadcfdfa7bd7a75c0f309599da5e2e756ea030b02e9"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x1-cvr10000.athinput",
+      "sha256": "cf3531e8c0c3b9ef5095dd185a78a834a2f1cf5a143aee6c7bfa137110d5921b"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x1x2-cvr100.athinput",
+      "sha256": "c8983536e4249adb82ed9568d080e8a40337eba581e643e079af2e5885a755ff"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x1x2-cvr1000.athinput",
+      "sha256": "dbe4b511548b8b3e550db28587b261a2f8191d84bc7af3b63f2875bfe6c8d2f3"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x1x2-cvr10000.athinput",
+      "sha256": "d76c136dd4bbac4468036d559838d8348f3bbdb735ce4b753e550e51ec57a927"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x2-cvr100.athinput",
+      "sha256": "ed006ea30f243fcc54098da5cdabb69aa5cc0692d13c41343d5bdf34f6676151"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x2-cvr1000.athinput",
+      "sha256": "ed4ddd5071121102f40c149352f532a0cb90ee717c019391da8b2ab8dad1a7ab"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc1-split_x2-cvr10000.athinput",
+      "sha256": "a6df5e168a620559f57ef6a43776c5afdb7ed0f91921724b2592f8217830310e"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-single-cvr100.athinput",
+      "sha256": "8b31d778c179abec0a5204615b43f23682ede5206c2dbe4ec789e2099241b905"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-single-cvr1000.athinput",
+      "sha256": "708e3d8aa002b3e15c8c7ed964ec5c10df83a605f630273c0d950f3d2b0804de"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-single-cvr10000.athinput",
+      "sha256": "aaf6931c84eb9afd75bb6aedb95a80137d4130d5b55bd7fac7446ee8fb98f636"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x1-cvr100.athinput",
+      "sha256": "3dce67be34463a487a4d9b57e5491f541b70531a240ccce7dfb6f3ac5b357d97"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x1-cvr1000.athinput",
+      "sha256": "07949b6ae586099df64e6d3008e3abe894e50c7b77bcb857ec75f4764c449569"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x1-cvr10000.athinput",
+      "sha256": "720d6bca80bcb73ed6fd70fc5f6a173b66ab84d77d9427e35699766c8a7d03b9"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x1x2-cvr100.athinput",
+      "sha256": "9471916932386a8bda29d53c8b29b9b419c1e17fe27b5a0500e545659dd2838f"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x1x2-cvr1000.athinput",
+      "sha256": "6c3bf0d5869750578fb31ad860de7626e76a81d1d5f0e1670bf576a497d91a88"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x1x2-cvr10000.athinput",
+      "sha256": "37dc9d9fb55a6ce0c51d129fae15c8e4103a97147640bced8ce5168fa9d46b92"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x2-cvr100.athinput",
+      "sha256": "43fd5d018135b56d0f45e9410d511d5b830d652747482ffbb8277a066af8f1d5"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x2-cvr1000.athinput",
+      "sha256": "5277c3e3e62158d5a5d65a8f8df7c5531b9bce63551ab6178dfcd60382132c23"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-coarse-ppc4-split_x2-cvr10000.athinput",
+      "sha256": "4726a7f19c6aa9b9d2ee1ce306f80126a14d5a1f1517582f53f8f3712b6eee24"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-single-cvr100.athinput",
+      "sha256": "1a34cf7a2595f2bf70e71f1d3c1b771392b7b5bda0fd407c8b5e80fdcbdf688a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-single-cvr1000.athinput",
+      "sha256": "c0d7532b57582337638200f3a9b81847863b91e6a87c2ab5a433147a88072c62"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-single-cvr10000.athinput",
+      "sha256": "c13d88ab24b9c5e57a7d373c76a5a1e8a10d2289112d8b5785b03e971b35c374"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x1-cvr100.athinput",
+      "sha256": "22cf6b96edeb6886ca3fc929e564fc5e73d3324792cb9d7ed3c6f2aa6ed336f8"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x1-cvr1000.athinput",
+      "sha256": "cbcfe28f914d72db9c114c1e7607fbadcc717e3e39a5f374ecc9e87d53a993c5"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x1-cvr10000.athinput",
+      "sha256": "a588b8d908654470ccbfdf09009a2216c670694e00097f9c5350560b7eb8fac6"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x1x2-cvr100.athinput",
+      "sha256": "02c535e563b83e17bfd63c21d5e6e6118b460d1e2e56aadfe954c71d24670c99"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x1x2-cvr1000.athinput",
+      "sha256": "5fa4ae4e881b2c5dd89edda1d8e7063e9b0b07a36fbe18efb323056563c91d91"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x1x2-cvr10000.athinput",
+      "sha256": "17147018b8e3e5c0aebae47cbb26ea00482b9048d4566179edabe0812adde77e"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x2-cvr100.athinput",
+      "sha256": "5491a759f834bd67e6d91030049ebd21041b56565bf4a77eb36008a28d20532b"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x2-cvr1000.athinput",
+      "sha256": "d97731aa958de18509781f6602bd19bd79360ea3eb98cfde4b9e6a4c2aea0192"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc1-split_x2-cvr10000.athinput",
+      "sha256": "8b8dc70fdffca51c7ba9475cf03174b8af526117fdb0d6e61302700e257cb272"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-single-cvr100.athinput",
+      "sha256": "a31aa6cdc5344e4cf147f32e574135c04c20ccefa4a47aea9f31fcb88841eb03"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-single-cvr1000.athinput",
+      "sha256": "c84cb984a8016f2e3b62998b0d8f6430076b1a9c715e1281cb38072fb8ab93c5"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-single-cvr10000.athinput",
+      "sha256": "17d828c0208d65a22473f8b2e93fd43f49f059b50603ab9aa0ea89745ce6f58f"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x1-cvr100.athinput",
+      "sha256": "4a6a5e0a20097b0337aed4d740b0f5c79bfc2a905bc559bc986d1427781d7bcf"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x1-cvr1000.athinput",
+      "sha256": "d1d23c6281e6d52048037e44a95eb185ab195fcac44c14b4f2b6b7e77785e2b4"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x1-cvr10000.athinput",
+      "sha256": "93dfddef7ed7128475b83ca9a6ad45c1a075aed60dda8aa13848846c76999db8"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x1x2-cvr100.athinput",
+      "sha256": "602c6e2a001757e87fd66e28c308af75445df13113aea411f74d816e4f1fc532"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x1x2-cvr1000.athinput",
+      "sha256": "6c5b27799d1819290f64317dc78659465a2e8d702374deef0949db15b4b46eca"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x1x2-cvr10000.athinput",
+      "sha256": "0426f2c412b2f67e475f54142ea87e754ee36b838f504282d33d94af77648c9f"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x2-cvr100.athinput",
+      "sha256": "3677dbec8dd025931b9111573afff52293474da95237c97de7a22ff1c20d2eb5"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x2-cvr1000.athinput",
+      "sha256": "8561b30c3b214a5836ec7b96f2134099707fe0ee8df8ce008a1a7ce5bb2bc43f"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d2-fine-ppc4-split_x2-cvr10000.athinput",
+      "sha256": "7489ee4943d8658f8ce75b317e47d4e96444bf31bd3053174300f374ff4c4c27"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-single-cvr100.athinput",
+      "sha256": "f00bc2dcdb28eb57f01865afd616d75f6465d85aa9f2c63beeafe2b5aa1039ee"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-single-cvr1000.athinput",
+      "sha256": "59dfe4fb1df8c2997b0118f94a608c1aca549f0841a53aed9836115cd89c517a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-single-cvr10000.athinput",
+      "sha256": "8675b172720e1cf2296027b025377c9dacde122730a48cb3f8ce7d4275976f95"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x1-cvr100.athinput",
+      "sha256": "369372f237ec20bf4e261f223a03eeca7d5d34980f90091d84e9f4f3a26099aa"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x1-cvr1000.athinput",
+      "sha256": "40ecfbb4445171b2ed5f07ac7f90ac9a951c6f64975c386c16e10c5e82a5be94"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x1-cvr10000.athinput",
+      "sha256": "b6cdbacdf1a660b8f61c42bb7a6faa1550d1153b4ecd9cc954dd28ebe7e65a71"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x2-cvr100.athinput",
+      "sha256": "81e38416941d58f58134b065aa2f957581e3de460ac8b88d8a93a9a5f2e584f7"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x2-cvr1000.athinput",
+      "sha256": "a0852b4fc29798bdc86b3d830746c9616a936bdce6e6db2d5b8ba34b937eede3"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x2-cvr10000.athinput",
+      "sha256": "c6e1fd0efa83b8fb36bf1574d6dd51c1e81f960287bbf16eab4ba499b546b063"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x3-cvr100.athinput",
+      "sha256": "03e2172e72b75c08bdf73d4f8dcbfac91df66a29d52f0abbb2055c6d6bf8f870"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x3-cvr1000.athinput",
+      "sha256": "cd44307a638b00b27f056eb773fd185e9734c07dfee84a51a0306990f5442ca7"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_x3-cvr10000.athinput",
+      "sha256": "141dbe87f759a7a4db553b034426bd22120e0e078c2cf15baf935fbfb2abf556"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_xyz-cvr100.athinput",
+      "sha256": "b80416615f9c29850efdd51e0d77e3a526fc7eefb74e4362698ba12b8670824a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_xyz-cvr1000.athinput",
+      "sha256": "e72534e41e7623c62af46140a013d3e3edd757e05934afdf829062439eb0275e"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc1-split_xyz-cvr10000.athinput",
+      "sha256": "16dc933543bfcd2616c51fecafbee24c2af39f6d271d7cdab698dee866bed2da"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-single-cvr100.athinput",
+      "sha256": "f1fa1952c8bdc60d85d55c6d6b847f18cb7f1b69c5db4a066418a8ed6289733e"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-single-cvr1000.athinput",
+      "sha256": "bea1c5fcaa3a1e796c488ae4bf82135ea2404216ac525fafae051ed9435567b6"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-single-cvr10000.athinput",
+      "sha256": "de6061dff3df48404d3b94fd6d5cee322d14ca0d1d7d4eeec91d5bdd4d2ae3db"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x1-cvr100.athinput",
+      "sha256": "3c362b33efb28ca4b5c4afc443bc6ee1a26f8b9db2b685ed4002fe6be47e9029"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x1-cvr1000.athinput",
+      "sha256": "d1c5f05b62b1867eaf2503ebaf3ca7f48c0b4e114c5365fb87cebccacf217de4"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x1-cvr10000.athinput",
+      "sha256": "1bfbbb76f26867fd8fce082ed8c8f514156111b2d60e0439cddfea5e5214fd36"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x2-cvr100.athinput",
+      "sha256": "ef2b49c2c8d42421716385258f0a4292175d3a49ded11546aea58344a1fadc62"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x2-cvr1000.athinput",
+      "sha256": "9e4f2bf213b1ecb712e23fd9e6ec42fe8d51680132a296089b8be42d4e670514"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x2-cvr10000.athinput",
+      "sha256": "64ea5960787eca1eb4c8b28e0c7e7f7b288d0a70c97f9551db1dc5d220147498"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x3-cvr100.athinput",
+      "sha256": "a1f843be2e062dcb73db0e8073d85cc50a36eadbb1f303bfcb9f2a5f2d3a7ee3"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x3-cvr1000.athinput",
+      "sha256": "d70e1397bc872ab64086c06d992ddb86a53483707f84b3bec94adbe3c910f238"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_x3-cvr10000.athinput",
+      "sha256": "5f9136411fbee30e656d3ec024587656347ff8506e9ab0df013bce43e7ebd0ce"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_xyz-cvr100.athinput",
+      "sha256": "df4d93e7e00362b024164ded9f12b6514862d2ea319d771d181781d89ca46a74"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_xyz-cvr1000.athinput",
+      "sha256": "1bb015637426063a55097d2f6cd84fbbea108080dfe6037054120b82a652ae60"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-coarse-ppc4-split_xyz-cvr10000.athinput",
+      "sha256": "40f28aa1940890191095868e7f8461fae809e5fc444150fd77fb31246baf9cff"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-single-cvr100.athinput",
+      "sha256": "2d9d598e7f0293dff1eff6ddc57dd73af4ceba0d867c1bad3d36a0622edddebe"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-single-cvr1000.athinput",
+      "sha256": "d0d356542771e06d6fc607747449deec7faa6d4b2abf4be5a05f54a49de73207"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-single-cvr10000.athinput",
+      "sha256": "4aa55d5ac9f25c95cc330692b76d100dcc765b3a556b9917f5c56185ca7b87b2"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x1-cvr100.athinput",
+      "sha256": "06062c3bec9b663f61f7bff268bfd071d0105f3c8ce951f83ece98450f577c1d"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x1-cvr1000.athinput",
+      "sha256": "720a0600b959c2969670a4baabb5208e789ab046cc004ee7ce92b1a566dd62a2"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x1-cvr10000.athinput",
+      "sha256": "820c713a53c87a2a6ae4d5e4e2f716fee0bd93d41c45b5468cbdeb7b2e220afd"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x2-cvr100.athinput",
+      "sha256": "0a530d2f42a059422d16ada21ec14f4e759a643b95f87fc4193c49976769820f"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x2-cvr1000.athinput",
+      "sha256": "85a387a18e1cfdc4f86b5178da67da69ac376834ba4c20ea54d74bb827e176f2"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x2-cvr10000.athinput",
+      "sha256": "d3d02b032a3ba418a40669c7cebb1202b77ee74c1c0f6612048b785d7f2aba60"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x3-cvr100.athinput",
+      "sha256": "264f3ffa364512dac13a41941f1982146d79b2c30474e74bfeb2323c7b0f7e58"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x3-cvr1000.athinput",
+      "sha256": "6617444cac22d250b6210f5d22a87bc5a04154146c928e6fcffc49189203af0d"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_x3-cvr10000.athinput",
+      "sha256": "84ee5480282203e78d2e80b74402d57c9d0a2cdd14e91a8b268c0d997334adfc"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_xyz-cvr100.athinput",
+      "sha256": "df9cae37137a191e919b9835b7deb6c1c0383d4cb6f63e634406400fe8086890"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_xyz-cvr1000.athinput",
+      "sha256": "2b614de82042bb8bb14b991515b023c4adee8866fff1b853008ceb8daff4a03f"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc1-split_xyz-cvr10000.athinput",
+      "sha256": "cadde4a799329b05f4ee16b2f5d27a12483e51f55c3f6420ab5003d6d190d934"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-single-cvr100.athinput",
+      "sha256": "6488cc48481892e46e8ac932fb86d01c586edb62fed1fc369bf2b219345a30ba"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-single-cvr1000.athinput",
+      "sha256": "2014d46691ab9081c74bcb6022a7731802fe0a731de93c47cb4245f27dda0b39"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-single-cvr10000.athinput",
+      "sha256": "41afbe1226fe78fd190d2b3088d722565fcc7e022ff1236c0bff72e93268833e"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x1-cvr100.athinput",
+      "sha256": "90f2713cc390d9a0c51dc62403c6dcdc9d207e44bc55a9d3f7ffa7b06e545172"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x1-cvr1000.athinput",
+      "sha256": "df51eb658fd632ba7f856d4e11ce57a6c61df2ed0d3acf15b5f25706ad2004a8"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x1-cvr10000.athinput",
+      "sha256": "4e990b05190e1ae6032504c98b6f5ad3bc52d39c9a6d4333416d7112a5c93f7a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x2-cvr100.athinput",
+      "sha256": "b4efa50fbf6a65c35573af6b37d8c59e6bcad695360ec3b1e234c015dac029ef"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x2-cvr1000.athinput",
+      "sha256": "0900386ba82e0a5645436d635f2d14ed5b7ecdab674b78f78d4b2bc83b4de8b7"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x2-cvr10000.athinput",
+      "sha256": "a2a4e154effa87116d0b57ea8051956e21470dbf1d5cb760b2119e872de81332"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x3-cvr100.athinput",
+      "sha256": "de6807537a8354485bdbf7aed26ddf7148eb986a91e410a1868448c09009be8a"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x3-cvr1000.athinput",
+      "sha256": "f1d01f779be792476d5731318dfa9a2a791ad29bf3dfb095e8f4f9f99838136e"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_x3-cvr10000.athinput",
+      "sha256": "07da87bc5219ec3757fe0310c70391c1202835dbcc69bf7a23657f1aab436ee0"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_xyz-cvr100.athinput",
+      "sha256": "b18bc61a733b09e5272a2643e620b3b00868c70bae033e6e191dd164acffebac"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_xyz-cvr1000.athinput",
+      "sha256": "589999ce53094df837f18be7949e2505f0eb75fd172d22157bb2242dbb208844"
+    },
+    {
+      "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/q043-current-oracle-d3-fine-ppc4-split_xyz-cvr10000.athinput",
+      "sha256": "83f9696e5380a800efb5e2675bd210c797cec0d2ea904693c0c38cba5512ad57"
     }
   ],
   "schema_version": 1

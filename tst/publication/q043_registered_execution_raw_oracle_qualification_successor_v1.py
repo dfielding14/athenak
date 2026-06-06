@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import base64
 from contextlib import contextmanager
 import hashlib
+import importlib.abc
 import importlib.util
 import io
 import json
@@ -38,6 +40,12 @@ REGISTERED_AUTHORIZATION_PREFIX = "q043-"
 REGISTERED_EXECUTION_RECEIPT_NAME = "q043_registered_execution_receipt.json"
 Q043_PRODUCER_ENTRYPOINT = "reconcile_q043_registered_execution.py"
 PROJECT_HOME_MIRROR_NAMESPACE = Path("ledger/q043_registered_execution_receipts")
+TRAMPOLINE_COMPLETION_NAMESPACE = Path("ledger/trampoline_completion_receipts")
+TRAMPOLINE_COMPLETION_NAME = "trampoline_completion_receipt.json"
+TRAMPOLINE_COMPLETION_RECORD_TYPE = "trusted_trampoline_completion_receipt"
+TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE = (
+    "trusted_trampoline_completion_ledger_binding"
+)
 SCHEMA_VERSION = 1
 SUCCESSOR_ID = "q043_registered_execution_raw_oracle_qualification_successor_v1"
 CASE_RECORD_TYPE = "q043_registered_execution_raw_oracle_case_admission"
@@ -417,6 +425,145 @@ def _read_stable_regular_file(
     return payload, {"device": before.st_dev, "inode": before.st_ino}
 
 
+class _RetainedRawSnapshot:
+    """Retain one receipt-bound raw file and every namespace descriptor to it."""
+
+    _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    _FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+
+    def __init__(
+        self,
+        raw_root: Path,
+        relative: str,
+        *,
+        label: str,
+        expected_sha256: str,
+        expected_byte_count: int,
+    ) -> None:
+        self.raw_root = raw_root
+        self.relative = _relative_path(relative, label=f"{label}/path")
+        self.label = label
+        self.expected_sha256 = expected_sha256
+        self.expected_byte_count = expected_byte_count
+        self.directories: list[tuple[int, str, int]] = []
+        self.root_fd: int | None = None
+        self.file_fd: int | None = None
+        self.file_parent_fd: int | None = None
+        self.file_name = PurePosixPath(self.relative).name
+        self.payload = b""
+        self.identity: dict[str, int] = {}
+        try:
+            self.root_fd = os.open(raw_root, self._DIRECTORY_FLAGS)
+            lexical = raw_root.stat(follow_symlinks=False)
+            root = os.fstat(self.root_fd)
+            _require(
+                stat.S_ISDIR(root.st_mode)
+                and not bool(root.st_mode & 0o222)
+                and (root.st_dev, root.st_ino) == (lexical.st_dev, lexical.st_ino),
+                f"{label}: retained raw root identity drifted",
+            )
+            current = self.root_fd
+            parts = PurePosixPath(self.relative).parts
+            for part in parts[:-1]:
+                child = os.open(part, self._DIRECTORY_FLAGS, dir_fd=current)
+                child_stat = os.fstat(child)
+                entry = os.stat(part, dir_fd=current, follow_symlinks=False)
+                _require(
+                    stat.S_ISDIR(child_stat.st_mode)
+                    and not bool(child_stat.st_mode & 0o222)
+                    and (child_stat.st_dev, child_stat.st_ino)
+                    == (entry.st_dev, entry.st_ino),
+                    f"{label}: retained raw directory identity drifted",
+                )
+                self.directories.append((current, part, child))
+                current = child
+            self.file_parent_fd = current
+            self.file_fd = os.open(self.file_name, self._FILE_FLAGS, dir_fd=current)
+            self.payload, self.identity = self._read_and_validate()
+        except BaseException:
+            self.close()
+            raise
+
+    @property
+    def absolute_path(self) -> str:
+        return str(self.raw_root.joinpath(*PurePosixPath(self.relative).parts))
+
+    def _read_and_validate(self) -> tuple[bytes, dict[str, int]]:
+        if self.file_fd is None or self.file_parent_fd is None:
+            raise AdmissionError(f"{self.label}: retained raw snapshot is closed")
+        os.lseek(self.file_fd, 0, os.SEEK_SET)
+        before = os.fstat(self.file_fd)
+        payload = bytearray()
+        while chunk := os.read(self.file_fd, 1024 * 1024):
+            payload.extend(chunk)
+        after = os.fstat(self.file_fd)
+        entry = os.stat(
+            self.file_name, dir_fd=self.file_parent_fd, follow_symlinks=False
+        )
+        stable = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_nlink",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        _require(
+            stat.S_ISREG(before.st_mode)
+            and before.st_nlink == 1
+            and not bool(before.st_mode & 0o222)
+            and all(
+                getattr(before, field) == getattr(after, field) for field in stable
+            )
+            and (after.st_dev, after.st_ino) == (entry.st_dev, entry.st_ino)
+            and len(payload) == self.expected_byte_count == after.st_size
+            and hashlib.sha256(payload).hexdigest() == self.expected_sha256,
+            f"{self.label}: retained raw bytes or identity drifted",
+        )
+        return bytes(payload), {"device": after.st_dev, "inode": after.st_ino}
+
+    def revalidate(self) -> None:
+        if self.root_fd is None:
+            raise AdmissionError(f"{self.label}: retained raw snapshot is closed")
+        lexical_fd = os.open(self.raw_root, self._DIRECTORY_FLAGS)
+        try:
+            expected = os.fstat(self.root_fd)
+            observed = os.fstat(lexical_fd)
+            _require(
+                (expected.st_dev, expected.st_ino) == (observed.st_dev, observed.st_ino)
+                and not bool(expected.st_mode & 0o222),
+                f"{self.label}: raw root changed during exact-byte analysis",
+            )
+        finally:
+            os.close(lexical_fd)
+        for parent_fd, name, child_fd in self.directories:
+            child = os.fstat(child_fd)
+            entry = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            _require(
+                stat.S_ISDIR(child.st_mode)
+                and not bool(child.st_mode & 0o222)
+                and (child.st_dev, child.st_ino) == (entry.st_dev, entry.st_ino),
+                f"{self.label}: raw namespace changed during exact-byte analysis",
+            )
+        payload, identity = self._read_and_validate()
+        _require(
+            payload == self.payload and identity == self.identity,
+            f"{self.label}: analyzed raw bytes differ from retained hash-bound bytes",
+        )
+
+    def close(self) -> None:
+        if self.file_fd is not None:
+            os.close(self.file_fd)
+            self.file_fd = None
+        for _, _, descriptor in reversed(self.directories):
+            os.close(descriptor)
+        self.directories.clear()
+        if self.root_fd is not None:
+            os.close(self.root_fd)
+            self.root_fd = None
+
+
 def _binding(value: object, *, label: str) -> dict[str, object]:
     record = _object(value, {"path", "sha256", "byte_count"}, label=label)
     return {
@@ -477,7 +624,7 @@ def _trusted_roots() -> tuple[Path, Path]:
 
 def _installed_control_plane_inventory(
     root: Path, version: str
-) -> tuple[Path, dict[str, object], dict[str, str]]:
+) -> tuple[Path, dict[str, object], dict[str, str], dict[str, bytes]]:
     version = _sha256(version, label="installed control-plane version")
     directory = _canonical_below(
         str(root / "control_plane" / version),
@@ -534,27 +681,30 @@ def _installed_control_plane_inventory(
         entries == {*digests, "inventory.json"},
         "installed control-plane generation entries drifted",
     )
+    sources = {}
     for name, digest in digests.items():
-        _read_stable_regular_file(
+        payload, _ = _read_stable_regular_file(
             directory / name,
             label=f"installed control-plane file/{name}",
             expected_sha256=digest,
             read_only=True,
         )
-    return directory, inventory, digests
+        sources[name] = payload
+    return directory, inventory, digests, sources
 
 
 def _installed_control_plane_pair(version: str) -> dict[str, object]:
     orion, project_home = _trusted_roots()
-    orion_dir, orion_inventory, digests = _installed_control_plane_inventory(
+    orion_dir, orion_inventory, digests, sources = _installed_control_plane_inventory(
         orion, version
     )
-    project_home_dir, project_home_inventory, project_home_digests = (
+    project_home_dir, project_home_inventory, project_home_digests, project_home_sources = (
         _installed_control_plane_inventory(project_home, version)
     )
     _require(
         _strict_equal(orion_inventory, project_home_inventory)
-        and digests == project_home_digests,
+        and digests == project_home_digests
+        and sources == project_home_sources,
         "paired installed control-plane generations differ",
     )
     return {
@@ -563,7 +713,59 @@ def _installed_control_plane_pair(version: str) -> dict[str, object]:
         "project_home_directory": project_home_dir,
         "inventory": orion_inventory,
         "digests": digests,
+        "captured_sources": sources,
     }
+
+
+class _CapturedControlPlaneImporter(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Load one verified installed generation exclusively from captured bytes."""
+
+    def __init__(self, pair: Mapping[str, object]) -> None:
+        self.directory = Path(str(pair["orion_directory"]))
+        self.version = str(pair["version"])
+        self.digests = dict(pair["digests"])
+        sources = pair["captured_sources"]
+        _require(type(sources) is dict, "captured installed control-plane bytes are absent")
+        self.sources = {
+            Path(filename).stem: (filename, payload)
+            for filename, payload in sources.items()
+            if filename.endswith(".py")
+        }
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Sequence[str] | None = None,
+        target: object | None = None,
+    ) -> Any:
+        del path, target
+        if fullname not in self.sources:
+            return None
+        filename, _ = self.sources[fullname]
+        return importlib.util.spec_from_loader(
+            fullname,
+            self,
+            origin=str(self.directory / filename),
+        )
+
+    def create_module(self, spec: Any) -> object | None:
+        del spec
+        return None
+
+    def exec_module(self, module: object) -> None:
+        name = str(module.__name__)
+        _require(name in self.sources, f"captured module is absent: {name}")
+        filename, payload = self.sources[name]
+        origin = str(self.directory / filename)
+        module.__file__ = origin
+        module.__dict__["_PIC_CAPTURED_CONTROL_PLANE_BINDING"] = {
+            "directory": str(self.directory),
+            "version": self.version,
+            "filename": filename,
+            "sha256": self.digests[filename],
+        }
+        code = compile(payload, origin, "exec", dont_inherit=True)
+        exec(code, module.__dict__)
 
 
 @contextmanager
@@ -571,7 +773,6 @@ def _installed_control_plane_modules(
     version: str, filenames: Sequence[str]
 ) -> Any:
     pair = _installed_control_plane_pair(version)
-    directory = Path(pair["orion_directory"])
     digests = pair["digests"]
     _require(
         all(filename in digests and filename.endswith(".py") for filename in filenames),
@@ -585,27 +786,20 @@ def _installed_control_plane_modules(
     previous = {name: sys.modules.get(name) for name in module_names}
     for name in module_names:
         sys.modules.pop(name, None)
-    sys.path.insert(0, str(directory))
+    importer = _CapturedControlPlaneImporter(pair)
+    sys.meta_path.insert(0, importer)
     loaded: dict[str, object] = {}
     try:
         for filename in filenames:
             module_name = Path(filename).stem
-            specification = importlib.util.spec_from_file_location(
-                module_name, directory / filename
-            )
-            _require(
-                specification is not None and specification.loader is not None,
-                f"installed control-plane module cannot be loaded: {filename}",
-            )
-            module = importlib.util.module_from_spec(specification)
-            sys.modules[module_name] = module
-            specification.loader.exec_module(module)
+            module = importlib.import_module(module_name)
             loaded[filename] = module
         yield loaded, pair
-    except (ImportError, OSError, ValueError) as error:
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
         raise AdmissionError("verified installed control-plane module failed") from error
     finally:
-        sys.path.pop(0)
+        if importer in sys.meta_path:
+            sys.meta_path.remove(importer)
         for name in module_names:
             sys.modules.pop(name, None)
             if previous[name] is not None:
@@ -1238,6 +1432,493 @@ def _project_home_mirror_binding(
     }
 
 
+def _completion_artifact_binding(value: object, *, label: str) -> dict[str, object]:
+    record = _object(
+        value,
+        {"path", "sha256", "byte_count", "filesystem_identity"},
+        label=label,
+    )
+    identity = _object(
+        record["filesystem_identity"], {"device", "inode"}, label=f"{label}/identity"
+    )
+    return {
+        "path": _relative_path(record["path"], label=f"{label}/path"),
+        "sha256": _sha256(record["sha256"], label=f"{label}/sha256"),
+        "byte_count": _nonnegative_integer(
+            record["byte_count"], label=f"{label}/byte_count"
+        ),
+        "filesystem_identity": {
+            "device": _nonnegative_integer(
+                identity["device"], label=f"{label}/identity/device"
+            ),
+            "inode": _nonnegative_integer(
+                identity["inode"], label=f"{label}/identity/inode"
+            ),
+        },
+    }
+
+
+def _trusted_trampoline_completion(
+    binding_value: object,
+    *,
+    ledger_binding_value: object,
+    receipt: Mapping[str, object],
+    manifest: Mapping[str, object],
+    artifact_dir: Path,
+) -> dict[str, object]:
+    """Independently bind the original trampoline-pinned run tree."""
+    orion, project_home = _trusted_roots()
+    submission_id = _text(receipt["submission_id"], label="completion/submission_id")
+    fixed_orion = (
+        orion
+        / TRAMPOLINE_COMPLETION_NAMESPACE
+        / submission_id
+        / TRAMPOLINE_COMPLETION_NAME
+    )
+    fixed_project_home = (
+        project_home
+        / TRAMPOLINE_COMPLETION_NAMESPACE
+        / submission_id
+        / TRAMPOLINE_COMPLETION_NAME
+    )
+    binding = _object(
+        binding_value,
+        {"orion_path", "project_home_path", "sha256", "byte_count"},
+        label="registered execution receipt/trampoline_completion_receipt",
+    )
+    _require(
+        binding["orion_path"] == str(fixed_orion)
+        and binding["project_home_path"] == str(fixed_project_home),
+        "trampoline completion receipt fixed-root path drifted",
+    )
+    orion_payload, orion_identity = _read_stable_regular_file(
+        fixed_orion,
+        label="trusted Orion trampoline completion receipt",
+        read_only=True,
+    )
+    project_payload, project_identity = _read_stable_regular_file(
+        fixed_project_home,
+        label="trusted Project Home trampoline completion receipt",
+        read_only=True,
+    )
+    _require(
+        orion_payload == project_payload
+        and (orion_identity["device"], orion_identity["inode"])
+        != (project_identity["device"], project_identity["inode"])
+        and not bool(fixed_orion.parent.stat(follow_symlinks=False).st_mode & 0o222)
+        and not bool(
+            fixed_project_home.parent.stat(follow_symlinks=False).st_mode & 0o222
+        ),
+        "paired trampoline completion receipts are not independent immutable bytes",
+    )
+    anchored = _object(
+        ledger_binding_value,
+        {
+            "schema_version",
+            "record_type",
+            "authority",
+            "receipt_sha256",
+            "receipt_byte_count",
+            "paired_receipts",
+            "artifact_root_identity",
+            "artifact_inventory",
+            "artifact_records_sha256",
+            "mandatory_stdout_stderr_sha256",
+        },
+        label="canonical mirrored-ledger trampoline completion anchor",
+    )
+    anchored_paired = _object(
+        anchored["paired_receipts"],
+        {"orion", "project_home"},
+        label="canonical mirrored-ledger trampoline completion paired receipts",
+    )
+    _require(
+        anchored["receipt_sha256"] == hashlib.sha256(orion_payload).hexdigest()
+        and anchored["receipt_byte_count"] == len(orion_payload)
+        and _strict_equal(
+            anchored_paired,
+            {
+                "orion": {
+                    "path": str(fixed_orion),
+                    "parent_identity": {
+                        "device": fixed_orion.parent.stat(follow_symlinks=False).st_dev,
+                        "inode": fixed_orion.parent.stat(follow_symlinks=False).st_ino,
+                    },
+                    "filesystem_identity": orion_identity,
+                },
+                "project_home": {
+                    "path": str(fixed_project_home),
+                    "parent_identity": {
+                        "device": fixed_project_home.parent.stat(
+                            follow_symlinks=False
+                        ).st_dev,
+                        "inode": fixed_project_home.parent.stat(
+                            follow_symlinks=False
+                        ).st_ino,
+                    },
+                    "filesystem_identity": project_identity,
+                },
+            },
+        ),
+        "trampoline completion differs from canonical mirrored-ledger anchor",
+    )
+    _require(
+        binding["sha256"]
+        == _sha256(anchored["receipt_sha256"], label="completion anchor/sha256")
+        and binding["byte_count"]
+        == _positive_integer(
+            anchored["receipt_byte_count"], label="completion anchor/byte_count"
+        ),
+        "registered execution receipt differs from canonical completion anchor",
+    )
+    completion = _object(
+        _json_payload(orion_payload, label="trusted trampoline completion receipt"),
+        {
+            "schema_version",
+            "record_type",
+            "receipt_role",
+            "authority",
+            "paired_paths",
+            "receipt_parent_identities",
+            "manifest_path",
+            "manifest_sha256",
+            "reservation_id",
+            "submission_id",
+            "slurm_job_id",
+            "control_plane_version",
+            "campaign",
+            "test_id",
+            "registered_science_authorization_id",
+            "artifact_dir",
+            "artifact_root_identity",
+            "artifact_inventory",
+            "artifact_records",
+            "mandatory_stdout_stderr",
+            "execution_binding",
+        },
+        label="trusted trampoline completion receipt",
+    )
+    authority = _object(
+        completion["authority"],
+        {
+            "launch_authorized",
+            "scientific_claim_authorized",
+            "publication_authorized",
+        },
+        label="trusted trampoline completion receipt/authority",
+    )
+    paired = _object(
+        completion["paired_paths"],
+        {"orion", "project_home"},
+        label="trusted trampoline completion receipt/paired_paths",
+    )
+    receipt_parent_identities = _object(
+        completion["receipt_parent_identities"],
+        {"orion", "project_home"},
+        label="trusted trampoline completion receipt/receipt_parent_identities",
+    )
+    normalized_parent_identities = {
+        root_name: {
+            key: _nonnegative_integer(
+                _object(
+                    receipt_parent_identities[root_name],
+                    {"device", "inode"},
+                    label=(
+                        "trusted trampoline completion receipt/"
+                        f"receipt_parent_identities/{root_name}"
+                    ),
+                )[key],
+                label=(
+                    "trusted trampoline completion receipt/"
+                    f"receipt_parent_identities/{root_name}/{key}"
+                ),
+            )
+            for key in ("device", "inode")
+        }
+        for root_name in ("orion", "project_home")
+    }
+    root_identity = _object(
+        completion["artifact_root_identity"],
+        {"device", "inode"},
+        label="trusted trampoline completion receipt/artifact_root_identity",
+    )
+    inventory = _object(
+        completion["artifact_inventory"],
+        {"path", "sha256", "byte_count", "filesystem_identity", "payload_base64"},
+        label="trusted trampoline completion receipt/artifact_inventory",
+    )
+    inventory_identity = _object(
+        inventory["filesystem_identity"],
+        {"device", "inode"},
+        label="trusted trampoline completion receipt/artifact_inventory/identity",
+    )
+    try:
+        inventory_payload = base64.b64decode(
+            _text(
+                inventory["payload_base64"],
+                label="trusted trampoline completion receipt/inventory payload",
+            ),
+            validate=True,
+        )
+    except ValueError as error:
+        raise AdmissionError("trusted trampoline completion inventory base64 drifted") from error
+    inventory_sha256 = _sha256(
+        inventory["sha256"], label="trusted trampoline completion inventory/sha256"
+    )
+    inventory_byte_count = _positive_integer(
+        inventory["byte_count"],
+        label="trusted trampoline completion inventory/byte_count",
+    )
+    _require(
+        completion["schema_version"] == SCHEMA_VERSION
+        and completion["record_type"] == TRAMPOLINE_COMPLETION_RECORD_TYPE
+        and completion["receipt_role"]
+        == "paired_immutable_pre_reconciliation_execution_anchor"
+        and authority
+        == {
+            "launch_authorized": False,
+            "scientific_claim_authorized": False,
+            "publication_authorized": False,
+        }
+        and paired == {"orion": str(fixed_orion), "project_home": str(fixed_project_home)}
+        and normalized_parent_identities
+        == {
+            "orion": {
+                "device": fixed_orion.parent.stat(follow_symlinks=False).st_dev,
+                "inode": fixed_orion.parent.stat(follow_symlinks=False).st_ino,
+            },
+            "project_home": {
+                "device": fixed_project_home.parent.stat(follow_symlinks=False).st_dev,
+                "inode": fixed_project_home.parent.stat(follow_symlinks=False).st_ino,
+            },
+        }
+        and completion["manifest_path"] == receipt["pre_submit_manifest_path"]
+        and completion["manifest_sha256"] == receipt["pre_submit_manifest_sha256"]
+        and completion["reservation_id"] == receipt["reservation_id"]
+        and completion["submission_id"] == submission_id
+        and completion["slurm_job_id"] == receipt["slurm_job_id"]
+        and completion["control_plane_version"] == receipt["control_plane_version"]
+        and completion["campaign"] == REGISTERED_CAMPAIGN
+        and completion["test_id"] == receipt["case_id"]
+        and completion["registered_science_authorization_id"]
+        == receipt["registered_science_authorization_id"]
+        and completion["artifact_dir"] == str(artifact_dir)
+        and inventory["path"] == str(artifact_dir / "artifact_inventory.json")
+        and inventory_sha256 == hashlib.sha256(inventory_payload).hexdigest()
+        and inventory_byte_count == len(inventory_payload),
+        "trusted trampoline completion receipt cross-link drifted",
+    )
+    artifact_metadata = artifact_dir.stat(follow_symlinks=False)
+    _require(
+        not bool(artifact_metadata.st_mode & 0o222)
+        and (
+            artifact_metadata.st_dev,
+            artifact_metadata.st_ino,
+        )
+        == (
+            _nonnegative_integer(root_identity["device"], label="completion root/device"),
+            _nonnegative_integer(root_identity["inode"], label="completion root/inode"),
+        ),
+        "replaceable run root differs from trusted trampoline completion",
+    )
+    observed_inventory_payload, observed_inventory_identity = _read_stable_regular_file(
+        artifact_dir / "artifact_inventory.json",
+        label="completion-bound artifact inventory",
+        expected_sha256=inventory_sha256,
+        expected_byte_count=inventory_byte_count,
+        read_only=True,
+    )
+    _require(
+        observed_inventory_payload == inventory_payload
+        and observed_inventory_identity
+        == {
+            "device": _nonnegative_integer(
+                inventory_identity["device"], label="completion inventory/device"
+            ),
+            "inode": _nonnegative_integer(
+                inventory_identity["inode"], label="completion inventory/inode"
+            ),
+        },
+        "artifact inventory differs from trusted trampoline completion",
+    )
+    inventory_json = _json_payload(
+        inventory_payload, label="completion-bound artifact inventory"
+    )
+    _require(
+        set(inventory_json) == {"schema_version", "files"}
+        and inventory_json["schema_version"] == 1
+        and type(inventory_json["files"]) is list,
+        "completion-bound artifact inventory schema drifted",
+    )
+    completion_records = [
+        _completion_artifact_binding(
+            item, label=f"trusted trampoline completion receipt/artifact_records[{index}]"
+        )
+        for index, item in enumerate(
+            _array(
+                completion["artifact_records"],
+                label="trusted trampoline completion receipt/artifact_records",
+            )
+        )
+    ]
+    _require(
+        len({item["path"] for item in completion_records}) == len(completion_records),
+        "trusted trampoline completion artifact path reused",
+    )
+    inventory_records = []
+    for index, raw in enumerate(inventory_json["files"]):
+        record = _object(
+            raw,
+            {"path", "sha256", "size"},
+            label=f"completion-bound artifact inventory/files[{index}]",
+        )
+        inventory_records.append(
+            {
+                "path": _relative_path(record["path"], label="completion inventory/path"),
+                "sha256": _sha256(record["sha256"], label="completion inventory/sha256"),
+                "byte_count": _nonnegative_integer(
+                    record["size"], label="completion inventory/size"
+                ),
+            }
+        )
+    _require(
+        [
+            {key: item[key] for key in ("path", "sha256", "byte_count")}
+            for item in completion_records
+        ]
+        == inventory_records,
+        "trusted trampoline completion artifact inventory bytes drifted",
+    )
+    for item in completion_records:
+        path = _source_member(artifact_dir, str(item["path"]), label="completion artifact")
+        payload, identity = _read_stable_regular_file(
+            path,
+            label=f"completion artifact/{item['path']}",
+            expected_sha256=str(item["sha256"]),
+            expected_byte_count=int(item["byte_count"]),
+            read_only=True,
+        )
+        _require(
+            len(payload) == item["byte_count"]
+            and identity == item["filesystem_identity"],
+            f"completion artifact identity drifted: {item['path']}",
+        )
+    contract, _, _ = _trusted_q043_launch_contract(
+        manifest["launch_contract"], case=_case_contract(str(receipt["case_id"]))
+    )
+    mandatory_paths = sorted(
+        {
+            str(action[key])
+            for action in contract["actions"]
+            for key in ("stdout_artifact", "stderr_artifact")
+        }
+    )
+    mandatory = [
+        _completion_artifact_binding(
+            item, label=f"trusted trampoline completion receipt/stdio[{index}]"
+        )
+        for index, item in enumerate(
+            _array(
+                completion["mandatory_stdout_stderr"],
+                label="trusted trampoline completion receipt/stdio",
+            )
+        )
+    ]
+    indexed = {item["path"]: item for item in completion_records}
+    execution = _object(
+        completion["execution_binding"],
+        {
+            "launch_contract_sha256",
+            "job_script_sha256",
+            "executable_sha256",
+            "input_deck_sha256",
+        },
+        label="trusted trampoline completion receipt/execution_binding",
+    )
+    snapshot_bindings = _object(
+        manifest.get("snapshot_bindings"),
+        {
+            "job_script",
+            "clean_candidate_manifest",
+            "executable",
+            "input_deck",
+            "environment_profile",
+        },
+        label="trusted pre-submit manifest/snapshot_bindings",
+    )
+    role_sha256 = {
+        role: _sha256(
+            snapshot_bindings[role].get("sha256"),
+            label=f"trusted manifest {role}/sha256",
+        )
+        for role in ("job_script", "executable", "input_deck")
+    }
+    _require(
+        mandatory == [indexed[path] for path in mandatory_paths]
+        and execution["launch_contract_sha256"] == _launch_contract_sha256(contract)
+        and execution["job_script_sha256"] == role_sha256["job_script"]
+        and execution["executable_sha256"]
+        == role_sha256["executable"]
+        == receipt["executable_sha256"]
+        and execution["input_deck_sha256"]
+        == role_sha256["input_deck"]
+        == receipt["deck_sha256"],
+        "trusted trampoline completion stdio or execution binding drifted",
+    )
+    observed_ledger_binding = {
+        "schema_version": SCHEMA_VERSION,
+        "record_type": TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE,
+        "authority": authority,
+        "receipt_sha256": hashlib.sha256(orion_payload).hexdigest(),
+        "receipt_byte_count": len(orion_payload),
+        "paired_receipts": {
+            "orion": {
+                "path": str(fixed_orion),
+                "parent_identity": normalized_parent_identities["orion"],
+                "filesystem_identity": orion_identity,
+            },
+            "project_home": {
+                "path": str(fixed_project_home),
+                "parent_identity": normalized_parent_identities["project_home"],
+                "filesystem_identity": project_identity,
+            },
+        },
+        "artifact_root_identity": {
+            "device": artifact_metadata.st_dev,
+            "inode": artifact_metadata.st_ino,
+        },
+        "artifact_inventory": {
+            "sha256": inventory_sha256,
+            "byte_count": inventory_byte_count,
+            "filesystem_identity": observed_inventory_identity,
+        },
+        "artifact_records_sha256": canonical_sha256(completion_records),
+        "mandatory_stdout_stderr_sha256": canonical_sha256(mandatory),
+    }
+    _require(
+        _strict_equal(ledger_binding_value, observed_ledger_binding),
+        "trampoline completion differs from canonical mirrored-ledger anchor",
+    )
+    return {
+        "orion_path": str(fixed_orion),
+        "project_home_path": str(fixed_project_home),
+        "sha256": hashlib.sha256(orion_payload).hexdigest(),
+        "byte_count": len(orion_payload),
+        "orion_filesystem_identity": orion_identity,
+        "project_home_filesystem_identity": project_identity,
+        "artifact_root_identity": {
+            "device": artifact_metadata.st_dev,
+            "inode": artifact_metadata.st_ino,
+        },
+        "receipt_parent_identities": normalized_parent_identities,
+        "artifact_inventory_sha256": inventory_sha256,
+        "artifact_records_sha256": canonical_sha256(completion_records),
+        "mandatory_stdout_stderr": mandatory,
+        "authority": authority,
+        "ledger_binding": observed_ledger_binding,
+    }
+
+
 def _trusted_producer_rederivation(
     *,
     producer_version: str,
@@ -1334,6 +2015,50 @@ def _manifest_snapshot_binding(
     }
 
 
+def _generic_manifest_snapshot_binding(
+    manifest: Mapping[str, object],
+    *,
+    role: str,
+    snapshot_root: Path,
+    executable: bool = False,
+) -> dict[str, object]:
+    records = manifest.get("snapshot_files")
+    _require(type(records) is list, "pre-submit manifest snapshot_files is malformed")
+    matches = [
+        item for item in records if type(item) is dict and item.get("role") == role
+    ]
+    _require(len(matches) == 1, f"pre-submit manifest requires one {role} snapshot")
+    record = _object(
+        matches[0],
+        {"path", "role", "sha256", "source_path", "source_sha256"},
+        label=f"pre-submit manifest snapshot/{role}",
+    )
+    path = _canonical_below(
+        record["path"], snapshot_root, label=f"pre-submit manifest snapshot/{role}"
+    )
+    digest = _sha256(record["sha256"], label=f"pre-submit manifest {role}/sha256")
+    _require(
+        path.parent == snapshot_root
+        and record["source_sha256"] == digest
+        and PurePosixPath(_absolute_path(record["source_path"], label=f"{role}/source")).is_absolute(),
+        f"pre-submit manifest {role} snapshot binding drifted",
+    )
+    payload, identity = _read_stable_regular_file(
+        path,
+        label=f"pre-submit manifest snapshot/{role}",
+        expected_sha256=digest,
+        executable=executable,
+        read_only=True,
+    )
+    return {
+        "path": str(path),
+        "sha256": digest,
+        "byte_count": len(payload),
+        "source_path": str(record["source_path"]),
+        "filesystem_identity": identity,
+    }
+
+
 def _trusted_pre_submit_manifest(
     event: Mapping[str, object],
     *,
@@ -1393,6 +2118,11 @@ def _trusted_pre_submit_manifest(
     )
     snapshot_root = manifest_path.parent / "snapshot"
     bindings = {
+        "job_script": _generic_manifest_snapshot_binding(
+            manifest,
+            role="job-script",
+            snapshot_root=snapshot_root,
+        ),
         "clean_candidate_manifest": _manifest_snapshot_binding(
             manifest,
             role="clean-candidate-manifest",
@@ -1562,6 +2292,7 @@ def _trusted_reconciliation(
                 "manifest_sha256",
                 "state",
                 "scheduler_exit_code",
+                "trampoline_completion",
             )
         }
         | {
@@ -1714,6 +2445,7 @@ def _execution_binding(
             "raw_output_root",
             "artifact_dir",
             "artifact_inventory",
+            "trampoline_completion_receipt",
             "terminal_receipt_sha256",
             "pre_submit_manifest_path",
             "pre_submit_manifest_sha256",
@@ -1849,6 +2581,13 @@ def _execution_binding(
         receipt_mirror_path=Path(str(receipt_mirror_binding["path"])),
         terminal_mirror_path=Path(str(terminal_mirror_binding["path"])),
     )
+    trampoline_completion = _trusted_trampoline_completion(
+        receipt["trampoline_completion_receipt"],
+        ledger_binding_value=trusted_reconciliation.get("trampoline_completion"),
+        receipt=receipt,
+        manifest=trusted_manifest,
+        artifact_dir=artifact_dir,
+    )
     contract, action, resources = _trusted_q043_launch_contract(
         trusted_manifest["launch_contract"], case=case
     )
@@ -1861,10 +2600,26 @@ def _execution_binding(
             "launch_contract_sha256",
             "launch_trampoline_entrypoint",
             "launch_trampoline_sha256",
+            "trusted_wrapper_evidence",
         },
         label="registered execution receipt/command_evidence",
     )
-    mpi_evidence = _object(
+    wrapper = _object(
+        command_evidence["trusted_wrapper_evidence"],
+        {
+            "source",
+            "stdout_sha256",
+            "required_exact_rank_line",
+            "required_exact_exit_line",
+            "observed_world_size",
+            "observed_rank_ids",
+            "exit_code",
+            "signal",
+            "terminal_cycle",
+        },
+        label="registered execution receipt/trusted_wrapper_evidence",
+    )
+    receipt_mpi_evidence = _object(
         receipt["mpi_evidence"],
         {
             "source",
@@ -1873,9 +2628,37 @@ def _execution_binding(
             "cpus_per_task",
             "gpus_per_task",
             "gpu_bind",
+            "observed_world_size",
+            "observed_rank_ids",
         },
         label="registered execution receipt/mpi_evidence",
     )
+    ranks = int(case["mpi_ranks"])
+    expected_rank_ids = list(range(ranks))
+    stdout_records = [
+        record
+        for record in trampoline_completion["mandatory_stdout_stderr"]
+        if record["path"] == "athena_stdout.txt"
+    ]
+    _require(
+        len(stdout_records) == 1,
+        "trusted trampoline completion lacks one exact stdout binding",
+    )
+    expected_wrapper = {
+        "source": "installed_trampoline_retained_stdout_exact_bytes",
+        "stdout_sha256": stdout_records[0]["sha256"],
+        "required_exact_rank_line": (
+            f"Q043_REGISTERED_EXECUTION case_id={case['case_id']} "
+            f"mpi_world_size={ranks} "
+            f"rank_ids={','.join(str(rank) for rank in expected_rank_ids)}"
+        ),
+        "required_exact_exit_line": "Q043_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0",
+        "observed_world_size": ranks,
+        "observed_rank_ids": expected_rank_ids,
+        "exit_code": 0,
+        "signal": 0,
+        "terminal_cycle": 1,
+    }
     _require(
         command_evidence
         == {
@@ -1887,11 +2670,14 @@ def _execution_binding(
             "launch_trampoline_sha256": receipt_producer[
                 "launch_trampoline_sha256"
             ],
+            "trusted_wrapper_evidence": expected_wrapper,
         }
-        and mpi_evidence
+        and receipt_mpi_evidence
         == {
-            "source": "trusted_pre_submit_manifest_launch_contract",
+            "source": "trusted_pre_submit_manifest_and_installed_trampoline_stdout",
             **resources,
+            "observed_world_size": ranks,
+            "observed_rank_ids": expected_rank_ids,
         },
         "registered execution command or MPI evidence differs from trusted controller",
     )
@@ -1907,6 +2693,7 @@ def _execution_binding(
         "terminal_cycle": 1,
         "registered_mpi_tasks": int(case["mpi_ranks"]),
         "artifact_inventory_sha256": artifact_inventory_binding["sha256"],
+        "trampoline_completion_receipt_sha256": trampoline_completion["sha256"],
         "raw_inventory_sha256": receipt["raw_inventory_sha256"],
         "reconciliation_event_sha256": receipt["reconciliation_event_sha256"],
         "reconciliation_mirror_ack_sha256": receipt[
@@ -1923,6 +2710,7 @@ def _execution_binding(
         "raw_output_root": str(raw_root),
         "artifact_dir": str(artifact_dir),
         "artifact_inventory": artifact_inventory_binding,
+        "trampoline_completion_receipt": trampoline_completion,
         "registered_execution_receipt": receipt_binding,
         "registered_execution_receipt_mirror": receipt_mirror_binding,
         "terminal_receipt": terminal_binding,
@@ -1932,7 +2720,7 @@ def _execution_binding(
         "receipt_raw_inventory": receipt_inventory,
         "receipt_raw_inventory_sha256": receipt["raw_inventory_sha256"],
         "command_evidence": command_evidence,
-        "mpi_evidence": mpi_evidence,
+        "mpi_evidence": expected_mpi_evidence(case),
         "registered_execution_identity": {
             key: receipt[key]
             for key in (
@@ -2088,7 +2876,7 @@ def _raw_artifact(
     case: Mapping[str, object],
     raw_root: Path,
     index: int,
-) -> tuple[dict[str, object], Path]:
+) -> tuple[dict[str, object], _RetainedRawSnapshot]:
     label = f"raw_artifacts[{index}]"
     record = _object(
         value,
@@ -2110,33 +2898,43 @@ def _raw_artifact(
         relative == _raw_relative_path(case, field=field, cycle=cycle, rank=rank),
         f"{label}: raw path does not match exact output inventory",
     )
-    absolute = _source_member(raw_root, relative, label=label)
     digest = _sha256(record["sha256"], label=f"{label}/sha256")
     byte_count = _positive_integer(record["byte_count"], label=f"{label}/byte_count")
-    payload, identity = _read_stable_regular_file(
-        absolute,
+    snapshot = _RetainedRawSnapshot(
+        raw_root,
+        relative,
         label=label,
         expected_sha256=digest,
         expected_byte_count=byte_count,
     )
     try:
-        dataset = binary.read_athenak_binary(absolute)
+        dataset = binary.parse_athenak_binary_bytes(
+            snapshot.payload, source=snapshot.absolute_path
+        )
     except binary.AnalysisError as error:
+        snapshot.close()
         raise AdmissionError(f"{label}: malformed AthenaK binary output") from error
-    _validate_raw_dataset(dataset, case=case, field=field, cycle=cycle)
+    except BaseException:
+        snapshot.close()
+        raise
+    try:
+        _validate_raw_dataset(dataset, case=case, field=field, cycle=cycle)
+    except BaseException:
+        snapshot.close()
+        raise
     return (
         {
             "path": relative,
-            "absolute_path": str(absolute),
+            "absolute_path": snapshot.absolute_path,
             "sha256": digest,
-            "byte_count": len(payload),
+            "byte_count": len(snapshot.payload),
             "case_id": case["case_id"],
             "field": field,
             "cycle": cycle,
             "rank": rank,
-            "filesystem_identity": identity,
+            "filesystem_identity": snapshot.identity,
         },
-        absolute,
+        snapshot,
     )
 
 
@@ -2311,123 +3109,155 @@ def build_case_admission(
         deck=deck,
     )
     _require(type(raw_artifacts) is list, "raw_artifacts: expected array")
-    verified = [
-        _raw_artifact(
-            item,
-            case=case,
-            raw_root=Path(execution["raw_output_root"]),
-            index=index,
-        )
-        for index, item in enumerate(raw_artifacts)
-    ]
-    artifacts = [item[0] for item in verified]
-    paths = [str(item["absolute_path"]) for item in artifacts]
-    identities = [
-        (item["filesystem_identity"]["device"], item["filesystem_identity"]["inode"])
-        for item in artifacts
-    ]
-    _require(len(paths) == len(set(paths)), "raw_artifacts: path reused")
-    _require(
-        len(identities) == len(set(identities)),
-        "raw_artifacts: filesystem object reused",
-    )
-    expected_inventory = [
-        (
-            cycle,
-            field,
-            rank,
-            _raw_relative_path(case, field=field, cycle=cycle, rank=rank),
-        )
-        for cycle in REQUIRED_CYCLES
-        for field in REQUIRED_FIELDS
-        for rank in range(int(case["mpi_ranks"]))
-    ]
-    observed_inventory = [
-        (item["cycle"], item["field"], item["rank"], item["path"]) for item in artifacts
-    ]
-    _require(
-        observed_inventory == expected_inventory,
-        "raw_artifacts: expected exactly one cycle-zero and cycle-one field/rank artifact",
-    )
-    receipt_inventory = [
-        {
-            key: item[key]
-            for key in ("path", "sha256", "byte_count", "case_id", "field", "cycle", "rank")
-        }
-        for item in artifacts
-    ]
-    _require(
-        receipt_inventory == execution["receipt_raw_inventory"]
-        and canonical_sha256(receipt_inventory)
-        == execution["receipt_raw_inventory_sha256"],
-        "raw artifacts differ from the installed-reconciliation receipt inventory",
-    )
-    cycle_one_paths = {
-        field: tuple(
-            Path(item["absolute_path"])
-            for item in artifacts
-            if item["cycle"] == 1 and item["field"] == field
-        )
-        for field in REQUIRED_FIELDS
-    }
+    verified: list[tuple[dict[str, object], _RetainedRawSnapshot]] = []
     try:
-        source_local_result = oracle.analyze_raw_case(str(case["case_id"]), cycle_one_paths)
-    except oracle.ContractError as error:
-        raise AdmissionError(f"{case['case_id']}: source-local raw oracle failed") from error
-    source_local_result = _validate_source_local_case_result(
-        source_local_result, case=case
-    )
-    expected_provenance = {
-        (item["absolute_path"], item["byte_count"], item["sha256"])
-        for item in artifacts
-        if item["cycle"] == 1
-    }
-    measured_provenance = {
-        (item["path"], item["size"], item["sha256"])
-        for item in source_local_result["raw_provenance"]
-    }
-    _require(
-        expected_provenance == measured_provenance
-        and source_local_result.get("source_local_oracle_check_pass") is True
-        and source_local_result.get("passed") is False
-        and source_local_result.get("launch_authorized") is False
-        and source_local_result.get("scientific_claim_authorized") is False
-        and source_local_result.get("publication_authorized") is False,
-        f"{case['case_id']}: source-local oracle result or provenance drifted",
-    )
-    hardened_result = {
-        "registered_execution_raw_oracle_check_pass": True,
-        "canonical_mirrored_ledger_reconciliation_check_pass": True,
-        "trusted_pre_submit_manifest_snapshot_check_pass": True,
-        "trusted_clean_candidate_build_revalidation_check_pass": True,
-        "installed_reconciliation_receipt_raw_inventory_seal_check_pass": True,
-        "strict_cycle_zero_and_cycle_one_runtime_metadata_check_pass": True,
-        "cycle_zero_exact_finite_zero_moments_check_pass": True,
-        "exact_output_inventory_check_pass": True,
-        "source_local_oracle_result": source_local_result,
-        "source_local_result_sufficient_for_downstream_qualification": False,
-    }
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "record_type": CASE_RECORD_TYPE,
-        "successor_id": SUCCESSOR_ID,
-        "campaign_id": oracle.CAMPAIGN_ID,
-        "status": "registered_case_evidence_admitted_non_authorizing",
-        "qualification_effect": QUALIFICATION_EFFECT,
-        "case_id": case["case_id"],
-        "case_contract": case,
-        "deck_binding": deck,
-        "candidate_binding": candidate,
-        "candidate_binding_sha256": canonical_sha256(candidate),
-        "execution_binding": execution,
-        "execution_binding_sha256": canonical_sha256(execution),
-        "raw_artifacts": artifacts,
-        "raw_inventory_sha256": canonical_sha256(artifacts),
-        "hardened_raw_oracle_result": hardened_result,
-        "hardened_raw_oracle_result_sha256": canonical_sha256(hardened_result),
-        "source_local_insufficiency": _source_local_insufficiency(),
-        "authorization": _authorization_boundary(),
-    }
+        for index, item in enumerate(raw_artifacts):
+            verified.append(
+                _raw_artifact(
+                    item,
+                    case=case,
+                    raw_root=Path(execution["raw_output_root"]),
+                    index=index,
+                )
+            )
+        artifacts = [item[0] for item in verified]
+        paths = [str(item["absolute_path"]) for item in artifacts]
+        identities = [
+            (item["filesystem_identity"]["device"], item["filesystem_identity"]["inode"])
+            for item in artifacts
+        ]
+        _require(len(paths) == len(set(paths)), "raw_artifacts: path reused")
+        _require(
+            len(identities) == len(set(identities)),
+            "raw_artifacts: filesystem object reused",
+        )
+        expected_inventory = [
+            (
+                cycle,
+                field,
+                rank,
+                _raw_relative_path(case, field=field, cycle=cycle, rank=rank),
+            )
+            for cycle in REQUIRED_CYCLES
+            for field in REQUIRED_FIELDS
+            for rank in range(int(case["mpi_ranks"]))
+        ]
+        observed_inventory = [
+            (item["cycle"], item["field"], item["rank"], item["path"])
+            for item in artifacts
+        ]
+        _require(
+            observed_inventory == expected_inventory,
+            "raw_artifacts: expected exactly one cycle-zero and cycle-one field/rank artifact",
+        )
+        receipt_inventory = [
+            {
+                key: item[key]
+                for key in (
+                    "path",
+                    "sha256",
+                    "byte_count",
+                    "case_id",
+                    "field",
+                    "cycle",
+                    "rank",
+                )
+            }
+            for item in artifacts
+        ]
+        _require(
+            receipt_inventory == execution["receipt_raw_inventory"]
+            and canonical_sha256(receipt_inventory)
+            == execution["receipt_raw_inventory_sha256"],
+            "raw artifacts differ from the installed-reconciliation receipt inventory",
+        )
+        cycle_one_snapshots = {
+            field: tuple(
+                (artifact["absolute_path"], snapshot.payload)
+                for artifact, snapshot in verified
+                if artifact["cycle"] == 1 and artifact["field"] == field
+            )
+            for field in REQUIRED_FIELDS
+        }
+        try:
+            source_local_result = oracle.analyze_raw_case_bytes(
+                str(case["case_id"]), cycle_one_snapshots
+            )
+        except oracle.ContractError as error:
+            raise AdmissionError(
+                f"{case['case_id']}: source-local exact-byte raw oracle failed"
+            ) from error
+        for _, snapshot in verified:
+            snapshot.revalidate()
+        repeated_execution = _execution_binding(
+            execution_binding,
+            case=case,
+            candidate=candidate,
+            deck=deck,
+        )
+        _require(
+            _strict_equal(repeated_execution, execution),
+            "registered execution changed during exact-byte raw analysis",
+        )
+        source_local_result = _validate_source_local_case_result(
+            source_local_result, case=case
+        )
+        expected_provenance = {
+            (item["absolute_path"], item["byte_count"], item["sha256"])
+            for item in artifacts
+            if item["cycle"] == 1
+        }
+        measured_provenance = {
+            (item["path"], item["size"], item["sha256"])
+            for item in source_local_result["raw_provenance"]
+        }
+        _require(
+            expected_provenance == measured_provenance
+            and source_local_result.get("source_local_oracle_check_pass") is True
+            and source_local_result.get("passed") is False
+            and source_local_result.get("launch_authorized") is False
+            and source_local_result.get("scientific_claim_authorized") is False
+            and source_local_result.get("publication_authorized") is False,
+            f"{case['case_id']}: source-local oracle result or provenance drifted",
+        )
+        hardened_result = {
+            "registered_execution_raw_oracle_check_pass": True,
+            "canonical_mirrored_ledger_reconciliation_check_pass": True,
+            "trusted_pre_submit_manifest_snapshot_check_pass": True,
+            "trusted_clean_candidate_build_revalidation_check_pass": True,
+            "trusted_external_trampoline_completion_receipt_check_pass": True,
+            "installed_reconciliation_receipt_raw_inventory_seal_check_pass": True,
+            "exact_retained_raw_bytes_analysis_and_post_revalidation_check_pass": True,
+            "strict_cycle_zero_and_cycle_one_runtime_metadata_check_pass": True,
+            "cycle_zero_exact_finite_zero_moments_check_pass": True,
+            "exact_output_inventory_check_pass": True,
+            "source_local_oracle_result": source_local_result,
+            "source_local_result_sufficient_for_downstream_qualification": False,
+        }
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "record_type": CASE_RECORD_TYPE,
+            "successor_id": SUCCESSOR_ID,
+            "campaign_id": oracle.CAMPAIGN_ID,
+            "status": "registered_case_evidence_admitted_non_authorizing",
+            "qualification_effect": QUALIFICATION_EFFECT,
+            "case_id": case["case_id"],
+            "case_contract": case,
+            "deck_binding": deck,
+            "candidate_binding": candidate,
+            "candidate_binding_sha256": canonical_sha256(candidate),
+            "execution_binding": execution,
+            "execution_binding_sha256": canonical_sha256(execution),
+            "raw_artifacts": artifacts,
+            "raw_inventory_sha256": canonical_sha256(artifacts),
+            "hardened_raw_oracle_result": hardened_result,
+            "hardened_raw_oracle_result_sha256": canonical_sha256(hardened_result),
+            "source_local_insufficiency": _source_local_insufficiency(),
+            "authorization": _authorization_boundary(),
+        }
+    finally:
+        for _, snapshot in reversed(verified):
+            snapshot.close()
 
 
 def _candidate_input(value: Mapping[str, object]) -> dict[str, object]:

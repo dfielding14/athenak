@@ -1379,6 +1379,14 @@ def reserve(
         queue_sha256 = hashlib.sha256(queue_output.encode("utf-8")).hexdigest()
         if queue_sha256 != manifest.get("queue_snapshot_sha256"):
             raise ValueError("Fresh queue output differs from frozen queue snapshot")
+        if (
+            manifest.get("campaign")
+            == "q043_registered_execution_raw_oracle_successor_v1"
+            and queue_output
+        ):
+            raise ValueError(
+                "Q043 requires the same-user Frontier queue to be completely empty"
+            )
         if "pic-reservation=" in queue_output:
             raise ValueError("A PIC-tagged Frontier job is already queued or running")
         expected_marker = _pending_marker_path(authorized_pic_root)
