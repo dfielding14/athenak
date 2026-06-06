@@ -106,11 +106,16 @@ verified.
 
 `CLAIM-PROD-BELL-NONLINEAR-NOHALL-001` is an explicit central-result gate.
 
-The exact AthenaK deposited-current closure is
+The general AthenaK deposited-current moment includes particle statistical and
+delta-f weights, physical-density scaling, the selected shape, configured
+species charge, and recipient-cell volume. For the non-expanding, full-f,
+uniform Q043 Bell carrier it reduces to
 `deposited J_CR/c = PPC * deposit_qscale * species_charge * v_CR /
 V_root_cell = 2 B_g k_0`, where `V_root_cell` is determined from the global
 root-mesh extents and counts. Replacing `species_charge` by `q/(mc)` is valid
-only for the present unit-species-mass decks. The historical Bell preparation instead targeted
+only when the configured species mass is one; the corrected source-local Q043
+matrix deliberately uses nonunit species mass and separately binds
+`species_charge/species_mass`. The historical Bell preparation instead targeted
 `2 B_g C k_0` and treated fixed `PPC * deposit_qscale` as sufficient without
 the root-cell-volume factor. Multiplication by artificial light speed `C`
 changes the physical Bell mode, while fixed `PPC * deposit_qscale` makes the
@@ -118,8 +123,12 @@ physical current change with dimension or root resolution. Correct deposition
 must also be invariant under a pure meshblock/rank decomposition change. This
 confirmed volume-aware current-normalization defect invalidates the historical
 Bell linear preparation/proxy evidence for qualification and invalidates any
-nonlinear foundation or campaign design that inherits it. It does not itself
-establish a corrected Bell result.
+nonlinear foundation or campaign design that inherits it. Corrected source,
+decks, and a raw-output oracle now exist source-locally, but the complete
+registered runtime matrix and hardened provenance admission remain open. A
+separately named corrected volume-aware Q019 campaign design exists, but it
+grants no execution or claim authority and does not itself establish a
+corrected Bell result.
 
 Until Q-019, Q-023, Q-025, Q-026, and Q-028 close with a named reviewer:
 
@@ -168,12 +177,13 @@ and production-scale performance.
 
 For the two central-result gates specifically:
 
-- **Bell nonlinear:** a source-local fixed-current-like foundation deck,
-  bounded analyzer, and Q019 campaign design exist, but they inherit the
-  invalid historical volume-blind, artificial-`C` current normalization and are
-  ineligible for qualification. Corrected linear qualification, a
+- **Bell nonlinear:** the historical source-local fixed-current-like foundation
+  deck and bounded analyzer inherit the invalid volume-blind, artificial-`C`
+  current normalization and are ineligible for qualification. A separately
+  named corrected volume-aware Q019 campaign design exists but grants no
+  execution or claim authority. Corrected linear qualification, a
   dimension/resolution/decomposition deposited-current oracle, a superseding
-  nonlinear design and foundation, qualifying generator and deck matrix,
+  nonlinear implementation, qualifying generator and deck matrix,
   excluded-pilot-frozen saturation windows, comparison maps, numeric tolerances,
   measured resource model, and registered campaign remain open.
 - **Section 5.4 shock:** the pressure baseline is selected and the future
@@ -198,6 +208,11 @@ The manuscript must distinguish the following:
 - preparation, preregistration, and launch authorization from qualifying
   scientific results;
 - AthenaK-selected release criteria from tolerances stated by a reference paper;
+- native 2D/3D particle meshes from a thin-2D/3V carrier with
+  one-dimensional physical variation;
+- exact opposite-impulse global conservation on a qualified uniform, full-f,
+  closed mesh from unqualified AMR-interface, boundary, injection, removal,
+  floor, delta-f, or isothermal-energy behavior;
 - Orion-only evidence retention from an institutional durable archive.
 
 ## Intended Audience and Reader Model
@@ -231,7 +246,8 @@ The manuscript should help the reader build this mental model:
   why artificial-`C` multiplication changes the physical Bell mode, and why all
   affected Bell evidence must be rerun.
 - How particle interpolation/deposition, feedback, and MHD evolution compose
-  into a conservative update.
+  into an opposite-impulse update, and the explicit conditions under which its
+  global momentum and energy sums cancel.
 - Why AMR receiver resolution, particle ownership, and mesh transitions are
   scientific-validity issues rather than implementation details.
 - Why a passing engineering proxy, serial/MPI overlay, or short GPU run does not
@@ -295,6 +311,10 @@ claim ID, and reviewer disposition.
 - State the full deposited-current closure, including `V_root_cell`; never
   describe a volume-blind or artificial-`C`-multiplied historical Bell artifact
   as qualifying evidence.
+- Use `one-dimensional variation on a thin 2D/3V carrier` rather than implying
+  that AthenaK's particle module runs on a native 1D mesh.
+- Use `opposite-impulse exchange` unless an exact conservation claim states its
+  uniform-mesh, full-f, closed-domain assumptions and exclusions.
 - Use `paper reproduction`, `production qualification`, `engineering proxy`,
   `preparation`, and `cross-code comparison` as distinct evidence classes.
 - Use `non-Hall` wherever a Bell result excludes Hall induction.
@@ -350,6 +370,9 @@ The following statements may orient methods drafting, subject to source audit:
   a dimension/resolution/decomposition deposited-current oracle, complete
   reruns, immutable evidence, independent recomputation, and named review
   before they support a result.
+- The corrected source-local Q043 Bell current matrix uses nonunit species mass
+  and binds charge separately from charge-to-mass, but complete registered
+  runtime observation and hardened provenance admission remain open.
 - A Q011 preproduction resource-scaling plan recommends a three-seed paired
   core followed by resource-gated expansion; it does not modify the historical
   eight-seed preregistration or authorize production.
@@ -379,6 +402,11 @@ These statements do not close a scientific claim.
 
 - The source and campaign-control work remains active; prose may become stale
   unless it binds an exact release candidate.
+- Independent review found that the first Q043 registered-execution admission
+  could self-attest control-plane provenance, did not bind raw-output bytes at
+  reconciliation, omitted deposition/output files from the candidate closure,
+  and did not validate cycle-zero moments. No Q043 registered evidence is
+  admissible until a hardened successor closes those defects.
 - A large inventory of bounded evidence can obscure the central argument unless
   the manuscript preserves evidence hierarchy and scope.
 - The central Bell and shock campaigns may remain blocked by prerequisites,

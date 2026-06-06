@@ -9,7 +9,7 @@
 
 \hypersetup{hypertexnames=false}
 
-\shorttitle{AthenaK MHD-PIC Methods Scaffold}
+\shorttitle{AthenaK MHD-PIC Methods}
 \shortauthors{AthenaK Collaboration}
 
 \newcommand{\athenak}{\texttt{AthenaK}\xspace}
@@ -25,9 +25,8 @@
 
 \begin{document}
 
-\title{AthenaK MHD-PIC: Core Numerical Method, Corrected Bell Qualification,
-and a Parallel-Shock Demonstration\\
-\large Internal ApJ Methods-Paper Scaffold}
+\title{AthenaK MHD-PIC: Numerical Method, Corrected Bell Qualification,
+and a Parallel-Shock Demonstration}
 
 \author{AthenaK Collaboration}
 \affiliation{\AUTHOR{Insert verified author list, affiliations, and contribution
@@ -44,9 +43,8 @@ evolved as magnetohydrodynamic gas and the energetic-particle population is
 advanced kinetically.
 The active paper-reproduction candidate uses mass-normalized particle momentum,
 a relativistic Boris pusher, triangular-shaped-cloud interpolation and
-deposition, ideal-MHD induction, and conservative particle--gas exchange in its
-documented applicability envelope.
-
+deposition, ideal-MHD induction, and opposite-impulse momentum and kinetic-energy
+feedback on qualified uniform meshes.
 \TODO{Replace this paragraph with the final quantitative results only after the
 claim-evidence ledger identifies the exact figures, tables, artifacts,
 uncertainties, and reviewer dispositions.}
@@ -144,7 +142,7 @@ artifact manifest, and review &
 Open \\
 \claimid{CLAIM-PAPER-BELL-LINEAR-001} &
 Corrected-normalization Bell phase and growth versus analytical dispersion in
-1D/2D/3D &
+one-dimensional variation on a thin 2D/3V carrier and in 2D/3D &
 Historical preparation and proxy evidence are invalid because they multiplied
 deposited $J_{\rm CR}/c$ by artificial $\mathbb{C}$ and omitted the
 root-cell-volume dependence, making fixed particle count times deposit weight
@@ -230,8 +228,18 @@ and kinetic energy per unit mass are
 \label{eq:kinetic-energy}
 \end{align}
 Here $\mathbb{C}$ is the configured artificial cosmic-ray light speed.
-\VERIFY{Confirm final notation, dimensions, normalization, and correspondence
-to code parameters and the governing reference before release.}
+All explicit paper and extension identities interpret the retained particle
+state slots as $\boldsymbol{w}$; physical velocity is derived from
+Equation~\ref{eq:velocity} for drift, deposition, VTK and tracked-particle
+output, and timestep selection. Initialization may be specified as velocity, in
+which case the initializer converts it to mass-normalized momentum. The parser
+requires every velocity-initialized species to satisfy
+$|\boldsymbol{v}|<\mathbb{C}$. The reduced-speed approximation additionally
+requires the represented particle, gas, Alfv\'en, and signal speeds to remain
+well below $\mathbb{C}$, and every physical campaign must demonstrate that its
+reported observables are insensitive to a preregistered increase in
+$\mathbb{C}$. The parser speed bound is necessary but is not that physical
+sensitivity test.
 
 The particle equations advanced in paper mode are
 \begin{align}
@@ -243,14 +251,35 @@ The particle equations advanced in paper mode are
 c\boldsymbol{E} &= -\boldsymbol{u}\times\boldsymbol{B}.
 \label{eq:ideal-electric-field}
 \end{align}
-\TODO{Insert verified citations and explain the artificial-light-speed validity
-condition and timestep constraints.}
+\TODO{Insert verified primary citations for the reduced-speed MHD-PIC
+formulation and relativistic Boris method.}
+The particle timestep is restricted by both a configured maximum cell crossing
+and a configured maximum Boris gyro angle. These are numerical guards; they do
+not by themselves establish that a selected artificial light speed is
+physically adequate.
 \TODO{Add the exact Boris update equations only after a source-to-manuscript
 derivation audit.}
 
 \subsection{Deposited-Current Normalization}
 
-For a uniform streaming carrier, the exact AthenaK deposited-current closure is
+The cell-centered current moment deposited by the general particle path is
+\begin{equation}
+\left(\frac{\boldsymbol{J}_{\rm CR}}{c}\right)_i
+=
+\frac{1}{V_i}\sum_p
+\eta_p q_{\rm scale} W_p f_p q_{s(p)}
+\boldsymbol{v}_p S_{ip},
+\label{eq:generic-deposited-current}
+\end{equation}
+where $S_{ip}$ is the selected particle-shape contribution to recipient cell
+$i$, $\eta_p$ is the physical-density scale, and $f_p$ is the evolving
+delta-$f$ weight or unity for a full-$f$ particle. Thus particle statistical
+weight, delta-$f$ weighting, physical-density scaling, particle shape, and
+recipient-cell volume are part of the generic deposition contract.
+
+For the non-expanding, full-$f$, uniform Q043 Bell carrier, $\eta_p=f_p=W_p=1$
+and the uniform shape sum reduces Equation~\ref{eq:generic-deposited-current}
+to
 \begin{equation}
 \left(\frac{J_{\rm CR}}{c}\right)_{\rm dep}
 =
@@ -262,11 +291,15 @@ For a uniform streaming carrier, the exact AthenaK deposited-current closure is
 where ${\rm PPC}$ is particles per root cell, $q_{\rm scale}$ is
 \texttt{deposit\_qscale}, $q_s$ is the configured species charge, and
 $V_{\rm root\,cell}$ is computed from the global root-mesh extents and counts.
-The replacement $q_s=q/(mc)$ is valid only for the present unit-species-mass
-decks. A fixed ${\rm PPC}\,q_{\rm scale}$ therefore
-changes the physical current when dimension or root resolution changes unless
-the volume dependence is included. Changing only meshblock/rank decomposition
-must leave Equation~\ref{eq:bell-deposited-current} invariant.
+The configured charge and charge-to-mass factor must remain distinct:
+$q_s=m_s[q/(mc)]$, with the shorthand $q_s=q/(mc)$ valid only when $m_s=1$.
+The corrected source-local current-oracle matrix uses $m_s=2$ and separately
+binds $q_s/m_s$ to the particle equation of motion, enforcing this distinction;
+its complete registered runtime observation remains pending. A fixed
+${\rm PPC}\,q_{\rm scale}$ therefore changes the physical current when
+dimension or root resolution changes unless the volume dependence is included.
+Changing only meshblock/rank decomposition must leave
+Equation~\ref{eq:bell-deposited-current} invariant.
 
 The historical Bell preparation omitted $V_{\rm root\,cell}$ from its closure
 and targeted $2B_g\mathbb{C}k_0$ rather than $2B_gk_0$. Both errors change the
@@ -279,13 +312,89 @@ artificial-$\mathbb{C}$ matrix.}
 
 \subsection{MHD Equations and Particle Backreaction}
 
-\TODO{Insert the exact MHD conservation equations, equation of state, and
-particle source terms used by \runtime. Define every source term and sign.}
-\TODO{Insert the verified cell-resolved discrete momentum and kinetic-energy
-exchange equations. Demonstrate how the particle change is applied with the
-opposite sign to the ideal-MHD gas update.}
-\VERIFY{Keep the exact-isothermal momentum-only feedback boundary separate from
-ideal-MHD momentum-and-energy feedback.}
+The background plasma follows non-relativistic ideal MHD. In \runtime, the
+induction update remains the ordinary constrained-transport update formed from
+Equation~\ref{eq:ideal-electric-field}; the parser rejects direct
+CR-current-to-CT options and requires the CR Hall mode to be off. Particle
+backreaction therefore enters the gas momentum and, for an ideal equation of
+state, total-energy updates, but not the paper-mode induction electric field.
+In AthenaK's $4\pi=1$ magnetic normalization, the continuum equations represented
+by that path are
+\begin{align}
+\frac{\partial \rho}{\partial t}
+ + \boldsymbol{\nabla}\cdot(\rho\boldsymbol{u}) &= 0,
+\label{eq:mhd-mass}\\
+\frac{\partial(\rho\boldsymbol{u})}{\partial t}
+ + \boldsymbol{\nabla}\cdot\left[
+\rho\boldsymbol{u}\boldsymbol{u}
++\left(P+\frac{B^2}{2}\right)\boldsymbol{I}
+-\boldsymbol{B}\boldsymbol{B}\right] &= \boldsymbol{S}_{P,g},
+\label{eq:mhd-momentum}\\
+\frac{\partial E_g}{\partial t}
+ + \boldsymbol{\nabla}\cdot\left[
+\left(E_g+P+\frac{B^2}{2}\right)\boldsymbol{u}
+-\boldsymbol{B}(\boldsymbol{u}\cdot\boldsymbol{B})\right] &= S_{E,g},
+\label{eq:mhd-energy}\\
+\frac{\partial\boldsymbol{B}}{\partial t}
+-\boldsymbol{\nabla}\times(\boldsymbol{u}\times\boldsymbol{B}) &= 0,
+\qquad \boldsymbol{\nabla}\cdot\boldsymbol{B}=0,
+\label{eq:mhd-induction}\\
+E_g &= \frac{P}{\gamma_g-1}
++\frac{\rho u^2}{2}+\frac{B^2}{2}.
+\label{eq:mhd-total-energy}
+\end{align}
+The ideal-gas path uses $P=(\gamma_g-1)e_{\rm int}$. Exact-isothermal
+compositions omit Equation~\ref{eq:mhd-energy} and close with
+$P=c_s^2\rho$. In the full-$f$ opposite-impulse path,
+$\boldsymbol{S}_{P,g}$ and $S_{E,g}$ are the negatives of the deposited
+particle momentum and kinetic-energy rates defined below.
+
+For a full-$f$ particle $p$ of species $s$, macro-particle weight $W_p$, and
+macro mass
+\begin{equation}
+M_p=q_{\rm scale}W_p m_s,
+\label{eq:macro-mass}
+\end{equation}
+the full-step midpoint Boris kick records the extensive rates
+\begin{align}
+\dot{\boldsymbol{P}}_p &=
+\frac{M_p}{\Delta t}
+\left(\boldsymbol{w}^{n+1}_p-\boldsymbol{w}^{n}_p\right),
+\label{eq:particle-momentum-rate}\\
+\dot{E}_p &=
+\frac{M_p}{\Delta t}
+\left[\epsilon_{\rm kin}(\boldsymbol{w}^{n+1}_p)
+      -\epsilon_{\rm kin}(\boldsymbol{w}^{n}_p)\right].
+\label{eq:particle-energy-rate}
+\end{align}
+Let ${\cal D}_i$ denote deposition to cell $i$, including the selected shape
+weights and division by recipient-cell volume. At the impulse-feedback stage,
+the gas update applies the opposite deposited change,
+\begin{align}
+(\rho\boldsymbol{u})_i &\leftarrow
+(\rho\boldsymbol{u})_i-\beta\Delta t\,
+{\cal D}_i(\dot{\boldsymbol{P}}_p),
+\label{eq:gas-opposite-momentum}\\
+E_i &\leftarrow E_i-\beta\Delta t\,{\cal D}_i(\dot{E}_p),
+\label{eq:gas-opposite-energy}
+\end{align}
+where $\beta\Delta t$ is the active MHD stage interval. The VL2 predictor uses
+the initial-position deposited charge and current to form the corresponding
+Lorentz-force predictor; the corrector consumes the deposited particle
+impulse. Unit momentum and energy feedback coefficients are mandatory for
+\runtime. Exact-isothermal paper delta-$f$, and the separately bounded Q-006
+full-$f$ carrier, use momentum-only feedback because no ideal-MHD total-energy
+variable is present.
+
+On a uniform periodic mesh, with full-$f$ particles, unit feedback
+coefficients, normalized shape sums, no floors, and no particle creation,
+removal, or escape, summing Equations~\ref{eq:gas-opposite-momentum} and
+\ref{eq:gas-opposite-energy} over cells cancels the corresponding summed
+particle changes. This is the exact global conservation invariant tested by
+the uniform-mesh coupling path. It is not a generic conservation claim for
+open or reflecting boundaries, shock injection and removal, delta-$f$
+feedback, exact-isothermal energy, floors, or refinement interfaces; those
+terms require separate accounting and qualification.
 
 \begin{table*}[htbp]
 \centering
@@ -301,29 +410,39 @@ Symbol & Intended meaning & Normalization or units & Code/configuration binding
 & Audit status \\
 \midrule
 $\mathbb{C}$ & Artificial cosmic-ray light speed &
-\TODO{State units and scale-separation condition} &
+Code velocity units; selected value must exceed represented particle speeds,
+with physical adequacy separately verified &
 \texttt{particles/pic\_cr\_light\_speed} &
-Verify \\
+Source-audited \\
 $\boldsymbol{w}$ & Mass-normalized particle momentum $\boldsymbol{p}/m$ &
-\TODO{State units} & Particle state slots under paper/extension identities &
-Verify \\
-$\boldsymbol{u}$ & MHD gas velocity & \TODO{State units} &
-\TODO{Bind source fields} & Verify \\
-$\boldsymbol{B}$ & Magnetic field & \TODO{State units and energy convention} &
-\TODO{Bind face/cell views} & Verify \\
+Code velocity units & Particle state slots \texttt{IPVX}, \texttt{IPVY},
+\texttt{IPVZ} under paper/extension identities &
+Source-audited \\
+$\boldsymbol{u}$ & MHD gas velocity & Code velocity units &
+MHD primitive slots \texttt{IVX}, \texttt{IVY}, \texttt{IVZ} & Source-audited \\
+$\boldsymbol{B}$ & Magnetic field & AthenaK $4\pi=1$ units; magnetic energy
+density $B^2/2$ &
+\texttt{b0} face fields and \texttt{bcc0} cell-centered fields & Verify \\
 $q/(mc)$ & Configured charge-to-mass factor & AthenaK normalized units &
-\TODO{Bind species parameter} & Verify \\
+\texttt{IPM}, initialized from \texttt{species*/charge}/
+\texttt{species*/mass} & Source-audited \\
 $q_s$ & Configured species charge used by macro-charge deposition &
-\TODO{State units and relation to species mass and $q/(mc)$} &
-\texttt{species*/charge} & Verify \\
+Macro charge is $q_{\rm scale}W_pq_s$; normalized
+$q/(mc)=q_s/m_s$ in the configured particle units &
+\texttt{species*/charge} & Source-audited \\
 $V_{\rm root\,cell}$ & Global root-cell volume &
 Global root-mesh extents divided by global root-mesh counts &
-\TODO{Bind mesh geometry source} & Verify \\
+\texttt{mesh\_size.dx1*dx2*dx3} & Source-audited \\
 $(J_{\rm CR}/c)_{\rm dep}$ & Deposited cosmic-ray current divided by $c$ &
 Equation~\ref{eq:bell-deposited-current} &
-\TODO{Bind deposited-current output/source fields} & Verify \\
-$w_{\rm macro}$ & Macro-particle weight & \TODO{State normalization} &
-\texttt{macro\_weight}/\texttt{IPWT} outputs & Verify \\
+Particle moments \texttt{IMOM\_J*}; \texttt{prtcl\_j*} outputs &
+Source-audited \\
+$W_p$ & Per-particle statistical weight &
+Multiplies both macro charge and macro mass &
+\texttt{macro\_weight}/\texttt{IPWT} outputs & Source-audited \\
+$M_p$ & Macro-particle mass &
+$q_{\rm scale}W_pm_s$; Equation~\ref{eq:macro-mass} &
+Feedback impulse and energy-exchange kernels & Source-audited \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -347,6 +466,20 @@ relativistic Boris update.
 \item Apply physical boundaries, migration, synchronization, and constrained
 transport in the documented task order.
 \end{enumerate}
+The implementation realizes this sequence with two VL2 stages having
+$\beta_1=1/2$ and $\beta_2=1$. During stage 1, the particle momentum push is a
+no-op: charge and current are deposited at $\boldsymbol{x}^n$, synchronized,
+and used by the gas predictor through the normalized
+$\rho_{\rm CR}(c\boldsymbol{E})+(\boldsymbol{J}_{\rm CR}/c)\times\boldsymbol{B}$
+and $(\boldsymbol{J}_{\rm CR}/c)\cdot(c\boldsymbol{E})$ sources. Particles then
+drift by $\Delta t/2$ to $\boldsymbol{x}^{n+1/2}$. During stage 2, TSC
+interpolation samples the midpoint gas state, the Boris update advances
+$\boldsymbol{w}$ over the full $\Delta t$, and the code deposits
+$\dot{\boldsymbol{P}}_p$ and $\dot{E}_p$. The gas corrector subtracts those
+deposited rates with $\beta_2=1$, after which particles drift by the remaining
+$\Delta t/2$ to $\boldsymbol{x}^{n+1}$. Moment boundary exchange and
+restriction/prolongation precede each gas source evaluation; particle boundary
+handling and migration follow each completed stage.
 \TODO{Add an algorithm figure that maps these conceptual stages to the actual
 AthenaK task graph.}
 \VERIFY{Trace the final figure and prose against the implementation and
@@ -355,26 +488,63 @@ qualified.}
 
 \subsection{Interpolation, Deposition, and Refinement Interfaces}
 
-\TODO{Describe TSC interpolation/deposition and define the receiver-resolution
-\texttt{paper\_smooth} refinement-interface target.}
+The active paper candidate requires second-order TSC interpolation and
+deposition. In each active dimension, the quadratic three-point shape is used
+to interpolate the midpoint MHD velocity and magnetic field and to deposit
+charge, current, and the extensive feedback rates. Charge and current use the
+macro charge $q_{\rm scale}W_pq_s$ and physical velocity; feedback channels use
+Equations~\ref{eq:particle-momentum-rate} and
+\ref{eq:particle-energy-rate}. Deposited extensive rates are divided by the
+recipient-cell volume before entering Equations~\ref{eq:gas-opposite-momentum}
+and \ref{eq:gas-opposite-energy}.
+
+On multilevel meshes, \runtime selects the separately named
+\texttt{paper\_smooth} candidate path, which routes receiver-resolution TSC
+records to leaf blocks. This choice follows the requirement that each
+cross-interface contribution be evaluated at the receiving-cell resolution;
+the weight sum associated with one particle may therefore differ from unity
+near a refinement interface while the deposited profile remains smooth.
 \GATE{Do not claim paper-faithful AMR deposition until the receiver-resolution
 TSC interface oracle and required AMR/MPI/HIP lifetime matrices close
 \qgate{Q-009}.}
+Because \texttt{paper\_smooth} permits a cross-interface particle's receiver
+weights to sum to a value other than unity, the uniform-mesh global
+conservation statement above is not extended to AMR interfaces.
 
 \subsection{Particle Provenance, Output, and Restart}
 
-\TODO{Describe persistent particle identifiers, species/source cohorts,
-macro-particle weights, birth times, typed PVTK output, and independently
-reconstructed spectra required by the target Bell and shock claims.}
-\TODO{Describe restart fingerprints, atomic publication, completion markers,
-and the exact tested recovery envelope.}
+Every cosmic-ray particle in the paper-mode layout carries its current
+MeshBlock identifier, persistent tracking
+tag, species identifier, persistent source cohort, macro-particle weight,
+birth time, sampled initial delta-$f$ background value, and evolving delta-$f$
+weight. Migration and restart copy the complete real and integer record. The
+particle restart payload uses schema version 7 for this layout. Selected
+physical extensions persist their continuation-sensitive fitted state, and the
+parallel-shock problem generator separately fingerprints its continuation
+controls; a generic model-wide restart fingerprint is not claimed.
+
+Typed particle VTK output exposes the persistent identifiers and weights as
+named scalar fields, while the velocity vector contains physical velocity
+rather than the stored mass-normalized momentum. Shock spectra are reconstructed
+from these fields with explicit species, source-cohort, birth-time, bin-edge,
+weight, exclusion, and overflow semantics. Restart publication and qualifying
+continuations additionally require exact source/deck/executable bindings,
+completion markers, and retained raw-artifact inventories.
 \GATE{Separate bounded serial/two-rank evidence from broad MPI, AMR, HIP, and
 Frontier-filesystem qualification.}
 
 \subsection{Performance Portability}
 
-\TODO{Describe the Kokkos execution model, particle data layout, communication,
-sorting, stage timers, memory accounting, and particle-aware load balancing.}
+Particle state and moment arrays are held in Kokkos device views and advanced
+through portable parallel kernels. MeshBlockPack-level task lists insert the
+particle push, deposition, synchronization, feedback, boundary handling, and
+migration operations at explicit dependencies in the MHD stage graph.
+Particle communication uses the current record layout and rank ownership;
+post-AMR refreshes validate MeshBlock-sized particle-owned storage.
+Synchronized stage timers, memory accounting, and particle-count load-cost
+terms provide measurement hooks for the registered performance campaign.
+A configured sorting cadence is exposed but remains a benchmark candidate
+rather than a qualified active production feature.
 \GATE{Do not claim production scaling or memory efficiency until
 \qgate{Q-010}, \qgate{Q-017}, \qgate{Q-025}, \qgate{Q-027}, and the registered
 scaling campaign close with retained evidence.}
@@ -424,7 +594,8 @@ Bell deposited-current oracle & \runtime & \TODO{Bind corrected matrix} &
 Equation~\ref{eq:bell-deposited-current} and direct deposited current &
 Dimension, root resolution, meshblock/rank decomposition, $\mathbb{C}$ &
 Blocked \\
-Bell linear & \runtime & \TODO{Bind corrected 1D/2D/3D matrix} &
+Bell linear & \runtime & \TODO{Bind corrected thin-2D/3V one-dimensional-
+variation plus 2D/3D matrix} &
 Signed phase and growth versus dispersion & Resolution, timestep, PPC, seed,
 MPI/GPU; corrected current oracle prerequisite & Blocked \\
 Bell nonlinear & \runtime & \TODO{Bind Q-019 campaign} &
@@ -479,7 +650,8 @@ targeted $2B_g\mathbb{C}k_0$.}
 \TODO{First close a direct deposited-current oracle for
 Equation~\ref{eq:bell-deposited-current} across dimension, root resolution,
 meshblock/rank decomposition, and artificial $\mathbb{C}$. Then insert the
-complete corrected 1D/2D/3D phase and growth reruns only after
+complete corrected thin-2D/3V one-dimensional-variation and 2D/3D phase and
+growth reruns only after
 \claimid{CLAIM-PAPER-BELL-LINEAR-001} closes. Include signed phase, analytical
 dispersion, convergence, exact fit windows, uncertainty, MPI/GPU scope, and raw
 artifact provenance.}
@@ -571,6 +743,11 @@ operation.}
 separate extension.
 \item Corrected Bell claims require the full volume-aware deposited-current
 closure and demonstrated dimension/resolution/decomposition invariance.
+\item Native AthenaK particle runs require a 2D or 3D mesh. A
+``one-dimensional'' Bell result means one-dimensional variation carried on a
+thin 2D/3V mesh, not a native 1D particle calculation.
+\item Exact opposite-impulse global conservation is claimed only for its
+explicitly qualified uniform-mesh, full-$f$, closed-domain envelope.
 \item MHD-PIC does not resolve thermal-pool injection physics in the Section~5.4
 shock setup.
 \item AMR-interface, broad MPI/HIP, resilience, performance, archive, and
