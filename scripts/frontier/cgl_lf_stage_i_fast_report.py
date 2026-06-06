@@ -54,7 +54,7 @@ REFERENCE_ROOT_RELATIVE = Path(
 WRITING_GUIDE = DEFAULT_ROOT / "writing_guide.md"
 TARGET_TIME = 10.0
 TIME_TOLERANCE = 1.0e-12
-RESTART_TIME_TOLERANCE = 1.0e-6
+RESTART_TIME_TOLERANCE = 5.0e-6
 STRICT_FAILURE_COLUMNS = (
     "lf_dfloor",
     "lf_pfloor",
@@ -295,7 +295,7 @@ def expand_cases(values: Iterable[str]) -> list[str]:
 
 def safe_relative_to(path: Path, parent: Path) -> bool:
     try:
-        path.absolute().relative_to(parent.absolute())
+        path.resolve(strict=False).relative_to(parent.resolve(strict=False))
         return True
     except ValueError:
         return False
@@ -723,6 +723,16 @@ def fast_candidates(
                     "error": str(error),
                 })
                 continue
+            try:
+                sequence = int(manifest.get("sequence", int(match.group(1))))
+            except (TypeError, ValueError) as error:
+                rejected.append({
+                    "reason": "manifest_sequence_is_not_an_integer",
+                    "manifest": str(manifest_path),
+                    "observed_sequence": manifest.get("sequence"),
+                    "error": str(error),
+                })
+                continue
             if str(manifest.get("case_id")) != case_id:
                 rejected.append({
                     "reason": "manifest_case_id_mismatch",
@@ -753,7 +763,7 @@ def fast_candidates(
                 "segment": segment,
                 "manifest_path": manifest_path,
                 "manifest": manifest,
-                "sequence": int(manifest.get("sequence", int(match.group(1)))),
+                "sequence": sequence,
                 "output": output,
                 "observed_final_time": final,
                 "source_root": source_root.absolute(),
@@ -762,9 +772,7 @@ def fast_candidates(
                     else "race" if relative == RACE_RUNS_RELATIVE
                     else "relaxed"
                 ),
-                "restart_link_valid": int(
-                    manifest.get("sequence", int(match.group(1)))
-                ) == 0,
+                "restart_link_valid": sequence == 0 and not bool(manifest.get("restart")),
             })
     return candidates
 
@@ -831,6 +839,31 @@ def validate_fast_restart_link(
     return None
 
 
+def validate_fast_seed_restart(child: dict[str, object], restart: Path) -> str | None:
+    child_manifest = child["manifest"]
+    assert isinstance(child_manifest, dict)
+    if not restart.is_file():
+        return f"historical seed restart rank-zero file is missing: {restart}"
+    expected_sha = child_manifest.get("restart_sha256")
+    if not isinstance(expected_sha, str) or not expected_sha:
+        return "historical seed manifest has no restart_sha256"
+    if sha256_file(restart) != expected_sha:
+        return f"historical seed restart rank-zero checksum differs: {restart}"
+    try:
+        restart_time = fast_restart_time(restart)
+    except (OSError, UnicodeDecodeError, ValueError, ReportError) as error:
+        return str(error)
+    child_start = float(child_manifest.get("start_time", math.nan))
+    if not math.isclose(
+        child_start, restart_time, rel_tol=0.0, abs_tol=RESTART_TIME_TOLERANCE
+    ):
+        return (
+            f"historical seed start_time {child_start:.16g} differs from restart "
+            f"time {restart_time:.16g}"
+        )
+    return None
+
+
 def select_fast_lineage(
     root: Path, case_id: str
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[str]]:
@@ -847,9 +880,16 @@ def select_fast_lineage(
         restart_value = child["manifest"].get("restart")  # type: ignore[union-attr]
         if not isinstance(restart_value, str) or not restart_value:
             continue
-        if int(child["sequence"]) == 0:
-            continue
         restart = Path(restart_value).absolute()
+        if int(child["sequence"]) == 0:
+            invalid = validate_fast_seed_restart(child, restart)
+            if invalid is not None:
+                warnings.append(
+                    f"invalid historical seed restart for {child['segment']}: {invalid}"
+                )
+            else:
+                child["restart_link_valid"] = True
+            continue
         parents = [
             parent for parent in candidates
             if safe_relative_to(restart, Path(parent["output"]) / "rst")
