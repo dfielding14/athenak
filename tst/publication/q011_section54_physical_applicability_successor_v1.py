@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Fail-closed source-local physical-applicability diagnostics for Q011.
 
-This additive successor consumes already decoded Q011 production-science mesh,
-deposited-moment, and particle products.  It computes snapshot applicability
-diagnostics and validates a future runtime time/escape record.  It does not
-launch work, mutate policy, authorize qualifying-output inspection, or close
-any scientific claim.
+This additive successor verifies decoded Q011 production-science mesh,
+deposited-moment, and particle products against opened immutable raw bytes. It
+computes snapshot applicability diagnostics and validates byte-bound future
+runtime time/escape records. It does not launch work, mutate policy, authorize
+qualifying-output inspection, or close any scientific claim.
 """
 
 from __future__ import annotations
@@ -27,9 +27,11 @@ from typing import Any
 import numpy as np
 
 if __package__:
+    from . import analyze_q011_section54_outputs as output_primitives
     from . import pvtk_particles
     from . import q011_section54_production_science_successor_v1 as science
 else:
+    import analyze_q011_section54_outputs as output_primitives
     import pvtk_particles
     import q011_section54_production_science_successor_v1 as science
 
@@ -42,6 +44,8 @@ RUNTIME_RECORD_TYPE = "q011_section54_runtime_time_escape_applicability_v1"
 NORMALIZATION_RECORD_TYPE = "q011_section54_bound_normalization_evidence_v1"
 SOURCE_MANIFEST_RECORD_TYPE = "q011_section54_source_manifest_v1"
 SNAPSHOT_PROVENANCE_RECORD_TYPE = "q011_section54_snapshot_provenance_manifest_v1"
+CYCLE_TELEMETRY_RECORD_TYPE = "q011_section54_bound_cycle_telemetry_v1"
+SLOPE_CUTOFF_ESCAPE_RECORD_TYPE = "q011_section54_bound_slope_cutoff_escape_evidence_v1"
 QUALIFICATION_EFFECT = (
     "source_local_non_authorizing_diagnostic_and_gate_only_no_launch_no_policy_"
     "mutation_no_qualifying_output_inspection_no_claim_closure"
@@ -99,9 +103,15 @@ ESCAPED_MACRO_WEIGHT_FRACTION_MAXIMUM = 1.0e-3
 ESCAPED_KINETIC_ENERGY_FRACTION_MAXIMUM = 1.0e-3
 ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM = 1.0e-12
 PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT = "d614e5c84aad3a541dc96af68ef1178dabc66f71"
+TRUSTED_Q011_RUNTIME_SOURCE_COMMIT = PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT
 PS_ESCAPE_LEDGER_SCHEMA = 1
 PS_CR_LEDGER_SCHEMA = 3
 PAPER_VL2_ESCAPE_AUDITS_PER_CYCLE = 2
+SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM = 1.0e-3
+SLOPE_CUTOFF_TAIL_ESCAPE_FRACTION_MAXIMUM = 1.0e-3
+MINIMUM_SLOPE_CUTOFF_HIGH_ENERGY_BINS = 4
+INNER_X1_ESCAPE_REASON = "inner_x1_escape_forbidden"
+OUTER_X1_ESCAPE_REASON = "outer_x1_physical_boundary_escape"
 REQUIRED_PS_ESCAPE_CHECKPOINT_NOMINAL_TIMES = tuple(
     float(value) for value in range(100, 1201, 100)
 )
@@ -572,6 +582,89 @@ def _particle_payload_sha256(
     return hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()
 
 
+def _decode_particle_vtk_bytes(payload: bytes, label: str) -> dict[str, Any]:
+    match = _PVTK_EXECUTION_PATTERN.match(payload[:4096])
+    _require(match is not None, f"{label} lacks canonical prtcl_all execution metadata")
+    try:
+        header_time = float(match.group(1))
+        header_nranks = int(match.group(2))
+        header_cycle = int(match.group(3))
+        header_variables = match.group(4).decode("ascii")
+    except (UnicodeDecodeError, ValueError) as error:
+        raise PhysicalApplicabilityError(
+            f"{label} contains invalid prtcl_all execution metadata"
+        ) from error
+    _require(
+        math.isfinite(header_time)
+        and header_nranks > 0
+        and header_cycle >= 0
+        and header_variables == "prtcl_all",
+        f"{label} prtcl_all execution metadata drifted",
+    )
+    try:
+        descriptor = os.memfd_create(
+            "q011-bound-particle-payload",
+            flags=getattr(os, "MFD_CLOEXEC", 0),
+        )
+        try:
+            remaining = memoryview(payload)
+            while remaining:
+                written = os.write(descriptor, remaining)
+                _require(written > 0, f"{label} could not stage bound particle bytes")
+                remaining = remaining[written:]
+            particles = pvtk_particles.read_particle_vtk(Path(f"/proc/self/fd/{descriptor}"))
+        finally:
+            os.close(descriptor)
+    except (OSError, ValueError) as error:
+        raise PhysicalApplicabilityError(
+            f"{label} bound prtcl_all payload cannot be decoded"
+        ) from error
+    _require(
+        set(particles.scalars) == _PVTK_SCALARS and set(particles.vectors) == {"vel"},
+        f"{label} prtcl_all field inventory drifted",
+    )
+    particle_count = particles.points.shape[0]
+    _require(
+        particle_count > 0
+        and particles.points.shape == (particle_count, 3)
+        and particles.vectors["vel"].shape == (particle_count, 3),
+        f"{label} prtcl_all shape or population is invalid",
+    )
+    for name in _PVTK_SCALARS:
+        _require(
+            particles.scalars[name].shape == (particle_count,),
+            f"{label} prtcl_all scalar shape drifted",
+        )
+    _require(
+        np.all(np.isfinite(particles.points))
+        and np.all(np.isfinite(particles.vectors["vel"]))
+        and all(
+            np.all(np.isfinite(particles.scalars[name]))
+            for name in ("macro_weight", "birth_time", "deltaf_f0", "deltaf_weight")
+        )
+        and np.all(particles.scalars["macro_weight"] >= 0.0)
+        and np.all(particles.scalars["gid"] >= 0)
+        and np.all(particles.scalars["ptag"] >= 0)
+        and np.all(particles.scalars["species"] >= 0)
+        and np.all(np.isin(particles.scalars["cr_source"], (0, 1)))
+        and np.unique(particles.scalars["ptag"]).size == particle_count,
+        f"{label} prtcl_all values or provenance are invalid",
+    )
+    return {
+        "execution_header": {
+            "observed_committed_time": header_time,
+            "nranks": header_nranks,
+            "cycle": header_cycle,
+            "variables": header_variables,
+        },
+        "points": particles.points,
+        "cr_source": particles.scalars["cr_source"],
+        "birth_time": particles.scalars["birth_time"],
+        "velocity": particles.vectors["vel"],
+        "macro_weight": particles.scalars["macro_weight"],
+    }
+
+
 def _validate_bound_normalization_evidence(
     evidence_root: Path,
     value: object,
@@ -629,6 +722,10 @@ def _validate_bound_normalization_evidence(
         "runtime normalization record type drifted",
     )
     source_commit = _source_commit(runtime["source_commit"], "runtime normalization source commit")
+    _require(
+        source_commit == TRUSTED_Q011_RUNTIME_SOURCE_COMMIT,
+        "runtime normalization is not bound to the exact trusted Q011 source identity",
+    )
     normalization = _validate_exact_normalization(runtime["normalization"])
     source_manifest = _decode_canonical_json(
         payloads["source_manifest"], "bound source manifest"
@@ -776,35 +873,68 @@ def _validate_snapshot_provenance(
     raw_products = _exact_keys(
         manifest["raw_products"], set(REQUIRED_RAW_PRODUCTS), "snapshot raw products"
     )
-    sources = {
-        "mhd_w_bcc": mhd_dataset.source,
-        **{product: current_datasets[product].source for product in science.CURRENT_PRODUCT_FIELDS},
-        "prtcl_all": particle_source,
+    supplied_datasets = {
+        "mhd_w_bcc": mhd_dataset,
+        **{product: current_datasets[product] for product in science.CURRENT_PRODUCT_FIELDS},
     }
     validated_products: dict[str, dict[str, object]] = {}
+    raw_payloads: dict[str, bytes] = {}
     for product in REQUIRED_RAW_PRODUCTS:
-        binding, _ = _read_bound_artifact(
+        binding, raw_payloads[product] = _read_bound_artifact(
             evidence_root, raw_products[product], expected_role=product
         )
+        validated_products[product] = binding
+    decoded_expected: dict[str, str] = {}
+    for product, supplied in supplied_datasets.items():
         _require(
-            type(sources[product]) is str and sources[product] == binding["path"],
+            supplied.source == validated_products[product]["path"],
             f"{product} decoded source is not bound to raw artifact",
         )
-        validated_products[product] = binding
-    decoded_expected = {
-        "mhd_w_bcc": _dataset_sha256(mhd_dataset, "mhd_w_bcc"),
-        **{
-            product: _dataset_sha256(current_datasets[product], product)
-            for product in science.CURRENT_PRODUCT_FIELDS
-        },
-        "prtcl_all": _particle_payload_sha256(
+        try:
+            parsed = output_primitives.parse_athenak_binary_bytes(
+                raw_payloads[product], source=str(validated_products[product]["path"])
+            )
+        except output_primitives.AnalysisError as error:
+            raise PhysicalApplicabilityError(
+                f"{product} bound raw product is not a trusted Athena binary: {error}"
+            ) from error
+        parsed_sha = _dataset_sha256(parsed, f"trusted decoded {product}")
+        _require(
+            parsed_sha == _dataset_sha256(supplied, f"supplied decoded {product}"),
+            f"{product} supplied decoded dataset disagrees with bound raw bytes",
+        )
+        decoded_expected[product] = parsed_sha
+    _require(
+        particle_source == validated_products["prtcl_all"]["path"],
+        "prtcl_all decoded source is not bound to raw artifact",
+    )
+    decoded_particle = _decode_particle_vtk_bytes(
+        raw_payloads["prtcl_all"], "snapshot bound prtcl_all"
+    )
+    _require(
+        decoded_particle["execution_header"]["observed_committed_time"]
+        == observed_committed_time
+        and decoded_particle["execution_header"]["cycle"] == mhd_dataset.cycle,
+        "snapshot bound prtcl_all cycle/time binding drifted",
+    )
+    decoded_expected["prtcl_all"] = _particle_payload_sha256(
+        points=decoded_particle["points"],
+        cr_source=decoded_particle["cr_source"],
+        birth_time=decoded_particle["birth_time"],
+        velocity=decoded_particle["velocity"],
+        macro_weight=decoded_particle["macro_weight"],
+    )
+    _require(
+        decoded_expected["prtcl_all"]
+        == _particle_payload_sha256(
             points=points,
             cr_source=cr_source,
             birth_time=birth_time,
             velocity=velocity,
             macro_weight=macro_weight,
         ),
-    }
+        "prtcl_all supplied decoded payload disagrees with bound raw bytes",
+    )
     decoded = _exact_keys(
         manifest["decoded_product_sha256"],
         set(REQUIRED_RAW_PRODUCTS),
@@ -814,7 +944,7 @@ def _validate_snapshot_provenance(
         _require(
             _sha256_text(decoded[product], f"snapshot decoded {product} digest")
             == expected_sha,
-            f"snapshot decoded {product} payload disagrees with provenance manifest",
+            f"snapshot decoded {product} payload disagrees with trusted raw-byte reduction",
         )
     return {
         "manifest_binding": manifest_binding,
@@ -1479,6 +1609,7 @@ class ApplicabilitySnapshot:
 
     record: Mapping[str, Any]
     cell_maps: Mapping[str, np.ndarray]
+    evidence_root: Path
 
 
 @_public_contract("Q011 physical-applicability snapshot reduction")
@@ -1795,7 +1926,11 @@ def reduce_physical_applicability_snapshot(
         "claim_rejections": _claim_rejections(gates, maximum_lambda),
         "runtime_time_escape_evidence_required": True,
     }
-    return ApplicabilitySnapshot(record=MappingProxyType(record), cell_maps=maps)
+    return ApplicabilitySnapshot(
+        record=MappingProxyType(record),
+        cell_maps=maps,
+        evidence_root=evidence_root.resolve(strict=True),
+    )
 
 
 _CYCLE_EXTREMA_KEYS = (
@@ -1817,11 +1952,19 @@ _CYCLE_MINIMUM_KEYS = {
     "lambda_B_characteristic_over_local_di_maximum_minimum",
     "delta_B_rms_over_B0_minimum",
 }
-_CYCLE_ENTRY_KEYS = set(_CYCLE_EXTREMA_KEYS) | {
+_CYCLE_TELEMETRY_KEYS = set(_CYCLE_EXTREMA_KEYS) | {
+    "schema_version",
+    "record_type",
+    "attempt_id",
+    "source_commit",
+    "executable_sha256",
+    "runtime_normalization_sha256",
+    "ps_escape_accounting_source_commit",
     "cycle",
+    "previous_committed_cycle",
+    "previous_committed_time",
     "start_time",
     "end_time",
-    "telemetry_record_sha256",
 }
 _PARTICLE_EXPOSURE_KEYS = {
     "complete",
@@ -1839,6 +1982,7 @@ _PARTICLE_EXPOSURE_KEYS = {
     "cumulative_CR_energy_weighted_Lambda_exceedance_fraction",
 }
 _STATE_VECTOR_KEYS = {"particle_count", "macro_weight", "kinetic_energy", "momentum"}
+_FACE_ESCAPE_KEYS = _STATE_VECTOR_KEYS | {"reason_code"}
 _ESCAPE_KEYS = {
     "complete",
     "scope",
@@ -1886,6 +2030,8 @@ _PS_ESCAPE_CHECKPOINT_KEYS = {
     "nominal_checkpoint_time",
     "observed_committed_time",
     "cycle",
+    "previous_committed_cycle",
+    "previous_committed_time",
     "restart_artifact",
     "particle_checkpoint_artifact",
     "ps_escape_ledger",
@@ -1898,7 +2044,7 @@ _PS_ESCAPE_CHECKPOINT_KEYS = {
 _CLAIM_ESCAPE_ACCOUNTING = {
     "Emax_claim": "active_plus_escaped_all_cycle_maximum_and_preregistered_fraction_bounds",
     "high_energy_slope_or_cutoff_claim": (
-        "escaped_population_explicitly_bounded_by_preregistered_count_mass_energy_fractions"
+        "bound_complete_binwise_and_high_energy_tail_active_plus_escaped_bias_bounds"
     ),
     "acceleration_rate_claim": (
         "active_plus_escaped_all_cycle_maximum_and_preregistered_fraction_bounds"
@@ -1921,8 +2067,28 @@ _RUNTIME_KEYS = {
     "per_cycle_inventory",
     "ps_escape_checkpoints",
     "claim_escape_accounting",
+    "escaped_slope_cutoff_evidence",
     "particle_exposure",
     "boundary_escape_ledger",
+}
+_SLOPE_CUTOFF_ESCAPE_KEYS = {
+    "schema_version",
+    "record_type",
+    "attempt_id",
+    "source_commit",
+    "executable_sha256",
+    "runtime_normalization_sha256",
+    "ps_escape_accounting_source_commit",
+    "complete",
+    "unavailable_reason",
+    "high_energy_tail_threshold",
+    "energy_bin_edges",
+    "active_particle_count_by_bin",
+    "active_macro_weight_by_bin",
+    "active_kinetic_energy_by_bin",
+    "escaped_particle_count_by_bin",
+    "escaped_macro_weight_by_bin",
+    "escaped_kinetic_energy_by_bin",
 }
 
 
@@ -1953,6 +2119,409 @@ def _decode_state_vector(value: object, label: str) -> dict[str, Any]:
             _finite_scalar(component, f"{label} momentum component {index}")
             for index, component in enumerate(momentum)
         ],
+    }
+
+
+def _decode_face_escape(
+    value: object, label: str, *, expected_reason: str
+) -> dict[str, Any]:
+    face = _exact_keys(value, _FACE_ESCAPE_KEYS, label)
+    _require(face["reason_code"] == expected_reason, f"{label} reason code drifted")
+    return {
+        "reason_code": expected_reason,
+        **_decode_state_vector(
+            {key: face[key] for key in _STATE_VECTOR_KEYS}, f"{label} state"
+        ),
+    }
+
+
+def _validate_cycle_telemetry_inventory(
+    evidence_root: Path,
+    value: object,
+    *,
+    attempt_id: str,
+    source_commit: str,
+    executable_sha256: str,
+    normalization_sha256: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    _require(type(value) is list, "runtime per-cycle inventory must be a list")
+    _require(
+        len(value) >= MINIMUM_RUNTIME_CYCLE_INVENTORY_COUNT,
+        "runtime per-cycle inventory is too short to establish complete coverage",
+    )
+    decoded: list[dict[str, Any]] = []
+    digests: set[str] = set()
+    paths: set[str] = set()
+    for index, raw_binding in enumerate(value):
+        binding, payload = _read_bound_artifact(
+            evidence_root, raw_binding, expected_role="cycle_telemetry_record"
+        )
+        _require(
+            binding["sha256"] not in digests and binding["path"] not in paths,
+            "runtime per-cycle telemetry artifact was reused",
+        )
+        digests.add(str(binding["sha256"]))
+        paths.add(str(binding["path"]))
+        entry = _exact_keys(
+            _decode_canonical_json(payload, f"runtime cycle telemetry {index}"),
+            _CYCLE_TELEMETRY_KEYS,
+            f"runtime cycle telemetry {index}",
+        )
+        _require(
+            type(entry["schema_version"]) is int
+            and entry["schema_version"] == SCHEMA_VERSION
+            and entry["record_type"] == CYCLE_TELEMETRY_RECORD_TYPE,
+            f"runtime cycle telemetry {index} identity drifted",
+        )
+        _require(
+            entry["attempt_id"] == attempt_id
+            and _source_commit(
+                entry["source_commit"], f"runtime cycle telemetry {index} source commit"
+            )
+            == source_commit
+            == TRUSTED_Q011_RUNTIME_SOURCE_COMMIT
+            and _sha256_text(
+                entry["executable_sha256"],
+                f"runtime cycle telemetry {index} executable digest",
+            )
+            == executable_sha256
+            and _sha256_text(
+                entry["runtime_normalization_sha256"],
+                f"runtime cycle telemetry {index} normalization digest",
+            )
+            == normalization_sha256
+            and _source_commit(
+                entry["ps_escape_accounting_source_commit"],
+                f"runtime cycle telemetry {index} escape implementation commit",
+            )
+            == PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
+            f"runtime cycle telemetry {index} trusted source/escape identity drifted",
+        )
+        cycle = _nonnegative_int(entry["cycle"], f"runtime cycle telemetry {index} cycle")
+        previous_cycle = _nonnegative_int(
+            entry["previous_committed_cycle"],
+            f"runtime cycle telemetry {index} previous cycle",
+        )
+        previous_time = _finite_scalar(
+            entry["previous_committed_time"],
+            f"runtime cycle telemetry {index} previous time",
+            minimum=0.0,
+        )
+        start = _finite_scalar(
+            entry["start_time"], f"runtime cycle telemetry {index} start time", minimum=0.0
+        )
+        end = _finite_scalar(
+            entry["end_time"], f"runtime cycle telemetry {index} end time", minimum=0.0
+        )
+        _require(
+            previous_cycle + 1 == cycle and previous_time <= start < end,
+            f"runtime cycle telemetry {index} chronology drifted",
+        )
+        _require(
+            end - start <= MAXIMUM_RUNTIME_CYCLE_SPAN
+            and start - previous_time <= MAXIMUM_RUNTIME_CYCLE_SPAN,
+            f"runtime cycle telemetry {index} exceeds the maximum chronology span",
+        )
+        metrics = {
+            key: _finite_scalar(
+                entry[key], f"runtime cycle telemetry {index} {key}", minimum=0.0
+            )
+            for key in _CYCLE_EXTREMA_KEYS
+        }
+        _require(
+            metrics["particle_rg_maximum_over_Ly"]
+            >= metrics["escaped_particle_rg_maximum_over_Ly"],
+            "runtime particle gyroradius maximum omits escaped particles",
+        )
+        _require(
+            metrics["high_energy_tail_rg_maximum_over_Ly"]
+            >= metrics["escaped_high_energy_tail_rg_maximum_over_Ly"],
+            "runtime high-energy gyroradius maximum omits escaped particles",
+        )
+        _require(
+            metrics["maximum_particle_specific_kinetic_energy"]
+            >= metrics["escaped_particle_specific_kinetic_energy_maximum"],
+            "runtime maximum particle energy omits escaped particles",
+        )
+        decoded.append(
+            {
+                "binding": binding,
+                "cycle": cycle,
+                "previous_committed_cycle": previous_cycle,
+                "previous_committed_time": previous_time,
+                "start_time": start,
+                "end_time": end,
+                **metrics,
+            }
+        )
+    first = decoded[0]
+    _require(
+        first["previous_committed_time"] < STARTUP_REMOVAL_TIME
+        <= first["start_time"]
+        and first["previous_committed_cycle"] + 1 == first["cycle"],
+        "runtime first retained cycle is not the first committed cycle starting across t=45",
+    )
+    _require(
+        decoded[-1]["end_time"] == EXPECTED_TERMINAL_TIME,
+        "runtime per-cycle inventory must bind exact actual terminal endpoint t=1200",
+    )
+    for left, right in zip(decoded, decoded[1:]):
+        _require(
+            right["cycle"] == left["cycle"] + 1
+            and right["previous_committed_cycle"] == left["cycle"],
+            "runtime per-cycle inventory has a cycle gap or previous-cycle drift",
+        )
+        _require(
+            right["previous_committed_time"] == left["end_time"]
+            and right["start_time"] == left["end_time"],
+            "runtime per-cycle inventory has a time gap, overlap, or previous-time drift",
+        )
+    extrema = {
+        key: (
+            min(float(entry[key]) for entry in decoded)
+            if key in _CYCLE_MINIMUM_KEYS
+            else max(float(entry[key]) for entry in decoded)
+        )
+        for key in _CYCLE_EXTREMA_KEYS
+    }
+    coverage = {
+        "sampling_mode": "opened_immutable_byte_bound_every_integrator_cycle_telemetry",
+        "previous_committed_cycle_before_startup_crossing": first[
+            "previous_committed_cycle"
+        ],
+        "previous_committed_time_before_startup_crossing": first[
+            "previous_committed_time"
+        ],
+        "post_startup_removal_start_time": first["start_time"],
+        "terminal_time": decoded[-1]["end_time"],
+        "first_cycle": first["cycle"],
+        "last_cycle": decoded[-1]["cycle"],
+        "covered_cycle_count": len(decoded),
+        "maximum_cycle_span": max(entry["end_time"] - entry["start_time"] for entry in decoded),
+        "complete_contiguous_actual_endpoints": True,
+        "trusted_source_commit": TRUSTED_Q011_RUNTIME_SOURCE_COMMIT,
+        "trusted_escape_implementation_commit": PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
+    }
+    return decoded, extrema, coverage
+
+
+def _nonnegative_numeric_list(
+    value: object, label: str, *, integer: bool = False
+) -> list[float | int]:
+    _require(type(value) is list, f"{label} must be a list")
+    if integer:
+        return [_nonnegative_int(item, f"{label} item {index}") for index, item in enumerate(value)]
+    return [
+        _finite_scalar(item, f"{label} item {index}", minimum=0.0)
+        for index, item in enumerate(value)
+    ]
+
+
+def _validate_slope_cutoff_escape_evidence(
+    evidence_root: Path,
+    value: object,
+    *,
+    attempt_id: str,
+    source_commit: str,
+    executable_sha256: str,
+    normalization_sha256: str,
+    active: Mapping[str, Any],
+    escaped: Mapping[str, Any],
+    maximum_specific_energy: float,
+) -> dict[str, Any]:
+    binding, payload = _read_bound_artifact(
+        evidence_root, value, expected_role="slope_cutoff_escape_evidence"
+    )
+    record = _exact_keys(
+        _decode_canonical_json(payload, "slope/cutoff escape evidence"),
+        _SLOPE_CUTOFF_ESCAPE_KEYS,
+        "slope/cutoff escape evidence",
+    )
+    _require(
+        type(record["schema_version"]) is int
+        and record["schema_version"] == SCHEMA_VERSION
+        and record["record_type"] == SLOPE_CUTOFF_ESCAPE_RECORD_TYPE,
+        "slope/cutoff escape evidence identity drifted",
+    )
+    _require(
+        record["attempt_id"] == attempt_id
+        and _source_commit(record["source_commit"], "slope/cutoff source commit")
+        == source_commit
+        == TRUSTED_Q011_RUNTIME_SOURCE_COMMIT
+        and _sha256_text(record["executable_sha256"], "slope/cutoff executable digest")
+        == executable_sha256
+        and _sha256_text(
+            record["runtime_normalization_sha256"], "slope/cutoff normalization digest"
+        )
+        == normalization_sha256
+        and _source_commit(
+            record["ps_escape_accounting_source_commit"],
+            "slope/cutoff escape implementation commit",
+        )
+        == PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
+        "slope/cutoff trusted source/escape identity drifted",
+    )
+    complete = _strict_bool(record["complete"], "slope/cutoff evidence complete")
+    array_keys = (
+        "energy_bin_edges",
+        "active_particle_count_by_bin",
+        "active_macro_weight_by_bin",
+        "active_kinetic_energy_by_bin",
+        "escaped_particle_count_by_bin",
+        "escaped_macro_weight_by_bin",
+        "escaped_kinetic_energy_by_bin",
+    )
+    if not complete:
+        _require(
+            type(record["unavailable_reason"]) is str
+            and bool(record["unavailable_reason"])
+            and record["high_energy_tail_threshold"] is None
+            and all(record[key] == [] for key in array_keys),
+            "incomplete slope/cutoff evidence must explicitly bind an unavailable reason and no bins",
+        )
+        return {
+            "binding": binding,
+            "complete": False,
+            "pass": False,
+            "unavailable_reason": record["unavailable_reason"],
+            "AthenaK_selected_bin_escape_fraction_maximum": (
+                SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM
+            ),
+            "AthenaK_selected_tail_escape_fraction_maximum": (
+                SLOPE_CUTOFF_TAIL_ESCAPE_FRACTION_MAXIMUM
+            ),
+        }
+    _require(record["unavailable_reason"] is None, "complete slope/cutoff evidence has a reason")
+    threshold = _finite_scalar(
+        record["high_energy_tail_threshold"], "slope/cutoff high-energy threshold", minimum=0.0
+    )
+    edges = _nonnegative_numeric_list(record["energy_bin_edges"], "slope/cutoff bin edges")
+    _require(
+        len(edges) >= MINIMUM_SLOPE_CUTOFF_HIGH_ENERGY_BINS + 1
+        and all(right > left for left, right in zip(edges, edges[1:]))
+        and threshold in edges[:-1]
+        and edges[-1] >= maximum_specific_energy,
+        "slope/cutoff energy-bin coverage is insufficient or non-monotonic",
+    )
+    bin_count = len(edges) - 1
+    arrays = {
+        "active_particle_count_by_bin": _nonnegative_numeric_list(
+            record["active_particle_count_by_bin"],
+            "slope/cutoff active particle counts",
+            integer=True,
+        ),
+        "active_macro_weight_by_bin": _nonnegative_numeric_list(
+            record["active_macro_weight_by_bin"], "slope/cutoff active macro weights"
+        ),
+        "active_kinetic_energy_by_bin": _nonnegative_numeric_list(
+            record["active_kinetic_energy_by_bin"], "slope/cutoff active kinetic energies"
+        ),
+        "escaped_particle_count_by_bin": _nonnegative_numeric_list(
+            record["escaped_particle_count_by_bin"],
+            "slope/cutoff escaped particle counts",
+            integer=True,
+        ),
+        "escaped_macro_weight_by_bin": _nonnegative_numeric_list(
+            record["escaped_macro_weight_by_bin"], "slope/cutoff escaped macro weights"
+        ),
+        "escaped_kinetic_energy_by_bin": _nonnegative_numeric_list(
+            record["escaped_kinetic_energy_by_bin"], "slope/cutoff escaped kinetic energies"
+        ),
+    }
+    _require(
+        all(len(values) == bin_count for values in arrays.values()),
+        "slope/cutoff bin array lengths drifted",
+    )
+    high_bins = [index for index, lower in enumerate(edges[:-1]) if lower >= threshold]
+    _require(
+        len(high_bins) >= MINIMUM_SLOPE_CUTOFF_HIGH_ENERGY_BINS
+        and all(
+            arrays["active_particle_count_by_bin"][index]
+            + arrays["escaped_particle_count_by_bin"][index]
+            > 0
+            and arrays["active_macro_weight_by_bin"][index]
+            + arrays["escaped_macro_weight_by_bin"][index]
+            > 0.0
+            and arrays["active_kinetic_energy_by_bin"][index]
+            + arrays["escaped_kinetic_energy_by_bin"][index]
+            > 0.0
+            for index in high_bins
+        ),
+        "slope/cutoff high-energy binwise evidence is insufficient",
+    )
+    _require(
+        sum(arrays["active_particle_count_by_bin"]) == active["particle_count"]
+        and sum(arrays["escaped_particle_count_by_bin"]) == escaped["particle_count"],
+        "slope/cutoff particle-count bins disagree with active/escaped ledgers",
+    )
+    for key, expected, label in (
+        ("active_macro_weight_by_bin", active["macro_weight"], "active macro weight"),
+        ("active_kinetic_energy_by_bin", active["kinetic_energy"], "active kinetic energy"),
+        ("escaped_macro_weight_by_bin", escaped["macro_weight"], "escaped macro weight"),
+        ("escaped_kinetic_energy_by_bin", escaped["kinetic_energy"], "escaped kinetic energy"),
+    ):
+        _require(
+            _closure_residual(float(expected), float(sum(arrays[key])), [float(v) for v in arrays[key]])
+            <= ESCAPE_LEDGER_RELATIVE_RESIDUAL_MAXIMUM,
+            f"slope/cutoff {label} bins disagree with ledger",
+        )
+
+    def fractions(active_key: str, escaped_key: str) -> list[float]:
+        result = []
+        for active_value, escaped_value in zip(arrays[active_key], arrays[escaped_key]):
+            denominator = float(active_value) + float(escaped_value)
+            result.append(float(escaped_value) / denominator if denominator > 0.0 else 0.0)
+        return result
+
+    bin_fractions = {
+        "particle_count": fractions(
+            "active_particle_count_by_bin", "escaped_particle_count_by_bin"
+        ),
+        "macro_weight": fractions(
+            "active_macro_weight_by_bin", "escaped_macro_weight_by_bin"
+        ),
+        "kinetic_energy": fractions(
+            "active_kinetic_energy_by_bin", "escaped_kinetic_energy_by_bin"
+        ),
+    }
+    tail_fractions: dict[str, float] = {}
+    for name, active_key, escaped_key in (
+        ("particle_count", "active_particle_count_by_bin", "escaped_particle_count_by_bin"),
+        ("macro_weight", "active_macro_weight_by_bin", "escaped_macro_weight_by_bin"),
+        ("kinetic_energy", "active_kinetic_energy_by_bin", "escaped_kinetic_energy_by_bin"),
+    ):
+        active_tail = sum(float(arrays[active_key][index]) for index in high_bins)
+        escaped_tail = sum(float(arrays[escaped_key][index]) for index in high_bins)
+        tail_fractions[name] = (
+            escaped_tail / (active_tail + escaped_tail)
+            if active_tail + escaped_tail > 0.0
+            else 0.0
+        )
+    passes = all(
+        bin_fractions[name][index] <= SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM
+        for name in bin_fractions
+        for index in high_bins
+    ) and all(
+        value <= SLOPE_CUTOFF_TAIL_ESCAPE_FRACTION_MAXIMUM
+        for value in tail_fractions.values()
+    )
+    return {
+        "binding": binding,
+        "complete": True,
+        "pass": passes,
+        "unavailable_reason": None,
+        "high_energy_tail_threshold": threshold,
+        "energy_bin_edges": edges,
+        **arrays,
+        "high_energy_bin_indices": high_bins,
+        "escaped_fraction_by_bin": bin_fractions,
+        "escaped_high_energy_tail_fractions": tail_fractions,
+        "AthenaK_selected_bin_escape_fraction_maximum": (
+            SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM
+        ),
+        "AthenaK_selected_tail_escape_fraction_maximum": (
+            SLOPE_CUTOFF_TAIL_ESCAPE_FRACTION_MAXIMUM
+        ),
     }
 
 
@@ -2238,13 +2807,29 @@ def _validate_ps_escape_checkpoints(
             minimum=0.0,
         )
         cycle = _nonnegative_int(checkpoint["cycle"], f"ps_escape checkpoint {index} cycle")
+        previous_cycle = _nonnegative_int(
+            checkpoint["previous_committed_cycle"],
+            f"ps_escape checkpoint {index} previous committed cycle",
+        )
+        previous_time = _finite_scalar(
+            checkpoint["previous_committed_time"],
+            f"ps_escape checkpoint {index} previous committed time",
+            minimum=0.0,
+        )
+        crossings = [entry for entry in inventory if entry["end_time"] >= nominal]
+        _require(bool(crossings), "ps_escape checkpoint nominal slot was never crossed")
+        first_crossing = crossings[0]
+        _require(
+            first_crossing["previous_committed_time"] < nominal
+            <= first_crossing["end_time"]
+            and first_crossing["cycle"] == cycle
+            and first_crossing["end_time"] == observed
+            and first_crossing["previous_committed_cycle"] == previous_cycle
+            and first_crossing["previous_committed_time"] == previous_time,
+            "ps_escape checkpoint is not the first committed cycle crossing its nominal slot",
+        )
         if nominal == EXPECTED_TERMINAL_TIME:
             _require(observed == nominal, "ps_escape endpoint checkpoint time drifted")
-        else:
-            _require(
-                nominal <= observed < nominal + 100.0,
-                "ps_escape observed checkpoint does not belong to nominal cadence slot",
-            )
         restart_binding, restart_payload = _read_bound_artifact(
             evidence_root,
             checkpoint["restart_artifact"],
@@ -2278,15 +2863,7 @@ def _validate_ps_escape_checkpoints(
             parsed_ledger["ps_removed_excluded_early_cohort"],
             "ps_escape checkpoint predates completed startup cohort removal",
         )
-        matches = [
-            entry
-            for entry in inventory
-            if entry["cycle"] == cycle and entry["end_time"] == observed
-        ]
-        _require(
-            len(matches) == 1,
-            "ps_escape checkpoint has no exact per-cycle inventory endpoint",
-        )
+        matches = [first_crossing]
         particle_inventory = _decode_bound_particle_checkpoint(
             particle_payload,
             f"ps_escape checkpoint {index} particle artifact",
@@ -2394,6 +2971,8 @@ def _validate_ps_escape_checkpoints(
                 "nominal_checkpoint_time": nominal,
                 "observed_committed_time": observed,
                 "cycle": cycle,
+                "previous_committed_cycle": previous_cycle,
+                "previous_committed_time": previous_time,
                 "restart_artifact": restart_binding,
                 "particle_checkpoint_artifact": particle_binding,
                 "ps_escape_ledger": parsed_ledger,
@@ -2482,6 +3061,10 @@ def _validate_runtime_time_escape(
         "runtime attempt id drifted",
     )
     source_commit = _source_commit(runtime["source_commit"], "runtime source commit")
+    _require(
+        source_commit == TRUSTED_Q011_RUNTIME_SOURCE_COMMIT,
+        "runtime source commit is not the exact trusted Q011 source identity",
+    )
     executable_sha256 = _sha256_text(
         runtime["executable_sha256"], "runtime executable digest"
     )
@@ -2506,99 +3089,14 @@ def _validate_runtime_time_escape(
         "runtime claim escape accounting modes drifted",
     )
 
-    inventory = runtime["per_cycle_inventory"]
-    _require(type(inventory) is list, "runtime per-cycle inventory must be a list")
-    _require(
-        len(inventory) >= MINIMUM_RUNTIME_CYCLE_INVENTORY_COUNT,
-        "runtime per-cycle inventory is too short to establish complete coverage",
+    decoded_inventory, extrema, coverage = _validate_cycle_telemetry_inventory(
+        evidence_root,
+        runtime["per_cycle_inventory"],
+        attempt_id=runtime["attempt_id"],
+        source_commit=source_commit,
+        executable_sha256=executable_sha256,
+        normalization_sha256=normalization_sha256,
     )
-    decoded_inventory: list[dict[str, Any]] = []
-    telemetry_digests: set[str] = set()
-    for index, raw_entry in enumerate(inventory):
-        entry = _exact_keys(raw_entry, _CYCLE_ENTRY_KEYS, f"runtime cycle entry {index}")
-        cycle = _nonnegative_int(entry["cycle"], f"runtime cycle entry {index} cycle")
-        start = _finite_scalar(
-            entry["start_time"], f"runtime cycle entry {index} start time", minimum=0.0
-        )
-        end = _finite_scalar(
-            entry["end_time"], f"runtime cycle entry {index} end time", minimum=0.0
-        )
-        _require(end > start, f"runtime cycle entry {index} has non-positive duration")
-        _require(
-            end - start <= MAXIMUM_RUNTIME_CYCLE_SPAN,
-            f"runtime cycle entry {index} exceeds the maximum cycle span",
-        )
-        telemetry_sha = _sha256_text(
-            entry["telemetry_record_sha256"],
-            f"runtime cycle entry {index} telemetry digest",
-        )
-        _require(
-            telemetry_sha not in telemetry_digests,
-            "runtime per-cycle telemetry digest was reused",
-        )
-        telemetry_digests.add(telemetry_sha)
-        metrics = {
-            key: _finite_scalar(entry[key], f"runtime cycle entry {index} {key}", minimum=0.0)
-            for key in _CYCLE_EXTREMA_KEYS
-        }
-        _require(
-            metrics["particle_rg_maximum_over_Ly"]
-            >= metrics["escaped_particle_rg_maximum_over_Ly"],
-            "runtime particle gyroradius maximum omits escaped particles",
-        )
-        _require(
-            metrics["high_energy_tail_rg_maximum_over_Ly"]
-            >= metrics["escaped_high_energy_tail_rg_maximum_over_Ly"],
-            "runtime high-energy gyroradius maximum omits escaped particles",
-        )
-        _require(
-            metrics["maximum_particle_specific_kinetic_energy"]
-            >= metrics["escaped_particle_specific_kinetic_energy_maximum"],
-            "runtime maximum particle energy omits escaped particles",
-        )
-        decoded_inventory.append(
-            {
-                "cycle": cycle,
-                "start_time": start,
-                "end_time": end,
-                "telemetry_record_sha256": telemetry_sha,
-                **metrics,
-            }
-        )
-    _require(
-        decoded_inventory[0]["start_time"] == STARTUP_REMOVAL_TIME
-        and decoded_inventory[-1]["end_time"] == EXPECTED_TERMINAL_TIME,
-        "runtime per-cycle inventory must bind exact actual endpoints t=45 and t=1200",
-    )
-    for left, right in zip(decoded_inventory, decoded_inventory[1:]):
-        _require(
-            right["cycle"] == left["cycle"] + 1,
-            "runtime per-cycle inventory has a cycle gap or duplicate",
-        )
-        _require(
-            right["start_time"] == left["end_time"],
-            "runtime per-cycle inventory has a time gap or overlap",
-        )
-    extrema = {
-        key: (
-            min(float(entry[key]) for entry in decoded_inventory)
-            if key in _CYCLE_MINIMUM_KEYS
-            else max(float(entry[key]) for entry in decoded_inventory)
-        )
-        for key in _CYCLE_EXTREMA_KEYS
-    }
-    coverage = {
-        "sampling_mode": "bound_actual_every_integrator_cycle_inventory",
-        "post_startup_removal_start_time": decoded_inventory[0]["start_time"],
-        "terminal_time": decoded_inventory[-1]["end_time"],
-        "first_cycle": decoded_inventory[0]["cycle"],
-        "last_cycle": decoded_inventory[-1]["cycle"],
-        "covered_cycle_count": len(decoded_inventory),
-        "maximum_cycle_span": max(
-            entry["end_time"] - entry["start_time"] for entry in decoded_inventory
-        ),
-        "complete_contiguous_actual_endpoints": True,
-    }
     ps_escape = _validate_ps_escape_checkpoints(
         evidence_root, runtime["ps_escape_checkpoints"], inventory=decoded_inventory
     )
@@ -2684,12 +3182,23 @@ def _validate_runtime_time_escape(
         "escape ledger scope drifted",
     )
     faces = _exact_keys(
-        escape["nonperiodic_faces"], {"ix1", "ox1"}, "nonperiodic escape faces"
+        escape["nonperiodic_faces"], {"inner_x1", "outer_x1"}, "nonperiodic escape faces"
     )
     decoded_faces = {
-        face: _decode_state_vector(faces[face], f"{face} escaped state")
-        for face in ("ix1", "ox1")
+        "inner_x1": _decode_face_escape(
+            faces["inner_x1"], "inner_x1 escaped state", expected_reason=INNER_X1_ESCAPE_REASON
+        ),
+        "outer_x1": _decode_face_escape(
+            faces["outer_x1"], "outer_x1 escaped state", expected_reason=OUTER_X1_ESCAPE_REASON
+        ),
     }
+    _require(
+        decoded_faces["inner_x1"]["particle_count"] == 0
+        and decoded_faces["inner_x1"]["macro_weight"] == 0.0
+        and decoded_faces["inner_x1"]["kinetic_energy"] == 0.0
+        and decoded_faces["inner_x1"]["momentum"] == [0.0, 0.0, 0.0],
+        "any inner_x1 escape rejects physical applicability",
+    )
     _require(
         escape["periodic_faces"] == ["ix2", "ox2"],
         "escape ledger periodic face inventory drifted",
@@ -2706,7 +3215,9 @@ def _validate_runtime_time_escape(
         escape["injected_macro_weight"], "injected macro weight", minimum=0.0
     )
     _require(injected_count > 0 and injected_weight > 0.0, "escape ledger source is empty")
-    face_counts = [decoded_faces[face]["particle_count"] for face in ("ix1", "ox1")]
+    face_counts = [
+        decoded_faces[face]["particle_count"] for face in ("inner_x1", "outer_x1")
+    ]
     _require(
         accumulated["particle_count"] == sum(face_counts),
         "escape face particle counts do not close to accumulated escape",
@@ -2714,24 +3225,24 @@ def _validate_runtime_time_escape(
     residuals = {
         "macro_weight": _closure_residual(
             accumulated["macro_weight"],
-            sum(decoded_faces[face]["macro_weight"] for face in ("ix1", "ox1")),
-            [decoded_faces[face]["macro_weight"] for face in ("ix1", "ox1")],
+            sum(decoded_faces[face]["macro_weight"] for face in ("inner_x1", "outer_x1")),
+            [decoded_faces[face]["macro_weight"] for face in ("inner_x1", "outer_x1")],
         ),
         "kinetic_energy": _closure_residual(
             accumulated["kinetic_energy"],
-            sum(decoded_faces[face]["kinetic_energy"] for face in ("ix1", "ox1")),
-            [decoded_faces[face]["kinetic_energy"] for face in ("ix1", "ox1")],
+            sum(decoded_faces[face]["kinetic_energy"] for face in ("inner_x1", "outer_x1")),
+            [decoded_faces[face]["kinetic_energy"] for face in ("inner_x1", "outer_x1")],
         ),
         "momentum": [
             _closure_residual(
                 accumulated["momentum"][component],
                 sum(
                     decoded_faces[face]["momentum"][component]
-                    for face in ("ix1", "ox1")
+                    for face in ("inner_x1", "outer_x1")
                 ),
                 [
                     decoded_faces[face]["momentum"][component]
-                    for face in ("ix1", "ox1")
+                    for face in ("inner_x1", "outer_x1")
                 ],
             )
             for component in range(3)
@@ -2873,6 +3384,17 @@ def _validate_runtime_time_escape(
         == extrema["escaped_particle_rg_maximum_over_Ly"],
         "terminal schema-1 ps_escape maxima disagree with all-cycle escaped extrema",
     )
+    slope_cutoff_escape = _validate_slope_cutoff_escape_evidence(
+        evidence_root,
+        runtime["escaped_slope_cutoff_evidence"],
+        attempt_id=runtime["attempt_id"],
+        source_commit=source_commit,
+        executable_sha256=executable_sha256,
+        normalization_sha256=normalization_sha256,
+        active=active,
+        escaped=accumulated,
+        maximum_specific_energy=extrema["maximum_particle_specific_kinetic_energy"],
+    )
     escaped_applicability_complete = (
         exposure_complete
         and update_included
@@ -2897,10 +3419,17 @@ def _validate_runtime_time_escape(
                     not bool(bounds["requires_escaped_maximum_inclusion"])
                     or escaped_extrema_included
                 )
+                and (
+                    claim != "high_energy_slope_or_cutoff_claim"
+                    or slope_cutoff_escape["pass"]
+                )
             ),
             "accounting_mode": claim_escape_accounting[claim],
             "observed_escape_fractions": dict(escape_fractions),
             "AthenaK_selected_preregistered_bounds": dict(bounds),
+            "slope_cutoff_binwise_tail_evidence_required": (
+                claim == "high_energy_slope_or_cutoff_claim"
+            ),
         }
         for claim, bounds in CLAIM_SPECIFIC_ESCAPE_BOUNDS.items()
     }
@@ -2924,6 +3453,7 @@ def _validate_runtime_time_escape(
         "ps_escape_accounting": ps_escape,
         "claim_escape_accounting": dict(claim_escape_accounting),
         "claim_specific_escape_applicability": claim_specific_escape_applicability,
+        "slope_cutoff_escape_evidence": slope_cutoff_escape,
         "particle_exposure": {**dict(exposure), **exposure_statistics},
         "boundary_escape_ledger": {
             **dict(escape),
@@ -2952,6 +3482,115 @@ def _validate_recorded_artifact_binding(
     _sha256_text(binding["sha256"], f"{label} sha256")
     _nonnegative_int(binding["byte_count"], f"{label} byte count")
     return binding
+
+
+def _revalidate_retained_snapshot_artifacts(
+    snapshot: ApplicabilitySnapshot, record: Mapping[str, Any]
+) -> None:
+    _require(
+        isinstance(snapshot.evidence_root, Path),
+        "snapshot retained evidence root must be a pathlib.Path",
+    )
+    root = snapshot.evidence_root.resolve(strict=True)
+    _require(root.is_dir(), "snapshot retained evidence root must remain a directory")
+    provenance = record["snapshot_provenance"]
+    raw_products = provenance["raw_products"]
+    raw_payloads: dict[str, bytes] = {}
+    for product in REQUIRED_RAW_PRODUCTS:
+        binding, raw_payloads[product] = _read_bound_artifact(
+            root, raw_products[product], expected_role=product
+        )
+        _require(
+            binding == dict(raw_products[product]),
+            f"retained snapshot {product} binding drifted",
+        )
+    parsed_datasets: dict[str, Any] = {}
+    for product in ("mhd_w_bcc", *science.CURRENT_PRODUCT_FIELDS):
+        try:
+            parsed_datasets[product] = output_primitives.parse_athenak_binary_bytes(
+                raw_payloads[product], source=str(raw_products[product]["path"])
+            )
+        except output_primitives.AnalysisError as error:
+            raise PhysicalApplicabilityError(
+                f"retained snapshot {product} is not a trusted Athena binary: {error}"
+            ) from error
+        _require(
+            _dataset_sha256(parsed_datasets[product], f"retained snapshot {product}")
+            == provenance["decoded_product_sha256"][product],
+            f"retained snapshot {product} decoded digest drifted",
+        )
+    particle = _decode_particle_vtk_bytes(
+        raw_payloads["prtcl_all"], "retained snapshot prtcl_all"
+    )
+    _require(
+        particle["execution_header"]["cycle"] == provenance["cycle"]
+        and particle["execution_header"]["observed_committed_time"]
+        == provenance["observed_committed_time"],
+        "retained snapshot prtcl_all cycle/time binding drifted",
+    )
+    _require(
+        _particle_payload_sha256(
+            points=particle["points"],
+            cr_source=particle["cr_source"],
+            birth_time=particle["birth_time"],
+            velocity=particle["velocity"],
+            macro_weight=particle["macro_weight"],
+        )
+        == provenance["decoded_product_sha256"]["prtcl_all"],
+        "retained snapshot prtcl_all decoded digest drifted",
+    )
+    normalization = record["bound_normalization_evidence"]
+    revalidated_normalization = _validate_bound_normalization_evidence(
+        root,
+        normalization["bindings"],
+        runtime_input_parameters=parsed_datasets["mhd_w_bcc"].input_parameters,
+    )
+    _require(
+        revalidated_normalization["source_commit"] == normalization["source_commit"]
+        and revalidated_normalization["runtime_input_parameters_sha256"]
+        == normalization["runtime_input_parameters_sha256"]
+        and revalidated_normalization["source_manifest"]
+        == normalization["source_manifest"]
+        and revalidated_normalization["bindings"] == normalization["bindings"],
+        "retained snapshot normalization/source evidence drifted",
+    )
+    manifest_binding, manifest_payload = _read_bound_artifact(
+        root, provenance["manifest_binding"], expected_role="snapshot_manifest"
+    )
+    manifest = _exact_keys(
+        _decode_canonical_json(
+            manifest_payload, "retained snapshot provenance manifest"
+        ),
+        {
+            "schema_version",
+            "record_type",
+            "attempt_id",
+            "source_commit",
+            "executable_sha256",
+            "runtime_normalization_sha256",
+            "nominal_slot_time",
+            "observed_committed_time",
+            "cycle",
+            "raw_products",
+            "decoded_product_sha256",
+        },
+        "retained snapshot provenance manifest",
+    )
+    _require(
+        manifest_binding == dict(provenance["manifest_binding"])
+        and manifest["attempt_id"] == provenance["attempt_id"]
+        and manifest["source_commit"] == provenance["source_commit"]
+        and manifest["executable_sha256"] == provenance["executable_sha256"]
+        and manifest["runtime_normalization_sha256"]
+        == provenance["runtime_normalization_sha256"]
+        and manifest["nominal_slot_time"] == provenance["nominal_slot_time"]
+        and manifest["observed_committed_time"]
+        == provenance["observed_committed_time"]
+        and manifest["cycle"] == provenance["cycle"]
+        and manifest["raw_products"] == provenance["raw_products"]
+        and manifest["decoded_product_sha256"] == provenance["decoded_product_sha256"],
+        "retained snapshot provenance manifest drifted",
+    )
 
 
 def _validate_snapshot(snapshot: object) -> Mapping[str, Any]:
@@ -3591,6 +4230,7 @@ def _validate_snapshot(snapshot: object) -> Mapping[str, Any]:
         == _claim_rejections(gates, expected_observables["Lambda_maximum"]),
         "snapshot claim-rejection contract drifted",
     )
+    _revalidate_retained_snapshot_artifacts(snapshot, record)
     return record
 
 
@@ -3816,6 +4456,7 @@ __all__ = [
     "CELL_MAP_NAMES",
     "CLAIM_REJECTION_RULES",
     "CLAIM_SPECIFIC_ESCAPE_BOUNDS",
+    "CYCLE_TELEMETRY_RECORD_TYPE",
     "DELTA_B_RMS_OVER_B0_MINIMUM",
     "DETECTED_FRONT_REGIONS",
     "EXACT_NORMALIZATION",
@@ -3825,11 +4466,13 @@ __all__ = [
     "ESCAPED_PARTICLE_COUNT_FRACTION_MAXIMUM",
     "EXPECTED_TERMINAL_TIME",
     "HISTORY_RECORD_TYPE",
+    "INNER_X1_ESCAPE_REASON",
     "LAMBDA_B_CHAR_OVER_DI_MAX_MINIMUM",
     "LAMBDA_MAXIMUM",
     "MAXIMUM_RUNTIME_CYCLE_SPAN",
     "MINIMUM_RUNTIME_CYCLE_INVENTORY_COUNT",
     "NORMALIZATION_RECORD_TYPE",
+    "OUTER_X1_ESCAPE_REASON",
     "PAPER_VL2_ESCAPE_AUDITS_PER_CYCLE",
     "PARTICLE_Q999_MINIMUM_POSITIVE_WEIGHT_SAMPLES",
     "PERMANENT_CLAIM_EXCLUSIONS",
@@ -3849,11 +4492,15 @@ __all__ = [
     "SCHEMA_VERSION",
     "SNAPSHOT_RECORD_TYPE",
     "SNAPSHOT_PROVENANCE_RECORD_TYPE",
+    "SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM",
+    "SLOPE_CUTOFF_ESCAPE_RECORD_TYPE",
+    "SLOPE_CUTOFF_TAIL_ESCAPE_FRACTION_MAXIMUM",
     "SOURCE_MANIFEST_RECORD_TYPE",
     "STARTUP_REMOVAL_TIME",
     "SUB_10DI_POWER_FRACTION_MAXIMUM",
     "SUCCESSOR_ID",
     "S_DELTA_MINIMUM",
+    "TRUSTED_Q011_RUNTIME_SOURCE_COMMIT",
     "reduce_physical_applicability_history",
     "reduce_physical_applicability_snapshot",
 ]

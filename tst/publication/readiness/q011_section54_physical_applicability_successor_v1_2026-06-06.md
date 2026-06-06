@@ -1,8 +1,9 @@
 # Q011 Section 5.4 physical-applicability successor v1
 
-Status: **repair successor to independently rejected commit
-`4fd567f5a4db0662c765668d9cb56aa63be22a3c`; additive source-local
-diagnostic/gate only; no production telemetry or result; no authorization**
+Status: **clean repair successor to independently rejected commits
+`4fd567f5a4db0662c765668d9cb56aa63be22a3c` and `72792e172`; additive
+source-local diagnostic/gate only; source base remains rejected; no production
+telemetry or result; no authorization; fresh independent review required**
 
 ## Purpose and boundary
 
@@ -26,20 +27,25 @@ S_delta = min(actual leaf dx1, actual leaf dx2) / d_i
 
 The rejected predecessor's seven findings are repaired as follows.
 
-1. **Actual complete time inventory.** History accepts only a bound canonical
-   runtime artifact containing at least 1000 unique contiguous per-cycle
-   entries. The reducer derives extrema and coverage from those entries,
-   requires each cycle span to be at most one time unit, and requires actual
-   endpoints exactly `t=45` and `t=1200`. A summary interval or one-cycle
-   assertion cannot pass.
+1. **Actual complete time inventory.** History accepts only at least 1000
+   unique immutable per-cycle canonical telemetry artifacts opened and checked
+   against their byte counts and SHA-256 digests. Every artifact binds the
+   exact attempt, executable, normalization, trusted Q011 source commit, and
+   sealed escape implementation identity. Inline invented records, a summary
+   interval, an arbitrary source, or a one-cycle assertion cannot pass.
 2. **Evidence-bound normalization and snapshots.** Normalization is read from a
    bound canonical runtime record and cross-bound to decoded runtime input
    parameters, deck, canonical source manifest, source archive, executable, and
-   source commit. Each snapshot manifest binds all seven raw products and the
-   decoded MHD, deposited-current, and particle payload digests. History
-   rejects stripped dictionaries and requires complete `ApplicabilitySnapshot`
-   objects with immutable digest-bound maps, all regions, particle
-   populations, spectrum, and provenance.
+   exact trusted source commit. Each snapshot manifest binds all seven raw
+   products. The reducer opens and strictly decodes mesh/current products from
+   actual Athena binary bytes and particles from actual AthenaK binary PVTK
+   bytes, then proves equality with the supplied decoded objects and manifest
+   digests. Arbitrary ASCII raw products fail. History reopens and reparses
+   every retained raw, manifest, normalization, deck, source, and executable
+   artifact before accepting a snapshot. History rejects stripped dictionaries
+   and requires complete `ApplicabilitySnapshot` objects with retained evidence
+   roots, immutable digest-bound maps, all regions, particle populations,
+   spectrum, and provenance.
 3. **Escape applicability and closure.** The runtime ledger closes exact
    particle counts and bounded macro-mass, kinetic-energy, and vector-momentum
    face residuals. Escaped particles must be included in all-cycle exposure,
@@ -63,12 +69,31 @@ The rejected predecessor's seven findings are repaired as follows.
    conservatively assigns all subgrid residual power to the high-wavenumber
    upper bound. A mixed-level `[0,1]` adversarial state exercises this path.
 
+The latest independent rejection of `72792e172` is additionally repaired:
+
+1. every admitted cycle record is decoded only from a separately opened bound
+   artifact; 1155 inline invented records and arbitrary source identities are
+   explicitly non-admitting;
+2. raw snapshot products are decoded from retained Athena binary/PVTK bytes,
+   rather than accepted from caller-fabricable decoded digests;
+3. each nominal restart checkpoint must be the first committed cycle whose end
+   crosses the slot and must bind its previous committed cycle and time;
+4. reason-coded physical escape is accepted only on `outer_x1`; any nonzero
+   `inner_x1` escape rejects;
+5. high-energy slope/cutoff applicability requires a separately bound complete
+   active-plus-escaped binwise/tail reduction whose bins cover the all-cycle
+   maximum energy; absent or biased evidence rejects that claim;
+6. runtime coverage starts at the first cycle whose start is at or above
+   `t=45` and whose bound previous committed time is below `t=45`; exact
+   equality of the first start to `t=45` is not required.
+
 ## Snapshot evidence
 
 Every retained snapshot includes:
 
 - exact canonical normalization/source/deck/executable bindings;
-- all raw-product bindings and decoded-payload digests;
+- all retained raw-product bindings and decoded-payload digests, reopened and
+  reparsed during history reduction;
 - immutable digest-bound maps of `R`, `Lambda`, `d_i`, `S_delta`, actual leaf
   spacings, and gas-frame current magnitude;
 - full-domain and detected-front-centered downstream, precursor, and
@@ -93,6 +118,8 @@ The successor binds the sealed physical-boundary escape implementation at
 At every production restart checkpoint with nominal slot
 `t=100,200,...,1200`, the reducer requires:
 
+- the first committed cycle crossing that nominal slot, with exact previous
+  committed cycle/time chronology bound to the all-cycle telemetry;
 - one digest-bound restart payload and one digest-bound full `prtcl_all` PVTK
   payload with the exact observed committed cycle and time;
 - complete schema-1 `ps_escape` and complete schema-3 CR source ledgers from
@@ -110,11 +137,13 @@ At every production restart checkpoint with nominal slot
 
 The terminal sealed ledger is also cross-bound to the independent runtime
 boundary ledger for escaped count, mass, kinetic energy, and all three momentum
-components. A positive escaped census must carry positive mass, energy, and
-global gyroradius evidence. Counts, masses, energies, audit counts, audit times,
-and escaped maxima must be monotonic. Signed momentum components are quantified
-and residual-bounded but are not required to be monotonic because physically
-valid cumulative signed momentum may change direction.
+components. The boundary ledger requires exact reason codes and permits
+physical escape only through `outer_x1`; any nonzero `inner_x1` escape rejects.
+A positive escaped census must carry positive mass, energy, and global
+gyroradius evidence. Counts, masses, energies, audit counts, audit times, and
+escaped maxima must be monotonic. Signed momentum components are quantified and
+residual-bounded but are not required to be monotonic because physically valid
+cumulative signed momentum may change direction.
 
 The conservative kinetic-energy escape fraction uses the lower bound of active
 energy reconstructed from the terminal float32 PVTK payload. Thus active
@@ -135,7 +164,7 @@ numeric cutoffs. Every numeric threshold below is explicitly
 | `Q011-APP-LAMBDA` | full-domain per-cell `Lambdamax <= 0.1` |
 | `Q011-APP-DI` | outside shock transition `S_delta,min >= 1`; precursor `lambda_B,char/d_i,max >= 10`; sub-`10d_i` power upper bound `<= 0.05`; `delta B_rms/B0 >= 0.1` |
 | `Q011-APP-RG` | snapshot macro/energy `q999/Ly <= 1/8` and energy fraction above `Ly/4 <= 1e-3`; all-cycle active-plus-escaped global and high-energy-tail `r_g,max/Ly <= 1/8`; claim-specific escaped count, mass, and kinetic-energy fractions each `<= 1e-3` |
-| `Q011-APP-TIME` | bound contiguous per-cycle inventory from actual `t=45` through `t=1200`; exact checkpoint cadence; complete active/boundary/escaped exposure; closed count/mass/energy/momentum ledgers |
+| `Q011-APP-TIME` | separately opened byte-bound contiguous per-cycle telemetry from the first start crossing `t=45` through exact `t=1200`; first-crossing checkpoint cadence; complete active/boundary/escaped exposure; outer-`x1`-only escape; closed count/mass/energy/momentum ledgers |
 
 ## Claim-specific escape rules
 
@@ -143,8 +172,10 @@ All four acceleration claims use separately named, preregistered count,
 macro-mass, and kinetic-energy fraction bounds of `1e-3`:
 
 - `Emax_claim`: active-plus-escaped all-cycle maximum and fraction bounds;
-- `high_energy_slope_or_cutoff_claim`: escaped population explicitly bounded
-  by all three fractions;
+- `high_energy_slope_or_cutoff_claim`: separately bound complete active plus
+  escaped energy-bin and high-energy-tail evidence, with each high-energy-bin
+  and aggregate-tail escaped count/mass/energy fraction at most `1e-3`; absent,
+  incomplete, non-covering, or biased evidence rejects the claim;
 - `acceleration_rate_claim`: active-plus-escaped all-cycle maximum and fraction
   bounds;
 - `acceleration_efficiency_claim`: escaped energy explicitly bounded, with
@@ -178,8 +209,9 @@ plasma.
 No conforming production runtime artifact exists in this worktree. Tests use
 synthetic adversarial evidence only. Remaining production obligations are:
 
-1. implement and independently review the corresponding C++ per-cycle,
-   particle-exposure, and checkpoint telemetry;
+1. implement and independently review the corresponding C++ separately
+   retained per-cycle telemetry, particle-exposure, first-crossing checkpoint,
+   reason-coded outer-`x1` escape, and slope/cutoff binwise-tail reductions;
 2. execute the registered production campaign without changing thresholds
    after observing results;
 3. retain complete bound raw, decoded, map, runtime, restart, PVTK, and escape

@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
@@ -38,13 +39,18 @@ NX2 = 32
 DX1 = 20.0
 DX2 = 10.0
 TIME = 500.0
-SOURCE_COMMIT = "4" * 40
+SOURCE_COMMIT = app.TRUSTED_Q011_RUNTIME_SOURCE_COMMIT
 ATTEMPT_ID = "q011-applicability-adversarial-fixture"
 RAW_PATHS = {
     product: f"raw/{product}.00500.bin"
     for product in app.REQUIRED_RAW_PRODUCTS
 }
 RAW_PATHS["prtcl_all"] = "raw/prtcl_all.00500.part.vtk"
+
+
+class _RetainedTemporaryDirectory(tempfile.TemporaryDirectory):
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        self._finalizer.detach()
 
 
 def _canonical(value: object) -> bytes:
@@ -71,6 +77,66 @@ def _write_artifact(root: Path, role: str, relative: str, payload: bytes) -> dic
         "sha256": _sha256_bytes(payload),
         "byte_count": len(payload),
     }
+
+
+def _input_parameters(
+    root_shape: tuple[int, int, int],
+    block_shape: tuple[int, int, int],
+    domain: tuple[float, float, float, float, float, float],
+) -> dict[str, dict[str, str]]:
+    return {
+        "mesh": {
+            "nx1": str(root_shape[0]),
+            "nx2": str(root_shape[1]),
+            "nx3": str(root_shape[2]),
+            "nghost": "0",
+            "x1min": str(domain[0]),
+            "x1max": str(domain[1]),
+            "x2min": str(domain[2]),
+            "x2max": str(domain[3]),
+            "x3min": str(domain[4]),
+            "x3max": str(domain[5]),
+        },
+        "meshblock": {
+            "nx1": str(block_shape[0]),
+            "nx2": str(block_shape[1]),
+            "nx3": str(block_shape[2]),
+        },
+    }
+
+
+def _athena_binary_payload(dataset: output_primitives.AthenaBinaryDataset) -> bytes:
+    parameter_header = "".join(
+        f"<{block}>\n"
+        + "".join(f"{key}={value}\n" for key, value in parameters.items())
+        for block, parameters in dataset.input_parameters.items()
+    ).encode("utf-8")
+    payload = bytearray(
+        b"Athena binary output version=1.1\n"
+        b"  size of preheader=5\n"
+        + f"  time={dataset.time}\n".encode("ascii")
+        + f"  cycle={dataset.cycle}\n".encode("ascii")
+        + f"  size of location={dataset.location_size}\n".encode("ascii")
+        + f"  size of variable={dataset.variable_size}\n".encode("ascii")
+        + f"  number of variables={len(dataset.variable_names)}\n".encode("ascii")
+        + b"  variables:  "
+        + b"  ".join(name.encode("ascii") for name in dataset.variable_names)
+        + b"  \n"
+        + f"  header offset={len(parameter_header)}\n".encode("ascii")
+        + parameter_header
+    )
+    for block in dataset.blocks:
+        payload.extend(struct.pack("<6i", *block.index_bounds))
+        payload.extend(struct.pack("<4i", *block.logical_location, block.level))
+        payload.extend(struct.pack("<6d", *block.geometry))
+        values = np.concatenate(
+            [
+                np.asarray(block.fields[field], dtype="<f8").reshape(-1)
+                for field in dataset.variable_names
+            ]
+        )
+        payload.extend(values.tobytes())
+    return bytes(payload)
 
 
 def _block(
@@ -134,6 +200,8 @@ def _mhd_dataset(
     low_density_cell: bool = False,
     high_k_fluctuation: bool = False,
 ) -> output_primitives.AthenaBinaryDataset:
+    domain = (0.0, NX1 * DX1, 0.0, NX2 * DX2, 0.0, 1.0)
+    root_shape = (NX1, NX2, 1)
     x = (np.arange(NX1) + 0.5) * DX1
     y = (np.arange(NX2) + 0.5) * DX2
     fields = _spatial_fields(
@@ -148,7 +216,7 @@ def _mhd_dataset(
         (NX1, NX2, 1),
         (0, 0, 0),
         0,
-        (0.0, NX1 * DX1, 0.0, NX2 * DX2, 0.0, 1.0),
+        domain,
         fields,
     )
     return output_primitives.AthenaBinaryDataset(
@@ -158,11 +226,11 @@ def _mhd_dataset(
         location_size=8,
         variable_size=8,
         variable_names=tuple(reversed(science.MHD_PRIMITIVE_FIELDS)),
-        input_parameters={},
-        root_grid_shape=(NX1, NX2, 1),
-        meshblock_shape=(NX1, NX2, 1),
+        input_parameters=_input_parameters(root_shape, root_shape, domain),
+        root_grid_shape=root_shape,
+        meshblock_shape=root_shape,
         nghost=0,
-        domain_bounds=(0.0, NX1 * DX1, 0.0, NX2 * DX2, 0.0, 1.0),
+        domain_bounds=domain,
         blocks=(block,),
     )
 
@@ -262,7 +330,7 @@ def _mixed_level_mhd_dataset() -> output_primitives.AthenaBinaryDataset:
         location_size=8,
         variable_size=8,
         variable_names=tuple(reversed(science.MHD_PRIMITIVE_FIELDS)),
-        input_parameters={},
+        input_parameters=_input_parameters(root_shape, block_shape, domain),
         root_grid_shape=root_shape,
         meshblock_shape=block_shape,
         nghost=0,
@@ -288,6 +356,48 @@ def _particles(*, velocity: object = 10.0, x: float = 5500.0) -> dict[str, objec
     }
 
 
+def _snapshot_particle_vtk(
+    particles: dict[str, object], observed_time: float, cycle: int
+) -> bytes:
+    points = np.asarray(particles["points"], dtype=">f4")
+    count = points.shape[0]
+    integer_scalars = {
+        "gid": np.zeros(count, dtype=">i4"),
+        "ptag": np.arange(count, dtype=">i4"),
+        "species": np.zeros(count, dtype=">i4"),
+        "cr_source": np.asarray(particles["cr_source"], dtype=">i4"),
+    }
+    real_scalars = {
+        "macro_weight": np.asarray(particles["macro_weight"], dtype=">f4"),
+        "birth_time": np.asarray(particles["birth_time"], dtype=">f4"),
+        "deltaf_f0": np.ones(count, dtype=">f4"),
+        "deltaf_weight": np.zeros(count, dtype=">f4"),
+    }
+    velocities = np.asarray(particles["velocity"], dtype=">f4")
+    payload = bytearray(
+        (
+            "# vtk DataFile Version 2.0\n"
+            f"# AthenaK particle data at time= {observed_time}  nranks= 1  "
+            f"cycle={cycle}  variables=prtcl_all\n"
+            "BINARY\n"
+            "DATASET UNSTRUCTURED_GRID\n"
+            "\n"
+            f"POINTS {count} float\n"
+        ).encode("ascii")
+    )
+    payload.extend(points.tobytes())
+    payload.extend(f"\n\nPOINT_DATA {count}\n".encode("ascii"))
+    for name, values in integer_scalars.items():
+        payload.extend(f"\nSCALARS {name} int\nLOOKUP_TABLE default\n".encode("ascii"))
+        payload.extend(values.tobytes())
+    for name, values in real_scalars.items():
+        payload.extend(f"\nSCALARS {name} float\nLOOKUP_TABLE default\n".encode("ascii"))
+        payload.extend(values.tobytes())
+    payload.extend(b"\nVECTORS vel float\n")
+    payload.extend(velocities.tobytes())
+    return bytes(payload)
+
+
 def _snapshot_evidence(
     root: Path,
     mhd: output_primitives.AthenaBinaryDataset,
@@ -296,6 +406,7 @@ def _snapshot_evidence(
     *,
     normalization: object | None = None,
     tamper_deck_after_binding: bool = False,
+    ascii_raw_product: str | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     root.mkdir(parents=True, exist_ok=True)
     bindings = {
@@ -314,8 +425,18 @@ def _snapshot_evidence(
     bindings["source_manifest"] = _write_artifact(
         root, "source_manifest", "bound/source-manifest.json", _canonical(source_manifest)
     )
+    raw_payloads = {
+        "mhd_w_bcc": _athena_binary_payload(mhd),
+        **{
+            product: _athena_binary_payload(currents[product])
+            for product in science.CURRENT_PRODUCT_FIELDS
+        },
+        "prtcl_all": _snapshot_particle_vtk(particles, TIME, mhd.cycle),
+    }
+    if ascii_raw_product is not None:
+        raw_payloads[ascii_raw_product] = b"arbitrary caller-controlled ASCII\n"
     raw = {
-        product: _write_artifact(root, product, RAW_PATHS[product], product.encode("ascii"))
+        product: _write_artifact(root, product, RAW_PATHS[product], raw_payloads[product])
         for product in app.REQUIRED_RAW_PRODUCTS
     }
     runtime_record = {
@@ -385,8 +506,9 @@ def _snapshot(
     normalization: object | None = None,
     tamper_deck_after_binding: bool = False,
     tamper_decoded_particle_after_manifest: bool = False,
+    ascii_raw_product: str | None = None,
 ) -> app.ApplicabilitySnapshot:
-    with tempfile.TemporaryDirectory() as temporary:
+    with _RetainedTemporaryDirectory() as temporary:
         root = Path(temporary)
         mhd = (
             _mixed_level_mhd_dataset()
@@ -411,6 +533,7 @@ def _snapshot(
             particles,
             normalization=normalization,
             tamper_deck_after_binding=tamper_deck_after_binding,
+            ascii_raw_product=ascii_raw_product,
         )
         if tamper_decoded_particle_after_manifest:
             particles["velocity"][0, 0] += 1.0
@@ -438,6 +561,19 @@ def _state_vector(
         "macro_weight": weight,
         "kinetic_energy": energy,
         "momentum": [0.0, 0.0, 0.0] if momentum is None else momentum,
+    }
+
+
+def _face_state(
+    reason_code: str,
+    count: int = 0,
+    weight: float = 0.0,
+    energy: float = 0.0,
+    momentum: list[float] | None = None,
+) -> dict[str, object]:
+    return {
+        "reason_code": reason_code,
+        **_state_vector(count, weight, energy, momentum),
     }
 
 
@@ -584,16 +720,30 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
         "escaped_high_energy_tail_rg_maximum_over_Ly": 0.0,
         "escaped_particle_specific_kinetic_energy_maximum": 0.0,
     }
-    inventory = [
-        {
-            "cycle": 1000 + index,
-            "start_time": app.STARTUP_REMOVAL_TIME + index,
-            "end_time": app.STARTUP_REMOVAL_TIME + index + 1.0,
-            "telemetry_record_sha256": _sha256_bytes(f"telemetry-{index}".encode("ascii")),
-            **metrics,
-        }
-        for index in range(int(app.EXPECTED_TERMINAL_TIME - app.STARTUP_REMOVAL_TIME))
-    ]
+    inventory = []
+    for index in range(int(app.EXPECTED_TERMINAL_TIME - app.STARTUP_REMOVAL_TIME)):
+        cycle = 1000 + index
+        start = app.STARTUP_REMOVAL_TIME + 0.25 if index == 0 else 45.0 + index
+        end = 46.0 + index
+        inventory.append(
+            {
+                "schema_version": app.SCHEMA_VERSION,
+                "record_type": app.CYCLE_TELEMETRY_RECORD_TYPE,
+                "attempt_id": record["snapshot_provenance"]["attempt_id"],
+                "source_commit": record["snapshot_provenance"]["source_commit"],
+                "executable_sha256": record["snapshot_provenance"]["executable_sha256"],
+                "runtime_normalization_sha256": record["snapshot_provenance"][
+                    "runtime_normalization_sha256"
+                ],
+                "ps_escape_accounting_source_commit": app.PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
+                "cycle": cycle,
+                "previous_committed_cycle": cycle - 1,
+                "previous_committed_time": 44.75 if index == 0 else start,
+                "start_time": start,
+                "end_time": end,
+                **metrics,
+            }
+        )
     count = particle["selected_particle_count"]
     active_energy = _active_energy(count)
     checkpoints = []
@@ -607,6 +757,8 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
                 "nominal_checkpoint_time": nominal,
                 "observed_committed_time": nominal,
                 "cycle": cycle,
+                "previous_committed_cycle": entry["previous_committed_cycle"],
+                "previous_committed_time": entry["previous_committed_time"],
                 "restart_artifact": None,
                 "particle_checkpoint_artifact": None,
                 "ps_escape_ledger": _ps_escape_ledger(
@@ -622,6 +774,32 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
                 "escaped_injected_max_rg_over_Ly_global": 0.0,
             }
         )
+    bin_count = app.MINIMUM_SLOPE_CUTOFF_HIGH_ENERGY_BINS
+    counts = [count // bin_count] * bin_count
+    counts[-1] += count - sum(counts)
+    masses = [float(value) for value in counts]
+    energies = [active_energy / bin_count] * bin_count
+    slope_cutoff_evidence = {
+        "schema_version": app.SCHEMA_VERSION,
+        "record_type": app.SLOPE_CUTOFF_ESCAPE_RECORD_TYPE,
+        "attempt_id": record["snapshot_provenance"]["attempt_id"],
+        "source_commit": record["snapshot_provenance"]["source_commit"],
+        "executable_sha256": record["snapshot_provenance"]["executable_sha256"],
+        "runtime_normalization_sha256": record["snapshot_provenance"][
+            "runtime_normalization_sha256"
+        ],
+        "ps_escape_accounting_source_commit": app.PS_ESCAPE_ACCOUNTING_SOURCE_COMMIT,
+        "complete": True,
+        "unavailable_reason": None,
+        "high_energy_tail_threshold": 0.0,
+        "energy_bin_edges": [25.0 * index for index in range(bin_count + 1)],
+        "active_particle_count_by_bin": counts,
+        "active_macro_weight_by_bin": masses,
+        "active_kinetic_energy_by_bin": energies,
+        "escaped_particle_count_by_bin": [0] * bin_count,
+        "escaped_macro_weight_by_bin": [0.0] * bin_count,
+        "escaped_kinetic_energy_by_bin": [0.0] * bin_count,
+    }
     return {
         "schema_version": app.SCHEMA_VERSION,
         "record_type": app.RUNTIME_RECORD_TYPE,
@@ -638,6 +816,7 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
         "per_cycle_inventory": inventory,
         "ps_escape_checkpoints": checkpoints,
         "claim_escape_accounting": dict(app._CLAIM_ESCAPE_ACCOUNTING),
+        "escaped_slope_cutoff_evidence": slope_cutoff_evidence,
         "particle_exposure": {
             "complete": True,
             "method": "every_particle_update_and_pre_destruction_boundary_event",
@@ -665,8 +844,8 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
             "complete": True,
             "scope": "all_Q011_shock_injected_particles_including_startup_removal",
             "nonperiodic_faces": {
-                "ix1": _state_vector(),
-                "ox1": _state_vector(),
+                "inner_x1": _face_state(app.INNER_X1_ESCAPE_REASON),
+                "outer_x1": _face_state(app.OUTER_X1_ESCAPE_REASON),
             },
             "periodic_faces": ["ix2", "ox2"],
             "accumulated_escaped": _state_vector(),
@@ -680,6 +859,25 @@ def _runtime_payload(snapshot: app.ApplicabilitySnapshot) -> dict[str, object]:
     }
 
 
+def _set_slope_cutoff_unavailable(
+    payload: dict[str, object], reason: str = "escaped_binwise_tail_telemetry_unavailable"
+) -> None:
+    evidence = payload["escaped_slope_cutoff_evidence"]
+    evidence["complete"] = False
+    evidence["unavailable_reason"] = reason
+    evidence["high_energy_tail_threshold"] = None
+    for key in (
+        "energy_bin_edges",
+        "active_particle_count_by_bin",
+        "active_macro_weight_by_bin",
+        "active_kinetic_energy_by_bin",
+        "escaped_particle_count_by_bin",
+        "escaped_macro_weight_by_bin",
+        "escaped_kinetic_energy_by_bin",
+    ):
+        evidence[key] = []
+
+
 def _history(
     snapshots: list[app.ApplicabilitySnapshot],
     payload: dict[str, object],
@@ -687,10 +885,29 @@ def _history(
     restart_ledger_overrides: dict[int, dict[str, object]] | None = None,
     particle_count_overrides: dict[int, int] | None = None,
     particle_payload_overrides: dict[int, bytes] | None = None,
+    bind_cycle_telemetry: bool = True,
+    bind_slope_cutoff_evidence: bool = True,
 ) -> dict[str, object]:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         bound_payload = copy.deepcopy(payload)
+        if bind_cycle_telemetry:
+            bound_payload["per_cycle_inventory"] = [
+                _write_artifact(
+                    root,
+                    "cycle_telemetry_record",
+                    f"runtime/cycles/{index:05d}.json",
+                    _canonical(entry),
+                )
+                for index, entry in enumerate(bound_payload["per_cycle_inventory"])
+            ]
+        if bind_slope_cutoff_evidence:
+            bound_payload["escaped_slope_cutoff_evidence"] = _write_artifact(
+                root,
+                "slope_cutoff_escape_evidence",
+                "runtime/slope-cutoff-escape.json",
+                _canonical(bound_payload["escaped_slope_cutoff_evidence"]),
+            )
         for index, checkpoint in enumerate(bound_payload.get("ps_escape_checkpoints", [])):
             if checkpoint.get("restart_artifact") is None:
                 restart_ledger = (
@@ -776,8 +993,14 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             _snapshot(normalization=drifted)
         with self.assertRaisesRegex(app.PhysicalApplicabilityError, "deck artifact .* drifted"):
             _snapshot(tamper_deck_after_binding=True)
-        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "decoded prtcl_all payload"):
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "supplied decoded payload disagrees"
+        ):
             _snapshot(tamper_decoded_particle_after_manifest=True)
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "not a trusted Athena binary"
+        ):
+            _snapshot(ascii_raw_product="mhd_w_bcc")
         with self.assertRaisesRegex(app.PhysicalApplicabilityError, "unexpected keyword"):
             app.reduce_physical_applicability_snapshot(  # type: ignore[call-arg]
                 None, {}, normalization=dict(app.EXACT_NORMALIZATION)
@@ -795,7 +1018,11 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         ):
             record = copy.deepcopy(dict(self.passing.record))
             record.pop(section)
-            stripped = app.ApplicabilitySnapshot(record=record, cell_maps=self.passing.cell_maps)
+            stripped = app.ApplicabilitySnapshot(
+                record=record,
+                cell_maps=self.passing.cell_maps,
+                evidence_root=self.passing.evidence_root,
+            )
             with self.assertRaisesRegex(app.PhysicalApplicabilityError, "keys drifted"):
                 _history([stripped], payload)
 
@@ -872,7 +1099,8 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
         self.assertTrue(history["all_physical_applicability_gates_pass"])
         coverage = history["runtime_time_escape_evidence"]["cycle_coverage"]
         self.assertEqual(coverage["covered_cycle_count"], 1155)
-        self.assertEqual(coverage["post_startup_removal_start_time"], 45.0)
+        self.assertEqual(coverage["post_startup_removal_start_time"], 45.25)
+        self.assertEqual(coverage["previous_committed_time_before_startup_crossing"], 44.75)
         self.assertEqual(coverage["terminal_time"], 1200.0)
         ps_escape = history["runtime_time_escape_evidence"]["ps_escape_accounting"]
         self.assertEqual(
@@ -1004,16 +1232,174 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             _history([self.passing], one_cycle)
         endpoint = _runtime_payload(self.passing)
         endpoint["per_cycle_inventory"][-1]["end_time"] = 1199.5
-        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "exact actual endpoints"):
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "terminal endpoint"):
             _history([self.passing], endpoint)
         gap = _runtime_payload(self.passing)
         gap["per_cycle_inventory"][1]["start_time"] += 0.1
-        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "time gap or overlap"):
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "time gap, overlap"):
             _history([self.passing], gap)
+
+    def test_1155_invented_inline_cycle_records_and_arbitrary_source_are_non_admitting(
+        self,
+    ) -> None:
+        invented = _runtime_payload(self.passing)
+        self.assertEqual(len(invented["per_cycle_inventory"]), 1155)
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "binding keys drifted"):
+            _history([self.passing], invented, bind_cycle_telemetry=False)
+
+        arbitrary_source = _runtime_payload(self.passing)
+        arbitrary_source["per_cycle_inventory"][500]["source_commit"] = "4" * 40
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "trusted source/escape identity drifted"
+        ):
+            _history([self.passing], arbitrary_source)
+
+    def test_snapshot_raw_products_must_be_trusted_byte_decodable(self) -> None:
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "not a trusted Athena binary"
+        ):
+            _snapshot(ascii_raw_product="prtcl_jx")
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "lacks canonical prtcl_all execution metadata"
+        ):
+            _snapshot(ascii_raw_product="prtcl_all")
+
+        tampered_after_reduction = _snapshot()
+        raw_binding = tampered_after_reduction.record["snapshot_provenance"]["raw_products"][
+            "mhd_w_bcc"
+        ]
+        (tampered_after_reduction.evidence_root / raw_binding["path"]).write_bytes(
+            b"tampered after snapshot reduction\n"
+        )
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "artifact byte count drifted"):
+            _history([tampered_after_reduction], _runtime_payload(tampered_after_reduction))
+
+    def test_checkpoint_must_be_first_committed_cycle_crossing_nominal_slot(self) -> None:
+        payload = _runtime_payload(self.passing)
+        checkpoint = payload["ps_escape_checkpoints"][0]
+        first_crossing_index = next(
+            index
+            for index, entry in enumerate(payload["per_cycle_inventory"])
+            if entry["end_time"] >= checkpoint["nominal_checkpoint_time"]
+        )
+        second = payload["per_cycle_inventory"][first_crossing_index + 1]
+        checkpoint["observed_committed_time"] = second["end_time"]
+        checkpoint["cycle"] = second["cycle"]
+        checkpoint["previous_committed_cycle"] = second["previous_committed_cycle"]
+        checkpoint["previous_committed_time"] = second["previous_committed_time"]
+        checkpoint["ps_escape_ledger"] = _ps_escape_ledger(
+            cycle=second["cycle"],
+            observed_time=second["end_time"],
+            active_count=1000,
+            active_mass=1000.0,
+        )
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError,
+            "not the first committed cycle crossing",
+        ):
+            _history([self.passing], payload)
+
+    def test_startup_coverage_requires_first_start_crossing_with_prior_commit_below_45(
+        self,
+    ) -> None:
+        passing = _history([self.passing], _runtime_payload(self.passing))
+        coverage = passing["runtime_time_escape_evidence"]["cycle_coverage"]
+        self.assertGreater(coverage["post_startup_removal_start_time"], 45.0)
+        self.assertLess(coverage["previous_committed_time_before_startup_crossing"], 45.0)
+
+        bad_previous = _runtime_payload(self.passing)
+        bad_previous["per_cycle_inventory"][0]["previous_committed_time"] = 45.0
+        with self.assertRaisesRegex(
+            app.PhysicalApplicabilityError, "first committed cycle starting across t=45"
+        ):
+            _history([self.passing], bad_previous)
+
+    def test_any_inner_x1_escape_rejects_even_with_reason_code(self) -> None:
+        payload = _runtime_payload(self.passing)
+        payload["boundary_escape_ledger"]["nonperiodic_faces"]["inner_x1"] = _face_state(
+            app.INNER_X1_ESCAPE_REASON, 1, 1.0, 1.0
+        )
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "any inner_x1 escape"):
+            _history([self.passing], payload)
+
+        wrong_reason = _runtime_payload(self.passing)
+        wrong_reason["boundary_escape_ledger"]["nonperiodic_faces"][
+            "outer_x1"
+        ]["reason_code"] = "arbitrary_escape_reason"
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "reason code drifted"):
+            _history([self.passing], wrong_reason)
+
+    def test_slope_cutoff_claim_requires_bound_complete_binwise_tail_evidence(self) -> None:
+        unbound = _runtime_payload(self.passing)
+        with self.assertRaisesRegex(app.PhysicalApplicabilityError, "binding keys drifted"):
+            _history([self.passing], unbound, bind_slope_cutoff_evidence=False)
+
+        unavailable = _runtime_payload(self.passing)
+        _set_slope_cutoff_unavailable(unavailable)
+        history = _history([self.passing], unavailable)
+        applicability = history["runtime_time_escape_evidence"][
+            "claim_specific_escape_applicability"
+        ]
+        self.assertFalse(applicability["high_energy_slope_or_cutoff_claim"]["pass"])
+        self.assertTrue(applicability["Emax_claim"]["pass"])
+        self.assertIn("high_energy_slope_or_cutoff_claim", history["claim_rejections"])
+
+        biased = _runtime_payload(self.passing)
+        ledger = biased["boundary_escape_ledger"]
+        active_energy = _active_energy(999)
+        ledger["nonperiodic_faces"]["outer_x1"] = _face_state(
+            app.OUTER_X1_ESCAPE_REASON, 1, 1.0, 1.0
+        )
+        ledger["accumulated_escaped"] = _state_vector(1, 1.0, 1.0)
+        ledger["terminal_active"] = _state_vector(999, 999.0, active_energy)
+        last_entry = biased["per_cycle_inventory"][-1]
+        last_entry["escaped_particle_specific_kinetic_energy_maximum"] = 1.0
+        last_entry["escaped_particle_rg_maximum_over_Ly"] = 0.01
+        last_entry["escaped_high_energy_tail_rg_maximum_over_Ly"] = 0.01
+        last_entry["particle_rg_maximum_over_Ly"] = max(
+            last_entry["particle_rg_maximum_over_Ly"], 0.01
+        )
+        last_entry["high_energy_tail_rg_maximum_over_Ly"] = max(
+            last_entry["high_energy_tail_rg_maximum_over_Ly"], 0.01
+        )
+        terminal = biased["ps_escape_checkpoints"][-1]
+        terminal["active_injected_cr_count_global"] = 999.0
+        terminal["active_injected_cr_mass_global"] = 999.0
+        terminal["active_injected_cr_kinetic_energy_global"] = active_energy
+        terminal["escaped_injected_max_specific_kinetic_energy_global"] = 1.0
+        terminal["escaped_injected_max_rg_over_Ly_global"] = 0.01
+        terminal["ps_escape_ledger"] = _ps_escape_ledger(
+            cycle=terminal["cycle"],
+            observed_time=terminal["observed_committed_time"],
+            active_count=999,
+            active_mass=999.0,
+            escaped_count=1,
+            escaped_mass=1.0,
+            escaped_energy=1.0,
+        )
+        evidence = biased["escaped_slope_cutoff_evidence"]
+        evidence["active_particle_count_by_bin"] = [250, 250, 250, 249]
+        evidence["active_macro_weight_by_bin"] = [250.0, 250.0, 250.0, 249.0]
+        evidence["active_kinetic_energy_by_bin"] = [active_energy / 4.0] * 4
+        evidence["escaped_particle_count_by_bin"] = [0, 0, 0, 1]
+        evidence["escaped_macro_weight_by_bin"] = [0.0, 0.0, 0.0, 1.0]
+        evidence["escaped_kinetic_energy_by_bin"] = [0.0, 0.0, 0.0, 1.0]
+        history = _history([self.passing], biased)
+        slope = history["runtime_time_escape_evidence"]["slope_cutoff_escape_evidence"]
+        self.assertFalse(slope["pass"])
+        self.assertGreater(
+            slope["escaped_fraction_by_bin"]["particle_count"][-1],
+            app.SLOPE_CUTOFF_BIN_ESCAPE_FRACTION_MAXIMUM,
+        )
+        self.assertFalse(
+            history["runtime_time_escape_evidence"]["claim_specific_escape_applicability"][
+                "high_energy_slope_or_cutoff_claim"
+            ]["pass"]
+        )
 
     def test_escape_count_weight_energy_limits_and_momentum_residual_are_enforced(self) -> None:
         residual = _runtime_payload(self.passing)
-        residual["boundary_escape_ledger"]["nonperiodic_faces"]["ix1"]["momentum"] = [
+        residual["boundary_escape_ledger"]["nonperiodic_faces"]["outer_x1"]["momentum"] = [
             1.0,
             0.0,
             0.0,
@@ -1023,7 +1409,9 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
 
         energetic_escape = _runtime_payload(self.passing)
         ledger = energetic_escape["boundary_escape_ledger"]
-        ledger["nonperiodic_faces"]["ix1"] = _state_vector(1, 1.0, 1000.0)
+        ledger["nonperiodic_faces"]["outer_x1"] = _face_state(
+            app.OUTER_X1_ESCAPE_REASON, 1, 1.0, 1000.0
+        )
         ledger["accumulated_escaped"] = _state_vector(1, 1.0, 1000.0)
         ledger["terminal_active"] = _state_vector(999, 999.0, 1.0)
         last_entry = energetic_escape["per_cycle_inventory"][-1]
@@ -1050,6 +1438,7 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             escaped_mass=1.0,
             escaped_energy=1000.0,
         )
+        _set_slope_cutoff_unavailable(energetic_escape)
         history = _history([self.passing], energetic_escape)
         self.assertFalse(history["gates"]["Q011-APP-RG"]["pass"])
         self.assertGreater(
@@ -1086,7 +1475,9 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
 
         count_mass_escape = _runtime_payload(self.passing)
         ledger = count_mass_escape["boundary_escape_ledger"]
-        ledger["nonperiodic_faces"]["ix1"] = _state_vector(2, 2.0, 1.0)
+        ledger["nonperiodic_faces"]["outer_x1"] = _face_state(
+            app.OUTER_X1_ESCAPE_REASON, 2, 2.0, 1.0
+        )
         ledger["accumulated_escaped"] = _state_vector(2, 2.0, 1.0)
         active_energy = _active_energy(998)
         ledger["terminal_active"] = _state_vector(998, 998.0, active_energy)
@@ -1111,6 +1502,7 @@ class Q011PhysicalApplicabilitySuccessorV1Tests(unittest.TestCase):
             escaped_mass=2.0,
             escaped_energy=1.0,
         )
+        _set_slope_cutoff_unavailable(count_mass_escape)
         history = _history([self.passing], count_mass_escape)
         fractions = history["gates"]["Q011-APP-RG"]["escape_fractions"]
         self.assertGreater(
