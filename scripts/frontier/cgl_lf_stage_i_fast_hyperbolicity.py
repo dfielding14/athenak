@@ -58,6 +58,7 @@ FAILED_STATES = {
     "TIMEOUT",
 }
 SNAPSHOT_POLICIES = {"all", "latest"}
+FORMULA_IDS = {"qualified-legacy", "literature-correct"}
 
 
 class HyperbolicityLaunchError(RuntimeError):
@@ -747,6 +748,7 @@ def prepare_attempt(
     walltime: str,
     cpus_per_task: int,
     python: Path,
+    formula_id: str,
     retry_of: str | None = None,
 ) -> Path:
     jobs = Path(str(context["jobs"]))
@@ -780,6 +782,8 @@ def prepare_attempt(
         "json",
         "--hash-inputs",
     ]
+    if formula_id != "qualified-legacy":
+        command.extend(["--formula", formula_id])
     manifest: dict[str, object] = {
         "schema_version": 1,
         "record_type": "cgl_lf_stage_i_direct_fast_hyperbolicity_job",
@@ -803,6 +807,7 @@ def prepare_attempt(
         "selected_snapshot": snapshots[-1],
         "selection_sha256": selection["selection_sha256"],
         "audit_script": context["audit"],
+        "formula_id": formula_id,
         "launcher": artifact_binding(Path(__file__)),
         "python": str(python.expanduser().absolute()),
         "command": command,
@@ -1015,6 +1020,13 @@ def validate_result(attempt_dir: Path, manifest: dict[str, object]) -> str | Non
             "json",
             "--hash-inputs",
         ]
+        formula_id = require_text(
+            manifest.get("formula_id", "qualified-legacy"), "formula ID"
+        )
+        if formula_id not in FORMULA_IDS:
+            return "attempt formula ID is unsupported"
+        if formula_id != "qualified-legacy":
+            expected_command.extend(["--formula", formula_id])
         if command != expected_command:
             return "attempt command differs from selected retained coverage"
         if (
@@ -1022,6 +1034,7 @@ def validate_result(attempt_dir: Path, manifest: dict[str, object]) -> str | Non
             or provenance.get("script_sha256") != audit.get("sha256")
             or provenance.get("input_patterns") != expected_patterns
             or provenance.get("hash_inputs") is not True
+            or provenance.get("formula_id", "qualified-legacy") != formula_id
         ):
             return "result provenance differs from attempt manifest"
         snapshots = require_list(result.get("snapshots"), "result snapshots")
@@ -1252,6 +1265,7 @@ def launch(args: argparse.Namespace) -> int:
             walltime=args.walltime,
             cpus_per_task=args.cpus_per_task,
             python=args.python,
+            formula_id=getattr(args, "formula", "qualified-legacy"),
         )
         if args.submit:
             print(f"submitted {case_id}: {submit_attempt(attempt)}")
@@ -1324,6 +1338,7 @@ def retry(args: argparse.Namespace) -> int:
             "walltime": args.walltime,
             "cpus_per_task": args.cpus_per_task,
             "python": args.python,
+            "formula_id": getattr(args, "formula", "qualified-legacy"),
         }
         if attempts:
             latest = attempts[-1]
@@ -1341,6 +1356,9 @@ def retry(args: argparse.Namespace) -> int:
                         manifest.get("cpus_per_task", args.cpus_per_task)
                     ),
                     "python": Path(str(manifest.get("python", args.python))),
+                    "formula_id": str(
+                        manifest.get("formula_id", "qualified-legacy")
+                    ),
                 }
                 attempt = prepare_attempt(
                     context=context,
@@ -1421,6 +1439,15 @@ def parser() -> argparse.ArgumentParser:
         "--jobs-dir",
         type=Path,
         help="external job/result directory; default: ANALYSIS/slurm-hyperbolicity",
+    )
+    command.add_argument(
+        "--formula",
+        choices=sorted(FORMULA_IDS),
+        default="qualified-legacy",
+        help=(
+            "authenticated discriminant formula audited by prepared jobs; "
+            "default: qualified-legacy"
+        ),
     )
     command.set_defaults(audit_script=DEFAULT_AUDIT)
     subcommands = command.add_subparsers(dest="command", required=True)

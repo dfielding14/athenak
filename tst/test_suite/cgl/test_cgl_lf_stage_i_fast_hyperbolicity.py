@@ -304,6 +304,39 @@ def test_launch_authenticates_and_binds_final_retained_state(
     assert "result.sha256" in batch
 
 
+def test_literature_correct_formula_is_bound_and_result_mismatch_fails_closed(
+    launcher, campaign, tmp_path
+):
+    jobs = tmp_path / "literature-jobs"
+    args = command_args(campaign, jobs, cases=["R03"])
+    args.formula = "literature-correct"
+
+    assert launcher.launch(args) == 0
+
+    attempt = jobs / "R03/attempt-000"
+    manifest = json.loads((attempt / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["formula_id"] == "literature-correct"
+    assert manifest["command"][-2:] == ["--formula", "literature-correct"]
+
+    result = valid_result(launcher, manifest)
+    result["provenance"]["formula_id"] = "literature-correct"
+    write_json(attempt / "result.json", result)
+    (attempt / "result.sha256").write_text(
+        f"{sha256(attempt / 'result.json')}  result.json\n",
+        encoding="utf-8",
+    )
+    (attempt / "exit_code.txt").write_text("0\n", encoding="utf-8")
+    assert launcher.attempt_state(attempt, manifest) == "COMPLETED"
+
+    result["provenance"]["formula_id"] = "qualified-legacy"
+    write_json(attempt / "result.json", result)
+    (attempt / "result.sha256").write_text(
+        f"{sha256(attempt / 'result.json')}  result.json\n",
+        encoding="utf-8",
+    )
+    assert launcher.attempt_state(attempt, manifest) == "INVALID_RESULT"
+
+
 def test_inventory_and_lineage_provenance_fail_closed_without_job_writes(
     launcher, campaign, tmp_path
 ):
