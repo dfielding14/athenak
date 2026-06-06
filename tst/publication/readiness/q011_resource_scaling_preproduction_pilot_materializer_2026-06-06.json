@@ -1,0 +1,94 @@
+{
+  "record_type": "q011_resource_scaling_preproduction_pilot_materializer_readiness",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q011-RS-MATERIALIZER",
+  "status": "source_local_materializer_ready_non_authorizing",
+  "qualification_effect": "engineering_resource_measurement_only_no_execution_authorization_no_claim_closure",
+  "scope": "Versioned readiness record for a deterministic source-local materializer that consumes the checked-in Q011 resource-scaling plan, the human-selected ps_p0_1p00 receipt, and the Section 5.4 production deck. It emits engineering-only pilot decks and non-authorizing registered-control-plane config fragments. It does not mutate historical preregistrations, shared control-plane files, live policy, or scheduler state.",
+  "source_bindings": {
+    "resource_scaling_plan": {
+      "path": "tst/publication/readiness/q011_resource_scaling_preproduction_plan_2026-06-06.json",
+      "sha256": "f6b059183cd3dd1cfbca55ef2d02300d597bac4e9ac5851aecc3ae79abdebfb5"
+    },
+    "selected_pressure_receipt": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/publication/q011_section54_pressure_selection_receipt.json",
+      "sha256": "e5c1492cfc67d5cfad0110e7d772bf75f9d6d2e1fd90b0d5d8dd3338965905cc",
+      "selected_case_id": "ps_p0_1p00",
+      "selected_problem_ps_p0": 1.0
+    },
+    "production_deck": {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+      "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+    },
+    "materializer_source": {
+      "path": "tst/publication/q011_resource_scaling_preproduction_pilot_materializer.py",
+      "sha256": "b8c0e3199b13245409fcef56af2e4c7fbc9e1da675d52f6b0f907a42015784bb"
+    }
+  },
+  "materialized_output_contract": {
+    "authorized_source_local_parent": "tst/.codex",
+    "direct_child_only": true,
+    "recursively_read_only_after_materialization": true,
+    "deterministic_manifest_sha256": "e72f1ee329b327f2a22cd1c9b3a647e2d00492f1c945fa6f68eed551ccd32f54",
+    "deck_count": 12,
+    "config_fragment_count": 24,
+    "phase_1_initial_ladder_fragment_count": 9,
+    "phase_1_selected_node_repeat_candidate_fragment_count": 9,
+    "phase_2_reduced_transverse_fragment_count": 3,
+    "phase_3_held_out_fragment_count": 3,
+    "phase_1_and_phase_3_bulk_output_policy": "all_six_production_output_dt_values_set_nonpositive",
+    "phase_2_output_policy": "exact_production_output_and_restart_cadence_retained",
+    "physical_output_inspection": "forbidden",
+    "allowed_inspection": [
+      "scheduler_elapsed_and_node_hours",
+      "runtime_timing_telemetry",
+      "particle_counts_and_particle_update_counts",
+      "active_cell_and_meshblock_counts",
+      "memory_high_water_marks",
+      "artifact_byte_counts_and_output_publication_times"
+    ]
+  },
+  "engineering_seed_allocation": {
+    "phase_1_ladder": 24060601,
+    "phase_1_selected_repeat": 24060602,
+    "phase_2_reduced_transverse": 24060604,
+    "phase_3_held_out": 24060603,
+    "disjoint_from_qualifying_seeds_23050101_through_23050108": true,
+    "qualification_effect": "none"
+  },
+  "registered_control_plane_compatibility": {
+    "submission_scope": "registered_science",
+    "selected_qos": "normal",
+    "frontier_gpus_per_node": 8,
+    "cpus_per_gpu_task": 7,
+    "phase_1_concrete_launch_contract_count": 18,
+    "phase_1_concrete_launch_contract_schema_validation": "passed",
+    "phase_2_and_phase_3_launch_contract_state": "blocked_pending_phase_1_node_selection_and_memory_meshblock_check",
+    "policy_slice_status": "review_required_not_authorized",
+    "current_q011_planner_retention_requirement": "required",
+    "planner_retention_materialized_by_this_artifact": false,
+    "planner_retention_boundary": "A separately reviewed pilot planner-retention binding accepted by the installed control plane is required before any registered execution. This materializer does not fabricate a qualifying-campaign planner binding or modify shared controller code."
+  },
+  "execution_gates": [
+    "All source bindings must still match exact bytes.",
+    "A final clean candidate, executable, environment profile, directive-only normal-QOS job template, analysis-script set, walltime, and timeout-margin artifact must be separately bound.",
+    "Each case requires a separately reviewed registered-science policy slice and fresh pre_manifest and pre_submit_wrapper operator attestations.",
+    "Each case requires a valid Q011 planner-retention binding accepted by the installed control plane.",
+    "Phase 1 selected-node repeats may run only for the selected node count and at most three times.",
+    "Phase 2 and Phase 3 remain blocked until their preceding Q011-RS gates pass and node counts are separately reviewed.",
+    "Registered pilot execution must remain serial and stop before 500 consumed node-hours.",
+    "Engineering-pilot physical fields, spectra, shock morphology, magnetic amplification, scientific profiles, residuals, and qualifying outputs may not be inspected."
+  ],
+  "execution_boundary": {
+    "historical_preregistrations_modified": false,
+    "shared_control_plane_files_modified": false,
+    "qualifying_outputs_inspected": false,
+    "physical_outputs_inspected": false,
+    "live_policy_mutation_authorized": false,
+    "scheduler_submission_authorized": false,
+    "frontier_execution_authorized": false,
+    "qualifying_evidence": false,
+    "claim_closure_authorized": false
+  }
+}
