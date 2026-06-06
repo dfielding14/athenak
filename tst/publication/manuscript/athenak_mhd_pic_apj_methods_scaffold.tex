@@ -25,8 +25,8 @@
 
 \begin{document}
 
-\title{AthenaK MHD-PIC: Numerical Method, Verification, and Qualification
-Envelope\\
+\title{AthenaK MHD-PIC: Core Numerical Method, Corrected Bell Qualification,
+and a Parallel-Shock Demonstration\\
 \large Internal ApJ Methods-Paper Scaffold}
 
 \author{AthenaK Collaboration}
@@ -55,6 +55,13 @@ verification, selected registered GPU oracles, and preregistered campaigns.
 It does not yet establish the complete paper-reproduction bundle, nonlinear
 Bell saturation, the Section~5.4 parallel-shock result, or production-scale
 performance.
+The historical Bell preparation is invalid for qualification because it omitted
+root-cell volume from the deposited-current contract, held particle count times
+deposit weight fixed across dimension and resolution changes, and multiplied
+AthenaK's deposited $J_{\rm CR}/c$ closure by artificial light speed
+$\mathbb{C}$. Corrected Bell linear and nonlinear results require a
+volume-aware dimension/resolution/decomposition current oracle, superseding
+contracts, and complete reruns.
 \GATE{The abstract must not claim those outcomes until their named gates close.}
 \end{abstract}
 
@@ -68,32 +75,34 @@ plasma astrophysics (1261) --- computational methods (1965) ---
 \paragraph{Reader orientation.}
 This paper should answer one question: under what documented physical and
 numerical conditions can \athenak evolve kinetic cosmic rays coupled to an MHD
-background with quantitatively verified accuracy, portability, and
-reproducibility?
+background for corrected linear and nonlinear Bell calculations and a
+Section~5.4 parallel shock with quantitatively verified accuracy,
+reproducibility, and measured performance?
 
 \TODO{Write the introduction around the unresolved method problem, not around
 the chronology of implementation.}
-\TODO{Add verified primary citations for MHD-PIC, cosmic-ray acceleration,
-gyro-resonant instabilities, delta-$f$ methods, expanding-box methods, AMR, and
-GPU-portable astrophysical codes.}
+\TODO{Add verified primary citations for MHD-PIC, the Bell instability,
+non-relativistic shock acceleration, AMR, reproducibility, and GPU-portable
+astrophysical codes.}
 \TODO{State the contribution relative to prior Athena/Athena++ MHD-PIC work and
 other independently mapped methods. Do not claim cross-code agreement until
 \qgate{Q-022}, \qgate{Q-030}, and \qgate{Q-040} close.}
 
 \paragraph{Proposed central claim.}
 \AUTHOR{Approve or revise: ``Within a precisely stated non-Hall, non-relativistic
-MHD applicability envelope, \athenak provides a performance-portable MHD-PIC
-implementation whose particle mechanics, coupling, mesh operations, and
-selected physical benchmarks can be evaluated through an auditable hierarchy of
-analytical, numerical, and campaign-level gates.''}
+MHD applicability envelope, \athenak provides an auditable core MHD-PIC
+implementation whose corrected Bell linear and nonlinear behavior,
+Section~5.4 parallel-shock reproduction, reproducibility, and measured
+performance can be evaluated through analytical, numerical, and campaign-level
+gates.''}
 \GATE{The final central claim must be narrowed to the closed claim IDs and
 reviewed evidence available at submission.}
 
 \paragraph{Dominant uncertainty.}
 The present dominant uncertainty is the transition from bounded local and
 selected GPU verification to complete long-horizon physical qualification,
-broad MPI/GPU portability, nonlinear saturation, Section~5.4 shock results, and
-production-scale performance.
+broad MPI/GPU portability, corrected Bell qualification, Section~5.4 shock
+results, and production-scale performance.
 
 \section{Scope, Runtime Identity, and Claim Discipline}
 \label{sec:scope}
@@ -101,6 +110,18 @@ production-scale performance.
 The method must be interpreted through an explicit runtime identity. New
 paper-facing coupled runs use \runtime. Historical engineering and pre-VL2
 identities are not interchangeable with this candidate.
+
+\subsection{Target Manuscript Scope}
+
+The target manuscript is restricted to the core MHD-PIC implementation and the
+implementation-level verification needed by its claims, corrected Bell linear
+and nonlinear qualification, the Section~5.4 parallel shock, reproducibility,
+and measured performance. Standalone multispecies-oscillation, CRSI, CRPAI,
+driven expanding/compressing-box, physical-damping, and calibrated-transport
+results are outside this target paper.
+\GATE{Narrowing manuscript scope does not close or weaken an excluded claim.
+No excluded result or figure may re-enter without an explicit scope revision
+and its original evidence gate.}
 
 \begin{table*}[htbp]
 \centering
@@ -122,36 +143,24 @@ Bounded analytical convergence and selected registered GPU oracle &
 artifact manifest, and review &
 Open \\
 \claimid{CLAIM-PAPER-BELL-LINEAR-001} &
-Bell phase and growth versus analytical dispersion in 1D/2D/3D &
-Paper-value preparation, estimator contract, initialization and restart smoke;
-existing growth proxy is not qualifying evidence &
+Corrected-normalization Bell phase and growth versus analytical dispersion in
+1D/2D/3D &
+Historical preparation and proxy evidence are invalid because they multiplied
+deposited $J_{\rm CR}/c$ by artificial $\mathbb{C}$ and omitted the
+root-cell-volume dependence, making fixed particle count times deposit weight
+change the current with dimension/resolution &
 \qgate{Q-003}, \qgate{Q-004}, \qgate{Q-005}, \qgate{Q-023},
-\qgate{Q-025}, \qgate{Q-026} &
+\qgate{Q-025}, \qgate{Q-026}; corrected contract,
+dimension/resolution/decomposition oracle, and complete reruns &
 Open \\
 \claimid{CLAIM-PROD-BELL-NONLINEAR-NOHALL-001} &
-Nonlinear Bell evolution and saturation in the tested non-Hall regime &
-No qualifying nonlinear result currently available &
+Corrected-normalization nonlinear Bell evolution and saturation in the tested
+non-Hall regime &
+Current foundation/design inherit the invalid historical volume-blind,
+artificial-$\mathbb{C}$ normalization; no qualifying nonlinear result is
+available &
 \qgate{Q-019}, \qgate{Q-023}, \qgate{Q-025}, \qgate{Q-026},
 \qgate{Q-028}; see explicit gate in Section~\ref{sec:bell} &
-Open \\
-\claimid{CLAIM-PAPER-OSCILLATION-001} &
-Gas plus electron/positron oscillation on uniform, SMR, and AMR grids &
-Bounded local mechanics carriers and short-horizon residual diagnostics &
-\qgate{Q-004}, \qgate{Q-006}, \qgate{Q-009}, \qgate{Q-025},
-\qgate{Q-026}; long-horizon and true-AMR qualification &
-Open \\
-\claimid{CLAIM-PAPER-CRSI-LINEAR-001} and
-\claimid{CLAIM-PAPER-CRPAI-LINEAR-001} &
-Polarization-resolved linear growth and spectra with physical delta-$f$ &
-Initialization, static-oracle preparation, and bounded CRSI mechanics replay &
-\qgate{Q-003}, \qgate{Q-004}, \qgate{Q-007}, \qgate{Q-023},
-\qgate{Q-025}, \qgate{Q-026}; theory comparison and long-horizon campaigns &
-Open \\
-\claimid{CLAIM-PAPER-CRPAI-DRIVEN-001} &
-Driven expanding/compressing-box CRPAI evolution &
-Bounded expanding-box mechanics, CPAW preparation, and restart checks &
-\qgate{Q-007}, \qgate{Q-008}, \qgate{Q-023}, \qgate{Q-025},
-\qgate{Q-026}; driven physical campaign &
 Open \\
 \claimid{CLAIM-PAPER-SHOCK-001} &
 Section~5.4 parallel-shock morphology, spectra, and AMR comparison &
@@ -160,6 +169,12 @@ pressure pilots, and a human-selected $p_0=1.0$ baseline &
 \qgate{Q-003}, \qgate{Q-004}, \qgate{Q-009}, \qgate{Q-011},
 \qgate{Q-016}, \qgate{Q-023}, \qgate{Q-025}, \qgate{Q-026},
 \qgate{Q-027}; see Section~\ref{sec:shock} &
+Open \\
+Measured performance &
+Cost, memory, communication, and load balance for the demonstrated matrix &
+Bounded observability scaffolding only &
+Registered measurements, exact hardware/software mapping, repeated measures,
+uncertainty, retained failures, and review &
 Open \\
 \claimid{CLAIM-RELEASE-PAPER-MHD-PIC-001} &
 Production-ready bounded paper-mode release &
@@ -187,6 +202,10 @@ relativistic MHD background fluid, thermal-pool injection, oblique-shock
 generality, and Hall-dominated Bell or shock-front inference.
 \item \TODO{Insert final supported boundary-condition, AMR, decomposition,
 restart, and toolchain matrix after all linked gates close.}
+\item Historical volume-blind or artificial-$\mathbb{C}$-multiplied Bell
+artifacts are explicitly invalid for qualification; corrected Bell runs must
+bind the full deposited-current closure and its dimension, resolution, and
+decomposition invariance.
 \end{itemize}
 
 \section{Physical Model and Notation}
@@ -228,6 +247,33 @@ condition and timestep constraints.}
 \TODO{Add the exact Boris update equations only after a source-to-manuscript
 derivation audit.}
 
+\subsection{Deposited-Current Normalization}
+
+For a uniform streaming carrier, the exact AthenaK deposited-current closure is
+\begin{equation}
+\left(\frac{J_{\rm CR}}{c}\right)_{\rm dep}
+=
+\frac{{\rm PPC}\,q_{\rm scale}\,[q/(mc)]\,v_{\rm CR}}
+     {V_{\rm root\,cell}}
+=2B_gk_0,
+\label{eq:bell-deposited-current}
+\end{equation}
+where ${\rm PPC}$ is particles per root cell, $q_{\rm scale}$ is
+\texttt{deposit\_qscale}, and $V_{\rm root\,cell}$ is computed from the global
+root-mesh extents and counts. A fixed ${\rm PPC}\,q_{\rm scale}$ therefore
+changes the physical current when dimension or root resolution changes unless
+the volume dependence is included. Changing only meshblock/rank decomposition
+must leave Equation~\ref{eq:bell-deposited-current} invariant.
+
+The historical Bell preparation omitted $V_{\rm root\,cell}$ from its closure
+and targeted $2B_g\mathbb{C}k_0$ rather than $2B_gk_0$. Both errors change the
+physical Bell problem and invalidate every inherited historical Bell artifact
+for qualification.
+\GATE{No corrected Bell result may be inserted until a direct deposited-current
+oracle demonstrates Equation~\ref{eq:bell-deposited-current} across the
+registered dimension, root-resolution, meshblock/rank-decomposition, and
+artificial-$\mathbb{C}$ matrix.}
+
 \subsection{MHD Equations and Particle Backreaction}
 
 \TODO{Insert the exact MHD conservation equations, equation of state, and
@@ -237,29 +283,6 @@ exchange equations. Demonstrate how the particle change is applied with the
 opposite sign to the ideal-MHD gas update.}
 \VERIFY{Keep the exact-isothermal momentum-only feedback boundary separate from
 ideal-MHD momentum-and-energy feedback.}
-
-\subsection{Delta-$f$ Representation}
-
-For physical delta-$f$ operation, the implementation evolves a perturbation
-weight derived from the initial and evolving analytical background
-distributions. A notation placeholder is
-\begin{equation}
-\delta w =
-1-\frac{f_0(t,\boldsymbol{x},\boldsymbol{p})}
-        {f_0(0,\boldsymbol{x}_0,\boldsymbol{p}_0)}.
-\label{eq:deltaf-placeholder}
-\end{equation}
-\VERIFY{Replace Equation~\ref{eq:deltaf-placeholder} with the exact paper and
-implementation notation after confirming sampling weights, macro-particle
-weights, deposited moments, and restart semantics.}
-
-\subsection{Expanding and Compressing Coordinates}
-
-\TODO{Insert the verified expanding-box coordinate map, particle momentum
-source, MHD conserved-variable map, magnetic-flux representation, and limiting
-analytic solutions.}
-\VERIFY{Explain which quantities are comoving, which are physical views, and
-which source-package compositions fail closed.}
 
 \begin{table*}[htbp]
 \centering
@@ -287,13 +310,14 @@ $\boldsymbol{B}$ & Magnetic field & \TODO{State units and energy convention} &
 \TODO{Bind face/cell views} & Verify \\
 $q/(mc)$ & Configured charge-to-mass factor & AthenaK normalized units &
 \TODO{Bind species parameter} & Verify \\
+$V_{\rm root\,cell}$ & Global root-cell volume &
+Global root-mesh extents divided by global root-mesh counts &
+\TODO{Bind mesh geometry source} & Verify \\
+$(J_{\rm CR}/c)_{\rm dep}$ & Deposited cosmic-ray current divided by $c$ &
+Equation~\ref{eq:bell-deposited-current} &
+\TODO{Bind deposited-current output/source fields} & Verify \\
 $w_{\rm macro}$ & Macro-particle weight & \TODO{State normalization} &
 \texttt{macro\_weight}/\texttt{IPWT} outputs & Verify \\
-$\delta w$ & Physical delta-$f$ perturbation weight &
-\TODO{State sign and deposition convention} &
-\texttt{deltaf\_weight}/\texttt{IPDFWT} outputs & Verify \\
-$a_i(t)$ & Directional box scale factor & \TODO{State law and units} &
-\TODO{Bind expansion parameters} & Verify \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -334,8 +358,8 @@ TSC interface oracle and required AMR/MPI/HIP lifetime matrices close
 \subsection{Particle Provenance, Output, and Restart}
 
 \TODO{Describe persistent particle identifiers, species/source cohorts,
-macro-particle weights, birth times, physical delta-$f$ fields, typed PVTK
-output, and independently reconstructed spectra.}
+macro-particle weights, birth times, typed PVTK output, and independently
+reconstructed spectra required by the target Bell and shock claims.}
 \TODO{Describe restart fingerprints, atomic publication, completion markers,
 and the exact tested recovery envelope.}
 \GATE{Separate bounded serial/two-rank evidence from broad MPI, AMR, HIP, and
@@ -390,22 +414,17 @@ Open \\
 Paper coupling & \runtime & \TODO{Bind} &
 Momentum/energy exchange and induction isolation & Decomposition, GPU, restart &
 Open \\
-Bell linear & \runtime & \TODO{Bind 1D/2D/3D matrix} &
+Bell deposited-current oracle & \runtime & \TODO{Bind corrected matrix} &
+Equation~\ref{eq:bell-deposited-current} and direct deposited current &
+Dimension, root resolution, meshblock/rank decomposition, $\mathbb{C}$ &
+Blocked \\
+Bell linear & \runtime & \TODO{Bind corrected 1D/2D/3D matrix} &
 Signed phase and growth versus dispersion & Resolution, timestep, PPC, seed,
-MPI/GPU & Open \\
+MPI/GPU; corrected current oracle prerequisite & Blocked \\
 Bell nonlinear & \runtime & \TODO{Bind Q-019 campaign} &
 Amplification, spectra, morphology, energy partition, saturation &
-Resolution, timestep, PPC, box, dimension, seed, independent comparison &
-Blocked \\
-Multispecies oscillation & \runtime & \TODO{Bind} &
-Frequency and residuals on uniform/SMR/AMR & Long horizon, true AMR, MPI/GPU &
-Open \\
-CRSI/CRPAI linear & \runtime & \TODO{Bind} &
-Polarization spectra and growth versus theory & Delta-$f$ envelope, resolution,
-PPC, seed, MPI/GPU & Open \\
-Driven CRPAI & \runtime & \TODO{Bind} &
-Anisotropy, spectra, distribution evolution & Drive rate, restart, MPI/GPU &
-Open \\
+Resolution, timestep, PPC, box, dimension, seed, decomposition, independent
+comparison; corrected current oracle prerequisite & Blocked \\
 Section~5.4 shock & \runtime & \TODO{Bind qualifying registration} &
 Morphology, field amplification, downstream spectra, AMR comparison &
 Paired seeds, coarse/AMR/fine, restart, MPI/GPU, load balance & Blocked \\
@@ -416,7 +435,7 @@ Node/rank/GPU/PPC/resolution matrix & Open \\
 \end{tabular}
 \end{table*}
 
-\section{Verification Results}
+\section{Core Implementation Verification}
 \label{sec:verification-results}
 
 \subsection{Relativistic Particle Mechanics}
@@ -438,23 +457,23 @@ momentum-only carriers.}
 physical convergence, decomposition consistency, interface behavior, and
 restart continuity.}
 \GATE{Do not promote short-horizon carriers or engineering proxies into the
-Section~5.3 reproduction claim.}
+target Bell or Section~5.4 claims.}
 
-\subsection{Expanding-Box Analytical Verification}
-
-\TODO{Insert complete CPAW amplitude/phase histories, resolution convergence,
-expanding-box gyro histories, and the final solver/dimensionality matrix.}
-\VERIFY{Current bounded preparation trends are not independent physical-model
-validation or production qualification.}
-
-\section{Coupled Physical Benchmarks}
+\section{Corrected Bell Qualification}
 \label{sec:physical-benchmarks}
 
 \subsection{Bell Instability}
 \label{sec:bell}
 
 \paragraph{Linear gate.}
-\TODO{Insert the paper-faithful 1D/2D/3D phase and growth comparison only after
+\GATE{The historical Bell linear preparation and proxy evidence are invalid for
+qualification because they omitted $V_{\rm root\,cell}$, held
+${\rm PPC}\,q_{\rm scale}$ fixed across dimension/resolution changes, and
+targeted $2B_g\mathbb{C}k_0$.}
+\TODO{First close a direct deposited-current oracle for
+Equation~\ref{eq:bell-deposited-current} across dimension, root resolution,
+meshblock/rank decomposition, and artificial $\mathbb{C}$. Then insert the
+complete corrected 1D/2D/3D phase and growth reruns only after
 \claimid{CLAIM-PAPER-BELL-LINEAR-001} closes. Include signed phase, analytical
 dispersion, convergence, exact fit windows, uncertainty, MPI/GPU scope, and raw
 artifact provenance.}
@@ -465,30 +484,22 @@ saturation result may be written or plotted as a production result until
 \qgate{Q-019}, \qgate{Q-023}, \qgate{Q-025}, \qgate{Q-026}, and \qgate{Q-028}
 close.}
 \paragraph{Current admissible statement.}
-A source-local high-rigidity, fixed-current-like foundation deck and bounded
-analyzer define diagnostics for magnetic amplification, scale migration, gas
-acceleration, and the amplified-field Alfv\'en speed. They do not measure a
-locked current, establish self-consistent CR-deflection or anisotropic-pressure
-saturation, authorize execution, or support a production result.
+The source-local high-rigidity, fixed-current-like foundation deck, bounded
+analyzer, and current Q019 design inherit the invalid historical
+volume-blind/artificial-$\mathbb{C}$ Bell normalization. They may document the
+defect and supersession requirement only; they do not authorize execution or
+support a production result.
+\TODO{Issue corrected source, deck, analyzer, and Q019 design successors only
+after the deposited-current oracle and corrected linear Bell predecessor
+close.}
 \TODO{Run and analyze the preregistered nonlinear sensitivity matrix covering
-particle count, resolution, timestep, box size, dimensionality, and seed.}
+particle count, resolution, timestep, box size, dimensionality, decomposition,
+and seed.}
 \TODO{Report magnetic amplification, mode spectra, filament/cavity morphology,
 energy partition, saturation amplitude, saturation time, and independent
 comparison with an explicit discrepancy ledger.}
 \TODO{State that any accepted result is non-Hall and must not be transferred to
 Hall-dominated shock-front conditions.}
-
-\subsection{Multispecies Oscillation}
-
-\TODO{Insert long-horizon uniform, SMR, and true-AMR frequency and residual
-comparisons. Explain the dominant mesh-transition uncertainty.}
-
-\subsection{CR Streaming and Pressure-Anisotropy Instabilities}
-
-\TODO{Insert polarization-resolved spectra and growth rates against verified
-theory only after the linear CRSI and CRPAI claims close.}
-\TODO{Separate linear reproduction, nonlinear saturation, driven evolution, and
-physical-damping transport calibration into distinct claims and subsections.}
 
 \section{Section 5.4 Parallel-Shock Demonstration}
 \label{sec:shock}
@@ -547,10 +558,10 @@ operation.}
 \begin{itemize}
 \item The paper-mode formulation excludes CR Hall induction; Hall behavior is a
 separate extension.
+\item Corrected Bell claims require the full volume-aware deposited-current
+closure and demonstrated dimension/resolution/decomposition invariance.
 \item MHD-PIC does not resolve thermal-pool injection physics in the Section~5.4
 shock setup.
-\item Physical damping and calibrated transport coefficients require separately
-qualified extensions.
 \item AMR-interface, broad MPI/HIP, resilience, performance, archive, and
 external-review boundaries must remain explicit.
 \item \TODO{Update this list from the final closed and open claim manifests.}
@@ -644,15 +655,13 @@ review before release.
 \begin{enumerate}
 \item Method and task-order schematic.
 \item Runtime-mode and applicability-envelope table.
-\item Relativistic gyro convergence and invariant errors.
-\item Coupled momentum/energy conservation and induction isolation.
-\item TSC deposition and refinement-interface validation.
-\item Uniform/SMR/AMR multispecies oscillation comparison.
-\item Expanding-box CPAW and gyro analytical verification.
-\item Bell linear dispersion comparison.
+\item Core particle-mechanics, coupling, TSC/refinement-interface, and restart
+verification needed by the target claims.
+\item Corrected Bell deposited-current
+dimension/resolution/decomposition/artificial-$\mathbb{C}$ oracle.
+\item Corrected Bell linear dispersion comparison.
 \item \GATE{Bell nonlinear saturation figure only after the Section~\ref{sec:bell}
 gate closes.}
-\item CRSI/CRPAI polarization and theory comparison.
 \item \GATE{Section~5.4 shock morphology, profiles, spectra, and AMR comparison
 only after the Section~\ref{sec:shock} gate closes.}
 \item Frontier performance, scaling, memory, and load-balance results.

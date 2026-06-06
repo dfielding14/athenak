@@ -7,8 +7,9 @@
 - **Article subtype and formal limits:** `[AUTHOR DECISION / VERIFY AGAINST CURRENT APJ REQUIREMENTS]`.
 - **Current manuscript source:** `tst/publication/manuscript/athenak_mhd_pic_apj_methods_scaffold.tex`.
 - **Companion operational tracker:** `tst/publication/manuscript/claim_evidence_ledger.md`.
-- **Status:** Gate 1 planning artifact. It does not authorize result wording, certify
-  evidence, or replace a claim manifest.
+- **Status:** Gate 1 planning artifact with a narrowed target-paper scope. It
+  does not authorize result wording, certify evidence, or replace a claim
+  manifest.
 - **Default reviewer state:** `pending external review`.
 
 This brief follows
@@ -41,24 +42,43 @@ independence, physical optimality, or a qualifying shock result.
 
 ## Central Question
 
-Under what documented physical and numerical conditions can AthenaK evolve
-kinetic cosmic rays coupled to an MHD background with quantitatively verified
-accuracy, portability, reproducibility, and explicitly bounded scientific
-claims?
+Under what documented physical and numerical conditions can AthenaK's core
+MHD-PIC implementation support corrected linear and nonlinear Bell
+calculations and a Section 5.4 parallel shock with quantitatively verified
+accuracy, reproducibility, measured performance, and explicitly bounded
+scientific claims?
 
 ## Proposed Main Claim
 
 The intended methods-paper claim is:
 
 > Within a precisely stated non-Hall MHD-PIC applicability envelope, AthenaK
-> provides a performance-portable implementation whose particle mechanics,
-> conservative particle-gas coupling, mesh operations, restart behavior, and
-> selected physical benchmarks are evaluated through an auditable hierarchy of
-> analytical, numerical, registered-campaign, and independent-review gates.
+> provides an auditable core implementation whose corrected Bell linear and
+> nonlinear behavior, Section 5.4 parallel-shock reproduction, reproducibility,
+> and measured performance are evaluated through analytical, numerical,
+> registered-campaign, and independent-review gates.
 
 This is a proposed claim, not a verified release statement. Before submission,
 it must be narrowed to the claim IDs that have closed, the exact portability
 matrix demonstrated, and the limitations supported by final evidence.
+
+## Target Paper Scope
+
+The target paper is narrowed to:
+
+- the core AthenaK MHD-PIC physical model, discrete implementation, mesh/AMR,
+  restart, provenance, and implementation-level verification needed to support
+  its result claims;
+- corrected Bell linear qualification followed by corrected nonlinear Bell
+  qualification;
+- the Section 5.4 parallel-shock campaign;
+- reproducibility and evidence provenance; and
+- measured performance on the exact demonstrated hardware/software matrix.
+
+Standalone multispecies-oscillation, CRSI, CRPAI, driven expanding/compressing
+box, physical-damping, and calibrated-transport results are outside this target
+paper. Their open claim IDs remain open; narrowing manuscript scope does not
+close, reject, or weaken their independent evidence gates.
 
 ## Intended Contribution
 
@@ -70,8 +90,9 @@ of test problems runs. It should explain:
 - the discrete particle and MHD coupling design;
 - how AthenaK mesh, AMR, restart, provenance, and portable execution constraints
   shape the method;
-- why the validation hierarchy separates implementation checks, paper
-  reproduction, nonlinear production qualification, and cross-code comparison;
+- why the validation hierarchy separates core implementation checks, corrected
+  Bell qualification, Section 5.4 reproduction, nonlinear production
+  qualification, and cross-code comparison;
 - which physical results close, remain limited, or remain unsupported.
 
 Contribution relative to prior methods and codes remains `[CITATION NEEDED /
@@ -85,8 +106,27 @@ verified.
 
 `CLAIM-PROD-BELL-NONLINEAR-NOHALL-001` is an explicit central-result gate.
 
+The exact AthenaK deposited-current closure is
+`deposited J_CR/c = PPC * deposit_qscale * (q/(mc)) * v_CR / V_root_cell
+= 2 B_g k_0`, where `V_root_cell` is determined from the global root-mesh
+extents and counts. The historical Bell preparation instead targeted
+`2 B_g C k_0` and treated fixed `PPC * deposit_qscale` as sufficient without
+the root-cell-volume factor. Multiplication by artificial light speed `C`
+changes the physical Bell mode, while fixed `PPC * deposit_qscale` makes the
+physical current change with dimension or root resolution. Correct deposition
+must also be invariant under a pure meshblock/rank decomposition change. This
+confirmed volume-aware current-normalization defect invalidates the historical
+Bell linear preparation/proxy evidence for qualification and invalidates any
+nonlinear foundation or campaign design that inherits it. It does not itself
+establish a corrected Bell result.
+
 Until Q-019, Q-023, Q-025, Q-026, and Q-028 close with a named reviewer:
 
+- no historical volume-blind or artificial-`C`-multiplied Bell artifact may
+  support a linear or nonlinear result;
+- no corrected nonlinear Bell campaign may qualify before the deposited-current
+  dimension/resolution/decomposition oracle and corrected linear predecessor
+  close;
 - no nonlinear Bell saturation result may appear in the abstract, conclusions,
   results narrative, or reader-facing figure bundle;
 - no claim may transfer a non-Hall result to Hall-dominated shock-front
@@ -95,8 +135,10 @@ Until Q-019, Q-023, Q-025, Q-026, and Q-028 close with a named reviewer:
   be described as production qualification.
 
 Required result scope, if the gate closes: the exact tested non-Hall physical
-regime, induction model, dimensions, parameter matrix, uncertainty, numerical
-sensitivity, comparison scope, and unresolved discrepancies.
+regime, corrected volume-aware deposited-`J_CR/c` normalization, direct-current
+dimension/resolution/decomposition oracle, induction model, dimensions,
+parameter matrix, uncertainty, numerical sensitivity, comparison scope, and
+unresolved discrepancies.
 
 ### Gate B: Section 5.4 Parallel Shock
 
@@ -126,10 +168,13 @@ and production-scale performance.
 For the two central-result gates specifically:
 
 - **Bell nonlinear:** a source-local fixed-current-like foundation deck,
-  bounded analyzer, and Q019 campaign design now exist, but the qualifying
-  generator and deck matrix, excluded-pilot-frozen saturation windows,
-  comparison maps, numeric tolerances, measured resource model, and registered
-  campaign remain open.
+  bounded analyzer, and Q019 campaign design exist, but they inherit the
+  invalid historical volume-blind, artificial-`C` current normalization and are
+  ineligible for qualification. Corrected linear qualification, a
+  dimension/resolution/decomposition deposited-current oracle, a superseding
+  nonlinear design and foundation, qualifying generator and deck matrix,
+  excluded-pilot-frozen saturation windows, comparison maps, numeric tolerances,
+  measured resource model, and registered campaign remain open.
 - **Section 5.4 shock:** the pressure baseline is selected and the future
   qualifying policy is detailed, and a staged resource-scaling plan now exists,
   but production registration, stable clean source, prerequisite simulations,
@@ -142,6 +187,9 @@ The manuscript must distinguish the following:
 - `paper_mhd_pic` or its exact final registered runtime identity from historical
   engineering modes and separately named extensions;
 - paper reproduction from AthenaK production qualification;
+- corrected volume-aware Bell `J_CR/c` normalization from the invalid
+  historical volume-blind, artificial-`C`-multiplied normalization and all
+  artifacts that inherit it;
 - non-Hall Bell behavior from any Hall extension or Hall-dominated inference;
 - energetic-particle injection prescriptions from resolved thermal-pool
   injection physics;
@@ -177,6 +225,10 @@ The manuscript should help the reader build this mental model:
   kinetic plasma modeling.
 - Why ideal-MHD induction and a separately named Hall extension must not be
   conflated.
+- Why AthenaK's deposited current includes `1/V_root_cell`, why fixed
+  `PPC * deposit_qscale` changes physical current with dimension or resolution,
+  why artificial-`C` multiplication changes the physical Bell mode, and why all
+  affected Bell evidence must be rerun.
 - How particle interpolation/deposition, feedback, and MHD evolution compose
   into a conservative update.
 - Why AMR receiver resolution, particle ownership, and mesh transitions are
@@ -198,8 +250,8 @@ The manuscript should help the reader build this mental model:
 | Governing model and notation | Define equations, normalization, and approximation boundaries | The reader can identify what is evolved, coupled, omitted, and separately extended |
 | Numerical method and AthenaK integration | Explain discrete updates, ordering, mesh behavior, restart, and provenance | Correctness depends on the composed algorithm, not only isolated formulas |
 | Verification and qualification design | Explain evidence classes, preregistration, uncertainty, and review | Different claims require different evidence; proxies cannot close physics gates |
-| Verification results | Present only closed analytical/numerical/portability claims | Each result has an oracle, scope, uncertainty, artifact chain, and limitation |
-| Coupled physical benchmarks | Test the method in controlled physical problems | Bell linear and other benchmarks must remain separated from nonlinear production claims |
+| Core implementation verification | Establish only the mechanics, coupling, mesh/AMR, restart, and portability evidence needed by the target claims | Each result has an oracle, scope, uncertainty, artifact chain, and limitation |
+| Corrected Bell linear result | Establish the mandatory corrected predecessor to nonlinear Bell | Historical volume-blind or artificial-`C`-multiplied Bell evidence is inadmissible; corrected normalization, invariance oracles, and reruns are required |
 | Nonlinear Bell result | Present a central production result only if Gate A closes | Any accepted result is restricted to the demonstrated non-Hall regime |
 | Section 5.4 shock result | Present a central paper-reproduction result only if Gate B closes | Morphology, spectra, AMR comparison, and provenance must come from one registered evidence chain |
 | Performance and scalability | Quantify cost and portability only from registered measurements | Performance claims require exact hardware, mapping, problem size, repeated measures, and uncertainty |
@@ -217,8 +269,9 @@ Priority methods items:
 1. Method and task-order schematic, verified against exact release source.
 2. Runtime-mode and applicability-envelope table.
 3. Verification-hierarchy and simulation-matrix table.
-4. Particle mechanics, coupling, mesh/AMR, and restart/provenance verification
-   figures supported by closed claims.
+4. Core particle mechanics, coupling, mesh/AMR, and restart/provenance
+   verification figures needed by the target claims and supported by closed
+   evidence.
 5. Final reproducibility and claim-evidence tables.
 
 Explicitly gated central-result items:
@@ -238,6 +291,9 @@ claim ID, and reviewer disposition.
 
 - Use `AthenaK` for the code and `MHD-PIC` for the bounded method.
 - Name the exact runtime identity for every physical claim.
+- State the full deposited-current closure, including `V_root_cell`; never
+  describe a volume-blind or artificial-`C`-multiplied historical Bell artifact
+  as qualifying evidence.
 - Use `paper reproduction`, `production qualification`, `engineering proxy`,
   `preparation`, and `cross-code comparison` as distinct evidence classes.
 - Use `non-Hall` wherever a Bell result excludes Hall induction.
@@ -284,9 +340,15 @@ The following statements may orient methods drafting, subject to source audit:
 - A human-only production receipt selected `problem/ps_p0=1.0` as the
   provenance-first Section 5.4 baseline.
 - The current Section 5.4 pressure pilots are engineering calibration only.
-- A source-local high-rigidity nonlinear Bell foundation and a Q019 campaign
-  design exist, but neither authorizes execution or supports a saturation
-  result.
+- The historical Bell linear preparation omitted the root-cell-volume factor
+  from its current contract, held `PPC * deposit_qscale` fixed across
+  dimension/resolution changes, and multiplied the deposited `J_CR/c` closure
+  by artificial `C`; it and all Bell plans or foundations inheriting that
+  normalization are invalid for qualification.
+- Corrected Bell linear and nonlinear campaigns require superseding contracts,
+  a dimension/resolution/decomposition deposited-current oracle, complete
+  reruns, immutable evidence, independent recomputation, and named review
+  before they support a result.
 - A Q011 preproduction resource-scaling plan recommends a three-seed paired
   core followed by resource-gated expansion; it does not modify the historical
   eight-seed preregistration or authorize production.
@@ -302,11 +364,11 @@ These statements do not close a scientific claim.
   and practical figure/table budget.
 - Approve or narrow the proposed main claim after reviewing the final set of
   closed claim IDs.
-- Decide whether the release manuscript requires both central-result gates to
-  close, or whether one may remain an explicitly blocked future test. This
-  decision cannot convert an open claim into a result.
-- Decide the final emphasis among implementation architecture, paper
-  reproduction, production qualification, and performance.
+- Preserve the narrowed target scope: core implementation, corrected Bell
+  linear/nonlinear, Section 5.4 shock, reproducibility, and measured
+  performance. If either central-result gate remains open, revise the target
+  paper scope explicitly rather than weakening a gate or presenting an open
+  result.
 - Approve the final terminology for the exact runtime identity.
 - Decide the final archive and data-availability statement after Q-026 review.
 - Assign named scientific, methods, provenance, figure/table, and final release
@@ -320,6 +382,10 @@ These statements do not close a scientific claim.
   the manuscript preserves evidence hierarchy and scope.
 - The central Bell and shock campaigns may remain blocked by prerequisites,
   resource sizing, authorization, or inconclusive physics.
+- The historical Bell current-normalization defect invalidates
+  inherited Bell plans and artifacts; failing to supersede every affected
+  binding could silently reintroduce a current that changes with dimension or
+  resolution, or the wrong physical Bell mode.
 - Cross-code comparison maps and numeric tolerances are incomplete.
 - Orion-only retention remains a terminal durability-review limitation.
 - The manuscript can overstate portability or performance if selected GPU
