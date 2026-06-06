@@ -3,7 +3,7 @@
   "schema_version": 1,
   "date": "2026-06-06",
   "gate": "Q-011",
-  "status": "fixed_uniform_numerical_candidate_and_restart_guards_complete_trusted_execution_pending",
+  "status": "fixed_uniform_numerical_candidate_review_repair_complete_trusted_execution_pending",
   "qualification_effect": "none",
   "authority": {
     "execution_authorized": false,
@@ -21,7 +21,7 @@
     "primary_worktree_touched": false,
     "protected_historical_files_edited": false
   },
-  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. The candidate ports the bounded ledger implementation and the independently reviewed restart/topology guards, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
+  "scope": "Clean current-PIC numerical candidate for exact combined MHD+CR accounting in pic_parallel_shock. This review-repair successor preserves the reviewed numerical accounting, closes fixed-uniform topology, executable-reducer closure, ledger-disabled baseline, and source-enforced 2D3V admission findings, removes the self-attested runtime-evidence packet verifier, and makes no trusted-execution, scientific, or publication claim.",
   "source_fail_closed_contract": {
     "qualified_topology": "fixed uniform mesh only",
     "qualified_boundary_geometry": "reflecting inner-x1, inflow or outflow outer-x1, periodic transverse boundaries",
@@ -30,6 +30,7 @@
       "mesh adaptive and multilevel flags are false",
       "max_level equals root_level",
       "every reconstructed MeshBlock logical level equals root_level",
+      "every root-level logical coordinate is in range, unique, and part of one complete fixed-uniform tiling",
       "every reconstructed MeshBlock cost_eachmb is finite and exactly 1.0",
       "restored adaptive refinement cooldown metadata is absent",
       "curvature AMR and particle-weighted runtime load balancing are disabled"
@@ -37,9 +38,11 @@
     "rejected": [
       "configured or restored AMR and SMR",
       "refined restart topology hidden by uniform restart overrides",
+      "out-of-range, duplicate, incomplete, or non-tiling fixed-uniform logical coordinates",
       "restored adaptive cooldown metadata even when all blocks are at root level",
       "nonfinite or non-unit restored MeshBlock costs",
       "particle-aware runtime load balancing",
+      "non-2D3V exact-ledger configurations",
       "boundary geometries outside the explicitly enforced Section 5.4 geometry"
     ]
   },
@@ -54,10 +57,12 @@
       "removed excluded startup-cohort CR state"
     ],
     "restart_contract": "schema-bound cumulative ledger with committed cycle and time continuity",
-    "source_local_negative_restart_cases": [
+    "source_local_admission_and_restart_cases": [
       "non-unit restored MeshBlock cost",
       "refined adaptive topology hidden by uniform overrides",
-      "adaptive restart metadata with root-only blocks"
+      "adaptive restart metadata with root-only blocks",
+      "non-2D3V exact-ledger admission rejection",
+      "ledger-disabled nonperiodic 3D baseline admission"
     ]
   },
   "evidence_boundary": {
@@ -70,32 +75,49 @@
   },
   "source_local_engineering_runtime": {
     "evidence_class": "bounded_source_local_engineering_self_consistency_only",
-    "mpi_enabled_debug_executable_sha256": "d10875e34192bae92a16664607985a95bacd92d41fa637be5197146dd944334b",
+    "mpi_enabled_debug_executable_sha256": "bed6cbd4a7302bbd5bf4548a5efe9941562426f3783af3a0d6c1fe32c58641ee",
     "trusted_execution_provenance": "absent",
     "registered_science_evidence": false,
     "mpi2_inflow": "not_requested",
-    "ledger_disabled_parity": "not_requested",
+    "ledger_disabled_parity": {
+      "case": "ledger_disabled_nonperiodic_3d",
+      "base_commit": "1d72534619da277fdd6838cabdab0d465d0a8867",
+      "base_executable_sha256": "e3664bcbfb59e64f18a30613b6c5a43e1add4de5749302c0aba332c7bf139d98",
+      "new_executable_sha256": "bed6cbd4a7302bbd5bf4548a5efe9941562426f3783af3a0d6c1fe32c58641ee",
+      "mhd_history_state_exactly_equal": true,
+      "particle_payload_exactly_equal": true
+    },
     "restart_execution_negative_guards": {
+      "exact_ledger_rejects_non_2d3v": {
+        "returncode": 1,
+        "deck_sha256": "bc8b4b256220a8f4a2253897f42748bf74e7ebef7b80e9422ac5ac0e2491213b",
+        "stdout_sha256": "11a4928d8d5c7056183b1507cb5f62e60216d1e2017fd0b6e657b20a6826289b"
+      },
+      "ledger_disabled_nonperiodic_3d": {
+        "returncode": 0,
+        "deck_sha256": "bc8b4b256220a8f4a2253897f42748bf74e7ebef7b80e9422ac5ac0e2491213b",
+        "stdout_sha256": "00fb07c61db37bffa0dd39593db723963c76d515fba75e78e7a9aeb61358c870"
+      },
       "nonunit_restored_cost": {
         "returncode": 1,
-        "restart_sha256": "e4e6769fb5e7034cea7273cf6afe03f61025d27cb883c4297eeb14f9c6965940",
-        "stdout_sha256": "95791b5a1b53d183f8c8d4eab7e1f0f4eaa6da4789854297d738ebc4179ac706"
+        "restart_sha256": "dafe5a8a4487e4990c0d1029f366b633e09a8dc1984f3c503f26ade237b0ccd4",
+        "stdout_sha256": "11a4928d8d5c7056183b1507cb5f62e60216d1e2017fd0b6e657b20a6826289b"
       },
       "restored_refined_or_adaptive_topology": {
         "returncode": 1,
         "seed_root_level": 1,
         "seed_nmb_total": 8,
         "seed_levels": [2, 2, 2, 2, 2, 2, 2, 2],
-        "restart_sha256": "849582b236f6d109ab8ec018a5f391f1a9edd5d430928c5563e60a2beae87e9c",
-        "stdout_sha256": "58c8f0e3e47701eac447ce7b090f23d68f8e41301b3dce3e1afb20fac6976dc4"
+        "restart_sha256": "cc392961fbf38fea59b1798785e5f34fa66d2ed0ecbcff16cad9e2fc1fd5484c",
+        "stdout_sha256": "0cc275e66647fe3c229d268199ed216ce910c1f8b8fe3a004d6fca064ba4630b"
       },
       "restored_adaptive_metadata_without_refinement": {
         "returncode": 1,
         "seed_root_level": 1,
         "seed_nmb_total": 2,
         "seed_levels": [1, 1],
-        "restart_sha256": "999067297f340c0658fa0bb87e8a5b02a98a73b0a51aab8a39aaa7e534d4bf37",
-        "stdout_sha256": "95791b5a1b53d183f8c8d4eab7e1f0f4eaa6da4789854297d738ebc4179ac706"
+        "restart_sha256": "24c470803ac8ea72b901c2a57398e7c579377ece1cbd16a2fde1aaa12cc8f17a",
+        "stdout_sha256": "11a4928d8d5c7056183b1507cb5f62e60216d1e2017fd0b6e657b20a6826289b"
       }
     },
     "serial_inflow": {
@@ -123,16 +145,16 @@
   },
   "downstream_binding_refresh": {
     "path": "tst/publication/readiness/q011_section54_production_campaign_contract_successor_v2_2026-06-06.json",
-    "pipeline_contract_sha256": "84c64f27c3deedbe200fa02bc16215304010919ca25625d3bef3f720635ea047",
-    "runtime_source_closure_sha256": "f276f7dab1987095e6db25117cc595f137104400491ea898841a6c6837652a57"
+    "pipeline_contract_sha256": "784761ad3dccbf20a009cb3e9f01d2a49dd789ecc0a3e1d80f2139cfc4e99d56",
+    "runtime_source_closure_sha256": "a8a34854a55e7076457e06eac4ab481c5fe71f5b0e7f06cc61a1e4d9077a7791"
   },
   "candidate_preparation_validation": {
-    "focused_tests": "15 passed",
-    "active_q011_adjacent_tests": "146 passed",
-    "q043_adjacent_tests": "62 passed",
-    "broad_q011_tests": "278 passed, 14 expected historical_or_predecessor_source_binding_drift_failures",
+    "focused_tests": "18 passed",
+    "transitive_dependency_adjacent_tests": "19 passed",
+    "production_contract_adjacent_tests": "22 passed",
+    "active_q011_adjacent_tests": "277 passed",
     "mpi_enabled_debug_built_in_pgens_build": "pass",
-    "source_local_engineering_runtime_harness": "pass",
+    "source_local_engineering_runtime_harness": "serial exact cases, admission/restart guards, and exact-primary-baseline ledger-disabled nonperiodic-3D parity pass; MPI not requested",
     "python_bytecode_compile": "pass",
     "git_diff_check": "pass"
   },
@@ -172,19 +194,27 @@
     },
     {
       "path": "src/pgen/tests/pic_parallel_shock.cpp",
-      "sha256": "ec74b46024f5bf14b67f83b3a07e6d603550e8d8f0cc4a978d46f9e61fcc5f5f"
+      "sha256": "9503d7b8ce4e6cb071f89fede34da668adb265a74135868f592ff767120bdc85"
     },
     {
       "path": "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "97f492fc8aa5d836bd33d9b617b0dd334a47608bb1ad6362fde9911b22c7706e"
+      "sha256": "4a436c320e1520836918282189e6640049a8dd39e2ca6b4838a95a0d4e1439f4"
+    },
+    {
+      "path": "tst/publication/q011_section54_restart.py",
+      "sha256": "966357706824a0355002369031fd212d56cfde08a7d937fa8334f4adbd8b827a"
+    },
+    {
+      "path": "tst/publication/q019_nonlinear_bell_particle_state.py",
+      "sha256": "2218d188d1603c46a95b23d03e4b48036af483788a0974ec22a9a7140e868928"
     },
     {
       "path": "tst/publication/test_q011_section54_exact_conservation_closure_successor_v1.py",
-      "sha256": "a91d8be957e21f6b346f58bc4d1ad4b38d70ca75d73cf9d7ad397be107a0b3d4"
+      "sha256": "0f6f2a90509b01cfacda809eba7189e6fa2909c5a959e9b8d19541f1cf8ac698"
     },
     {
       "path": "tst/scripts/particles/pic_parallel_shock_exact_conservation_closure_vl2_tsc.py",
-      "sha256": "177208171d39cda940b62f888e86e808d9eb00d3f754092f166d533b37417be6"
+      "sha256": "0138ba844ac413e4bed1b5fc3a89ece8b52ff9cc11cf47f93774d27456e6514a"
     }
   ]
 }

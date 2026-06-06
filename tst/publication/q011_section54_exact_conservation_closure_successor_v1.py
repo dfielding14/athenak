@@ -67,6 +67,67 @@ def _require(condition: bool, message: str) -> None:
         raise ConservationClosureError(message)
 
 
+def _validate_fixed_uniform_topology(
+    *,
+    logical_locations: Sequence[tuple[int, int, int, int]],
+    deck_mesh_cells: Sequence[int],
+    deck_block_cells: Sequence[int],
+    root_level: int,
+    nmb_total: int,
+    label: str,
+) -> None:
+    """Require one complete, unique root-level tiling of the configured mesh."""
+    _require(
+        len(deck_mesh_cells) == 3
+        and len(deck_block_cells) == 3
+        and all(value > 0 for value in (*deck_mesh_cells, *deck_block_cells)),
+        f"{label}: invalid fixed-uniform mesh geometry",
+    )
+    _require(
+        all(
+            mesh_cells % block_cells == 0
+            for mesh_cells, block_cells in zip(deck_mesh_cells, deck_block_cells)
+        ),
+        f"{label}: MeshBlocks do not tile the fixed-uniform mesh",
+    )
+    root_counts = tuple(
+        mesh_cells // block_cells
+        for mesh_cells, block_cells in zip(deck_mesh_cells, deck_block_cells)
+    )
+    expected_root_level = 0
+    while (1 << expected_root_level) < max(root_counts):
+        expected_root_level += 1
+    _require(
+        root_level == expected_root_level,
+        f"{label}: root level is inconsistent with the fixed-uniform root grid",
+    )
+    expected_count = math.prod(root_counts)
+    _require(
+        nmb_total == expected_count and len(logical_locations) == nmb_total,
+        f"{label}: fixed-uniform MeshBlock count is incomplete",
+    )
+    occupied: set[tuple[int, int, int]] = set()
+    for location in logical_locations:
+        coordinate = location[:3]
+        _require(
+            location[3] == root_level
+            and all(
+                0 <= value < extent
+                for value, extent in zip(coordinate, root_counts)
+            ),
+            f"{label}: fixed-uniform logical coordinate is out of range",
+        )
+        _require(
+            coordinate not in occupied,
+            f"{label}: fixed-uniform logical coordinate is duplicated",
+        )
+        occupied.add(coordinate)
+    _require(
+        len(occupied) == expected_count,
+        f"{label}: fixed-uniform logical coordinates do not completely tile the mesh",
+    )
+
+
 def canonical_json_bytes(value: object) -> bytes:
     """Serialize a result deterministically without permitting non-finite aliases."""
     return (
@@ -494,6 +555,14 @@ def _restart_mhd_state(
              f"{label}: exact closure rejects adaptive restart metadata")
     _require(all(location[3] == root_level for location in logical_locations),
              f"{label}: exact closure rejects refined restart topology")
+    _validate_fixed_uniform_topology(
+        logical_locations=logical_locations,
+        deck_mesh_cells=deck_mesh_cells,
+        deck_block_cells=deck_block_cells,
+        root_level=root_level,
+        nmb_total=nmb_total,
+        label=label,
+    )
     _require(offset + 8 <= len(payload), f"{label}: missing restart data size")
     data_size = struct.unpack_from("<Q", payload, offset)[0]
     offset += 8

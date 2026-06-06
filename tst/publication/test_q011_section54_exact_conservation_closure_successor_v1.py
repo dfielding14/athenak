@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 import struct
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -639,6 +640,8 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         struct.pack_into("<i", bad_level, logical_location + 3 * 4, -1)
         refined_level = bytearray(valid)
         struct.pack_into("<i", refined_level, logical_location + 3 * 4, 1)
+        out_of_range_location = bytearray(valid)
+        struct.pack_into("<i", out_of_range_location, logical_location, 1)
         nonunit_cost = bytearray(valid)
         struct.pack_into("<f", nonunit_cost, logical_location + 4 * 4, 2.0)
         bad_metadata = bytearray(valid)
@@ -656,6 +659,7 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             (bytes(bad_rank), "MeshBlock rank assignment drifted"),
             (bytes(bad_level), "invalid MeshBlock level"),
             (bytes(refined_level), "rejects refined restart topology"),
+            (bytes(out_of_range_location), "logical coordinate is out of range"),
             (bytes(nonunit_cost), "rejects non-unit load-balance costs"),
             (bytes(bad_metadata), "mesh metadata schema drifted"),
             (bytes(adaptive_metadata), "rejects adaptive restart metadata"),
@@ -668,6 +672,72 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(reducer.ConservationClosureError, message):
                     _reduce(_fixture(restart_payloads=[payload, terminal]))
+
+    def test_fixed_uniform_topology_requires_in_range_unique_complete_tiling(
+        self,
+    ) -> None:
+        valid = ((0, 0, 0, 1), (1, 0, 0, 1), (0, 1, 0, 1), (1, 1, 0, 1))
+        reducer._validate_fixed_uniform_topology(
+            logical_locations=valid,
+            deck_mesh_cells=(4, 2, 1),
+            deck_block_cells=(2, 1, 1),
+            root_level=1,
+            nmb_total=4,
+            label="fixture",
+        )
+        cases = (
+            (
+                ((0, 0, 0, 1), (1, 0, 0, 1), (0, 1, 0, 1), (2, 1, 0, 1)),
+                (4, 2, 1),
+                (2, 1, 1),
+                1,
+                4,
+                "logical coordinate is out of range",
+            ),
+            (
+                ((0, 0, 0, 1), (1, 0, 0, 1), (0, 1, 0, 1), (0, 1, 0, 1)),
+                (4, 2, 1),
+                (2, 1, 1),
+                1,
+                4,
+                "logical coordinate is duplicated",
+            ),
+            (
+                valid[:-1],
+                (4, 2, 1),
+                (2, 1, 1),
+                1,
+                4,
+                "MeshBlock count is incomplete",
+            ),
+            (
+                valid,
+                (3, 2, 1),
+                (2, 1, 1),
+                1,
+                4,
+                "MeshBlocks do not tile",
+            ),
+            (
+                valid,
+                (4, 2, 1),
+                (2, 1, 1),
+                0,
+                4,
+                "root level is inconsistent",
+            ),
+        )
+        for locations, mesh, block, level, count, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(reducer.ConservationClosureError, message):
+                    reducer._validate_fixed_uniform_topology(
+                        logical_locations=locations,
+                        deck_mesh_cells=mesh,
+                        deck_block_cells=block,
+                        root_level=level,
+                        nmb_total=count,
+                        label="fixture",
+                    )
 
     def test_nonfinite_history_and_particle_schema_drift_fail_closed(self) -> None:
         mhd = _history(reducer._MHD_LABELS, _mhd_rows()).replace(
@@ -733,13 +803,28 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             "runtime load balancing are",
             "ParallelShockExactMeshStateIsFixedUniform",
             "pmesh->max_level != pmesh->root_level",
-            "pmesh->lloc_eachmb[gid].level != pmesh->root_level",
+            "loc.level != pmesh->root_level",
             "pmesh->cost_eachmb[gid] != 1.0F",
             "!pmesh->restart_meta.ncyc_since_ref.empty()",
+            "occupied_root_blocks",
+            "loc.lx1 < 0 || loc.lx1 >= pmesh->nmb_rootx1",
+            "pmy_mesh_->two_d && ppart->pic_enable_2d3v",
             "duplicate or cycle/time-discontinuous",
             "exact conservation history is ",
         ):
             self.assertIn(required, source)
+        ledger_parse = source.index(
+            'ps_enable_conservation_ledger = pin->GetOrAddBoolean('
+        )
+        exact_z_guard = source.index(
+            "pic_parallel_shock exact conservation ledger expects periodic "
+        )
+        self.assertGreater(exact_z_guard, ledger_parse)
+        self.assertIn(
+            "if (ps_enable_conservation_ledger) {",
+            source[ledger_parse:exact_z_guard],
+        )
+        self.assertNotIn("pic_parallel_shock expects periodic z boundaries in 3D.", source)
         self.assertIn("pic_boundary_escape_ledger", boundary)
         self.assertIn('#include "outputs/restart_utils.hpp"', boundary)
         for marker in (
@@ -766,6 +851,9 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             "nonunit_restored_cost",
             "restored_refined_or_adaptive_topology",
             "restored_adaptive_metadata_without_refinement",
+            "exact_ledger_rejects_non_2d3v",
+            "ledger_disabled_nonperiodic_3d",
+            "ledger-disabled nonperiodic 3D new/base physics state differs",
             "_run_athena_expect_fail",
         ):
             self.assertIn(required, runtime_source)
@@ -787,6 +875,45 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
                 / "tst/publication/"
                 "test_q011_section54_exact_conservation_runtime_evidence_successor_v2.py"
             ).exists()
+        )
+
+    def test_candidate_source_closure_binds_transitive_reducer_dependencies(
+        self,
+    ) -> None:
+        dependencies = (
+            "tst/publication/q011_section54_restart.py",
+            "tst/publication/q019_nonlinear_bell_particle_state.py",
+        )
+        self.assertTrue(set(dependencies).issubset(runtime._SOURCE_FILES))
+        baseline = runtime._candidate_payload()
+        original_read_bytes = Path.read_bytes
+        for dependency in dependencies:
+            target = (ROOT / dependency).resolve()
+
+            def mutated_read_bytes(path: Path, *, bound_target: Path = target) -> bytes:
+                payload = original_read_bytes(path)
+                if path.resolve() == bound_target:
+                    return payload + b"\n"
+                return payload
+
+            with self.subTest(dependency=dependency):
+                with mock.patch.object(Path, "read_bytes", mutated_read_bytes):
+                    self.assertNotEqual(runtime._candidate_payload(), baseline)
+
+    def test_runtime_parity_case_is_ledger_disabled_nonperiodic_3d(self) -> None:
+        self.assertEqual(
+            runtime._LEDGER_DISABLED_NONPERIODIC_3D_OVERRIDES,
+            (
+                "mesh/nx3=4",
+                "mesh/x3max=4.0",
+                "meshblock/nx3=4",
+                "mesh/ix3_bc=outflow",
+                "mesh/ox3_bc=outflow",
+                "particles/pic_enable_2d3v=false",
+                "particles/pic_boundary_conservation_ledger=false",
+                "problem/ps_enable_conservation_ledger=false",
+                "problem/user_hist=false",
+            ),
         )
 
     def test_paper_vl2_boundary_stage_and_checkpoint_order_are_explicit(self) -> None:
@@ -865,6 +992,13 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
         )
         self.assertFalse(record["isolation"]["protected_historical_files_edited"])
         self.assertTrue(all(value is False for value in record["authority"].values()))
+        artifact_paths = {artifact["path"] for artifact in record["artifacts"]}
+        self.assertTrue(
+            {
+                "tst/publication/q011_section54_restart.py",
+                "tst/publication/q019_nonlinear_bell_particle_state.py",
+            }.issubset(artifact_paths)
+        )
         for artifact in record["artifacts"]:
             path = ROOT / artifact["path"]
             self.assertTrue(path.is_file(), artifact["path"])

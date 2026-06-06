@@ -34,6 +34,21 @@ _SOURCE_FILES = (
     "src/particles/particles_pushers.cpp",
     "src/pgen/tests/pic_parallel_shock.cpp",
     "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",
+    "tst/publication/q011_section54_restart.py",
+    "tst/publication/q019_nonlinear_bell_particle_state.py",
+)
+_THREE_D_GEOMETRY_OVERRIDES = (
+    "mesh/nx3=4",
+    "mesh/x3max=4.0",
+    "meshblock/nx3=4",
+)
+_LEDGER_DISABLED_NONPERIODIC_3D_OVERRIDES = _THREE_D_GEOMETRY_OVERRIDES + (
+    "mesh/ix3_bc=outflow",
+    "mesh/ox3_bc=outflow",
+    "particles/pic_enable_2d3v=false",
+    "particles/pic_boundary_conservation_ledger=false",
+    "problem/ps_enable_conservation_ledger=false",
+    "problem/user_hist=false",
 )
 _MAX_NORMALIZED_RESIDUAL = 2.0e-10
 _STATE_ATOL = 2.0e-10
@@ -193,7 +208,8 @@ def _run_athena_expect_fail(
     exe_dir: Path,
     basename: str,
     reason: str,
-    restart: Path,
+    deck: Path | None = None,
+    restart: Path | None = None,
     launcher: list[str] | None = None,
     overrides: tuple[str, ...] = (),
 ) -> dict[str, object]:
@@ -201,18 +217,20 @@ def _run_athena_expect_fail(
         label=label,
         exe_dir=exe_dir,
         basename=basename,
+        deck=deck,
         restart=restart,
         launcher=launcher,
         overrides=overrides,
     )
     output = str(record["stdout"]) + str(record["stderr"])
     if record["returncode"] == 0:
-        raise RuntimeError(label + ": invalid restart unexpectedly passed")
+        raise RuntimeError(label + ": invalid exact-ledger input unexpectedly passed")
     if reason not in output:
         raise RuntimeError(label + ": missing fail-closed reason\n" + output)
     return {
         "returncode": record["returncode"],
         "reason": reason,
+        "deck_sha256": record["deck_sha256"],
         "restart_sha256": record["restart_sha256"],
         "stdout_sha256": record["stdout_sha256"],
         "stderr_sha256": record["stderr_sha256"],
@@ -322,11 +340,51 @@ def _publish_mutated_restart(
 def _run_restart_execution_negative_guards(
     *, exe_dir: Path, deck_payload: bytes, launcher: list[str] | None
 ) -> dict[str, object]:
-    reason = "root_level=max_level, every reconstructed MeshBlock at root_level with unit cost"
+    reason = "root_level=max_level, every reconstructed MeshBlock at root_level"
     results: dict[str, object] = {}
     with tempfile.TemporaryDirectory(prefix="q011-exact-guard-deck-", dir=exe_dir) as tmp:
         deck = Path(tmp) / _DECK.name
         deck.write_bytes(deck_payload)
+
+        three_d_overrides = _THREE_D_GEOMETRY_OVERRIDES + (
+            "time/nlim=1",
+            "time/tlim=1.0e9",
+            "output1/dt=1.0e9",
+        )
+        results["exact_ledger_rejects_non_2d3v"] = _run_athena_expect_fail(
+            label="guard_exact_ledger_non_2d3v",
+            exe_dir=exe_dir,
+            basename="pic_parallel_shock_exact_guard_non_2d3v",
+            reason="requires the 2D3V",
+            deck=deck,
+            launcher=launcher,
+            overrides=three_d_overrides,
+        )
+
+        ledger_disabled_record = _execute_athena(
+            label="guard_ledger_disabled_nonperiodic_3d",
+            exe_dir=exe_dir,
+            basename="pic_parallel_shock_exact_guard_ledger_disabled_3d",
+            deck=deck,
+            launcher=launcher,
+            overrides=_LEDGER_DISABLED_NONPERIODIC_3D_OVERRIDES + (
+                "time/nlim=1",
+                "time/tlim=1.0e9",
+                "output1/dt=1.0e9",
+            ),
+        )
+        if ledger_disabled_record["returncode"] != 0:
+            raise RuntimeError(
+                "ledger-disabled nonperiodic 3D baseline unexpectedly failed\n"
+                + str(ledger_disabled_record["stdout"])
+                + str(ledger_disabled_record["stderr"])
+            )
+        results["ledger_disabled_nonperiodic_3d"] = {
+            "returncode": ledger_disabled_record["returncode"],
+            "deck_sha256": ledger_disabled_record["deck_sha256"],
+            "stdout_sha256": ledger_disabled_record["stdout_sha256"],
+            "stderr_sha256": ledger_disabled_record["stderr_sha256"],
+        }
 
         uniform_basename = "pic_parallel_shock_exact_guard_uniform_seed"
         _run_athena(
@@ -744,11 +802,8 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
         return "not_requested"
     base_executable = Path(raw_base).resolve()
     new_dir = _exe_dir()
-    overrides = (
+    overrides = _LEDGER_DISABLED_NONPERIODIC_3D_OVERRIDES + (
         "time/tlim=5.0",
-        "problem/ps_enable_conservation_ledger=false",
-        "particles/pic_boundary_conservation_ledger=false",
-        "problem/user_hist=false",
         "problem/ps_remove_birth_time_before=-1.0",
         "output1/dt=5.0",
         "output2/dt=5.0",
@@ -771,12 +826,22 @@ def _run_optional_ledger_disabled_parity(deck_payload: bytes) -> object:
         mhd_rows, _ = closure._parse_history(
             _history_payload(exe_dir, basename, "mhd"), closure._MHD_LABELS, name
         )
-        results.append((mhd_rows[-1], _particle_payload(path.read_bytes(), name)))
-    mhd_equal = results[0][0] == results[1][0]
-    particle_equal = results[0][1] == results[1][1]
+        results.append({
+            "executable_sha256": _sha(executable.read_bytes()),
+            "mhd": mhd_rows[-1],
+            "particles": _particle_payload(path.read_bytes(), name),
+        })
+    mhd_equal = results[0]["mhd"] == results[1]["mhd"]
+    particle_equal = results[0]["particles"] == results[1]["particles"]
     if not (mhd_equal and particle_equal):
-        raise RuntimeError("ledger-disabled new/base physics state differs")
-    return {"mhd_history_state_exactly_equal": True, "particle_payload_exactly_equal": True}
+        raise RuntimeError("ledger-disabled nonperiodic 3D new/base physics state differs")
+    return {
+        "case": "ledger_disabled_nonperiodic_3d",
+        "new_executable_sha256": results[0]["executable_sha256"],
+        "base_executable_sha256": results[1]["executable_sha256"],
+        "mhd_history_state_exactly_equal": True,
+        "particle_payload_exactly_equal": True,
+    }
 
 
 def _summary() -> dict[str, object]:

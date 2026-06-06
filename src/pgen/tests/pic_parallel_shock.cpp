@@ -222,17 +222,36 @@ bool ParallelShockExactMeshStateIsFixedUniform(const Mesh *pmesh) {
   if (pmesh == nullptr || pmesh->adaptive || pmesh->multilevel ||
       pmesh->nmb_total <= 0 || pmesh->lloc_eachmb == nullptr ||
       pmesh->cost_eachmb == nullptr || pmesh->max_level != pmesh->root_level ||
+      pmesh->nmb_rootx1 <= 0 || pmesh->nmb_rootx2 <= 0 ||
+      pmesh->nmb_rootx3 <= 0 ||
       !pmesh->restart_meta.ncyc_since_ref.empty()) {
     return false;
   }
+  if (pmesh->nmb_rootx1 > pmesh->nmb_total ||
+      pmesh->nmb_rootx2 > pmesh->nmb_total/pmesh->nmb_rootx1 ||
+      pmesh->nmb_rootx3 >
+          pmesh->nmb_total/(pmesh->nmb_rootx1*pmesh->nmb_rootx2) ||
+      pmesh->nmb_rootx1*pmesh->nmb_rootx2*pmesh->nmb_rootx3 != pmesh->nmb_total) {
+    return false;
+  }
+  std::vector<bool> occupied_root_blocks(pmesh->nmb_total, false);
   for (int gid = 0; gid < pmesh->nmb_total; ++gid) {
-    if (pmesh->lloc_eachmb[gid].level != pmesh->root_level ||
+    const LogicalLocation &loc = pmesh->lloc_eachmb[gid];
+    if (loc.level != pmesh->root_level ||
+        loc.lx1 < 0 || loc.lx1 >= pmesh->nmb_rootx1 ||
+        loc.lx2 < 0 || loc.lx2 >= pmesh->nmb_rootx2 ||
+        loc.lx3 < 0 || loc.lx3 >= pmesh->nmb_rootx3 ||
         !std::isfinite(pmesh->cost_eachmb[gid]) ||
         pmesh->cost_eachmb[gid] != 1.0F) {
       return false;
     }
+    const int root_gid =
+        (loc.lx3*pmesh->nmb_rootx2 + loc.lx2)*pmesh->nmb_rootx1 + loc.lx1;
+    if (occupied_root_blocks[root_gid]) return false;
+    occupied_root_blocks[root_gid] = true;
   }
-  return true;
+  return std::all_of(occupied_root_blocks.begin(), occupied_root_blocks.end(),
+                     [](const bool occupied) { return occupied; });
 }
 
 void HashParallelShockRestartBytes(std::uint64_t &hash, const void *data,
@@ -3558,16 +3577,6 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << "pic_parallel_shock expects periodic y boundaries." << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  if (pmy_mesh_->three_d &&
-      (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic ||
-       pmy_mesh_->mesh_bcs[BoundaryFace::outer_x3] != BoundaryFlag::periodic)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "pic_parallel_shock expects periodic z boundaries in 3D."
-              << std::endl;
-    restart_utils::AbortOnFatalError();
-  }
-
   // Parse runtime controls.
   ps_rho0 = pin->GetOrAddReal("problem", "ps_rho0", 1.0);
   ps_p0 = pin->GetOrAddReal("problem", "ps_p0", 1.0);
@@ -3666,9 +3675,19 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   }
   if (ps_enable_conservation_ledger) {
     auto *ppart = pmbp->ppart;
+    if (pmy_mesh_->three_d &&
+        (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic ||
+         pmy_mesh_->mesh_bcs[BoundaryFace::outer_x3] != BoundaryFlag::periodic)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock exact conservation ledger expects periodic "
+                << "z boundaries in 3D." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
     const bool user_history_enabled =
         pin->GetOrAddBoolean("problem", "user_hist", false);
     const bool exact_particle_model =
+        pmy_mesh_->two_d && ppart->pic_enable_2d3v &&
         ppart->pic_boundary_conservation_ledger &&
         ppart->UsesPaperVL2Coupling() &&
         ppart->pic_background_mode == PICBackgroundMode::coupled &&
@@ -3707,16 +3726,17 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock exact conservation ledger requires the "
-                << "paper_mhd_pic_vl2_tsc conservative coupled model, rk2, exact "
-                << "particle-boundary instrumentation, injection with gas "
+                << "2D3V paper_mhd_pic_vl2_tsc conservative coupled model, rk2, "
+                << "exact particle-boundary instrumentation, injection with gas "
                 << "subtraction, user history, no frame/recenter map, no MHD "
                 << "diffusion or other source terms, a fixed uniform mesh with "
                 << "curvature AMR and particle-weighted AMR load balancing disabled, "
                 << "root_level=max_level, every reconstructed MeshBlock at root_level "
-                << "with unit cost, no restored adaptive cooldown metadata, and no "
-                << "untracked physics modules. AMR, SMR, refined restart topology, "
-                << "non-unit restored MeshBlock costs and runtime load balancing are "
-                << "not qualified by this bounded successor."
+                << "with in-range unique logical coordinates that completely tile the "
+                << "root grid and unit cost, no restored adaptive cooldown metadata, "
+                << "and no untracked physics modules. AMR, SMR, refined restart "
+                << "topology, non-unit restored MeshBlock costs and "
+                << "runtime load balancing are not qualified by this bounded successor."
                 << std::endl;
       restart_utils::AbortOnFatalError();
     }
