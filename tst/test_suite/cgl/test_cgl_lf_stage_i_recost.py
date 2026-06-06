@@ -6165,6 +6165,51 @@ def test_budget_rejects_partial_historical_r12_identity_collisions(monkeypatch, 
         )
 
 
+@pytest.mark.parametrize(
+    ("lineage_case", "identity"),
+    (
+        ("R11", ("4766856", "R12", "s00_rankio_t0_t0p25", "clean_partial")),
+        ("R12", ("5000001", "R03", "s00_rankio_t0_t0p25", "accepted")),
+    ),
+)
+def test_budget_rejects_lineage_key_identity_mismatch(monkeypatch, lineage_case, identity):
+    module = load_recost_module()
+    monkeypatch.setattr(module, "manifest_identity", lambda value: value["identity"])
+    monkeypatch.setattr(module, "final_time", lambda value: value["final_time"])
+
+    with pytest.raises(ValueError, match="budget lineage identity differs"):
+        module.calculate_budget(
+            [
+                {"job_id": "5000000", "actual_node_hours": "0.1"},
+                {"job_id": identity[0], "actual_node_hours": "1"},
+            ],
+            {
+                "R03": [{
+                    "identity": ("5000000", "R03", "s00_rankio_t0_t0p25", "accepted"),
+                    "final_time": 0.25,
+                }],
+                lineage_case: [{"identity": identity, "final_time": 0.25}],
+            },
+            {
+                "R03": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+                lineage_case: {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+            },
+            [],
+            Decimal("0"),
+            Decimal("100"),
+            Decimal("100"),
+        )
+
+
+@pytest.mark.parametrize("result", ("cancelled", "failed", "accepted"))
+def test_protected_historical_r12_job_rejects_noninventory_results(result):
+    module = load_recost_module()
+    with pytest.raises(ValueError, match="historical R12 inventory identity partially collides"):
+        module.validated_manifest_identity(
+            "4766856", "R12", "s00_rankio_t0_t0p25", result
+        )
+
+
 def test_budget_live_projection_allows_exact_fresh_r12_calibration_above_envelope(
     monkeypatch,
 ):
@@ -6272,6 +6317,59 @@ def test_budget_above_envelope_fails_without_exact_fresh_r12_calibration(monkeyp
             },
             [],
             Decimal("0"),
+            Decimal("100"),
+            Decimal("2000"),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("parent_job_id", "4766856"),
+        ("parent_result", "clean_partial"),
+        ("parent_segment", "s00_rankio_t0_t0p25"),
+        ("restart_file", "/tmp/restart"),
+        ("restart_file_sha256", "a" * 64),
+        ("restart_time", 0.1371931229426507),
+    ),
+)
+def test_budget_above_envelope_rejects_nonfresh_r12_parent_fields(monkeypatch, field, value):
+    module = load_recost_module()
+    monkeypatch.setattr(module, "manifest_identity", lambda item: item["identity"])
+    monkeypatch.setattr(module, "final_time", lambda item: item["final_time"])
+    profile = {
+        "case_id": "R12",
+        "segment": "s01_rankio_t0_t0p12",
+        "nodes": 4,
+        "ranks_per_node": 8,
+        "walltime": "02:00:00",
+        "athena_walltime": "01:50:00",
+        "time_tlim_target": 0.12,
+        field: value,
+    }
+
+    with pytest.raises(ValueError, match="historical clean partial is inventory-only"):
+        module.calculate_budget(
+            [
+                {"job_id": "5000000", "actual_node_hours": "1"},
+                {"job_id": "4766856", "actual_node_hours": "10"},
+            ],
+            {
+                "R03": [{
+                    "identity": ("5000000", "R03", "s00_rankio_t0_t0p25", "accepted"),
+                    "final_time": 0.25,
+                }],
+                "R12": [{
+                    "identity": module.R12_HISTORICAL_INVENTORY_IDENTITY,
+                    "final_time": 0.1,
+                }],
+            },
+            {
+                "R03": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+                "R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+            },
+            [profile],
+            Decimal("8"),
             Decimal("100"),
             Decimal("2000"),
         )

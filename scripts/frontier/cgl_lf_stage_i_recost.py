@@ -3742,7 +3742,7 @@ def manifest_identity(manifest: dict[str, object]) -> tuple[str | None, str, str
         job_id = None if raw_job_id is None else require_job_id(raw_job_id, "manifest job ID")
         if cancellation.get("job_id") not in {None, job_id}:
             raise ValueError(f"cancelled manifest {case_id}/{segment} job ID differs")
-        return job_id, case_id, segment, "cancelled"
+        return validated_manifest_identity(job_id, case_id, segment, "cancelled")
     if manifest.get("state") != "recorded" or not isinstance(accounting, dict):
         raise ValueError(f"manifest {case_id}/{segment} is not a recorded terminal outcome")
     job_id = require_job_id(manifest.get("job_id"), "manifest job ID")
@@ -3766,7 +3766,7 @@ def manifest_identity(manifest: dict[str, object]) -> tuple[str | None, str, str
     if result not in SCIENTIFIC_RESULTS:
         if inspection is not None:
             raise ValueError(f"manifest {job_id} non-scientific result fabricates inspection")
-        return job_id, case_id, segment, result
+        return validated_manifest_identity(job_id, case_id, segment, result)
     if not isinstance(inspection, dict):
         raise ValueError(f"manifest {job_id} scientific result lacks inspection")
     assert isinstance(inspection, dict)
@@ -3807,7 +3807,18 @@ def manifest_identity(manifest: dict[str, object]) -> tuple[str | None, str, str
             require_integer(allocation["nodes"], f"manifest {job_id} nodes", minimum=1)
             * EXPECTED_RANKS_PER_NODE,
         )
-    return job_id, case_id, segment, result
+    return validated_manifest_identity(job_id, case_id, segment, result)
+
+
+def validated_manifest_identity(
+    job_id: str | None, case_id: str, segment: str, result: str
+) -> tuple[str | None, str, str, str]:
+    """Reject any partial collision with the protected historical R12 identity."""
+
+    identity = (job_id, case_id, segment, result)
+    if job_id == R12_HISTORICAL_JOB_ID and identity != R12_HISTORICAL_INVENTORY_IDENTITY:
+        raise ValueError("historical R12 inventory identity partially collides")
+    return identity
 
 
 def cross_validate_accounting(
@@ -7708,13 +7719,15 @@ def calculate_budget(
         cells = require_integer(matrix[case_id]["_cell_count"], f"{case_id} matrix cells", minimum=1)
         for manifest in lineage:
             identity = manifest_identity(manifest)
-            job_id, _, segment, _ = identity
+            job_id, identity_case_id, segment, _ = identity
             if job_id == R12_HISTORICAL_JOB_ID:
                 if identity != R12_HISTORICAL_INVENTORY_IDENTITY:
                     raise ValueError("historical R12 inventory identity partially collides")
                 historical_r12_inventory_count += 1
                 if historical_r12_inventory_count > 1:
                     raise ValueError("historical R12 inventory identity is duplicated")
+            if identity_case_id != case_id:
+                raise ValueError(f"{case_id} budget lineage identity differs")
             row = rows_by_job[job_id]
             actual_job = require_decimal(row["actual_node_hours"], f"ledger job {job_id} actual")
             _, start, _ = parse_segment(segment, f"ledger job {job_id} segment")
@@ -7799,21 +7812,48 @@ def calculate_budget(
         and manifest_identity(r12_lineage[0]) == R12_HISTORICAL_INVENTORY_IDENTITY
     )
     fresh_r12_profiles = []
-    for profile in profiles:
-        try:
-            target = Decimal(str(profile.get("time_tlim_target")))
-        except InvalidOperation:
-            target = None
-        if (
-            profile.get("case_id") == "R12"
-            and profile.get("segment") == R12_FRESH_RERUN_SEGMENT
-            and profile.get("nodes") == R12_FRESH_RERUN_NODES
-            and profile.get("ranks_per_node") == R12_FRESH_RERUN_RANKS_PER_NODE
-            and profile.get("walltime") == R12_FRESH_RERUN_WALLTIME
-            and profile.get("athena_walltime") == R12_FRESH_RERUN_ATHENA_WALLTIME
-            and target == Decimal(str(R12_FRESH_RERUN_TARGET))
-        ):
-            fresh_r12_profiles.append(profile)
+    if historical_r12_requires_fresh_calibration:
+        for profile in profiles:
+            if profile.get("case_id") != "R12":
+                continue
+            segment_index, segment_start, segment_target = parse_segment(
+                profile.get("segment"), "fresh R12 calibration profile segment"
+            )
+            if require_authoritative_r12_fresh_rerun(
+                "R12",
+                R12_HISTORICAL_INVENTORY_IDENTITY,
+                str(profile.get("segment")),
+                1,
+                segment_start,
+                require_finite_float(
+                    profile.get("time_tlim_target"), "fresh R12 calibration profile target"
+                ),
+                require_integer(
+                    profile.get("nodes"), "fresh R12 calibration profile nodes", minimum=1
+                ),
+                require_integer(
+                    profile.get("ranks_per_node"),
+                    "fresh R12 calibration profile ranks per node",
+                    minimum=1,
+                ),
+                profile.get("walltime"),
+                profile.get("athena_walltime"),
+                tuple(
+                    profile.get(key)
+                    for key in (
+                        "parent_job_id",
+                        "parent_result",
+                        "parent_segment",
+                        "restart_file",
+                        "restart_file_sha256",
+                        "restart_time",
+                    )
+                ),
+                segment_index,
+            ):
+                if abs(segment_target - R12_FRESH_RERUN_TARGET) > 1.0e-12:
+                    raise ValueError("fresh R12 calibration segment target differs")
+                fresh_r12_profiles.append(profile)
     provisional_r12_calibration = (
         historical_r12_requires_fresh_calibration and len(fresh_r12_profiles) == 1
     )
