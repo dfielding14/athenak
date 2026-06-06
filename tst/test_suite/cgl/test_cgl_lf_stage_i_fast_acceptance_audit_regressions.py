@@ -524,16 +524,29 @@ class FakeReport:
     """Replay fixture for direct-fast history and snapshot diagnostics."""
 
     def __init__(
-        self, windows: dict[str, object], ensemble: dict[str, object]
+        self,
+        windows: dict[str, object],
+        ensemble: dict[str, object],
+        records: dict[str, object] | None = None,
     ):
         self.windows = windows
-        self.analyzer = FakeSnapshotAnalyzer(ensemble)
+        self.ensemble = json.loads(json.dumps(ensemble))
+        self.records = json.loads(json.dumps(records or {}))
+        self.analyzer = FakeSnapshotAnalyzer(self.ensemble)
 
     def load_pure_analyzer(self) -> FakeSnapshotAnalyzer:
         return self.analyzer
 
     def window_summaries(self, *_args) -> dict[str, object]:
         return self.windows
+
+    def analyze_snapshot_paths_bounded(self, *_args) -> tuple[
+        dict[str, object], dict[str, object]
+    ]:
+        return (
+            json.loads(json.dumps(self.records)),
+            json.loads(json.dumps(self.ensemble)),
+        )
 
     @staticmethod
     def merge_histories(
@@ -695,6 +708,12 @@ def write_complete_diagnostics(
             },
         },
     }
+    records = {
+        str(snapshot_source.resolve()): {
+            "time": 9.0,
+            "snapshot_provenance": provenance,
+        },
+    }
     write_json(
         case_dir / "diagnostics.json",
         {
@@ -709,12 +728,7 @@ def write_complete_diagnostics(
             "snapshot_analysis_status": "complete",
             "analysis_errors": [],
             "windows": windows,
-            "snapshots": {
-                str(snapshot_source.resolve()): {
-                    "time": 9.0,
-                    "snapshot_provenance": provenance,
-                },
-            },
+            "snapshots": records,
             "snapshot_ensemble": ensemble,
             "compat": {
                 "analysis_window": {"time_start": 8.0, "time_end": 10.0},
@@ -732,18 +746,22 @@ def write_complete_diagnostics(
             },
         },
     )
-    return FakeReport(windows, ensemble)
+    return FakeReport(windows, ensemble, records)
 
 
-def add_r15_strict_failure_fixture(
+def add_strict_failure_fixture(
     root: Path,
     lineage: dict[str, object],
     *,
+    job_id: str,
+    failure_time: float,
+    hard_bound: int,
     variant: str | None = "standard",
 ) -> None:
-    """Retain one exact strict R15 hard-bound failure beside a variant lineage."""
+    """Retain one exact strict hard-bound failure beside a variant lineage."""
 
-    segment = root / "runs/strict/R15/fast_s000_t0_to_t10"
+    case_id = str(lineage["case_id"])
+    segment = root / f"runs/strict/{case_id}/fast_s000_t0_to_t10"
     manifest = segment / "manifest/fast_run.json"
     executable = lineage["test_qualified_executable"]
     write_json(
@@ -751,9 +769,9 @@ def add_r15_strict_failure_fixture(
         {
             "schema_version": 1,
             "root": str(root.absolute()),
-            "case_id": "R15",
-            "case_name": matrix_cases()["R15"]["name"],
-            "job_id": "4771183",
+            "case_id": case_id,
+            "case_name": matrix_cases()[case_id]["name"],
+            "job_id": job_id,
             "run_dir": str(segment.absolute()),
             "output_dir": str((segment / "output").absolute()),
             "sequence": 0,
@@ -770,13 +788,13 @@ def add_r15_strict_failure_fixture(
         },
     )
     (segment / "manifest/run_exit_code").write_text("143\n", encoding="utf-8")
-    log = root / "logs/slurm-fast/cglf_R15_s000.4771183.log"
+    log = root / f"logs/slurm-fast/cglf_{case_id}_s000.{job_id}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(
-        "elapsed=1 cycle=10030 time=1.275643e+00 dt=1e-4\n"
+        f"elapsed=1 cycle=10030 time={failure_time:.17g} dt=1e-4\n"
         "CGL Landau-fluid strict admissibility failed after a split stage: "
         "sweep=post stage=1/19 dfloor=0 pfloor=0 nonfinite=0 "
-        "nonpositive=0 hard_bound=2\n",
+        f"nonpositive=0 hard_bound={hard_bound}\n",
         encoding="utf-8",
     )
     lineage["unselected_lineages"] = [{
@@ -784,10 +802,28 @@ def add_r15_strict_failure_fixture(
             "segment": str(segment.absolute()),
             "variant": variant,
             "command_line_overrides": [],
-            "job_id": "4771183",
+            "job_id": job_id,
             "state": "failed",
         }],
     }]
+
+
+def add_r15_strict_failure_fixture(
+    root: Path,
+    lineage: dict[str, object],
+    *,
+    variant: str | None = "standard",
+) -> None:
+    """Retain the observed strict R15 failure beside a variant lineage."""
+
+    add_strict_failure_fixture(
+        root,
+        lineage,
+        job_id="4771183",
+        failure_time=1.275643,
+        hard_bound=2,
+        variant=variant,
+    )
 
 
 def summarize(
@@ -1298,6 +1334,40 @@ def test_snapshot_index_mismatch_cannot_become_claim_grade(
     assert comparison is None
 
 
+def test_stored_snapshot_science_must_match_byte_level_replay(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(tmp_path / "lineage", case_id="R02")
+    policy = policy_fixture(["R02"], lineage)
+    case_dir = tmp_path / "report/cases/R02"
+    add_authenticated_execution_fixture(
+        fast_acceptance, tmp_path / "execution-fixture", policy, lineage
+    )
+    write_json(case_dir / "lineage.json", lineage)
+    report = write_complete_diagnostics(fast_acceptance, case_dir, lineage)
+    monkeypatch.setattr(fast_acceptance, "load_report_module", lambda: report)
+    diagnostics_path = case_dir / "diagnostics.json"
+    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+    source = next(iter(diagnostics["snapshots"]))
+    diagnostics["snapshots"][source]["forged_science"] = {"mean": 1.0e99}
+    write_json(diagnostics_path, diagnostics)
+
+    summary, comparison = fast_acceptance.summarize_case(
+        FakeAcceptance(policy),
+        policy,
+        "R02",
+        lineage,
+        plain_binding(case_dir / "lineage.json"),
+        "fixture",
+        tmp_path / "acceptance/cases/R02",
+    )
+
+    assert summary["result"] == "inconclusive"
+    assert summary["reviewed_case_evidence"]["binding"] is None
+    assert "byte-level science replay" in summary["reviewed_case_evidence"]["reason"]
+    assert comparison is None
+
+
 def test_r10_remains_exploratory_with_complete_direct_fast_science(
     fast_acceptance, tmp_path, monkeypatch
 ):
@@ -1365,6 +1435,50 @@ def test_exact_r15_nonfatal_variant_is_scoped_and_preserves_strict_failure(
     assert {
         gate["name"]: gate["result"] for gate in evidence["gates"]
     }["r15_prior_strict_failure_retained"] == "pass"
+
+
+def test_exact_r14_nonfatal_variant_is_scoped_and_preserves_strict_failure(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    lineage = lineage_fixture(
+        tmp_path / "lineage",
+        case_id="R14",
+        strict=False,
+        variants=["finite_limiter_hard_bound_diagnostic_nonfatal"],
+        overrides=["mhd/cgl_lf_strict_admissibility=false"],
+    )
+    add_strict_failure_fixture(
+        tmp_path / "campaign",
+        lineage,
+        job_id="4770854",
+        failure_time=0.1326939,
+        hard_bound=167,
+    )
+
+    summary, comparison = summarize(
+        fast_acceptance,
+        tmp_path,
+        "R14",
+        lineage,
+        complete_diagnostics=True,
+        monkeypatch=monkeypatch,
+    )
+    evidence = json.loads(
+        (
+            tmp_path
+            / "acceptance/cases/R14/reviewed_case_evidence.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert summary["result"] == "pass"
+    assert comparison is not None and comparison["result"] == "pass"
+    retained = evidence["retained_strict_failure_evidence"]
+    assert retained[0]["job_id"] == "4770854"
+    assert retained[0]["failure_time"] == pytest.approx(0.1326939)
+    assert retained[0]["failure_counters"]["lf_hardbd"] == 167
+    assert {
+        gate["name"]: gate["result"] for gate in evidence["gates"]
+    }["r14_prior_strict_failure_retained"] == "pass"
 
 
 @pytest.mark.parametrize("variant", [None, "standard"])
@@ -1614,6 +1728,32 @@ def test_case_lineage_must_match_authenticated_inventory_record(
         match="differs from its authenticated inventory record",
     ):
         fast_acceptance.case_record("R02", output, inventory)
+
+
+def test_case_lineage_parse_and_binding_do_not_use_split_reads(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    output = tmp_path / "fast-report"
+    lineage = lineage_fixture(tmp_path / "lineage")
+    lineage_path = output / "cases/R02/lineage.json"
+    write_json(lineage_path, lineage)
+    inventory = {"output": str(output), "cases": {"R02": lineage}}
+    original_binding = fast_acceptance.binding
+
+    def mutate_on_split_binding(path: Path) -> dict[str, object]:
+        if path.resolve() == lineage_path.resolve():
+            write_json(lineage_path, {**lineage, "status": "mutated_after_parse"})
+        return original_binding(path)
+
+    monkeypatch.setattr(fast_acceptance, "binding", mutate_on_split_binding)
+    record, record_binding, source = fast_acceptance.case_record(
+        "R02", output, inventory
+    )
+
+    assert record == lineage
+    assert source == "case_directory"
+    assert record_binding == plain_binding(lineage_path)
+    assert json.loads(lineage_path.read_text(encoding="utf-8")) == lineage
 
 
 def test_nested_symlink_output_escape_is_rejected_before_writing(

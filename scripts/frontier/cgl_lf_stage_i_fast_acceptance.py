@@ -10,9 +10,9 @@ instead of aborting the campaign assessment.
 R10 is always exploratory-only because the qualified executable regularizes a
 non-hyperbolic CGL fast-speed discriminant.  R14 and R15 are admitted only as
 explicit finite-limiter, nonfatal-hard-bound variants when those variants are
-recorded in the selected fast-report lineage.  The observed strict R15 failure
-remains retained evidence and is never converted into strict-admissibility
-support by the diagnostic variant.
+recorded in the selected fast-report lineage.  Observed strict R14 and R15
+failures remain retained evidence and are never converted into
+strict-admissibility support by the diagnostic variants.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import tempfile
 from typing import Iterable
@@ -57,6 +58,14 @@ NONFATAL_HARD_BOUND_VARIANT = "finite_limiter_hard_bound_diagnostic_nonfatal"
 NONFATAL_HARD_BOUND_OVERRIDE = "mhd/cgl_lf_strict_admissibility=false"
 SCOPED_NONFATAL_CASES = ("R14", "R15")
 EXECUTION_EPOCH = "E03-forcing-policy"
+SNAPSHOT_PDF_BINS = 64
+SNAPSHOT_ALIGNMENT_SHELLS = (2, 4, 6, 8, 12, 16, 24, 32, 64, 128)
+SNAPSHOT_EDDY_CASES = ("R02", "R04")
+SNAPSHOT_EDDY_SAMPLES = 2_000_000
+SNAPSHOT_EDDY_BINS = 24
+SNAPSHOT_EDDY_SEED = 731
+SNAPSHOT_REPLAY_WORKERS = 4
+SNAPSHOT_REPLAY_MEMORY_BUDGET_GIB = 384.0
 STRICT_FAILURE_PATTERN = re.compile(
     r"CGL Landau-fluid strict admissibility failed.*?"
     r"dfloor=(\d+)\s+pfloor=(\d+)\s+nonfinite=(\d+)\s+"
@@ -149,17 +158,62 @@ def write_text(path: Path, value: str) -> None:
     atomic_write(path, value.encode("utf-8"))
 
 
-def load_json(path: Path) -> dict[str, object]:
-    """Load one JSON object."""
+def read_bound_bytes(path: Path) -> tuple[bytes, dict[str, object]]:
+    """Read and bind one stable regular file from the same bytes."""
 
     try:
-        with path.open(encoding="utf-8") as stream:
-            value = json.load(stream)
-    except (OSError, json.JSONDecodeError) as error:
+        resolved = path.expanduser().absolute().resolve(strict=True)
+        with resolved.open("rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode):
+                raise FastAcceptanceError(f"expected a regular file: {resolved}")
+            payload = stream.read()
+            after = os.fstat(stream.fileno())
+        current = resolved.stat()
+    except OSError as error:
+        raise FastAcceptanceError(f"cannot read regular file {path}: {error}") from error
+    before_identity = (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+    )
+    after_identity = (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+    )
+    current_identity = (
+        current.st_dev,
+        current.st_ino,
+        current.st_size,
+        current.st_mtime_ns,
+    )
+    if (
+        before_identity != after_identity
+        or current_identity != after_identity
+        or len(payload) != after.st_size
+    ):
+        raise FastAcceptanceError(f"regular file changed while being read: {resolved}")
+    return payload, {
+        "path": str(resolved),
+        "size_bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+
+
+def load_bound_json(path: Path) -> tuple[dict[str, object], dict[str, object]]:
+    """Parse and bind one JSON object from a single stable read."""
+
+    payload, file_binding = read_bound_bytes(path)
+    try:
+        value = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise FastAcceptanceError(f"cannot load JSON object {path}: {error}") from error
     if not isinstance(value, dict):
         raise FastAcceptanceError(f"expected a JSON object: {path}")
-    return value
+    return value, file_binding
 
 
 def binding(path: Path) -> dict[str, object]:
@@ -328,7 +382,7 @@ def case_record(
     inline = cases.get(case_id) if isinstance(cases, dict) else None
     lineage_path = output_root / "cases" / case_id / "lineage.json"
     if lineage_path.is_file():
-        lineage = load_json(lineage_path)
+        lineage, lineage_binding = load_bound_json(lineage_path)
         if (
             not isinstance(inline, dict)
             or canonical_json_bytes(lineage) != canonical_json_bytes(inline)
@@ -336,7 +390,7 @@ def case_record(
             raise FastAcceptanceError(
                 f"{case_id} case lineage differs from its authenticated inventory record"
             )
-        return lineage, binding(lineage_path), "case_directory"
+        return lineage, lineage_binding, "case_directory"
     if isinstance(inline, dict):
         return inline, None, "inventory_inline"
     return None, None, "missing"
@@ -396,7 +450,7 @@ def retained_strict_failure_evidence(
 ) -> list[dict[str, object]]:
     """Authenticate retained strict-run failures relevant to a scoped variant."""
 
-    if case_id != "R15":
+    if case_id not in SCOPED_NONFATAL_CASES:
         return []
     records: list[dict[str, object]] = []
     seen: set[Path] = set()
@@ -427,10 +481,9 @@ def retained_strict_failure_evidence(
         manifest_path = segment_path / "manifest/fast_run.json"
         exit_path = segment_path / "manifest/run_exit_code"
         try:
-            manifest = load_json(manifest_path)
-            manifest_binding = binding(manifest_path)
-            exit_binding = binding(exit_path)
-            exit_code = int(exit_path.read_text(encoding="utf-8").strip())
+            manifest, manifest_binding = load_bound_json(manifest_path)
+            exit_payload, exit_binding = read_bound_bytes(exit_path)
+            exit_code = int(exit_payload.decode("utf-8").strip())
             if (
                 manifest.get("schema_version") != 1
                 or manifest.get("case_id") != case_id
@@ -471,7 +524,8 @@ def retained_strict_failure_evidence(
             if len(logs) != 1:
                 continue
             log_path = logs[0]
-            text = log_path.read_text(encoding="utf-8", errors="replace")
+            log_payload, log_binding = read_bound_bytes(log_path)
+            text = log_payload.decode("utf-8", errors="replace")
             failures = list(STRICT_FAILURE_PATTERN.finditer(text))
             if not failures:
                 continue
@@ -505,10 +559,10 @@ def retained_strict_failure_evidence(
                 "provenance": {
                     "manifest": manifest_binding,
                     "run_exit_code": exit_binding,
-                    "slurm_log": binding(log_path),
+                    "slurm_log": log_binding,
                 },
             })
-        except (FastAcceptanceError, OSError, ValueError):
+        except (FastAcceptanceError, OSError, UnicodeDecodeError, ValueError):
             continue
     return sorted(records, key=lambda value: str(value["job_id"]))
 
@@ -544,6 +598,20 @@ def current_declared_binding(
     if comparable_binding(current) != declared:
         return current, [f"{label} declared binding differs from current bytes"]
     return current, []
+
+
+def load_declared_bound_json(
+    value: object, label: str
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Parse a declared JSON object and verify the binding from the same read."""
+
+    declared = comparable_binding(value)
+    if declared is None or not isinstance(declared.get("path"), str):
+        raise FastAcceptanceError(f"{label} binding is missing or malformed")
+    record, current = load_bound_json(Path(str(declared["path"])))
+    if comparable_binding(current) != declared:
+        raise FastAcceptanceError(f"{label} declared binding differs from current bytes")
+    return record, current
 
 
 def require_same_current_binding(
@@ -619,12 +687,9 @@ def qualified_executable_evidence(
         if isinstance(verified, dict)
         else None
     )
-    approval_binding, errors = current_declared_binding(
+    approval, approval_binding = load_declared_bound_json(
         declared, "qualification approval"
     )
-    if approval_binding is None or errors:
-        raise FastAcceptanceError("; ".join(errors))
-    approval = load_json(Path(str(approval_binding["path"])))
     executable_sha = unique_lineage_identity(lineage, "executable_sha256")
     executable_path_value = approval.get("approved_executable")
     if (
@@ -827,12 +892,9 @@ def direct_fast_execution_lineage_evidence(
             )
         ):
             raise FastAcceptanceError(f"execution-lineage record {index} identity differs")
-        manifest_binding, manifest_errors = current_declared_binding(
+        manifest, manifest_binding = load_declared_bound_json(
             value.get("manifest"), f"execution manifest {index}"
         )
-        if manifest_binding is None or manifest_errors:
-            raise FastAcceptanceError("; ".join(manifest_errors))
-        manifest = load_json(Path(str(manifest_binding["path"])))
         segment = Path(str(value.get("segment_dir") or "")).resolve(strict=True)
         output = Path(str(value.get("output") or "")).resolve(strict=True)
         if output != segment / "output":
@@ -1239,13 +1301,15 @@ def scientific_scope(
             "retained_strict_failure_evidence": strict_failure_evidence or [],
             **selected,
         }
-    if case_id == "R15" and strict_failure_evidence:
+    if case_id in SCOPED_NONFATAL_CASES and strict_failure_evidence:
         return {
             "classification": "strict_admissibility_failure_evidence",
             "campaign_interpretation_eligible": False,
             "uniform_strict_diagnostics_eligible": True,
             "hard_bound_is_fatal": True,
-            "reason": "strict R15 terminated on an authenticated hard-bound failure",
+            "reason": (
+                f"strict {case_id} terminated on an authenticated hard-bound failure"
+            ),
             "allowed_claims": ["observed strict-admissibility failure"],
             "excluded_claims": [
                 "successful strict-admissibility evolution",
@@ -1553,7 +1617,7 @@ def authenticate_snapshot_records(
     snapshot_index: dict[str, object],
     case_id: str,
     analyzer: object,
-) -> None:
+) -> tuple[list[Path], dict[str, int], float, float]:
     """Authenticate selected snapshot identity, rank sets, and current bytes."""
 
     snapshots = diagnostics.get("snapshots")
@@ -1598,6 +1662,7 @@ def authenticate_snapshot_records(
     revalidate = getattr(analyzer, "revalidate_snapshot_provenance_record", None)
     if not callable(validate) or not callable(revalidate):
         raise FastAcceptanceError("snapshot provenance replay kernels are unavailable")
+    expected_ranks_by_path: dict[str, int] = {}
     for item in selected:
         source = str(item["representative"])
         expected_ranks = item.get("expected_ranks")
@@ -1620,6 +1685,63 @@ def authenticate_snapshot_records(
                 f"{case_id} snapshot provenance differs from its bound index: {source}"
             )
         revalidate(validated, expected_ranks, f"{case_id} snapshot {source}")
+        expected_ranks_by_path[source] = expected_ranks
+    return (
+        [Path(value) for value in representatives],
+        expected_ranks_by_path,
+        start,
+        end,
+    )
+
+
+def replay_snapshot_science(
+    report: object,
+    analyzer: object,
+    diagnostics: dict[str, object],
+    lineage: dict[str, object],
+    case_id: str,
+    paths: list[Path],
+    expected_ranks_by_path: dict[str, int],
+    start: float,
+    end: float,
+) -> None:
+    """Recompute retained snapshot science directly from authenticated bytes."""
+
+    replay = getattr(report, "analyze_snapshot_paths_bounded", None)
+    if not callable(replay):
+        raise FastAcceptanceError(
+            "direct-fast snapshot science replay kernel is unavailable"
+        )
+    model = lineage.get("model_choices")
+    if not isinstance(model, dict):
+        raise FastAcceptanceError(f"{case_id} effective model choices are malformed")
+    replayed_records, replayed_ensemble = replay(
+        analyzer,
+        paths,
+        SNAPSHOT_PDF_BINS,
+        list(SNAPSHOT_ALIGNMENT_SHELLS),
+        start,
+        end,
+        model,
+        SNAPSHOT_EDDY_SAMPLES if case_id in SNAPSHOT_EDDY_CASES else 0,
+        SNAPSHOT_EDDY_BINS,
+        SNAPSHOT_EDDY_SEED,
+        expected_ranks_by_path,
+        SNAPSHOT_REPLAY_WORKERS,
+        SNAPSHOT_REPLAY_MEMORY_BUDGET_GIB,
+    )
+    if canonical_json_bytes(replayed_records) != canonical_json_bytes(
+        diagnostics.get("snapshots")
+    ):
+        raise FastAcceptanceError(
+            f"{case_id} retained snapshot records differ from byte-level science replay"
+        )
+    if canonical_json_bytes(replayed_ensemble) != canonical_json_bytes(
+        diagnostics.get("snapshot_ensemble")
+    ):
+        raise FastAcceptanceError(
+            f"{case_id} snapshot ensemble differs from byte-level science replay"
+        )
 
 
 def authenticated_complete_diagnostics(
@@ -1636,8 +1758,7 @@ def authenticated_complete_diagnostics(
         path = direct_fast_diagnostics_path(case_id, lineage_binding)
         if not path.is_file():
             return None, None, "complete direct-fast diagnostics are unavailable"
-        diagnostics = load_json(path)
-        diagnostics_binding = binding(path)
+        diagnostics, diagnostics_binding = load_bound_json(path)
         expected_name = acceptance.case_name(policy, case_id)
         if (
             diagnostics.get("schema_version") != 1
@@ -1677,10 +1798,10 @@ def authenticated_complete_diagnostics(
                 f"{case_id} diagnostics merged {kind} history",
             )
         snapshot_index = path.parent / "snapshots.json"
-        snapshot_index_record = load_json(snapshot_index)
+        snapshot_index_record, snapshot_index_binding = load_bound_json(snapshot_index)
         require_same_current_binding(
             provenance.get("snapshot_index"),
-            binding(snapshot_index),
+            snapshot_index_binding,
             f"{case_id} diagnostics snapshot index",
         )
         require_same_current_binding(
@@ -1706,7 +1827,7 @@ def authenticated_complete_diagnostics(
 
         report = load_report_module()
         analyzer = report.load_pure_analyzer()
-        authenticate_snapshot_records(
+        paths, expected_ranks_by_path, start, end = authenticate_snapshot_records(
             diagnostics, snapshot_index_record, case_id, analyzer
         )
         recomputed_windows = report.window_summaries(
@@ -1721,21 +1842,17 @@ def authenticated_complete_diagnostics(
             raise FastAcceptanceError(
                 f"{case_id} direct-fast history diagnostics replay differs"
             )
-        recomputed_ensemble = analyzer.average_snapshot_records(diagnostics["snapshots"])
-        recomputed_ensemble["time_start"] = ensemble.get("time_start")
-        recomputed_ensemble["time_end"] = ensemble.get("time_end")
-        firehose = recomputed_ensemble.get("firehose_threshold_occupancy")
-        if isinstance(firehose, dict):
-            analysis_window = firehose.get("analysis_window")
-            if isinstance(analysis_window, dict):
-                analysis_window.update({
-                    "requested_time_start": ensemble.get("time_start"),
-                    "requested_time_end": ensemble.get("time_end"),
-                })
-        if canonical_json_bytes(recomputed_ensemble) != canonical_json_bytes(ensemble):
-            raise FastAcceptanceError(
-                f"{case_id} snapshot ensemble differs from retained records"
-            )
+        replay_snapshot_science(
+            report,
+            analyzer,
+            diagnostics,
+            lineage,
+            case_id,
+            paths,
+            expected_ranks_by_path,
+            start,
+            end,
+        )
         if not isinstance(compat, dict):
             raise FastAcceptanceError(f"{case_id} direct-fast diagnostics lack compat data")
         wrapped = {"cases": {expected_name: compat}}
@@ -2118,19 +2235,21 @@ def reviewed_complete_case_evidence(
             ),
             observations={"diagnostics": diagnostics_binding},
         ))
-        if case_id == "R15" and scope and scope.get("classification") == (
-            "scoped_nonfatal_hard_bound_variant"
+        if (
+            case_id in SCOPED_NONFATAL_CASES
+            and scope
+            and scope.get("classification") == "scoped_nonfatal_hard_bound_variant"
         ):
             strict_failures = scope.get("retained_strict_failure_evidence")
             retained = isinstance(strict_failures, list) and bool(strict_failures)
             gates.append(acceptance.gate(
-                "r15_prior_strict_failure_retained",
+                f"{case_id.lower()}_prior_strict_failure_retained",
                 "pass" if retained else "inconclusive",
                 reason=(
-                    "the prior strict R15 hard-bound termination remains authenticated "
-                    "failure evidence"
+                    f"the prior strict {case_id} hard-bound termination remains "
+                    "authenticated failure evidence"
                     if retained
-                    else "the prior strict R15 failure is not retained"
+                    else f"the prior strict {case_id} failure is not retained"
                 ),
                 observations=strict_failures,
             ))
@@ -3128,7 +3247,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         inventory_path = args.inventory.expanduser().absolute().resolve(strict=True)
-        inventory = load_json(inventory_path)
+        inventory, inventory_binding = load_bound_json(inventory_path)
         reporter_binding = authenticate_inventory_reporter(inventory)
         output_root = inventory_output_root(inventory_path, inventory)
         output = (
@@ -3203,7 +3322,7 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": 1,
             "record_type": "cgl-lf-stage-i-direct-fast-acceptance-provenance",
             "inputs": {
-                "inventory": binding(inventory_path),
+                "inventory": inventory_binding,
                 "inventory_reporter": reporter_binding,
                 "criteria": policy["criteria_binding"],
                 "criteria_review": policy["review_binding"],
