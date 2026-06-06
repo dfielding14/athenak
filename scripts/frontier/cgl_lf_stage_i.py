@@ -9495,7 +9495,12 @@ def validate_transaction_ledger_row(row: object,
         raise ValueError("recorded transaction manifest accounting differs from ledger")
 
 
-def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
+def validate_submission_audit(
+    paths: dict[str, Path],
+    value: object,
+    reservations: list[dict[str, object]],
+    expected_case_id: str,
+) -> None:
     """Require fixed machine-readable submit-policy evidence."""
 
     if not isinstance(value, dict):
@@ -9537,6 +9542,25 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
     )
     if value["offline_local_root"] is not offline_local_root:
         raise ValueError("submission journal root mode differs from submission audit")
+    if not offline_local_root and any(
+        key not in value
+        for key in ("initial_queue_authentication", "final_queue_authentication")
+    ):
+        raise ValueError(
+            "production submission journal lacks complete initial/final queue evidence"
+        )
+    for key in ("initial_queue_authentication", "final_queue_authentication"):
+        if key not in value:
+            continue
+        queue = value[key]
+        validate_queue_authentication_evidence(queue, key)
+        if not isinstance(queue, dict):
+            raise ValueError(f"{key} is invalid")
+        authenticate_production_queue(paths, reservations, queue["rows"])
+        if not offline_local_root:
+            require_stale_job_absent_from_complete_queue_evidence(
+                queue, f"production submission audit {key}"
+            )
     clearance = value.get("shared_root_isolation_clearance")
     if clearance is not None:
         clearance = require_r17_exact_keys(
@@ -9669,9 +9693,8 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
             "submission audit shared-root clearance consumption",
         )
         if (
-            consumption["action"] not in {"check-submit", "submit"}
-            or consumption["case_id"]
-            not in {f"R{number:02d}" for number in range(3, 18)}
+            consumption["action"] != "submit"
+            or consumption["case_id"] != expected_case_id
             or consumption["authorized_stale_manifest"]
             != str(
                 paths["root"] / "runs" / SHARED_ROOT_STALE_CAMPAIGN_ID
@@ -9682,6 +9705,18 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
                 "submission audit shared-root clearance consumption differs"
             )
     acknowledged = value["acknowledged_shared_root_campaigns"]
+    if clearance is not None and acknowledged != [SHARED_ROOT_STALE_CAMPAIGN_ID]:
+        raise ValueError(
+            "submission audit managed-clearance acknowledgement differs"
+        )
+    if (
+        not offline_local_root
+        and clearance is None
+        and shared_root_campaign_conflicts(paths["root"], set())
+    ):
+        raise ValueError(
+            "production submission journal lacks required managed shared-root clearance"
+        )
     if (
         not offline_local_root
         and bool(acknowledged) != (clearance is not None)
@@ -9689,9 +9724,6 @@ def validate_submission_audit(paths: dict[str, Path], value: object) -> None:
         raise ValueError(
             "production shared-root acknowledgement and managed clearance differ"
         )
-    for key in ("initial_queue_authentication", "final_queue_authentication"):
-        if key in value:
-            validate_queue_authentication_evidence(value[key], key)
     binding = value.get("batch_script")
     if binding is None:
         if not (
@@ -9913,7 +9945,12 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
         digest = value.get("prepared_manifest_sha256")
         if not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None:
             raise ValueError("pending submission journal has invalid manifest digest")
-        validate_submission_audit(paths, value.get("submission_audit"))
+        validate_submission_audit(
+            paths,
+            value.get("submission_audit"),
+            prior_reservations,
+            manifest_path.parents[2].name,
+        )
         authenticate_canonical_reservation_snapshot(paths, prior_reservations)
         require_retained_r17_policy(paths, prior_reservations)
         require_reservation_budget(
@@ -9991,7 +10028,12 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
         digest = value.get("prepared_manifest_sha256")
         if not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None:
             raise ValueError("submitted journal has invalid prepared manifest digest")
-        validate_submission_audit(paths, value.get("submission_audit"))
+        validate_submission_audit(
+            paths,
+            value.get("submission_audit"),
+            prior_reservations,
+            manifest_path.parents[2].name,
+        )
         require_numeric_job_id(str(value.get("job_id", "")))
         if manifest.get("job_id") != value.get("job_id"):
             raise ValueError("submitted journal job ID differs from manifest")
@@ -10003,7 +10045,12 @@ def read_transaction(paths: dict[str, Path], path: Path) -> dict[str, object]:
         digest = value.get("prepared_manifest_sha256")
         if not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None:
             raise ValueError("cleared journal has invalid prepared manifest digest")
-        validate_submission_audit(paths, value.get("submission_audit"))
+        validate_submission_audit(
+            paths,
+            value.get("submission_audit"),
+            prior_reservations,
+            manifest_path.parents[2].name,
+        )
         if not isinstance(value.get("recovery_notes"), str):
             raise ValueError("cleared submission transaction lacks recovery notes")
         validate_scheduler_absence_evidence(

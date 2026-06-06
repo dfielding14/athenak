@@ -516,7 +516,69 @@ def test_managed_shared_root_clearance_submission_audit_rejects_stale_final_queu
         "shared_root_isolation_clearance": clearance,
     }
     with pytest.raises(ValueError, match="remains present in complete squeue"):
-        module.validate_submission_audit(fixture["paths"], audit)
+        module.validate_submission_audit(fixture["paths"], audit, [], "R16")
+
+
+@pytest.mark.parametrize(
+    ("mutation", "match"),
+    (
+        ("missing-final", "lacks complete initial/final queue evidence"),
+        ("missing-clearance-with-stale-final", "remains present in complete squeue"),
+        ("whitespace-stale-id", "queued CGL job or malformed scheduler row"),
+        ("wrong-acknowledgement", "managed-clearance acknowledgement differs"),
+        ("check-submit-consumption", "clearance consumption differs"),
+        ("wrong-case-consumption", "clearance consumption differs"),
+    ),
+)
+def test_production_managed_clearance_submission_audit_rejects_replay_bypass(
+    tmp_path, monkeypatch, mutation, match
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    monkeypatch.setattr(module, "DEFAULT_ROOT", fixture["paths"]["root"])
+    clearance = authenticate_managed_clearance(module, fixture)
+    batch = fixture["paths"]["root"] / "retained-submit-script.sbatch"
+    batch.write_text("#!/bin/bash\n")
+    batch.chmod(0o750)
+    audit = {
+        "created_utc": fixture["now"].isoformat(),
+        "offline_local_root": False,
+        "skip_slurm_test": False,
+        "slurm_test_only": "passed",
+        "acknowledged_shared_root_campaigns": [module.SHARED_ROOT_STALE_CAMPAIGN_ID],
+        "initial_queue_authentication": fixture["queue_evidence"],
+        "final_queue_authentication": fixture["queue_evidence"],
+        "batch_script": module.batch_script_binding(
+            batch, batch.stat(), batch.read_bytes()
+        ),
+        "shared_root_isolation_clearance": clearance,
+    }
+    if mutation == "missing-final":
+        audit.pop("final_queue_authentication")
+    elif mutation == "missing-clearance-with-stale-final":
+        audit.pop("shared_root_isolation_clearance")
+        audit["acknowledged_shared_root_campaigns"] = []
+        rows = ["4743106|batch|RUNNING|unrelated_non_cgl_job"]
+        audit["final_queue_authentication"] = {
+            "checked_utc": fixture["queue_evidence"]["checked_utc"],
+            "rows": rows,
+            "rows_sha256": module.stable_json_sha256(rows),
+        }
+    elif mutation == "whitespace-stale-id":
+        rows = ["4743106 |batch|RUNNING|unrelated_non_cgl_job"]
+        audit["final_queue_authentication"] = {
+            "checked_utc": fixture["queue_evidence"]["checked_utc"],
+            "rows": rows,
+            "rows_sha256": module.stable_json_sha256(rows),
+        }
+    elif mutation == "wrong-acknowledgement":
+        audit["acknowledged_shared_root_campaigns"] = ["different-campaign"]
+    elif mutation == "check-submit-consumption":
+        clearance["consumption"]["action"] = "check-submit"
+    else:
+        clearance["consumption"]["case_id"] = "R03"
+    with pytest.raises(ValueError, match=match):
+        module.validate_submission_audit(fixture["paths"], audit, [], "R16")
 
 
 @pytest.mark.parametrize(
