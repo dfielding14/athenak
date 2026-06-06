@@ -203,6 +203,8 @@ The regression suite includes:
 - bounded dynamic AMR refine smoke;
 - MPI 2-rank and 4-rank Jeans tests;
 - MPI multipole binary reduction test;
+- one-rank versus four-rank partial-SMR comparison across fine/coarse
+  boundaries;
 - GPU smoke tests for Jeans and root-host/device equivalence when a CUDA build is
   available.
 

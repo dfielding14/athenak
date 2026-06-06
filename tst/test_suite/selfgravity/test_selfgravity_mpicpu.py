@@ -90,3 +90,46 @@ def test_mpi_multipole_binary_reduction_mpicpu():
     finally:
         sg.cleanup_outputs(basename)
         testutils.cleanup()
+
+
+def test_mpi_partial_smr_matches_serial_mpicpu():
+    # Fixed work isolates rank-dependent fine/coarse communication from convergence.
+    serial_basename = "selfgravity_binary_partial_smr_serial"
+    mpi_basename = "selfgravity_binary_partial_smr_mpicpu"
+    try:
+        sg.run_athena(
+            "inputs/tests/selfgravity_binary_smr.athinput",
+            serial_basename,
+            max_final_defect=None,
+        )
+        sg.run_athena(
+            "inputs/tests/selfgravity_binary_smr.athinput",
+            mpi_basename,
+            mpi_ranks=4,
+            max_final_defect=None,
+        )
+
+        serial = sg.parse_binary_output(
+            sg.latest_binary_output(serial_basename, "grav_phi")
+        )
+        mpi = sg.parse_binary_output(sg.latest_binary_output(mpi_basename, "grav_phi"))
+        assert {block["level"] for block in serial["blocks"]} == {0, 1}
+        assert {block["level"] for block in mpi["blocks"]} == {0, 1}
+
+        serial_phi, serial_x1, serial_x2, serial_x3 = sg.concatenate_field(
+            serial, "grav_phi"
+        )
+        mpi_phi, mpi_x1, mpi_x2, mpi_x3 = sg.concatenate_field(mpi, "grav_phi")
+        serial_order = np.lexsort((serial_x1, serial_x2, serial_x3))
+        mpi_order = np.lexsort((mpi_x1, mpi_x2, mpi_x3))
+        serial_coords = np.column_stack(
+            (serial_x1[serial_order], serial_x2[serial_order], serial_x3[serial_order])
+        )
+        mpi_coords = np.column_stack(
+            (mpi_x1[mpi_order], mpi_x2[mpi_order], mpi_x3[mpi_order])
+        )
+        assert np.max(np.abs(serial_coords - mpi_coords)) < 1.0e-14
+        assert np.max(np.abs(serial_phi[serial_order] - mpi_phi[mpi_order])) < 1.0e-10
+    finally:
+        sg.cleanup_outputs(serial_basename, mpi_basename)
+        testutils.cleanup()

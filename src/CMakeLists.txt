@@ -83,6 +83,7 @@ add_executable(
         mesh/refinement_criteria.cpp
 
         multigrid/multigrid.cpp
+        multigrid/multigrid_bvals.cpp
         multigrid/multigrid_driver.cpp
         multigrid/multigrid_tasks.cpp
 

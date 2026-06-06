@@ -15,6 +15,9 @@
 #include <cstdio> // std::size_t
 #include <cstring> // memcpy
 #include <iostream>
+#include <map>
+#include <memory>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -156,6 +159,12 @@ struct MultigridTaskIDs {
       TaskID fc_ghostsR2;
       TaskID fc_ghostsB2;
       TaskID fc_ghosts_prol;
+      TaskID fill_coarse0;
+      TaskID fill_coarse1;
+      TaskID fill_coarseR;
+      TaskID fill_coarseB;
+      TaskID fill_coarseR2;
+      TaskID fill_coarseB2;
 };
 
 //! \class Multigrid
@@ -428,7 +437,8 @@ class MultigridDriver {
   TaskStatus FMGProlongateTask(Driver *pdrive, int stag);
   TaskStatus ProlongateBoundary(Driver *pdrive, int stag);
   TaskStatus ProlongateBoundaryForProlongation(Driver *pdrive, int stag);
-  TaskStatus FillFCBoundary(Driver *pdrive, int stag);
+  TaskStatus FillCoarseBoundary(Driver *pdrive, int stag);
+  TaskStatus ProlongateFCBoundary(Driver *pdrive, int stag);
   TaskStatus CalculateFASRHS(Driver *pdrive, int stag);
   TaskStatus StoreOldData(Driver *pdrive, int stag);
   TaskStatus ClearRecv(Driver *pdrive, int stag);
@@ -521,18 +531,32 @@ class MultigridDriver {
   int nb_rank_;
 };
 
+struct MGPerLevelIndcs {
+  MeshBufferIndcs isame, icoar, ifine;
+  int isame_ndat, icoar_ndat, ifine_ndat;
+};
+
 class MultigridBoundaryValues : public MeshBoundaryValuesCC {
  public:
-  MultigridBoundaryValues(MeshBlockPack *pmbp, ParameterInput *pin, bool coarse, Multigrid *pmg);
+  MultigridBoundaryValues(MeshBlockPack *pmbp, ParameterInput *pin,
+                          bool coarse, Multigrid *pmg);
   ~MultigridBoundaryValues();
 
   void RemapIndicesForMG();
+  void ComputePerLevelIndices();
 
   // pack/restrict fluxes at fine/coarse boundaries into boundary buffers and send
   TaskStatus PackAndSendMG(const DvceArray5D<Real> &u);
   TaskStatus RecvAndUnpackMG(DvceArray5D<Real> &u);
   TaskStatus InitRecvMG(const int nvars);
-  TaskStatus FillFineCoarseMGGhosts(DvceArray5D<Real> &u);
+
+  void FillCoarseMG(const DvceArray5D<Real> &u);
+  TaskStatus ProlongateFCMG(DvceArray5D<Real> &u);
+
+  DvceArray5D<Real> coarse_buf_;
+
+  DualArray2D<MGPerLevelIndcs> send_mg_indcs_;
+  DualArray2D<MGPerLevelIndcs> recv_mg_indcs_;
 
  private:
   Multigrid *pmy_mg;
