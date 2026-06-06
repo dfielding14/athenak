@@ -184,7 +184,11 @@ def _verify_installed(
 
 
 def _verify_source(
-    script_dir: Path, directory_descriptor: int, target: str
+    script_dir: Path,
+    directory_descriptor: int,
+    target: str,
+    *,
+    expected_git_commit: str,
 ) -> dict[str, bytes]:
     if target not in SOURCE_ONLY_ENTRYPOINTS:
         raise ValueError(
@@ -208,11 +212,15 @@ def _verify_source(
         stdout=subprocess.DEVNULL,
         env=environment,
     )
+    if re.fullmatch(r"[0-9a-f]{40}", expected_git_commit) is None:
+        raise ValueError("Expected source Git commit is malformed")
     head = subprocess.check_output(
         _git("-C", str(repository), "rev-parse", "HEAD"),
         text=True,
         env=environment,
     ).strip()
+    if head != expected_git_commit:
+        raise ValueError("Source control-plane HEAD differs from expected Git commit")
     status_command = _git(
         "-C",
         str(repository),
@@ -227,7 +235,7 @@ def _verify_source(
     sources = {}
     for name, path in zip(SOURCE_CONTROL_PLANE_FILES, paths):
         tracked = subprocess.check_output(
-            _git("-C", str(repository), "show", f"{head}:{path}"),
+            _git("-C", str(repository), "show", f"{expected_git_commit}:{path}"),
             env=environment,
         )
         if _read_file_at(directory_descriptor, name, require_read_only=False) != tracked:
@@ -304,11 +312,24 @@ def _execute_captured(script_dir: Path, target: str, sources: dict[str, bytes]) 
 
 def main() -> None:
     if len(sys.argv) < 2:
-        raise SystemExit("usage: run_control_plane.py ENTRYPOINT [ARG ...]")
+        raise SystemExit(
+            "usage: run_control_plane.py "
+            "[--expected-git-commit FULL_GIT_COMMIT] ENTRYPOINT [ARG ...]"
+        )
     script_dir = Path(os.path.abspath(__file__)).parent
     if Path(__file__).resolve(strict=True).parent != script_dir:
         raise ValueError("Refusing a symlink alias for the control-plane runner")
-    target = sys.argv[1]
+    arguments = sys.argv[1:]
+    expected_git_commit: str | None = None
+    if arguments[:1] == ["--expected-git-commit"]:
+        if len(arguments) < 3:
+            raise SystemExit(
+                "usage: run_control_plane.py "
+                "--expected-git-commit FULL_GIT_COMMIT ENTRYPOINT [ARG ...]"
+            )
+        expected_git_commit = arguments[1]
+        arguments = arguments[2:]
+    target = arguments[0]
     if not target or "/" in target or not target.endswith(".py"):
         raise ValueError(f"Unsupported control-plane entrypoint: {target!r}")
     directory_descriptor = os.open(
@@ -318,13 +339,26 @@ def main() -> None:
     try:
         entries = set(os.listdir(directory_descriptor))
         if "inventory.json" in entries:
+            if expected_git_commit is not None:
+                raise ValueError(
+                    "Installed control-plane execution does not accept a source Git commit"
+                )
             if target not in CONTROL_PLANE_FILES:
                 raise ValueError(f"Unsupported installed control-plane entrypoint: {target!r}")
             sources = _verify_installed(script_dir, directory_descriptor)
         else:
-            sources = _verify_source(script_dir, directory_descriptor, target)
+            if expected_git_commit is None:
+                raise ValueError(
+                    "Source control-plane execution requires an expected Git commit"
+                )
+            sources = _verify_source(
+                script_dir,
+                directory_descriptor,
+                target,
+                expected_git_commit=expected_git_commit,
+            )
         sys._pic_control_plane_bootstrapped = True
-        sys.argv = [str(script_dir / target), *sys.argv[2:]]
+        sys.argv = [str(script_dir / target), *arguments[1:]]
         _execute_captured(script_dir, target, sources)
     finally:
         os.close(directory_descriptor)

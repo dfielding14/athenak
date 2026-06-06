@@ -22,6 +22,7 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tarfile
 import types
@@ -76,6 +77,13 @@ SEED_TIMEOUT_RATIONALE_FILENAME = "timeout_margin_seed_rationale.json"
 QUEUE_SNAPSHOT_FORMAT = "%i|%P|%q|%T|%j|%k"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
+_TRUSTED_GIT = "/usr/bin/git"
+_TRUSTED_GIT_OPTIONS = (
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+)
 _UUID = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 )
@@ -176,6 +184,101 @@ class ContractError(ValueError):
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ContractError(message)
+
+
+def _expected_git_commit(value: object) -> str:
+    _require(
+        isinstance(value, str) and _GIT_COMMIT.fullmatch(value) is not None,
+        "expected Git commit must be a full lowercase hexadecimal commit",
+    )
+    return value
+
+
+def _trusted_git_environment() -> dict[str, str]:
+    return {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "HOME": "/",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/usr/bin:/bin",
+    }
+
+
+def _trusted_git_command(*arguments: str) -> list[str]:
+    return [_TRUSTED_GIT, *_TRUSTED_GIT_OPTIONS, *arguments]
+
+
+def _require_reviewed_git_commit(expected_git_commit: object) -> str:
+    """Require this tracked source repository to be clean at one reviewed HEAD."""
+    expected = _expected_git_commit(expected_git_commit)
+    environment = _trusted_git_environment()
+    try:
+        repository = Path(
+            subprocess.check_output(
+                _trusted_git_command(
+                    "-C", str(REPO_ROOT), "rev-parse", "--show-toplevel"
+                ),
+                text=True,
+                env=environment,
+            ).strip()
+        ).resolve()
+        _require(
+            repository == REPO_ROOT,
+            "materializer source repository differs from the expected repository",
+        )
+        source_path = str(MATERIALIZER_SOURCE.relative_to(repository))
+        subprocess.run(
+            _trusted_git_command(
+                "-C",
+                str(repository),
+                "ls-files",
+                "--error-unmatch",
+                "--",
+                source_path,
+            ),
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=environment,
+        )
+        head_before = subprocess.check_output(
+            _trusted_git_command("-C", str(repository), "rev-parse", "HEAD"),
+            text=True,
+            env=environment,
+        ).strip()
+        status = subprocess.check_output(
+            _trusted_git_command(
+                "-C",
+                str(repository),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=no",
+                "--ignore-submodules=none",
+            ),
+            text=True,
+            env=environment,
+        )
+        head_after = subprocess.check_output(
+            _trusted_git_command("-C", str(repository), "rev-parse", "HEAD"),
+            text=True,
+            env=environment,
+        ).strip()
+    except ContractError:
+        raise
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ContractError(
+            "could not authenticate the reviewed materializer Git commit"
+        ) from error
+    _require(
+        head_before == expected and head_after == expected,
+        "materializer source HEAD differs from the expected Git commit",
+    )
+    _require(
+        status == "",
+        "materializer source repository must have a clean tracked HEAD",
+    )
+    return expected
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -942,6 +1045,68 @@ def materialize_baseline_policy_successor(
     )
 
 
+def materialize_exact_reviewed_preflight_predecessor_policy_successor(
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    storage_preflight_binding: Path,
+) -> dict[str, object]:
+    """Advance only the controller and preflight of an empty-allowlist policy."""
+    _, _, baseline = _read_json(baseline_policy, label="baseline storage policy")
+    _require(isinstance(baseline, dict), "baseline storage policy is malformed")
+    _require(
+        baseline.get("registered_science_slices") == [],
+        "baseline storage policy must have an empty registered-science allowlist",
+    )
+    baseline_storage = baseline.get("olcf_side_storage")
+    _require(
+        isinstance(baseline_storage, dict),
+        "baseline OLCF-side storage policy is malformed",
+    )
+    baseline_binding = baseline_storage.get("storage_preflight_evidence")
+    _require(
+        isinstance(baseline_binding, dict),
+        "baseline storage-preflight evidence binding is malformed",
+    )
+    successor = _advance_control_plane_fields(
+        copy.deepcopy(baseline),
+        control_plane_version=control_plane_version,
+        storage_preflight_binding=storage_preflight_binding,
+        require_fresh_preflight=True,
+        require_new_control_plane=True,
+    )
+    successor_storage = successor["olcf_side_storage"]
+    _require(
+        isinstance(successor_storage, dict),
+        "successor OLCF-side storage policy is malformed",
+    )
+    successor_binding = successor_storage.get("storage_preflight_evidence")
+    _require(
+        isinstance(successor_binding, dict)
+        and successor_binding != baseline_binding
+        and successor_binding.get("probe_id") != baseline_binding.get("probe_id")
+        and successor_binding.get("sha256") != baseline_binding.get("sha256"),
+        "successor storage-preflight evidence binding must be different",
+    )
+    mutable_storage_fields = {
+        "installed_control_plane_version",
+        "staged_control_plane_candidate_version",
+        "last_preflight_utc",
+        "storage_preflight_evidence",
+    }
+    baseline_comparable = copy.deepcopy(baseline)
+    successor_comparable = copy.deepcopy(successor)
+    for value in [baseline_comparable, successor_comparable]:
+        storage = value["olcf_side_storage"]
+        for field in mutable_storage_fields:
+            storage[field] = None
+    _require(
+        _json_bytes(successor_comparable) == _json_bytes(baseline_comparable),
+        "exact reviewed predecessor successor changed unrelated policy fields",
+    )
+    return successor
+
+
 def materialize_retire_consumed_slices_baseline_policy_successor(
     *,
     baseline_policy: Path,
@@ -988,18 +1153,39 @@ def materialize_candidate_only_policy_successor(
     clean_candidate_manifest: Path,
     executable: Path,
     environment_profile: Path,
+    expected_git_commit: str,
 ) -> dict[str, object]:
     """Authorize one exact clean candidate while keeping all launches prohibited."""
+    expected_git_commit = _expected_git_commit(expected_git_commit)
     _, _, baseline = _read_json(baseline_policy, label="baseline storage policy")
     _require(isinstance(baseline, dict), "baseline storage policy is malformed")
     _require(
         baseline.get("registered_science_slices") == [],
         "baseline storage policy must have an empty registered-science allowlist",
     )
+    baseline_freeze = baseline.get("science_submission_freeze")
+    pending_freeze = baseline_freeze == {"status": "pending_clean_candidate_freeze"}
+    authorized_freeze = (
+        isinstance(baseline_freeze, dict)
+        and set(baseline_freeze)
+        == {
+            "status",
+            "manifest_path",
+            "manifest_sha256",
+            "build_profile_control_plane_version",
+        }
+        and baseline_freeze.get("status") == "authorized"
+        and isinstance(baseline_freeze.get("manifest_path"), str)
+        and _SHA256.fullmatch(str(baseline_freeze.get("manifest_sha256"))) is not None
+        and _SHA256.fullmatch(
+            str(baseline_freeze.get("build_profile_control_plane_version"))
+        )
+        is not None
+    )
     _require(
-        baseline.get("science_submission_freeze")
-        == {"status": "pending_clean_candidate_freeze"},
-        "baseline storage policy must have a pending clean-candidate freeze",
+        pending_freeze or authorized_freeze,
+        "baseline storage policy must have a pending or exact authorized "
+        "clean-candidate freeze",
     )
     successor = _advance_control_plane_fields(
         copy.deepcopy(baseline),
@@ -1019,6 +1205,18 @@ def materialize_candidate_only_policy_successor(
         != _CONSUMED_HISTORICAL_V2_CLEAN_CANDIDATE_MANIFEST_SHA256,
         "candidate-only clean-candidate manifest must be fresh",
     )
+    _require(
+        final["git_commit"] == expected_git_commit,
+        "candidate-only clean-candidate Git commit differs from the expected Git commit",
+    )
+    if authorized_freeze:
+        assert isinstance(baseline_freeze, dict)
+        _require(
+            final["clean_candidate_manifest_sha256"]
+            != baseline_freeze["manifest_sha256"],
+            "candidate-only clean-candidate manifest must differ from the currently "
+            "authorized freeze",
+        )
     successor["science_submission_freeze"] = {
         "status": "authorized",
         "manifest_path": final["clean_candidate_manifest_path"],
@@ -1345,19 +1543,46 @@ def materialize_reviewed_pre_submit_config(
 def _write_new_file(path: Path, payload: bytes) -> None:
     path = _absolute(path, label="output file")
     _require(path.parent.is_dir(), f"output parent is not a directory: {path.parent}")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    directory_flags = (
+        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    )
     try:
-        descriptor = os.open(path, flags, 0o444)
+        directory = os.open(path.parent, directory_flags)
     except OSError as error:
-        raise ContractError(f"refusing to overwrite output file: {path}") from error
+        raise ContractError(f"output parent is not a stable directory: {path.parent}") from error
+
+    def require_same_parent() -> None:
+        lexical = os.open(path.parent, directory_flags)
+        try:
+            expected = os.fstat(directory)
+            actual = os.fstat(lexical)
+            _require(
+                (actual.st_dev, actual.st_ino) == (expected.st_dev, expected.st_ino),
+                f"output parent changed while writing: {path.parent}",
+            )
+        finally:
+            os.close(lexical)
+
     try:
-        offset = 0
-        while offset < len(payload):
-            offset += os.write(descriptor, payload[offset:])
-        os.fsync(descriptor)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path.name, flags, 0o444, dir_fd=directory)
+        except OSError as error:
+            raise ContractError(f"refusing to overwrite output file: {path}") from error
+        try:
+            offset = 0
+            while offset < len(payload):
+                offset += os.write(descriptor, payload[offset:])
+            os.fsync(descriptor)
+            os.fchmod(descriptor, 0o444)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        require_same_parent()
+        os.fsync(directory)
+        require_same_parent()
     finally:
-        os.close(descriptor)
-    os.chmod(path, 0o444)
+        os.close(directory)
 
 
 def write_seed_timeout_margin(
@@ -1509,6 +1734,27 @@ def write_retire_consumed_slices_baseline_policy_successor(
     return successor
 
 
+def write_exact_reviewed_preflight_predecessor_policy_successor(
+    output: Path,
+    *,
+    baseline_policy: Path,
+    control_plane_version: str,
+    storage_preflight_binding: Path,
+    expected_git_commit: str,
+) -> dict[str, object]:
+    """Write one exact empty-allowlist predecessor migration successor."""
+    expected_git_commit = _require_reviewed_git_commit(expected_git_commit)
+    successor = materialize_exact_reviewed_preflight_predecessor_policy_successor(
+        baseline_policy=baseline_policy,
+        control_plane_version=control_plane_version,
+        storage_preflight_binding=storage_preflight_binding,
+    )
+    payload = _json_bytes(successor)
+    _require_reviewed_git_commit(expected_git_commit)
+    _write_new_file(output, payload)
+    return successor
+
+
 def write_candidate_only_policy_successor(
     output: Path,
     *,
@@ -1518,8 +1764,10 @@ def write_candidate_only_policy_successor(
     clean_candidate_manifest: Path,
     executable: Path,
     environment_profile: Path,
+    expected_git_commit: str,
 ) -> dict[str, object]:
     """Write one exact-candidate successor without adding launch slices."""
+    expected_git_commit = _require_reviewed_git_commit(expected_git_commit)
     successor = materialize_candidate_only_policy_successor(
         baseline_policy=baseline_policy,
         control_plane_version=control_plane_version,
@@ -1527,8 +1775,11 @@ def write_candidate_only_policy_successor(
         clean_candidate_manifest=clean_candidate_manifest,
         executable=executable,
         environment_profile=environment_profile,
+        expected_git_commit=expected_git_commit,
     )
-    _write_new_file(output, _json_bytes(successor))
+    payload = _json_bytes(successor)
+    _require_reviewed_git_commit(expected_git_commit)
+    _write_new_file(output, payload)
     return successor
 
 
@@ -1661,6 +1912,16 @@ def build_parser() -> argparse.ArgumentParser:
     baseline_policy.add_argument("--control-plane-version", required=True)
     baseline_policy.add_argument("--storage-preflight-binding", required=True, type=Path)
     baseline_policy.add_argument("--output", required=True, type=Path)
+    exact_predecessor_policy = subparsers.add_parser(
+        "exact-reviewed-preflight-predecessor-policy-successor"
+    )
+    exact_predecessor_policy.add_argument("--baseline-policy", required=True, type=Path)
+    exact_predecessor_policy.add_argument("--control-plane-version", required=True)
+    exact_predecessor_policy.add_argument(
+        "--storage-preflight-binding", required=True, type=Path
+    )
+    exact_predecessor_policy.add_argument("--expected-git-commit", required=True)
+    exact_predecessor_policy.add_argument("--output", required=True, type=Path)
     retirement_policy = subparsers.add_parser(
         "retire-consumed-slices-baseline-policy-successor"
     )
@@ -1675,6 +1936,7 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_policy.add_argument("--control-plane-version", required=True)
     candidate_policy.add_argument("--storage-preflight-binding", required=True, type=Path)
     _add_final_binding_arguments(candidate_policy)
+    candidate_policy.add_argument("--expected-git-commit", required=True)
     candidate_policy.add_argument("--output", required=True, type=Path)
     pilot_policy = subparsers.add_parser("pilot-policy-successor")
     pilot_policy.add_argument("--baseline-policy", required=True, type=Path)
@@ -1732,6 +1994,16 @@ def main() -> None:
         )
         print(json.dumps(successor, sort_keys=True, separators=(",", ":")))
         return
+    if arguments.command == "exact-reviewed-preflight-predecessor-policy-successor":
+        successor = write_exact_reviewed_preflight_predecessor_policy_successor(
+            arguments.output,
+            baseline_policy=arguments.baseline_policy,
+            control_plane_version=arguments.control_plane_version,
+            storage_preflight_binding=arguments.storage_preflight_binding,
+            expected_git_commit=arguments.expected_git_commit,
+        )
+        print(json.dumps(successor, sort_keys=True, separators=(",", ":")))
+        return
     common = {
         "clean_candidate_manifest": arguments.clean_candidate_manifest,
         "executable": arguments.executable,
@@ -1747,6 +2019,7 @@ def main() -> None:
             baseline_policy=arguments.baseline_policy,
             control_plane_version=arguments.control_plane_version,
             storage_preflight_binding=arguments.storage_preflight_binding,
+            expected_git_commit=arguments.expected_git_commit,
             **common,
         )
         print(json.dumps(successor, sort_keys=True, separators=(",", ":")))

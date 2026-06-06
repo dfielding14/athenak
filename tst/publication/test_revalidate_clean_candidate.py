@@ -25,6 +25,7 @@ import revalidate_clean_candidate as revalidator
 FREEZE_ID = "12345678-1234-4234-8234-123456789abc"
 CURRENT_VERSION = "a" * 64
 HISTORICAL_VERSION = "b" * 64
+SOURCE_GIT_COMMIT = "c" * 40
 
 
 def _json_bytes(value: object) -> bytes:
@@ -94,7 +95,7 @@ class RevalidateCleanCandidateTest(unittest.TestCase):
             "source": {
                 "archive_path": str(root / "source.tar"),
                 "commit_path": str(root / "source.commit"),
-                "git_commit": "c" * 40,
+                "git_commit": SOURCE_GIT_COMMIT,
                 "git_tree": "d" * 40,
                 "source_bundle_sha256": "e" * 64,
                 "submodules": submodules,
@@ -129,6 +130,8 @@ class RevalidateCleanCandidateTest(unittest.TestCase):
         self,
         *,
         expected_manifest_sha256: str | None = None,
+        expected_git_commit: str | None = None,
+        expected_receipt_control_plane_version: str | None = None,
         verify_installed: revalidator.InstalledVerifier | None = None,
         verify_historical: revalidator.InstalledVerifier | None = None,
         validate_bundle: revalidator.BundleValidator | None = None,
@@ -157,6 +160,10 @@ class RevalidateCleanCandidateTest(unittest.TestCase):
                 _sha256(self.candidate.read_bytes())
                 if expected_manifest_sha256 is None
                 else expected_manifest_sha256
+            ),
+            expected_git_commit=expected_git_commit,
+            expected_receipt_control_plane_version=(
+                expected_receipt_control_plane_version
             ),
             control_plane_dir=(
                 self.orion_root / "control_plane" / CURRENT_VERSION
@@ -644,6 +651,48 @@ class RevalidateCleanCandidateTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing historical"):
             self._invoke(verify_historical=missing)
 
+    def test_revalidation_can_require_exact_build_receipt_controller(self) -> None:
+        result, _, _ = self._invoke(
+            expected_receipt_control_plane_version=HISTORICAL_VERSION
+        )
+        self.assertEqual(
+            result["build"]["receipt_control_plane_version"],
+            HISTORICAL_VERSION,
+        )
+        with self.assertRaisesRegex(ValueError, "different control-plane version"):
+            self._invoke(expected_receipt_control_plane_version=CURRENT_VERSION)
+
+    def test_revalidation_can_require_exact_source_git_commit(self) -> None:
+        result, _, _ = self._invoke(expected_git_commit=SOURCE_GIT_COMMIT)
+        self.assertEqual(result["source"]["git_commit"], SOURCE_GIT_COMMIT)
+
+    def test_revalidation_requires_full_lowercase_expected_git_commit(self) -> None:
+        verify_installed = mock.Mock()
+        for malformed in ["", "A" * 40, "0" * 39, "0" * 41, "0" * 64]:
+            with self.subTest(malformed=malformed):
+                with self.assertRaisesRegex(ValueError, "full lowercase Git commit"):
+                    self._invoke(
+                        expected_git_commit=malformed,
+                        verify_installed=verify_installed,
+                    )
+        verify_installed.assert_not_called()
+
+    def test_revalidation_rejects_expected_git_commit_mismatch_before_semantic_validation(
+        self,
+    ) -> None:
+        validate_bundle = mock.Mock()
+        verify_historical = mock.Mock()
+
+        with self.assertRaisesRegex(ValueError, "Git commit differs from expected"):
+            self._invoke(
+                expected_git_commit="0" * 40,
+                validate_bundle=validate_bundle,
+                verify_historical=verify_historical,
+            )
+
+        validate_bundle.assert_not_called()
+        verify_historical.assert_not_called()
+
     def test_revalidation_requires_lowercase_expected_manifest_sha256(self) -> None:
         verify_installed = mock.Mock()
         for malformed in ["", "A" * 64, "0" * 63, "not-a-digest"]:
@@ -677,11 +726,25 @@ class RevalidateCleanCandidateTest(unittest.TestCase):
                 str(self.candidate),
                 "--expected-manifest-sha256",
                 expected_sha256,
+                "--expected-git-commit",
+                SOURCE_GIT_COMMIT,
             ]
         )
         self.assertEqual(parsed.candidate_manifest_path, self.candidate)
         self.assertEqual(parsed.expected_manifest_sha256, expected_sha256)
+        self.assertEqual(parsed.expected_git_commit, SOURCE_GIT_COMMIT)
         with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(
+                    [
+                        "--manifest",
+                        str(self.candidate),
+                        "--expected-manifest-sha256",
+                        expected_sha256,
+                        "--expected-git-commit",
+                        "A" * 40,
+                    ]
+                )
             with self.assertRaises(SystemExit):
                 parser.parse_args(
                     [
@@ -714,12 +777,16 @@ class RevalidateCleanCandidateTest(unittest.TestCase):
                 str(self.candidate),
                 "--expected-manifest-sha256",
                 expected_sha256,
+                "--expected-git-commit",
+                SOURCE_GIT_COMMIT,
             ],
         ), redirect_stdout(output):
             revalidator.main()
         revalidate.assert_called_once_with(
             self.candidate,
             expected_manifest_sha256=expected_sha256,
+            expected_git_commit=SOURCE_GIT_COMMIT,
+            expected_receipt_control_plane_version=None,
         )
         self.assertEqual(
             output.getvalue(),

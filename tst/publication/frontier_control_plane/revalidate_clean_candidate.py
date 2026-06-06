@@ -59,6 +59,19 @@ def _lowercase_sha256(value: object, *, label: str) -> str:
     return value
 
 
+def _lowercase_git_commit(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+        raise ValueError(f"{label} is not a full lowercase Git commit")
+    return value
+
+
+def _expected_git_commit_argument(value: str) -> str:
+    try:
+        return _lowercase_git_commit(value, label="Expected source Git commit")
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
 def _mapping(record: dict[str, object], key: str, *, label: str) -> dict[str, object]:
     value = record.get(key)
     if not isinstance(value, dict):
@@ -136,6 +149,8 @@ def revalidate_clean_candidate(
     candidate_manifest_path: Path,
     *,
     expected_manifest_sha256: str,
+    expected_git_commit: str | None = None,
+    expected_receipt_control_plane_version: str | None = None,
     control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
@@ -149,6 +164,22 @@ def revalidate_clean_candidate(
     expected_candidate_sha256 = _lowercase_sha256(
         expected_manifest_sha256,
         label="Expected clean-candidate manifest SHA-256",
+    )
+    expected_source_git_commit = (
+        _lowercase_git_commit(
+            expected_git_commit,
+            label="Expected source Git commit",
+        )
+        if expected_git_commit is not None
+        else None
+    )
+    expected_receipt_version = (
+        _lowercase_sha256(
+            expected_receipt_control_plane_version,
+            label="Expected build-receipt control-plane version",
+        )
+        if expected_receipt_control_plane_version is not None
+        else None
     )
     current_inventory = _verify_current_installed_pair(
         control_plane_dir,
@@ -177,6 +208,18 @@ def revalidate_clean_candidate(
         raise ValueError(
             "Captured clean-candidate manifest SHA-256 differs from expected binding"
         )
+    source = _mapping(candidate, "source", label="Clean-candidate manifest")
+    source_git_commit = _lowercase_git_commit(
+        _text(source, "git_commit", label="Clean-candidate source"),
+        label="Clean-candidate source git_commit",
+    )
+    if (
+        expected_source_git_commit is not None
+        and source_git_commit != expected_source_git_commit
+    ):
+        raise ValueError(
+            "Captured clean-candidate source Git commit differs from expected binding"
+        )
     receipt = read_json_bytes(
         build_profile_receipt,
         label="clean-candidate build-profile receipt",
@@ -186,6 +229,14 @@ def revalidate_clean_candidate(
         "control_plane_version",
         label="Clean-candidate build-profile receipt",
     )
+    if (
+        expected_receipt_version is not None
+        and receipt_control_plane_version != expected_receipt_version
+    ):
+        raise ValueError(
+            "Clean-candidate build-profile receipt belongs to a different "
+            "control-plane version"
+        )
     validated_submodules = validate_bundle(
         candidate,
         source_archive=tree["source_archive"],
@@ -205,7 +256,6 @@ def revalidate_clean_candidate(
         authorized_project_home_root=authorized_project_home_root,
         verify_historical=verify_historical,
     )
-    source = _mapping(candidate, "source", label="Clean-candidate manifest")
     build = _mapping(candidate, "build", label="Clean-candidate manifest")
     candidate_path = tree.get("candidate_manifest_path")
     if not isinstance(candidate_path, Path):
@@ -230,7 +280,7 @@ def revalidate_clean_candidate(
         "record_type": RECORD_TYPE,
         "schema_version": 1,
         "source": {
-            "git_commit": _text(source, "git_commit", label="Clean-candidate source"),
+            "git_commit": source_git_commit,
             "git_tree": _text(source, "git_tree", label="Clean-candidate source"),
             "source_bundle_sha256": _digest(
                 source,
@@ -255,6 +305,8 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
     )
     parser.add_argument("--expected-manifest-sha256", required=True)
+    parser.add_argument("--expected-git-commit", type=_expected_git_commit_argument)
+    parser.add_argument("--expected-receipt-control-plane-version")
     return parser
 
 
@@ -265,6 +317,10 @@ def main() -> None:
     result = revalidate_clean_candidate(
         args.candidate_manifest_path,
         expected_manifest_sha256=args.expected_manifest_sha256,
+        expected_git_commit=args.expected_git_commit,
+        expected_receipt_control_plane_version=(
+            args.expected_receipt_control_plane_version
+        ),
     )
     print(_canonical_json_bytes(result).decode("utf-8"), end="")
 

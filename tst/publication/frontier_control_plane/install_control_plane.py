@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 
@@ -33,12 +34,21 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 def _require_reviewed_source_for_production(
     pic_root: Path,
+    *,
+    expected_git_commit: str | None,
 ) -> list[tuple[str, bytes]] | None:
     if pic_root not in {
         Path(os.path.abspath(AUTHORIZED_PIC_ROOT)),
         Path(os.path.abspath(AUTHORIZED_PROJECT_HOME_ROOT)),
     }:
         return None
+    if (
+        not isinstance(expected_git_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", expected_git_commit) is None
+    ):
+        raise ValueError(
+            "Production control-plane install requires an expected Git commit"
+        )
     repository = Path(
         subprocess.check_output(
             trusted_git_command("-C", str(SCRIPT_DIR), "rev-parse", "--show-toplevel"),
@@ -85,6 +95,10 @@ def _require_reviewed_source_for_production(
         text=True,
         env=trusted_git_environment(),
     ).strip()
+    if head != expected_git_commit:
+        raise ValueError(
+            "Production control-plane source HEAD differs from expected Git commit"
+        )
     captured_sources = [
         (
             name,
@@ -189,9 +203,12 @@ def _verify_staged_install(
     require_read_only(staging)
 
 
-def install(pic_root: Path) -> Path:
+def install(pic_root: Path, *, expected_git_commit: str | None = None) -> Path:
     pic_root = Path(os.path.abspath(pic_root))
-    reviewed_sources = _require_reviewed_source_for_production(pic_root)
+    reviewed_sources = _require_reviewed_source_for_production(
+        pic_root,
+        expected_git_commit=expected_git_commit,
+    )
     captured_sources = reviewed_sources if reviewed_sources is not None else _snapshot_sources()
     records = [
         {"path": name, "sha256": sha256_bytes(data)}
@@ -225,7 +242,13 @@ def install(pic_root: Path) -> Path:
             },
         )
         _verify_staged_install(temporary, inventory=inventory, records=records)
-        if _require_reviewed_source_for_production(pic_root) != reviewed_sources:
+        if (
+            _require_reviewed_source_for_production(
+                pic_root,
+                expected_git_commit=expected_git_commit,
+            )
+            != reviewed_sources
+        ):
             raise ValueError("Production control-plane pinned HEAD blobs changed before publication")
         staging.publish_tree(destination)
     published_inventory = verify_installed_control_plane(
@@ -236,7 +259,13 @@ def install(pic_root: Path) -> Path:
         raise ValueError(
             "Published control-plane inventory differs from captured sources"
         )
-    if _require_reviewed_source_for_production(pic_root) != reviewed_sources:
+    if (
+        _require_reviewed_source_for_production(
+            pic_root,
+            expected_git_commit=expected_git_commit,
+        )
+        != reviewed_sources
+    ):
         raise ValueError("Production control-plane pinned HEAD blobs changed after publication")
     print(destination)
     return destination
@@ -245,8 +274,9 @@ def install(pic_root: Path) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pic-root", required=True, type=Path)
+    parser.add_argument("--expected-git-commit")
     args = parser.parse_args()
-    install(args.pic_root)
+    install(args.pic_root, expected_git_commit=args.expected_git_commit)
 
 
 if __name__ == "__main__":

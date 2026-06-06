@@ -97,16 +97,17 @@ AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS = [
     "verify_absent",
 ]
 # The capture helper authenticates a clean tracked HEAD before and after probing.
-# Pin its reviewed blob closure here; the commit records chronology for review.
+# Pin the cycle-free reviewed blob closure here; its common-module digest is
+# checked against this executing controller below.
 AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS = {
     "entrypoint_sha256": (
-        "22b8c3898154e0c687bf5bd555b7fae35826014cd5af8e33bd04b946671cb7f0"
+        "118e8206fc172522380ee135022d0e089ac5452da5073e8149a8e4ea265b5b9c"
     ),
     "runner_sha256": (
-        "029daff53c82ddc30ff560a1ab87d45966c2ef47514d550c38d1497e293a27e2"
+        "6053f190ed5bea093537ca5e6aef110212d54861f6726a6fa7294a1716eca2d5"
     ),
     "schema_sha256": (
-        "183fb8996381660a731a650e2fb42e0ee4989b248646d592fb28c0e57f8de898"
+        "348b80f6b56fa56da57a4d30932b41784c939f5a2b1bf49c82d3a6acd024ee3f"
     ),
 }
 AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_POLICY_SHA256 = (
@@ -115,6 +116,34 @@ AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_POLICY_SHA256 = (
 AUTHORIZED_HISTORICAL_STORAGE_PREFLIGHT_RETIREMENT_PROMOTION_SHA256 = (
     "073da1d4fe7f2eb054da9f3ec2bf2860f2643c3f44ca88d6183f4592eb0681bf"
 )
+AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_POLICY_SHA256 = (
+    "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+)
+AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROMOTION_SHA256 = (
+    "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+)
+AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_CONTROL_PLANE_VERSION = (
+    "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721"
+)
+AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROBE_ID = (
+    "1554766c-21e2-48b1-8cfe-b1e7e4e75aa2"
+)
+AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_EVIDENCE_SHA256 = (
+    "81ba8415e786cf88563520119e88d5e749937aaad293d84003ec8f4b3acb6501"
+)
+AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION = {
+    "entrypoint_sha256": (
+        "22b8c3898154e0c687bf5bd555b7fae35826014cd5af8e33bd04b946671cb7f0"
+    ),
+    "git_commit": "749c95bb7492d67bd3765eadd5287f54663c4052",
+    "runner_sha256": (
+        "74ab26fdf66129e018ce5a63a3827853e878b1efff71449490b0b017f48fd956"
+    ),
+    "schema_sha256": (
+        "183fb8996381660a731a650e2fb42e0ee4989b248646d592fb28c0e57f8de898"
+    ),
+    "tracked_clean_head_blobs": True,
+}
 PREPARED_ARTIFACT_INVENTORY_PATH = (
     "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
 )
@@ -219,6 +248,16 @@ def scheduler_account_matches_authorized(value: object) -> bool:
 
 def _is_lowercase_sha256(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _is_canonical_uuid(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        return False
+    return str(parsed) == value
 
 
 TRUSTED_GIT = "/usr/bin/git"
@@ -460,6 +499,13 @@ AUTHORIZED_REGISTERED_SCIENCE_SLICE_STATUS = "authorized"
 TRUSTED_LAUNCH_EXECUTOR = "trusted_trampoline_athena_argv_v1"
 CANONICAL_POLICY_RELATIVE = Path("policy/storage_policy.json")
 ACTIVE_PROMOTION_RELATIVE = Path("policy/active_promotion.json")
+ACTIVE_PROMOTION_TRANSACTION_RELATIVE = Path(
+    "policy/.active_promotion_transaction.json"
+)
+ACTIVE_PROMOTION_ROLLBACK_ANCHOR_PREFIXES = (
+    ".storage_policy.json.transaction-rollback-",
+    ".active_promotion.json.transaction-rollback-",
+)
 SITE_POLICY_MAX_AGE_SECONDS = 24 * 60 * 60
 CONTROL_PLANE_FILES = [
     "clean_candidate.schema.json",
@@ -504,6 +550,23 @@ def sha256(path: Path) -> str:
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _exact_json_equal(left: object, right: object) -> bool:
+    """Compare JSON values without Python's bool/int/float equality aliases."""
+    return json.dumps(
+        left,
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ) == json.dumps(
+        right,
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def trusted_git_environment() -> dict[str, str]:
@@ -2150,6 +2213,48 @@ def canonical_policy_path(authorized_pic_root: Path = AUTHORIZED_PIC_ROOT) -> Pa
 
 def active_promotion_path(root: Path) -> Path:
     return Path(os.path.abspath(root)) / ACTIVE_PROMOTION_RELATIVE
+
+
+def active_promotion_transaction_path(root: Path) -> Path:
+    return Path(os.path.abspath(root)) / ACTIVE_PROMOTION_TRANSACTION_RELATIVE
+
+
+def active_promotion_recovery_entry_names(root: Path) -> list[str]:
+    """List names that reserve the active-policy transaction namespace."""
+    lexical_root = Path(os.path.abspath(root))
+    policy_parent = active_promotion_transaction_path(lexical_root).parent
+    try:
+        descriptor = open_directory_below(policy_parent, root=lexical_root)
+    except FileNotFoundError:
+        return []
+    try:
+        marker_name = active_promotion_transaction_path(lexical_root).name
+        names = sorted(
+            name
+            for name in os.listdir(descriptor)
+            if name == marker_name
+            or any(
+                name.startswith(prefix)
+                for prefix in ACTIVE_PROMOTION_ROLLBACK_ANCHOR_PREFIXES
+            )
+        )
+        require_same_directory(policy_parent, descriptor, root=lexical_root)
+        return names
+    finally:
+        os.close(descriptor)
+
+
+def require_no_active_promotion_transaction(
+    *,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+) -> None:
+    """Fail closed while a durable active-policy rollback transaction exists."""
+    for root in [authorized_pic_root, authorized_project_home_root]:
+        if active_promotion_recovery_entry_names(root):
+            raise ValueError(
+                "Active-policy promotion transaction requires locked recovery"
+            )
 
 
 def require_below(path: Path, root: Path) -> Path:
@@ -4703,6 +4808,9 @@ def verify_historical_installed_control_plane(
 
 _STRICT_STORAGE_PREFLIGHT_PROFILE = "strict_authenticated_mirror"
 _HISTORICAL_RETIREMENT_STORAGE_PREFLIGHT_PROFILE = "historical_retirement_predecessor"
+_EXACT_REVIEWED_STORAGE_PREFLIGHT_PREDECESSOR_PROFILE = (
+    "exact_reviewed_storage_preflight_predecessor"
+)
 
 
 def _canonical_storage_preflight_bytes(value: dict[str, object]) -> bytes:
@@ -4727,10 +4835,12 @@ def _validate_storage_preflight_artifact(
     project_home_path: Path,
     authorized_pic_root: Path,
     authorized_project_home_root: Path,
+    authorized_source_authentication: dict[str, object] | None = None,
 ) -> None:
     artifact = read_json_bytes(payload, label="storage-preflight evidence")
     if payload != _canonical_storage_preflight_bytes(artifact):
         raise ValueError("Storage-preflight evidence must use canonical JSON bytes")
+    expected_schema_version = 1 if authorized_source_authentication is not None else 2
     if (
         set(artifact)
         != {
@@ -4746,7 +4856,7 @@ def _validate_storage_preflight_artifact(
             "status",
         }
         or type(artifact.get("schema_version")) is not int
-        or artifact["schema_version"] != 1
+        or artifact["schema_version"] != expected_schema_version
         or artifact.get("record_type") != "frontier_pic_storage_preflight_evidence"
         or artifact.get("probe_id") != probe_id
         or artifact.get("method") != AUTHORIZED_STORAGE_PREFLIGHT_METHOD
@@ -4766,27 +4876,37 @@ def _validate_storage_preflight_artifact(
             "Storage-preflight evidence completion differs from policy last_preflight_utc"
         )
     source = artifact.get("source_authentication")
-    if (
-        not isinstance(source, dict)
-        or set(source)
-        != {
-            "entrypoint_sha256",
+    expected_source_keys = (
+        set(authorized_source_authentication)
+        if authorized_source_authentication is not None
+        else {
+            *AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS,
+            "common_sha256",
             "git_commit",
-            "runner_sha256",
-            "schema_sha256",
             "tracked_clean_head_blobs",
         }
+    )
+    if (
+        not isinstance(source, dict)
+        or set(source) != expected_source_keys
         or source.get("tracked_clean_head_blobs") is not True
         or not isinstance(source.get("git_commit"), str)
         or re.fullmatch(r"[0-9a-f]{40}", source["git_commit"]) is None
-        or any(
-            source.get(field) != digest
-            for field, digest in AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS.items()
-        )
     ):
         raise ValueError("Storage-preflight evidence source authentication is not authorized")
-    # git_commit is retained provenance. The reviewed tracked-file digests and
-    # tracked_clean_head_blobs=True are the cycle-free authorization boundary.
+    if authorized_source_authentication is not None:
+        if source != authorized_source_authentication:
+            raise ValueError(
+                "Storage-preflight evidence source authentication is not authorized"
+            )
+    elif any(
+        source.get(field) != digest
+        for field, digest in AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS.items()
+    ) or source.get("common_sha256") != sha256(Path(__file__)):
+        raise ValueError("Storage-preflight evidence source authentication is not authorized")
+    # git_commit is retained provenance. The reviewed cycle-free tracked-file
+    # digests, executing common-module digest and tracked-clean assertion are
+    # the authorization boundary.
     if artifact.get("publication") != {
         "orion_path": str(orion_path),
         "project_home_path": str(project_home_path),
@@ -4844,7 +4964,10 @@ def _validate_storage_preflight_binding(
                 "Historical storage-preflight compatibility accepts only absent evidence"
             )
         return
-    if profile != _STRICT_STORAGE_PREFLIGHT_PROFILE:
+    if profile not in {
+        _STRICT_STORAGE_PREFLIGHT_PROFILE,
+        _EXACT_REVIEWED_STORAGE_PREFLIGHT_PREDECESSOR_PROFILE,
+    }:
         raise ValueError("Unsupported storage-preflight validation profile")
     binding = storage.get("storage_preflight_evidence")
     if (
@@ -4895,6 +5018,11 @@ def _validate_storage_preflight_binding(
         project_home_path=project_home_path,
         authorized_pic_root=lexical_pic_root,
         authorized_project_home_root=lexical_project_home_root,
+        authorized_source_authentication=(
+            AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION
+            if profile == _EXACT_REVIEWED_STORAGE_PREFLIGHT_PREDECESSOR_PROFILE
+            else None
+        ),
     )
 
 
@@ -4973,12 +5101,18 @@ def _validate_storage_policy(
         "ledger_genesis_allowed",
         "last_preflight_utc",
     }
-    if storage_preflight_profile == _STRICT_STORAGE_PREFLIGHT_PROFILE:
+    authenticated_storage_preflight_profiles = {
+        _STRICT_STORAGE_PREFLIGHT_PROFILE,
+        _EXACT_REVIEWED_STORAGE_PREFLIGHT_PREDECESSOR_PROFILE,
+    }
+    if storage_preflight_profile in authenticated_storage_preflight_profiles:
         if "storage_preflight_evidence" not in storage:
             raise ValueError(
                 "Storage policy lacks authenticated storage-preflight evidence"
             )
         required_storage_keys.add("storage_preflight_evidence")
+    elif storage_preflight_profile != _HISTORICAL_RETIREMENT_STORAGE_PREFLIGHT_PROFILE:
+        raise ValueError("Unsupported storage-preflight validation profile")
     allowed_storage_keys = required_storage_keys | {
         "status",
         "storage_preflight_evidence",
@@ -5055,7 +5189,7 @@ def _validate_storage_policy(
     if (
         not isinstance(project_home_mirror_root, str)
         or (
-            storage_preflight_profile == _STRICT_STORAGE_PREFLIGHT_PROFILE
+            storage_preflight_profile in authenticated_storage_preflight_profiles
             and (
                 lexical_project_home_mirror_root
                 != Path(os.path.abspath(authorized_project_home_root))
@@ -5444,12 +5578,63 @@ def require_policy_predecessor_snapshot_for_promotion(
     successor_policy: dict[str, object],
     successor_control_plane_version: str,
     permit_historical_retirement_predecessor: bool = False,
+    permit_exact_reviewed_storage_preflight_predecessor: bool = False,
+    permit_exact_authorized_clean_candidate_freeze_replacement: bool = False,
+    expected_active_policy_sha256: str | None = None,
+    expected_active_promotion_sha256: str | None = None,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
     authorized_account: str = AUTHORIZED_ACCOUNT,
     ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
+    predecessor_policy_bytes: bytes | None = None,
+    predecessor_promotion_bytes: bytes | None = None,
+    allow_active_promotion_transaction: bool = False,
 ) -> tuple[dict[str, object], dict[str, str]] | None:
-    """Revalidate an active predecessor, with one narrow retirement-only legacy mode."""
+    """Revalidate an active predecessor, with narrow one-use migration modes."""
+    supplied_predecessor_bytes = (
+        predecessor_policy_bytes is not None
+        or predecessor_promotion_bytes is not None
+    )
+    if (
+        supplied_predecessor_bytes
+        and (
+            type(predecessor_policy_bytes) is not bytes
+            or type(predecessor_promotion_bytes) is not bytes
+            or not allow_active_promotion_transaction
+        )
+    ):
+        raise ValueError(
+            "Prepared-transaction predecessor bytes require one complete locked "
+            "recovery snapshot"
+        )
+    if not allow_active_promotion_transaction:
+        require_no_active_promotion_transaction(
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+    transition_modes = [
+        permit_historical_retirement_predecessor,
+        permit_exact_reviewed_storage_preflight_predecessor,
+        permit_exact_authorized_clean_candidate_freeze_replacement,
+    ]
+    if sum(transition_modes) > 1:
+        raise ValueError("Policy predecessor transition modes are exclusive")
+    if permit_exact_authorized_clean_candidate_freeze_replacement:
+        if not _is_lowercase_sha256(
+            expected_active_policy_sha256
+        ) or not _is_lowercase_sha256(expected_active_promotion_sha256):
+            raise ValueError(
+                "Exact authorized clean-candidate freeze replacement requires both "
+                "exact active predecessor hashes"
+            )
+    elif (
+        expected_active_policy_sha256 is not None
+        or expected_active_promotion_sha256 is not None
+    ):
+        raise ValueError(
+            "Exact active predecessor hashes require authorized clean-candidate "
+            "freeze replacement mode"
+        )
     policy_path = canonical_policy_path(authorized_pic_root)
     mirror_policy_path = canonical_policy_path(authorized_project_home_root)
     promotion_path = active_promotion_path(authorized_pic_root)
@@ -5460,35 +5645,53 @@ def require_policy_predecessor_snapshot_for_promotion(
         promotion_path,
         mirror_promotion_path,
     ]
-    anchor_exists = [path.exists() or path.is_symlink() for path in anchor_paths]
-    if not any(anchor_exists):
-        if permit_historical_retirement_predecessor:
-            raise ValueError(
-                "Historical storage-preflight retirement requires an active predecessor"
+    if supplied_predecessor_bytes:
+        assert isinstance(predecessor_policy_bytes, bytes)
+        assert isinstance(predecessor_promotion_bytes, bytes)
+        policy_bytes = predecessor_policy_bytes
+        promotion_bytes = predecessor_promotion_bytes
+    else:
+        anchor_exists = [path.exists() or path.is_symlink() for path in anchor_paths]
+        if not any(anchor_exists):
+            if (
+                permit_historical_retirement_predecessor
+                or permit_exact_reviewed_storage_preflight_predecessor
+                or permit_exact_authorized_clean_candidate_freeze_replacement
+            ):
+                raise ValueError(
+                    "Policy predecessor transition requires an active predecessor"
+                )
+            return None
+        if not all(anchor_exists):
+            raise ValueError("Active-policy predecessor anchors are incomplete")
+        artifacts: dict[Path, bytes] = {}
+        for path, root in [
+            (policy_path, authorized_pic_root),
+            (mirror_policy_path, authorized_project_home_root),
+            (promotion_path, authorized_pic_root),
+            (mirror_promotion_path, authorized_project_home_root),
+        ]:
+            lexical_root = Path(os.path.abspath(root))
+            lexical_root.resolve(strict=True)
+            require_canonical_path_below(path, lexical_root)
+            artifacts[path] = read_stable_regular_file_below(
+                path, lexical_root, require_read_only_mode=True
             )
-        return None
-    if not all(anchor_exists):
-        raise ValueError("Active-policy predecessor anchors are incomplete")
-    artifacts: dict[Path, bytes] = {}
-    for path, root in [
-        (policy_path, authorized_pic_root),
-        (mirror_policy_path, authorized_project_home_root),
-        (promotion_path, authorized_pic_root),
-        (mirror_promotion_path, authorized_project_home_root),
-    ]:
-        lexical_root = Path(os.path.abspath(root))
-        lexical_root.resolve(strict=True)
-        require_canonical_path_below(path, lexical_root)
-        artifacts[path] = read_stable_regular_file_below(
-            path, lexical_root, require_read_only_mode=True
-        )
-    promotion_bytes = artifacts[promotion_path]
-    if promotion_bytes != artifacts[mirror_promotion_path]:
-        raise ValueError("Orion and Project Home predecessor promotion bytes differ")
+        promotion_bytes = artifacts[promotion_path]
+        if promotion_bytes != artifacts[mirror_promotion_path]:
+            raise ValueError("Orion and Project Home predecessor promotion bytes differ")
+        policy_bytes = artifacts[policy_path]
+        if policy_bytes != artifacts[mirror_policy_path]:
+            raise ValueError("Orion and Project Home predecessor policy bytes differ")
     promotion = read_json_bytes(promotion_bytes, label=str(promotion_path))
-    policy_bytes = artifacts[policy_path]
-    if policy_bytes != artifacts[mirror_policy_path]:
-        raise ValueError("Orion and Project Home predecessor policy bytes differ")
+    if permit_exact_authorized_clean_candidate_freeze_replacement and (
+        sha256_bytes(policy_bytes) != expected_active_policy_sha256
+        or sha256_bytes(promotion_bytes) != expected_active_promotion_sha256
+    ):
+        raise ValueError(
+            "Exact authorized clean-candidate freeze replacement active predecessor "
+            "hashes changed"
+        )
     predecessor_version = promotion.get("control_plane_version")
     if not _is_lowercase_sha256(predecessor_version):
         raise ValueError("Active-policy predecessor control-plane version is malformed")
@@ -5519,7 +5722,6 @@ def require_policy_predecessor_snapshot_for_promotion(
     ):
         raise ValueError("Active-policy predecessor Project Home root is not authorized")
     expected = {
-        "schema_version": 1,
         "control_plane_version": predecessor_version,
         "policy_path": str(policy_path),
         "project_home_policy_path": str(
@@ -5564,7 +5766,31 @@ def require_policy_predecessor_snapshot_for_promotion(
                 "pre_policy_promotion_attestation_sha256": digest,
             }
         )
-    if type(promotion.get("schema_version")) is not int or promotion != expected:
+    promotion_schema_version = promotion.get("schema_version")
+    if (
+        type(promotion_schema_version) is int
+        and promotion_schema_version == 2
+        and _is_canonical_uuid(promotion.get("promotion_id"))
+    ):
+        expected.update(
+            {
+                "schema_version": 2,
+                "promotion_id": promotion["promotion_id"],
+            }
+        )
+    elif (
+        type(promotion_schema_version) is int
+        and promotion_schema_version == 1
+        and "promotion_id" not in promotion
+        and (
+            permit_historical_retirement_predecessor
+            or permit_exact_reviewed_storage_preflight_predecessor
+        )
+    ):
+        expected["schema_version"] = 1
+    else:
+        raise ValueError("Active-policy predecessor promotion record is malformed")
+    if promotion != expected:
         raise ValueError("Active-policy predecessor promotion record is malformed")
     storage = policy.get("olcf_side_storage")
     has_evidence = isinstance(storage, dict) and "storage_preflight_evidence" in storage
@@ -5573,6 +5799,177 @@ def require_policy_predecessor_snapshot_for_promotion(
         raise ValueError(
             "Historical storage-preflight retirement flag requires a legacy predecessor"
         )
+    if permit_exact_reviewed_storage_preflight_predecessor:
+        if not has_evidence:
+            raise ValueError(
+                "Exact reviewed storage-preflight predecessor migration requires "
+                "authenticated predecessor evidence"
+            )
+        if (
+            sha256_bytes(policy_bytes)
+            != AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_POLICY_SHA256
+            or sha256_bytes(promotion_bytes)
+            != AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROMOTION_SHA256
+            or predecessor_version
+            != AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_CONTROL_PLANE_VERSION
+        ):
+            raise ValueError(
+                "Exact reviewed storage-preflight predecessor differs from the exact "
+                "reviewed live anchors"
+            )
+        assert isinstance(storage, dict)
+        predecessor_binding = storage["storage_preflight_evidence"]
+        if (
+            not isinstance(predecessor_binding, dict)
+            or predecessor_binding.get("probe_id")
+            != AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROBE_ID
+            or predecessor_binding.get("sha256")
+            != AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_EVIDENCE_SHA256
+        ):
+            raise ValueError(
+                "Exact reviewed storage-preflight predecessor evidence differs from "
+                "the exact reviewed live binding"
+            )
+        if predecessor_version == successor_control_plane_version:
+            raise ValueError(
+                "Exact reviewed storage-preflight predecessor migration requires "
+                "a new control plane"
+            )
+        if successor_policy.get("registered_science_slices") != []:
+            raise ValueError(
+                "Exact reviewed storage-preflight predecessor migration requires one "
+                "empty-allowlist replacement"
+            )
+        successor_storage = successor_policy.get("olcf_side_storage")
+        if not isinstance(successor_storage, dict):
+            raise ValueError(
+                "Exact reviewed storage-preflight successor storage is malformed"
+            )
+        predecessor_comparable = {
+            **policy,
+            "olcf_side_storage": {
+                **storage,
+                "installed_control_plane_version": None,
+                "staged_control_plane_candidate_version": None,
+                "last_preflight_utc": None,
+                "storage_preflight_evidence": None,
+            },
+        }
+        successor_comparable = {
+            **successor_policy,
+            "olcf_side_storage": {
+                **successor_storage,
+                "installed_control_plane_version": None,
+                "staged_control_plane_candidate_version": None,
+                "last_preflight_utc": None,
+                "storage_preflight_evidence": None,
+            },
+        }
+        if not _exact_json_equal(successor_comparable, predecessor_comparable):
+            raise ValueError(
+                "Exact reviewed storage-preflight successor is not the exact "
+                "authorized predecessor transformation"
+            )
+        successor_binding = successor_storage.get("storage_preflight_evidence")
+        if (
+            not isinstance(successor_binding, dict)
+            or successor_binding == predecessor_binding
+            or successor_binding.get("probe_id") == predecessor_binding.get("probe_id")
+            or successor_binding.get("sha256") == predecessor_binding.get("sha256")
+        ):
+            raise ValueError(
+                "Exact reviewed storage-preflight successor requires a different "
+                "authenticated evidence binding"
+            )
+        if utc_datetime(
+            successor_storage.get("last_preflight_utc"),
+            field="successor.olcf_side_storage.last_preflight_utc",
+        ) <= utc_datetime(
+            storage.get("last_preflight_utc"),
+            field="predecessor.olcf_side_storage.last_preflight_utc",
+        ):
+            raise ValueError(
+                "Exact reviewed storage-preflight successor requires a newer "
+                "authenticated storage preflight"
+            )
+        profile = _EXACT_REVIEWED_STORAGE_PREFLIGHT_PREDECESSOR_PROFILE
+    predecessor_freeze = policy.get("science_submission_freeze")
+    successor_freeze = successor_policy.get("science_submission_freeze")
+    predecessor_has_authorized_freeze = (
+        isinstance(predecessor_freeze, dict)
+        and predecessor_freeze.get("status") == AUTHORIZED_CLEAN_CANDIDATE_FREEZE
+    )
+    successor_has_authorized_freeze = (
+        isinstance(successor_freeze, dict)
+        and successor_freeze.get("status") == AUTHORIZED_CLEAN_CANDIDATE_FREEZE
+    )
+    authorized_freeze_changed = (
+        predecessor_has_authorized_freeze
+        and not _exact_json_equal(predecessor_freeze, successor_freeze)
+    )
+    if authorized_freeze_changed and not (
+        permit_exact_authorized_clean_candidate_freeze_replacement
+        or permit_historical_retirement_predecessor
+    ):
+        raise ValueError(
+            "Any transition away from an authorized clean-candidate freeze requires "
+            "an exact active-predecessor transition mode"
+        )
+    if permit_exact_authorized_clean_candidate_freeze_replacement:
+        expected_freeze_keys = {
+            "status",
+            "manifest_path",
+            "manifest_sha256",
+            "build_profile_control_plane_version",
+        }
+        if (
+            predecessor_version != successor_control_plane_version
+            or policy.get("registered_science_slices") != []
+            or successor_policy.get("registered_science_slices") != []
+        ):
+            raise ValueError(
+                "Exact authorized clean-candidate freeze replacement requires the "
+                "same control plane and empty allowlists"
+            )
+        if (
+            not isinstance(predecessor_freeze, dict)
+            or not isinstance(successor_freeze, dict)
+            or set(predecessor_freeze) != expected_freeze_keys
+            or set(successor_freeze) != expected_freeze_keys
+            or predecessor_freeze.get("status")
+            != AUTHORIZED_CLEAN_CANDIDATE_FREEZE
+            or successor_freeze.get("status") != AUTHORIZED_CLEAN_CANDIDATE_FREEZE
+            or successor_freeze.get("build_profile_control_plane_version")
+            != successor_control_plane_version
+        ):
+            raise ValueError(
+                "Exact authorized clean-candidate freeze replacement requires exact "
+                "authorized freeze bindings"
+            )
+        predecessor_comparable = {
+            **policy,
+            "science_submission_freeze": None,
+        }
+        successor_comparable = {
+            **successor_policy,
+            "science_submission_freeze": None,
+        }
+        if not _exact_json_equal(successor_comparable, predecessor_comparable):
+            raise ValueError(
+                "Exact authorized clean-candidate freeze replacement changed "
+                "unrelated policy fields"
+            )
+        if (
+            not authorized_freeze_changed
+            or successor_freeze.get("manifest_path")
+            == predecessor_freeze.get("manifest_path")
+            or successor_freeze.get("manifest_sha256")
+            == predecessor_freeze.get("manifest_sha256")
+        ):
+            raise ValueError(
+                "Exact authorized clean-candidate freeze replacement requires a "
+                "different manifest path and digest"
+            )
     if not has_evidence:
         if not permit_historical_retirement_predecessor:
             raise ValueError(
@@ -5612,6 +6009,11 @@ def require_policy_predecessor_snapshot_for_promotion(
         allow_pending_genesis=True,
         storage_preflight_profile=profile,
     )
+    if not allow_active_promotion_transaction:
+        require_no_active_promotion_transaction(
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
     return policy, {
         "active_policy_sha256": sha256_bytes(policy_bytes),
         "active_promotion_sha256": sha256_bytes(promotion_bytes),
@@ -5626,7 +6028,13 @@ def require_storage_policy_unlock_snapshot(
     authorized_account: str = AUTHORIZED_ACCOUNT,
     ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
     allow_pending_genesis: bool = False,
+    allow_active_promotion_transaction: bool = False,
 ) -> tuple[dict[str, object], dict[str, str]]:
+    if not allow_active_promotion_transaction:
+        require_no_active_promotion_transaction(
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
     policy_path = canonical_policy_path(authorized_pic_root)
     mirror_policy_path = canonical_policy_path(authorized_project_home_root)
     promotion_path = active_promotion_path(authorized_pic_root)
@@ -5660,7 +6068,8 @@ def require_storage_policy_unlock_snapshot(
         raise ValueError("Orion and Project Home active-policy bytes differ")
     policy_sha256 = sha256_bytes(policy_bytes)
     expected = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "promotion_id": promotion.get("promotion_id"),
         "control_plane_version": control_plane_version,
         "policy_path": str(policy_path),
         "project_home_policy_path": str(mirror_policy_path),
@@ -5716,7 +6125,11 @@ def require_storage_policy_unlock_snapshot(
                 ],
             }
         )
-    if type(promotion.get("schema_version")) is not int or promotion != expected:
+    if (
+        type(promotion.get("schema_version")) is not int
+        or not _is_canonical_uuid(promotion.get("promotion_id"))
+        or promotion != expected
+    ):
         raise ValueError("Active-policy promotion record is not anchored to this control plane")
     if sha256_bytes(mirror_policy_bytes) != promotion["policy_sha256"]:
         raise ValueError("Project Home active-policy mirror checksum differs")
@@ -5729,6 +6142,11 @@ def require_storage_policy_unlock_snapshot(
         ledger_mirror_transport=ledger_mirror_transport,
         allow_pending_genesis=allow_pending_genesis,
     )
+    if not allow_active_promotion_transaction:
+        require_no_active_promotion_transaction(
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
     return policy, {
         "active_policy_sha256": policy_sha256,
         "active_promotion_sha256": sha256_bytes(promotion_bytes),

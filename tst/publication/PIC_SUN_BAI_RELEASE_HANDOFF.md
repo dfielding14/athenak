@@ -182,24 +182,66 @@ Completed:
     complete chain. Source-local validation/replay, retained-plan replay,
     installed-control-plane replay, and completed-attempt replay each
     revalidate it.
-    This gate implementation creates no selection: no pressure-selection
-    receipt exists, no case is selected, and no launch or science authority is
-    granted.
+    At that checkpoint, the gate implementation had created no selection: no
+    pressure-selection receipt existed, no case had been selected, and no
+    launch or science authority had been granted.
+37. Commit `164e98ec153d90f26dea42647edeb23fe5ce9a4e` passed clean worker
+    job `4767080` with `199` archive-focused tests and all `1394` publication
+    tests with two intentional skips. Paired `ccc9d8ae` installation and a
+    fresh successor preflight succeeded, but policy promotion failed closed
+    because the new controller correctly rejected the live predecessor's older
+    reviewed preflight source-authentication tuple. The active policy and
+    promotion remain unchanged. The current exact source-local repair adds one
+    exact-hash, exact-source-tuple, new-controller, empty-allowlist,
+    exact-successor migration path that preserves the authorized freeze and
+    empty allowlist while changing only the controller and a strictly newer
+    preflight binding; normal unlock and promotion remain strict. It also gives
+    every promotion a unique identity, publishes the four mirrored active
+    anchors through a durable recoverable rollback transaction, and binds exact
+    clean-candidate replacement to a build receipt from the successor
+    controller. The latest source-local hardening revalidates every authorized
+    successor before commitment, after both markers are committed on the normal
+    path, and during complete-successor recovery, with exact successor-anchor
+    checks bracketing each validation and the same visible transaction
+    generation required for each validation. Preserved authorized freezes are
+    revalidated before any successor anchor is published. The exact
+    active-generation verifier authenticates its executing installed
+    controller and holds the stable serialization anchor across its complete
+    proof. Any committed marker over a
+    partial successor retains all transaction evidence for reviewed manual
+    recovery; only a prepared-only strict partial publication may roll back.
+    Committed completion removes rollback anchors before marker cleanup. It
+    requires the current successor
+    controller and the freeze-bound build-receipt controller to have paired
+    installed authority, allowing the migration to preserve the authenticated
+    historical candidate while still requiring its later replacement to be
+    built by the successor controller. Candidate or active-anchor drift at the
+    complete commit boundary retains locked recovery evidence with readers
+    closed. An unreadable or changed visible post-commit marker retains locked
+    recovery evidence. Readers also fail closed on any reserved rollback-anchor entry;
+    markerless or unexpected anchors are preserved for reviewed manual
+    recovery. Thus absent markers for this complete-predecessor migration leave
+    recovery evidence and readers closed. A prepared or mixed marker over the
+    complete valid successor finalizes forward. A complete successor that fails
+    semantic, controller, or authorized-candidate validation retains locked
+    recovery evidence and is never rolled back.
 
 In progress:
 
 1. Preserve the immutable aggregate bundle, aggregate receipt, aggregate
    analysis, review packet, review-packet receipt, success seals, and exact
    recovered `publication_acceptance/` inode. Do not republish or replace them.
-2. Finish independent review and clean-worker validation of the source-local
-   and installed-control-plane pressure-selection schema-v3 gate, then
-   pair-install and promote it under a launch-prohibited policy.
-3. Keep the human pressure choice and qualifying campaign launch blocked. No
-   selection exists until the complete v3 attestation and receipt chain is
-   created by the human-gate process and accepted by every replay boundary.
+2. Commit, push, independently review, and clean-worker validate the exact
+   predecessor-migration and authorized-freeze compare-and-swap repair now
+   bound by the current readiness successor, then pair-install and promote the
+   exact empty-allowlist successor while preserving the authorized freeze.
+3. The human selected `problem/ps_p0=1.0`. Keep that choice non-authoritative
+   and the qualifying campaign launch blocked until the complete v3
+   attestation and receipt chain is sealed and accepted by every replay
+   boundary.
 
-The authoritative current pressure-gate checkpoint is
-[`q011_section54_post_publication_pressure_gate_status_successor_2026-06-05.json`](readiness/q011_section54_post_publication_pressure_gate_status_successor_2026-06-05.json).
+The current governing pressure-gate readiness checkpoint is
+[`q011_section54_pressure_gate_exact_predecessor_migration_repair_successor_2026-06-05.json`](readiness/q011_section54_pressure_gate_exact_predecessor_migration_repair_successor_2026-06-05.json).
 The advisory option ranking is
 [`q011_section54_pressure_selection_options_2026-06-05.md`](readiness/q011_section54_pressure_selection_options_2026-06-05.md).
 Neither artifact is a human pressure-selection receipt.
@@ -210,13 +252,12 @@ Remaining:
    packet-bound pressure-selection schema-v3 gate repair.
 2. Pair-install and promote the repaired control plane while retaining a
    launch-prohibited policy.
-3. Perform the human pressure-choice review from the immutable four-slice
-   calibration bundle. Do not invent or silently auto-select this science
-   decision.
-4. Accept only a canonical schema-v3 human selection receipt that binds and
-   verifies the exact immutable packet and aggregate receipts, exact historical
-   recomputation, sealed source-bound authoritative reanalysis, and sealed
-   post-gate human reviewer attestation.
+3. Seal the already recorded human choice `problem/ps_p0=1.0`; do not change,
+   infer, or silently auto-select a different science decision.
+4. Accept only a canonical schema-v3 human selection receipt for that recorded
+   choice that binds and verifies the exact immutable packet and aggregate
+   receipts, exact historical recomputation, sealed source-bound authoritative
+   reanalysis, and sealed post-gate human reviewer attestation.
 5. Make `planner_retention` conditionally mandatory at manifest creation and
    reservation before any qualifying-science policy authorization.
 6. Materialize and validate a fresh qualifying campaign plan only after the
@@ -501,8 +542,9 @@ chain:
    materialization/admission reopen the receipt and attestations and rebind the
    reanalysis to the frozen clean-candidate archive and helper-source closure.
 
-No schema-v3 pressure-selection receipt exists, the selected case remains
-unset, and this gate grants no launch authority or science authority.
+No schema-v3 pressure-selection receipt exists. The human choice
+`problem/ps_p0=1.0` is recorded but remains unsealed and non-authoritative, and
+this gate grants no launch authority or science authority.
 
 The two hidden pre-repair staging trees were audited and removed on
 `2026-06-02T22:59:11Z`. One was empty. The other contained only three partial
@@ -1098,15 +1140,19 @@ Then:
 1. Read this file and both governing plans.
 2. Verify the exact aggregate and review-packet receipts and their success
    seals without mutating or republishing them.
-3. Read the post-publication pressure-gate successor, inspect the packet-bound
-   pressure-selection schema-v3 gate, and recompute its scoped absence
-   evidence. Confirm no selection receipt exists or is accepted by the gate.
+3. Read the exact-predecessor migration-repair pressure-gate successor, inspect
+   the packet-bound pressure-selection schema-v3 gate, and recompute its bound
+   evidence. Confirm `problem/ps_p0=1.0` is recorded but unsealed and that no
+   selection receipt exists or is accepted by the gate.
 4. Finish focused and full local validation, independent adversarial review,
-   commit, push, and clean committed worker validation.
+   commit, push, and clean committed worker validation. The repaired preflight
+   capture must bind the executing common module, reject namespace
+   substitution, preserve ambiguous residue, and use only exact commit-forward
+   pair recovery.
 5. Pair-install and promote the repaired control plane under a
    launch-prohibited policy.
-6. Ask the human collaborator to review the immutable four-slice pressure
-   calibration evidence and select the qualifying pressure option.
+6. Seal the already recorded human `problem/ps_p0=1.0` choice through the
+   authoritative reanalysis, reviewer attestation, and schema-v3 receipt chain.
 7. Only then materialize a fresh qualifying campaign plan and proceed through the
    staged release plan.
 
@@ -1117,7 +1163,7 @@ The remaining work should stay staged:
 | Phase | Purpose | Launch condition |
 | --- | --- | --- |
 | Repair and aggregate publication | Close known software blockers and publish the four-slice calibration evidence | No qualifying launch |
-| Human pressure selection | Choose the Section 5.4 pressure parameter from immutable evidence | Complete schema-v3 human-reviewed selection receipt and sealed attestation chain |
+| Human pressure selection | Seal the recorded `problem/ps_p0=1.0` choice from immutable evidence | Complete schema-v3 human-reviewed selection receipt and sealed attestation chain |
 | Qualifying campaign planning | Materialize retained plan, helper closure, manifests, and receipts | Repaired boundary plus adversarial review |
 | Prerequisite slices | Exercise restart, spatial, particle, artifact, and analysis paths cheaply | Each slice reconciled and reviewed |
 | Paper-test reproduction suite | Reproduce the cheaper Sun and Bai validation tests | Quantitative acceptance criteria met |

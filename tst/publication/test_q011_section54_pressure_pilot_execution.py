@@ -10,13 +10,14 @@ import io
 import json
 import os
 from pathlib import Path
+import stat
 import sys
 import tarfile
 import tempfile
 from typing import Iterator
 import unittest
 import uuid
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tst.publication import q011_section54_pressure_pilot_execution as execution
 from tst.publication.frontier_control_plane.operator_attestation import (
@@ -40,8 +41,13 @@ def _put(path: Path, payload: bytes, mode: int) -> Path:
     return path
 
 
-def _storage_preflight_binding(root: Path, completed_utc: str) -> Path:
-    probe_id = "12345678-1234-4234-8234-123456789abc"
+def _storage_preflight_binding(
+    root: Path,
+    completed_utc: str,
+    *,
+    probe_id: str = "12345678-1234-4234-8234-123456789abc",
+    evidence_sha256: str = "a" * 64,
+) -> Path:
     return _put(
         root
         / f"storage-preflight-{completed_utc.replace(':', '')}-{uuid.uuid4()}.json",
@@ -73,7 +79,7 @@ def _storage_preflight_binding(root: Path, completed_utc: str) -> Path:
                             / "storage_preflight_evidence"
                             / f"{probe_id}.json"
                         ),
-                        "sha256": "a" * 64,
+                        "sha256": evidence_sha256,
                     },
                 }
             )
@@ -721,6 +727,129 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         environment_profile=binding["environment_profile"],
                     )
 
+    def test_write_new_file_syncs_final_read_only_metadata_before_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "reviewed-output.json"
+            events: list[tuple[str, int | None]] = []
+            real_fchmod = os.fchmod
+            real_fsync = os.fsync
+
+            def record_fchmod(descriptor: int, mode: int) -> None:
+                events.append(("fchmod", mode))
+                real_fchmod(descriptor, mode)
+
+            def record_fsync(descriptor: int) -> None:
+                status = os.fstat(descriptor)
+                if stat.S_ISREG(status.st_mode):
+                    events.append(("file_fsync", stat.S_IMODE(status.st_mode)))
+                elif stat.S_ISDIR(status.st_mode):
+                    events.append(("parent_fsync", None))
+                real_fsync(descriptor)
+
+            with patch.object(
+                execution.os, "fchmod", side_effect=record_fchmod
+            ), patch.object(execution.os, "fsync", side_effect=record_fsync):
+                execution._write_new_file(output, b"reviewed\n")
+
+            self.assertEqual(
+                [event for event, _ in events],
+                ["file_fsync", "fchmod", "file_fsync", "parent_fsync"],
+            )
+            self.assertEqual(events[1][1], 0o444)
+            self.assertEqual(events[2][1], 0o444)
+            self.assertEqual(output.read_bytes(), b"reviewed\n")
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o444)
+
+    def test_write_new_file_propagates_parent_fsync_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "reviewed-output.json"
+            synced: list[str] = []
+            real_fsync = os.fsync
+
+            def fail_parent_fsync(descriptor: int) -> None:
+                status = os.fstat(descriptor)
+                if stat.S_ISDIR(status.st_mode):
+                    synced.append("parent")
+                    raise OSError("parent fsync failed")
+                synced.append("file")
+                real_fsync(descriptor)
+
+            with patch.object(
+                execution.os, "fsync", side_effect=fail_parent_fsync
+            ), self.assertRaisesRegex(OSError, "parent fsync failed"):
+                execution._write_new_file(output, b"reviewed\n")
+
+            self.assertEqual(synced, ["file", "file", "parent"])
+            self.assertEqual(output.read_bytes(), b"reviewed\n")
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o444)
+
+    def test_write_new_file_rejects_parent_substitution_during_fsync(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "reviewed"
+            held = root / "held-reviewed"
+            parent.mkdir()
+            output = parent / "reviewed-output.json"
+            real_fsync = os.fsync
+            substituted = False
+
+            def substitute_parent(descriptor: int) -> None:
+                nonlocal substituted
+                if stat.S_ISDIR(os.fstat(descriptor).st_mode) and not substituted:
+                    substituted = True
+                    parent.rename(held)
+                    parent.mkdir()
+                real_fsync(descriptor)
+
+            with patch.object(
+                execution.os, "fsync", side_effect=substitute_parent
+            ), self.assertRaisesRegex(execution.ContractError, "output parent changed"):
+                execution._write_new_file(output, b"reviewed\n")
+            self.assertTrue(substituted)
+            self.assertEqual((held / output.name).read_bytes(), b"reviewed\n")
+            self.assertFalse(output.exists())
+
+    def test_build_freeze_worker_binds_exact_active_generation_and_source(self) -> None:
+        worker = (
+            Path(__file__).absolute().parent
+            / "frontier_q011_clean_candidate_build_freeze_job.sh"
+        ).read_text(encoding="utf-8")
+        verification = '"${VERIFY_ACTIVE_GENERATION[@]}" >/dev/null'
+        self.assertEqual(worker.count(verification), 2)
+        self.assertLess(
+            worker.index(verification),
+            worker.index('"${CONTROL_PLANE[@]}" write_orion_build_profile.py'),
+        )
+        self.assertGreater(
+            worker.rindex(verification),
+            worker.index('"${CONTROL_PLANE[@]}" revalidate_clean_candidate.py'),
+        )
+        self.assertIn('[[ "$#" -eq 7 ]]', worker)
+        self.assertIn(
+            '--expected-active-policy-sha256 "$EXPECTED_ACTIVE_POLICY_SHA256"',
+            worker,
+        )
+        self.assertIn(
+            '--expected-active-promotion-sha256 "$EXPECTED_ACTIVE_PROMOTION_SHA256"',
+            worker,
+        )
+        self.assertIn('--expected-git-commit "$EXPECTED_GIT_COMMIT"', worker)
+        self.assertIn(
+            '--expected-receipt-control-plane-version "$CONTROL_PLANE_VERSION"',
+            worker,
+        )
+        for binding in [
+            "source_commit",
+            "control_plane_version",
+            "expected_active_policy_sha256",
+            "expected_active_promotion_sha256",
+            "expected_authorized_freeze_manifest",
+            "expected_authorized_freeze_manifest_sha256",
+            "expected_authorized_freeze_build_controller",
+        ]:
+            self.assertEqual(worker.count(f"printf '{binding}=%s\\n'"), 1)
+        self.assertNotIn("submit_frontier_job.sh", worker)
+
     def test_complete_policy_successors_preserve_baseline_and_replace_only_launch_fields(
         self,
     ) -> None:
@@ -728,7 +857,10 @@ class PressurePilotExecutionTest(unittest.TestCase):
             root = Path(directory)
             baseline_value = {
                 "schema_version": 1,
-                "frontier": {"preserved": "frontier"},
+                "frontier": {
+                    "maximum_node_hours": 10000.0,
+                    "preserved": "frontier",
+                },
                 "science_submission_freeze": {
                     "status": "pending_clean_candidate_freeze"
                 },
@@ -803,6 +935,158 @@ class PressurePilotExecutionTest(unittest.TestCase):
                     baseline_policy=baseline,
                     control_plane_version="a" * 64,
                     storage_preflight_binding=_storage_preflight_binding(root, "2026-06-02T01:02:03Z"),
+                )
+
+    def test_exact_reviewed_preflight_predecessor_successor_is_exact_and_fresh(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            predecessor_binding = json.loads(
+                _storage_preflight_binding(
+                    root,
+                    "2026-06-02T01:02:03Z",
+                    probe_id="11111111-1111-4111-8111-111111111111",
+                    evidence_sha256="1" * 64,
+                ).read_text(encoding="utf-8")
+            )
+            baseline_value = {
+                "schema_version": 1,
+                "frontier": {"preserved": "frontier"},
+                "science_submission_freeze": {
+                    "status": "authorized",
+                    "manifest_path": "/retained/clean_candidate_manifest.json",
+                    "manifest_sha256": "f" * 64,
+                    "build_profile_control_plane_version": "0" * 64,
+                },
+                "registered_science_slices": [],
+                "frontier_admission_smoke": {"status": "closed_after_pass"},
+                "olcf_side_storage": {
+                    "installed_control_plane_version": "0" * 64,
+                    "staged_control_plane_candidate_version": "0" * 64,
+                    "project_home_mirror_root": str(
+                        execution.AUTHORIZED_PROJECT_HOME_ROOT
+                    ),
+                    **predecessor_binding,
+                    "preserved": "storage",
+                },
+                "long_term_storage": {"preserved": "retention"},
+                "reviewer": "preserved reviewer",
+            }
+            baseline = _put(
+                root / "baseline.json",
+                (json.dumps(baseline_value) + "\n").encode("utf-8"),
+                0o444,
+            )
+            successor_binding = _storage_preflight_binding(
+                root,
+                "2026-06-02T01:02:04Z",
+                probe_id="22222222-2222-4222-8222-222222222222",
+                evidence_sha256="2" * 64,
+            )
+            output = root / "exact-successor.json"
+            with patch.object(
+                execution, "_require_reviewed_git_commit", return_value="a" * 40
+            ):
+                successor = (
+                    execution.write_exact_reviewed_preflight_predecessor_policy_successor(
+                        output,
+                        baseline_policy=baseline,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=successor_binding,
+                        expected_git_commit="a" * 40,
+                    )
+                )
+            self.assertEqual(
+                successor["science_submission_freeze"],
+                baseline_value["science_submission_freeze"],
+            )
+            self.assertEqual(successor["registered_science_slices"], [])
+            self.assertEqual(successor["reviewer"], "preserved reviewer")
+            self.assertEqual(
+                successor["olcf_side_storage"]["installed_control_plane_version"],
+                "a" * 64,
+            )
+            self.assertEqual(
+                successor["olcf_side_storage"]["last_preflight_utc"],
+                "2026-06-02T01:02:04Z",
+            )
+            self.assertEqual(output.stat().st_mode & 0o222, 0)
+            with patch.object(
+                execution, "_require_reviewed_git_commit", return_value="a" * 40
+            ), self.assertRaisesRegex(execution.ContractError, "refusing to overwrite"):
+                execution.write_exact_reviewed_preflight_predecessor_policy_successor(
+                    output,
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=successor_binding,
+                    expected_git_commit="a" * 40,
+                )
+            with self.assertRaisesRegex(execution.ContractError, "must be newer"):
+                execution.materialize_exact_reviewed_preflight_predecessor_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(
+                        root,
+                        "2026-06-02T01:02:03Z",
+                        probe_id="33333333-3333-4333-8333-333333333333",
+                        evidence_sha256="3" * 64,
+                    ),
+                )
+            with self.assertRaisesRegex(execution.ContractError, "must be new"):
+                execution.materialize_exact_reviewed_preflight_predecessor_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="0" * 64,
+                    storage_preflight_binding=successor_binding,
+                )
+            with self.assertRaisesRegex(execution.ContractError, "must be different"):
+                execution.materialize_exact_reviewed_preflight_predecessor_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(
+                        root,
+                        "2026-06-02T01:02:04Z",
+                        probe_id="11111111-1111-4111-8111-111111111111",
+                        evidence_sha256="1" * 64,
+                    ),
+                )
+            noncanonical_value = copy.deepcopy(baseline_value)
+            noncanonical_value["olcf_side_storage"]["project_home_mirror_root"] = str(
+                execution.AUTHORIZED_PROJECT_HOME_LEDGER_ROOT
+            )
+            noncanonical = _put(
+                root / "noncanonical-baseline.json",
+                (json.dumps(noncanonical_value) + "\n").encode("utf-8"),
+                0o444,
+            )
+            with self.assertRaisesRegex(
+                execution.ContractError, "changed unrelated policy fields"
+            ):
+                execution.materialize_exact_reviewed_preflight_predecessor_policy_successor(
+                    baseline_policy=noncanonical,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=successor_binding,
+                )
+            real_advance = execution._advance_control_plane_fields
+
+            def advance_with_numeric_type_drift(
+                successor: dict[str, object], **kwargs: object
+            ) -> dict[str, object]:
+                advanced = real_advance(successor, **kwargs)
+                advanced["frontier"]["maximum_node_hours"] = 10000
+                return advanced
+
+            with patch.object(
+                execution,
+                "_advance_control_plane_fields",
+                side_effect=advance_with_numeric_type_drift,
+            ), self.assertRaisesRegex(
+                execution.ContractError, "changed unrelated policy fields"
+            ):
+                execution.materialize_exact_reviewed_preflight_predecessor_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=successor_binding,
                 )
 
     def test_policy_successor_rejects_malformed_or_writable_storage_preflight_binding(
@@ -1002,6 +1286,8 @@ class PressurePilotExecutionTest(unittest.TestCase):
                     execution,
                     "validate_source_tranche",
                     side_effect=AssertionError("candidate-only reopened consumed slices"),
+                ), patch.object(
+                    execution, "_require_reviewed_git_commit", return_value="a" * 40
                 ):
                     successor = execution.write_candidate_only_policy_successor(
                         output,
@@ -1013,6 +1299,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                         executable=binding["executable"],
                         environment_profile=binding["environment_profile"],
+                        expected_git_commit="a" * 40,
                     )
                 with self.assertRaisesRegex(execution.ContractError, "must match"):
                     execution.materialize_candidate_only_policy_successor(
@@ -1024,6 +1311,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                         executable=binding["executable"],
                         environment_profile=binding["environment_profile"],
+                        expected_git_commit="a" * 40,
                     )
                 with patch.object(
                     execution,
@@ -1044,6 +1332,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                         executable=binding["executable"],
                         environment_profile=binding["environment_profile"],
+                        expected_git_commit="a" * 40,
                     )
                 self.assertEqual(successor["registered_science_slices"], [])
                 self.assertEqual(
@@ -1085,6 +1374,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                         executable=detached,
                         environment_profile=binding["environment_profile"],
+                        expected_git_commit="a" * 40,
                     )
                 equal_preflight = (
                     execution.materialize_candidate_only_policy_successor(
@@ -1096,6 +1386,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                         executable=binding["executable"],
                         environment_profile=binding["environment_profile"],
+                        expected_git_commit="a" * 40,
                     )
                 )
                 self.assertEqual(
@@ -1114,9 +1405,12 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                         executable=binding["executable"],
                         environment_profile=binding["environment_profile"],
+                        expected_git_commit="a" * 40,
                     )
 
-    def test_candidate_only_successor_requires_pending_empty_baseline(self) -> None:
+    def test_candidate_only_successor_requires_empty_and_valid_freeze_baseline(
+        self,
+    ) -> None:
         baseline_value = {
             "science_submission_freeze": {"status": "pending_clean_candidate_freeze"},
             "registered_science_slices": [],
@@ -1141,7 +1435,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         (json.dumps(value) + "\n").encode("utf-8"),
                         0o444,
                     )
-                    message = "empty" if name == "nonempty" else "pending"
+                    message = "empty" if name == "nonempty" else "exact authorized"
                     with self.assertRaisesRegex(execution.ContractError, message):
                         execution.materialize_candidate_only_policy_successor(
                             baseline_policy=baseline,
@@ -1150,7 +1444,83 @@ class PressurePilotExecutionTest(unittest.TestCase):
                             clean_candidate_manifest=root / "unused-manifest.json",
                             executable=root / "unused-athena",
                             environment_profile=root / "unused-environment.sh",
+                            expected_git_commit="a" * 40,
                         )
+
+    def test_candidate_only_successor_replaces_exact_authorized_freeze(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self._final_binding(root / "current") as current, self._final_binding(
+                root / "replacement", git_commit="b" * 40
+            ) as replacement:
+                baseline_value = {
+                    "science_submission_freeze": {
+                        "status": "authorized",
+                        "manifest_path": str(current["clean_candidate_manifest"]),
+                        "manifest_sha256": _sha256(
+                            Path(current["clean_candidate_manifest"]).read_bytes()
+                        ),
+                        "build_profile_control_plane_version": "a" * 64,
+                    },
+                    "registered_science_slices": [],
+                    "olcf_side_storage": {
+                        "installed_control_plane_version": "a" * 64,
+                        "staged_control_plane_candidate_version": "a" * 64,
+                        "last_preflight_utc": "2026-06-02T05:08:36Z",
+                    },
+                }
+                baseline = _put(
+                    root / "authorized-baseline.json",
+                    (json.dumps(baseline_value) + "\n").encode("utf-8"),
+                    0o444,
+                )
+                with self.assertRaisesRegex(
+                    execution.ContractError,
+                    "clean-candidate Git commit differs from the expected",
+                ):
+                    execution.materialize_candidate_only_policy_successor(
+                        baseline_policy=baseline,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(
+                            root, "2026-06-02T05:08:37Z"
+                        ),
+                        clean_candidate_manifest=replacement[
+                            "clean_candidate_manifest"
+                        ],
+                        executable=replacement["executable"],
+                        environment_profile=replacement["environment_profile"],
+                        expected_git_commit="a" * 40,
+                    )
+                successor = execution.materialize_candidate_only_policy_successor(
+                    baseline_policy=baseline,
+                    control_plane_version="a" * 64,
+                    storage_preflight_binding=_storage_preflight_binding(
+                        root, "2026-06-02T05:08:37Z"
+                    ),
+                    clean_candidate_manifest=replacement["clean_candidate_manifest"],
+                    executable=replacement["executable"],
+                    environment_profile=replacement["environment_profile"],
+                    expected_git_commit="b" * 40,
+                )
+                self.assertEqual(successor["registered_science_slices"], [])
+                self.assertEqual(
+                    successor["science_submission_freeze"]["manifest_path"],
+                    str(replacement["clean_candidate_manifest"]),
+                )
+                with self.assertRaisesRegex(
+                    execution.ContractError, "must differ from the currently authorized"
+                ):
+                    execution.materialize_candidate_only_policy_successor(
+                        baseline_policy=baseline,
+                        control_plane_version="a" * 64,
+                        storage_preflight_binding=_storage_preflight_binding(
+                            root, "2026-06-02T05:08:37Z"
+                        ),
+                        clean_candidate_manifest=current["clean_candidate_manifest"],
+                        executable=current["executable"],
+                        environment_profile=current["environment_profile"],
+                        expected_git_commit="a" * 40,
+                    )
 
     def test_final_bindings_fail_closed_on_environment_and_executable_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1311,7 +1681,231 @@ class PressurePilotExecutionTest(unittest.TestCase):
                     [*required, "--case-id", "ps_p0_unknown"]
                 )
 
+    def test_reviewed_git_authentication_uses_trusted_git_and_rejects_drift(
+        self,
+    ) -> None:
+        expected = "a" * 40
+        with patch.object(
+            execution.subprocess,
+            "check_output",
+            side_effect=[
+                f"{execution.REPO_ROOT}\n",
+                f"{expected}\n",
+                "",
+                f"{expected}\n",
+            ],
+        ) as checked, patch.object(execution.subprocess, "run") as tracked:
+            self.assertEqual(
+                execution._require_reviewed_git_commit(expected), expected
+            )
+            self.assertTrue(
+                all(
+                    call.args[0][0] == execution._TRUSTED_GIT
+                    and call.kwargs["env"] == execution._trusted_git_environment()
+                    for call in checked.call_args_list
+                )
+            )
+            self.assertEqual(
+                tracked.call_args.kwargs["env"],
+                execution._trusted_git_environment(),
+            )
+        variants = {
+            "head": (
+                [
+                    f"{execution.REPO_ROOT}\n",
+                    f"{'b' * 40}\n",
+                    "",
+                    f"{'b' * 40}\n",
+                ],
+                "HEAD differs",
+            ),
+            "tracked": (
+                [
+                    f"{execution.REPO_ROOT}\n",
+                    f"{expected}\n",
+                    " M tst/publication/q011_section54_pressure_pilot_execution.py\n",
+                    f"{expected}\n",
+                ],
+                "clean tracked HEAD",
+            ),
+        }
+        for name, (outputs, message) in variants.items():
+            with self.subTest(name=name), patch.object(
+                execution.subprocess, "check_output", side_effect=outputs
+            ) as checked, patch.object(execution.subprocess, "run") as tracked:
+                with self.assertRaisesRegex(execution.ContractError, message):
+                    execution._require_reviewed_git_commit(expected)
+                self.assertTrue(
+                    all(
+                        call.args[0][0] == execution._TRUSTED_GIT
+                        for call in checked.call_args_list
+                    )
+                )
+                self.assertEqual(
+                    tracked.call_args.kwargs["env"],
+                    execution._trusted_git_environment(),
+                )
+        with patch.object(
+            execution.subprocess,
+            "check_output",
+            side_effect=AssertionError("malformed commit reached Git"),
+        ), self.assertRaisesRegex(execution.ContractError, "full lowercase"):
+            execution._require_reviewed_git_commit("A" * 40)
+
+    def test_live_policy_writers_recheck_git_before_publication_and_block_drift(
+        self,
+    ) -> None:
+        expected = "a" * 40
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            transitions = (
+                (
+                    "write_exact_reviewed_preflight_predecessor_policy_successor",
+                    "materialize_exact_reviewed_preflight_predecessor_policy_successor",
+                    {
+                        "baseline_policy": root / "baseline.json",
+                        "control_plane_version": "b" * 64,
+                        "storage_preflight_binding": root / "preflight.json",
+                        "expected_git_commit": expected,
+                    },
+                ),
+                (
+                    "write_candidate_only_policy_successor",
+                    "materialize_candidate_only_policy_successor",
+                    {
+                        "baseline_policy": root / "baseline.json",
+                        "control_plane_version": "b" * 64,
+                        "storage_preflight_binding": root / "preflight.json",
+                        "clean_candidate_manifest": root
+                        / "clean_candidate_manifest.json",
+                        "executable": root / "athena",
+                        "environment_profile": root / "environment.sh",
+                        "expected_git_commit": expected,
+                    },
+                ),
+            )
+            for writer_name, materializer_name, arguments in transitions:
+                with self.subTest(writer=writer_name, state="stable"):
+                    events: list[str] = []
+
+                    def authenticate(value: object) -> str:
+                        self.assertEqual(value, expected)
+                        events.append("authenticate")
+                        return expected
+
+                    def materialize(**values: object) -> dict[str, object]:
+                        if writer_name == "write_candidate_only_policy_successor":
+                            self.assertEqual(values["expected_git_commit"], expected)
+                        events.append("materialize")
+                        return {"transition": writer_name}
+
+                    def publish(path: Path, payload: bytes) -> None:
+                        self.assertEqual(path, root / f"{writer_name}.json")
+                        self.assertTrue(payload.endswith(b"\n"))
+                        events.append("publish")
+
+                    with patch.object(
+                        execution,
+                        "_require_reviewed_git_commit",
+                        side_effect=authenticate,
+                    ), patch.object(
+                        execution, materializer_name, side_effect=materialize
+                    ), patch.object(execution, "_write_new_file", side_effect=publish):
+                        getattr(execution, writer_name)(
+                            root / f"{writer_name}.json", **arguments
+                        )
+                    self.assertEqual(
+                        events,
+                        ["authenticate", "materialize", "authenticate", "publish"],
+                    )
+
+                with self.subTest(writer=writer_name, state="drift"):
+                    output = root / f"{writer_name}-drift.json"
+                    materialized = Mock(return_value={"transition": writer_name})
+                    published = Mock()
+                    with patch.object(
+                        execution,
+                        "_require_reviewed_git_commit",
+                        side_effect=[
+                            expected,
+                            execution.ContractError("materializer source drifted"),
+                        ],
+                    ), patch.object(
+                        execution, materializer_name, materialized
+                    ), patch.object(execution, "_write_new_file", published):
+                        with self.assertRaisesRegex(
+                            execution.ContractError, "source drifted"
+                        ):
+                            getattr(execution, writer_name)(output, **arguments)
+                    materialized.assert_called_once()
+                    published.assert_not_called()
+                    self.assertFalse(output.exists())
+
+    def test_live_policy_cli_requires_expected_git_commit(self) -> None:
+        exact = [
+            "exact-reviewed-preflight-predecessor-policy-successor",
+            "--baseline-policy",
+            "/tmp/active-policy.json",
+            "--control-plane-version",
+            "a" * 64,
+            "--storage-preflight-binding",
+            "/tmp/storage-preflight.json",
+            "--output",
+            "/tmp/exact-successor-policy.json",
+        ]
+        candidate = [
+            "candidate-only-policy-successor",
+            "--baseline-policy",
+            "/tmp/retired-policy.json",
+            "--control-plane-version",
+            "a" * 64,
+            "--storage-preflight-binding",
+            "/tmp/storage-preflight.json",
+            "--clean-candidate-manifest",
+            "/tmp/clean_candidate_manifest.json",
+            "--executable",
+            "/tmp/athena",
+            "--environment-profile",
+            "/tmp/frontier_pic_environment.sh",
+            "--output",
+            "/tmp/candidate-only-policy.json",
+        ]
+        with redirect_stderr(io.StringIO()):
+            for arguments in (exact, candidate):
+                with self.subTest(command=arguments[0]), self.assertRaises(SystemExit):
+                    execution.build_parser().parse_args(arguments)
+
     def test_policy_transition_cli_dispatches_reviewed_successor_writers(self) -> None:
+        with patch.object(
+            execution,
+            "write_exact_reviewed_preflight_predecessor_policy_successor",
+            return_value={"transition": "exact-predecessor"},
+        ) as exact_predecessor, patch.object(
+            sys,
+            "argv",
+            [
+                "q011",
+                "exact-reviewed-preflight-predecessor-policy-successor",
+                "--baseline-policy",
+                "/tmp/active-policy.json",
+                "--control-plane-version",
+                "a" * 64,
+                "--storage-preflight-binding",
+                "/tmp/storage-preflight.json",
+                "--expected-git-commit",
+                "b" * 40,
+                "--output",
+                "/tmp/exact-successor-policy.json",
+            ],
+        ), redirect_stdout(io.StringIO()):
+            execution.main()
+        exact_predecessor.assert_called_once_with(
+            Path("/tmp/exact-successor-policy.json"),
+            baseline_policy=Path("/tmp/active-policy.json"),
+            control_plane_version="a" * 64,
+            storage_preflight_binding=Path("/tmp/storage-preflight.json"),
+            expected_git_commit="b" * 40,
+        )
         with patch.object(
             execution,
             "write_retire_consumed_slices_baseline_policy_successor",
@@ -1361,6 +1955,8 @@ class PressurePilotExecutionTest(unittest.TestCase):
                 "/tmp/athena",
                 "--environment-profile",
                 "/tmp/frontier_pic_environment.sh",
+                "--expected-git-commit",
+                "c" * 40,
                 "--output",
                 "/tmp/candidate-only-policy.json",
             ],
@@ -1374,6 +1970,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
             clean_candidate_manifest=Path("/tmp/clean_candidate_manifest.json"),
             executable=Path("/tmp/athena"),
             environment_profile=Path("/tmp/frontier_pic_environment.sh"),
+            expected_git_commit="c" * 40,
         )
 
 

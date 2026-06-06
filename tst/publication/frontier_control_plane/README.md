@@ -29,7 +29,40 @@ No real ledger genesis or reservation is permitted until a reviewed
 `../readiness/storage_policy.json` is atomically promoted to the canonical
 `${PIC_ROOT}/policy/storage_policy.json`, mirrored to Project Home, and bound by
 matching read-only `policy/active_promotion.json` records. The active promotion
-record binds the installed control-plane version and exact policy SHA-256.
+record binds the installed control-plane version, exact policy SHA-256, and one
+unique canonical promotion UUID. Re-promoting byte-identical policy therefore
+produces a different promotion digest, so exact policy/promotion compare-and-
+swap checkpoints cannot be replayed after an A-to-B-to-A sequence. Policy
+publication is one durable mirrored rollback transaction: the promoter creates
+rollback anchors and mirrored prepared `.active_promotion_transaction.json`
+markers under both policy-parent locks, publishes and validates all four active
+anchors, then durably upgrades both markers to committed before cleanup. Each
+marker binds the exact predecessor and successor digest for all four anchors.
+Recovery finalizes any complete valid successor forward after validating all
+four successor digests, the coherent active generation, its paired installed
+controller, and any authorized clean candidate, including when the surviving
+marker state is prepared or mixed prepared/committed. A complete successor that
+fails semantic, controller, or authorized-candidate validation retains locked
+recovery evidence and is never rolled back. Any committed marker over a partial
+successor retains all transaction evidence for reviewed manual recovery. Only
+a prepared-only strict partial reachable publication prefix is eligible for
+rollback. Partial prepared recovery validates the
+exact rollback predecessor and controller before mutation, restores in reverse
+publication order, and revalidates the restored predecessor before deleting
+evidence. Committed completion removes rollback anchors before transaction
+markers, so an anchor-cleanup failure leaves readers closed behind a marker.
+Active readers fail closed while either marker or any entry in the reserved
+rollback-anchor namespace exists. The next locked promoter finalizes a complete
+valid successor or rolls back a strict partial prepared transaction before
+validating a predecessor. Markerless or unexpected rollback-anchor evidence is
+never cleaned automatically and requires reviewed manual recovery. An
+unreadable or changed visible marker after commit publication begins retains
+locked recovery evidence. For a complete-predecessor transaction, absent
+post-commit markers leave rollback-anchor evidence and readers closed. A
+partial prepared first-ever promotion with no predecessor has no rollback
+anchors and requires explicit reviewed manual recovery. Never remove a
+transaction marker or rollback anchor manually.
+
 Genesis and reservation read only that anchored policy and fail closed. The
 exact authorized paths, `AST207` account, `batch` partition, serial-submission
 policy, 10000-node-hour cap, Project Home usage, `filesystem_copy` ledger
@@ -51,21 +84,53 @@ authorizes one exact Orion clean-candidate manifest path and SHA-256 digest.
 ## Install
 
 Install the same frozen control-plane version in Orion and Project Home only
-from a reviewed clean Git commit. The production installer rejects untracked or
-modified control-plane source files:
+from a reviewed clean Git commit that exactly matches the true remote `PIC`
+tip. The source runner and production installer independently require that
+exact commit, and the clean true-remote gate is repeated immediately before
+each install:
 
 ```bash
 export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
 export PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
 export PROJECT_HOME_MIRROR_ROOT=/ccs/proj/ast207/proj-shared/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
 PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+require_exact_reviewed_source() {
+  local remote_pic_tip source_status
+  source_status="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+  )"
+  test -z "$source_status"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+  remote_pic_tip="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+      /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+  )"
+  [[ "$remote_pic_tip" =~ ^[0-9a-f]{40}$ ]]
+  test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
+}
+SOURCE_CONTROL_PLANE=(
+  "$PYTHON" -I -B
+  "${SOURCE_REPO}/tst/publication/frontier_control_plane/run_control_plane.py"
+  --expected-git-commit "$FULL_GIT_COMMIT"
+)
 
-"$PYTHON" -I tst/publication/frontier_control_plane/run_control_plane.py \
+require_exact_reviewed_source
+"${SOURCE_CONTROL_PLANE[@]}" \
   install_control_plane.py \
-  --pic-root /lustre/orion/ast207/proj-shared/dfielding/PIC
-"$PYTHON" -I tst/publication/frontier_control_plane/run_control_plane.py \
+  --pic-root "$PIC_ROOT" \
+  --expected-git-commit "$FULL_GIT_COMMIT"
+require_exact_reviewed_source
+"${SOURCE_CONTROL_PLANE[@]}" \
   install_control_plane.py \
-  --pic-root /autofs/nccs-svm1_proj/ast207/proj-shared/PIC
+  --pic-root "$PROJECT_HOME_POLICY_ROOT" \
+  --expected-git-commit "$FULL_GIT_COMMIT"
 ```
 
 Both commands must print the same digest. Installation retains a pinned
@@ -90,20 +155,59 @@ sealed attestations authenticate that historical `/ccs/proj` spelling.
 Promote the reviewed policy through the installed control plane:
 
 ```bash
-export VERSION=<reviewed-control-plane-digest>
+export VERSION='<reviewed-control-plane-digest>'
 export CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/${VERSION}"
 CONTROL_PLANE=("$PYTHON" -I "${CONTROL_PLANE_DIR}/run_control_plane.py")
 
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy <reviewed-successor-policy.json>
+  --reviewed-policy '<reviewed-successor-policy.json>'
 ```
 
-Promotion validates the reviewed policy, serializes promoters, durably
+Promotion validates the reviewed policy, serializes promoters, creates
+mirrored prepared transaction markers and four predecessor rollback anchors,
 publishes each read-only Orion and Project Home file, and performs a final
-coherent reread of both policy copies and both promotion records. Publication
-cannot be collectively atomic across the two filesystems, so readers fail
-closed while any partial generation is visible. A direct edit to the
-repository policy or either active copy is not an authorization.
+coherent reread of both policy copies and both promotion records. It commits
+only after both transaction markers are durably upgraded to committed.
+Publication cannot be collectively atomic across the two filesystems, so
+readers fail closed while either transaction marker or any reserved rollback-
+anchor entry exists. A surviving marker binds the exact successor digest of all
+four active anchors, the coherent active policy/promotion generation, and
+paired installed controller. Those bindings are revalidated before evidence is
+deleted, including recovery from one surviving prepared, mixed, or committed
+marker. Markerless or unexpected rollback-anchor evidence is preserved for
+reviewed manual recovery. A prepared or mixed marker over the complete valid
+successor is finalized forward. Any committed marker over a partial successor
+retains all transaction evidence for reviewed manual recovery; only a
+prepared-only strict partial reachable publication prefix may roll back. Before
+rollback the next locked promoter validates the exact rollback predecessor
+semantically. It restores in reverse publication order and revalidates the
+canonical predecessor while evidence remains. An unreadable or changed visible
+marker after commit publication begins retains locked recovery evidence. For a
+complete-predecessor transaction, absent post-commit markers leave rollback-
+anchor evidence and readers closed. If the successor contains an authorized
+clean-candidate freeze, promotion fully revalidates that digest-bound bundle
+before any successor anchor is published for an exact migration or freeze
+replacement, before committed-marker publication, after both markers are
+committed on the normal path, and during complete-successor recovery; exact
+successor-anchor checks bracket the post-publication validations. The same visible transaction
+generation must remain visible for each validation. The exact launch-prohibited
+generation verifier authenticates its executing installed controller and holds
+the stable serialization anchor across its active-state, ledger and candidate
+proof. Committed completion removes rollback anchors before marker cleanup. The
+successor controller must be the verified
+current pair, while the candidate receipt must match the freeze's explicit
+`build_profile_control_plane_version`, which may be a paired historical
+controller when an exact migration preserves the existing freeze. Exact freeze
+replacement additionally requires a candidate built by the successor
+controller. Candidate or active-anchor drift at the complete commit boundary
+retains locked recovery evidence with readers closed; only an already-strict-
+partial publication may roll back. Later direct candidate mutation cannot alter
+the authorized digest and remains rejected by downstream candidate validation.
+Normal active promotion records use schema v2 and one
+unique canonical promotion UUID. The one-use exact reviewed predecessor
+migration is the sole path that may consume the exact retained schema-v1 live
+predecessor. A direct edit to the repository policy or either active copy is
+not an authorization.
 Do not promote the retained historical `readiness/storage_policy.json`
 directly. The live historical migration must use the generated one-use
 retirement successor sequence below.
@@ -122,7 +226,7 @@ storage policy, promote that policy, and reconcile the reviewed allocation IDs
 through the paired installed control plane:
 
 ```bash
-export AUTHORIZATION_ID=<reviewed-authorization-id>
+export AUTHORIZATION_ID='<reviewed-authorization-id>'
 
 "${CONTROL_PLANE[@]}" reconcile_manual_frontier_allocations.py \
   --authorization "${PIC_ROOT}/policy/manual_accounting_authorizations/${AUTHORIZATION_ID}.json" \
@@ -177,7 +281,7 @@ only the missing mate.
 Initialize the ledger exactly once through the installed version:
 
 ```bash
-export VERSION=<reviewed-control-plane-digest>
+export VERSION='<reviewed-control-plane-digest>'
 export CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/${VERSION}"
 
 "${CONTROL_PLANE[@]}" initialize_frontier_ledger.py \
@@ -215,7 +319,7 @@ source "$ENV_FILE" || exit $?
 "${CONTROL_PLANE[@]}" write_orion_build_profile.py \
   --source-root /ccs/home/dfielding/athenak-pic \
   --profile-id hip-mpi-release-paper-pic \
-  --expected-git-commit <full-lowercase-git-commit>
+  --expected-git-commit '<full-lowercase-git-commit>'
 ```
 
 The writer measures and requires the exact reviewed module stack before it
@@ -727,7 +831,9 @@ ledger counts without changing the historical incident record.
 
 Live mutation and pressure publication require a successful clean committed
 repair-validation worker first. Submit it only after the reviewed repair is
-committed and pushed:
+committed and pushed. This is a non-science validation worker. Before its
+`sbatch`, inspect all same-user processes and Frontier jobs and confirm that no
+same-user command can launch science or mutate either PIC root concurrently:
 
 ```bash
 (
@@ -743,8 +849,20 @@ SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-fi
 test -z "$SOURCE_STATUS"
 FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+cd "$SOURCE_REPO"
 REPAIR_VALIDATION_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
-  "${SOURCE_REPO}/tst/publication/frontier_q011_section54_repair_validation_job.sh" \
+  "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh" \
   "$FULL_GIT_COMMIT")"
 printf 'repair_validation_job_token=%q\n' "$REPAIR_VALIDATION_JOB_TOKEN"
 REPAIR_VALIDATION_JOB_ID="${REPAIR_VALIDATION_JOB_TOKEN%;frontier}"
@@ -778,16 +896,23 @@ SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-fi
 test -z "$SOURCE_STATUS"
 test "$REPAIR_VALIDATION_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$REPAIR_VALIDATION_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
-REPAIR_VALIDATION_STATE="$(
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+test "$REPAIR_VALIDATION_COMMIT" = "$REMOTE_PIC_TIP"
+REPAIR_VALIDATION_RECORD="$(
   "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
-    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    -j "$REPAIR_VALIDATION_JOB_ID" \
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
     /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
-      $1 == job {count += 1; state = $2}
-      END {if (count != 1) exit 1; print state}
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
     '
 )"
-test "$REPAIR_VALIDATION_STATE" = COMPLETED
-REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test "$REPAIR_VALIDATION_RECORD" = \
+  "${REPAIR_VALIDATION_JOB_ID}|pic-q011-pressure-gate-validate|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-pressure-gate-validate.${REPAIR_VALIDATION_JOB_ID}.log"
 test -r "$REPAIR_VALIDATION_LOG"
 REPAIR_VALIDATION_LOG_COMMIT="$(
   /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
@@ -817,14 +942,37 @@ copy. Its terminal ledger event is retained as immutable chronology. The four
 rebuilt v2 slices completed and are consumed historical evidence. Do not
 relaunch them.
 
-The historical live policy predates authenticated mirrored storage-preflight
-evidence. Capture one authenticated preflight binding from clean tracked
-source, persist the emitted fragment as a read-only review artifact under
-`${PIC_ROOT}/policy`, then install the paired successor controller. Materialize
-the exact consumed-slice retirement successor only after both installs print
-the same digest. The one-use promotion flag accepts only the exact reviewed
-historical live anchors, a newer controller, an empty registered-slice
-allowlist and a pending clean-candidate freeze:
+The current live policy contains authenticated mirrored storage-preflight
+evidence produced by an older reviewed capture runner. Capture one successor
+preflight binding from clean tracked source, persist the emitted fragment as a
+read-only review artifact under `${PIC_ROOT}/policy`, then install the paired
+successor controller. Materialize the exact predecessor-migration successor
+only after both installs print the same digest. The one-use migration
+flag accepts only the exact reviewed live policy, promotion, controller,
+preflight binding, and evidence source-authentication tuple. The successor must
+preserve every policy field except the newer controller version and a
+different, strictly newer strict-current preflight binding; this preserves the
+authorized clean-candidate freeze and empty registered-slice allowlist. This
+sequence authorizes no science. The only permitted `sbatch` below is the exact
+non-science build/freeze worker. Never invoke `pilot-policy-successor`,
+`policy-slices`, `pre-submit-config`, `submit_frontier_job.sh`,
+`launch_with_frontier_profile.sh`, or the historical launch block while
+executing this sequence. Every reviewed `ps` and `squeue` gate must confirm
+that no same-user process or job can launch science or mutate either PIC root.
+The new strict-current preflight artifact is schema v2 and binds the executing
+common module; the one-use exact predecessor path alone accepts the bound
+historical schema-v1 artifact.
+Every source-only control-plane invocation below binds the same
+`FULL_GIT_COMMIT` independently at both the source runner and source-only
+entrypoint. Each live Q011 policy materialization repeats the clean true-remote
+gate, creates a fresh detached worktree snapshot at that exact commit, and
+passes the materializer's own required commit binding. The final read-only
+publication verification instead executes from a fresh `git archive` snapshot
+of that reviewed commit, never from mutable checkout files.
+The new active launch-prohibited generation verifier accepts schema v2 only;
+do not invoke it against the exact schema-v1 predecessor. Verify that
+predecessor only through its exact mirrored anchors, paired historical
+controller, and preserved candidate as shown below:
 
 ```bash
 (
@@ -839,110 +987,1310 @@ GIT=(
   /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
   /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
 )
-SOURCE_CONTROL_PLANE=(
-  "$PYTHON" -I -B
-  "${SOURCE_REPO}/tst/publication/frontier_control_plane/run_control_plane.py"
+OLD_ACTIVE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
+OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
+OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+PRESERVED_CLEAN_CANDIDATE_MANIFEST="${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
+PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256=dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f
+PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION="$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+OLD_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
+OLD_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
+OLD_CONTROL_PLANE=("$PYTHON" -I -B "${OLD_ORION_CONTROL_PLANE}/run_control_plane.py")
+require_no_policy_recovery_entries() {
+  local policy_parent recovery_entry
+  for policy_parent in "${PIC_ROOT}/policy" "${PROJECT_HOME_POLICY_ROOT}/policy"; do
+    test -d "$policy_parent"
+    test ! -L "$policy_parent"
+    recovery_entry="$(
+      /usr/bin/find "$policy_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.active_promotion_transaction.json' \
+        -o -name '.storage_policy.json.transaction-rollback-*' \
+        -o -name '.active_promotion.json.transaction-rollback-*' \
+        -o -name '.storage_policy.json.tmp-*' \
+        -o -name '.active_promotion.json.tmp-*' \
+        -o -name '.storage_policy.json.rollback-*' \
+        -o -name '.active_promotion.json.rollback-*' \) \
+        -print -quit
+    )"
+    test -z "$recovery_entry"
+  done
+}
+require_no_staging_entries() {
+  local staging_parent staging_entry
+  for staging_parent in \
+    "${PIC_ROOT}/policy/storage_preflight_bindings" \
+    "${PIC_ROOT}/policy/storage_preflight_evidence" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+    "${PIC_ROOT}/control_plane" \
+    "${PROJECT_HOME_POLICY_ROOT}/control_plane" \
+    "${PIC_ROOT}/clean_candidates"; do
+    test -d "$staging_parent"
+    test ! -L "$staging_parent"
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.staging.*' -o -name '.tmp-*' -o -name '*.recovery-staging' \) \
+        -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  for staging_parent in \
+    "${PIC_ROOT}/policy/storage_preflight_evidence" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence"; do
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        \( ! -type f -o ! -name '*.json' -o -perm /222 -o ! -links 1 \) \
+        -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  for staging_parent in "$PIC_ROOT" "$PROJECT_HOME_POLICY_ROOT"; do
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        -name '.pic-storage-preflight-*' -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  local orion_evidence project_home_evidence evidence_name
+  orion_evidence="$(
+    /usr/bin/find "${PIC_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  project_home_evidence="$(
+    /usr/bin/find "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  test -n "$orion_evidence"
+  test "$orion_evidence" = "$project_home_evidence"
+  while IFS= read -r evidence_name; do
+    /usr/bin/cmp -s \
+      "${PIC_ROOT}/policy/storage_preflight_evidence/${evidence_name}" \
+      "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence/${evidence_name}"
+  done <<< "$orion_evidence"
+}
+require_exact_reviewed_source() {
+  local remote_pic_tip source_status
+  source_status="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+  )"
+  test -z "$source_status"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+  remote_pic_tip="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+      /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+  )"
+  [[ "$remote_pic_tip" =~ ^[0-9a-f]{40}$ ]]
+  test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
+}
+run_reviewed_q011_materializer() {
+  local snapshot snapshot_root status
+  require_exact_reviewed_source
+  snapshot_root="$(/usr/bin/mktemp -d /tmp/athenak-pic-q011-reviewed.XXXXXX)"
+  snapshot="${snapshot_root}/source"
+  status=0
+  "${GIT[@]}" -C "$SOURCE_REPO" worktree add --detach "$snapshot" \
+    "$FULL_GIT_COMMIT" || status=$?
+  if test "$status" -eq 0; then
+    if test -f "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py" &&
+      test ! -L "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py"; then
+      "$PYTHON" -I -B \
+        "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py" \
+        "$@" || status=$?
+    else
+      status=1
+    fi
+  fi
+  if test -e "$snapshot"; then
+    "${GIT[@]}" -C "$SOURCE_REPO" worktree remove --force "$snapshot" || status=1
+  fi
+  /usr/bin/rm -rf -- "$snapshot_root" || status=1
+  return "$status"
+}
+verify_exact_old_launch_prohibited_generation() {
+  local remote_pic_tip
+  remote_pic_tip="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+      /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+  )"
+  test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
+  test -d "$OLD_ORION_CONTROL_PLANE"
+  test -d "$OLD_PROJECT_HOME_CONTROL_PLANE"
+  /usr/bin/cmp -s \
+    "${OLD_ORION_CONTROL_PLANE}/inventory.json" \
+    "${OLD_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+  test "$(
+    "${OLD_CONTROL_PLANE[@]}" \
+      validate_and_reserve_frontier_job.py verify-control-plane
+  )" = "$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+  /usr/bin/cmp -s \
+    "${PIC_ROOT}/policy/storage_policy.json" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
+  /usr/bin/cmp -s \
+    "${PIC_ROOT}/policy/active_promotion.json" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
+  test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+    /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+      /usr/bin/awk '{print $1}'
+  )"
+  test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+    /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+      /usr/bin/awk '{print $1}'
+  )"
+  "$PYTHON" -I -B - \
+    "$OLD_ORION_CONTROL_PLANE" \
+    "$OLD_PROJECT_HOME_CONTROL_PLANE" \
+    "$PIC_ROOT" \
+    "$PROJECT_HOME_POLICY_ROOT" \
+    "$OLD_ACTIVE_CONTROL_PLANE_VERSION" \
+    "$OLD_ACTIVE_POLICY_SHA256" \
+    "$OLD_ACTIVE_PROMOTION_SHA256" \
+    "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+    "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+    "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION" <<'PY'
+import sys
+from pathlib import Path
+
+old_orion = Path(sys.argv[1])
+old_project_home = Path(sys.argv[2])
+pic_root = Path(sys.argv[3])
+project_home_root = Path(sys.argv[4])
+version, policy_sha256, promotion_sha256 = sys.argv[5:8]
+preserved_manifest, preserved_manifest_sha256, preserved_build_controller = sys.argv[8:11]
+sys.path.insert(0, str(old_orion))
+
+from control_plane_common import require_storage_policy_unlock_snapshot
+from control_plane_common import verify_installed_control_plane
+from control_plane_common import project_home_ledger_root
+from ledger import require_no_incomplete_manual_accounting_marker
+from promote_active_policy import _require_no_outstanding_submissions
+
+orion_inventory = verify_installed_control_plane(
+    old_orion,
+    authorized_pic_root=pic_root,
 )
+project_home_inventory = verify_installed_control_plane(
+    old_project_home,
+    authorized_pic_root=project_home_root,
+)
+assert orion_inventory == project_home_inventory
+assert orion_inventory["version"] == version
+
+policy, snapshot = require_storage_policy_unlock_snapshot(
+    control_plane_version=version,
+    authorized_pic_root=pic_root,
+    authorized_project_home_root=project_home_root,
+    allow_pending_genesis=True,
+)
+assert snapshot == {
+    "active_policy_sha256": policy_sha256,
+    "active_promotion_sha256": promotion_sha256,
+}
+assert policy["registered_science_slices"] == []
+assert policy["science_submission_freeze"] == {
+    "build_profile_control_plane_version": preserved_build_controller,
+    "manifest_path": preserved_manifest,
+    "manifest_sha256": preserved_manifest_sha256,
+    "status": "authorized",
+}
+require_no_incomplete_manual_accounting_marker(
+    pic_root / "ledger" / "node_hours.jsonl",
+    project_home_ledger_root(project_home_root) / "ledger" / "node_hours.jsonl",
+)
+_require_no_outstanding_submissions(policy, pic_root, project_home_root)
+PY
+  "${OLD_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+    --manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+    --expected-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
+}
 SOURCE_STATUS="$(
   "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
 )"
 test -z "$SOURCE_STATUS"
 FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+SOURCE_CONTROL_PLANE=(
+  "$PYTHON" -I -B
+  "${SOURCE_REPO}/tst/publication/frontier_control_plane/run_control_plane.py"
+  --expected-git-commit "$FULL_GIT_COMMIT"
+)
 REPAIR_VALIDATION_COMMIT='<repair_validation_commit from the completed checkpoint>'
 REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
 [[ "$REPAIR_VALIDATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
 test "$REPAIR_VALIDATION_COMMIT" = "$FULL_GIT_COMMIT"
-REPAIR_VALIDATION_STATE="$(
+REPAIR_VALIDATION_RECORD="$(
   "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
-    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    -j "$REPAIR_VALIDATION_JOB_ID" \
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
     /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
-      $1 == job {count += 1; state = $2}
-      END {if (count != 1) exit 1; print state}
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
     '
 )"
-test "$REPAIR_VALIDATION_STATE" = COMPLETED
-REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test "$REPAIR_VALIDATION_RECORD" = \
+  "${REPAIR_VALIDATION_JOB_ID}|pic-q011-pressure-gate-validate|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-pressure-gate-validate.${REPAIR_VALIDATION_JOB_ID}.log"
 test -r "$REPAIR_VALIDATION_LOG"
 REPAIR_VALIDATION_LOG_COMMIT="$(
   /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
 )"
 test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
 test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+require_no_policy_recovery_entries
+require_no_staging_entries
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+verify_exact_old_launch_prohibited_generation
 STORAGE_PREFLIGHT_BINDING_DIR="${PIC_ROOT}/policy/storage_preflight_bindings"
-/usr/bin/mkdir -p "$STORAGE_PREFLIGHT_BINDING_DIR"
-/usr/bin/chmod 0700 "$STORAGE_PREFLIGHT_BINDING_DIR"
-STORAGE_PREFLIGHT_STAGING="$(
-  /usr/bin/mktemp -p "$STORAGE_PREFLIGHT_BINDING_DIR" .staging.XXXXXX
+test -d "$STORAGE_PREFLIGHT_BINDING_DIR"
+test ! -L "$STORAGE_PREFLIGHT_BINDING_DIR"
+test "$(
+  /usr/bin/stat -Lc '%F|%a|%u' "$STORAGE_PREFLIGHT_BINDING_DIR"
+)" = "directory|2700|$(/usr/bin/id -u)"
+STORAGE_PREFLIGHT_BINDING_DIR_ID="$(
+  /usr/bin/stat -Lc '%d:%i' "$STORAGE_PREFLIGHT_BINDING_DIR"
 )"
-trap '/usr/bin/rm -f "$STORAGE_PREFLIGHT_STAGING"' EXIT
-"${SOURCE_CONTROL_PLANE[@]}" capture_storage_preflight_evidence.py \
-  > "$STORAGE_PREFLIGHT_STAGING"
+require_exact_reviewed_source
+STORAGE_PREFLIGHT_FRAGMENT="$(
+  "${SOURCE_CONTROL_PLANE[@]}" capture_storage_preflight_evidence.py \
+    --expected-git-commit "$FULL_GIT_COMMIT"
+)"
+test "$(
+  /usr/bin/stat -Lc '%d:%i' "$STORAGE_PREFLIGHT_BINDING_DIR"
+)" = "$STORAGE_PREFLIGHT_BINDING_DIR_ID"
 PROBE_ID="$(
-  "$PYTHON" -I -B -c \
-    'import json, sys; print(json.load(open(sys.argv[1]))["storage_preflight_evidence"]["probe_id"])' \
-    "$STORAGE_PREFLIGHT_STAGING"
+  printf '%s\n' "$STORAGE_PREFLIGHT_FRAGMENT" |
+    "$PYTHON" -I -B -c \
+      'import json, sys; print(json.load(sys.stdin)["storage_preflight_evidence"]["probe_id"])'
 )"
 [[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
 STORAGE_PREFLIGHT_BINDING="${STORAGE_PREFLIGHT_BINDING_DIR}/${PROBE_ID}.json"
+test ! -e "$STORAGE_PREFLIGHT_BINDING"
+STORAGE_PREFLIGHT_STAGING="$(
+  /usr/bin/mktemp -p "$STORAGE_PREFLIGHT_BINDING_DIR" .staging.XXXXXX
+)"
+printf '%s\n' "$STORAGE_PREFLIGHT_FRAGMENT" > "$STORAGE_PREFLIGHT_STAGING"
 /usr/bin/chmod 0400 "$STORAGE_PREFLIGHT_STAGING"
 /usr/bin/ln -T -- "$STORAGE_PREFLIGHT_STAGING" "$STORAGE_PREFLIGHT_BINDING"
 /usr/bin/rm "$STORAGE_PREFLIGHT_STAGING"
+test "$(
+  /usr/bin/stat -Lc '%d:%i' "$STORAGE_PREFLIGHT_BINDING_DIR"
+)" = "$STORAGE_PREFLIGHT_BINDING_DIR_ID"
 "$PYTHON" -I -B -c \
   'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd); fd = os.open(os.path.dirname(sys.argv[1]), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
   "$STORAGE_PREFLIGHT_BINDING"
 
+require_no_policy_recovery_entries
+require_no_staging_entries
+verify_exact_old_launch_prohibited_generation
+require_exact_reviewed_source
 ORION_CONTROL_PLANE="$(
   "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
-    --pic-root "$PIC_ROOT"
+    --pic-root "$PIC_ROOT" \
+    --expected-git-commit "$FULL_GIT_COMMIT"
 )"
+printf 'one_sided_orion_control_plane=%s\n' "$ORION_CONTROL_PLANE"
+require_no_policy_recovery_entries
+require_no_staging_entries
+verify_exact_old_launch_prohibited_generation
+require_exact_reviewed_source
 PROJECT_HOME_CONTROL_PLANE="$(
   "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
-    --pic-root "$PROJECT_HOME_POLICY_ROOT"
+    --pic-root "$PROJECT_HOME_POLICY_ROOT" \
+    --expected-git-commit "$FULL_GIT_COMMIT"
 )"
+printf 'one_sided_project_home_control_plane=%s\n' "$PROJECT_HOME_CONTROL_PLANE"
 VERSION="${ORION_CONTROL_PLANE##*/}"
 [[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
 test "$ORION_CONTROL_PLANE" = "${PIC_ROOT}/control_plane/${VERSION}"
 test "$PROJECT_HOME_CONTROL_PLANE" = \
   "${PROJECT_HOME_POLICY_ROOT}/control_plane/${VERSION}"
 test "${PROJECT_HOME_CONTROL_PLANE##*/}" = "$VERSION"
+/usr/bin/cmp -s \
+  "${ORION_CONTROL_PLANE}/inventory.json" \
+  "${PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+require_no_staging_entries
 CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
 POLICY_SUFFIX="${VERSION:0:8}_${PROBE_ID}"
-RETIREMENT_POLICY="${PIC_ROOT}/policy/reviewed_launch_prohibited_strict_storage_successor_${POLICY_SUFFIX}.json"
+MIGRATION_POLICY="${PIC_ROOT}/policy/reviewed_exact_preflight_predecessor_successor_${POLICY_SUFFIX}.json"
 CANDIDATE_ONLY_POLICY="${PIC_ROOT}/policy/reviewed_candidate_only_successor_${POLICY_SUFFIX}.json"
-test ! -e "$RETIREMENT_POLICY"
+test ! -e "$MIGRATION_POLICY"
 test ! -e "$CANDIDATE_ONLY_POLICY"
+require_no_policy_recovery_entries
+require_no_staging_entries
+verify_exact_old_launch_prohibited_generation
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR_BEFORE_MIGRATION='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR_BEFORE_MIGRATION" = yes
 
-"$PYTHON" -I -B "${SOURCE_REPO}/tst/publication/q011_section54_pressure_pilot_execution.py" \
-  retire-consumed-slices-baseline-policy-successor \
+run_reviewed_q011_materializer \
+  exact-reviewed-preflight-predecessor-policy-successor \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
   --baseline-policy "${PIC_ROOT}/policy/storage_policy.json" \
   --control-plane-version "$VERSION" \
   --storage-preflight-binding "$STORAGE_PREFLIGHT_BINDING" \
-  --output "$RETIREMENT_POLICY"
+  --output "$MIGRATION_POLICY"
 
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy "$RETIREMENT_POLICY" \
-  --retire-historical-storage-preflight-predecessor
+  --reviewed-policy "$MIGRATION_POLICY" \
+  --migrate-exact-reviewed-storage-preflight-predecessor
 
+EXPECTED_ACTIVE_POLICY_SHA256="$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+EXPECTED_ACTIVE_PROMOTION_SHA256="$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+[[ "$EXPECTED_ACTIVE_POLICY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+[[ "$EXPECTED_ACTIVE_PROMOTION_SHA256" =~ ^[0-9a-f]{64}$ ]]
+require_no_policy_recovery_entries
+require_no_staging_entries
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --verify-active-launch-prohibited-generation \
+  --expected-control-plane-version "$VERSION" \
+  --expected-active-policy-sha256 "$EXPECTED_ACTIVE_POLICY_SHA256" \
+  --expected-active-promotion-sha256 "$EXPECTED_ACTIVE_PROMOTION_SHA256" \
+  --expected-authorized-freeze-manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  --expected-authorized-freeze-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  --expected-authorized-freeze-build-controller \
+    "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION"
+printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
+printf 'probe_id=%s\n' "$PROBE_ID"
+printf 'control_plane_version=%s\n' "$VERSION"
+printf 'expected_active_policy_sha256=%s\n' "$EXPECTED_ACTIVE_POLICY_SHA256"
+printf 'expected_active_promotion_sha256=%s\n' "$EXPECTED_ACTIVE_PROMOTION_SHA256"
+printf 'preserved_clean_candidate_manifest=%s\n' "$PRESERVED_CLEAN_CANDIDATE_MANIFEST"
+printf 'preserved_clean_candidate_manifest_sha256=%s\n' "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
+printf 'preserved_clean_candidate_build_profile_control_plane_version=%s\n' \
+  "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION"
+
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR_BEFORE_BUILD_FREEZE='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR_BEFORE_BUILD_FREEZE" = yes
+cd "$SOURCE_REPO"
 BUILD_FREEZE_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh" \
-  "$FULL_GIT_COMMIT" "$VERSION")"
+  "$FULL_GIT_COMMIT" "$VERSION" \
+  "$EXPECTED_ACTIVE_POLICY_SHA256" "$EXPECTED_ACTIVE_PROMOTION_SHA256" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION")"
 printf 'build_freeze_job_token=%q\n' "$BUILD_FREEZE_JOB_TOKEN"
 BUILD_FREEZE_JOB_ID="${BUILD_FREEZE_JOB_TOKEN%;frontier}"
 [[ "$BUILD_FREEZE_JOB_ID" =~ ^[0-9]+$ ]]
 test "$BUILD_FREEZE_JOB_TOKEN" = "$BUILD_FREEZE_JOB_ID" ||
   test "$BUILD_FREEZE_JOB_TOKEN" = "${BUILD_FREEZE_JOB_ID};frontier"
+printf 'build_freeze_job_id=%s\n' "$BUILD_FREEZE_JOB_ID"
+)
+```
+
+If authenticated preflight capture stops after publishing only one evidence
+mirror, or after publishing the complete pair but before its Orion binding,
+preserve every evidence and staging artifact. Do not recapture and do not
+manually remove anything. First identify one exact reviewed `PROBE_ID`, its
+SHA-256, and the surviving role through read-only inspection. Then fill those
+bindings into this standalone commit-forward recovery block. The authenticated
+audit rejects ambiguous residue, malformed evidence, divergent mirrors and any
+other one-sided pair before recovery mutates only the missing evidence mirror
+and publishes the derived Orion binding:
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT='<exact committed source identity used for interrupted capture>'
+PROBE_ID='<exact reviewed interrupted-capture probe UUID>'
+EXPECTED_EVIDENCE_SHA256='<sha256 of the exact surviving or complete evidence bytes>'
+EXPECTED_EXISTING_ROLE='<orion_simulation_root or project_home_mirror_root>'
+OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
+OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+[[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+[[ "$EXPECTED_EVIDENCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+case "$EXPECTED_EXISTING_ROLE" in
+  orion_simulation_root|project_home_mirror_root) ;;
+  *) exit 1 ;;
+esac
+require_exact_reviewed_source() {
+  local remote_pic_tip source_status
+  source_status="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+  )"
+  test -z "$source_status"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+  remote_pic_tip="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+      /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+  )"
+  [[ "$remote_pic_tip" =~ ^[0-9a-f]{40}$ ]]
+  test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
+}
+SOURCE_CONTROL_PLANE=(
+  "$PYTHON" -I -B
+  "${SOURCE_REPO}/tst/publication/frontier_control_plane/run_control_plane.py"
+  --expected-git-commit "$FULL_GIT_COMMIT"
+)
+require_exact_reviewed_source
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/storage_policy.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/active_promotion.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
+test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+AUDIT="$(
+  "${SOURCE_CONTROL_PLANE[@]}" capture_storage_preflight_evidence.py \
+    --expected-git-commit "$FULL_GIT_COMMIT" \
+    --audit-exact-pair \
+    --probe-id "$PROBE_ID" \
+    --expected-evidence-sha256 "$EXPECTED_EVIDENCE_SHA256"
+)"
+AUDIT_STATE="$(
+  printf '%s\n' "$AUDIT" |
+    "$PYTHON" -I -B -c 'import json, sys; print(json.load(sys.stdin)["state"])'
+)"
+case "$AUDIT_STATE:$EXPECTED_EXISTING_ROLE" in
+  valid_identical_pair:orion_simulation_root|\
+  valid_identical_pair:project_home_mirror_root|\
+  valid_orion_only:orion_simulation_root|\
+  valid_project_home_only:project_home_mirror_root) ;;
+  *) exit 1 ;;
+esac
+require_exact_reviewed_source
+STORAGE_PREFLIGHT_FRAGMENT="$(
+  "${SOURCE_CONTROL_PLANE[@]}" capture_storage_preflight_evidence.py \
+    --expected-git-commit "$FULL_GIT_COMMIT" \
+    --recover-exact-pair \
+    --probe-id "$PROBE_ID" \
+    --expected-evidence-sha256 "$EXPECTED_EVIDENCE_SHA256" \
+    --expected-existing-role "$EXPECTED_EXISTING_ROLE"
+)"
+test "$(
+  printf '%s\n' "$STORAGE_PREFLIGHT_FRAGMENT" |
+    "$PYTHON" -I -B -c \
+      'import json, sys; value = json.load(sys.stdin)["storage_preflight_evidence"]; print(value["probe_id"] + "|" + value["sha256"])'
+)" = "${PROBE_ID}|${EXPECTED_EVIDENCE_SHA256}"
+test "$(
+  "${SOURCE_CONTROL_PLANE[@]}" capture_storage_preflight_evidence.py \
+    --expected-git-commit "$FULL_GIT_COMMIT" \
+    --audit-exact-pair \
+    --probe-id "$PROBE_ID" \
+    --expected-evidence-sha256 "$EXPECTED_EVIDENCE_SHA256" |
+    "$PYTHON" -I -B -c 'import json, sys; print(json.load(sys.stdin)["state"])'
+)" = valid_identical_pair
+STORAGE_PREFLIGHT_BINDING_DIR="${PIC_ROOT}/policy/storage_preflight_bindings"
+test "$(
+  /usr/bin/stat -Lc '%F|%a|%u' "$STORAGE_PREFLIGHT_BINDING_DIR"
+)" = "directory|2700|$(/usr/bin/id -u)"
+STORAGE_PREFLIGHT_BINDING_DIR_ID="$(
+  /usr/bin/stat -Lc '%d:%i' "$STORAGE_PREFLIGHT_BINDING_DIR"
+)"
+STORAGE_PREFLIGHT_BINDING="${STORAGE_PREFLIGHT_BINDING_DIR}/${PROBE_ID}.json"
+test ! -e "$STORAGE_PREFLIGHT_BINDING"
+STORAGE_PREFLIGHT_STAGING="$(
+  /usr/bin/mktemp -p "$STORAGE_PREFLIGHT_BINDING_DIR" .staging.XXXXXX
+)"
+printf '%s\n' "$STORAGE_PREFLIGHT_FRAGMENT" > "$STORAGE_PREFLIGHT_STAGING"
+/usr/bin/chmod 0400 "$STORAGE_PREFLIGHT_STAGING"
+/usr/bin/ln -T -- "$STORAGE_PREFLIGHT_STAGING" "$STORAGE_PREFLIGHT_BINDING"
+/usr/bin/rm "$STORAGE_PREFLIGHT_STAGING"
+test "$(
+  /usr/bin/stat -Lc '%d:%i' "$STORAGE_PREFLIGHT_BINDING_DIR"
+)" = "$STORAGE_PREFLIGHT_BINDING_DIR_ID"
+"$PYTHON" -I -B -c \
+  'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd); fd = os.open(os.path.dirname(sys.argv[1]), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
+  "$STORAGE_PREFLIGHT_BINDING"
+printf 'recovered_probe_id=%s\n' "$PROBE_ID"
+printf 'recovered_storage_preflight_binding=%s\n' "$STORAGE_PREFLIGHT_BINDING"
+)
+```
+
+If the session stops after exactly one `one_sided_*_control_plane` checkpoint,
+do not rerun the primary block and do not remove any `.tmp-*` entry. A
+`.tmp-*` entry requires reviewed manual recovery. Otherwise, fill the exact
+printed installed path, its opposite missing root, the retained preflight
+binding, and the committed source identity into this one-sided recovery block.
+It re-verifies the unchanged exact old launch-prohibited generation and mutates
+only the missing half of the pair:
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT='<exact committed source identity used for preflight and first install>'
+PROBE_ID='<probe_id from the retained published preflight binding>'
+VERSION='<digest basename from the one_sided_*_control_plane checkpoint>'
+EXISTING_CONTROL_PLANE='<exact one_sided_*_control_plane checkpoint path>'
+MISSING_CONTROL_PLANE_ROOT='<the exact opposite root>'
+OLD_ACTIVE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
+OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
+OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+PRESERVED_CLEAN_CANDIDATE_MANIFEST="${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
+PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256=dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f
+OLD_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
+OLD_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
+OLD_CONTROL_PLANE=("$PYTHON" -I -B "${OLD_ORION_CONTROL_PLANE}/run_control_plane.py")
+[[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+[[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
+test -r "${PIC_ROOT}/policy/storage_preflight_bindings/${PROBE_ID}.json"
+if test "$EXISTING_CONTROL_PLANE" = "${PIC_ROOT}/control_plane/${VERSION}"; then
+  test "$MISSING_CONTROL_PLANE_ROOT" = "$PROJECT_HOME_POLICY_ROOT"
+else
+  test "$EXISTING_CONTROL_PLANE" = "${PROJECT_HOME_POLICY_ROOT}/control_plane/${VERSION}"
+  test "$MISSING_CONTROL_PLANE_ROOT" = "$PIC_ROOT"
+fi
+test -d "$EXISTING_CONTROL_PLANE"
+test ! -e "${MISSING_CONTROL_PLANE_ROOT}/control_plane/${VERSION}"
+EXISTING_CONTROL_PLANE_COMMAND=(
+  "$PYTHON" -I -B "${EXISTING_CONTROL_PLANE}/run_control_plane.py"
+)
+test "$(
+  "${EXISTING_CONTROL_PLANE_COMMAND[@]}" \
+    validate_and_reserve_frontier_job.py verify-control-plane
+)" = "$VERSION"
+SOURCE_STATUS="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+)"
+test -z "$SOURCE_STATUS"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+require_exact_reviewed_source() {
+  local remote_pic_tip source_status
+  source_status="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+  )"
+  test -z "$source_status"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+  remote_pic_tip="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+      /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+  )"
+  [[ "$remote_pic_tip" =~ ^[0-9a-f]{40}$ ]]
+  test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
+}
+SOURCE_CONTROL_PLANE=(
+  "$PYTHON" -I -B
+  "${SOURCE_REPO}/tst/publication/frontier_control_plane/run_control_plane.py"
+  --expected-git-commit "$FULL_GIT_COMMIT"
+)
+for POLICY_PARENT in "${PIC_ROOT}/policy" "${PROJECT_HOME_POLICY_ROOT}/policy"; do
+  test -d "$POLICY_PARENT"
+  test ! -L "$POLICY_PARENT"
+  RECOVERY_ENTRY="$(
+    /usr/bin/find "$POLICY_PARENT" -mindepth 1 -maxdepth 1 \
+      \( -name '.active_promotion_transaction.json' \
+      -o -name '.storage_policy.json.transaction-rollback-*' \
+      -o -name '.active_promotion.json.transaction-rollback-*' \
+      -o -name '.storage_policy.json.tmp-*' \
+      -o -name '.active_promotion.json.tmp-*' \
+      -o -name '.storage_policy.json.rollback-*' \
+      -o -name '.active_promotion.json.rollback-*' \) -print -quit
+  )"
+  test -z "$RECOVERY_ENTRY"
+done
+for STAGING_PARENT in \
+  "${PIC_ROOT}/policy/storage_preflight_bindings" \
+  "${PIC_ROOT}/policy/storage_preflight_evidence" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+  "${PIC_ROOT}/control_plane" \
+  "${PROJECT_HOME_POLICY_ROOT}/control_plane" \
+  "${PIC_ROOT}/clean_candidates"; do
+  test -d "$STAGING_PARENT"
+  test ! -L "$STAGING_PARENT"
+  STAGING_ENTRY="$(
+    /usr/bin/find "$STAGING_PARENT" -mindepth 1 -maxdepth 1 \
+      \( -name '.staging.*' -o -name '.tmp-*' -o -name '*.recovery-staging' \) \
+      -print -quit
+  )"
+  test -z "$STAGING_ENTRY"
+done
+for STORAGE_ROOT in "$PIC_ROOT" "$PROJECT_HOME_POLICY_ROOT"; do
+  STORAGE_PROBE_ENTRY="$(
+    /usr/bin/find "$STORAGE_ROOT" -mindepth 1 -maxdepth 1 \
+      -name '.pic-storage-preflight-*' -print -quit
+  )"
+  test -z "$STORAGE_PROBE_ENTRY"
+done
+ORION_EVIDENCE="$(
+  /usr/bin/find "${PIC_ROOT}/policy/storage_preflight_evidence" \
+    -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+    /usr/bin/sort
+)"
+PROJECT_HOME_EVIDENCE="$(
+  /usr/bin/find "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+    -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+    /usr/bin/sort
+)"
+test -n "$ORION_EVIDENCE"
+test "$ORION_EVIDENCE" = "$PROJECT_HOME_EVIDENCE"
+while IFS= read -r EVIDENCE_NAME; do
+  /usr/bin/cmp -s \
+    "${PIC_ROOT}/policy/storage_preflight_evidence/${EVIDENCE_NAME}" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence/${EVIDENCE_NAME}"
+done <<< "$ORION_EVIDENCE"
+/usr/bin/cmp -s \
+  "${OLD_ORION_CONTROL_PLANE}/inventory.json" \
+  "${OLD_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+test "$(
+  "${OLD_CONTROL_PLANE[@]}" \
+    validate_and_reserve_frontier_job.py verify-control-plane
+)" = "$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/storage_policy.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/active_promotion.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
+test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+"$PYTHON" -I -B - \
+  "$OLD_ORION_CONTROL_PLANE" \
+  "$OLD_PROJECT_HOME_CONTROL_PLANE" \
+  "$PIC_ROOT" \
+  "$PROJECT_HOME_POLICY_ROOT" \
+  "$OLD_ACTIVE_CONTROL_PLANE_VERSION" \
+  "$OLD_ACTIVE_POLICY_SHA256" \
+  "$OLD_ACTIVE_PROMOTION_SHA256" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  "$OLD_ACTIVE_CONTROL_PLANE_VERSION" <<'PY'
+import sys
+from pathlib import Path
+
+old_orion = Path(sys.argv[1])
+old_project_home = Path(sys.argv[2])
+pic_root = Path(sys.argv[3])
+project_home_root = Path(sys.argv[4])
+version, policy_sha256, promotion_sha256 = sys.argv[5:8]
+preserved_manifest, preserved_manifest_sha256, preserved_build_controller = sys.argv[8:11]
+sys.path.insert(0, str(old_orion))
+
+from control_plane_common import require_storage_policy_unlock_snapshot
+from control_plane_common import verify_installed_control_plane
+from control_plane_common import project_home_ledger_root
+from ledger import require_no_incomplete_manual_accounting_marker
+from promote_active_policy import _require_no_outstanding_submissions
+
+orion_inventory = verify_installed_control_plane(
+    old_orion,
+    authorized_pic_root=pic_root,
+)
+project_home_inventory = verify_installed_control_plane(
+    old_project_home,
+    authorized_pic_root=project_home_root,
+)
+assert orion_inventory == project_home_inventory
+assert orion_inventory["version"] == version
+
+policy, snapshot = require_storage_policy_unlock_snapshot(
+    control_plane_version=version,
+    authorized_pic_root=pic_root,
+    authorized_project_home_root=project_home_root,
+    allow_pending_genesis=True,
+)
+assert snapshot == {
+    "active_policy_sha256": policy_sha256,
+    "active_promotion_sha256": promotion_sha256,
+}
+assert policy["registered_science_slices"] == []
+assert policy["science_submission_freeze"] == {
+    "build_profile_control_plane_version": preserved_build_controller,
+    "manifest_path": preserved_manifest,
+    "manifest_sha256": preserved_manifest_sha256,
+    "status": "authorized",
+}
+require_no_incomplete_manual_accounting_marker(
+    pic_root / "ledger" / "node_hours.jsonl",
+    project_home_ledger_root(project_home_root) / "ledger" / "node_hours.jsonl",
+)
+_require_no_outstanding_submissions(policy, pic_root, project_home_root)
+PY
+"${OLD_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+  --manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  --expected-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+require_exact_reviewed_source
+RECOVERED_CONTROL_PLANE="$(
+  "${SOURCE_CONTROL_PLANE[@]}" install_control_plane.py \
+    --pic-root "$MISSING_CONTROL_PLANE_ROOT" \
+    --expected-git-commit "$FULL_GIT_COMMIT"
+)"
+test "$RECOVERED_CONTROL_PLANE" = \
+  "${MISSING_CONTROL_PLANE_ROOT}/control_plane/${VERSION}"
+/usr/bin/cmp -s \
+  "${EXISTING_CONTROL_PLANE}/inventory.json" \
+  "${RECOVERED_CONTROL_PLANE}/inventory.json"
+test -z "$(
+  /usr/bin/find "${MISSING_CONTROL_PLANE_ROOT}/control_plane" \
+    -mindepth 1 -maxdepth 1 -name '.tmp-*' -print -quit
+)"
+printf 'recovered_paired_control_plane_version=%s\n' "$VERSION"
+)
+```
+
+After this recovery succeeds, or after an interruption that left both
+controller installs complete but did not start migration, fill the exact
+retained checkpoints into this standalone post-install resume block. It
+revalidates the completed repair worker, clean true-remote source, paired
+controller, old launch-prohibited generation, complete mirrored evidence pairs
+and empty recovery namespaces. It executes the Q011 migration materializer from
+a fresh detached worktree snapshot at the reviewed commit, performs only the
+one-use migration, verifies the resulting launch-prohibited generation, and
+stops before any `sbatch`:
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT='<exact committed source identity used for preflight and installs>'
+REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
+PROBE_ID='<probe_id from the retained published preflight binding>'
+VERSION='<shared digest basename from the completed paired installs>'
+OLD_ACTIVE_CONTROL_PLANE_VERSION=821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721
+OLD_ACTIVE_POLICY_SHA256=23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3
+OLD_ACTIVE_PROMOTION_SHA256=4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243
+PRESERVED_CLEAN_CANDIDATE_MANIFEST="${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
+PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256=dee6be45657e99ec477eec513c45be4ba6ac43b4fd5deb5655750f51c668e42f
+PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION="$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+[[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
+[[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+[[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
+require_exact_reviewed_source() {
+  local remote_pic_tip source_status
+  source_status="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+  )"
+  test -z "$source_status"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+  remote_pic_tip="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+      /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+  )"
+  [[ "$remote_pic_tip" =~ ^[0-9a-f]{40}$ ]]
+  test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
+}
+require_no_policy_recovery_entries() {
+  local policy_parent recovery_entry
+  for policy_parent in "${PIC_ROOT}/policy" "${PROJECT_HOME_POLICY_ROOT}/policy"; do
+    test -d "$policy_parent"
+    test ! -L "$policy_parent"
+    recovery_entry="$(
+      /usr/bin/find "$policy_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.active_promotion_transaction.json' \
+        -o -name '.storage_policy.json.transaction-rollback-*' \
+        -o -name '.active_promotion.json.transaction-rollback-*' \
+        -o -name '.storage_policy.json.tmp-*' \
+        -o -name '.active_promotion.json.tmp-*' \
+        -o -name '.storage_policy.json.rollback-*' \
+        -o -name '.active_promotion.json.rollback-*' \) \
+        -print -quit
+    )"
+    test -z "$recovery_entry"
+  done
+}
+require_no_staging_entries() {
+  local staging_parent staging_entry
+  for staging_parent in \
+    "${PIC_ROOT}/policy/storage_preflight_bindings" \
+    "${PIC_ROOT}/policy/storage_preflight_evidence" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+    "${PIC_ROOT}/control_plane" \
+    "${PROJECT_HOME_POLICY_ROOT}/control_plane" \
+    "${PIC_ROOT}/clean_candidates"; do
+    test -d "$staging_parent"
+    test ! -L "$staging_parent"
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.staging.*' -o -name '.tmp-*' -o -name '*.recovery-staging' \) \
+        -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  for staging_parent in "$PIC_ROOT" "$PROJECT_HOME_POLICY_ROOT"; do
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        -name '.pic-storage-preflight-*' -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  local orion_evidence project_home_evidence evidence_name
+  orion_evidence="$(
+    /usr/bin/find "${PIC_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  project_home_evidence="$(
+    /usr/bin/find "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  test -n "$orion_evidence"
+  test "$orion_evidence" = "$project_home_evidence"
+  while IFS= read -r evidence_name; do
+    /usr/bin/cmp -s \
+      "${PIC_ROOT}/policy/storage_preflight_evidence/${evidence_name}" \
+      "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence/${evidence_name}"
+  done <<< "$orion_evidence"
+}
+run_reviewed_q011_materializer() {
+  local snapshot snapshot_root status
+  require_exact_reviewed_source
+  snapshot_root="$(/usr/bin/mktemp -d /tmp/athenak-pic-q011-reviewed.XXXXXX)"
+  snapshot="${snapshot_root}/source"
+  status=0
+  "${GIT[@]}" -C "$SOURCE_REPO" worktree add --detach "$snapshot" \
+    "$FULL_GIT_COMMIT" || status=$?
+  if test "$status" -eq 0; then
+    if test -f "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py" &&
+      test ! -L "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py"; then
+      "$PYTHON" -I -B \
+        "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py" \
+        "$@" || status=$?
+    else
+      status=1
+    fi
+  fi
+  if test -e "$snapshot"; then
+    "${GIT[@]}" -C "$SOURCE_REPO" worktree remove --force "$snapshot" || status=1
+  fi
+  /usr/bin/rm -rf -- "$snapshot_root" || status=1
+  return "$status"
+}
+OLD_ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
+OLD_PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${OLD_ACTIVE_CONTROL_PLANE_VERSION}"
+OLD_CONTROL_PLANE=("$PYTHON" -I -B "${OLD_ORION_CONTROL_PLANE}/run_control_plane.py")
+ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${VERSION}"
+PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${VERSION}"
+CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
+STORAGE_PREFLIGHT_BINDING="${PIC_ROOT}/policy/storage_preflight_bindings/${PROBE_ID}.json"
+POLICY_SUFFIX="${VERSION:0:8}_${PROBE_ID}"
+MIGRATION_POLICY="${PIC_ROOT}/policy/reviewed_exact_preflight_predecessor_successor_${POLICY_SUFFIX}.json"
+CANDIDATE_ONLY_POLICY="${PIC_ROOT}/policy/reviewed_candidate_only_successor_${POLICY_SUFFIX}.json"
+require_exact_reviewed_source
+REPAIR_VALIDATION_RECORD="$(
+  "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
+    -j "$REPAIR_VALIDATION_JOB_ID" \
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
+    /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
+    '
+)"
+test "$REPAIR_VALIDATION_RECORD" = \
+  "${REPAIR_VALIDATION_JOB_ID}|pic-q011-pressure-gate-validate|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-pressure-gate-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test -r "$REPAIR_VALIDATION_LOG"
+REPAIR_VALIDATION_LOG_COMMIT="$(
+  /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
+)"
+test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
+test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+test -d "$ORION_CONTROL_PLANE"
+test -d "$PROJECT_HOME_CONTROL_PLANE"
+/usr/bin/cmp -s \
+  "${ORION_CONTROL_PLANE}/inventory.json" \
+  "${PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+test "$(
+  "${CONTROL_PLANE[@]}" validate_and_reserve_frontier_job.py verify-control-plane
+)" = "$VERSION"
+test -r "$STORAGE_PREFLIGHT_BINDING"
+test ! -e "$MIGRATION_POLICY"
+test ! -e "$CANDIDATE_ONLY_POLICY"
+require_no_policy_recovery_entries
+require_no_staging_entries
+/usr/bin/cmp -s \
+  "${OLD_ORION_CONTROL_PLANE}/inventory.json" \
+  "${OLD_PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+test "$(
+  "${OLD_CONTROL_PLANE[@]}" validate_and_reserve_frontier_job.py verify-control-plane
+)" = "$OLD_ACTIVE_CONTROL_PLANE_VERSION"
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/storage_policy.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/active_promotion.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
+test "$OLD_ACTIVE_POLICY_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+test "$OLD_ACTIVE_PROMOTION_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+"$PYTHON" -I -B - \
+  "$OLD_ORION_CONTROL_PLANE" \
+  "$OLD_PROJECT_HOME_CONTROL_PLANE" \
+  "$PIC_ROOT" \
+  "$PROJECT_HOME_POLICY_ROOT" \
+  "$OLD_ACTIVE_CONTROL_PLANE_VERSION" \
+  "$OLD_ACTIVE_POLICY_SHA256" \
+  "$OLD_ACTIVE_PROMOTION_SHA256" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION" <<'PY'
+import sys
+from pathlib import Path
+
+old_orion = Path(sys.argv[1])
+old_project_home = Path(sys.argv[2])
+pic_root = Path(sys.argv[3])
+project_home_root = Path(sys.argv[4])
+version, policy_sha256, promotion_sha256 = sys.argv[5:8]
+preserved_manifest, preserved_manifest_sha256, preserved_build_controller = sys.argv[8:11]
+sys.path.insert(0, str(old_orion))
+
+from control_plane_common import require_storage_policy_unlock_snapshot
+from control_plane_common import verify_installed_control_plane
+from control_plane_common import project_home_ledger_root
+from ledger import require_no_incomplete_manual_accounting_marker
+from promote_active_policy import _require_no_outstanding_submissions
+
+orion_inventory = verify_installed_control_plane(old_orion, authorized_pic_root=pic_root)
+project_home_inventory = verify_installed_control_plane(
+    old_project_home,
+    authorized_pic_root=project_home_root,
+)
+assert orion_inventory == project_home_inventory
+assert orion_inventory["version"] == version
+policy, snapshot = require_storage_policy_unlock_snapshot(
+    control_plane_version=version,
+    authorized_pic_root=pic_root,
+    authorized_project_home_root=project_home_root,
+    allow_pending_genesis=True,
+)
+assert snapshot == {
+    "active_policy_sha256": policy_sha256,
+    "active_promotion_sha256": promotion_sha256,
+}
+assert policy["registered_science_slices"] == []
+assert policy["science_submission_freeze"] == {
+    "build_profile_control_plane_version": preserved_build_controller,
+    "manifest_path": preserved_manifest,
+    "manifest_sha256": preserved_manifest_sha256,
+    "status": "authorized",
+}
+require_no_incomplete_manual_accounting_marker(
+    pic_root / "ledger" / "node_hours.jsonl",
+    project_home_ledger_root(project_home_root) / "ledger" / "node_hours.jsonl",
+)
+_require_no_outstanding_submissions(policy, pic_root, project_home_root)
+PY
+"${OLD_CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+  --manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  --expected-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+run_reviewed_q011_materializer \
+  exact-reviewed-preflight-predecessor-policy-successor \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --baseline-policy "${PIC_ROOT}/policy/storage_policy.json" \
+  --control-plane-version "$VERSION" \
+  --storage-preflight-binding "$STORAGE_PREFLIGHT_BINDING" \
+  --output "$MIGRATION_POLICY"
+require_no_policy_recovery_entries
+require_no_staging_entries
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --reviewed-policy "$MIGRATION_POLICY" \
+  --migrate-exact-reviewed-storage-preflight-predecessor
+EXPECTED_ACTIVE_POLICY_SHA256="$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+EXPECTED_ACTIVE_PROMOTION_SHA256="$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+[[ "$EXPECTED_ACTIVE_POLICY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+[[ "$EXPECTED_ACTIVE_PROMOTION_SHA256" =~ ^[0-9a-f]{64}$ ]]
+require_no_policy_recovery_entries
+require_no_staging_entries
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --verify-active-launch-prohibited-generation \
+  --expected-control-plane-version "$VERSION" \
+  --expected-active-policy-sha256 "$EXPECTED_ACTIVE_POLICY_SHA256" \
+  --expected-active-promotion-sha256 "$EXPECTED_ACTIVE_PROMOTION_SHA256" \
+  --expected-authorized-freeze-manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  --expected-authorized-freeze-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  --expected-authorized-freeze-build-controller \
+    "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION"
 printf 'full_git_commit=%s\n' "$FULL_GIT_COMMIT"
 printf 'probe_id=%s\n' "$PROBE_ID"
 printf 'control_plane_version=%s\n' "$VERSION"
+printf 'expected_active_policy_sha256=%s\n' "$EXPECTED_ACTIVE_POLICY_SHA256"
+printf 'expected_active_promotion_sha256=%s\n' "$EXPECTED_ACTIVE_PROMOTION_SHA256"
+printf 'preserved_clean_candidate_manifest=%s\n' "$PRESERVED_CLEAN_CANDIDATE_MANIFEST"
+printf 'preserved_clean_candidate_manifest_sha256=%s\n' "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
+printf 'preserved_clean_candidate_build_profile_control_plane_version=%s\n' \
+  "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION"
+)
+```
+
+After this standalone resume succeeds, use only the worker-only resume block
+below with the eight printed post-migration values. Do not recapture preflight,
+reinstall either side, or replay the one-use policy migration.
+
+Preserve the eight values printed immediately after exact predecessor migration
+as the post-migration checkpoint. They are emitted before `sbatch`, so an
+interruption cannot require replaying the one-use migration to recover the
+candidate-replacement CAS anchors. Each primary or resumed build/freeze
+submission must pass exactly seven positional worker arguments, in this order:
+commit, successor controller, active policy SHA-256, active promotion SHA-256,
+preserved manifest path, preserved manifest SHA-256, and preserved build
+controller. Do not replace them with named flags.
+
+If the session stops after migration but before build/freeze submission, run
+the worker-only resume block below. If it stops during `sbatch`, first perform
+reviewed scheduler inspection and recover the accepted job ID when one exists;
+run this block only when that inspection proves no build/freeze job was
+accepted. It rechecks the exact post-migration anchors and submits only the
+build/freeze worker. It does not rerun preflight capture, installation, policy
+migration, reservation, or any science launch:
+
+```bash
+(
+set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
+test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
+SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
+SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
+GIT=(
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
+  /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
+)
+FULL_GIT_COMMIT='<full_git_commit from the post-migration checkpoint>'
+PROBE_ID='<probe_id from the post-migration checkpoint>'
+VERSION='<control_plane_version from the post-migration checkpoint>'
+EXPECTED_ACTIVE_POLICY_SHA256='<expected_active_policy_sha256 from the post-migration checkpoint>'
+EXPECTED_ACTIVE_PROMOTION_SHA256='<expected_active_promotion_sha256 from the post-migration checkpoint>'
+PRESERVED_CLEAN_CANDIDATE_MANIFEST='<preserved_clean_candidate_manifest from the post-migration checkpoint>'
+PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256='<preserved_clean_candidate_manifest_sha256 from the post-migration checkpoint>'
+PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION='<preserved_clean_candidate_build_profile_control_plane_version from the post-migration checkpoint>'
+REVIEWED_NO_ACCEPTED_BUILD_FREEZE_JOB='<yes only after reviewed scheduler inspection>'
+[[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+[[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+[[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
+[[ "$EXPECTED_ACTIVE_POLICY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+[[ "$EXPECTED_ACTIVE_PROMOTION_SHA256" =~ ^[0-9a-f]{64}$ ]]
+test "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" = \
+  "${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
+[[ "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+[[ "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION" =~ ^[0-9a-f]{64}$ ]]
+test "$REVIEWED_NO_ACCEPTED_BUILD_FREEZE_JOB" = yes
+require_no_policy_recovery_entries() {
+  local policy_parent recovery_entry
+  for policy_parent in "${PIC_ROOT}/policy" "${PROJECT_HOME_POLICY_ROOT}/policy"; do
+    test -d "$policy_parent"
+    test ! -L "$policy_parent"
+    recovery_entry="$(
+      /usr/bin/find "$policy_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.active_promotion_transaction.json' \
+        -o -name '.storage_policy.json.transaction-rollback-*' \
+        -o -name '.active_promotion.json.transaction-rollback-*' \
+        -o -name '.storage_policy.json.tmp-*' \
+        -o -name '.active_promotion.json.tmp-*' \
+        -o -name '.storage_policy.json.rollback-*' \
+        -o -name '.active_promotion.json.rollback-*' \) \
+        -print -quit
+    )"
+    test -z "$recovery_entry"
+  done
+}
+require_no_staging_entries() {
+  local staging_parent staging_entry
+  for staging_parent in \
+    "${PIC_ROOT}/policy/storage_preflight_bindings" \
+    "${PIC_ROOT}/policy/storage_preflight_evidence" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+    "${PIC_ROOT}/control_plane" \
+    "${PROJECT_HOME_POLICY_ROOT}/control_plane" \
+    "${PIC_ROOT}/clean_candidates"; do
+    test -d "$staging_parent"
+    test ! -L "$staging_parent"
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.staging.*' -o -name '.tmp-*' -o -name '*.recovery-staging' \) \
+        -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  for staging_parent in "$PIC_ROOT" "$PROJECT_HOME_POLICY_ROOT"; do
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        -name '.pic-storage-preflight-*' -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  local orion_evidence project_home_evidence evidence_name
+  orion_evidence="$(
+    /usr/bin/find "${PIC_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  project_home_evidence="$(
+    /usr/bin/find "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  test -n "$orion_evidence"
+  test "$orion_evidence" = "$project_home_evidence"
+  while IFS= read -r evidence_name; do
+    /usr/bin/cmp -s \
+      "${PIC_ROOT}/policy/storage_preflight_evidence/${evidence_name}" \
+      "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence/${evidence_name}"
+  done <<< "$orion_evidence"
+}
+SOURCE_STATUS="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+)"
+test -z "$SOURCE_STATUS"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${VERSION}"
+PROJECT_HOME_CONTROL_PLANE="${PROJECT_HOME_POLICY_ROOT}/control_plane/${VERSION}"
+test -d "$ORION_CONTROL_PLANE"
+test -d "$PROJECT_HOME_CONTROL_PLANE"
+/usr/bin/cmp -s \
+  "${ORION_CONTROL_PLANE}/inventory.json" \
+  "${PROJECT_HOME_CONTROL_PLANE}/inventory.json"
+CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
+POLICY_SUFFIX="${VERSION:0:8}_${PROBE_ID}"
+STORAGE_PREFLIGHT_BINDING="${PIC_ROOT}/policy/storage_preflight_bindings/${PROBE_ID}.json"
+MIGRATION_POLICY="${PIC_ROOT}/policy/reviewed_exact_preflight_predecessor_successor_${POLICY_SUFFIX}.json"
+CANDIDATE_ONLY_POLICY="${PIC_ROOT}/policy/reviewed_candidate_only_successor_${POLICY_SUFFIX}.json"
+test -r "$STORAGE_PREFLIGHT_BINDING"
+test -r "$MIGRATION_POLICY"
+test ! -e "$CANDIDATE_ONLY_POLICY"
+test "$EXPECTED_ACTIVE_POLICY_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+test "$EXPECTED_ACTIVE_PROMOTION_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+require_no_policy_recovery_entries
+require_no_staging_entries
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --verify-active-launch-prohibited-generation \
+  --expected-control-plane-version "$VERSION" \
+  --expected-active-policy-sha256 "$EXPECTED_ACTIVE_POLICY_SHA256" \
+  --expected-active-promotion-sha256 "$EXPECTED_ACTIVE_PROMOTION_SHA256" \
+  --expected-authorized-freeze-manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  --expected-authorized-freeze-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  --expected-authorized-freeze-build-controller \
+    "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION"
+
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+cd "$SOURCE_REPO"
+BUILD_FREEZE_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
+  "${SOURCE_REPO}/tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh" \
+  "$FULL_GIT_COMMIT" "$VERSION" \
+  "$EXPECTED_ACTIVE_POLICY_SHA256" "$EXPECTED_ACTIVE_PROMOTION_SHA256" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION")"
+printf 'build_freeze_job_token=%q\n' "$BUILD_FREEZE_JOB_TOKEN"
+BUILD_FREEZE_JOB_ID="${BUILD_FREEZE_JOB_TOKEN%;frontier}"
+[[ "$BUILD_FREEZE_JOB_ID" =~ ^[0-9]+$ ]]
+test "$BUILD_FREEZE_JOB_TOKEN" = "$BUILD_FREEZE_JOB_ID" ||
+  test "$BUILD_FREEZE_JOB_TOKEN" = "${BUILD_FREEZE_JOB_ID};frontier"
 printf 'build_freeze_job_id=%s\n' "$BUILD_FREEZE_JOB_ID"
 )
 ```
 
 After the worker job completes successfully, fill the values printed by the
-first phase into this independent post-worker phase. It requires exactly one
-successful top-level Slurm record and independently revalidates the immutable
+post-migration checkpoint and the accepted job ID into this independent
+post-worker phase. It requires exactly one successful top-level Slurm record
+and exact single-valued log bindings for all seven worker inputs before it
+reads candidate output. It then independently revalidates the immutable
 candidate through the installed controller before candidate-only promotion:
 
 ```bash
@@ -950,55 +2298,235 @@ candidate through the installed controller before candidate-only promotion:
 set -euo pipefail
 test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
 test "${PYTHON:-}" = /opt/cray/pe/python/3.11.7/bin/python3
+PROJECT_HOME_POLICY_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
 SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
 SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
 GIT=(
   /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin
   /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null
 )
-FULL_GIT_COMMIT='<full_git_commit printed by the first phase>'
-PROBE_ID='<probe_id printed by the first phase>'
-VERSION='<control_plane_version printed by the first phase>'
-BUILD_FREEZE_JOB_ID='<build_freeze_job_id printed by the first phase>'
+FULL_GIT_COMMIT='<full_git_commit from the post-migration checkpoint>'
+PROBE_ID='<probe_id from the post-migration checkpoint>'
+VERSION='<control_plane_version from the post-migration checkpoint>'
+EXPECTED_ACTIVE_POLICY_SHA256='<expected_active_policy_sha256 from the post-migration checkpoint>'
+EXPECTED_ACTIVE_PROMOTION_SHA256='<expected_active_promotion_sha256 from the post-migration checkpoint>'
+PRESERVED_CLEAN_CANDIDATE_MANIFEST='<preserved_clean_candidate_manifest from the post-migration checkpoint>'
+PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256='<preserved_clean_candidate_manifest_sha256 from the post-migration checkpoint>'
+PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION='<preserved_clean_candidate_build_profile_control_plane_version from the post-migration checkpoint>'
+BUILD_FREEZE_JOB_ID='<build_freeze_job_id from the accepted build/freeze submission>'
 [[ "$FULL_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$PROBE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
 [[ "$VERSION" =~ ^[0-9a-f]{64}$ ]]
+[[ "$EXPECTED_ACTIVE_POLICY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+[[ "$EXPECTED_ACTIVE_PROMOTION_SHA256" =~ ^[0-9a-f]{64}$ ]]
+test "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" = \
+  "${PIC_ROOT}/clean_candidates/98a372c9-2ea0-47e6-ad34-e66343e7eea1/clean_candidate_manifest.json"
+[[ "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+[[ "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION" =~ ^[0-9a-f]{64}$ ]]
 [[ "$BUILD_FREEZE_JOB_ID" =~ ^[0-9]+$ ]]
+require_no_policy_recovery_entries() {
+  local policy_parent recovery_entry
+  for policy_parent in "${PIC_ROOT}/policy" "${PROJECT_HOME_POLICY_ROOT}/policy"; do
+    test -d "$policy_parent"
+    test ! -L "$policy_parent"
+    recovery_entry="$(
+      /usr/bin/find "$policy_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.active_promotion_transaction.json' \
+        -o -name '.storage_policy.json.transaction-rollback-*' \
+        -o -name '.active_promotion.json.transaction-rollback-*' \
+        -o -name '.storage_policy.json.tmp-*' \
+        -o -name '.active_promotion.json.tmp-*' \
+        -o -name '.storage_policy.json.rollback-*' \
+        -o -name '.active_promotion.json.rollback-*' \) \
+        -print -quit
+    )"
+    test -z "$recovery_entry"
+  done
+}
+require_no_staging_entries() {
+  local staging_parent staging_entry
+  for staging_parent in \
+    "${PIC_ROOT}/policy/storage_preflight_bindings" \
+    "${PIC_ROOT}/policy/storage_preflight_evidence" \
+    "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+    "${PIC_ROOT}/control_plane" \
+    "${PROJECT_HOME_POLICY_ROOT}/control_plane" \
+    "${PIC_ROOT}/clean_candidates"; do
+    test -d "$staging_parent"
+    test ! -L "$staging_parent"
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        \( -name '.staging.*' -o -name '.tmp-*' -o -name '*.recovery-staging' \) \
+        -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  for staging_parent in "$PIC_ROOT" "$PROJECT_HOME_POLICY_ROOT"; do
+    staging_entry="$(
+      /usr/bin/find "$staging_parent" -mindepth 1 -maxdepth 1 \
+        -name '.pic-storage-preflight-*' -print -quit
+    )"
+    test -z "$staging_entry"
+  done
+  local orion_evidence project_home_evidence evidence_name
+  orion_evidence="$(
+    /usr/bin/find "${PIC_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  project_home_evidence="$(
+    /usr/bin/find "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -printf '%f\n' |
+      /usr/bin/sort
+  )"
+  test -n "$orion_evidence"
+  test "$orion_evidence" = "$project_home_evidence"
+  while IFS= read -r evidence_name; do
+    /usr/bin/cmp -s \
+      "${PIC_ROOT}/policy/storage_preflight_evidence/${evidence_name}" \
+      "${PROJECT_HOME_POLICY_ROOT}/policy/storage_preflight_evidence/${evidence_name}"
+  done <<< "$orion_evidence"
+}
 SOURCE_STATUS="$(
   "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
 )"
 test -z "$SOURCE_STATUS"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+require_exact_reviewed_source() {
+  local remote_pic_tip source_status
+  source_status="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all
+  )"
+  test -z "$source_status"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+  test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+  remote_pic_tip="$(
+    "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+      /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+  )"
+  [[ "$remote_pic_tip" =~ ^[0-9a-f]{40}$ ]]
+  test "$FULL_GIT_COMMIT" = "$remote_pic_tip"
+}
+run_reviewed_q011_materializer() {
+  local snapshot snapshot_root status
+  require_exact_reviewed_source
+  snapshot_root="$(/usr/bin/mktemp -d /tmp/athenak-pic-q011-reviewed.XXXXXX)"
+  snapshot="${snapshot_root}/source"
+  status=0
+  "${GIT[@]}" -C "$SOURCE_REPO" worktree add --detach "$snapshot" \
+    "$FULL_GIT_COMMIT" || status=$?
+  if test "$status" -eq 0; then
+    if test -f "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py" &&
+      test ! -L "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py"; then
+      "$PYTHON" -I -B \
+        "$snapshot/tst/publication/q011_section54_pressure_pilot_execution.py" \
+        "$@" || status=$?
+    else
+      status=1
+    fi
+  fi
+  if test -e "$snapshot"; then
+    "${GIT[@]}" -C "$SOURCE_REPO" worktree remove --force "$snapshot" || status=1
+  fi
+  /usr/bin/rm -rf -- "$snapshot_root" || status=1
+  return "$status"
+}
 ORION_CONTROL_PLANE="${PIC_ROOT}/control_plane/${VERSION}"
 CONTROL_PLANE=("$PYTHON" -I -B "${ORION_CONTROL_PLANE}/run_control_plane.py")
 POLICY_SUFFIX="${VERSION:0:8}_${PROBE_ID}"
 STORAGE_PREFLIGHT_BINDING="${PIC_ROOT}/policy/storage_preflight_bindings/${PROBE_ID}.json"
-RETIREMENT_POLICY="${PIC_ROOT}/policy/reviewed_launch_prohibited_strict_storage_successor_${POLICY_SUFFIX}.json"
+MIGRATION_POLICY="${PIC_ROOT}/policy/reviewed_exact_preflight_predecessor_successor_${POLICY_SUFFIX}.json"
 CANDIDATE_ONLY_POLICY="${PIC_ROOT}/policy/reviewed_candidate_only_successor_${POLICY_SUFFIX}.json"
 test -r "$STORAGE_PREFLIGHT_BINDING"
-test -r "$RETIREMENT_POLICY"
+test -r "$MIGRATION_POLICY"
 test ! -e "$CANDIDATE_ONLY_POLICY"
-BUILD_FREEZE_STATE="$(
+test "$EXPECTED_ACTIVE_POLICY_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+test "$EXPECTED_ACTIVE_PROMOTION_SHA256" = "$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+require_no_policy_recovery_entries
+require_no_staging_entries
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --verify-active-launch-prohibited-generation \
+  --expected-control-plane-version "$VERSION" \
+  --expected-active-policy-sha256 "$EXPECTED_ACTIVE_POLICY_SHA256" \
+  --expected-active-promotion-sha256 "$EXPECTED_ACTIVE_PROMOTION_SHA256" \
+  --expected-authorized-freeze-manifest "$PRESERVED_CLEAN_CANDIDATE_MANIFEST" \
+  --expected-authorized-freeze-manifest-sha256 "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  --expected-authorized-freeze-build-controller \
+    "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION"
+BUILD_FREEZE_RECORD="$(
   "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n -j "$BUILD_FREEZE_JOB_ID" \
-    --format=JobIDRaw,State --parsable2 |
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
     /usr/bin/awk -F'|' -v job="$BUILD_FREEZE_JOB_ID" '
-      $1 == job {count += 1; state = $2}
-      END {if (count != 1) exit 1; print state}
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
     '
 )"
-test "$BUILD_FREEZE_STATE" = COMPLETED
+test "$BUILD_FREEZE_RECORD" = \
+  "${BUILD_FREEZE_JOB_ID}|pic-q011-build-freeze|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
 BUILD_FREEZE_LOG="${PIC_ROOT}/logs/slurm/pic-q011-build-freeze.${BUILD_FREEZE_JOB_ID}.log"
+test -r "$BUILD_FREEZE_LOG"
+read_exact_build_freeze_log_binding() {
+  local key="$1" value
+  value="$(
+    /usr/bin/awk -F= -v key="$key" '
+      $1 == key {count += 1; value = substr($0, length(key) + 2)}
+      END {if (count != 1 || value == "") exit 1; print value}
+    ' "$BUILD_FREEZE_LOG"
+  )"
+  printf '%s\n' "$value"
+}
+BUILD_FREEZE_LOG_COMMIT="$(
+  read_exact_build_freeze_log_binding source_commit
+)"
+BUILD_FREEZE_LOG_CONTROL_PLANE_VERSION="$(
+  read_exact_build_freeze_log_binding control_plane_version
+)"
+BUILD_FREEZE_LOG_EXPECTED_ACTIVE_POLICY_SHA256="$(
+  read_exact_build_freeze_log_binding expected_active_policy_sha256
+)"
+BUILD_FREEZE_LOG_EXPECTED_ACTIVE_PROMOTION_SHA256="$(
+  read_exact_build_freeze_log_binding expected_active_promotion_sha256
+)"
+BUILD_FREEZE_LOG_EXPECTED_AUTHORIZED_FREEZE_MANIFEST="$(
+  read_exact_build_freeze_log_binding expected_authorized_freeze_manifest
+)"
+BUILD_FREEZE_LOG_EXPECTED_AUTHORIZED_FREEZE_MANIFEST_SHA256="$(
+  read_exact_build_freeze_log_binding expected_authorized_freeze_manifest_sha256
+)"
+BUILD_FREEZE_LOG_EXPECTED_AUTHORIZED_FREEZE_BUILD_CONTROLLER="$(
+  read_exact_build_freeze_log_binding expected_authorized_freeze_build_controller
+)"
+test "$BUILD_FREEZE_LOG_COMMIT" = "$FULL_GIT_COMMIT"
+test "$BUILD_FREEZE_LOG_CONTROL_PLANE_VERSION" = "$VERSION"
+test "$BUILD_FREEZE_LOG_EXPECTED_ACTIVE_POLICY_SHA256" = \
+  "$EXPECTED_ACTIVE_POLICY_SHA256"
+test "$BUILD_FREEZE_LOG_EXPECTED_ACTIVE_PROMOTION_SHA256" = \
+  "$EXPECTED_ACTIVE_PROMOTION_SHA256"
+test "$BUILD_FREEZE_LOG_EXPECTED_AUTHORIZED_FREEZE_MANIFEST" = \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST"
+test "$BUILD_FREEZE_LOG_EXPECTED_AUTHORIZED_FREEZE_MANIFEST_SHA256" = \
+  "$PRESERVED_CLEAN_CANDIDATE_MANIFEST_SHA256"
+test "$BUILD_FREEZE_LOG_EXPECTED_AUTHORIZED_FREEZE_BUILD_CONTROLLER" = \
+  "$PRESERVED_CLEAN_CANDIDATE_BUILD_PROFILE_CONTROL_PLANE_VERSION"
 CLEAN_CANDIDATE_MANIFEST="$(
-  /usr/bin/sed -n 's/^clean_candidate_manifest=//p' "$BUILD_FREEZE_LOG"
+  read_exact_build_freeze_log_binding clean_candidate_manifest
 )"
 CLEAN_CANDIDATE_MANIFEST_SHA256="$(
-  /usr/bin/sed -n 's/^clean_candidate_manifest_sha256=//p' "$BUILD_FREEZE_LOG"
+  read_exact_build_freeze_log_binding clean_candidate_manifest_sha256
 )"
-test -n "$CLEAN_CANDIDATE_MANIFEST"
-test -n "$CLEAN_CANDIDATE_MANIFEST_SHA256"
-test "$(printf '%s\n' "$CLEAN_CANDIDATE_MANIFEST" | /usr/bin/wc -l)" -eq 1
-test "$(printf '%s\n' "$CLEAN_CANDIDATE_MANIFEST_SHA256" | /usr/bin/wc -l)" -eq 1
 [[ "$CLEAN_CANDIDATE_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
 EXECUTABLE="${CLEAN_CANDIDATE_MANIFEST%/*}/athena"
 ENVIRONMENT_PROFILE="${ORION_CONTROL_PLANE}/frontier_pic_environment.sh"
@@ -1006,11 +2534,14 @@ test -x "$EXECUTABLE"
 test -r "$ENVIRONMENT_PROFILE"
 "${CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
   --manifest "$CLEAN_CANDIDATE_MANIFEST" \
-  --expected-manifest-sha256 "$CLEAN_CANDIDATE_MANIFEST_SHA256"
+  --expected-manifest-sha256 "$CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --expected-receipt-control-plane-version "$VERSION"
 
-"$PYTHON" -I -B "${SOURCE_REPO}/tst/publication/q011_section54_pressure_pilot_execution.py" \
+run_reviewed_q011_materializer \
   candidate-only-policy-successor \
-  --baseline-policy "$RETIREMENT_POLICY" \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --baseline-policy "${PIC_ROOT}/policy/storage_policy.json" \
   --control-plane-version "$VERSION" \
   --storage-preflight-binding "$STORAGE_PREFLIGHT_BINDING" \
   --clean-candidate-manifest "$CLEAN_CANDIDATE_MANIFEST" \
@@ -1018,22 +2549,92 @@ test -r "$ENVIRONMENT_PROFILE"
   --environment-profile "$ENVIRONMENT_PROFILE" \
   --output "$CANDIDATE_ONLY_POLICY"
 
+EXPECTED_FINAL_ACTIVE_POLICY_SHA256="$(
+  /usr/bin/sha256sum "$CANDIDATE_ONLY_POLICY" | /usr/bin/awk '{print $1}'
+)"
+[[ "$EXPECTED_FINAL_ACTIVE_POLICY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+require_no_policy_recovery_entries
+require_no_staging_entries
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
 "${CONTROL_PLANE[@]}" promote_active_policy.py \
-  --reviewed-policy "$CANDIDATE_ONLY_POLICY"
+  --reviewed-policy "$CANDIDATE_ONLY_POLICY" \
+  --replace-exact-authorized-clean-candidate-freeze \
+  --expected-active-policy-sha256 "$EXPECTED_ACTIVE_POLICY_SHA256" \
+  --expected-active-promotion-sha256 "$EXPECTED_ACTIVE_PROMOTION_SHA256"
+
+FINAL_ACTIVE_POLICY_SHA256="$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/storage_policy.json" |
+    /usr/bin/awk '{print $1}'
+)"
+FINAL_ACTIVE_PROMOTION_SHA256="$(
+  /usr/bin/sha256sum "${PIC_ROOT}/policy/active_promotion.json" |
+    /usr/bin/awk '{print $1}'
+)"
+test "$FINAL_ACTIVE_POLICY_SHA256" = "$EXPECTED_FINAL_ACTIVE_POLICY_SHA256"
+[[ "$FINAL_ACTIVE_PROMOTION_SHA256" =~ ^[0-9a-f]{64}$ ]]
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/storage_policy.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/storage_policy.json"
+/usr/bin/cmp -s \
+  "${PIC_ROOT}/policy/active_promotion.json" \
+  "${PROJECT_HOME_POLICY_ROOT}/policy/active_promotion.json"
+"${CONTROL_PLANE[@]}" revalidate_clean_candidate.py \
+  --manifest "$CLEAN_CANDIDATE_MANIFEST" \
+  --expected-manifest-sha256 "$CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --expected-receipt-control-plane-version "$VERSION"
+require_no_policy_recovery_entries
+require_no_staging_entries
+"${CONTROL_PLANE[@]}" promote_active_policy.py \
+  --verify-active-launch-prohibited-generation \
+  --expected-control-plane-version "$VERSION" \
+  --expected-active-policy-sha256 "$FINAL_ACTIVE_POLICY_SHA256" \
+  --expected-active-promotion-sha256 "$FINAL_ACTIVE_PROMOTION_SHA256" \
+  --expected-authorized-freeze-manifest "$CLEAN_CANDIDATE_MANIFEST" \
+  --expected-authorized-freeze-manifest-sha256 "$CLEAN_CANDIDATE_MANIFEST_SHA256" \
+  --expected-authorized-freeze-build-controller "$VERSION"
+printf 'final_active_policy_sha256=%s\n' "$FINAL_ACTIVE_POLICY_SHA256"
+printf 'final_active_promotion_sha256=%s\n' "$FINAL_ACTIVE_PROMOTION_SHA256"
+printf 'final_authorized_clean_candidate_manifest=%s\n' "$CLEAN_CANDIDATE_MANIFEST"
+printf 'final_authorized_clean_candidate_manifest_sha256=%s\n' \
+  "$CLEAN_CANDIDATE_MANIFEST_SHA256"
 )
 ```
 
-Treat each mutation in the two phases above as a durable checkpoint. If the
-session stops after the preflight hard link is published, retain that immutable
-binding and resume with its exact `PROBE_ID`; do not silently capture a
-replacement. If the session stops after paired controller installation, verify
-both exact installed directories and their shared digest before resuming; do
-not blindly rerun an install. If it stops after retirement-policy promotion,
-inspect the exact active policy and promotion record, then resume with the
-worker build only; do not retry the one-use predecessor retirement. If it stops
-after `sbatch`, recover the one printed `BUILD_FREEZE_JOB_ID` through `sacct`
-and its Slurm log, then run the second phase only after that exact top-level job
-is `COMPLETED`. A replacement submission requires a reviewed failure record.
+Treat each mutation in the phases above as a durable checkpoint. If the session
+stops during authenticated preflight capture, preserve every published evidence
+or staging artifact and use only the exact commit-forward evidence recovery
+block above. Do not delete evidence, recapture, or run a fresh primary block.
+If the Orion binding was published, retain that immutable binding and resume
+with its exact `PROBE_ID`; do not silently capture a replacement.
+
+If the session stops after only one paired controller installation, use only
+the exact one-sided recovery block above. If both installs completed, verify
+both exact directories and their byte-identical inventories before resuming;
+do not blindly rerun either install. If it stops after migration-policy
+promotion, preserve the printed post-migration checkpoint, inspect the exact
+active policy and promotion record, then use the worker-only resume block; do
+not retry the one-use predecessor migration. If it stops during or after
+`sbatch`, recover the accepted `BUILD_FREEZE_JOB_ID` through reviewed scheduler
+inspection and its Slurm log. Do not resubmit unless that inspection proves no
+job was accepted. Run the post-worker phase only after the exact eight-field
+top-level `sacct` identity is `COMPLETED` with `ExitCode=0:0` and its log binds
+the exact source commit.
+
+A replacement submission requires a reviewed failure record. Either promotion
+command may first recover an interrupted durable policy transaction while
+holding both policy-parent locks. Every operator checkpoint must reject both
+mirrored transaction markers, every reserved rollback anchor, and every
+unexpected `.staging.*` or `.tmp-*` entry; never remove them manually. Do not
+infer a committed state from only one active anchor. Candidate promotion is not
+complete until the mandatory final verifier confirms the exact controller,
+mirrored final policy/promotion hashes, exact newly authorized freeze, empty
+science allowlist, expected source commit, and an empty recovery/staging
+namespace.
 
 The historical v2 launch procedure below is retained for audit only. It must
 not be replayed. For one selected case, it required the operator to
@@ -1079,9 +2680,9 @@ Use this exact selected-case mapping:
 | `ps_p0_0p20` | `q011-section54-pressure-ps-p0-0p20-v2` | `q011_section54_pressure_ps_p0_0p20` |
 
 ```bash
-CASE=<one-preregistered-case-id>
-AUTHORIZATION_ID=<matching-preregistered-authorization-id>
-CAMPAIGN=<matching-preregistered-campaign>
+CASE='<one-preregistered-case-id>'
+AUTHORIZATION_ID='<matching-preregistered-authorization-id>'
+CAMPAIGN='<matching-preregistered-campaign>'
 # Example for the first case: PRIOR_CASE_CLOSURES=()
 # Example for the second case:
 # PRIOR_CASE_CLOSURES=(--prior-case-closure "ps_p0_1p00=<submission-id>=<descriptor-sha256>")
@@ -1168,7 +2769,7 @@ descriptor SHA-256:
 env -u PIC_F1_ANALYSIS_HELPER_FD /opt/cray/pe/python/3.11.7/bin/python3 -I -B \
   "${PIC_ROOT}/manifests/<campaign>/<submission-id>/snapshot/analysis/000-analyze_q011_section54_pressure_pilot_case.py" \
   --artifact-dir "${PIC_ROOT}/runs/<campaign>/<submission-id>" \
-  --case-id <case-id>
+  --case-id '<case-id>'
 ```
 
 Before starting the next case, require the reconciled terminal ledger event,
@@ -1207,31 +2808,40 @@ SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-fi
 test -z "$SOURCE_STATUS"
 FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
 REPAIR_VALIDATION_COMMIT='<repair_validation_commit from the completed checkpoint>'
 REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
 [[ "$REPAIR_VALIDATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
 test "$REPAIR_VALIDATION_COMMIT" = "$FULL_GIT_COMMIT"
-REPAIR_VALIDATION_STATE="$(
+REPAIR_VALIDATION_RECORD="$(
   "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
-    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    -j "$REPAIR_VALIDATION_JOB_ID" \
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
     /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
-      $1 == job {count += 1; state = $2}
-      END {if (count != 1) exit 1; print state}
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
     '
 )"
-test "$REPAIR_VALIDATION_STATE" = COMPLETED
-REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test "$REPAIR_VALIDATION_RECORD" = \
+  "${REPAIR_VALIDATION_JOB_ID}|pic-q011-pressure-gate-validate|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-pressure-gate-validate.${REPAIR_VALIDATION_JOB_ID}.log"
 test -r "$REPAIR_VALIDATION_LOG"
 REPAIR_VALIDATION_LOG_COMMIT="$(
   /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
 )"
 test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
 test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
-QUEUED_JOB_IDS="$(
-  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u dfielding -h -o '%i'
-)"
-test -z "$QUEUED_JOB_IDS"
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
 ACCEPTANCE_HELPER_RELATIVE=tst/publication/provision_q011_pressure_publication_acceptance_root.py
 EXPECTED_ACCEPTANCE_HELPER_SHA256=431787450a6fe2a37a6ee1e1a37e1626444e2f6af3d7516117f820bc17963920
 ACCEPTANCE_HELPER_SNAPSHOT="$(
@@ -1330,31 +2940,40 @@ SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-fi
 test -z "$SOURCE_STATUS"
 FULL_GIT_COMMIT="$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
 REPAIR_VALIDATION_COMMIT='<repair_validation_commit from the completed checkpoint>'
 REPAIR_VALIDATION_JOB_ID='<repair_validation_job_id from the completed checkpoint>'
 [[ "$REPAIR_VALIDATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 [[ "$REPAIR_VALIDATION_JOB_ID" =~ ^[0-9]+$ ]]
 test "$REPAIR_VALIDATION_COMMIT" = "$FULL_GIT_COMMIT"
-REPAIR_VALIDATION_STATE="$(
+REPAIR_VALIDATION_RECORD="$(
   "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
-    -j "$REPAIR_VALIDATION_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    -j "$REPAIR_VALIDATION_JOB_ID" \
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
     /usr/bin/awk -F'|' -v job="$REPAIR_VALIDATION_JOB_ID" '
-      $1 == job {count += 1; state = $2}
-      END {if (count != 1) exit 1; print state}
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
     '
 )"
-test "$REPAIR_VALIDATION_STATE" = COMPLETED
-REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-repair-validate.${REPAIR_VALIDATION_JOB_ID}.log"
+test "$REPAIR_VALIDATION_RECORD" = \
+  "${REPAIR_VALIDATION_JOB_ID}|pic-q011-pressure-gate-validate|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
+REPAIR_VALIDATION_LOG="${PIC_ROOT}/logs/slurm/pic-q011-pressure-gate-validate.${REPAIR_VALIDATION_JOB_ID}.log"
 test -r "$REPAIR_VALIDATION_LOG"
 REPAIR_VALIDATION_LOG_COMMIT="$(
   /usr/bin/sed -n 's/^source_commit=//p' "$REPAIR_VALIDATION_LOG"
 )"
 test "$REPAIR_VALIDATION_LOG_COMMIT" = "$FULL_GIT_COMMIT"
 test "$(printf '%s\n' "$REPAIR_VALIDATION_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
-QUEUED_JOB_IDS="$(
-  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u dfielding -h -o '%i'
-)"
-test -z "$QUEUED_JOB_IDS"
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
 test -d "${PIC_ROOT}/publication" || /usr/bin/mkdir "${PIC_ROOT}/publication"
 ACCEPTANCE_HELPER_RELATIVE=tst/publication/provision_q011_pressure_publication_acceptance_root.py
 EXPECTED_ACCEPTANCE_HELPER_SHA256=431787450a6fe2a37a6ee1e1a37e1626444e2f6af3d7516117f820bc17963920
@@ -1388,6 +3007,7 @@ do
     'import os, sys; fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW); os.fsync(fd); os.close(fd)' \
     "$directory"
 done
+cd "$SOURCE_REPO"
 AGGREGATE_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_pilot_publish_job.sh" \
   "$FULL_GIT_COMMIT")"
@@ -1407,6 +3027,7 @@ this packet-submission phase:
 ```bash
 (
 set -euo pipefail
+test "${PIC_ROOT:-}" = /lustre/orion/ast207/proj-shared/dfielding/PIC
 SOURCE_REPO=/autofs/nccs-svm1_home2/dfielding/athenak-pic
 SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
 GIT=(
@@ -1421,19 +3042,36 @@ SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-fi
 test -z "$SOURCE_STATUS"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
-AGGREGATE_STATE="$(
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+AGGREGATE_RECORD="$(
   "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
-    -j "$AGGREGATE_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    -j "$AGGREGATE_JOB_ID" \
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
     /usr/bin/awk -F'|' -v job="$AGGREGATE_JOB_ID" '
-      $1 == job {count += 1; state = $2}
-      END {if (count != 1) exit 1; print state}
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
     '
 )"
-test "$AGGREGATE_STATE" = COMPLETED
-QUEUED_JOB_IDS="$(
-  "${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u dfielding -h -o '%i'
+test "$AGGREGATE_RECORD" = \
+  "${AGGREGATE_JOB_ID}|pic-q011-pressure-publish|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
+AGGREGATE_LOG="${PIC_ROOT}/logs/slurm/pic-q011-pressure-publish.${AGGREGATE_JOB_ID}.log"
+test -r "$AGGREGATE_LOG"
+AGGREGATE_LOG_COMMIT="$(
+  /usr/bin/sed -n 's/^source_commit=//p' "$AGGREGATE_LOG"
 )"
-test -z "$QUEUED_JOB_IDS"
+test "$AGGREGATE_LOG_COMMIT" = "$FULL_GIT_COMMIT"
+test "$(printf '%s\n' "$AGGREGATE_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+/usr/bin/ps -u "$(/usr/bin/id -u)" -ww -o pid=,ppid=,lstart=,args=
+"${SLURM_ENV[@]}" /usr/bin/squeue --clusters=frontier -u "$(/usr/bin/id -un)" \
+  -h -o '%i|%j|%a|%q|%T|%Z|%o'
+REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR='<yes only after reviewing both snapshots>'
+test "$REVIEWED_NO_SCIENCE_OR_SAME_USER_PIC_MUTATOR" = yes
+cd "$SOURCE_REPO"
 REVIEW_PACKET_JOB_TOKEN="$("${SLURM_ENV[@]}" /usr/bin/sbatch --parsable --export=NIL \
   "${SOURCE_REPO}/tst/publication/frontier_q011_section54_pressure_pilot_review_packet_job.sh" \
   "$FULL_GIT_COMMIT")"
@@ -1469,40 +3107,78 @@ SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-fi
 test -z "$SOURCE_STATUS"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
 test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
-REVIEW_PACKET_STATE="$(
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+REVIEW_PACKET_RECORD="$(
   "${SLURM_ENV[@]}" /usr/bin/sacct -X --clusters=frontier -n \
-    -j "$REVIEW_PACKET_JOB_ID" --format=JobIDRaw,State --parsable2 |
+    -j "$REVIEW_PACKET_JOB_ID" \
+    --format=JobIDRaw,JobName,Account,Partition,QOS,State,ExitCode,WorkDir --parsable2 |
     /usr/bin/awk -F'|' -v job="$REVIEW_PACKET_JOB_ID" '
-      $1 == job {count += 1; state = $2}
-      END {if (count != 1) exit 1; print state}
+      $1 == job {count += 1; record = $1 FS $2 FS $3 FS $4 FS $5 FS $6 FS $7 FS $8}
+      END {if (count != 1) exit 1; print record}
     '
 )"
-test "$REVIEW_PACKET_STATE" = COMPLETED
-run_source_python() {
-  local script="${1:?usage: run_source_python SCRIPT [ARG ...]}"
+test "$REVIEW_PACKET_RECORD" = \
+  "${REVIEW_PACKET_JOB_ID}|pic-q011-pressure-review|ast207|batch|debug|COMPLETED|0:0|${SOURCE_REPO}"
+REVIEW_PACKET_LOG="${PIC_ROOT}/logs/slurm/pic-q011-pressure-review.${REVIEW_PACKET_JOB_ID}.log"
+test -r "$REVIEW_PACKET_LOG"
+REVIEW_PACKET_LOG_COMMIT="$(
+  /usr/bin/sed -n 's/^source_commit=//p' "$REVIEW_PACKET_LOG"
+)"
+test "$REVIEW_PACKET_LOG_COMMIT" = "$FULL_GIT_COMMIT"
+test "$(printf '%s\n' "$REVIEW_PACKET_LOG_COMMIT" | /usr/bin/wc -l)" -eq 1
+SOURCE_STATUS="$("${GIT[@]}" -C "$SOURCE_REPO" status --porcelain --untracked-files=all)"
+test -z "$SOURCE_STATUS"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse HEAD)"
+test "$FULL_GIT_COMMIT" = "$("${GIT[@]}" -C "$SOURCE_REPO" rev-parse origin/PIC)"
+REMOTE_PIC_TIP="$(
+  "${GIT[@]}" -C "$SOURCE_REPO" ls-remote --exit-code origin refs/heads/PIC |
+    /usr/bin/awk '$2 == "refs/heads/PIC" {count += 1; tip = $1} END {if (count != 1) exit 1; print tip}'
+)"
+[[ "$REMOTE_PIC_TIP" =~ ^[0-9a-f]{40}$ ]]
+test "$FULL_GIT_COMMIT" = "$REMOTE_PIC_TIP"
+SOURCE_SNAPSHOT="$(/usr/bin/mktemp -d /tmp/athenak-pic-final-review.XXXXXX)"
+trap '/usr/bin/rm -rf -- "${SOURCE_SNAPSHOT:-}"' EXIT
+"${GIT[@]}" -C "$SOURCE_REPO" archive --format=tar "$FULL_GIT_COMMIT" |
+  /usr/bin/tar -xf - -C "$SOURCE_SNAPSHOT"
+for SNAPSHOT_SOURCE in \
+  publish_q011_section54_pressure_pilot_bundle.py \
+  render_q011_section54_pressure_pilot_review_packet.py \
+  readiness/plotting_environment_lock_candidate_2026-05-30.json; do
+  test -f "${SOURCE_SNAPSHOT}/tst/publication/${SNAPSHOT_SOURCE}"
+  test ! -L "${SOURCE_SNAPSHOT}/tst/publication/${SNAPSHOT_SOURCE}"
+done
+run_snapshot_python() {
+  local script="${1:?usage: run_snapshot_python SCRIPT [ARG ...]}"
   shift
   "$PYTHON" -I -B -c \
     'import runpy, sys; root, script, *args = sys.argv[1:]; sys.path.insert(0, root); sys.argv = [script, *args]; runpy.run_path(script, run_name="__main__")' \
-    "${SOURCE_REPO}/tst/publication" \
-    "${SOURCE_REPO}/tst/publication/${script}" "$@"
+    "${SOURCE_SNAPSHOT}/tst/publication" \
+    "${SOURCE_SNAPSHOT}/tst/publication/${script}" "$@"
 }
-run_source_python publish_q011_section54_pressure_pilot_bundle.py \
+run_snapshot_python publish_q011_section54_pressure_pilot_bundle.py \
   --verify-published-receipt \
   "${PIC_ROOT}/publication/q011_section54_pressure_pilot_bundle_receipt.json"
-run_source_plot_python() {
-  local script="${1:?usage: run_source_plot_python SCRIPT [ARG ...]}"
+run_snapshot_plot_python() {
+  local script="${1:?usage: run_snapshot_plot_python SCRIPT [ARG ...]}"
   shift
   "$PYTHON" -I -B -c \
     'import importlib.metadata, json, runpy, sys; root, script, package_root, lock_path, *args = sys.argv[1:]; sys.path.insert(0, package_root); lock = json.load(open(lock_path, encoding="utf-8")); actual_python = sys.version.split()[0]; expected_python = lock["python"]; actual_python == expected_python or sys.exit(f"plot Python drifted: {actual_python} != {expected_python}"); [(importlib.metadata.version(name) == version) or sys.exit(f"plot dependency drifted: {name}") for name, version in lock["dependencies"].items()]; sys.path.insert(0, root); sys.argv = [script, *args]; runpy.run_path(script, run_name="__main__")' \
-    "${SOURCE_REPO}/tst/publication" \
-    "${SOURCE_REPO}/tst/publication/${script}" \
+    "${SOURCE_SNAPSHOT}/tst/publication" \
+    "${SOURCE_SNAPSHOT}/tst/publication/${script}" \
     /autofs/nccs-svm1_home2/dfielding/.local/lib/python3.11/site-packages \
-    "${SOURCE_REPO}/tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json" \
+    "${SOURCE_SNAPSHOT}/tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json" \
     "$@"
 }
-run_source_plot_python render_q011_section54_pressure_pilot_review_packet.py \
+run_snapshot_plot_python render_q011_section54_pressure_pilot_review_packet.py \
   --verify-published-receipt \
   "${PIC_ROOT}/publication/q011_section54_pressure_pilot_review_packet_receipt.json"
+/usr/bin/rm -rf -- "$SOURCE_SNAPSHOT"
+trap - EXIT
 )
 ```
 
@@ -1611,7 +3287,7 @@ dispatch, repair the marker through the installed validator:
   --ledger-csv "${PIC_ROOT}/ledger/node_hours.csv" \
   --receipts-jsonl "${PIC_ROOT}/ledger/mirror_receipts.jsonl" \
   --mirror-jsonl "${PROJECT_HOME_MIRROR_ROOT}/ledger/node_hours.jsonl" \
-  --reservation-id <reservation-id>
+  --reservation-id '<reservation-id>'
 ```
 
 If the primary Orion append completed but Project Home mirroring or the local

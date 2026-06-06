@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "record_type": {
       "const": "frontier_pic_storage_preflight_evidence"
@@ -79,6 +79,7 @@
       "additionalProperties": false,
       "required": [
         "git_commit",
+        "common_sha256",
         "runner_sha256",
         "entrypoint_sha256",
         "schema_sha256",
@@ -87,6 +88,9 @@
       "properties": {
         "git_commit": {
           "$ref": "#/$defs/gitCommit"
+        },
+        "common_sha256": {
+          "$ref": "#/$defs/sha256"
         },
         "runner_sha256": {
           "$ref": "#/$defs/sha256"

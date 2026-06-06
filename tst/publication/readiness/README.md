@@ -797,11 +797,64 @@ qualify any scientific claim by itself.
   scoped zero-match searches for a pressure-selection receipt and retained
   validation-worker log. It grants no pair-install, policy-promotion, launch,
   or science authority.
+  Clean worker job `4767080` subsequently passed, and paired `ccc9d8ae`
+  installation plus a fresh successor preflight completed. Promotion failed
+  closed against the live predecessor's older reviewed preflight capture
+  source. The current source-local successor adds an exact-anchor,
+  exact-source-tuple, exact-successor one-use migration path. It preserves the
+  authorized freeze and empty allowlist and permits only the new controller and
+  a different, strictly newer strict-current preflight binding; normal policy
+  validation and unlock remain strict. The successor preflight path binds the
+  executing common module as well as the cycle-free reviewed source tuple,
+  detects namespace substitution, opens evidence nonblocking, and preserves
+  ambiguous evidence or staging residue for exact commit-forward recovery.
 - `q011_section54_pressure_selection_options_2026-06-05.md`: non-authorizing
   human-review memo for the successfully published immutable four-case pressure
   packet. It ranks and explores every viable pressure option, relates them to
   the primary MHD-PIC shock literature, recommends `problem/ps_p0=1.0` only on
   an advisory basis, and is explicitly not a human selection receipt.
+- `q011_section54_pressure_gate_exact_predecessor_migration_repair_successor_2026-06-05.json`:
+  current append-only pressure-gate checkpoint. It binds clean worker `4767080`,
+  paired immutable `ccc9d8ae` installation, the retained failed-closed policy
+  promotion and fresh `ba77f665` preflight, unchanged live `821d1858` policy
+  anchors, and the exact source-local exact-predecessor repair closure. Its
+  final controller digest and 15-file repair/test/runbook closure are bound for
+  commit. Every successful promotion has a unique promotion identity and uses
+  a durable mirrored four-anchor rollback transaction; active readers fail
+  closed until an interrupted transaction is recovered under lock. Committed
+  recovery validates the exact successor digest, coherent active generation,
+  and paired installed controller before deleting transaction evidence,
+  including recovery from one surviving marker. A prepared or mixed marker
+  over the complete valid successor finalizes forward. A complete successor
+  that fails semantic, controller, or authorized-candidate validation retains
+  locked recovery evidence and is never rolled back. Any committed marker over
+  a partial successor retains all transaction evidence for reviewed manual
+  recovery. Only a prepared-only strict partial reachable publication prefix
+  may roll back. Prepared recovery validates the exact rollback predecessor
+  and controller before mutation, restores in reverse publication order, and
+  revalidates the restored predecessor before evidence cleanup. An unreadable
+  or changed
+  visible marker after commit publication begins retains locked recovery
+  evidence. Readers also fail closed on every reserved rollback-anchor entry;
+  markerless or unexpected anchors are preserved for reviewed manual recovery.
+  Thus absent markers for this complete-predecessor migration leave recovery
+  evidence and readers closed.
+  Every authorized-freeze successor is fully revalidated before commit, after
+  both markers are committed on the normal path, and during complete-successor
+  recovery. Exact successor-anchor checks bracket each revalidation. The same
+  visible transaction generation must remain visible for each validation.
+  Preserved authorized freezes are also revalidated before any successor anchor
+  is published. The exact active-generation verifier authenticates its
+  executing installed controller and holds the stable serialization anchor
+  across the complete active-state, ledger, and candidate proof.
+  Committed completion removes rollback anchors before marker cleanup.
+  The current successor controller and the freeze-bound build-receipt
+  controller must each have paired installed authority; an exact migration may
+  preserve a historical build receipt, while exact freeze replacement requires
+  a candidate built by the successor controller and exact active-policy and
+  promotion compare-and-swap anchors.
+  It records the human `p0=1.0` choice as unsealed and non-authoritative, keeps
+  the packet gate blocked, and grants no launch or science authority.
 
 ### Q011 pressure-selection schema-v3 gate
 
@@ -833,9 +886,10 @@ boundary, not a selection creator. Its exact chain is:
    source-snapshot replay binds the reanalysis back to the frozen
    clean-candidate archive and helper-source closure.
 
-No pressure-selection receipt exists and no case has been selected. The gate,
-status successor, advisory options memo, and all replay validations grant no
-launch authority and no science authority.
+No pressure-selection receipt exists. The human `p0=1.0` choice is recorded
+but remains unsealed and non-authoritative; it is not yet an authoritative
+pressure selection. The gate, status successor, advisory options memo, and all
+replay validations grant no launch authority and no science authority.
 
 - `q011_parallel_shock_storage_estimator_successor_2026-06-01.json`:
   analytical storage-planning successor after the publication deck gained a

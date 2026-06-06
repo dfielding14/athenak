@@ -105,6 +105,23 @@ _Q011_PACKET_GATE_SOURCE_TEST_CLOSURE_PATHS = (
     "tst/publication/readiness/q011_section54_pressure_pilot_postrun_aggregate_source_authorization_successor_v6_2026-06-05.json",
     "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
 )
+_Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS = (
+    "tst/publication/frontier_control_plane/README.md",
+    "tst/publication/frontier_control_plane/control_plane_common.py",
+    "tst/publication/frontier_control_plane/promote_active_policy.py",
+    "tst/publication/frontier_control_plane/revalidate_clean_candidate.py",
+    "tst/publication/frontier_control_plane/run_control_plane.py",
+    "tst/publication/frontier_control_plane/install_control_plane.py",
+    "tst/publication/frontier_control_plane/capture_storage_preflight_evidence.py",
+    "tst/publication/frontier_control_plane/storage_preflight.schema.json",
+    "tst/publication/frontier_control_plane/test_control_plane.py",
+    "tst/publication/q011_section54_pressure_pilot_execution.py",
+    "tst/publication/test_q011_section54_pressure_pilot_execution.py",
+    "tst/publication/test_revalidate_clean_candidate.py",
+    "tst/publication/test_capture_storage_preflight_evidence.py",
+    "tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh",
+    "tst/publication/test_pic_readiness_registry.py",
+)
 
 
 def _load(name: str) -> dict[str, object]:
@@ -571,6 +588,8 @@ def _validate_q011_post_publication_pressure_gate_status_successor(
             or re.fullmatch(r"[0-9a-f]{64}", binding["sha256"]) is None
         ):
             raise ValueError("packet-gate source/test closure binding drifted")
+    if closure["closure_sha256"] != inventory_digest(closure_files):
+        raise ValueError("packet-gate source/test closure digest drifted")
     if not _exact_json_equal(value["published_pressure_evidence"], {
         "aggregate_manifest": {
             "path": (
@@ -792,6 +811,371 @@ def _validate_q011_post_publication_pressure_gate_status_successor(
         })
     ):
         raise ValueError("pressure-selection packet-gate contract drifted")
+
+
+def _validate_q011_exact_predecessor_migration_repair_successor(
+    value: object,
+) -> None:
+    if type(value) is not dict or set(value) != {
+        "schema_version",
+        "record_type",
+        "recorded_utc",
+        "source_checkpoint_commit",
+        "predecessor_record",
+        "predecessor_sha256",
+        "retained_clean_worker",
+        "retained_failed_migration_attempt",
+        "unchanged_live_operational_baseline",
+        "source_local_exact_predecessor_repair",
+        "next_clean_worker",
+        "human_pressure_selection",
+        "packet_gate",
+        "frontier_launch_authorization",
+        "qualification_effect",
+        "status",
+    }:
+        raise ValueError("exact-predecessor migration repair successor shape drifted")
+    if not _exact_json_equal(
+        {
+            key: value[key]
+            for key in (
+                "schema_version",
+                "record_type",
+                "recorded_utc",
+                "source_checkpoint_commit",
+                "predecessor_record",
+                "predecessor_sha256",
+                "frontier_launch_authorization",
+                "qualification_effect",
+                "status",
+            )
+        },
+        {
+            "schema_version": 1,
+            "record_type": (
+                "q011_section54_pressure_gate_exact_predecessor_migration_"
+                "repair_successor"
+            ),
+            "recorded_utc": "2026-06-05T12:17:04Z",
+            "source_checkpoint_commit": "164e98ec153d90f26dea42647edeb23fe5ce9a4e",
+            "predecessor_record": (
+                "tst/publication/readiness/"
+                "q011_section54_post_publication_pressure_gate_status_successor_"
+                "2026-06-05.json"
+            ),
+            "predecessor_sha256": (
+                "0ba6ac19df478630830b13a68443e0560cfcf9dbd00d48f20ad25d59a39568be"
+            ),
+            "frontier_launch_authorization": "none_launch_prohibited",
+            "qualification_effect": "none_no_science_claim",
+            "status": (
+                "exact_predecessor_migration_repair_source_local_pending_commit_"
+                "clean_worker_pair_install_and_promotion"
+            ),
+        },
+    ):
+        raise ValueError("exact-predecessor migration repair successor scalar drifted")
+    if type(value["schema_version"]) is not int:
+        raise ValueError("exact-predecessor migration repair schema type drifted")
+    if not _exact_json_equal(
+        value["retained_clean_worker"],
+        {
+            "job_id": "4767080",
+            "job_name": "pic-q011-pressure-gate-validate",
+            "state": "COMPLETED",
+            "exit_code": "0:0",
+            "submitted_utc": "2026-06-05T07:41:58",
+            "started_utc": "2026-06-05T07:42:26",
+            "ended_utc": "2026-06-05T07:53:08",
+            "source_commit": "164e98ec153d90f26dea42647edeb23fe5ce9a4e",
+            "worker": {
+                "path": (
+                    "tst/publication/"
+                    "frontier_q011_section54_pressure_gate_validation_job.sh"
+                ),
+                "sha256": (
+                    "63ee6ca57229a96c0448134a7c105dcd0de820bbf46bd70182f49ff6514ed4d7"
+                ),
+                "expected_publication_python_files": 145,
+                "expected_publication_shell_files": 17,
+                "expected_publication_json_files": 290,
+                "expected_publication_test_modules": 65,
+            },
+            "log": {
+                "path": (
+                    "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/"
+                    "pic-q011-pressure-gate-validate.4767080.log"
+                ),
+                "sha256": (
+                    "ff04031ad6ffa0a13f03378357a7dede7acf4b1cd6328f00b4297d73cdf32fd8"
+                ),
+            },
+            "archive_focused_tests": 199,
+            "publication_tests": 1394,
+            "publication_test_skips": 2,
+        },
+    ):
+        raise ValueError("retained clean-worker binding drifted")
+    orion_root = "/lustre/orion/ast207/proj-shared/dfielding/PIC"
+    project_root = "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
+    failed_version = "ccc9d8aef994bb64465f9b16de58236ff42ed2df028e8d9897ababb30f2cb7f1"
+    failed_inventory_sha256 = (
+        "b843109601bda18cd5e9ebf0c7634480ec97d4d7feec07c1cc576964fb8f77eb"
+    )
+    if not _exact_json_equal(
+        value["retained_failed_migration_attempt"],
+        {
+            "paired_control_plane": {
+                "version": failed_version,
+                "inventoried_file_count": 24,
+                "orion_inventory": {
+                    "path": f"{orion_root}/control_plane/{failed_version}/inventory.json",
+                    "sha256": failed_inventory_sha256,
+                },
+                "project_home_inventory": {
+                    "path": f"{project_root}/control_plane/{failed_version}/inventory.json",
+                    "sha256": failed_inventory_sha256,
+                },
+                "inventories_byte_identical": True,
+            },
+            "fresh_storage_preflight": {
+                "binding": {
+                    "path": (
+                        f"{orion_root}/policy/storage_preflight_bindings/"
+                        "ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json"
+                    ),
+                    "sha256": (
+                        "25b4f01f92b52ef7e163e178f49fd2ab8519e5e2d035133752354b77aef24d36"
+                    ),
+                },
+                "probe_id": "ba77f665-9bb1-4441-8475-f16ea6aa6ab6",
+                "completed_utc": "2026-06-05T11:54:44.378099Z",
+                "evidence_sha256": (
+                    "6938aabe3da76c9dfffbfd6dce3b134cd65b0a9e052dc9bb01bedbcf152e7b48"
+                ),
+                "orion_evidence_path": (
+                    f"{orion_root}/policy/storage_preflight_evidence/"
+                    "ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json"
+                ),
+                "project_home_evidence_path": (
+                    f"{project_root}/policy/storage_preflight_evidence/"
+                    "ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json"
+                ),
+            },
+            "reviewed_policy": {
+                "path": (
+                    f"{orion_root}/policy/"
+                    "reviewed_launch_prohibited_pressure_gate_successor_"
+                    "ccc9d8ae_ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json"
+                ),
+                "sha256": (
+                    "fcfc444d66b5c90986c3cc4e8ea6400858589e2eaea14e5b755703a89e040e0e"
+                ),
+            },
+            "promotion_result": (
+                "failed_closed_live_predecessor_source_authentication_not_authorized"
+            ),
+            "active_policy_changed": False,
+            "active_promotion_changed": False,
+            "authority": "none",
+        },
+    ):
+        raise ValueError("retained failed migration-attempt binding drifted")
+    live_version = "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721"
+    live_policy_sha256 = (
+        "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+    )
+    live_promotion_sha256 = (
+        "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+    )
+    if not _exact_json_equal(
+        value["unchanged_live_operational_baseline"],
+        {
+            "installed_control_plane_version": live_version,
+            "active_policies": [
+                {
+                    "path": f"{orion_root}/policy/storage_policy.json",
+                    "sha256": live_policy_sha256,
+                },
+                {
+                    "path": f"{project_root}/policy/storage_policy.json",
+                    "sha256": live_policy_sha256,
+                },
+            ],
+            "active_policies_byte_identical": True,
+            "active_promotions": [
+                {
+                    "path": f"{orion_root}/policy/active_promotion.json",
+                    "sha256": live_promotion_sha256,
+                },
+                {
+                    "path": f"{project_root}/policy/active_promotion.json",
+                    "sha256": live_promotion_sha256,
+                },
+            ],
+            "active_promotions_byte_identical": True,
+            "registered_science_slices": [],
+            "science_submission_freeze_status": "authorized",
+        },
+    ):
+        raise ValueError("unchanged live operational baseline drifted")
+    repair = value["source_local_exact_predecessor_repair"]
+    closure = repair.get("source_test_closure") if type(repair) is dict else None
+    closure_files = closure.get("files") if type(closure) is dict else None
+    if (
+        type(repair) is not dict
+        or set(repair)
+        != {
+            "control_plane_version",
+            "inventoried_file_count",
+            "state",
+            "final_binding_refresh",
+            "exact_migration_contract",
+            "source_test_closure",
+        }
+        or repair["control_plane_version"]
+        != "b99fba0fef551715973e7e33775e82ea7f276949f0739730362e8d526c13bca1"
+        or type(repair["inventoried_file_count"]) is not int
+        or repair["inventoried_file_count"] != 24
+        or repair["state"]
+        != "source_local_uncommitted_exact_predecessor_migration_repair"
+        or not _exact_json_equal(
+            repair["final_binding_refresh"],
+            {
+                "status": "completed_before_commit",
+                "fields": ["control_plane_version", "source_test_closure"],
+                "authority": "none",
+            },
+        )
+        or repair["exact_migration_contract"]
+        != [
+            "exact_active_policy_and_promotion_hashes",
+            "exact_active_controller_probe_evidence_and_source_authentication",
+            "new_control_plane_required",
+            "empty_registered_science_allowlist_required",
+            "authorized_science_freeze_preserved",
+            "only_controller_and_different_strictly_newer_preflight_binding_change",
+            "schema_v2_unique_promotion_identity_and_aba_resistant_compare_and_swap",
+            "durable_mirrored_prepared_committed_four_anchor_transaction",
+            "authorized_successor_revalidated_before_commit_after_both_committed_markers_on_normal_path_and_during_recovery",
+            "preserved_authorized_freeze_revalidated_before_any_successor_anchor_publication",
+            "exact_active_generation_verifier_authenticates_executing_installed_controller_and_holds_stable_serialization_anchor",
+            "exact_successor_anchors_bracket_authorized_candidate_revalidation",
+            "same_visible_transaction_generation_required_for_each_validation",
+            "complete_successor_rollback_anchors_removed_before_marker_cleanup",
+            "authorized_successor_revalidation_binds_current_and_freeze_build_receipt_controllers",
+            "preserved_authorized_freeze_allows_paired_historical_build_receipt",
+            "candidate_or_active_anchor_drift_at_complete_commit_boundary_retains_locked_recovery_evidence",
+            "visible_ambiguous_postcommit_marker_state_retains_locked_recovery_evidence",
+            "active_readers_fail_closed_while_transaction_marker_or_reserved_rollback_anchor_exists",
+            "markerless_or_unexpected_rollback_anchor_evidence_requires_reviewed_manual_recovery",
+            "complete_predecessor_absent_markers_leave_fail_closed_rollback_anchor_evidence",
+            "complete_valid_successor_rolls_forward_regardless_of_prepared_or_mixed_marker_state",
+            "complete_invalid_successor_retains_locked_recovery_evidence",
+            "committed_recovery_validates_exact_successor_digests_semantics_and_controller_before_evidence_cleanup",
+            "partial_successor_with_any_committed_marker_retains_all_transaction_evidence_for_reviewed_manual_recovery",
+            "strict_partial_prepared_recovery_requires_reachable_publication_prefix_and_semantic_predecessor_before_mutation",
+            "prepared_rollback_restores_reverse_publication_order",
+            "prepared_rollback_revalidates_restored_predecessor_before_evidence_cleanup",
+            "interrupted_transaction_recovery_requires_locked_promotion",
+            "authorized_freeze_changes_require_exact_active_predecessor_compare_and_swap",
+            "exact_freeze_replacement_revalidates_full_clean_candidate_bundle",
+            "exact_freeze_replacement_requires_successor_controller_build_receipt",
+            "active_predecessor_revalidated_immediately_before_transaction_setup",
+            "exact_commit_required_for_source_runner_installer_and_q011_materializers",
+            "preflight_capture_and_recovery_hold_stable_serialization_anchor",
+            "preflight_capture_source_authentication_binds_executing_common_module",
+            "preflight_recovery_requires_exact_pair_digest_source_and_existing_role",
+            "preflight_evidence_publication_is_commit_forward_and_preserves_ambiguous_residue",
+            "normal_unlock_and_promotion_remain_strict",
+        ]
+        or type(closure) is not dict
+        or set(closure) != {"file_count", "closure_sha256", "files"}
+        or type(closure["file_count"]) is not int
+        or closure["file_count"]
+        != len(_Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS)
+        or type(closure_files) is not list
+        or any(type(binding) is not dict for binding in closure_files)
+        or [binding.get("path") for binding in closure_files]
+        != list(_Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS)
+    ):
+        raise ValueError("source-local exact-predecessor repair binding drifted")
+    for binding in closure_files:
+        if (
+            type(binding) is not dict
+            or set(binding) != {"path", "sha256"}
+            or type(binding["path"]) is not str
+            or type(binding["sha256"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", binding["sha256"]) is None
+            or _sha256(REPO_ROOT / binding["path"]) != binding["sha256"]
+        ):
+            raise ValueError("exact-predecessor repair source/test closure drifted")
+    if closure["closure_sha256"] != inventory_digest(closure_files):
+        raise ValueError("exact-predecessor repair source/test closure digest drifted")
+    next_worker = value["next_clean_worker"]
+    if (
+        type(next_worker) is not dict
+        or any(
+            type(next_worker.get(key)) is not int
+            for key in (
+                "expected_publication_python_files",
+                "expected_publication_shell_files",
+                "expected_publication_json_files",
+                "expected_publication_test_modules",
+            )
+        )
+        or not _exact_json_equal(
+            next_worker,
+            {
+                "path": (
+                    "tst/publication/"
+                    "frontier_q011_section54_pressure_gate_validation_job.sh"
+                ),
+                "sha256": (
+                    "3966f56d61bd73164873c88aac906da27cc002a11a88ea11d176329945a37d97"
+                ),
+                "expected_publication_python_files": 145,
+                "expected_publication_shell_files": 17,
+                "expected_publication_json_files": 291,
+                "expected_publication_test_modules": 65,
+                "status": "pending_clean_committed_worker_validation",
+            },
+        )
+    ):
+        raise ValueError("next clean-worker binding drifted")
+    if not _exact_json_equal(
+        value["human_pressure_selection"],
+        {
+            "status": "human_choice_recorded_not_yet_sealed_or_authoritative",
+            "selected_case": {"case_id": "ps_p0_1p00", "problem_ps_p0": 1.0},
+            "reviewer_id": "dfielding",
+            "rationale": (
+                "Selected p0=1.0 as the recommended baseline because it explicitly "
+                "matches Bai et al. (2015), which uses P0=T0=1 and treats the choice "
+                "as unimportant while thermal pressure is much smaller than ram "
+                "pressure."
+            ),
+            "selection_receipt": None,
+        },
+    ):
+        raise ValueError("human pressure-selection checkpoint drifted")
+    if not _exact_json_equal(
+        value["packet_gate"],
+        {
+            "status": "blocked",
+            "required_receipt_schema_version": 3,
+            "remaining_actions": [
+                "commit_push_exact_predecessor_migration_repair",
+                "clean_worker_validate_exact_repair_commit",
+                "capture_fresh_preflight_pair_install_and_promote_exact_migration",
+                "build_freeze_revalidate_and_promote_fresh_clean_candidate",
+                "seal_authoritative_reanalysis_reviewer_and_selection_receipt",
+                "verify_all_pressure_selection_replay_boundaries",
+            ],
+            "authority": "none",
+        },
+    ):
+        raise ValueError("exact-predecessor repair packet-gate state drifted")
 
 
 def _validation_manifest_schema() -> dict[str, object]:
@@ -2431,6 +2815,50 @@ class PicReadinessRegistryTests(unittest.TestCase):
         staged_packet_gate = post_publication_status[
             "staged_packet_gate_control_plane"
         ]
+        exact_predecessor_repair_successor = _load(
+            "q011_section54_pressure_gate_exact_predecessor_migration_repair_"
+            "successor_2026-06-05.json"
+        )
+        _validate_q011_exact_predecessor_migration_repair_successor(
+            exact_predecessor_repair_successor
+        )
+        exact_predecessor_repair = exact_predecessor_repair_successor[
+            "source_local_exact_predecessor_repair"
+        ]
+        self.assertEqual(
+            exact_predecessor_repair["final_binding_refresh"],
+            {
+                "status": "completed_before_commit",
+                "fields": ["control_plane_version", "source_test_closure"],
+                "authority": "none",
+            },
+        )
+        exact_predecessor_repair_version = exact_predecessor_repair[
+            "control_plane_version"
+        ]
+        if staged_version == exact_predecessor_repair_version:
+            self.assertEqual(
+                exact_predecessor_repair_successor["packet_gate"]["authority"],
+                "none",
+            )
+            self.assertEqual(
+                exact_predecessor_repair_successor["frontier_launch_authorization"],
+                "none_launch_prohibited",
+            )
+            self.assertEqual(
+                staged_packet_gate["version"],
+                "ccc9d8aef994bb64465f9b16de58236ff42ed2df028e8d9897ababb30f2cb7f1",
+            )
+            self.assertNotEqual(staged_version, staged_packet_gate["version"])
+            self.assertEqual(
+                staged_packet_gate["pair_install_authorization_by_this_status"],
+                "none",
+            )
+            self.assertEqual(
+                staged_packet_gate["policy_promotion_authorization_by_this_status"],
+                "none",
+            )
+            return
         if staged_version == staged_packet_gate["version"]:
             live_baseline = post_publication_status["live_operational_baseline"]
             self.assertNotEqual(
@@ -3349,34 +3777,24 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(_regular_files_below(root, "test_*.py"), [regular])
 
-    def test_q011_live_policy_uses_installed_production_unlock_snapshot(self) -> None:
+    def test_q011_historical_status_binds_installed_controller_inventory(self) -> None:
         status = _load(
             "q011_section54_post_publication_pressure_gate_status_successor_"
             "2026-06-05.json"
         )
         live = status["live_operational_baseline"]
-        installed_dir = Path(live["inventories"][0]["path"]).parent
-        verify_historical_installed_control_plane(
-            installed_dir,
-            authorized_pic_root=installed_dir.parents[1],
-        )
-        verified = _installed_policy_unlock_snapshot(
-            installed_dir,
-            live["installed_control_plane_version"],
-        )
-        policy = json.loads(
-            Path(live["active_policies"][0]["path"]).read_text(encoding="utf-8")
-        )
-        self.assertTrue(_exact_json_equal(verified["policy"], policy))
-        self.assertTrue(
-            _exact_json_equal(
-                verified["snapshot"],
-                {
-                    "active_policy_sha256": live["active_policies"][0]["sha256"],
-                    "active_promotion_sha256": live["active_promotions"][0]["sha256"],
-                },
+        inventory_payloads = []
+        for binding in live["inventories"]:
+            path = Path(binding["path"])
+            payload = path.read_bytes()
+            self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
+            inventory_payloads.append(payload)
+            installed = verify_historical_installed_control_plane(
+                path.parent,
+                authorized_pic_root=path.parents[2],
             )
-        )
+            self.assertEqual(installed["version"], live["installed_control_plane_version"])
+        self.assertEqual(len(set(inventory_payloads)), 1)
 
     def test_q011_post_publication_pressure_gate_status_successor_recomputes(
         self,
@@ -3388,6 +3806,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         status_payload = status_path.read_text(encoding="utf-8")
         status = json.loads(status_payload)
+        self.assertEqual(
+            _sha256(status_path),
+            "0ba6ac19df478630830b13a68443e0560cfcf9dbd00d48f20ad25d59a39568be",
+        )
         _validate_q011_post_publication_pressure_gate_status_successor(status)
         self.assertEqual(status_payload, json.dumps(status, indent=2) + "\n")
 
@@ -3404,187 +3826,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
             _sha256(REPO_ROOT / authorization["path"]),
             authorization["sha256"],
         )
-        clean_snapshot_worker = status[
-            "clean_snapshot_pressure_gate_validation_worker"
-        ]
-        clean_snapshot_worker_path = REPO_ROOT / clean_snapshot_worker["path"]
-        self.assertTrue(stat.S_ISREG(clean_snapshot_worker_path.lstat().st_mode))
-        self.assertEqual(
-            _sha256(clean_snapshot_worker_path),
-            clean_snapshot_worker["sha256"],
-        )
-        publication_root = REPO_ROOT / "tst" / "publication"
-        expected_counts = {
-            "expected_publication_python_files": len(
-                _regular_files_below(publication_root, "*.py")
-            ),
-            "expected_publication_shell_files": len(
-                _regular_files_below(publication_root, "*.sh")
-            ),
-            "expected_publication_json_files": len(
-                _regular_files_below(publication_root, "*.json")
-            ),
-            "expected_publication_test_modules": len(
-                _regular_files_below(publication_root, "test_*.py")
-            ),
-        }
-        for key, observed in expected_counts.items():
-            with self.subTest(clean_snapshot_count=key):
-                self.assertEqual(clean_snapshot_worker[key], observed)
-        clean_snapshot_worker_text = clean_snapshot_worker_path.read_text(
-            encoding="utf-8"
-        )
-        for array, count in (
-            ("publication_python", 145),
-            ("publication_shell", 17),
-            ("publication_json", 290),
-            ("modules", 65),
-        ):
-            with self.subTest(clean_snapshot_wrapper_count=array):
-                self.assertIn(
-                    f'test "${{#{array}[@]}}" -eq {count}',
-                    clean_snapshot_worker_text,
-                )
-        staged_packet_gate = status["staged_packet_gate_control_plane"]
-        self.assertEqual(
-            staged_packet_gate["version"],
-            inventory_digest(
-                [
-                    {"path": name, "sha256": _sha256(CONTROL_PLANE_DIR / name)}
-                    for name in CONTROL_PLANE_FILES
-                ]
-            ),
-        )
-        self.assertEqual(
-            staged_packet_gate["inventoried_file_count"],
-            len(CONTROL_PLANE_FILES),
-        )
-        staged_inventory = staged_packet_gate["prepared_artifact_inventory"]
-        self.assertEqual(
-            _sha256(REPO_ROOT / staged_inventory["path"]),
-            staged_inventory["sha256"],
-        )
-        live = status["live_operational_baseline"]
-        inventory_payloads = []
-        installed_inventories = []
-        for binding in live["inventories"]:
-            path = Path(binding["path"])
-            with self.subTest(live_inventory=path):
-                with _pinned_regular_bytes(path) as payload:
-                    self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
-                    inventory_payloads.append(payload)
-                installed_inventories.append(
-                    verify_historical_installed_control_plane(
-                        path.parent,
-                        authorized_pic_root=path.parents[2],
-                    )
-                )
-        self.assertEqual(len(set(inventory_payloads)), 1)
-        installed_inventory = json.loads(inventory_payloads[0])
-        self.assertEqual(installed_inventories, [installed_inventory] * 2)
-        self.assertEqual(
-            installed_inventory["version"],
-            live["installed_control_plane_version"],
-        )
-        self.assertEqual(
-            len(installed_inventory["files"]),
-            live["inventoried_member_count"],
-        )
-        installed_policy_verification = _installed_policy_unlock_snapshot(
-            Path(live["inventories"][0]["path"]).parent,
-            live["installed_control_plane_version"],
-        )
-
-        policy_payloads = []
-        for binding in live["active_policies"]:
-            path = Path(binding["path"])
-            with self.subTest(live_policy=path):
-                with _pinned_regular_bytes(path) as payload:
-                    self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
-                    policy_payloads.append(payload)
-        self.assertEqual(len(set(policy_payloads)), 1)
-        live_policy = json.loads(policy_payloads[0])
-        self.assertTrue(
-            _exact_json_equal(installed_policy_verification["policy"], live_policy)
-        )
-        side_storage = live_policy["olcf_side_storage"]
-        freeze = live_policy["science_submission_freeze"]
-        self.assertEqual(
-            live["projected_policy_state"],
-            {
-                "installed_control_plane_version": side_storage[
-                    "installed_control_plane_version"
-                ],
-                "staged_control_plane_candidate_version": side_storage[
-                    "staged_control_plane_candidate_version"
-                ],
-                "build_profile_control_plane_version": freeze[
-                    "build_profile_control_plane_version"
-                ],
-                "registered_science_slices": live_policy["registered_science_slices"],
-                "science_submission_freeze_status": freeze["status"],
-            },
-        )
-
-        promotion_payloads = []
-        for binding in live["active_promotions"]:
-            path = Path(binding["path"])
-            with self.subTest(live_promotion=path):
-                with _pinned_regular_bytes(path) as payload:
-                    self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
-                    promotion_payloads.append(payload)
-        self.assertEqual(len(set(promotion_payloads)), 1)
-        live_promotion = json.loads(promotion_payloads[0])
-        self.assertEqual(
-            live["projected_promotion_state"],
-            {
-                "control_plane_version": live_promotion["control_plane_version"],
-                "policy_sha256": live_promotion["policy_sha256"],
-            },
-        )
-        self.assertEqual(
-            live_promotion["control_plane_version"],
-            live["installed_control_plane_version"],
-        )
-        self.assertEqual(
-            live_promotion["policy_sha256"],
-            live["active_policies"][0]["sha256"],
-        )
-        self.assertEqual(
-            live_promotion["policy_path"],
-            live["active_policies"][0]["path"],
-        )
-        self.assertEqual(
-            live_promotion["project_home_policy_path"],
-            live["active_policies"][1]["path"],
-        )
-        self.assertTrue(
-            _exact_json_equal(
-                installed_policy_verification["snapshot"],
-                {
-                    "active_policy_sha256": live["active_policies"][0]["sha256"],
-                    "active_promotion_sha256": live["active_promotions"][0]["sha256"],
-                },
-            )
-        )
-        self.assertNotEqual(
-            staged_packet_gate["version"],
-            live["installed_control_plane_version"],
-        )
-
-        closure = status["source_test_closure"]
-        recomputed_closure = []
-        for relative in _Q011_PACKET_GATE_SOURCE_TEST_CLOSURE_PATHS:
-            with _pinned_regular_bytes(REPO_ROOT / relative) as payload:
-                recomputed_closure.append(
-                    {"path": relative, "sha256": hashlib.sha256(payload).hexdigest()}
-                )
-        self.assertEqual(closure["files"], recomputed_closure)
-        self.assertEqual(closure["file_count"], len(recomputed_closure))
-        self.assertEqual(
-            closure["closure_sha256"],
-            inventory_digest(recomputed_closure),
-        )
+        # This successor is an immutable point-in-time status. Its source
+        # closure, validation worker, staged controller, active anchors, and
+        # scoped absence observations are expected to be superseded later.
+        # Recompute only bindings that the record declares immutable.
         evidence = status["published_pressure_evidence"]
         for label, binding in evidence.items():
             with self.subTest(published_pressure_evidence=label):
@@ -3630,10 +3875,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     receipt["source_bindings"]["runtime_source_archive"]["git_commit"],
                     status["source_checkpoint_commit"],
                 )
-        consumed = pressure_packet_verifier.consume_published_pressure_pilot_review_packet(
-            evidence["review_packet_receipt"]["path"],
-            aggregate_receipt_binding=evidence["aggregate_receipt"],
-            authorized_pic_root=Path(evidence["aggregate_receipt"]["path"]).parents[1],
+        consumed = (
+            pressure_packet_verifier.consume_published_pressure_pilot_review_packet(
+                evidence["review_packet_receipt"]["path"],
+                aggregate_receipt_binding=evidence["aggregate_receipt"],
+                authorized_pic_root=Path(evidence["aggregate_receipt"]["path"]).parents[1],
+            )
         )
         self.assertEqual(
             consumed["receipt_binding"],
@@ -3651,83 +3898,6 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ).strip(),
             "commit",
         )
-
-        acceptance = status["publication_acceptance_state"]
-        publication_root_path = Path(acceptance["publication_root"]["path"])
-        publication_root_status = publication_root_path.lstat()
-        self.assertEqual(
-            acceptance["publication_root"]["identity"],
-            {
-                "device": publication_root_status.st_dev,
-                "inode": publication_root_status.st_ino,
-            },
-        )
-        self.assertEqual(
-            acceptance["publication_root"]["mode"],
-            f"{stat.S_IMODE(publication_root_status.st_mode):05o}",
-        )
-        self.assertEqual(
-            acceptance["publication_root"]["exact_entries"],
-            sorted(path.name for path in publication_root_path.iterdir()),
-        )
-        acceptance_root_path = Path(acceptance["acceptance_root"]["path"])
-        acceptance_root_status = acceptance_root_path.lstat()
-        self.assertEqual(
-            acceptance["acceptance_root"]["identity"],
-            {
-                "device": acceptance_root_status.st_dev,
-                "inode": acceptance_root_status.st_ino,
-            },
-        )
-        self.assertEqual(
-            acceptance["acceptance_root"]["mode"],
-            f"{stat.S_IMODE(acceptance_root_status.st_mode):04o}",
-        )
-        self.assertEqual(
-            acceptance["acceptance_root"]["exact_entries"],
-            sorted(path.name for path in acceptance_root_path.iterdir()),
-        )
-        for binding in acceptance["success_seals"]:
-            seal_path = Path(binding["path"])
-            seal_status = seal_path.lstat()
-            self.assertEqual(_sha256(seal_path), binding["sha256"])
-            self.assertEqual(
-                binding["identity"],
-                {"device": seal_status.st_dev, "inode": seal_status.st_ino},
-            )
-            self.assertEqual(binding["mode"], f"{stat.S_IMODE(seal_status.st_mode):04o}")
-            receipt_path = Path(binding["receipt"]["path"])
-            receipt_status = receipt_path.lstat()
-            self.assertEqual(_sha256(receipt_path), binding["receipt"]["sha256"])
-            self.assertEqual(
-                binding["receipt"]["identity"],
-                {"device": receipt_status.st_dev, "inode": receipt_status.st_ino},
-            )
-            seal = json.loads(seal_path.read_text(encoding="utf-8"))
-            self.assertEqual(seal["receipt_sha256"], binding["receipt"]["sha256"])
-            self.assertEqual(seal["receipt_identity"], binding["receipt"]["identity"])
-            self.assertEqual(
-                seal["publication_root_identity"],
-                acceptance["publication_root"]["identity"],
-            )
-        for path in acceptance["absent_publication_paths"]:
-            with self.assertRaises(FileNotFoundError):
-                Path(path).lstat()
-        for search in acceptance["absent_namespace_globs"]:
-            self.assertEqual(
-                sorted(path.name for path in Path(search["root"]).glob(search["glob"])),
-                search["matches"],
-            )
-
-        absence = status["scoped_absence_evidence"]
-        for search in absence["pressure_selection_receipt_searches"]:
-            root = Path(search["root"])
-            self.assertTrue(root.is_dir())
-        validation_log_search = absence["clean_snapshot_validation_log_search"]
-        validation_log_root = Path(validation_log_search["root"])
-        self.assertTrue(validation_log_root.is_dir())
-        # These are point-in-time observations. Successful validation, selection,
-        # and later policy promotion are expected to populate these namespaces.
 
         memo = status["advisory_pressure_options_memo"]
         memo_path = REPO_ROOT / memo["path"]
@@ -3858,6 +4028,16 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "source/test closure malformed hash",
                 ("source_test_closure", "files", 0, "sha256"),
                 "0",
+            ),
+            (
+                "source/test closure valid-looking member hash drift",
+                ("source_test_closure", "files", 0, "sha256"),
+                "0" * 64,
+            ),
+            (
+                "source/test closure valid-looking digest drift",
+                ("source_test_closure", "closure_sha256"),
+                "0" * 64,
             ),
             (
                 "aggregate receipt",
@@ -4019,6 +4199,289 @@ class PicReadinessRegistryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _validate_q011_post_publication_pressure_gate_status_successor(
                 status_with_extra_key
+            )
+
+    def test_q011_exact_predecessor_repair_source_test_closure_contract(
+        self,
+    ) -> None:
+        newly_critical_paths = {
+            "tst/publication/frontier_control_plane/README.md",
+            "tst/publication/frontier_control_plane/run_control_plane.py",
+            "tst/publication/frontier_control_plane/install_control_plane.py",
+            "tst/publication/frontier_control_plane/capture_storage_preflight_evidence.py",
+            "tst/publication/frontier_control_plane/storage_preflight.schema.json",
+            "tst/publication/test_capture_storage_preflight_evidence.py",
+        }
+        closure_paths = _Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS
+        self.assertEqual(len(closure_paths), 15)
+        self.assertEqual(len(set(closure_paths)), len(closure_paths))
+        self.assertTrue(newly_critical_paths.issubset(closure_paths))
+        for relative in closure_paths:
+            with self.subTest(closure_path=relative):
+                self.assertTrue((REPO_ROOT / relative).is_file())
+
+    def test_q011_exact_predecessor_migration_repair_successor_recomputes(
+        self,
+    ) -> None:
+        successor_path = (
+            READINESS_DIR
+            / "q011_section54_pressure_gate_exact_predecessor_migration_repair_"
+            "successor_2026-06-05.json"
+        )
+        successor_payload = successor_path.read_text(encoding="utf-8")
+        successor = json.loads(successor_payload)
+        _validate_q011_exact_predecessor_migration_repair_successor(successor)
+        self.assertEqual(successor_payload, json.dumps(successor, indent=2) + "\n")
+
+        predecessor_path = REPO_ROOT / successor["predecessor_record"]
+        self.assertEqual(_sha256(predecessor_path), successor["predecessor_sha256"])
+        predecessor = json.loads(predecessor_path.read_text(encoding="utf-8"))
+        self.assertGreater(
+            _canonical_utc_second(successor["recorded_utc"]),
+            _canonical_utc_second(predecessor["recorded_utc"]),
+        )
+
+        retained_worker = successor["retained_clean_worker"]
+        self.assertEqual(
+            _sha256(Path(retained_worker["log"]["path"])),
+            retained_worker["log"]["sha256"],
+        )
+
+        failed_attempt = successor["retained_failed_migration_attempt"]
+        paired = failed_attempt["paired_control_plane"]
+        installed_inventory_payloads = []
+        for key in ("orion_inventory", "project_home_inventory"):
+            binding = paired[key]
+            payload = Path(binding["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
+            installed_inventory_payloads.append(payload)
+        self.assertEqual(len(set(installed_inventory_payloads)), 1)
+        self.assertTrue(paired["inventories_byte_identical"])
+
+        preflight = failed_attempt["fresh_storage_preflight"]
+        self.assertEqual(
+            _sha256(Path(preflight["binding"]["path"])),
+            preflight["binding"]["sha256"],
+        )
+        for key in ("orion_evidence_path", "project_home_evidence_path"):
+            self.assertEqual(
+                _sha256(Path(preflight[key])),
+                preflight["evidence_sha256"],
+            )
+        reviewed_policy = failed_attempt["reviewed_policy"]
+        self.assertEqual(
+            _sha256(Path(reviewed_policy["path"])),
+            reviewed_policy["sha256"],
+        )
+
+        live = successor["unchanged_live_operational_baseline"]
+        for bindings_key, identical_key in (
+            ("active_policies", "active_policies_byte_identical"),
+            ("active_promotions", "active_promotions_byte_identical"),
+        ):
+            payloads = []
+            for binding in live[bindings_key]:
+                payload = Path(binding["path"]).read_bytes()
+                self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
+                payloads.append(payload)
+            self.assertEqual(len(set(payloads)), 1)
+            self.assertTrue(live[identical_key])
+        live_policy = json.loads(
+            Path(live["active_policies"][0]["path"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(live_policy["registered_science_slices"], [])
+        self.assertEqual(
+            live_policy["science_submission_freeze"]["status"],
+            "authorized",
+        )
+
+        repair = successor["source_local_exact_predecessor_repair"]
+        current_control_plane_bindings = [
+            {"path": name, "sha256": _sha256(CONTROL_PLANE_DIR / name)}
+            for name in CONTROL_PLANE_FILES
+        ]
+        current_control_plane_version = inventory_digest(
+            current_control_plane_bindings
+        )
+        self.assertRegex(current_control_plane_version, r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            repair["control_plane_version"],
+            current_control_plane_version,
+        )
+        self.assertEqual(
+            repair["inventoried_file_count"],
+            len(current_control_plane_bindings),
+        )
+        current_closure = [
+            {"path": relative, "sha256": _sha256(REPO_ROOT / relative)}
+            for relative in _Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS
+        ]
+        closure = repair["source_test_closure"]
+        current_closure_sha256 = inventory_digest(current_closure)
+        self.assertRegex(current_closure_sha256, r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            closure["files"],
+            current_closure,
+        )
+        self.assertEqual(
+            [binding["path"] for binding in closure["files"]],
+            [binding["path"] for binding in current_closure],
+        )
+        self.assertEqual(
+                repair["final_binding_refresh"],
+                {
+                    "status": "completed_before_commit",
+                    "fields": ["control_plane_version", "source_test_closure"],
+                    "authority": "none",
+                },
+        )
+
+        next_worker = successor["next_clean_worker"]
+        next_worker_path = REPO_ROOT / next_worker["path"]
+        self.assertEqual(_sha256(next_worker_path), next_worker["sha256"])
+        publication_root = REPO_ROOT / "tst" / "publication"
+        expected_counts = {
+            "expected_publication_python_files": len(
+                _regular_files_below(publication_root, "*.py")
+            ),
+            "expected_publication_shell_files": len(
+                _regular_files_below(publication_root, "*.sh")
+            ),
+            "expected_publication_json_files": len(
+                _regular_files_below(publication_root, "*.json")
+            ),
+            "expected_publication_test_modules": len(
+                _regular_files_below(publication_root, "test_*.py")
+            ),
+        }
+        for key, observed in expected_counts.items():
+            with self.subTest(next_clean_worker_count=key):
+                self.assertEqual(next_worker[key], observed)
+
+    def test_q011_exact_predecessor_migration_repair_successor_rejects_drift(
+        self,
+    ) -> None:
+        successor = _load(
+            "q011_section54_pressure_gate_exact_predecessor_migration_repair_"
+            "successor_2026-06-05.json"
+        )
+        rejection_cases = [
+            ("schema numeric alias", ("schema_version",), 1.0),
+            ("predecessor", ("predecessor_sha256",), "0" * 64),
+            (
+                "retained worker log",
+                ("retained_clean_worker", "log", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "failed-attempt authority",
+                ("retained_failed_migration_attempt", "authority"),
+                "pair_install",
+            ),
+            (
+                "live active policy",
+                (
+                    "unchanged_live_operational_baseline",
+                    "active_policies",
+                    0,
+                    "sha256",
+                ),
+                "0" * 64,
+            ),
+            (
+                "repair controller",
+                ("source_local_exact_predecessor_repair", "control_plane_version"),
+                "0" * 64,
+            ),
+            (
+                "final-refresh status",
+                (
+                    "source_local_exact_predecessor_repair",
+                    "final_binding_refresh",
+                    "status",
+                ),
+                "complete",
+            ),
+            (
+                "source/test closure path",
+                (
+                    "source_local_exact_predecessor_repair",
+                    "source_test_closure",
+                    "files",
+                    0,
+                    "path",
+                ),
+                "tst/publication/other.py",
+            ),
+            (
+                "source/test closure member hash",
+                (
+                    "source_local_exact_predecessor_repair",
+                    "source_test_closure",
+                    "files",
+                    0,
+                    "sha256",
+                ),
+                "0" * 64,
+            ),
+            (
+                "source/test closure digest",
+                (
+                    "source_local_exact_predecessor_repair",
+                    "source_test_closure",
+                    "closure_sha256",
+                ),
+                "0" * 64,
+            ),
+            ("next worker", ("next_clean_worker", "sha256"), "0" * 64),
+            (
+                "human pressure numeric alias",
+                (
+                    "human_pressure_selection",
+                    "selected_case",
+                    "problem_ps_p0",
+                ),
+                1,
+            ),
+            (
+                "selection receipt invented",
+                ("human_pressure_selection", "selection_receipt"),
+                {},
+            ),
+            ("packet gate unblocked", ("packet_gate", "status"), "ready"),
+            (
+                "launch authorization granted",
+                ("frontier_launch_authorization",),
+                "authorized",
+            ),
+        ]
+        for label, path, replacement in rejection_cases:
+            with self.subTest(label=label):
+                candidate = copy.deepcopy(successor)
+                _replace_nested(candidate, path, replacement)
+                with self.assertRaises(ValueError):
+                    _validate_q011_exact_predecessor_migration_repair_successor(
+                        candidate
+                    )
+
+        coordinated_closure_drift = copy.deepcopy(successor)
+        coordinated_closure = coordinated_closure_drift[
+            "source_local_exact_predecessor_repair"
+        ]["source_test_closure"]
+        coordinated_closure["files"][0]["sha256"] = "0" * 64
+        coordinated_closure["closure_sha256"] = inventory_digest(
+            coordinated_closure["files"]
+        )
+        with self.assertRaises(ValueError):
+            _validate_q011_exact_predecessor_migration_repair_successor(
+                coordinated_closure_drift
+            )
+
+        successor_with_extra_key = copy.deepcopy(successor)
+        successor_with_extra_key["unexpected"] = True
+        with self.assertRaises(ValueError):
+            _validate_q011_exact_predecessor_migration_repair_successor(
+                successor_with_extra_key
             )
 
     def test_reviewed_mpich_stderr_fixture_matches_failed_attempt_provenance(self) -> None:

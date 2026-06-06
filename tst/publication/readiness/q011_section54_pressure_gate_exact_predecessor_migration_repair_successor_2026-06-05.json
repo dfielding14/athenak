@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_pressure_gate_exact_predecessor_migration_repair_successor",
+  "recorded_utc": "2026-06-05T12:17:04Z",
+  "source_checkpoint_commit": "164e98ec153d90f26dea42647edeb23fe5ce9a4e",
+  "predecessor_record": "tst/publication/readiness/q011_section54_post_publication_pressure_gate_status_successor_2026-06-05.json",
+  "predecessor_sha256": "0ba6ac19df478630830b13a68443e0560cfcf9dbd00d48f20ad25d59a39568be",
+  "retained_clean_worker": {
+    "job_id": "4767080",
+    "job_name": "pic-q011-pressure-gate-validate",
+    "state": "COMPLETED",
+    "exit_code": "0:0",
+    "submitted_utc": "2026-06-05T07:41:58",
+    "started_utc": "2026-06-05T07:42:26",
+    "ended_utc": "2026-06-05T07:53:08",
+    "source_commit": "164e98ec153d90f26dea42647edeb23fe5ce9a4e",
+    "worker": {
+      "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+      "sha256": "63ee6ca57229a96c0448134a7c105dcd0de820bbf46bd70182f49ff6514ed4d7",
+      "expected_publication_python_files": 145,
+      "expected_publication_shell_files": 17,
+      "expected_publication_json_files": 290,
+      "expected_publication_test_modules": 65
+    },
+    "log": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/pic-q011-pressure-gate-validate.4767080.log",
+      "sha256": "ff04031ad6ffa0a13f03378357a7dede7acf4b1cd6328f00b4297d73cdf32fd8"
+    },
+    "archive_focused_tests": 199,
+    "publication_tests": 1394,
+    "publication_test_skips": 2
+  },
+  "retained_failed_migration_attempt": {
+    "paired_control_plane": {
+      "version": "ccc9d8aef994bb64465f9b16de58236ff42ed2df028e8d9897ababb30f2cb7f1",
+      "inventoried_file_count": 24,
+      "orion_inventory": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/ccc9d8aef994bb64465f9b16de58236ff42ed2df028e8d9897ababb30f2cb7f1/inventory.json",
+        "sha256": "b843109601bda18cd5e9ebf0c7634480ec97d4d7feec07c1cc576964fb8f77eb"
+      },
+      "project_home_inventory": {
+        "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/control_plane/ccc9d8aef994bb64465f9b16de58236ff42ed2df028e8d9897ababb30f2cb7f1/inventory.json",
+        "sha256": "b843109601bda18cd5e9ebf0c7634480ec97d4d7feec07c1cc576964fb8f77eb"
+      },
+      "inventories_byte_identical": true
+    },
+    "fresh_storage_preflight": {
+      "binding": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_preflight_bindings/ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json",
+        "sha256": "25b4f01f92b52ef7e163e178f49fd2ab8519e5e2d035133752354b77aef24d36"
+      },
+      "probe_id": "ba77f665-9bb1-4441-8475-f16ea6aa6ab6",
+      "completed_utc": "2026-06-05T11:54:44.378099Z",
+      "evidence_sha256": "6938aabe3da76c9dfffbfd6dce3b134cd65b0a9e052dc9bb01bedbcf152e7b48",
+      "orion_evidence_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_preflight_evidence/ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json",
+      "project_home_evidence_path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/storage_preflight_evidence/ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json"
+    },
+    "reviewed_policy": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/reviewed_launch_prohibited_pressure_gate_successor_ccc9d8ae_ba77f665-9bb1-4441-8475-f16ea6aa6ab6.json",
+      "sha256": "fcfc444d66b5c90986c3cc4e8ea6400858589e2eaea14e5b755703a89e040e0e"
+    },
+    "promotion_result": "failed_closed_live_predecessor_source_authentication_not_authorized",
+    "active_policy_changed": false,
+    "active_promotion_changed": false,
+    "authority": "none"
+  },
+  "unchanged_live_operational_baseline": {
+    "installed_control_plane_version": "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+    "active_policies": [
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+        "sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+      },
+      {
+        "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+        "sha256": "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3"
+      }
+    ],
+    "active_policies_byte_identical": true,
+    "active_promotions": [
+      {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+        "sha256": "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+      },
+      {
+        "path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+        "sha256": "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243"
+      }
+    ],
+    "active_promotions_byte_identical": true,
+    "registered_science_slices": [],
+    "science_submission_freeze_status": "authorized"
+  },
+  "source_local_exact_predecessor_repair": {
+    "control_plane_version": "b99fba0fef551715973e7e33775e82ea7f276949f0739730362e8d526c13bca1",
+    "inventoried_file_count": 24,
+    "state": "source_local_uncommitted_exact_predecessor_migration_repair",
+    "final_binding_refresh": {
+      "status": "completed_before_commit",
+      "fields": [
+        "control_plane_version",
+        "source_test_closure"
+      ],
+      "authority": "none"
+    },
+    "exact_migration_contract": [
+      "exact_active_policy_and_promotion_hashes",
+      "exact_active_controller_probe_evidence_and_source_authentication",
+      "new_control_plane_required",
+      "empty_registered_science_allowlist_required",
+      "authorized_science_freeze_preserved",
+      "only_controller_and_different_strictly_newer_preflight_binding_change",
+      "schema_v2_unique_promotion_identity_and_aba_resistant_compare_and_swap",
+      "durable_mirrored_prepared_committed_four_anchor_transaction",
+      "authorized_successor_revalidated_before_commit_after_both_committed_markers_on_normal_path_and_during_recovery",
+      "preserved_authorized_freeze_revalidated_before_any_successor_anchor_publication",
+      "exact_active_generation_verifier_authenticates_executing_installed_controller_and_holds_stable_serialization_anchor",
+      "exact_successor_anchors_bracket_authorized_candidate_revalidation",
+      "same_visible_transaction_generation_required_for_each_validation",
+      "complete_successor_rollback_anchors_removed_before_marker_cleanup",
+      "authorized_successor_revalidation_binds_current_and_freeze_build_receipt_controllers",
+      "preserved_authorized_freeze_allows_paired_historical_build_receipt",
+      "candidate_or_active_anchor_drift_at_complete_commit_boundary_retains_locked_recovery_evidence",
+      "visible_ambiguous_postcommit_marker_state_retains_locked_recovery_evidence",
+      "active_readers_fail_closed_while_transaction_marker_or_reserved_rollback_anchor_exists",
+      "markerless_or_unexpected_rollback_anchor_evidence_requires_reviewed_manual_recovery",
+      "complete_predecessor_absent_markers_leave_fail_closed_rollback_anchor_evidence",
+      "complete_valid_successor_rolls_forward_regardless_of_prepared_or_mixed_marker_state",
+      "complete_invalid_successor_retains_locked_recovery_evidence",
+      "committed_recovery_validates_exact_successor_digests_semantics_and_controller_before_evidence_cleanup",
+      "partial_successor_with_any_committed_marker_retains_all_transaction_evidence_for_reviewed_manual_recovery",
+      "strict_partial_prepared_recovery_requires_reachable_publication_prefix_and_semantic_predecessor_before_mutation",
+      "prepared_rollback_restores_reverse_publication_order",
+      "prepared_rollback_revalidates_restored_predecessor_before_evidence_cleanup",
+      "interrupted_transaction_recovery_requires_locked_promotion",
+      "authorized_freeze_changes_require_exact_active_predecessor_compare_and_swap",
+      "exact_freeze_replacement_revalidates_full_clean_candidate_bundle",
+      "exact_freeze_replacement_requires_successor_controller_build_receipt",
+      "active_predecessor_revalidated_immediately_before_transaction_setup",
+      "exact_commit_required_for_source_runner_installer_and_q011_materializers",
+      "preflight_capture_and_recovery_hold_stable_serialization_anchor",
+      "preflight_capture_source_authentication_binds_executing_common_module",
+      "preflight_recovery_requires_exact_pair_digest_source_and_existing_role",
+      "preflight_evidence_publication_is_commit_forward_and_preserves_ambiguous_residue",
+      "normal_unlock_and_promotion_remain_strict"
+    ],
+    "source_test_closure": {
+      "file_count": 15,
+      "closure_sha256": "7e018862a169137ee32f731ad7467037d7859cd08c8198b1a2ce0bb54140eee5",
+      "files": [
+        {
+          "path": "tst/publication/frontier_control_plane/README.md",
+          "sha256": "8f6e8b41fa7e4a2471be1a185ef41d8c798b5556af9153c33d9f32a1080785b0"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/control_plane_common.py",
+          "sha256": "efb725c8040b7d705ffa52aa4e3f2ab8ee44c24fefbb73eeda4294951ca7016d"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/promote_active_policy.py",
+          "sha256": "093e4d328f591d8482fe31d87472125494b2b987832a82a34995c8231c6f8937"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/revalidate_clean_candidate.py",
+          "sha256": "b9118359a312adc6d6b71c67c2e82f2e2d1bbf07be4b2f2c7221af0c1faf262f"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/run_control_plane.py",
+          "sha256": "6053f190ed5bea093537ca5e6aef110212d54861f6726a6fa7294a1716eca2d5"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/install_control_plane.py",
+          "sha256": "737924f64a208f748412fddf6b6c8fe8afe1a24b25a186e1d5395bb01bdd64ed"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/capture_storage_preflight_evidence.py",
+          "sha256": "118e8206fc172522380ee135022d0e089ac5452da5073e8149a8e4ea265b5b9c"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/storage_preflight.schema.json",
+          "sha256": "348b80f6b56fa56da57a4d30932b41784c939f5a2b1bf49c82d3a6acd024ee3f"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/test_control_plane.py",
+          "sha256": "e6d85babf298ae8c42c8c315cd5fb7848f14c8d7eca04501a3e13386a9a38790"
+        },
+        {
+          "path": "tst/publication/q011_section54_pressure_pilot_execution.py",
+          "sha256": "b9977295888818097281d2c2c962b82cab954089060b3d797a22b25129a0036e"
+        },
+        {
+          "path": "tst/publication/test_q011_section54_pressure_pilot_execution.py",
+          "sha256": "cec05fa30d61231b381b35db160d3d5920a43e10bff974f53b5e09ecf1115fb4"
+        },
+        {
+          "path": "tst/publication/test_revalidate_clean_candidate.py",
+          "sha256": "dc6c7b79d7a5b7392646c48d00f060de18134d1022254e497eba89dd1b81375a"
+        },
+        {
+          "path": "tst/publication/test_capture_storage_preflight_evidence.py",
+          "sha256": "711d02ab85c3e92b70037fae2b1e02575d64a4559d10f65681450cc2a43d8cba"
+        },
+        {
+          "path": "tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh",
+          "sha256": "ad2faeda635c62126251ed5aa91a768fbbbf45920cb056a982280ff46d77b1ed"
+        },
+        {
+          "path": "tst/publication/test_pic_readiness_registry.py",
+          "sha256": "7544256c5457675f191bcd92b974a9871e69f3a522b08615209cfbce10c3034b"
+        }
+      ]
+    }
+  },
+  "next_clean_worker": {
+    "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+    "sha256": "3966f56d61bd73164873c88aac906da27cc002a11a88ea11d176329945a37d97",
+    "expected_publication_python_files": 145,
+    "expected_publication_shell_files": 17,
+    "expected_publication_json_files": 291,
+    "expected_publication_test_modules": 65,
+    "status": "pending_clean_committed_worker_validation"
+  },
+  "human_pressure_selection": {
+    "status": "human_choice_recorded_not_yet_sealed_or_authoritative",
+    "selected_case": {
+      "case_id": "ps_p0_1p00",
+      "problem_ps_p0": 1.0
+    },
+    "reviewer_id": "dfielding",
+    "rationale": "Selected p0=1.0 as the recommended baseline because it explicitly matches Bai et al. (2015), which uses P0=T0=1 and treats the choice as unimportant while thermal pressure is much smaller than ram pressure.",
+    "selection_receipt": null
+  },
+  "packet_gate": {
+    "status": "blocked",
+    "required_receipt_schema_version": 3,
+    "remaining_actions": [
+      "commit_push_exact_predecessor_migration_repair",
+      "clean_worker_validate_exact_repair_commit",
+      "capture_fresh_preflight_pair_install_and_promote_exact_migration",
+      "build_freeze_revalidate_and_promote_fresh_clean_candidate",
+      "seal_authoritative_reanalysis_reviewer_and_selection_receipt",
+      "verify_all_pressure_selection_replay_boundaries"
+    ],
+    "authority": "none"
+  },
+  "frontier_launch_authorization": "none_launch_prohibited",
+  "qualification_effect": "none_no_science_claim",
+  "status": "exact_predecessor_migration_repair_source_local_pending_commit_clean_worker_pair_install_and_promotion"
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+import copy
 from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
@@ -20,11 +21,12 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from typing import Callable
+from typing import Callable, Iterator
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 import uuid
 
+import control_plane_common
 import install_control_plane
 import launch_trampoline
 import ledger
@@ -32,11 +34,15 @@ import promote_active_policy
 import q011_pressure_review_packet_verifier as pressure_packet_verifier
 import reconcile_frontier_job
 import reconcile_manual_frontier_allocations
+import revalidate_clean_candidate
 import terminal_recovery_handoff
 import validate_and_reserve_frontier_job
 from control_plane_common import atomic_write_bytes, durable_mkdir_parents
 from control_plane_common import AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS
 from control_plane_common import AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS
+from control_plane_common import (
+    AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION,
+)
 from control_plane_common import PinnedDirectoryAncestry
 from control_plane_common import CONTROL_PLANE_FILES, inventory_digest, make_tree_read_only
 from control_plane_common import durable_replace_tree
@@ -318,14 +324,16 @@ class SnapshotTests(unittest.TestCase):
         root.chmod(0o500)
         return attestation_path
 
-    def _publish_test_control_plane_successor(self, root: Path) -> Path:
+    def _publish_test_control_plane_successor(
+        self, root: Path, *, schema_suffix: str = "\n"
+    ) -> Path:
         staging = root / "control_plane" / "test-successor-staging"
         shutil.copytree(self.control_plane_dir, staging)
         for path in staging.iterdir():
             path.chmod(path.stat().st_mode | 0o200)
         schema = staging / "control_plane.schema.json"
         schema.write_text(
-            schema.read_text(encoding="utf-8") + "\n",
+            schema.read_text(encoding="utf-8") + schema_suffix,
             encoding="utf-8",
         )
         records = [
@@ -352,6 +360,17 @@ class SnapshotTests(unittest.TestCase):
         staging.rename(destination)
         return destination
 
+    def _revalidate_clean_candidate_with_test_source(
+        self, candidate_manifest_path: Path, **kwargs: object
+    ) -> dict[str, object]:
+        if self.authorized_clean_candidate_source_root is None:
+            raise AssertionError("Clean-candidate test source root was not injected")
+        return revalidate_clean_candidate.revalidate_clean_candidate(
+            candidate_manifest_path,
+            **kwargs,
+            authorized_source_root=self.authorized_clean_candidate_source_root,
+        )
+
     def _promote_test_control_plane_successor(self, successor: Path) -> None:
         self._write_policy(
             admission_smoke_overrides=(
@@ -362,15 +381,26 @@ class SnapshotTests(unittest.TestCase):
             installed_control_plane_version=successor.name,
             staged_control_plane_candidate_version=successor.name,
         )
-        promote(
-            self.policy,
-            **self._pre_policy_promotion_attestation_arguments(
-                control_plane_version=successor.name
-            ),
-            control_plane_dir=successor,
-            authorized_pic_root=self.pic_root,
-            authorized_project_home_root=self.project_home_root,
-        )
+
+        def invoke() -> None:
+            promote(
+                self.policy,
+                **self._pre_policy_promotion_attestation_arguments(
+                    control_plane_version=successor.name
+                ),
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+        if self.authorized_clean_candidate_source_root is not None:
+            with patch(
+                "promote_active_policy.revalidate_clean_candidate",
+                side_effect=self._revalidate_clean_candidate_with_test_source,
+            ):
+                invoke()
+        else:
+            invoke()
 
     def _create_test_terminal_recovery_handoff(
         self,
@@ -790,9 +820,10 @@ class SnapshotTests(unittest.TestCase):
                 "project_home_path": str(project_home_path),
             },
             "record_type": "frontier_pic_storage_preflight_evidence",
-            "schema_version": 1,
+            "schema_version": 2,
             "source_authentication": {
                 **AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS,
+                "common_sha256": sha256(Path(control_plane_common.__file__)),
                 "git_commit": "a" * 40,
                 "tracked_clean_head_blobs": True,
             },
@@ -886,14 +917,144 @@ class SnapshotTests(unittest.TestCase):
             path.write_bytes(promotion_payload)
             path.chmod(0o444)
 
-    def _promote_policy(self) -> None:
-        promote(
-            self.policy,
-            **self._pre_policy_promotion_attestation_arguments(),
-            control_plane_dir=self.control_plane_dir,
-            authorized_pic_root=self.pic_root,
-            authorized_project_home_root=self.project_home_root,
+    def _rewrite_active_storage_preflight_artifact(
+        self, mutate: Callable[[dict[str, object]], None]
+    ) -> None:
+        policy_paths = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+        ]
+        policy = json.loads(policy_paths[0].read_text(encoding="utf-8"))
+        binding = policy["olcf_side_storage"]["storage_preflight_evidence"]
+        evidence_paths = [
+            Path(str(binding[key])) for key in ["orion_path", "project_home_path"]
+        ]
+        artifact = json.loads(evidence_paths[0].read_text(encoding="utf-8"))
+        mutate(artifact)
+        policy["olcf_side_storage"]["last_preflight_utc"] = artifact["completed_utc"]
+        evidence_payload = (
+            json.dumps(
+                artifact,
+                allow_nan=False,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        for path in evidence_paths:
+            path.chmod(0o644)
+            path.write_bytes(evidence_payload)
+            path.chmod(0o444)
+        binding["sha256"] = hashlib.sha256(evidence_payload).hexdigest()
+        policy_payload = json.dumps(policy).encode("utf-8")
+        for path in policy_paths:
+            path.chmod(0o644)
+            path.write_bytes(policy_payload)
+            path.chmod(0o444)
+        promotion_paths = [
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        promotion = json.loads(promotion_paths[0].read_text(encoding="utf-8"))
+        promotion["policy_sha256"] = hashlib.sha256(policy_payload).hexdigest()
+        promotion_payload = (json.dumps(promotion, indent=2, sort_keys=True) + "\n").encode(
+            "utf-8"
         )
+        for path in promotion_paths:
+            path.chmod(0o644)
+            path.write_bytes(promotion_payload)
+            path.chmod(0o444)
+
+    def _install_deliberately_malformed_active_policy_fixture(self) -> None:
+        """Fabricate malformed authorized state solely for downstream rejection tests."""
+        policy_payload = self.policy.read_bytes()
+        for path in [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+        ]:
+            path.chmod(0o644)
+            path.write_bytes(policy_payload)
+            path.chmod(0o444)
+        promotion_paths = [
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        promotion = json.loads(promotion_paths[0].read_text(encoding="utf-8"))
+        promotion["policy_sha256"] = hashlib.sha256(policy_payload).hexdigest()
+        promotion_payload = (json.dumps(promotion, indent=2, sort_keys=True) + "\n").encode(
+            "utf-8"
+        )
+        for path in promotion_paths:
+            path.chmod(0o644)
+            path.write_bytes(promotion_payload)
+            path.chmod(0o444)
+
+    def _rewrite_active_policy_as_exact_reviewed_preflight_predecessor(self) -> None:
+        def mutate(artifact: dict[str, object]) -> None:
+            artifact.update(
+                completed_utc="2026-06-02T00:00:00Z",
+                schema_version=1,
+                source_authentication={
+                    **AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION
+                },
+                started_utc="2026-06-02T00:00:00Z",
+            )
+
+        self._rewrite_active_storage_preflight_artifact(mutate)
+
+    @contextmanager
+    def _authorize_active_exact_reviewed_preflight_predecessor(self) -> Iterator[None]:
+        policy_path = self.pic_root / "policy" / "storage_policy.json"
+        promotion_path = self.pic_root / "policy" / "active_promotion.json"
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        binding = policy["olcf_side_storage"]["storage_preflight_evidence"]
+        with patch(
+            "control_plane_common."
+            "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_POLICY_SHA256",
+            sha256(policy_path),
+        ), patch(
+            "control_plane_common."
+            "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROMOTION_SHA256",
+            sha256(promotion_path),
+        ), patch(
+            "control_plane_common."
+            "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_CONTROL_PLANE_VERSION",
+            self.control_plane_version,
+        ), patch(
+            "control_plane_common."
+            "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROBE_ID",
+            binding["probe_id"],
+        ), patch(
+            "control_plane_common."
+            "AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_EVIDENCE_SHA256",
+            binding["sha256"],
+        ):
+            yield
+
+    def _promote_policy(
+        self, *, patch_clean_candidate_revalidation: bool = True
+    ) -> None:
+        def invoke() -> None:
+            promote(
+                self.policy,
+                **self._pre_policy_promotion_attestation_arguments(),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+        if (
+            patch_clean_candidate_revalidation
+            and self.authorized_clean_candidate_source_root is not None
+        ):
+            with patch(
+                "promote_active_policy.revalidate_clean_candidate",
+                side_effect=self._revalidate_clean_candidate_with_test_source,
+            ):
+                invoke()
+        else:
+            invoke()
 
     def _pre_policy_promotion_attestation_arguments(
         self, *, control_plane_version: str | None = None
@@ -2948,21 +3109,26 @@ class SnapshotTests(unittest.TestCase):
         )
 
     def _clean_candidate(
-        self, *, authorize: bool
+        self,
+        *,
+        authorize: bool,
+        source_name: str = "candidate-source",
+        freeze_id: str = "03a7bd9a-7d4c-4e37-a12b-46de3817eff2",
+        profile_id: str = "hip-mpi-release-paper-pic",
     ) -> tuple[Path, Path, str]:
-        source_root = self._clean_source("candidate-source")
+        source_root = self._clean_source(source_name)
         self.authorized_clean_candidate_source_root = source_root
         self._add_submodule(source_root, "nested")
         executable, profile = self._build_profile(
-            source_root, self.pic_root / "candidate-build", "hip-mpi-release-paper-pic"
+            source_root, self.pic_root / "candidate-build", profile_id
         )
         manifest_path = create_freeze(
             source_root=source_root,
             executable=executable,
             build_profile=profile,
-            build_profile_id="hip-mpi-release-paper-pic",
+            build_profile_id=profile_id,
             prepared_artifact_inventory=self._prepared_artifact_inventory(),
-            freeze_id="03a7bd9a-7d4c-4e37-a12b-46de3817eff2",
+            freeze_id=freeze_id,
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
             authorized_source_root=source_root,
@@ -3089,7 +3255,7 @@ class SnapshotTests(unittest.TestCase):
             science_submission_freeze=self._authorized_science_freeze(candidate),
             admission_smoke_overrides={"status": "closed_after_pass"},
         )
-        self._promote_policy()
+        self._install_deliberately_malformed_active_policy_fixture()
 
     def _create_manifest(self, *, control_plane_dir: Path | None = None) -> Path:
         target_control_plane = control_plane_dir or self.control_plane_dir
@@ -3512,12 +3678,53 @@ class SnapshotTests(unittest.TestCase):
                         "requires clean tracked source files",
                     ):
                         install_control_plane._require_reviewed_source_for_production(
-                            production_root
+                            production_root,
+                            expected_git_commit="a" * 40,
                         )
                 tracked.assert_called_once()
                 self.assertEqual(
                     tracked.call_args.kwargs["env"], trusted_git_environment()
                 )
+
+    def test_production_installer_requires_exact_expected_git_commit(self) -> None:
+        production_root = self.root / "production-pic"
+        project_home_root = self.root / "production-project-home"
+        repository = install_control_plane.SCRIPT_DIR.parent
+        with patch(
+            "install_control_plane.AUTHORIZED_PIC_ROOT", production_root
+        ), patch(
+            "install_control_plane.AUTHORIZED_PROJECT_HOME_ROOT",
+            project_home_root,
+        ), self.assertRaisesRegex(
+            ValueError,
+            "requires an expected Git commit",
+        ):
+            install_control_plane._require_reviewed_source_for_production(
+                production_root,
+                expected_git_commit=None,
+            )
+        with patch(
+            "install_control_plane.AUTHORIZED_PIC_ROOT", production_root
+        ), patch(
+            "install_control_plane.AUTHORIZED_PROJECT_HOME_ROOT",
+            project_home_root,
+        ), patch(
+            "install_control_plane.subprocess.check_output",
+            side_effect=[
+                f"{repository}\n",
+                "",
+                "b" * 40 + "\n",
+            ],
+        ), patch(
+            "install_control_plane.subprocess.run"
+        ), self.assertRaisesRegex(
+            ValueError,
+            "differs from expected Git commit",
+        ):
+            install_control_plane._require_reviewed_source_for_production(
+                production_root,
+                expected_git_commit="a" * 40,
+            )
 
     def test_common_git_hash_helpers_ignore_caller_configuration(self) -> None:
         commit = "1" * 40
@@ -3869,8 +4076,2212 @@ class SnapshotTests(unittest.TestCase):
         mirror_promotion = self.project_home_root / "policy" / "active_promotion.json"
         self.assertEqual(policy.read_bytes(), mirror_policy.read_bytes())
         self.assertEqual(promotion.read_bytes(), mirror_promotion.read_bytes())
+        promotion_value = json.loads(promotion.read_text(encoding="utf-8"))
+        self.assertEqual(promotion_value["schema_version"], 2)
+        self.assertEqual(
+            str(uuid.UUID(str(promotion_value["promotion_id"]))),
+            promotion_value["promotion_id"],
+        )
         for path in [policy, mirror_policy, promotion, mirror_promotion]:
             self.assertFalse(bool(path.stat().st_mode & 0o222))
+
+    def test_active_policy_reader_fails_closed_during_promotion_transaction(
+        self,
+    ) -> None:
+        marker = self.pic_root / "policy" / ".active_promotion_transaction.json"
+        marker.write_text("{}\n", encoding="utf-8")
+        marker.chmod(0o400)
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+    def test_active_policy_reader_fails_closed_on_reserved_rollback_anchor_entries(
+        self,
+    ) -> None:
+        for root in [self.pic_root, self.project_home_root]:
+            for prefix in control_plane_common.ACTIVE_PROMOTION_ROLLBACK_ANCHOR_PREFIXES:
+                for kind in ["regular", "symlink", "directory"]:
+                    with self.subTest(root=root, prefix=prefix, kind=kind):
+                        path = root / "policy" / f"{prefix}malformed"
+                        if kind == "regular":
+                            path.write_text("ambiguous recovery evidence\n", encoding="utf-8")
+                        elif kind == "symlink":
+                            path.symlink_to("missing-rollback-anchor")
+                        else:
+                            path.mkdir()
+                        try:
+                            with self.assertRaisesRegex(
+                                ValueError, "requires locked recovery"
+                            ):
+                                require_storage_policy_unlock_snapshot(
+                                    control_plane_version=self.control_plane_version,
+                                    authorized_pic_root=self.pic_root,
+                                    authorized_project_home_root=self.project_home_root,
+                                    allow_pending_genesis=True,
+                                )
+                        finally:
+                            if kind == "directory":
+                                path.rmdir()
+                            else:
+                                path.unlink()
+
+    def test_policy_promotion_transaction_handles_each_publication_failure(
+        self,
+    ) -> None:
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        real_bytes = promote_active_policy.atomic_write_bytes_at
+        real_json = promote_active_policy.atomic_write_json_at
+
+        for fail_at in range(1, 9):
+            with self.subTest(fail_at=fail_at):
+                self._write_policy()
+                before = {path: path.read_bytes() for path in anchors}
+                calls = 0
+
+                def maybe_fail(
+                    implementation: Callable[..., None],
+                    *args: object,
+                    **kwargs: object,
+                ) -> None:
+                    nonlocal calls
+                    calls += 1
+                    if calls == fail_at:
+                        raise RuntimeError(f"injected publication failure {fail_at}")
+                    implementation(*args, **kwargs)
+
+                with patch(
+                    "promote_active_policy.atomic_write_bytes_at",
+                    side_effect=lambda *args, **kwargs: maybe_fail(
+                        real_bytes, *args, **kwargs
+                    ),
+                ), patch(
+                    "promote_active_policy.atomic_write_json_at",
+                    side_effect=lambda *args, **kwargs: maybe_fail(
+                        real_json, *args, **kwargs
+                    ),
+                ):
+                    if fail_at <= 6:
+                        with self.assertRaisesRegex(
+                            RuntimeError, "injected publication failure"
+                        ):
+                            self._promote_policy()
+                    else:
+                        self._promote_policy()
+                current = {path: path.read_bytes() for path in anchors}
+                if fail_at <= 6:
+                    self.assertEqual(current, before)
+                else:
+                    self.assertNotEqual(current, before)
+                    self.assertEqual(anchors[0].read_bytes(), self.policy.read_bytes())
+                    require_storage_policy_unlock_snapshot(
+                        control_plane_version=self.control_plane_version,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                        allow_pending_genesis=True,
+                    )
+                self.assertFalse(
+                    (self.pic_root / "policy" / ".active_promotion_transaction.json").exists()
+                )
+                self.assertFalse(
+                    (
+                        self.project_home_root
+                        / "policy"
+                        / ".active_promotion_transaction.json"
+                    ).exists()
+                )
+                for root in [self.pic_root, self.project_home_root]:
+                    self.assertEqual(
+                        list((root / "policy").glob(".*.transaction-rollback-*")),
+                        [],
+                    )
+
+    def test_policy_promotion_transaction_cleans_each_setup_failure(self) -> None:
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        real_link = promote_active_policy.os.link
+
+        for fail_at in range(1, 5):
+            with self.subTest(fail_at=fail_at):
+                self._write_policy()
+                before = {path: path.read_bytes() for path in anchors}
+                calls = 0
+
+                def fail_link(*args: object, **kwargs: object) -> None:
+                    nonlocal calls
+                    calls += 1
+                    if calls == fail_at:
+                        raise RuntimeError(f"injected rollback-link failure {fail_at}")
+                    real_link(*args, **kwargs)
+
+                with patch(
+                    "promote_active_policy.os.link", side_effect=fail_link
+                ), self.assertRaisesRegex(RuntimeError, "injected rollback-link failure"):
+                    self._promote_policy()
+                self.assertEqual({path: path.read_bytes() for path in anchors}, before)
+                for root in [self.pic_root, self.project_home_root]:
+                    self.assertFalse(
+                        (root / "policy" / ".active_promotion_transaction.json").exists()
+                    )
+                    self.assertEqual(
+                        list((root / "policy").glob(".*.transaction-rollback-*")),
+                        [],
+                    )
+
+    def test_policy_promotion_preserves_markerless_transaction_setup_links(
+        self,
+    ) -> None:
+        orphan_id = str(uuid.uuid4())
+        for root in [self.pic_root, self.project_home_root]:
+            policy_root = root / "policy"
+            for name in ["storage_policy.json", "active_promotion.json"]:
+                os.link(
+                    policy_root / name,
+                    policy_root / f".{name}.transaction-rollback-{orphan_id}",
+                )
+
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+        self._write_policy()
+        with self.assertRaisesRegex(
+            ValueError,
+            "Markerless active-policy promotion rollback anchors require reviewed "
+            "manual recovery",
+        ):
+            self._promote_policy()
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+
+    def test_policy_promotion_preserves_markerless_complete_successor_evidence(
+        self,
+    ) -> None:
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        predecessor = {path: path.read_bytes() for path in anchors}
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        self._promote_policy()
+        successor = {path: path.read_bytes() for path in anchors}
+        self.assertNotEqual(successor, predecessor)
+        transaction_id = str(uuid.uuid4())
+        rollback_paths = []
+        for path in anchors:
+            rollback_path = path.with_name(
+                f".{path.name}.transaction-rollback-{transaction_id}"
+            )
+            rollback_path.write_bytes(predecessor[path])
+            rollback_path.chmod(0o444)
+            rollback_paths.append(rollback_path)
+
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        with self.assertRaisesRegex(
+            ValueError,
+            "Markerless active-policy promotion rollback anchors require reviewed "
+            "manual recovery",
+        ):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for path in anchors}, successor)
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_recovery_rejects_forged_null_predecessors_without_mutation(
+        self,
+    ) -> None:
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        baseline = {path: path.read_bytes() for _, path in anchors}
+
+        for predecessor_state, null_indexes, error_pattern in [
+            ("absent", {0, 1, 2, 3}, "explicit manual recovery"),
+            ("complete", {0}, "predecessor state is malformed"),
+        ]:
+            with self.subTest(predecessor_state=predecessor_state):
+                for _, path in anchors:
+                    if path.exists():
+                        path.chmod(0o600)
+                    path.write_bytes(baseline[path])
+                    path.chmod(0o444)
+                transaction_id = str(uuid.uuid4())
+                marker = {
+                    "schema_version": (
+                        promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION
+                    ),
+                    "record_type": (
+                        promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE
+                    ),
+                    "transaction_id": transaction_id,
+                    "state": "prepared",
+                    "predecessor_state": predecessor_state,
+                    "anchors": [
+                        {
+                            "root_role": root_role,
+                            "name": path.name,
+                            "rollback_name": (
+                                f".{path.name}.transaction-rollback-{transaction_id}"
+                            ),
+                            "predecessor_sha256": (
+                                None if index in null_indexes else sha256(path)
+                            ),
+                            "successor_sha256": sha256(path),
+                        }
+                        for index, (root_role, path) in enumerate(anchors)
+                    ],
+                }
+                if predecessor_state == "absent":
+                    for index in [1, 3]:
+                        anchors[index][1].unlink()
+                before = {
+                    path: path.read_bytes() if path.exists() else None
+                    for _, path in anchors
+                }
+                marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+                marker_paths = []
+                for root in [self.pic_root, self.project_home_root]:
+                    path = root / "policy" / ".active_promotion_transaction.json"
+                    path.write_text(marker_payload, encoding="utf-8")
+                    path.chmod(0o400)
+                    marker_paths.append(path)
+                self._write_policy()
+                with self.assertRaisesRegex(ValueError, error_pattern):
+                    self._promote_policy()
+                self.assertEqual(
+                    {
+                        path: path.read_bytes() if path.exists() else None
+                        for _, path in anchors
+                    },
+                    before,
+                )
+                self.assertTrue(all(path.exists() for path in marker_paths))
+                for path in marker_paths:
+                    path.chmod(0o600)
+                    path.unlink()
+        for _, path in anchors:
+            if path.exists():
+                path.chmod(0o600)
+            path.write_bytes(baseline[path])
+            path.chmod(0o444)
+
+    def test_policy_promotion_recovery_prevalidates_all_rollback_anchors(self) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        successor = {
+            path.name: f"prepared successor {path.name}\n".encode("utf-8")
+            for _, path in anchors
+        }
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        for root_role, path in anchors:
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            os.link(path, path.with_name(rollback_name))
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": hashlib.sha256(
+                        successor[path.name]
+                    ).hexdigest(),
+                }
+            )
+        anchors[0][1].unlink()
+        anchors[0][1].write_bytes(successor[anchors[0][1].name])
+        anchors[0][1].chmod(0o444)
+        before = {path: path.read_bytes() for _, path in anchors}
+        corrupt = anchors[-1][1].with_name(
+            f".{anchors[-1][1].name}.transaction-rollback-{transaction_id}"
+        )
+        corrupt.unlink()
+        corrupt.write_text("corrupt rollback anchor\n", encoding="utf-8")
+        corrupt.chmod(0o444)
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        for root in [self.pic_root, self.project_home_root]:
+            path = root / "policy" / ".active_promotion_transaction.json"
+            path.write_text(marker_payload, encoding="utf-8")
+            path.chmod(0o400)
+
+        self._write_policy()
+        with self.assertRaisesRegex(ValueError, "rollback anchor digest differs"):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertTrue(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+
+    def test_policy_promotion_prepared_recovery_rejects_semantically_invalid_rollback(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        before = {path: path.read_bytes() for _, path in anchors}
+        invalid_predecessor = b"{}\n"
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for index, (root_role, path) in enumerate(anchors):
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            rollback_path.write_bytes(invalid_predecessor)
+            rollback_path.chmod(0o444)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": hashlib.sha256(
+                        invalid_predecessor
+                    ).hexdigest(),
+                    "successor_sha256": sha256(path),
+                }
+            )
+            if index != 0:
+                path.unlink()
+                path.write_bytes(invalid_predecessor)
+                path.chmod(0o444)
+        before = {path: path.read_bytes() for _, path in anchors}
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(marker_payload, encoding="utf-8")
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+
+        self._write_policy()
+        with self.assertRaisesRegex(
+            ValueError,
+            "predecessor control-plane version is malformed",
+        ):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+        self.assertEqual(
+            {path: path.read_bytes() for path in rollback_paths},
+            {path: invalid_predecessor for path in rollback_paths},
+        )
+
+    def test_policy_promotion_prepared_recovery_rejects_stale_unrelated_generation(
+        self,
+    ) -> None:
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        stale_predecessor = {path: path.read_bytes() for _, path in anchors}
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        self._promote_policy()
+        current = {path: path.read_bytes() for _, path in anchors}
+        self.assertNotEqual(current, stale_predecessor)
+
+        transaction_id = str(uuid.uuid4())
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for index, (root_role, path) in enumerate(anchors):
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            rollback_path.write_bytes(stale_predecessor[path])
+            rollback_path.chmod(0o444)
+            rollback_paths.append(rollback_path)
+            successor_payload = (
+                b"unrelated stale-marker policy successor\n"
+                if path.name == "storage_policy.json"
+                else b"unrelated stale-marker promotion successor\n"
+            )
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": hashlib.sha256(
+                        stale_predecessor[path]
+                    ).hexdigest(),
+                    "successor_sha256": hashlib.sha256(
+                        successor_payload
+                    ).hexdigest(),
+                }
+            )
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(marker_payload, encoding="utf-8")
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        with self.assertRaisesRegex(ValueError, "not one reachable publication-prefix"):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, current)
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_rollback_rejects_complete_successor(self) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for root_role, path in anchors:
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            digest = sha256(path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": digest,
+                    "successor_sha256": digest,
+                }
+            )
+        before = {path: path.read_bytes() for _, path in anchors}
+        policy_descriptor = os.open(
+            self.pic_root / "policy",
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        mirror_policy_descriptor = os.open(
+            self.project_home_root / "policy",
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        try:
+            with self.assertRaisesRegex(
+                ValueError,
+                "Complete active-policy promotion successor cannot roll back",
+            ):
+                promote_active_policy._rollback_promotion_transaction(
+                    marker,
+                    policy_descriptor,
+                    mirror_policy_descriptor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    post_publish_check=lambda: None,
+                    validate_predecessor=lambda *_: None,
+                )
+        finally:
+            os.close(mirror_policy_descriptor)
+            os.close(policy_descriptor)
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_rollback_rejects_committed_marker_at_mutation_boundary(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        successor_policy = b"{}\n"
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for index, (root_role, path) in enumerate(anchors):
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": (
+                        hashlib.sha256(successor_policy).hexdigest()
+                        if index in [0, 2]
+                        else sha256(path)
+                    ),
+                }
+            )
+        anchors[0][1].unlink()
+        anchors[0][1].write_bytes(successor_policy)
+        anchors[0][1].chmod(0o444)
+        before = {path: path.read_bytes() for _, path in anchors}
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(
+                json.dumps({**marker, "state": "committed"}, indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+
+        expected_predecessor_snapshot = {
+            "active_policy_sha256": marker["anchors"][0]["predecessor_sha256"],
+            "active_promotion_sha256": marker["anchors"][1]["predecessor_sha256"],
+        }
+        policy_descriptor = os.open(
+            self.pic_root / "policy",
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        mirror_policy_descriptor = os.open(
+            self.project_home_root / "policy",
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        try:
+            rollback_arguments = {
+                "policy_descriptor": policy_descriptor,
+                "mirror_policy_descriptor": mirror_policy_descriptor,
+                "authorized_pic_root": self.pic_root,
+                "authorized_project_home_root": self.project_home_root,
+                "post_publish_check": lambda: None,
+                "validate_predecessor": lambda *_: (
+                    {},
+                    expected_predecessor_snapshot,
+                ),
+            }
+            with self.assertRaisesRegex(
+                ValueError,
+                "Committed active-policy promotion transaction cannot roll back",
+            ):
+                promote_active_policy._rollback_promotion_transaction(
+                    {**marker, "state": "committed"},
+                    **rollback_arguments,
+                )
+            with self.assertRaisesRegex(
+                ValueError,
+                "transaction marker changed before rollback",
+            ):
+                promote_active_policy._rollback_promotion_transaction(
+                    marker,
+                    **rollback_arguments,
+                )
+        finally:
+            os.close(mirror_policy_descriptor)
+            os.close(policy_descriptor)
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_complete_final_validation_failure_requires_recovery(
+        self,
+    ) -> None:
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        self._write_policy()
+        with patch(
+            "promote_active_policy.require_storage_policy_unlock_snapshot",
+            side_effect=ValueError("injected final validation failure"),
+        ), patch(
+            "promote_active_policy._rollback_promotion_transaction",
+            wraps=promote_active_policy._rollback_promotion_transaction,
+        ) as rollback, self.assertRaisesRegex(
+            RuntimeError,
+            "Committed active-policy promotion requires locked recovery",
+        ):
+            self._promote_policy()
+        rollback.assert_not_called()
+        self.assertNotEqual({path: path.read_bytes() for path in anchors}, before)
+        self.assertEqual(anchors[0].read_bytes(), self.policy.read_bytes())
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            self.assertTrue(marker_path.exists())
+            self.assertEqual(
+                json.loads(marker_path.read_text(encoding="utf-8"))["state"],
+                "prepared",
+            )
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+
+    def test_policy_promotion_anchor_mutation_after_committed_markers_requires_recovery(
+        self,
+    ) -> None:
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        real_atomic_write_json_at = promote_active_policy.atomic_write_json_at
+        committed_markers = 0
+
+        def mutate_after_second_committed_marker(
+            parent_descriptor: int,
+            name: str,
+            value: object,
+            **kwargs: object,
+        ) -> None:
+            nonlocal committed_markers
+            real_atomic_write_json_at(parent_descriptor, name, value, **kwargs)
+            if (
+                name == ".active_promotion_transaction.json"
+                and isinstance(value, dict)
+                and value.get("state") == "committed"
+            ):
+                committed_markers += 1
+                if committed_markers == 2:
+                    active_policy = self.pic_root / "policy" / "storage_policy.json"
+                    active_policy.chmod(0o644)
+                    active_policy.write_text("{}\n", encoding="utf-8")
+                    active_policy.chmod(0o444)
+
+        with patch(
+            "promote_active_policy.atomic_write_json_at",
+            side_effect=mutate_after_second_committed_marker,
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Active-policy promotion commit state requires locked recovery",
+        ):
+            self._promote_policy()
+        self.assertEqual(committed_markers, 2)
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            self.assertTrue(marker_path.exists())
+            self.assertEqual(
+                json.loads(marker_path.read_text(encoding="utf-8"))["state"],
+                "committed",
+            )
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+    def test_policy_promotion_marker_mutation_after_committed_markers_rolls_forward(
+        self,
+    ) -> None:
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        real_atomic_write_json_at = promote_active_policy.atomic_write_json_at
+        committed_markers = 0
+
+        def replace_second_committed_marker_with_prepared(
+            parent_descriptor: int,
+            name: str,
+            value: object,
+            **kwargs: object,
+        ) -> None:
+            nonlocal committed_markers
+            real_atomic_write_json_at(parent_descriptor, name, value, **kwargs)
+            if (
+                name == ".active_promotion_transaction.json"
+                and isinstance(value, dict)
+                and value.get("state") == "committed"
+            ):
+                committed_markers += 1
+                if committed_markers == 2:
+                    marker_path = (
+                        self.project_home_root
+                        / "policy"
+                        / ".active_promotion_transaction.json"
+                    )
+                    marker_path.chmod(0o600)
+                    marker_path.write_text(
+                        json.dumps(
+                            {**value, "state": "prepared"},
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    marker_path.chmod(0o400)
+
+        with patch(
+            "promote_active_policy.atomic_write_json_at",
+            side_effect=replace_second_committed_marker_with_prepared,
+        ):
+            self._promote_policy()
+        self.assertEqual(committed_markers, 2)
+        self.assertNotEqual({path: path.read_bytes() for path in anchors}, before)
+        self.assertEqual(anchors[0].read_bytes(), self.policy.read_bytes())
+        require_storage_policy_unlock_snapshot(
+            control_plane_version=self.control_plane_version,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+            allow_pending_genesis=True,
+        )
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertFalse(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                list((root / "policy").glob(".*.transaction-rollback-*")),
+                [],
+            )
+
+    def test_policy_promotion_unreadable_postcommit_marker_state_never_rolls_back(
+        self,
+    ) -> None:
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        real_read_marker = promote_active_policy._read_promotion_transaction_marker
+        unreadable_committed_reads = 0
+
+        def fail_while_both_committed(*args: object, **kwargs: object) -> object:
+            nonlocal unreadable_committed_reads
+            marker_paths = [
+                root / "policy" / ".active_promotion_transaction.json"
+                for root in [self.pic_root, self.project_home_root]
+            ]
+            if all(path.exists() for path in marker_paths) and all(
+                json.loads(path.read_text(encoding="utf-8"))["state"] == "committed"
+                for path in marker_paths
+            ):
+                unreadable_committed_reads += 1
+                raise OSError("injected unreadable postcommit marker state")
+            return real_read_marker(*args, **kwargs)
+
+        with patch(
+            "promote_active_policy._read_promotion_transaction_marker",
+            side_effect=fail_while_both_committed,
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "commit state requires locked recovery",
+        ):
+            self._promote_policy()
+        self.assertEqual(unreadable_committed_reads, 2)
+        self.assertNotEqual({path: path.read_bytes() for path in anchors}, before)
+        self.assertEqual(anchors[0].read_bytes(), self.policy.read_bytes())
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            self.assertTrue(marker_path.exists())
+            self.assertEqual(
+                json.loads(marker_path.read_text(encoding="utf-8"))["state"],
+                "committed",
+            )
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+    def test_policy_promotion_complete_invalid_successor_requires_locked_recovery(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": (
+                promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE
+            ),
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        for root_role, path in anchors:
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            os.link(path, path.with_name(rollback_name))
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": hashlib.sha256(b"{}\n").hexdigest(),
+                }
+            )
+            path.unlink()
+            path.write_text("{}\n", encoding="utf-8")
+            path.chmod(0o444)
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        for root in [self.pic_root, self.project_home_root]:
+            path = root / "policy" / ".active_promotion_transaction.json"
+            path.write_text(marker_payload, encoding="utf-8")
+            path.chmod(0o400)
+
+        self._write_policy()
+        with self.assertRaisesRegex(
+            ValueError,
+            "successor controller is malformed",
+        ):
+            self._promote_policy()
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertTrue(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+    def test_policy_promotion_complete_valid_prepared_or_mixed_successor_rolls_forward(
+        self,
+    ) -> None:
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        predecessor = {path: path.read_bytes() for _, path in anchors}
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        self._promote_policy()
+        successor = {path: path.read_bytes() for _, path in anchors}
+        self.assertNotEqual(successor, predecessor)
+        real_predecessor_validation = (
+            promote_active_policy.require_policy_predecessor_snapshot_for_promotion
+        )
+
+        def fail_after_complete_successor_recovery(
+            *args: object, **kwargs: object
+        ) -> object:
+            if kwargs.get("allow_active_promotion_transaction") is True:
+                return real_predecessor_validation(*args, **kwargs)
+            raise ValueError("injected after complete-successor recovery")
+
+        for states in [("prepared", "prepared"), ("committed", "prepared")]:
+            with self.subTest(states=states):
+                transaction_id = str(uuid.uuid4())
+                marker = {
+                    "schema_version": (
+                        promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION
+                    ),
+                    "record_type": (
+                        promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE
+                    ),
+                    "transaction_id": transaction_id,
+                    "state": "prepared",
+                    "predecessor_state": "complete",
+                    "anchors": [],
+                }
+                rollback_paths = []
+                for root_role, path in anchors:
+                    rollback_name = (
+                        f".{path.name}.transaction-rollback-{transaction_id}"
+                    )
+                    rollback_path = path.with_name(rollback_name)
+                    rollback_path.write_bytes(predecessor[path])
+                    rollback_path.chmod(0o444)
+                    rollback_paths.append(rollback_path)
+                    marker["anchors"].append(
+                        {
+                            "root_role": root_role,
+                            "name": path.name,
+                            "rollback_name": rollback_name,
+                            "predecessor_sha256": hashlib.sha256(
+                                predecessor[path]
+                            ).hexdigest(),
+                            "successor_sha256": hashlib.sha256(
+                                successor[path]
+                            ).hexdigest(),
+                        }
+                    )
+                marker_paths = []
+                for state, root in zip(
+                    states,
+                    [self.pic_root, self.project_home_root],
+                ):
+                    marker_path = (
+                        root / "policy" / ".active_promotion_transaction.json"
+                    )
+                    marker_path.write_text(
+                        json.dumps(
+                            {**marker, "state": state},
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    marker_path.chmod(0o400)
+                    marker_paths.append(marker_path)
+
+                self._write_policy(
+                    admission_smoke_overrides={"status": "closed_after_pass"}
+                )
+                with patch(
+                    "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+                    side_effect=fail_after_complete_successor_recovery,
+                ), self.assertRaisesRegex(
+                    ValueError,
+                    "injected after complete-successor recovery",
+                ):
+                    self._promote_policy()
+                self.assertEqual(
+                    {path: path.read_bytes() for _, path in anchors},
+                    successor,
+                )
+                self.assertFalse(any(path.exists() for path in marker_paths))
+                self.assertFalse(any(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_recovers_reachable_partial_publication_prefix(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        before = {path: path.read_bytes() for _, path in anchors}
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        successor = b"{}\n"
+        for root_role, path in anchors:
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": hashlib.sha256(successor).hexdigest(),
+                }
+            )
+        for index in [0, 2]:
+            path = anchors[index][1]
+            path.unlink()
+            path.write_bytes(successor)
+            path.chmod(0o444)
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(marker_payload, encoding="utf-8")
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+
+        real_predecessor_validation = (
+            promote_active_policy.require_policy_predecessor_snapshot_for_promotion
+        )
+
+        def fail_after_partial_recovery(*args: object, **kwargs: object) -> object:
+            if kwargs.get("allow_active_promotion_transaction") is True:
+                return real_predecessor_validation(*args, **kwargs)
+            raise ValueError("injected after partial-prefix recovery")
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+            side_effect=fail_after_partial_recovery,
+        ), self.assertRaisesRegex(ValueError, "injected after partial-prefix recovery"):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        self.assertFalse(any(path.exists() for path in marker_paths))
+        self.assertFalse(any(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_interrupted_rollback_remains_reachable_and_recovers(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        before = {path: path.read_bytes() for _, path in anchors}
+        successor = b"{}\n"
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for index, (root_role, path) in enumerate(anchors):
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": hashlib.sha256(successor).hexdigest(),
+                }
+            )
+            if index in [0, 1, 2]:
+                path.unlink()
+                path.write_bytes(successor)
+                path.chmod(0o444)
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(marker_payload, encoding="utf-8")
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+
+        real_atomic_write = promote_active_policy.atomic_write_bytes_at
+        calls = 0
+
+        def interrupt_second_rollback_write(*args: object, **kwargs: object) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected rollback publication interruption")
+            real_atomic_write(*args, **kwargs)
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy.atomic_write_bytes_at",
+            side_effect=interrupt_second_rollback_write,
+        ), self.assertRaisesRegex(
+            OSError,
+            "injected rollback publication interruption",
+        ):
+            self._promote_policy()
+        for index in [1, 3]:
+            self.assertEqual(anchors[index][1].read_bytes(), before[anchors[index][1]])
+        for index in [0, 2]:
+            self.assertEqual(anchors[index][1].read_bytes(), successor)
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+
+        real_predecessor_validation = (
+            promote_active_policy.require_policy_predecessor_snapshot_for_promotion
+        )
+
+        def fail_after_rollback_retry(*args: object, **kwargs: object) -> object:
+            if kwargs.get("allow_active_promotion_transaction") is True:
+                return real_predecessor_validation(*args, **kwargs)
+            raise ValueError("injected after rollback retry")
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+            side_effect=fail_after_rollback_retry,
+        ), self.assertRaisesRegex(ValueError, "injected after rollback retry"):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        self.assertFalse(any(path.exists() for path in marker_paths))
+        self.assertFalse(any(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_recovers_committed_marker_cleanup(self) -> None:
+        transaction_id = str(uuid.uuid4())
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "committed",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        for root_role, path in [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]:
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            os.link(path, path.with_name(rollback_name))
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": sha256(path),
+                }
+            )
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        for root in [self.pic_root, self.project_home_root]:
+            path = root / "policy" / ".active_promotion_transaction.json"
+            path.write_text(marker_payload, encoding="utf-8")
+            path.chmod(0o400)
+
+        self._write_policy()
+        self._promote_policy()
+        require_storage_policy_unlock_snapshot(
+            control_plane_version=self.control_plane_version,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+            allow_pending_genesis=True,
+        )
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertFalse(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                list((root / "policy").glob(".*.transaction-rollback-*")),
+                [],
+            )
+
+    def test_policy_promotion_committed_recovery_requires_exact_successor_anchors(
+        self,
+    ) -> None:
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        baseline = {path: path.read_bytes() for _, path in anchors}
+
+        for predecessor_state, mutation in [
+            ("complete", "missing"),
+            ("complete", "corrupt"),
+            ("absent", "missing"),
+            ("absent", "corrupt"),
+        ]:
+            with self.subTest(
+                predecessor_state=predecessor_state,
+                mutation=mutation,
+            ):
+                transaction_id = str(uuid.uuid4())
+                marker = {
+                    "schema_version": (
+                        promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION
+                    ),
+                    "record_type": (
+                        promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE
+                    ),
+                    "transaction_id": transaction_id,
+                    "state": "committed",
+                    "predecessor_state": predecessor_state,
+                    "anchors": [],
+                }
+                rollback_paths = []
+                for root_role, path in anchors:
+                    rollback_name = (
+                        f".{path.name}.transaction-rollback-{transaction_id}"
+                    )
+                    if predecessor_state == "complete":
+                        rollback_path = path.with_name(rollback_name)
+                        os.link(path, rollback_path)
+                        rollback_paths.append(rollback_path)
+                    marker["anchors"].append(
+                        {
+                            "root_role": root_role,
+                            "name": path.name,
+                            "rollback_name": rollback_name,
+                            "predecessor_sha256": (
+                                sha256(path)
+                                if predecessor_state == "complete"
+                                else None
+                            ),
+                            "successor_sha256": sha256(path),
+                        }
+                    )
+                marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+                marker_paths = []
+                for root in [self.pic_root, self.project_home_root]:
+                    marker_path = (
+                        root / "policy" / ".active_promotion_transaction.json"
+                    )
+                    marker_path.write_text(marker_payload, encoding="utf-8")
+                    marker_path.chmod(0o400)
+                    marker_paths.append(marker_path)
+
+                corrupted = anchors[0][1]
+                if mutation == "missing":
+                    corrupted.unlink()
+                else:
+                    corrupted.chmod(0o600)
+                    corrupted.write_text("corrupt committed successor\n", encoding="utf-8")
+                    corrupted.chmod(0o400)
+                self._write_policy()
+                with self.assertRaises(
+                    (FileNotFoundError, ValueError)
+                ):
+                    self._promote_policy()
+                self.assertTrue(all(path.exists() for path in marker_paths))
+                self.assertEqual(
+                    [path.exists() for path in rollback_paths],
+                    [True] * len(rollback_paths),
+                )
+
+                for path in marker_paths:
+                    path.chmod(0o600)
+                    path.unlink()
+                for path in rollback_paths:
+                    path.unlink()
+                for _, path in anchors:
+                    if path.exists():
+                        path.chmod(0o600)
+                        path.write_bytes(baseline[path])
+                    else:
+                        path.write_bytes(baseline[path])
+                    path.chmod(0o444)
+
+    def test_policy_promotion_committed_recovery_preserves_evidence_until_semantic_validation(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        before = {path: path.read_bytes() for _, path in anchors}
+        invalid_successor = b"{}\n"
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "committed",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for index, (root_role, path) in enumerate(anchors):
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": hashlib.sha256(before[path]).hexdigest(),
+                    "successor_sha256": hashlib.sha256(invalid_successor).hexdigest(),
+                }
+            )
+            path.unlink()
+            path.write_bytes(invalid_successor)
+            path.chmod(0o444)
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(marker_payload, encoding="utf-8")
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+
+        self._write_policy()
+        with self.assertRaisesRegex(
+            ValueError,
+            "successor controller is malformed",
+        ):
+            self._promote_policy()
+        self.assertEqual(
+            {path: path.read_bytes() for _, path in anchors},
+            {path: invalid_successor for _, path in anchors},
+        )
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+        self.assertEqual(
+            {path: path.read_bytes() for path in rollback_paths},
+            {
+                rollback_path: before[path]
+                for (_, path), rollback_path in zip(anchors, rollback_paths)
+            },
+        )
+
+    def test_policy_promotion_committed_recovery_rechecks_successor_after_candidate_validation(
+        self,
+    ) -> None:
+        authorized_freeze = {
+            "status": "authorized",
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / str(uuid.uuid4())
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "1" * 64,
+            "build_profile_control_plane_version": self.control_plane_version,
+        }
+        self._write_policy(science_submission_freeze=authorized_freeze)
+        passed_revalidation = {
+            "status": "passed",
+            "current_control_plane_version": self.control_plane_version,
+            "build": {
+                "receipt_control_plane_version": self.control_plane_version,
+            },
+        }
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value=passed_revalidation,
+        ):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "committed",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for root_role, path in anchors:
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": sha256(path),
+                }
+            )
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(marker_payload, encoding="utf-8")
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+        mutated = False
+
+        def revalidate_then_mutate(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal mutated
+            if not mutated:
+                active_policy = self.pic_root / "policy" / "storage_policy.json"
+                active_policy.chmod(0o644)
+                active_policy.write_text("{}\n", encoding="utf-8")
+                active_policy.chmod(0o444)
+                mutated = True
+            return passed_revalidation
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_then_mutate,
+        ), self.assertRaisesRegex(ValueError, "successor anchor digest differs"):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+        self.assertTrue(mutated)
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+    def test_policy_promotion_lone_committed_marker_requires_exact_successor(
+        self,
+    ) -> None:
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        baseline = {path: path.read_bytes() for _, path in anchors}
+
+        for mutation in ["none", "missing", "corrupt"]:
+            with self.subTest(mutation=mutation):
+                transaction_id = str(uuid.uuid4())
+                marker = {
+                    "schema_version": (
+                        promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION
+                    ),
+                    "record_type": (
+                        promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE
+                    ),
+                    "transaction_id": transaction_id,
+                    "state": "committed",
+                    "predecessor_state": "complete",
+                    "anchors": [],
+                }
+                rollback_paths = []
+                for root_role, path in anchors:
+                    rollback_name = (
+                        f".{path.name}.transaction-rollback-{transaction_id}"
+                    )
+                    rollback_path = path.with_name(rollback_name)
+                    os.link(path, rollback_path)
+                    rollback_paths.append(rollback_path)
+                    marker["anchors"].append(
+                        {
+                            "root_role": root_role,
+                            "name": path.name,
+                            "rollback_name": rollback_name,
+                            "predecessor_sha256": sha256(path),
+                            "successor_sha256": sha256(path),
+                        }
+                    )
+                marker_path = (
+                    self.pic_root
+                    / "policy"
+                    / ".active_promotion_transaction.json"
+                )
+                marker_path.write_text(
+                    json.dumps(marker, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                marker_path.chmod(0o400)
+
+                mutated = anchors[0][1]
+                if mutation == "missing":
+                    mutated.unlink()
+                elif mutation == "corrupt":
+                    mutated.chmod(0o600)
+                    mutated.write_text(
+                        "corrupt committed successor\n",
+                        encoding="utf-8",
+                    )
+                    mutated.chmod(0o400)
+
+                self._write_policy()
+                if mutation == "none":
+                    with patch(
+                        "promote_active_policy."
+                        "require_policy_predecessor_snapshot_for_promotion",
+                        side_effect=ValueError("injected after lone-marker cleanup"),
+                    ), self.assertRaisesRegex(
+                        ValueError,
+                        "injected after lone-marker cleanup",
+                    ):
+                        self._promote_policy()
+                    self.assertFalse(marker_path.exists())
+                    self.assertEqual(
+                        [path.exists() for path in rollback_paths],
+                        [False] * len(rollback_paths),
+                    )
+                else:
+                    with self.assertRaises((FileNotFoundError, ValueError)):
+                        self._promote_policy()
+                    self.assertTrue(marker_path.exists())
+                    self.assertEqual(
+                        [path.exists() for path in rollback_paths],
+                        [True] * len(rollback_paths),
+                    )
+
+                if marker_path.exists():
+                    marker_path.chmod(0o600)
+                    marker_path.unlink()
+                for path in rollback_paths:
+                    if path.exists():
+                        path.unlink()
+                for _, path in anchors:
+                    if path.exists():
+                        path.chmod(0o600)
+                        path.write_bytes(baseline[path])
+                    else:
+                        path.write_bytes(baseline[path])
+                    path.chmod(0o444)
+
+    def test_policy_promotion_mixed_commit_partial_state_retains_recovery_evidence(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        before = {path: path.read_bytes() for _, path in anchors}
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        for index, (root_role, path) in enumerate(anchors):
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            os.link(path, path.with_name(rollback_name))
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": hashlib.sha256(b"{}\n").hexdigest(),
+                }
+            )
+            if index in [0, 2]:
+                path.unlink()
+                path.write_text("{}\n", encoding="utf-8")
+                path.chmod(0o444)
+        for root, state in [
+            (self.pic_root, "committed"),
+            (self.project_home_root, "prepared"),
+        ]:
+            path = root / "policy" / ".active_promotion_transaction.json"
+            path.write_text(
+                json.dumps({**marker, "state": state}, indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            path.chmod(0o400)
+
+        self._write_policy()
+        with self.assertRaisesRegex(
+            ValueError,
+            "successor anchor digest differs",
+        ):
+            self._promote_policy()
+        self.assertNotEqual({path: path.read_bytes() for _, path in anchors}, before)
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertTrue(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+
+    def test_policy_promotion_prepared_rollback_interruption_remains_recoverable(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        before = {path: path.read_bytes() for _, path in anchors}
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "prepared",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for index, (root_role, path) in enumerate(anchors):
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": hashlib.sha256(b"{}\n").hexdigest(),
+                }
+            )
+            if index in [0, 2]:
+                path.unlink()
+                path.write_text("{}\n", encoding="utf-8")
+                path.chmod(0o444)
+        marker_paths = []
+        for root, state in [
+            (self.pic_root, "prepared"),
+            (self.project_home_root, "prepared"),
+        ]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(
+                json.dumps({**marker, "state": state}, indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+
+        real_unlink = promote_active_policy._unlink_if_exists_at
+        real_fsync = promote_active_policy.os.fsync
+        fail_next_fsync = False
+        failed = False
+
+        def unlink_first_marker_then_fail_fsync(
+            parent_descriptor: int, name: str
+        ) -> None:
+            nonlocal fail_next_fsync
+            is_first_marker = (
+                name == ".active_promotion_transaction.json"
+                and not fail_next_fsync
+                and not failed
+            )
+            real_unlink(parent_descriptor, name)
+            if is_first_marker:
+                fail_next_fsync = True
+
+        def fail_fsync_after_first_marker_unlink(descriptor: int) -> None:
+            nonlocal fail_next_fsync, failed
+            if fail_next_fsync:
+                fail_next_fsync = False
+                failed = True
+                raise OSError("injected prepared rollback marker fsync failure")
+            real_fsync(descriptor)
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy._unlink_if_exists_at",
+            side_effect=unlink_first_marker_then_fail_fsync,
+        ), patch(
+            "promote_active_policy.os.fsync",
+            side_effect=fail_fsync_after_first_marker_unlink,
+        ), self.assertRaisesRegex(
+            OSError,
+            "injected prepared rollback marker fsync failure",
+        ):
+            self._promote_policy()
+        self.assertTrue(failed)
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        self.assertEqual(sum(path.exists() for path in marker_paths), 1)
+        remaining_marker = next(path for path in marker_paths if path.exists())
+        self.assertEqual(
+            json.loads(remaining_marker.read_text(encoding="utf-8"))["state"],
+            "prepared",
+        )
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+
+        real_predecessor_validation = (
+            promote_active_policy.require_policy_predecessor_snapshot_for_promotion
+        )
+
+        def fail_after_interrupted_rollback_recovery(
+            *args: object, **kwargs: object
+        ) -> object:
+            if kwargs.get("allow_active_promotion_transaction") is True:
+                return real_predecessor_validation(*args, **kwargs)
+            raise ValueError("injected after interrupted rollback recovery")
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+            side_effect=fail_after_interrupted_rollback_recovery,
+        ), self.assertRaisesRegex(
+            ValueError,
+            "injected after interrupted rollback recovery",
+        ):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        self.assertFalse(any(path.exists() for path in marker_paths))
+        self.assertFalse(any(path.exists() for path in rollback_paths))
+
+    def test_policy_promotion_committed_absent_predecessor_marker_only_cleans_up(
+        self,
+    ) -> None:
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        before = {path: path.read_bytes() for _, path in anchors}
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "committed",
+            "predecessor_state": "absent",
+            "anchors": [
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": (
+                        f".{path.name}.transaction-rollback-{transaction_id}"
+                    ),
+                    "predecessor_sha256": None,
+                    "successor_sha256": sha256(path),
+                }
+                for root_role, path in anchors
+            ],
+        }
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        for root in [self.pic_root, self.project_home_root]:
+            path = root / "policy" / ".active_promotion_transaction.json"
+            path.write_text(marker_payload, encoding="utf-8")
+            path.chmod(0o400)
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+            side_effect=ValueError("injected after committed cleanup"),
+        ), self.assertRaisesRegex(ValueError, "injected after committed cleanup"):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for _, path in anchors}, before)
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertFalse(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                list((root / "policy").glob(".*.transaction-rollback-*")),
+                [],
+            )
+
+    def test_policy_promotion_committed_rollback_anchor_cleanup_failure_retains_markers(
+        self,
+    ) -> None:
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        reviewed_policy = self.policy.read_bytes()
+        real_unlink = promote_active_policy._unlink_if_exists_at
+        failed = False
+
+        def fail_first_rollback_anchor_cleanup(
+            parent_descriptor: int, name: str
+        ) -> None:
+            nonlocal failed
+            if not failed and ".transaction-rollback-" in name:
+                failed = True
+                raise OSError("injected committed rollback-anchor cleanup failure")
+            real_unlink(parent_descriptor, name)
+
+        with patch(
+            "promote_active_policy._unlink_if_exists_at",
+            side_effect=fail_first_rollback_anchor_cleanup,
+        ):
+            self._promote_policy()
+        self.assertTrue(failed)
+        self.assertEqual(
+            (self.pic_root / "policy" / "storage_policy.json").read_bytes(),
+            reviewed_policy,
+        )
+        for root in [self.pic_root, self.project_home_root]:
+            marker = root / "policy" / ".active_promotion_transaction.json"
+            self.assertTrue(marker.exists())
+            self.assertEqual(
+                json.loads(marker.read_text(encoding="utf-8"))["state"],
+                "committed",
+            )
+            self.assertNotEqual(
+                list((root / "policy").glob(".*.transaction-rollback-*")),
+                [],
+            )
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+        real_predecessor_validation = (
+            promote_active_policy.require_policy_predecessor_snapshot_for_promotion
+        )
+
+        def fail_after_committed_recovery(*args: object, **kwargs: object) -> object:
+            if kwargs.get("allow_active_promotion_transaction") is True:
+                return real_predecessor_validation(*args, **kwargs)
+            raise ValueError("injected after committed anchor-cleanup recovery")
+
+        with patch(
+            "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+            side_effect=fail_after_committed_recovery,
+        ), self.assertRaisesRegex(
+            ValueError,
+            "injected after committed anchor-cleanup recovery",
+        ):
+            self._promote_policy()
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertFalse(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                list((root / "policy").glob(".*.transaction-rollback-*")),
+                [],
+            )
+
+    def test_policy_promotion_committed_marker_cleanup_failure_reports_success(
+        self,
+    ) -> None:
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        reviewed_policy = self.policy.read_bytes()
+        real_unlink = promote_active_policy._unlink_if_exists_at
+        failed = False
+
+        def fail_first_committed_marker_cleanup(
+            parent_descriptor: int, name: str
+        ) -> None:
+            nonlocal failed
+            if (
+                not failed
+                and name == ".active_promotion_transaction.json"
+            ):
+                marker_path = (
+                    Path("/proc")
+                    / str(os.getpid())
+                    / "fd"
+                    / str(parent_descriptor)
+                    / name
+                )
+                if marker_path.exists():
+                    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+                    if marker.get("state") == "committed":
+                        failed = True
+                        raise OSError("injected committed marker cleanup failure")
+            real_unlink(parent_descriptor, name)
+
+        with patch(
+            "promote_active_policy._unlink_if_exists_at",
+            side_effect=fail_first_committed_marker_cleanup,
+        ):
+            self._promote_policy()
+        self.assertTrue(failed)
+        self.assertEqual(
+            (self.pic_root / "policy" / "storage_policy.json").read_bytes(),
+            reviewed_policy,
+        )
+        self.assertTrue(
+            any(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+                for root in [self.pic_root, self.project_home_root]
+            )
+        )
+
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        self._promote_policy()
+        require_storage_policy_unlock_snapshot(
+            control_plane_version=self.control_plane_version,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+            allow_pending_genesis=True,
+        )
+
+    def test_policy_promotion_committed_marker_fsync_failure_reports_success(
+        self,
+    ) -> None:
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        reviewed_policy = self.policy.read_bytes()
+        real_unlink = promote_active_policy._unlink_if_exists_at
+        real_fsync = promote_active_policy.os.fsync
+        fail_next_fsync = False
+        failed = False
+
+        def unlink_committed_marker_then_fail_fsync(
+            parent_descriptor: int, name: str
+        ) -> None:
+            nonlocal fail_next_fsync
+            marker_path = (
+                Path("/proc")
+                / str(os.getpid())
+                / "fd"
+                / str(parent_descriptor)
+                / name
+            )
+            is_committed_marker = False
+            if (
+                name == ".active_promotion_transaction.json"
+                and marker_path.exists()
+            ):
+                marker = json.loads(marker_path.read_text(encoding="utf-8"))
+                is_committed_marker = marker.get("state") == "committed"
+            real_unlink(parent_descriptor, name)
+            if is_committed_marker:
+                fail_next_fsync = True
+
+        def fail_fsync_after_committed_marker_unlink(descriptor: int) -> None:
+            nonlocal fail_next_fsync, failed
+            if fail_next_fsync:
+                fail_next_fsync = False
+                failed = True
+                raise OSError("injected post-unlink committed marker fsync failure")
+            real_fsync(descriptor)
+
+        with patch(
+            "promote_active_policy._unlink_if_exists_at",
+            side_effect=unlink_committed_marker_then_fail_fsync,
+        ), patch(
+            "promote_active_policy.os.fsync",
+            side_effect=fail_fsync_after_committed_marker_unlink,
+        ):
+            self._promote_policy()
+        self.assertTrue(failed)
+        self.assertEqual(
+            (self.pic_root / "policy" / "storage_policy.json").read_bytes(),
+            reviewed_policy,
+        )
+        self.assertEqual(
+            sum(
+                (
+                    root / "policy" / ".active_promotion_transaction.json"
+                ).exists()
+                for root in [self.pic_root, self.project_home_root]
+            ),
+            1,
+        )
+
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        self._promote_policy()
+        require_storage_policy_unlock_snapshot(
+            control_plane_version=self.control_plane_version,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+            allow_pending_genesis=True,
+        )
+
+    def test_policy_promotion_rejects_predecessor_swap_at_transaction_setup(
+        self,
+    ) -> None:
+        active_promotion_paths = [
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        real_transaction = promote_active_policy._active_policy_transaction
+        mutated: dict[Path, bytes] = {}
+
+        @contextmanager
+        def mutate_before_transaction(*args: object, **kwargs: object) -> Iterator[None]:
+            promotion = json.loads(
+                active_promotion_paths[0].read_text(encoding="utf-8")
+            )
+            promotion["promotion_id"] = str(uuid.uuid4())
+            payload = (
+                json.dumps(promotion, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            for path in active_promotion_paths:
+                path.chmod(0o644)
+                path.write_bytes(payload)
+                path.chmod(0o444)
+                mutated[path] = payload
+            with real_transaction(*args, **kwargs):
+                yield
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy._active_policy_transaction",
+            side_effect=mutate_before_transaction,
+        ), self.assertRaisesRegex(ValueError, "changed before transaction setup"):
+            self._promote_policy()
+        self.assertEqual(
+            {path: path.read_bytes() for path in active_promotion_paths},
+            mutated,
+        )
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertFalse(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
 
     def test_policy_promotion_rejects_broken_pending_marker_symlink(self) -> None:
         marker = self.pic_root / "ledger" / "pending_submission.json"
@@ -8854,7 +11265,7 @@ PY
             science_submission_freeze=self._authorized_science_freeze(candidate),
             admission_smoke_overrides={"status": "closed_after_pass"},
         )
-        self._promote_policy()
+        self._install_deliberately_malformed_active_policy_fixture()
         manifest_path = self._create_manifest()
         with self.assertRaisesRegex(ValueError, "differs from archived source inventory"):
             self._reserve(manifest_path)
@@ -8907,7 +11318,7 @@ PY
             ),
             admission_smoke_overrides={"status": "closed_after_pass"},
         )
-        self._promote_policy()
+        self._install_deliberately_malformed_active_policy_fixture()
         manifest_path = self._create_manifest()
         with self.assertRaisesRegex(ValueError, "unauthorized control-plane version"):
             self._reserve(manifest_path)
@@ -9131,7 +11542,7 @@ PY
             science_submission_freeze=self._authorized_science_freeze(candidate),
             admission_smoke_overrides={"status": "closed_after_pass"},
         )
-        self._promote_policy()
+        self._install_deliberately_malformed_active_policy_fixture()
         manifest_path = self._create_manifest()
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
@@ -9189,7 +11600,7 @@ PY
             science_submission_freeze=self._authorized_science_freeze(candidate),
             admission_smoke_overrides={"status": "closed_after_pass"},
         )
-        self._promote_policy()
+        self._install_deliberately_malformed_active_policy_fixture()
         manifest_path = self._create_manifest()
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
@@ -10338,6 +12749,55 @@ PY
                 for key, filename in expected.items()
             },
         )
+        self.assertNotIn(
+            "common_sha256",
+            AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS,
+        )
+
+    def test_exact_reviewed_storage_preflight_predecessor_authorization_is_literal(
+        self,
+    ) -> None:
+        self.assertEqual(
+            control_plane_common.
+            AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_POLICY_SHA256,
+            "23a73b868146f63d4b363713f988d55e9dadffa15b26f2b2f1d07da66331f5c3",
+        )
+        self.assertEqual(
+            control_plane_common.
+            AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROMOTION_SHA256,
+            "4824ea825e7b9e42becdca4b9a8b72c0454bd1a2e02d5e365b1878ed94c53243",
+        )
+        self.assertEqual(
+            control_plane_common.
+            AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_CONTROL_PLANE_VERSION,
+            "821d185856722bd0178acb9427f78ac82671a4b6670779ec8400fbac54c6d721",
+        )
+        self.assertEqual(
+            control_plane_common.
+            AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_PROBE_ID,
+            "1554766c-21e2-48b1-8cfe-b1e7e4e75aa2",
+        )
+        self.assertEqual(
+            control_plane_common.
+            AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_EVIDENCE_SHA256,
+            "81ba8415e786cf88563520119e88d5e749937aaad293d84003ec8f4b3acb6501",
+        )
+        self.assertEqual(
+            AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION,
+            {
+                "entrypoint_sha256": (
+                    "22b8c3898154e0c687bf5bd555b7fae35826014cd5af8e33bd04b946671cb7f0"
+                ),
+                "git_commit": "749c95bb7492d67bd3765eadd5287f54663c4052",
+                "runner_sha256": (
+                    "74ab26fdf66129e018ce5a63a3827853e878b1efff71449490b0b017f48fd956"
+                ),
+                "schema_sha256": (
+                    "183fb8996381660a731a650e2fb42e0ee4989b248646d592fb28c0e57f8de898"
+                ),
+                "tracked_clean_head_blobs": True,
+            },
+        )
 
     def test_policy_rejects_missing_storage_preflight_binding_and_root_fields(
         self,
@@ -10501,6 +12961,1607 @@ PY
             promote(
                 self.policy,
                 retire_historical_storage_preflight_predecessor=True,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_reviewed_storage_preflight_predecessor_migration_is_one_time(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        with self.assertRaisesRegex(ValueError, "root schema"):
+            promote(
+                self.policy,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self._authorize_active_exact_reviewed_preflight_predecessor():
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=successor.name,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+            second_successor = self._publish_test_control_plane_successor(
+                self.pic_root, schema_suffix="\n\n"
+            )
+            project_home_second_successor = self._publish_test_control_plane_successor(
+                self.project_home_root, schema_suffix="\n\n"
+            )
+            self.assertEqual(project_home_second_successor.name, second_successor.name)
+            self.assertNotEqual(second_successor.name, successor.name)
+            self._write_policy(
+                installed_control_plane_version=second_successor.name,
+                staged_control_plane_candidate_version=second_successor.name,
+            )
+            with self.assertRaisesRegex(ValueError, "exact reviewed live anchors"):
+                promote(
+                    self.policy,
+                    migrate_exact_reviewed_storage_preflight_predecessor=True,
+                    control_plane_dir=second_successor,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+
+    def test_exact_reviewed_storage_preflight_migration_preserves_historical_authorized_freeze(
+        self,
+    ) -> None:
+        candidate, _, _ = self._clean_candidate(
+            authorize=True,
+            source_name="migration-preserved-candidate-source",
+            freeze_id=str(uuid.uuid4()),
+            profile_id="hip-mpi-release-paper-pic-migration-preserved",
+        )
+        candidate_source_root = self.authorized_clean_candidate_source_root
+        assert candidate_source_root is not None
+        authorized_freeze = self._authorized_science_freeze(candidate)
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+            science_submission_freeze=authorized_freeze,
+        )
+
+        def revalidate_with_test_source(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            return revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=candidate_source_root,
+            )
+
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ) as revalidate:
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(revalidate.call_count, 3)
+        for invocation in revalidate.call_args_list:
+            self.assertEqual(
+                invocation.kwargs["expected_receipt_control_plane_version"],
+                self.control_plane_version,
+            )
+            self.assertEqual(invocation.kwargs["control_plane_dir"], successor)
+        active, _ = require_storage_policy_unlock_snapshot(
+            control_plane_version=successor.name,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(active["science_submission_freeze"], authorized_freeze)
+
+    def test_exact_reviewed_storage_preflight_migration_revalidates_preserved_freeze_before_publication(
+        self,
+    ) -> None:
+        candidate, _, _ = self._clean_candidate(authorize=True)
+        authorized_freeze = self._authorized_science_freeze(candidate)
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+            science_submission_freeze=authorized_freeze,
+        )
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=ValueError("preserved candidate differs"),
+        ), self.assertRaisesRegex(ValueError, "preserved candidate differs"):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual({path: path.read_bytes() for path in anchors}, before)
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertFalse(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                list((root / "policy").glob(".*.transaction-rollback-*")),
+                [],
+            )
+
+    def test_exact_reviewed_storage_preflight_migration_committed_recovery_preserves_historical_authorized_freeze(
+        self,
+    ) -> None:
+        candidate, _, _ = self._clean_candidate(
+            authorize=True,
+            source_name="migration-recovery-preserved-candidate-source",
+            freeze_id=str(uuid.uuid4()),
+            profile_id="hip-mpi-release-paper-pic-migration-recovery-preserved",
+        )
+        candidate_source_root = self.authorized_clean_candidate_source_root
+        assert candidate_source_root is not None
+        authorized_freeze = self._authorized_science_freeze(candidate)
+        historical_build_controller = self.control_plane_version
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+            science_submission_freeze=authorized_freeze,
+        )
+        real_unlink = promote_active_policy._unlink_if_exists_at
+        cleanup_failed = False
+
+        def fail_first_committed_marker_cleanup(
+            parent_descriptor: int, name: str
+        ) -> None:
+            nonlocal cleanup_failed
+            marker_path = (
+                Path("/proc")
+                / str(os.getpid())
+                / "fd"
+                / str(parent_descriptor)
+                / name
+            )
+            if (
+                not cleanup_failed
+                and name == ".active_promotion_transaction.json"
+                and marker_path.exists()
+                and json.loads(marker_path.read_text(encoding="utf-8")).get("state")
+                == "committed"
+            ):
+                cleanup_failed = True
+                raise OSError("injected exact migration committed cleanup failure")
+            real_unlink(parent_descriptor, name)
+
+        def revalidate_with_test_source(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            return revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=candidate_source_root,
+            )
+
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ) as migration_revalidate, patch(
+            "promote_active_policy._unlink_if_exists_at",
+            side_effect=fail_first_committed_marker_cleanup,
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertTrue(cleanup_failed)
+        self.assertEqual(migration_revalidate.call_count, 3)
+        marker_paths = [
+            root / "policy" / ".active_promotion_transaction.json"
+            for root in [self.pic_root, self.project_home_root]
+        ]
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(
+            all(
+                json.loads(path.read_text(encoding="utf-8"))["state"] == "committed"
+                for path in marker_paths
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=successor.name,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+        real_predecessor_validation = (
+            promote_active_policy.require_policy_predecessor_snapshot_for_promotion
+        )
+
+        def fail_after_committed_recovery(*args: object, **kwargs: object) -> object:
+            if kwargs.get("allow_active_promotion_transaction") is True:
+                return real_predecessor_validation(*args, **kwargs)
+            raise ValueError("injected after historical-freeze committed recovery")
+
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ) as recovery_revalidate, patch(
+            "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+            side_effect=fail_after_committed_recovery,
+        ), self.assertRaisesRegex(
+            ValueError,
+            "injected after historical-freeze committed recovery",
+        ):
+            promote(
+                self.policy,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(recovery_revalidate.call_count, 1)
+        recovery_invocation = recovery_revalidate.call_args
+        assert recovery_invocation is not None
+        self.assertEqual(
+            recovery_invocation.kwargs["expected_receipt_control_plane_version"],
+            historical_build_controller,
+        )
+        self.assertEqual(recovery_invocation.kwargs["control_plane_dir"], successor)
+        for root in [self.pic_root, self.project_home_root]:
+            self.assertFalse(
+                (root / "policy" / ".active_promotion_transaction.json").exists()
+            )
+            self.assertEqual(
+                list((root / "policy").glob(".*.transaction-rollback-*")),
+                [],
+            )
+        active, _ = require_storage_policy_unlock_snapshot(
+            control_plane_version=successor.name,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(active["science_submission_freeze"], authorized_freeze)
+        self.assertEqual(active["registered_science_slices"], [])
+
+    def test_exact_reviewed_storage_preflight_migration_complete_prepared_or_mixed_recovery_preserves_historical_authorized_freeze(
+        self,
+    ) -> None:
+        candidate, _, _ = self._clean_candidate(
+            authorize=True,
+            source_name="migration-prepared-recovery-preserved-candidate-source",
+            freeze_id=str(uuid.uuid4()),
+            profile_id="hip-mpi-release-paper-pic-migration-prepared-recovery",
+        )
+        candidate_source_root = self.authorized_clean_candidate_source_root
+        assert candidate_source_root is not None
+        authorized_freeze = self._authorized_science_freeze(candidate)
+        historical_build_controller = self.control_plane_version
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        predecessor = {path: path.read_bytes() for _, path in anchors}
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+            science_submission_freeze=authorized_freeze,
+        )
+
+        def revalidate_with_test_source(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            return revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=candidate_source_root,
+            )
+
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        successor_anchors = {path: path.read_bytes() for _, path in anchors}
+        self.assertNotEqual(successor_anchors, predecessor)
+        real_predecessor_validation = (
+            promote_active_policy.require_policy_predecessor_snapshot_for_promotion
+        )
+
+        def fail_after_complete_successor_recovery(
+            *args: object, **kwargs: object
+        ) -> object:
+            if kwargs.get("allow_active_promotion_transaction") is True:
+                return real_predecessor_validation(*args, **kwargs)
+            raise ValueError(
+                "injected after historical-freeze complete-successor recovery"
+            )
+
+        for states in [("prepared", "prepared"), ("committed", "prepared")]:
+            with self.subTest(states=states):
+                transaction_id = str(uuid.uuid4())
+                marker = {
+                    "schema_version": (
+                        promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION
+                    ),
+                    "record_type": (
+                        promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE
+                    ),
+                    "transaction_id": transaction_id,
+                    "state": "prepared",
+                    "predecessor_state": "complete",
+                    "anchors": [],
+                }
+                rollback_paths = []
+                for root_role, path in anchors:
+                    rollback_name = (
+                        f".{path.name}.transaction-rollback-{transaction_id}"
+                    )
+                    rollback_path = path.with_name(rollback_name)
+                    rollback_path.write_bytes(predecessor[path])
+                    rollback_path.chmod(0o444)
+                    rollback_paths.append(rollback_path)
+                    marker["anchors"].append(
+                        {
+                            "root_role": root_role,
+                            "name": path.name,
+                            "rollback_name": rollback_name,
+                            "predecessor_sha256": hashlib.sha256(
+                                predecessor[path]
+                            ).hexdigest(),
+                            "successor_sha256": hashlib.sha256(
+                                successor_anchors[path]
+                            ).hexdigest(),
+                        }
+                    )
+                marker_paths = []
+                for state, root in zip(
+                    states,
+                    [self.pic_root, self.project_home_root],
+                ):
+                    marker_path = (
+                        root / "policy" / ".active_promotion_transaction.json"
+                    )
+                    marker_path.write_text(
+                        json.dumps(
+                            {**marker, "state": state},
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    marker_path.chmod(0o400)
+                    marker_paths.append(marker_path)
+
+                with patch(
+                    "promote_active_policy.revalidate_clean_candidate",
+                    side_effect=revalidate_with_test_source,
+                ) as recovery_revalidate, patch(
+                    "promote_active_policy.require_policy_predecessor_snapshot_for_promotion",
+                    side_effect=fail_after_complete_successor_recovery,
+                ), self.assertRaisesRegex(
+                    ValueError,
+                    "injected after historical-freeze complete-successor recovery",
+                ):
+                    promote(
+                        self.policy,
+                        control_plane_dir=successor,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                    )
+                self.assertEqual(recovery_revalidate.call_count, 1)
+                recovery_invocation = recovery_revalidate.call_args
+                assert recovery_invocation is not None
+                self.assertEqual(
+                    recovery_invocation.kwargs[
+                        "expected_receipt_control_plane_version"
+                    ],
+                    historical_build_controller,
+                )
+                self.assertEqual(
+                    recovery_invocation.kwargs["control_plane_dir"],
+                    successor,
+                )
+                self.assertEqual(
+                    {path: path.read_bytes() for _, path in anchors},
+                    successor_anchors,
+                )
+                self.assertFalse(any(path.exists() for path in marker_paths))
+                self.assertFalse(any(path.exists() for path in rollback_paths))
+                active, _ = require_storage_policy_unlock_snapshot(
+                    control_plane_version=successor.name,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+                self.assertEqual(active["science_submission_freeze"], authorized_freeze)
+                self.assertEqual(active["registered_science_slices"], [])
+
+    def test_exact_reviewed_storage_preflight_predecessor_rejects_source_drift(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        self._rewrite_active_storage_preflight_artifact(
+            lambda artifact: artifact["source_authentication"].update(
+                runner_sha256="0" * 64
+            )
+        )
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), (
+            self.assertRaisesRegex(ValueError, "source authentication")
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_reviewed_storage_preflight_predecessor_rejects_wrong_anchor(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        with self.assertRaisesRegex(ValueError, "exact reviewed live anchors"):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_reviewed_storage_preflight_predecessor_requires_new_controller(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        self._write_policy()
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), (
+            self.assertRaisesRegex(ValueError, "requires a new control plane")
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_reviewed_storage_preflight_predecessor_rejects_freeze_drift(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            science_submission_freeze={
+                "status": "authorized",
+                "manifest_path": str(
+                    self.pic_root
+                    / "clean_candidates"
+                    / str(uuid.uuid4())
+                    / "clean_candidate_manifest.json"
+                ),
+                "manifest_sha256": "1" * 64,
+                "build_profile_control_plane_version": self.control_plane_version,
+            },
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), (
+            self.assertRaisesRegex(ValueError, "exact authorized predecessor transformation")
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_reviewed_storage_preflight_predecessor_rejects_metadata_drift(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        policy["reviewer"] = "unrelated successor drift"
+        self.policy.write_text(json.dumps(policy), encoding="utf-8")
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), (
+            self.assertRaisesRegex(ValueError, "exact authorized predecessor transformation")
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_reviewed_storage_preflight_predecessor_rejects_numeric_type_drift(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        self.assertIsInstance(policy["frontier"]["maximum_node_hours"], float)
+        policy["frontier"]["maximum_node_hours"] = 10000
+        self.policy.write_text(json.dumps(policy), encoding="utf-8")
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), (
+            self.assertRaisesRegex(ValueError, "exact authorized predecessor transformation")
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_reviewed_storage_preflight_predecessor_requires_newer_preflight(
+        self,
+    ) -> None:
+        self._rewrite_active_policy_as_exact_reviewed_preflight_predecessor()
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        self._rewrite_reviewed_storage_preflight_artifact(
+            lambda artifact: artifact.update(
+                completed_utc="2026-06-02T00:00:00Z",
+                started_utc="2026-06-02T00:00:00Z",
+            )
+        )
+        policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        policy["olcf_side_storage"]["last_preflight_utc"] = "2026-06-02T00:00:00Z"
+        self.policy.write_text(json.dumps(policy), encoding="utf-8")
+        with self._authorize_active_exact_reviewed_preflight_predecessor(), (
+            self.assertRaisesRegex(ValueError, "requires a newer authenticated")
+        ):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_exact_authorized_clean_candidate_freeze_replacement_is_compare_and_swap(
+        self,
+    ) -> None:
+        first_freeze = {
+            "status": "authorized",
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "first"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "1" * 64,
+            "build_profile_control_plane_version": self.control_plane_version,
+        }
+        self._write_policy(science_submission_freeze=first_freeze)
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": self.control_plane_version,
+                "build": {
+                    "receipt_control_plane_version": self.control_plane_version,
+                },
+            },
+        ):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+
+        active_policy_path = self.pic_root / "policy" / "storage_policy.json"
+        active_promotion_path = self.pic_root / "policy" / "active_promotion.json"
+        expected_policy_sha256 = sha256(active_policy_path)
+        expected_promotion_sha256 = sha256(active_promotion_path)
+        predecessor = json.loads(active_policy_path.read_text(encoding="utf-8"))
+        second = copy.deepcopy(predecessor)
+        second["science_submission_freeze"] = {
+            **first_freeze,
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "second"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "2" * 64,
+        }
+        stale = copy.deepcopy(predecessor)
+        stale["science_submission_freeze"] = {
+            **first_freeze,
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "stale"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "3" * 64,
+        }
+        self.policy.write_text(json.dumps(second), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "exact active-predecessor transition"):
+            self._promote_policy()
+        with self.assertRaisesRegex(ValueError, "requires both exact active predecessor"):
+            promote(
+                self.policy,
+                replace_exact_authorized_clean_candidate_freeze=True,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": self.control_plane_version,
+                "build": {
+                    "receipt_control_plane_version": self.control_plane_version,
+                },
+            },
+        ) as revalidate:
+            promote(
+                self.policy,
+                replace_exact_authorized_clean_candidate_freeze=True,
+                expected_active_policy_sha256=expected_policy_sha256,
+                expected_active_promotion_sha256=expected_promotion_sha256,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        expected_revalidation = call(
+            Path(second["science_submission_freeze"]["manifest_path"]),
+            expected_manifest_sha256=second["science_submission_freeze"][
+                "manifest_sha256"
+            ],
+            expected_receipt_control_plane_version=self.control_plane_version,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(revalidate.call_args_list, [expected_revalidation] * 3)
+        self.assertEqual(
+            json.loads(active_policy_path.read_text(encoding="utf-8")),
+            second,
+        )
+
+        second_policy_sha256 = sha256(active_policy_path)
+        second_promotion_sha256 = sha256(active_promotion_path)
+        self.policy.write_text(json.dumps(predecessor), encoding="utf-8")
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": self.control_plane_version,
+                "build": {
+                    "receipt_control_plane_version": self.control_plane_version,
+                },
+            },
+        ):
+            promote(
+                self.policy,
+                replace_exact_authorized_clean_candidate_freeze=True,
+                expected_active_policy_sha256=second_policy_sha256,
+                expected_active_promotion_sha256=second_promotion_sha256,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(sha256(active_policy_path), expected_policy_sha256)
+        self.assertNotEqual(sha256(active_promotion_path), expected_promotion_sha256)
+
+        self.policy.write_text(json.dumps(stale), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "active predecessor hashes changed"):
+            promote(
+                self.policy,
+                replace_exact_authorized_clean_candidate_freeze=True,
+                expected_active_policy_sha256=expected_policy_sha256,
+                expected_active_promotion_sha256=expected_promotion_sha256,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_authorized_clean_candidate_freeze_cannot_step_down_without_exact_mode(
+        self,
+    ) -> None:
+        authorized_freeze = {
+            "status": "authorized",
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "first"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "1" * 64,
+            "build_profile_control_plane_version": self.control_plane_version,
+        }
+        self._write_policy(science_submission_freeze=authorized_freeze)
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": self.control_plane_version,
+                "build": {
+                    "receipt_control_plane_version": self.control_plane_version,
+                },
+            },
+        ):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+
+        self._write_policy(
+            science_submission_freeze={"status": "pending_clean_candidate_freeze"}
+        )
+        with self.assertRaisesRegex(ValueError, "exact active-predecessor transition"):
+            self._promote_policy()
+        self.assertEqual({path: path.read_bytes() for path in anchors}, before)
+
+    def test_exact_authorized_clean_candidate_freeze_revalidation_failure_is_atomic(
+        self,
+    ) -> None:
+        first_freeze = {
+            "status": "authorized",
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "first"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "1" * 64,
+            "build_profile_control_plane_version": self.control_plane_version,
+        }
+        self._write_policy(science_submission_freeze=first_freeze)
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": self.control_plane_version,
+                "build": {
+                    "receipt_control_plane_version": self.control_plane_version,
+                },
+            },
+        ):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        successor = json.loads(anchors[0].read_text(encoding="utf-8"))
+        successor["science_submission_freeze"] = {
+            **first_freeze,
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "second"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "2" * 64,
+        }
+        self.policy.write_text(json.dumps(successor), encoding="utf-8")
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=ValueError("candidate bundle differs"),
+        ), self.assertRaisesRegex(ValueError, "candidate bundle differs"):
+            promote(
+                self.policy,
+                replace_exact_authorized_clean_candidate_freeze=True,
+                expected_active_policy_sha256=sha256(anchors[0]),
+                expected_active_promotion_sha256=sha256(anchors[2]),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual({path: path.read_bytes() for path in anchors}, before)
+
+    def test_authorized_clean_candidate_revalidation_uses_bound_historical_build_controller(
+        self,
+    ) -> None:
+        historical_build_controller = "0" * 64
+        manifest_path = (
+            self.pic_root
+            / "clean_candidates"
+            / str(uuid.uuid4())
+            / "clean_candidate_manifest.json"
+        )
+        policy = {
+            "science_submission_freeze": {
+                "status": "authorized",
+                "manifest_path": str(manifest_path),
+                "manifest_sha256": "1" * 64,
+                "build_profile_control_plane_version": historical_build_controller,
+            }
+        }
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": self.control_plane_version,
+                "build": {
+                    "receipt_control_plane_version": historical_build_controller,
+                },
+            },
+        ) as revalidate:
+            promote_active_policy._require_authorized_clean_candidate_freeze_revalidation(
+                policy,
+                control_plane_version=self.control_plane_version,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        revalidate.assert_called_once_with(
+            manifest_path,
+            expected_manifest_sha256="1" * 64,
+            expected_receipt_control_plane_version=historical_build_controller,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+
+    def test_active_launch_prohibited_generation_verifier_binds_exact_state(
+        self,
+    ) -> None:
+        candidate, _, _ = self._clean_candidate(authorize=True)
+        candidate_source_root = self.authorized_clean_candidate_source_root
+        assert candidate_source_root is not None
+        active_policy = self.pic_root / "policy" / "storage_policy.json"
+        active_promotion = self.pic_root / "policy" / "active_promotion.json"
+        freeze = self._authorized_science_freeze(candidate)
+        serialization_lock_held = False
+
+        def revalidate_with_test_source(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            nonlocal serialization_lock_held
+            anchor = stable_serialization_anchor(self.pic_root)
+            descriptor = os.open(
+                anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            )
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                serialization_lock_held = True
+            finally:
+                os.close(descriptor)
+            return revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=candidate_source_root,
+            )
+
+        bindings = {
+            "expected_control_plane_version": self.control_plane_version,
+            "expected_active_policy_sha256": sha256(active_policy),
+            "expected_active_promotion_sha256": sha256(active_promotion),
+            "expected_authorized_freeze_manifest": candidate,
+            "expected_authorized_freeze_manifest_sha256": freeze["manifest_sha256"],
+            "expected_authorized_freeze_build_controller": self.control_plane_version,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ) as revalidate, patch.object(
+            promote_active_policy,
+            "SCRIPT_DIR",
+            self.control_plane_dir,
+        ):
+            report = promote_active_policy.verify_active_launch_prohibited_generation(
+                **bindings,
+            )
+        self.assertEqual(revalidate.call_count, 1)
+        self.assertTrue(serialization_lock_held)
+        self.assertEqual(
+            report,
+            {
+                "active_policy_sha256": sha256(active_policy),
+                "active_promotion_sha256": sha256(active_promotion),
+                "control_plane_version": self.control_plane_version,
+                "record_type": (
+                    "frontier_pic_active_launch_prohibited_generation_verification"
+                ),
+                "schema_version": 1,
+                "science_submission_freeze": freeze,
+                "status": "passed",
+            },
+        )
+
+        for label, override in [
+            ("policy", {"expected_active_policy_sha256": "0" * 64}),
+            ("promotion", {"expected_active_promotion_sha256": "0" * 64}),
+            (
+                "freeze",
+                {"expected_authorized_freeze_manifest_sha256": "0" * 64},
+            ),
+        ]:
+            with self.subTest(label=label), patch.object(
+                promote_active_policy,
+                "SCRIPT_DIR",
+                self.control_plane_dir,
+            ), self.assertRaisesRegex(
+                ValueError,
+                "differs from expected",
+            ):
+                promote_active_policy.verify_active_launch_prohibited_generation(
+                    **{**bindings, **override},
+                )
+
+        rollback_anchor = (
+            self.pic_root
+            / "policy"
+            / f".storage_policy.json.transaction-rollback-{uuid.uuid4()}"
+        )
+        rollback_anchor.write_bytes(active_policy.read_bytes())
+        rollback_anchor.chmod(0o400)
+        with patch.object(
+            promote_active_policy,
+            "SCRIPT_DIR",
+            self.control_plane_dir,
+        ), self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            promote_active_policy.verify_active_launch_prohibited_generation(
+                **bindings,
+            )
+
+        with self.assertRaisesRegex(TypeError, "control_plane_dir"):
+            promote_active_policy.verify_active_launch_prohibited_generation(
+                **bindings,
+                control_plane_dir=self.control_plane_dir,
+            )
+
+    def test_active_launch_prohibited_generation_verifier_cli_dispatches_exact_bindings(
+        self,
+    ) -> None:
+        expected = {
+            "schema_version": 1,
+            "status": "passed",
+        }
+        manifest = Path("/tmp/clean_candidate_manifest.json")
+        arguments = [
+            "promote_active_policy.py",
+            "--verify-active-launch-prohibited-generation",
+            "--expected-control-plane-version",
+            "a" * 64,
+            "--expected-active-policy-sha256",
+            "b" * 64,
+            "--expected-active-promotion-sha256",
+            "c" * 64,
+            "--expected-authorized-freeze-manifest",
+            str(manifest),
+            "--expected-authorized-freeze-manifest-sha256",
+            "d" * 64,
+            "--expected-authorized-freeze-build-controller",
+            "e" * 64,
+        ]
+        output = io.StringIO()
+        with patch.object(
+            promote_active_policy,
+            "verify_active_launch_prohibited_generation",
+            return_value=expected,
+        ) as verify_generation, patch.object(
+            sys, "argv", arguments
+        ), patch.object(
+            sys, "stdout", output
+        ):
+            promote_active_policy.main()
+        verify_generation.assert_called_once_with(
+            expected_active_policy_sha256="b" * 64,
+            expected_active_promotion_sha256="c" * 64,
+            expected_control_plane_version="a" * 64,
+            expected_authorized_freeze_manifest=manifest,
+            expected_authorized_freeze_manifest_sha256="d" * 64,
+            expected_authorized_freeze_build_controller="e" * 64,
+        )
+        self.assertEqual(
+            output.getvalue(),
+            json.dumps(expected, separators=(",", ":"), sort_keys=True) + "\n",
+        )
+
+    def test_exact_authorized_clean_candidate_mutation_after_initial_revalidation_requires_recovery(
+        self,
+    ) -> None:
+        self._clean_candidate(authorize=True)
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        candidate, _, _ = self._clean_candidate(
+            authorize=False,
+            source_name="replacement-candidate-toctou-precommit",
+            freeze_id=str(uuid.uuid4()),
+            profile_id="hip-mpi-release-paper-pic-toctou-precommit",
+        )
+        replacement_source_root = self.authorized_clean_candidate_source_root
+        assert replacement_source_root is not None
+        successor = json.loads(anchors[0].read_text(encoding="utf-8"))
+        successor["science_submission_freeze"] = self._authorized_science_freeze(
+            candidate
+        )
+        self.policy.write_text(json.dumps(successor), encoding="utf-8")
+        reviewed_successor = copy.deepcopy(successor)
+        validations = 0
+
+        def revalidate_then_mutate(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            nonlocal validations
+            result = revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=replacement_source_root,
+            )
+            validations += 1
+            if validations == 1:
+                candidate.parent.chmod(0o755)
+                candidate.chmod(0o644)
+                candidate.write_bytes(candidate.read_bytes() + b"\n")
+                candidate.chmod(0o444)
+                candidate.parent.chmod(0o555)
+            return result
+
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_then_mutate,
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Committed active-policy promotion requires locked recovery",
+        ):
+            promote(
+                self.policy,
+                replace_exact_authorized_clean_candidate_freeze=True,
+                expected_active_policy_sha256=sha256(anchors[0]),
+                expected_active_promotion_sha256=sha256(anchors[2]),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(validations, 1)
+        self.assertNotEqual({path: path.read_bytes() for path in anchors}, before)
+        self.assertEqual(
+            json.loads(anchors[0].read_text(encoding="utf-8")),
+            reviewed_successor,
+        )
+        self.assertEqual(anchors[0].read_bytes(), anchors[1].read_bytes())
+        self.assertEqual(anchors[2].read_bytes(), anchors[3].read_bytes())
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            self.assertTrue(marker_path.exists())
+            self.assertEqual(
+                json.loads(marker_path.read_text(encoding="utf-8"))["state"],
+                "prepared",
+            )
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+
+    def test_authorized_clean_candidate_mutation_after_committed_markers_requires_recovery(
+        self,
+    ) -> None:
+        candidate, _, _ = self._clean_candidate(
+            authorize=False,
+            source_name="candidate-toctou-committed",
+            freeze_id=str(uuid.uuid4()),
+            profile_id="hip-mpi-release-paper-pic-toctou-committed",
+        )
+        candidate_source_root = self.authorized_clean_candidate_source_root
+        assert candidate_source_root is not None
+        self._write_policy(
+            science_submission_freeze=self._authorized_science_freeze(candidate)
+        )
+        reviewed_policy = self.policy.read_bytes()
+        real_atomic_write_json_at = promote_active_policy.atomic_write_json_at
+        committed_markers = 0
+
+        def mutate_after_second_committed_marker(
+            parent_descriptor: int,
+            name: str,
+            value: object,
+            **kwargs: object,
+        ) -> None:
+            nonlocal committed_markers
+            real_atomic_write_json_at(parent_descriptor, name, value, **kwargs)
+            if (
+                name == ".active_promotion_transaction.json"
+                and isinstance(value, dict)
+                and value.get("state") == "committed"
+            ):
+                committed_markers += 1
+                if committed_markers == 2:
+                    candidate.parent.chmod(0o755)
+                    candidate.chmod(0o644)
+                    candidate.write_bytes(candidate.read_bytes() + b"\n")
+                    candidate.chmod(0o444)
+                    candidate.parent.chmod(0o555)
+
+        def revalidate_with_test_source(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            return revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=candidate_source_root,
+            )
+
+        with patch(
+            "promote_active_policy.atomic_write_json_at",
+            side_effect=mutate_after_second_committed_marker,
+        ), patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Committed active-policy promotion requires locked recovery",
+        ):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+        self.assertEqual(committed_markers, 2)
+        self.assertEqual(
+            (self.pic_root / "policy" / "storage_policy.json").read_bytes(),
+            reviewed_policy,
+        )
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            self.assertTrue(marker_path.exists())
+            self.assertEqual(
+                json.loads(marker_path.read_text(encoding="utf-8"))["state"],
+                "committed",
+            )
+            self.assertEqual(
+                len(list((root / "policy").glob(".*.transaction-rollback-*"))),
+                2,
+            )
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+    def test_committed_authorized_clean_candidate_recovery_preserves_evidence_when_candidate_is_invalid(
+        self,
+    ) -> None:
+        candidate, _, _ = self._clean_candidate(
+            authorize=True,
+            source_name="candidate-toctou-recovery",
+            freeze_id=str(uuid.uuid4()),
+            profile_id="hip-mpi-release-paper-pic-toctou-recovery",
+        )
+        candidate_source_root = self.authorized_clean_candidate_source_root
+        assert candidate_source_root is not None
+        transaction_id = str(uuid.uuid4())
+        anchors = [
+            ("orion", self.pic_root / "policy" / "storage_policy.json"),
+            ("orion", self.pic_root / "policy" / "active_promotion.json"),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "storage_policy.json",
+            ),
+            (
+                "project_home",
+                self.project_home_root / "policy" / "active_promotion.json",
+            ),
+        ]
+        marker = {
+            "schema_version": promote_active_policy.PROMOTION_TRANSACTION_SCHEMA_VERSION,
+            "record_type": promote_active_policy.PROMOTION_TRANSACTION_RECORD_TYPE,
+            "transaction_id": transaction_id,
+            "state": "committed",
+            "predecessor_state": "complete",
+            "anchors": [],
+        }
+        rollback_paths = []
+        for root_role, path in anchors:
+            rollback_name = f".{path.name}.transaction-rollback-{transaction_id}"
+            rollback_path = path.with_name(rollback_name)
+            os.link(path, rollback_path)
+            rollback_paths.append(rollback_path)
+            marker["anchors"].append(
+                {
+                    "root_role": root_role,
+                    "name": path.name,
+                    "rollback_name": rollback_name,
+                    "predecessor_sha256": sha256(path),
+                    "successor_sha256": sha256(path),
+                }
+            )
+        marker_payload = json.dumps(marker, indent=2, sort_keys=True) + "\n"
+        marker_paths = []
+        for root in [self.pic_root, self.project_home_root]:
+            marker_path = root / "policy" / ".active_promotion_transaction.json"
+            marker_path.write_text(marker_payload, encoding="utf-8")
+            marker_path.chmod(0o400)
+            marker_paths.append(marker_path)
+        candidate.parent.chmod(0o755)
+        candidate.chmod(0o644)
+        candidate.write_bytes(candidate.read_bytes() + b"\n")
+        candidate.chmod(0o444)
+        candidate.parent.chmod(0o555)
+
+        def revalidate_with_test_source(
+            candidate_manifest_path: Path, **kwargs: object
+        ) -> dict[str, object]:
+            return revalidate_clean_candidate.revalidate_clean_candidate(
+                candidate_manifest_path,
+                **kwargs,
+                authorized_source_root=candidate_source_root,
+            )
+
+        self._write_policy()
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=revalidate_with_test_source,
+        ), self.assertRaisesRegex(ValueError, "differs from expected binding"):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+        self.assertTrue(all(path.exists() for path in marker_paths))
+        self.assertTrue(all(path.exists() for path in rollback_paths))
+        with self.assertRaisesRegex(ValueError, "requires locked recovery"):
+            require_storage_policy_unlock_snapshot(
+                control_plane_version=self.control_plane_version,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                allow_pending_genesis=True,
+            )
+
+    def test_exact_authorized_clean_candidate_freeze_replacement_revalidates_real_malformed_candidates(
+        self,
+    ) -> None:
+        self._clean_candidate(authorize=True)
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        expected_policy_sha256 = sha256(anchors[0])
+        expected_promotion_sha256 = sha256(anchors[2])
+
+        def rewrite_manifest(
+            candidate: Path, mutate: Callable[[dict[str, object]], None]
+        ) -> None:
+            value = json.loads(candidate.read_text(encoding="utf-8"))
+            mutate(value)
+            candidate.parent.chmod(0o755)
+            candidate.chmod(0o644)
+            candidate.write_text(json.dumps(value), encoding="utf-8")
+            candidate.chmod(0o444)
+            candidate.parent.chmod(0o555)
+
+        def rewrite_profile(
+            candidate: Path, mutate: Callable[[dict[str, object]], None]
+        ) -> None:
+            value = json.loads(candidate.read_text(encoding="utf-8"))
+            build = value["build"]
+            assert isinstance(build, dict)
+            profile_path = Path(str(build["profile_path"]))
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            mutate(profile)
+            candidate.parent.chmod(0o755)
+            profile_path.chmod(0o644)
+            profile_path.write_text(json.dumps(profile), encoding="utf-8")
+            profile_path.chmod(0o444)
+            build["profile_sha256"] = sha256(profile_path)
+            candidate.chmod(0o644)
+            candidate.write_text(json.dumps(value), encoding="utf-8")
+            candidate.chmod(0o444)
+            candidate.parent.chmod(0o555)
+
+        def mutate_prepared_artifact(candidate: Path) -> None:
+            def mutate(value: dict[str, object]) -> None:
+                prepared = value["prepared_artifacts"]
+                assert isinstance(prepared, dict)
+                paper_decks = prepared["paper_decks"]
+                assert isinstance(paper_decks, list)
+                record = paper_decks[0]
+                assert isinstance(record, dict)
+                record["sha256"] = "0" * 64
+
+            rewrite_manifest(candidate, mutate)
+
+        def mutate_receipt_controller(candidate: Path) -> None:
+            value = json.loads(candidate.read_text(encoding="utf-8"))
+            build = value["build"]
+            assert isinstance(build, dict)
+            receipt_path = Path(str(build["profile_receipt_path"]))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["control_plane_version"] = "0" * 64
+            candidate.parent.chmod(0o755)
+            receipt_path.chmod(0o644)
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipt_path.chmod(0o444)
+            candidate.parent.chmod(0o555)
+
+        def mutate_duplicate_candidate_keys(candidate: Path) -> None:
+            candidate.parent.chmod(0o755)
+            candidate.chmod(0o644)
+            candidate.write_text(
+                '{"schema_version":4,"schema_version":4}\n',
+                encoding="utf-8",
+            )
+            candidate.chmod(0o444)
+            candidate.parent.chmod(0o555)
+
+        def mutate_layout(candidate: Path) -> None:
+            rewrite_manifest(
+                candidate,
+                lambda value: value["build"].update(
+                    executable_path=str(self.pic_root / "alternate-athena")
+                ),
+            )
+
+        def mutate_profile_source_root(candidate: Path) -> None:
+            rewrite_profile(
+                candidate,
+                lambda profile: profile.update(
+                    authorized_source_root=str(self.root / "forged-source")
+                ),
+            )
+
+        def mutate_profile_provenance_path(candidate: Path) -> None:
+            def mutate(profile: dict[str, object]) -> None:
+                provenance = profile["provenance_inputs"]
+                assert isinstance(provenance, dict)
+                toolchain = provenance["toolchain"]
+                assert isinstance(toolchain, dict)
+                toolchain["path"] = str(self.pic_root / "bin" / "forged-toolchain.txt")
+
+            rewrite_profile(candidate, mutate)
+
+        cases: list[tuple[str, Callable[[Path], None], str]] = [
+            (
+                "prepared-artifact manifest tamper",
+                mutate_prepared_artifact,
+                "differs from archived source inventory",
+            ),
+            (
+                "different build-receipt controller",
+                mutate_receipt_controller,
+                "different control-plane version",
+            ),
+            (
+                "duplicate candidate JSON key",
+                mutate_duplicate_candidate_keys,
+                "Duplicate JSON object key",
+            ),
+            (
+                "candidate layout widening",
+                mutate_layout,
+                "does not match the fixed layout",
+            ),
+            (
+                "forged build-profile source root",
+                mutate_profile_source_root,
+                "authorized source root",
+            ),
+            (
+                "forged build-provenance path",
+                mutate_profile_provenance_path,
+                "documented Orion layout",
+            ),
+        ]
+        for index, (label, mutate, error_pattern) in enumerate(cases):
+            with self.subTest(label=label):
+                candidate, _, _ = self._clean_candidate(
+                    authorize=False,
+                    source_name=f"replacement-candidate-source-{index}",
+                    freeze_id=str(uuid.uuid4()),
+                    profile_id=f"hip-mpi-release-paper-pic-replacement-{index}",
+                )
+                replacement_source_root = self.authorized_clean_candidate_source_root
+                assert replacement_source_root is not None
+                mutate(candidate)
+                successor = json.loads(anchors[0].read_text(encoding="utf-8"))
+                successor["science_submission_freeze"] = self._authorized_science_freeze(
+                    candidate
+                )
+                self.policy.write_text(json.dumps(successor), encoding="utf-8")
+
+                def revalidate_with_test_source(
+                    candidate_manifest_path: Path, **kwargs: object
+                ) -> dict[str, object]:
+                    return revalidate_clean_candidate.revalidate_clean_candidate(
+                        candidate_manifest_path,
+                        **kwargs,
+                        authorized_source_root=replacement_source_root,
+                    )
+
+                with patch(
+                    "promote_active_policy.revalidate_clean_candidate",
+                    side_effect=revalidate_with_test_source,
+                ), self.assertRaisesRegex(ValueError, error_pattern):
+                    promote(
+                        self.policy,
+                        replace_exact_authorized_clean_candidate_freeze=True,
+                        expected_active_policy_sha256=expected_policy_sha256,
+                        expected_active_promotion_sha256=expected_promotion_sha256,
+                        control_plane_dir=self.control_plane_dir,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                    )
+                self.assertEqual({path: path.read_bytes() for path in anchors}, before)
+
+    def test_exact_authorized_clean_candidate_freeze_replacement_rejects_policy_drift(
+        self,
+    ) -> None:
+        first_freeze = {
+            "status": "authorized",
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "first"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "1" * 64,
+            "build_profile_control_plane_version": self.control_plane_version,
+        }
+        self._write_policy(science_submission_freeze=first_freeze)
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": self.control_plane_version,
+                "build": {
+                    "receipt_control_plane_version": self.control_plane_version,
+                },
+            },
+        ):
+            self._promote_policy(patch_clean_candidate_revalidation=False)
+        active_policy_path = self.pic_root / "policy" / "storage_policy.json"
+        active_promotion_path = self.pic_root / "policy" / "active_promotion.json"
+        successor = json.loads(active_policy_path.read_text(encoding="utf-8"))
+        successor["science_submission_freeze"] = {
+            **first_freeze,
+            "manifest_path": str(
+                self.pic_root
+                / "clean_candidates"
+                / "second"
+                / "clean_candidate_manifest.json"
+            ),
+            "manifest_sha256": "2" * 64,
+        }
+        successor["frontier"]["maximum_node_hours"] = 10000
+        self.policy.write_text(json.dumps(successor), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "changed unrelated policy fields"):
+            promote(
+                self.policy,
+                replace_exact_authorized_clean_candidate_freeze=True,
+                expected_active_policy_sha256=sha256(active_policy_path),
+                expected_active_promotion_sha256=sha256(active_promotion_path),
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_policy_predecessor_transition_modes_are_exclusive(self) -> None:
+        with self.assertRaisesRegex(ValueError, "modes are exclusive"):
+            promote(
+                self.policy,
+                retire_historical_storage_preflight_predecessor=True,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self.assertRaisesRegex(ValueError, "modes are exclusive"):
+            promote(
+                self.policy,
+                migrate_exact_reviewed_storage_preflight_predecessor=True,
+                replace_exact_authorized_clean_candidate_freeze=True,
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,

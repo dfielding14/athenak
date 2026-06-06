@@ -70,7 +70,7 @@ release milestones is complete.
 | True delta-f | State, deposition, restart, and bounded source-local mechanics exist | Long-horizon CRSI/CRPAI paper reproduction remains open |
 | Expanding box | Bounded host CPAW, gyro-history, comoving-flux, div(B), and restart checks exist | Full paper Section 5.7 and Frontier qualification remain open |
 | AMR lifetime | Serial refine/derefine, restart, boundary, ASan, and UBSan successors pass | Multi-rank MPI migration, HIP lifetime, and scientific AMR equivalence remain open |
-| Shock generator | Paper-surface injection and startup-cohort removal are implemented; a bounded actual-particle audit passes; the first registered HIP pressure slice exposed a strided host-to-device copy fault; the packed-transfer repair passes bounded regressions; the rebuilt HIP/MPI v2 retry completed four serialized pressure-engineering calibration slices | Aggregate calibration publication, human pressure review, prerequisite slices, and qualifying shock campaigns remain open |
+| Shock generator | Paper-surface injection and startup-cohort removal are implemented; a bounded actual-particle audit passes; the first registered HIP pressure slice exposed a strided host-to-device copy fault; the packed-transfer repair passes bounded regressions; the rebuilt HIP/MPI v2 retry completed four serialized pressure-engineering calibration slices; the immutable aggregate and review packet are published; the human selected `problem/ps_p0=1.0` | Selection sealing and schema-v3 acceptance, prerequisite slices, and qualifying shock campaigns remain open |
 | Particle provenance | Schema-7 provenance and independently reconstructed weighted spectra pass bounded local tests, including a two-rank Orion-local replay | Frontier HIP parity and shock-campaign binding remain open |
 | Frontier control plane | Serialized ledger, root restriction, registered F0/F1 slices, and bounded F2 engineering evidence exist | Remaining registered science and stress slices remain open |
 
@@ -91,11 +91,13 @@ particle subview copy during injection. The packed particle-transfer repair
 passes bounded serial-host append, recenter and startup-cohort compaction
 regressions. The rebuilt clean HIP/MPI candidate then completed the registered
 v2 pressure-pilot retry for `problem/ps_p0 = 1.0`, `0.05`, `0.10`, and `0.20`.
-All four slices are reconciled with immutable raw descriptors. Aggregate
-publication is paused after a failed-closed parser-compatibility discovery and
-two intentionally cancelled worker reruns exposed additional publication
-hardening requirements before any public bundle was accepted. Human pressure
-review, qualifying-plan hardening, and prerequisite slices remain open.
+All four slices are reconciled with immutable raw descriptors. The immutable
+aggregate bundle and review packet were accepted after the failed-closed
+parser-compatibility discovery and intentionally cancelled worker reruns drove
+additional publication hardening. The human selected `problem/ps_p0=1.0`, but
+the authoritative reanalysis, reviewer attestations, and schema-v3 selection
+receipt remain unsealed. Qualifying-plan hardening and prerequisite slices
+remain open.
 
 The prepared contract includes:
 
@@ -682,18 +684,19 @@ unless all required bindings and products are present.
 
 Execute these actions in order:
 
-1. Commit and push the integrated ninth authenticated-storage,
-   exact-historical-anchor and candidate-lifecycle repair tree, and run the
-   full clean-worker validation matrix from that commit.
-2. Capture authenticated mirrored storage-preflight evidence, install the
-   paired controller, promote the one-use consumed-slice retirement successor,
-   freeze and independently revalidate a fresh worker-built candidate, and
+1. Commit and push the exact readiness-bound reviewed preflight-predecessor
+   migration and authorized-freeze compare-and-swap repair, and run the full
+   clean-worker validation matrix from that commit.
+2. Capture fresh authenticated mirrored storage-preflight evidence, install
+   the paired controller, promote the one-use exact predecessor-migration
+   successor while revalidating and preserving the authorized freeze, its
+   historical build-controller receipt, and the empty allowlist; freeze and
+   independently revalidate a fresh successor-controller-built candidate, and
    promote the candidate-only successor.
-3. Provision the fixed sibling publication-acceptance authority through the
-   reviewed one-time transition. Finish and verify the immutable four-slice
-   pressure aggregate publication and pressure-review packet on workers.
-4. Record the required human
-   `problem/ps_p0` selection receipt.
+3. Seal the human-selected `problem/ps_p0=1.0` authoritative reanalysis and
+   reviewer attestations plus the schema-v3 pressure-selection receipt.
+4. Verify all source-local, retained-plan, installed-controller, and
+   completed-attempt pressure-selection replay paths.
 5. Close the Section 5.4 normalization, macro-particle-mass, gas-subtraction,
    spectrum-window, snapshot-tolerance, and AMR-residual reviews.
 6. Materialize and freeze the qualifying Section 5.4 plan and analyzer.
