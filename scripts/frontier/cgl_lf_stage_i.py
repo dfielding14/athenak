@@ -9786,21 +9786,27 @@ def validate_submission_audit(
 def reauthenticate_retained_managed_shared_root_clearance(
     paths: dict[str, Path],
     submission_audit: object,
-) -> None:
-    """Close a retained submit audit over its exact declared F120 checkpoint."""
+    *,
+    expected_authority: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    """Return a finite-read F120 binding, optionally requiring it unchanged.
+
+    A returned binding is a snapshot, not a lease. Callers must require the
+    same binding again immediately before every authority-consuming action.
+    """
 
     if not isinstance(submission_audit, dict):
-        return
+        return None
     clearance = submission_audit.get("shared_root_isolation_clearance")
     if clearance is None:
-        return
+        return None
     if not isinstance(clearance, dict):
         raise ValueError("submission audit shared-root clearance is invalid")
     checkpoint_match = re.fullmatch(r"F-([1-9][0-9]*)", str(clearance.get("checkpoint")))
     audit_review = clearance.get("publication_audit_review")
     if checkpoint_match is None or not isinstance(audit_review, dict):
         raise ValueError("submission audit shared-root clearance is invalid")
-    authenticate_managed_shared_root_clearance_final_closure(
+    authority = authenticate_managed_shared_root_clearance_final_closure(
         paths,
         int(checkpoint_match.group(1)),
         expected_audit_review_sha256=require_r17_sha256(
@@ -9812,6 +9818,11 @@ def reauthenticate_retained_managed_shared_root_clearance(
             "submission audit created_utc",
         ),
     )
+    if expected_authority is not None and authority != expected_authority:
+        raise ValueError(
+            "retained managed shared-root clearance changed before authority use"
+        )
+    return authority
 
 
 def open_batch_script_from_binding(value: object) -> dict[str, object]:
@@ -10367,6 +10378,10 @@ def apply_transaction(paths: dict[str, Path], transaction_path: Path) -> None:
     """Idempotently complete one journaled metadata transition."""
 
     transaction = read_transaction(paths, transaction_path)
+    submission_audit = transaction.get("submission_audit")
+    clearance_authority = reauthenticate_retained_managed_shared_root_clearance(
+        paths, submission_audit
+    )
     kind = transaction.get("kind")
     if kind == "submit_pending":
         raise ValueError(
@@ -10400,10 +10415,27 @@ def apply_transaction(paths: dict[str, Path], transaction_path: Path) -> None:
         if matches and matches[0] != row:
             raise ValueError(f"transaction ledger row conflicts: {transaction_path}")
         if not matches:
+            reauthenticate_retained_managed_shared_root_clearance(
+                paths,
+                submission_audit,
+                expected_authority=clearance_authority,
+            )
             append_ledger_row(paths["ledger"], row, ledger)
+    reauthenticate_retained_managed_shared_root_clearance(
+        paths, submission_audit, expected_authority=clearance_authority
+    )
     write_json(paths["reservations"], reservations)
+    reauthenticate_retained_managed_shared_root_clearance(
+        paths, submission_audit, expected_authority=clearance_authority
+    )
     write_json(manifest_path, manifest)
+    reauthenticate_retained_managed_shared_root_clearance(
+        paths, submission_audit, expected_authority=clearance_authority
+    )
     refresh_summary(paths)
+    reauthenticate_retained_managed_shared_root_clearance(
+        paths, submission_audit, expected_authority=clearance_authority
+    )
     unlink_trusted_transaction(paths, transaction_path, transaction)
 
 
@@ -14042,6 +14074,18 @@ def current_managed_shared_root_clearance_installed_transaction_binding(
     require_managed_shared_root_clearance_aliases_absent(
         (transaction,), "managed shared-root clearance installed transaction binding"
     )
+    entries = set(trusted_directory_entries(
+        staging, "managed shared-root clearance installed transaction staging"
+    ))
+    expected_entries = {
+        *SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS.values(),
+        SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+    }
+    if entries != expected_entries:
+        raise ValueError(
+            "managed shared-root clearance installed transaction staging has "
+            "extra or missing entries"
+        )
     binding = {
         "marker": current_clearance_file_binding(
             transaction,
@@ -14064,6 +14108,7 @@ def current_managed_shared_root_clearance_installed_transaction_binding(
             )
             for key, name in SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS.items()
         },
+        "entries": sorted(entries),
         "expected": managed_shared_root_clearance_expected_digests(
             expected, "managed shared-root clearance installed transaction expected"
         ),
@@ -14145,6 +14190,7 @@ def current_managed_shared_root_clearance_public_binding(
 
 def current_managed_shared_root_clearance_live_dependency_binding(
     paths: dict[str, Path],
+    checkpoint: int,
 ) -> dict[str, object]:
     """Return exact current bindings for every live F120 dependency."""
 
@@ -14156,6 +14202,16 @@ def current_managed_shared_root_clearance_live_dependency_binding(
     stale_manifest = stale_namespace / "manifest/prepared_run.json"
     stage_namespace = paths["root"] / "runs/mks24-stage-i" / EXECUTION_EPOCH
     terminal_source = paths["root"] / SHARED_ROOT_CLEARANCE_SUPERSESSION_RELATIVE
+    accounting = paths["root"] / "accounting"
+    supersedes = [
+        paths["root"] / relative for relative in SHARED_ROOT_CLEARANCE_LEGACY_RELATIVES
+    ]
+    for prior_checkpoint in managed_shared_root_clearance_checkpoints(
+        accounting, before=checkpoint
+    ):
+        supersedes.extend(
+            managed_shared_root_clearance_chain_paths(accounting, prior_checkpoint)
+        )
     stale_manifest_binding = current_clearance_file_binding(
         stale_manifest,
         "managed shared-root clearance closing stale manifest",
@@ -14192,6 +14248,14 @@ def current_managed_shared_root_clearance_live_dependency_binding(
                 mode=0o444,
             )
             for index, path in enumerate(source_paths)
+        ],
+        "supersedes": [
+            current_clearance_file_binding(
+                path,
+                f"managed shared-root clearance closing superseded publication {index}",
+                mode=0o444,
+            )
+            for index, path in enumerate(supersedes)
         ],
         "stale_manifest": stale_manifest_binding,
         "stale_namespace": current_clearance_directory_binding(
@@ -14231,7 +14295,9 @@ def current_managed_shared_root_clearance_final_binding(
             )
         ),
         "live_dependencies": (
-            current_managed_shared_root_clearance_live_dependency_binding(paths)
+            current_managed_shared_root_clearance_live_dependency_binding(
+                paths, checkpoint
+            )
         ),
     }
     closing = {
@@ -14241,7 +14307,9 @@ def current_managed_shared_root_clearance_final_binding(
             )
         ),
         "live_dependencies": (
-            current_managed_shared_root_clearance_live_dependency_binding(paths)
+            current_managed_shared_root_clearance_live_dependency_binding(
+                paths, checkpoint
+            )
         ),
         "public": current_managed_shared_root_clearance_public_binding(
             paths, checkpoint, expected
@@ -14263,7 +14331,7 @@ def authenticate_managed_shared_root_clearance_final_closure(
     expected: dict[str, str] | None = None,
     now: datetime | None = None,
 ) -> dict[str, object]:
-    """Close authority over one stable public, private, and live F120 state."""
+    """Return one complete finite-read public, private, and live F120 snapshot."""
 
     accounting = paths["root"] / "accounting"
     committed = authenticate_managed_shared_root_clearance_chain_commit(
@@ -15553,6 +15621,9 @@ def submit(args: argparse.Namespace) -> int:
         args, manifest_path, manifest, run_slurm_test=True
     )
     try:
+        clearance_authority = reauthenticate_retained_managed_shared_root_clearance(
+            paths, audit
+        )
         audit["final_queue_authentication"] = authenticated_production_queue_evidence(
             args, paths, read_reservations(paths), offline_local_root
         )
@@ -15562,6 +15633,9 @@ def submit(args: argparse.Namespace) -> int:
                 now=datetime.now(timezone.utc),
             )
         reauthenticate_open_batch_script(script, audit["batch_script"])
+        reauthenticate_retained_managed_shared_root_clearance(
+            paths, audit, expected_authority=clearance_authority
+        )
         transaction_path = write_submit_pending_transaction(
             paths, manifest_path, audit
         )
@@ -15569,6 +15643,9 @@ def submit(args: argparse.Namespace) -> int:
         if output_file:
             output = Path(output_file).read_text(encoding="utf-8")
         else:
+            reauthenticate_retained_managed_shared_root_clearance(
+                paths, audit, expected_authority=clearance_authority
+            )
             output = subprocess.run(
                 [str(SBATCH), "--parsable", str(script["descriptor_path"])],
                 check=True,

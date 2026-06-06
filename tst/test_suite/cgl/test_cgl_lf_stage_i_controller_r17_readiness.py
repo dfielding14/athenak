@@ -283,6 +283,34 @@ def mutate_installed_clearance_transaction(module, fixture, target_kind, mutatio
     return target
 
 
+def replace_file_with_same_bytes(path: Path) -> None:
+    retained = path.read_bytes()
+    mode = stat.S_IMODE(path.stat().st_mode)
+    path.unlink()
+    path.write_bytes(retained)
+    path.chmod(mode)
+
+
+def mutate_managed_clearance_tail_authority(module, fixture, mutation) -> None:
+    if mutation == "audit-review-alias":
+        hostile_deterministic_alias(
+            module, fixture["audit_review_path"], "temporary", "regular"
+        )
+    elif mutation == "source-authority-replacement":
+        replace_file_with_same_bytes(fixture["source_paths"][0])
+    elif mutation == "private-install-replacement":
+        replace_file_with_same_bytes(fixture["transaction_path"])
+    elif mutation == "stale-manifest-replacement":
+        replace_file_with_same_bytes(
+            fixture["paths"]["root"] / "runs" / module.SHARED_ROOT_STALE_CAMPAIGN_ID
+            / "manifest/prepared_run.json"
+        )
+    elif mutation == "extra-private-staging":
+        write_stable_json(fixture["staging_path"] / "foreign-private-entry", {})
+    else:
+        replace_file_with_same_bytes(fixture["legacy_paths"][0])
+
+
 def mutate_managed_clearance_final_authority(module, fixture, mutation):
     if mutation == "audit-review-delete":
         fixture["audit_review_path"].unlink()
@@ -1166,6 +1194,199 @@ def test_managed_clearance_final_combined_close_rejects_inflight_mutation(
             pass
         else:
             assert 120 not in checkpoints
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "audit-review-alias",
+        "source-authority-replacement",
+        "private-install-replacement",
+        "stale-manifest-replacement",
+        "extra-private-staging",
+        "supersedes-replacement",
+    ),
+)
+def test_managed_clearance_action_guard_rejects_tail_window_mutation(
+    tmp_path, monkeypatch, mutation
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    clearance = authenticate_managed_clearance(
+        module, fixture, checkpoint_number=fixture["checkpoint"]
+    )
+    audit = {
+        "created_utc": fixture["now"].isoformat(),
+        "shared_root_isolation_clearance": clearance,
+    }
+    authority = module.reauthenticate_retained_managed_shared_root_clearance(
+        fixture["paths"], audit
+    )
+    assert authority is not None
+    supersedes = authority["binding"]["live_dependencies"]["supersedes"]
+    artifact = json.loads(fixture["artifact_path"].read_text())
+    assert [binding["path"] for binding in supersedes] == [
+        binding["path"] for binding in artifact["supersedes"]
+    ]
+    assert authority["binding"]["transaction"]["entries"] == sorted({
+        *module.SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS.values(),
+        module.SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+    })
+
+    mutate_managed_clearance_tail_authority(module, fixture, mutation)
+
+    with pytest.raises(ValueError):
+        module.reauthenticate_retained_managed_shared_root_clearance(
+            fixture["paths"], audit, expected_authority=authority
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "audit-review-alias",
+        "source-authority-replacement",
+        "private-install-replacement",
+        "stale-manifest-replacement",
+        "extra-private-staging",
+        "supersedes-replacement",
+    ),
+)
+def test_managed_clearance_finite_read_tail_requires_action_reclose(
+    tmp_path, monkeypatch, mutation
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    clearance = authenticate_managed_clearance(
+        module, fixture, checkpoint_number=fixture["checkpoint"]
+    )
+    audit = {
+        "created_utc": fixture["now"].isoformat(),
+        "shared_root_isolation_clearance": clearance,
+    }
+    public_binding = module.current_managed_shared_root_clearance_public_binding
+    public_reads = 0
+    mutated = False
+
+    def mutate_at_final_public_read(*args, **kwargs):
+        nonlocal public_reads, mutated
+        public_reads += 1
+        if public_reads == 4 and mutation != "audit-review-alias":
+            mutate_managed_clearance_tail_authority(module, fixture, mutation)
+            mutated = True
+        result = public_binding(*args, **kwargs)
+        if public_reads == 4 and mutation == "audit-review-alias":
+            mutate_managed_clearance_tail_authority(module, fixture, mutation)
+            mutated = True
+        return result
+
+    monkeypatch.setattr(
+        module,
+        "current_managed_shared_root_clearance_public_binding",
+        mutate_at_final_public_read,
+    )
+    authority = module.authenticate_managed_shared_root_clearance_final_closure(
+        fixture["paths"],
+        fixture["checkpoint"],
+        expected_audit_review_sha256=fixture["expected"]["audit_review"],
+        now=fixture["now"],
+    )
+    assert mutated
+    assert public_reads == 4
+    with pytest.raises(ValueError):
+        module.reauthenticate_retained_managed_shared_root_clearance(
+            fixture["paths"], audit, expected_authority=authority
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation_boundary", "completed_actions"),
+    (
+        ("before-ledger", []),
+        ("after-ledger", ["ledger"]),
+        ("after-reservations", ["ledger", "reservations"]),
+        ("after-manifest", ["ledger", "reservations", "manifest"]),
+        (
+            "after-summary",
+            ["ledger", "reservations", "manifest", "summary"],
+        ),
+    ),
+)
+def test_apply_transaction_recloses_before_each_f120_canonical_mutation(
+    tmp_path, monkeypatch, mutation_boundary, completed_actions
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    clearance = authenticate_managed_clearance(
+        module, fixture, checkpoint_number=fixture["checkpoint"]
+    )
+    audit = {
+        "created_utc": fixture["now"].isoformat(),
+        "shared_root_isolation_clearance": clearance,
+    }
+    manifest_path = fixture["paths"]["runs"] / "R16/s00/manifest/prepared_run.json"
+    transaction_path = fixture["paths"]["transactions"] / "submitted.json"
+    row = {"job_id": "123"}
+    transaction = {
+        "kind": "submitted",
+        "manifest_path": str(manifest_path),
+        "manifest": {},
+        "reservations": [],
+        "ledger_row": row,
+        "submission_audit": audit,
+    }
+    monkeypatch.setattr(module, "read_transaction", lambda *_args: transaction)
+    monkeypatch.setattr(module, "transaction_ledger_views", lambda *_args: ([], [row]))
+    monkeypatch.setattr(module, "require_reservation_budget", lambda *_args: None)
+    monkeypatch.setattr(module, "require_retained_r17_policy", lambda *_args: None)
+    monkeypatch.setattr(module, "read_ledger", lambda *_args: [])
+    actions = []
+    mutated = False
+
+    def mutate_authority():
+        nonlocal mutated
+        assert not mutated
+        replace_file_with_same_bytes(fixture["source_paths"][0])
+        mutated = True
+
+    def validate_baseline(*_args):
+        if mutation_boundary == "before-ledger":
+            mutate_authority()
+
+    def append_ledger(*_args):
+        actions.append("ledger")
+        if mutation_boundary == "after-ledger":
+            mutate_authority()
+
+    def write_canonical(path, *_args, **_kwargs):
+        action = "reservations" if path == fixture["paths"]["reservations"] else "manifest"
+        actions.append(action)
+        if mutation_boundary == f"after-{action}":
+            mutate_authority()
+
+    def refresh(*_args):
+        actions.append("summary")
+        if mutation_boundary == "after-summary":
+            mutate_authority()
+
+    monkeypatch.setattr(
+        module, "validate_transaction_reservation_baseline", validate_baseline
+    )
+    monkeypatch.setattr(module, "append_ledger_row", append_ledger)
+    monkeypatch.setattr(module, "write_json", write_canonical)
+    monkeypatch.setattr(module, "refresh_summary", refresh)
+    monkeypatch.setattr(
+        module,
+        "unlink_trusted_transaction",
+        lambda *_args: pytest.fail("transaction retired after F120 authority mutation"),
+    )
+
+    with pytest.raises(
+        ValueError, match="changed before authority use|exact current bindings"
+    ):
+        module.apply_transaction(fixture["paths"], transaction_path)
+    assert mutated
+    assert actions == completed_actions
 
 
 @pytest.mark.parametrize(
@@ -5669,6 +5890,11 @@ def test_submit_rejects_managed_clearance_stale_job_reappearing_in_final_queue(
         module, "authenticated_production_queue_evidence",
         lambda *_args: final_queue,
     )
+    monkeypatch.setattr(
+        module,
+        "reauthenticate_retained_managed_shared_root_clearance",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(module, "close_authenticated_batch_script", lambda _script: None)
 
     def unexpected(*_args, **_kwargs):
@@ -5683,6 +5909,81 @@ def test_submit_rejects_managed_clearance_stale_job_reappearing_in_final_queue(
     )
     with pytest.raises(ValueError, match="remains present in complete squeue"):
         module.submit.__wrapped__(args)
+
+
+@pytest.mark.parametrize("mutation_point", ("after-final-queue", "after-journal"))
+def test_submit_recloses_f120_after_final_queue_journal_before_real_sbatch(
+    tmp_path, monkeypatch, mutation_point
+):
+    module = load_controller()
+    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    clearance = authenticate_managed_clearance(
+        module, fixture, checkpoint_number=fixture["checkpoint"]
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}\n")
+    script = {"path": tmp_path / "run.sbatch"}
+    audit = {
+        "created_utc": fixture["now"].isoformat(),
+        "batch_script": {},
+        "shared_root_isolation_clearance": clearance,
+    }
+    read_manifest = module.read_manifest
+
+    def read_submit_manifest(path):
+        if path == manifest_path:
+            return {"project_root": str(fixture["paths"]["root"])}
+        return read_manifest(path)
+
+    monkeypatch.setattr(
+        module, "read_manifest", read_submit_manifest
+    )
+    monkeypatch.setattr(
+        module, "require_root", lambda *_args: fixture["paths"]["root"]
+    )
+    monkeypatch.setattr(module, "is_offline_local_root", lambda *_args: False)
+    monkeypatch.setattr(
+        module,
+        "submission_preflight",
+        lambda *_args, **_kwargs: (fixture["paths"], script, audit),
+    )
+    monkeypatch.setattr(module, "read_reservations", lambda *_args: [])
+
+    def final_queue(*_args):
+        if mutation_point == "after-final-queue":
+            replace_file_with_same_bytes(fixture["transaction_path"])
+        return fixture["queue_evidence"]
+
+    monkeypatch.setattr(
+        module,
+        "authenticated_production_queue_evidence",
+        final_queue,
+    )
+    monkeypatch.setattr(module, "reauthenticate_open_batch_script", lambda *_args: None)
+    monkeypatch.setattr(module, "close_authenticated_batch_script", lambda *_args: None)
+    journal_written = False
+
+    def write_journal(*_args):
+        nonlocal journal_written
+        journal_written = True
+        if mutation_point == "after-journal":
+            replace_file_with_same_bytes(fixture["transaction_path"])
+        return fixture["paths"]["transactions"] / "submit-pending.json"
+
+    monkeypatch.setattr(module, "write_submit_pending_transaction", write_journal)
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("real sbatch crossed stale F120 closure"),
+    )
+    args = SimpleNamespace(
+        manifest=str(manifest_path),
+        allow_local_root=False,
+        sbatch_output_file=None,
+    )
+    with pytest.raises(ValueError, match="changed before authority use"):
+        module.submit.__wrapped__(args)
+    assert journal_written is (mutation_point == "after-journal")
 
 
 def test_check_submit_prints_authenticated_isolated_python(
