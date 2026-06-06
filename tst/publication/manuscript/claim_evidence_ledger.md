@@ -46,8 +46,8 @@ Snapshot date: 2026-06-06. Recheck before every substantive manuscript revision.
 | Q011 future campaign policy | Three grid variants, eight paired seeds, 24 expected baseline attempts; nominal-slot/observed-time rules and all-attempt retention are frozen in a policy-only successor | Planning evidence only; no execution authorization or result |
 | Q011 resource-scaling plan | Excluded preproduction pilots and a three-seed paired core with resource-gated complete-triad expansion are designed under a 500-node-hour pilot ceiling | Does not change the historical eight-seed preregistration; measured sizing and authorization remain open |
 | Q011 storage projection | Approximately `10.553535598859627 TB` planning envelope for 24 baseline attempts | Planning value only; actual sizes, retry capacity, capacity confirmation, and reservation remain open |
-| Q019 nonlinear Bell | Source-local high-rigidity fixed-current-like foundation deck, bounded analyzer, and campaign design exist, but inherit the invalid historical volume-blind/artificial-`C` current normalization; qualifying corrected source, matrix, pilots, registration, and evidence remain absent | Current Q019 foundation/design are ineligible for qualification; no nonlinear Bell production result or result figure is admissible |
-| Q022 nonlinear Bell comparison | Equation map, parameter overlap, extracted dataset, and numeric tolerance rows are absent; external review pending | No independent-comparison or scoped superiority claim is admissible |
+| Q019 nonlinear Bell | The historical source-local foundation and analyzer inherit the invalid volume-blind/artificial-`C` normalization. A separately named corrected volume-aware campaign design now exists, but corrected source/decks/analyzer, pilots, registration, and evidence remain absent | Historical Q019 artifacts remain ineligible; the corrected design grants no execution or claim authority, and no nonlinear Bell production result or result figure is admissible |
+| Q022 nonlinear Bell comparison | Bounded equation/normalization/parameter maps bind the retained references and establish that the target-paper Bell benchmark is linear. No standalone nonlinear-saturation dataset or numeric acceptance tolerance is supplied by that benchmark; extraction, execution bindings, discrepancy closure, and external review remain open | The bounded map may define comparison scope, but no nonlinear agreement, independent-comparison, or scoped-superiority claim is admissible |
 | Manuscript scaffold | Contains explicit open gates and TODOs | It is architecture, not evidence |
 
 ## Central Result Gate A: Nonlinear Bell Saturation
@@ -74,10 +74,14 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
   Bell mode; the volume omission makes the current change with dimension or
   root resolution. A pure meshblock/rank decomposition change must leave the
   deposited current invariant.
-- The historical Bell preparation/proxy evidence and the current Q019
-  foundation/design that inherit that normalization are invalid for
-  qualification. They may document the defect and supersession requirement
-  only.
+- The historical Bell preparation/proxy evidence and historical Q019
+  foundation/analyzer that inherit that normalization are invalid for
+  qualification. A separately named corrected volume-aware Q019 campaign
+  design exists, but it grants no execution or claim authority and is not
+  qualifying evidence.
+- The bounded Q022 reference map establishes that the retained target-paper
+  Bell benchmark is linear and supplies no standalone nonlinear-saturation
+  dataset or numeric nonlinear acceptance tolerance.
 - The production-readiness plan defines the required nonlinear saturation
   qualification contract.
 - Corrected Bell linear and nonlinear campaigns do not yet exist as qualifying
@@ -100,8 +104,8 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
 |---|---|---|---|
 | Corrected Bell current normalization | Source, deck, analyzer, and direct cycle-one deposited-current oracle bind `PPC * deposit_qscale * species_charge * v_CR / V_root_cell = 2 B_g k_0`; reject artificial-`C` multiplication; and demonstrate invariant physical current across the registered dimension, root-resolution, meshblock/rank-decomposition, and artificial-`C` matrix | Historical Q023 preparation and cycle-zero proxy evidence are invalid; corrected qualifying evidence absent | Supersede every affected Bell source/deck/analyzer/design binding and archive an invalidated-artifact inventory |
 | Q003/Q004/Q005 prerequisites | Required mechanics, coupling, and corrected paper-faithful linear Bell gates close | Open; historical Bell linear evidence invalidated | Complete the corrected qualifying linear Bell convergence, MPI/GPU, independent-recompute, and review matrix |
-| Exact physical regime | Corrected fiducial normalization, parameters, dimensional scope, exclusions, and artifact root frozen before qualifying output | Current design inherits invalid normalization | Issue and review a corrected Q019 successor before registration |
-| Qualifying decks | Exact corrected deck matrix and checksums frozen | Historical source-local foundation invalid for qualification; corrected matrix absent | Implement and review a separately named corrected Q019 source and exact pilot matrix |
+| Exact physical regime | Corrected fiducial normalization, parameters, dimensional scope, exclusions, and artifact root frozen before qualifying output | Corrected volume-aware successor design exists but is not execution-frozen; corrected implementation and evidence are absent | Implement, review, pilot, and freeze the separately named corrected Q019 successor before registration |
+| Qualifying decks | Exact corrected deck matrix and checksums frozen | Historical source-local foundation invalid for qualification; corrected successor design exists but corrected deck matrix is absent | Implement and review the separately named corrected Q019 source and exact pilot matrix |
 | Nonlinear analyzer | Production analyzer, source digest, outputs, failure behavior, and independent recompute contract frozen | Bounded source-local analyzer exists; production and independent-recompute contracts absent | Extend only after required raw diagnostics and pilot-frozen criteria close |
 | Saturation windows and criteria | Theory-derived or excluded-pilot-derived windows, estimators, uncertainty, tolerances, outlier rule, and stop conditions frozen before qualifying inspection | Open | Run only explicitly excluded pilots, then freeze successor |
 | Sensitivity design | Particle count, timestep, resolution, box size, dimensionality, and seed requirements bound; any sequential design has maximum seeds and node-hour ceiling | Proposed Q019 staged design; not frozen for execution | Complete independent physics/resource review and excluded pilots |
@@ -109,7 +113,7 @@ nonlinear Bell evolution for the exact tested non-Hall AthenaK regime.
 | Registered execution | Clean candidate, executable, decks, analyzer, policy slices, launch contracts, and retention bound | Unauthorized | Install/promote reviewed successor and execute serially |
 | Raw evidence | Every qualifying, failed, outlier, and replacement attempt archived with inventories | Absent | Enforce registered retention during execution |
 | Primary observables | Amplification, dominant wavelength, spectra, morphology, energy partition, saturation amplitude, and saturation time measured with uncertainty | Absent | Analyze only after complete registered dataset |
-| Q022/Q028 comparison | Reference extraction, equation/normalization/parameter maps, numeric tolerances, discrepancy ledger, and comparison runs close | Blocked | Complete external-reference mapping and review |
+| Q022/Q028 comparison | Reference extraction, equation/normalization/parameter maps, defensible comparison criteria, discrepancy ledger, and comparison runs close | Bounded central/reference-specific maps complete; target-paper Bell benchmark is linear and supplies no standalone nonlinear numeric tolerance; execution comparison and external review remain open | Bind corrected execution evidence, retain the explicit no-standalone-nonlinear-tolerance boundary, and close the discrepancy ledger and review |
 | Independent recomputation | Reviewer-owned implementation regenerates the primary metric table from archived raw output | Absent | Produce independent artifact after execution |
 | Named review | Reviewer accepts exact claim scope and limitations | Pending external review | Assign reviewer after evidence package is complete |
 
