@@ -2651,7 +2651,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         "manifest": replay_manifest,
         "reservations": [replay_reservation],
         "ledger_row": None,
-    })
+    }, mode=0o644)
     with monkeypatch.context() as policy:
         policy.setattr(stage_i, "DEFAULT_ROOT", root)
         with pytest.raises(
@@ -2694,7 +2694,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         "manifest": r17_replay_manifest,
         "reservations": [r17_replay_reservation],
         "ledger_row": None,
-    })
+    }, mode=0o644)
     with monkeypatch.context() as policy:
         policy.setattr(stage_i, "DEFAULT_ROOT", root)
         policy.setattr(
@@ -2767,7 +2767,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         "manifest": recorded_replay_manifest,
         "reservations": [recorded_replay_reservation],
         "ledger_row": recorded_ledger_row,
-    })
+    }, mode=0o644)
     with monkeypatch.context() as policy:
         policy.setattr(stage_i, "DEFAULT_ROOT", root)
         with pytest.raises(ValueError, match="invalid numeric fields"):
@@ -2801,7 +2801,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         "manifest": recorded_replay_manifest,
         "reservations": [recorded_replay_reservation],
         "ledger_row": recorded_ledger_row,
-    })
+    }, mode=0o644)
     with monkeypatch.context() as policy:
         policy.setattr(stage_i, "DEFAULT_ROOT", root)
         with pytest.raises(ValueError, match="invalid numeric fields"):
@@ -2844,7 +2844,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         "manifest": recorded_replay_manifest,
         "reservations": [recorded_replay_reservation],
         "ledger_row": recorded_ledger_row,
-    })
+    }, mode=0o644)
     with monkeypatch.context() as policy:
         policy.setattr(stage_i, "DEFAULT_ROOT", root)
         with pytest.raises(ValueError, match="scheduler evidence elapsed_seconds"):
@@ -2880,11 +2880,21 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     )
     manifest_path.parent.mkdir(parents=True)
     batch_script = manifest_path.parent / "cgl_lf_stage_i.sbatch"
-    batch_script.write_text("#!/bin/bash\n")
+    batch_template = (
+        "#!/bin/bash\n"
+        f"BATCH_SCRIPT_SHA256={stage_i.BATCH_SCRIPT_DIGEST_PLACEHOLDER}\n"
+    )
+    batch_text, batch_digest = stage_i.finalize_batch_script(batch_template)
+    batch_script.write_text(batch_text)
+    batch_script.chmod(0o750)
+    monkeypatch.setattr(
+        stage_i, "generated_batch_script", lambda *_args: batch_template
+    )
     stage_i.write_json(manifest_path, {
         "execution_epoch": stage_i.EXECUTION_EPOCH,
         "project_root": str(root),
         "state": "prepared",
+        "command": {"batch_script_sha256": batch_digest},
         "paths": {"batch_script": str(batch_script)},
     })
     stage_i.write_json(paths["reservations"], [{
@@ -2911,8 +2921,8 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     assert "--allow-shared-root-campaign" not in capsys.readouterr().out
 
     queue.write_text("123|batch|RUNNING|unrelated_job\n")
-    with pytest.raises(ValueError, match="another user job is queued"):
-        stage_i.check_submit(args)
+    assert stage_i.check_submit(args) == 0
+    capsys.readouterr()
     overlap_manifest_path = (
         paths["runs"] / "R04" / "s00" / "manifest" / "prepared_run.json"
     )
@@ -2956,15 +2966,15 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     assert stage_i.check_submit(args) == 0
     capsys.readouterr()
     queue.write_text(overlap_queue_row + "123|batch|RUNNING|unrelated_job\n")
-    with pytest.raises(ValueError, match="another user job is queued"):
-        stage_i.check_submit(args)
+    assert stage_i.check_submit(args) == 0
+    capsys.readouterr()
     queue.write_text(overlap_queue_row)
     for invalid_row in (
         f"321|debug|RUNNING|{stage_i.expected_job_name(overlap_manifest)}",
         "321|batch|RUNNING|wrong_name",
         overlap_queue_row.strip() + "\n" + overlap_queue_row.strip(),
     ):
-        with pytest.raises(ValueError, match="another user job is queued"):
+        with pytest.raises(ValueError, match="queued CGL job"):
             stage_i.authenticate_production_queue(
                 paths, reservations, invalid_row.splitlines()
             )
@@ -2983,16 +2993,17 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         "exploratory", "beta 25", "-reviewed", "exploratory",
     ]
     assert stage_i.check_submit(args) == 0
+    python = stage_i.authenticated_python_binary()
     helper = str(PAPER_STAGE_I_TOOL.resolve())
     submit_line = next(
         line.strip() for line in capsys.readouterr().out.splitlines()
         if line.strip().startswith(
-            f"python3 {shlex.quote(helper)} submit "
+            f"{shlex.quote(python)} -I -S -B {shlex.quote(helper)} submit "
         )
     )
     tokens = shlex.split(submit_line)
-    assert tokens[1] == helper
-    parsed = stage_i.parser().parse_args(tokens[2:])
+    assert tokens[:5] == [python, "-I", "-S", "-B", helper]
+    parsed = stage_i.parser().parse_args(tokens[5:])
     assert parsed.allow_shared_root_campaign == [
         "-reviewed", "beta 25", "exploratory",
     ]
@@ -3243,6 +3254,13 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    batch_template = (
+        "#!/bin/bash\n"
+        f"BATCH_SCRIPT_SHA256={stage_i.BATCH_SCRIPT_DIGEST_PLACEHOLDER}\n"
+    )
+    monkeypatch.setattr(
+        stage_i, "generated_batch_script", lambda *_args: batch_template
+    )
 
     def prepared_fixture(root, segment):
         paths = stage_i.initialize(root)
@@ -3251,7 +3269,9 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
         )
         manifest_path.parent.mkdir(parents=True)
         batch_script = manifest_path.parent / "cgl_lf_stage_i.sbatch"
-        batch_script.write_text("#!/bin/bash\n")
+        batch_text, batch_digest = stage_i.finalize_batch_script(batch_template)
+        batch_script.write_text(batch_text)
+        batch_script.chmod(0o750)
         manifest = {
             "execution_epoch": stage_i.EXECUTION_EPOCH,
             "project_root": str(root),
@@ -3266,6 +3286,7 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
                 "requested_walltime": "00:10:00",
                 "reserved_node_hours": 1.0 / 6.0,
             },
+            "command": {"batch_script_sha256": batch_digest},
             "paths": {"batch_script": str(batch_script)},
         }
         stage_i.write_json(manifest_path, manifest)
@@ -3336,13 +3357,13 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
     Path(args.sbatch_output_file).write_text("12345\n")
     before_manifest = manifest_path.read_text()
     before_reservations = paths["reservations"].read_text()
-    queue_results = iter(["", "999|batch|RUNNING|unrelated_job\n"])
+    queue_results = iter(["", "999|batch|RUNNING|cgl_untracked_stage_i_job\n"])
     monkeypatch.setattr(
         stage_i,
         "production_queue_output",
         lambda *_args, **_kwargs: next(queue_results),
     )
-    with pytest.raises(ValueError, match="another user job is queued"):
+    with pytest.raises(ValueError, match="queued CGL job"):
         stage_i.submit(args)
     assert not stage_i.pending_transaction_paths(paths)
     assert manifest_path.read_text() == before_manifest

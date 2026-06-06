@@ -36,6 +36,20 @@ AUTHORIZED_REVIEWER = (
 )
 F113_REVIEW_AUTHORITY = "campaign-authorized-independent-review"
 STORAGE_PROJECTION_METHOD = "observed-stage-i-output-byte-rate-v1"
+REQUEST_REVIEW_IDENTITY_ASSURANCE = "declared-process-independence-non-cryptographic"
+REQUEST_REVIEW_IDENTITY_LIMITATION = (
+    "Reviewer identity and process independence are declared evidence, "
+    "not cryptographically proven."
+)
+F116_REQUIRED_COMMITTED_TOOLS = {
+    "scripts/frontier/cgl_lf_stage_i.py": "0644",
+    "scripts/frontier/cgl_lf_stage_i_checkpoint.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_qualification.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_recost.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_source_authority.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_validate_segment.py": "0644",
+    "scripts/frontier/cgl_lf_stage_i_wave_plan.py": "0644",
+}
 F116_AUTHORIZATION = {
     "current_source_selection_authorized": True,
     "source_authority_publication_authorized": True,
@@ -87,7 +101,9 @@ POLICY_TEXT = {
 INITIAL_TARGETS = {
     **{f"R{number:02d}": 0.25 for number in range(3, 6)},
     "R06": 0.5,
-    **{f"R{number:02d}": 0.25 for number in range(7, 16)},
+    **{f"R{number:02d}": 0.25 for number in range(7, 12)},
+    "R12": 0.12,
+    **{f"R{number:02d}": 0.25 for number in range(13, 16)},
     "R16": 1.5,
     "R17": 0.25,
 }
@@ -112,6 +128,22 @@ def sha256(path: Path) -> str:
     """Return one fixture digest."""
 
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def mutated_history_copy(source: Path, target: Path, column: str, value: float) -> dict[str, object]:
+    """Copy one history while coherently changing a named final-row measurement."""
+
+    lines = source.read_text().splitlines()
+    labels = [token.split("=", 1)[1] for token in lines[1].split()[1:]]
+    fields = lines[-1].split()
+    fields[labels.index(column)] = f"{value:.16e}"
+    target.write_text("\n".join([*lines[:-1], " ".join(fields)]) + "\n")
+    target.chmod(0o644)
+    return {
+        "path": str(target),
+        "size_bytes": target.stat().st_size,
+        "sha256": sha256(target),
+    }
 
 
 def write_json(path: Path, value: object) -> None:
@@ -144,6 +176,20 @@ def git(repository: Path, *arguments: str) -> str:
         text=True,
     )
     return completed.stdout.strip()
+
+
+def f116_committed_tools(repository: Path, revision: str) -> list[dict[str, object]]:
+    """Return the exact source-authority seven-tool fixture contract."""
+
+    return [
+        {
+            "path": relative,
+            "revision": revision,
+            "sha256": sha256(repository / relative),
+            "mode": mode,
+        }
+        for relative, mode in sorted(F116_REQUIRED_COMMITTED_TOOLS.items())
+    ]
 
 
 def scheduler_time(value: datetime) -> str:
@@ -652,17 +698,15 @@ def refresh_request(fixture: dict[str, object], mutate=None) -> None:
             "reviewer": {
                 "agent_id": "fixture-independent-request-reviewer",
                 "role": "independent recost request reviewer",
-                "independent_from_request_author": True,
+                "declared_process_independence": True,
+                "identity_assurance": REQUEST_REVIEW_IDENTITY_ASSURANCE,
+                "identity_assurance_limitation": REQUEST_REVIEW_IDENTITY_LIMITATION,
             },
             "candidate": {
                 "path": str(request_path),
                 "sha256": fixture["request_sha256"],
             },
-            "scope": {
-                "non_authorizing": True,
-                "scheduler_mutation_authorized": False,
-                "canonical_mutation_authorized": False,
-            },
+            "scope": {"non_authorizing": True},
         },
     )
 
@@ -1279,14 +1323,12 @@ def write_external_request_review(
         "reviewer": {
             "agent_id": "external-draft-request-reviewer",
             "role": "independent recost request reviewer",
-            "independent_from_request_author": True,
+            "declared_process_independence": True,
+            "identity_assurance": REQUEST_REVIEW_IDENTITY_ASSURANCE,
+            "identity_assurance_limitation": REQUEST_REVIEW_IDENTITY_LIMITATION,
         },
         "candidate": {"path": str(request), "sha256": sha256(request)},
-        "scope": {
-            "non_authorizing": True,
-            "scheduler_mutation_authorized": False,
-            "canonical_mutation_authorized": False,
-        },
+        "scope": {"non_authorizing": True},
     }
     if mutate is not None:
         mutate(review)
@@ -1349,6 +1391,12 @@ def recost_fixture(tmp_path):
         "    print(json.dumps(reconcile_report(root), indent=2, sort_keys=True))\n"
     )
     helper.chmod(0o644)
+    for relative, mode in F116_REQUIRED_COMMITTED_TOOLS.items():
+        path = repository / relative
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"#!/usr/bin/env python3\n# fixture {path.name}\n")
+        path.chmod(int(mode, 8))
     inputs: dict[str, Path] = {}
     cases = []
     for number in range(2, 18):
@@ -1755,7 +1803,7 @@ def recost_fixture(tmp_path):
             "predecessor_authorities": {"historical_f115": historical_bindings},
             "implementation": {
                 "publisher": {"fixture": True},
-                "committed_tools": {"fixture": True},
+                "committed_tools": f116_committed_tools(repository, revision),
                 "intermediate_36140_bundle": bridge_bundle,
                 "current_source_bundle": current_bundle,
             },
@@ -2776,7 +2824,44 @@ def test_generator_requires_exact_independent_request_review(recost_fixture):
     value = json.loads(review.read_text())
     value["reviewer"]["agent_id"] = "fixture-request-author"
     write_immutable_json(review, value)
-    assert_rejected(run_generator(recost_fixture), "reviewer is not independently scoped")
+    assert_rejected(
+        run_generator(recost_fixture),
+        "lacks the exact declared non-cryptographic process-independence assurance",
+    )
+
+
+def test_request_review_scope_is_exactly_non_authorizing(recost_fixture):
+    review = recost_fixture["request_review"]
+    assert isinstance(review, Path)
+    value = json.loads(review.read_text())
+    assert value["scope"] == {"non_authorizing": True}
+    value["scope"]["scheduler_mutation_authorized"] = False
+    write_immutable_json(review, value)
+    assert_rejected(run_generator(recost_fixture), "over-authorizes")
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("declared-independent-false", "lacks the exact declared non-cryptographic"),
+        ("cryptographic-identity-claim", "lacks the exact declared non-cryptographic"),
+        ("stronger-proof-field", "recost request reviewer schema differs"),
+    ),
+)
+def test_request_review_identity_is_declared_noncryptographic_only(
+    recost_fixture, mutation, message,
+):
+    review = recost_fixture["request_review"]
+    assert isinstance(review, Path)
+    value = json.loads(review.read_text())
+    if mutation == "declared-independent-false":
+        value["reviewer"]["declared_process_independence"] = False
+    elif mutation == "cryptographic-identity-claim":
+        value["reviewer"]["identity_assurance"] = "cryptographically-verified-independent"
+    else:
+        value["reviewer"]["identity_verified"] = True
+    write_immutable_json(review, value)
+    assert_rejected(run_generator(recost_fixture), message)
 
 
 def test_generator_requires_f116_current_source_and_build_qualification_chains(
@@ -2835,6 +2920,38 @@ def test_generator_rejects_legacy_f116_publisher_schema(recost_fixture):
     write_immutable_json(authority, value)
     refresh_request(recost_fixture)
     assert_rejected(run_generator(recost_fixture), "F116 evidence schema differs")
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("missing", "must contain exactly seven tools"),
+        ("duplicate", "identity, order, revision, or mode differs"),
+        ("mode", "identity, order, revision, or mode differs"),
+        ("digest", "historical revision bytes differ"),
+    ),
+)
+def test_f116_consumer_requires_exact_seven_committed_tools(
+    recost_fixture, mutation, message,
+):
+    module = load_recost_module()
+    repository = recost_fixture["repository"]
+    revision = recost_fixture["revision"]
+    assert isinstance(repository, Path)
+    assert isinstance(revision, str)
+    tools = f116_committed_tools(repository, revision)
+    assert module.authenticate_f116_committed_tools(tools, repository, revision) == tools
+    invalid = deepcopy(tools)
+    if mutation == "missing":
+        invalid.pop()
+    elif mutation == "duplicate":
+        invalid[1]["path"] = invalid[0]["path"]
+    elif mutation == "mode":
+        invalid[0]["mode"] = "0755" if invalid[0]["mode"] == "0644" else "0644"
+    else:
+        invalid[0]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match=message):
+        module.authenticate_f116_committed_tools(invalid, repository, revision)
 
 
 def test_generator_rejects_f116_six_part_binding_to_historical_f115_bundle(
@@ -2929,6 +3046,7 @@ def test_generator_accepts_qualification_backed_initial_profiles_r04_through_r16
     retained = artifact["recommendations"]["recommended_next_profiles"][0]
     assert retained["case_id"] == case_id
     assert retained["nodes"] == nodes
+    assert retained["time_tlim_target"] == INITIAL_TARGETS[case_id]
     assert retained["recommendation_basis"]["kind"] == "qualified-initial-calibration"
 
 
@@ -4451,6 +4569,39 @@ def test_r17_recost_consumes_real_schema2_producer_output(tmp_path, monkeypatch)
             module.InputTracker(),
         )
 
+    scientific_path = root / operational["scientific_evidence"]["path"]
+    scientific = json.loads(scientific_path.read_text())
+    invalid_ct = deepcopy(scientific)
+    invalid_ct["user_history"] = mutated_history_copy(
+        Path(scientific["user_history"]["path"]),
+        scientific_path.with_name("coherent-invalid-ct.user.hst"),
+        "max_ndiv",
+        1.0e-12,
+    )
+    with pytest.raises(ValueError, match="mass, LF, hard-bound, or CT gate failed"):
+        module.authenticate_r17_physics_contract(
+            invalid_ct,
+            root,
+            operational["rank_local_outputs"],
+            operational["rank_local_restarts"],
+            module.InputTracker(),
+        )
+    invalid_mass = deepcopy(scientific)
+    invalid_mass["mhd_history"] = mutated_history_copy(
+        Path(scientific["mhd_history"]["path"]),
+        scientific_path.with_name("coherent-invalid-mass.mhd.hst"),
+        "mass",
+        2.01,
+    )
+    with pytest.raises(ValueError, match="mass, LF, hard-bound, or CT gate failed"):
+        module.authenticate_r17_physics_contract(
+            invalid_mass,
+            root,
+            operational["rank_local_outputs"],
+            operational["rank_local_restarts"],
+            module.InputTracker(),
+        )
+
     scheduler_path = root / operational["scheduler_evidence"]["path"]
     scheduler_path.chmod(0o644)
     with pytest.raises(ValueError, match="mode is 0644, expected 0444"):
@@ -4633,6 +4784,7 @@ def test_generator_rejects_preseeded_private_reexec_paths_without_valid_descript
     environment = dict(os.environ)
     environment.update(
         {
+            "_CGL_LF_STAGE_I_RECOST_PYTHON_DESCRIPTOR": "99",
             "_CGL_LF_STAGE_I_RECOST_SOURCE": "/attacker/source.py",
             "_CGL_LF_STAGE_I_RECOST_REPOSITORY_ROOT": "/attacker/repository",
         }
@@ -4657,11 +4809,14 @@ def test_authenticated_reexec_descriptor_controls_private_source_metadata(
     assert isinstance(generator, Path)
     assert isinstance(repository, Path)
     descriptor = os.open(generator, os.O_RDONLY)
+    python_descriptor = os.open(Path("/proc/self/exe").resolve(strict=True), os.O_RDONLY)
     try:
         monkeypatch.setattr(module, "__file__", f"/proc/self/fd/{descriptor}")
         monkeypatch.setenv(module.SELF_DESCRIPTOR_ENV, str(descriptor))
+        monkeypatch.setenv(module.PYTHON_DESCRIPTOR_ENV, str(python_descriptor))
         monkeypatch.setenv(module.SELF_SOURCE_ENV, str(generator))
         monkeypatch.setenv(module.REPOSITORY_ROOT_ENV, str(repository))
+        monkeypatch.setattr(module, "require_isolated_python_reexec", lambda value: None)
         assert module.authenticate_self(
             ["--expected-generator-sha256", sha256(generator)]
         ) == (generator, repository, sha256(generator))
@@ -4670,6 +4825,49 @@ def test_authenticated_reexec_descriptor_controls_private_source_metadata(
             module.authenticate_self(
                 ["--expected-generator-sha256", sha256(generator)]
             )
+    finally:
+        os.close(descriptor)
+        os.close(python_descriptor)
+
+
+def test_authenticated_reexec_rejects_named_source_inode_substitution(
+    recost_fixture, monkeypatch,
+):
+    module = load_recost_module()
+    generator = recost_fixture["generator"]
+    repository = recost_fixture["repository"]
+    assert isinstance(generator, Path)
+    assert isinstance(repository, Path)
+    descriptor = os.open(generator, os.O_RDONLY)
+    python_descriptor = os.open(Path("/proc/self/exe").resolve(strict=True), os.O_RDONLY)
+    displaced = generator.with_name(f"{generator.name}.displaced")
+    generator.rename(displaced)
+    generator.write_bytes(displaced.read_bytes())
+    generator.chmod(0o755)
+    try:
+        monkeypatch.setattr(module, "__file__", f"/proc/self/fd/{descriptor}")
+        monkeypatch.setenv(module.SELF_DESCRIPTOR_ENV, str(descriptor))
+        monkeypatch.setenv(module.PYTHON_DESCRIPTOR_ENV, str(python_descriptor))
+        monkeypatch.setenv(module.SELF_SOURCE_ENV, str(generator))
+        monkeypatch.setenv(module.REPOSITORY_ROOT_ENV, str(repository))
+        monkeypatch.setattr(module, "require_isolated_python_reexec", lambda value: None)
+        with pytest.raises(ValueError, match="source pathname is not the inherited descriptor"):
+            module.authenticate_self(
+                ["--expected-generator-sha256", sha256(generator)]
+            )
+    finally:
+        os.close(descriptor)
+        os.close(python_descriptor)
+
+
+def test_authenticated_python_reexec_requires_isolated_running_interpreter():
+    if sys.flags.isolated:
+        pytest.skip("test runner is already isolated")
+    module = load_recost_module()
+    descriptor = os.open(Path("/proc/self/exe").resolve(strict=True), os.O_RDONLY)
+    try:
+        with pytest.raises(ValueError, match="Python reexecution is not isolated"):
+            module.require_isolated_python_reexec(descriptor)
     finally:
         os.close(descriptor)
 
@@ -4690,13 +4888,15 @@ def test_reexec_and_git_environments_strip_caller_path_config_and_private_state(
         module.REPOSITORY_ROOT_ENV: "/hostile/repository",
     }.items():
         monkeypatch.setenv(key, value)
-    reexec = module.reexec_environment(7, RECOST, REPOSITORY)
+    reexec = module.reexec_environment(7, 8, RECOST, REPOSITORY)
     assert reexec[module.SELF_DESCRIPTOR_ENV] == "7"
+    assert reexec[module.PYTHON_DESCRIPTOR_ENV] == "8"
     assert reexec[module.SELF_SOURCE_ENV] == str(RECOST)
     assert reexec[module.REPOSITORY_ROOT_ENV] == str(REPOSITORY)
     assert "LD_PRELOAD" not in reexec
     assert "PYTHONPATH" not in reexec
     assert "GIT_CONFIG_PARAMETERS" not in reexec
+    assert reexec["XDG_CONFIG_HOME"] == "/nonexistent"
 
     calls = []
 
@@ -4719,6 +4919,217 @@ def test_reexec_and_git_environments_strip_caller_path_config_and_private_state(
     assert environment["GIT_CONFIG_NOSYSTEM"] == "1"
     assert "LD_PRELOAD" not in environment
     assert "GIT_CONFIG_PARAMETERS" not in environment
+
+
+def test_mutation_lock_pathname_replacement_blocks_managed_write(tmp_path):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock_path = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    lock_path.write_bytes(b"")
+    lock_path.chmod(0o644)
+    displaced = root / "displaced.lock"
+    target = root / "managed.json"
+    with module.stage_i_lock(root) as mutation_lock:
+        lock_path.rename(displaced)
+        lock_path.write_bytes(b"")
+        lock_path.chmod(0o644)
+        with pytest.raises(ValueError, match="lock pathname changed"):
+            module.write_exact_or_verify(
+                target,
+                b"{}\n",
+                mode=0o644,
+                label="managed fixture",
+                mutation_lock=mutation_lock,
+            )
+        assert not target.exists()
+        lock_path.unlink()
+        displaced.rename(lock_path)
+
+
+def test_inode_bound_rollback_rejects_target_and_parent_substitution(tmp_path):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    target.write_text("created\n")
+    target.chmod(0o644)
+    identity = module.retained_entry_identity(target, "managed fixture")
+    displaced_target = parent / "displaced.json"
+    target.rename(displaced_target)
+    target.write_text("replacement\n")
+    target.chmod(0o644)
+    with pytest.raises(ValueError, match="target inode changed"):
+        module.rollback_created_entry(identity, "managed fixture")
+    assert target.read_text() == "replacement\n"
+
+    bound_parent = tmp_path / "bound-parent"
+    bound_parent.mkdir()
+    bound_target = bound_parent / "managed.json"
+    bound_target.write_text("created\n")
+    bound_target.chmod(0o644)
+    bound_identity = module.retained_entry_identity(bound_target, "parent-bound fixture")
+    displaced_parent = tmp_path / "displaced-parent"
+    bound_parent.rename(displaced_parent)
+    bound_parent.mkdir()
+    (displaced_parent / bound_target.name).rename(bound_target)
+    with pytest.raises(ValueError, match="parent inode changed"):
+        module.rollback_created_entry(bound_identity, "parent-bound fixture")
+    assert bound_target.read_text() == "created\n"
+
+
+def test_atomic_rollback_retains_exact_inode_as_forensics_without_unlink(tmp_path):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    target.write_text("created\n")
+    target.chmod(0o644)
+    identity = module.retained_entry_identity(target, "managed fixture")
+    forensic = module.rollback_created_entry(identity, "managed fixture")
+    assert not target.exists()
+    assert forensic.read_text() == "created\n"
+    assert "recost-rollback-forensic" in forensic.name
+
+
+def test_atomic_rollback_never_unlinks_substituted_inode(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    target.write_text("created\n")
+    target.chmod(0o644)
+    identity = module.retained_entry_identity(target, "managed fixture")
+    substitute = parent / "substitute"
+    substitute.write_text("substituted\n")
+    substitute.chmod(0o644)
+    escaped = parent / "escaped-created"
+    real_renameat2 = module.renameat2
+    raced = False
+
+    def substitute_between_check_and_atomic_move(
+        directory, source, destination, flags, label,
+    ):
+        nonlocal raced
+        if not raced and "rollback forensic retention" in label:
+            os.rename(source, escaped.name, src_dir_fd=directory, dst_dir_fd=directory)
+            os.rename(
+                substitute.name,
+                source,
+                src_dir_fd=directory,
+                dst_dir_fd=directory,
+            )
+            raced = True
+        return real_renameat2(directory, source, destination, flags, label)
+
+    monkeypatch.setattr(module, "renameat2", substitute_between_check_and_atomic_move)
+    with pytest.raises(ValueError, match="changed during atomic forensic move"):
+        module.rollback_created_entry(identity, "managed fixture")
+    assert raced
+    assert escaped.read_text() == "created\n"
+    retained = list(parent.glob(".managed.json.recost-rollback-forensic.*.retained"))
+    assert len(retained) == 1
+    assert retained[0].read_text() == "substituted\n"
+    assert not target.exists()
+
+
+def test_atomic_publication_no_clobbers_absent_target_race(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    real_renameat2 = module.renameat2
+    raced = False
+
+    def create_target_before_atomic_publication(
+        directory, source, destination, flags, label,
+    ):
+        nonlocal raced
+        if not raced and "atomic publication" in label:
+            target.write_bytes(b"raced replacement\n")
+            target.chmod(0o644)
+            raced = True
+        return real_renameat2(directory, source, destination, flags, label)
+
+    monkeypatch.setattr(module, "renameat2", create_target_before_atomic_publication)
+    with pytest.raises(ValueError, match="target appeared during atomic no-clobber publication"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert raced
+    assert target.read_bytes() == b"raced replacement\n"
+    retained = list(parent.glob(".managed.json.recost-publish-forensic.*.tmp"))
+    assert len(retained) == 1
+    assert retained[0].read_bytes() == payload
+
+
+def test_atomic_publication_detects_post_move_inode_substitution(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    substitute = parent / "substitute"
+    substitute.write_bytes(b"substituted\n")
+    substitute.chmod(0o644)
+    escaped = parent / "escaped-managed"
+    real_renameat2 = module.renameat2
+    raced = False
+
+    def substitute_after_atomic_publication(
+        directory, source, destination, flags, label,
+    ):
+        nonlocal raced
+        real_renameat2(directory, source, destination, flags, label)
+        if not raced and "atomic publication" in label:
+            os.rename(destination, escaped.name, src_dir_fd=directory, dst_dir_fd=directory)
+            os.rename(
+                substitute.name,
+                destination,
+                src_dir_fd=directory,
+                dst_dir_fd=directory,
+            )
+            raced = True
+
+    monkeypatch.setattr(module, "renameat2", substitute_after_atomic_publication)
+    with pytest.raises(ValueError, match="rollback target inode changed"):
+        module.write_exact_or_verify(
+            target, b"managed\n", mode=0o644, label="managed fixture"
+        )
+    assert raced
+    assert target.read_bytes() == b"substituted\n"
+    assert escaped.read_bytes() == b"managed\n"
+
+
+def test_exact_existing_copy_verification_rejects_parent_path_substitution(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"exact\n"
+    target.write_bytes(payload)
+    target.chmod(0o644)
+    displaced_parent = tmp_path / "displaced-parent"
+    original_hash = module.sha256_descriptor
+    swapped = False
+
+    def swap_parent_after_hash(descriptor):
+        nonlocal swapped
+        digest = original_hash(descriptor)
+        if not swapped:
+            swapped = True
+            parent.rename(displaced_parent)
+            parent.mkdir()
+            replacement = parent / target.name
+            replacement.write_bytes(payload)
+            replacement.chmod(0o644)
+        return digest
+
+    monkeypatch.setattr(module, "sha256_descriptor", swap_parent_after_hash)
+    with pytest.raises(ValueError, match="parent pathname changed during publication"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert target.read_bytes() == payload
+    assert (displaced_parent / target.name).read_bytes() == payload
 
 
 def test_generator_ignores_hostile_git_path_and_global_system_configuration(
@@ -4873,6 +5284,10 @@ def test_clean_partial_accepts_exact_frozen_e03_no_max_ndiv_live_migration(
     controller_evidence = stage_i.revalidate_continuation_plasma_evidence(
         controller_manifest["scientific_inspection"], controller_manifest
     )["plasma_continuation_evidence"]
+    assert recost_evidence["authorization_basis"] == (
+        "none; historical frozen-E03 evidence is inventory-only and cannot "
+        "authorize continuation"
+    )
     assert recost_evidence == controller_evidence
     drifted = deepcopy(manifest)
     drifted["command"]["input_sha256"] = "0" * 64
@@ -4898,6 +5313,236 @@ def test_clean_partial_accepts_exact_frozen_e03_no_max_ndiv_live_migration(
             mhd,
             user,
         )
+
+
+def test_r12_historical_clean_partial_requires_exact_fresh_four_node_rerun():
+    """Keep retained s00 evidence non-authorizing and require the exact fresh s01 run."""
+
+    module = load_recost_module()
+    terminal = ("4766856", "R12", "s00_rankio_t0_t0p25", "clean_partial")
+    null_parent = (None, None, None, None, None, None)
+    assert module.PLAN_INITIAL_TARGETS["R12"] == stage_i.R12_FRESH_RERUN_TARGET == 0.12
+    assert module.R12_FRESH_RERUN_SEGMENT == stage_i.R12_FRESH_RERUN_SEGMENT
+    assert module.require_authoritative_r12_fresh_rerun(
+        "R12",
+        terminal,
+        stage_i.R12_FRESH_RERUN_SEGMENT,
+        1,
+        0.0,
+        stage_i.R12_FRESH_RERUN_TARGET,
+        stage_i.R12_FRESH_RERUN_NODES,
+        stage_i.R12_FRESH_RERUN_RANKS_PER_NODE,
+        stage_i.R12_FRESH_RERUN_WALLTIME,
+        stage_i.R12_FRESH_RERUN_ATHENA_WALLTIME,
+        null_parent,
+        1,
+    )
+    assert not module.require_authoritative_r12_fresh_rerun(
+        "R03",
+        ("4766828", "R03", "s02_rankio_t0p5_t0p75", "accepted"),
+        "s03_rankio_t0p75_t1",
+        3,
+        0.75,
+        1.0,
+        1,
+        8,
+        "02:00:00",
+        "01:50:00",
+        null_parent,
+        3,
+    )
+    for mutation in (
+        {"segment": "s01_rankio_t0p25_t0p5"},
+        {"nodes": 1},
+        {"ranks_per_node": 4},
+        {"walltime": "01:59:59"},
+        {"athena_walltime": "01:49:59"},
+        {"parent_fields": ("4766856", "clean_partial", "s00_rankio_t0_t0p25", None, None, 0.25)},
+        {"target": 0.25},
+    ):
+        values = {
+            "segment": "s01_rankio_t0_t0p12",
+            "nodes": 4,
+            "ranks_per_node": 8,
+            "walltime": "02:00:00",
+            "athena_walltime": "01:50:00",
+            "parent_fields": null_parent,
+            "target": 0.12,
+        }
+        values.update(mutation)
+        with pytest.raises(ValueError, match="inventory-only"):
+            module.require_authoritative_r12_fresh_rerun(
+                "R12",
+                terminal,
+                values["segment"],
+                1,
+                0.0,
+                values["target"],
+                values["nodes"],
+                values["ranks_per_node"],
+                values["walltime"],
+                values["athena_walltime"],
+                values["parent_fields"],
+                1,
+            )
+
+
+def test_r12_fresh_profile_identity_matches_controller_contract(recost_fixture):
+    """Bind the recost fresh recommendation to the controller's exact launch contract."""
+
+    module = load_recost_module()
+    fresh = profile(
+        recost_fixture,
+        case_id="R12",
+        segment=module.R12_FRESH_RERUN_SEGMENT,
+        nodes=module.R12_FRESH_RERUN_NODES,
+        parent=False,
+        target=module.R12_FRESH_RERUN_TARGET,
+    )
+    assert {
+        "segment": fresh["segment"],
+        "nodes": fresh["nodes"],
+        "ranks_per_node": fresh["ranks_per_node"],
+        "walltime": fresh["walltime"],
+        "athena_walltime": fresh["athena_walltime"],
+        "time_tlim_target": fresh["time_tlim_target"],
+    } == {
+        "segment": stage_i.R12_FRESH_RERUN_SEGMENT,
+        "nodes": stage_i.R12_FRESH_RERUN_NODES,
+        "ranks_per_node": stage_i.R12_FRESH_RERUN_RANKS_PER_NODE,
+        "walltime": stage_i.R12_FRESH_RERUN_WALLTIME,
+        "athena_walltime": stage_i.R12_FRESH_RERUN_ATHENA_WALLTIME,
+        "time_tlim_target": stage_i.R12_FRESH_RERUN_TARGET,
+    }
+    assert fresh["nodes"] * fresh["ranks_per_node"] == stage_i.R12_FRESH_RERUN_TOTAL_RANKS
+    assert all(
+        fresh[field] is None
+        for field in (
+            "parent_job_id",
+            "parent_result",
+            "parent_segment",
+            "restart_file",
+            "restart_file_sha256",
+            "restart_time",
+        )
+    )
+    stage_i.require_fresh_r12_profile_contract(
+        fresh, None, None, fresh["time_tlim_target"]
+    )
+
+
+def test_continuation_target_alignment_is_r12_specific_and_exact():
+    module = load_recost_module()
+    for target in (0.12, 0.14, 0.24, 10.0):
+        module.require_continuation_target_alignment("R12", target)
+    for target in (0.121, 0.25, 0.31):
+        with pytest.raises(ValueError, match="exact 0.02 fresh-R12 output cadence"):
+            module.require_continuation_target_alignment("R12", target)
+
+    for target in (0.25, 0.5, 10.0):
+        module.require_continuation_target_alignment("R03", target)
+    for target in (0.24, 0.3, 0.55):
+        with pytest.raises(ValueError, match="exact quarter-time output cadence"):
+            module.require_continuation_target_alignment("R03", target)
+
+
+def test_generator_retains_quarter_alignment_and_measured_90_percent_cap(recost_fixture):
+    nonquarter = profile(
+        recost_fixture,
+        target=0.55,
+        segment="s01_rankio_t0p25_t0p55",
+    )
+    set_profiles(recost_fixture, [nonquarter], mode="sole-next-profile")
+    assert_rejected(run_generator(recost_fixture), "exact quarter-time output cadence")
+
+    measured_overrun = profile(
+        recost_fixture,
+        target=0.75,
+        segment="s01_rankio_t0p25_t0p75",
+    )
+    set_profiles(recost_fixture, [measured_overrun], mode="sole-next-profile")
+    assert_rejected(
+        run_generator(recost_fixture), "interval exceeds measured runtime recommendation"
+    )
+
+
+def test_r12_fresh_rerun_supersedes_historical_inventory_in_authoritative_lineage(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    historical = {
+        "_manifest_path": str(tmp_path / "historical.json"),
+        "identity": ("4766856", "R12", "s00_rankio_t0_t0p25", "clean_partial"),
+        "final_time": 0.1371931229426507,
+        "parent": None,
+    }
+    fresh = {
+        "_manifest_path": str(tmp_path / "fresh.json"),
+        "identity": ("5000000", "R12", "s01_rankio_t0_t0p12", "clean_partial"),
+        "final_time": 0.12,
+        "parent": None,
+    }
+    monkeypatch.setattr(module, "manifest_identity", lambda manifest: manifest["identity"])
+    monkeypatch.setattr(module, "final_time", lambda manifest: manifest["final_time"])
+    monkeypatch.setattr(module, "manifest_parent_path", lambda manifest: manifest["parent"])
+    lineages = module.authenticated_case_lineages(tmp_path, [historical, fresh])
+    assert lineages == {"R12": [fresh]}
+
+
+def test_authoritative_lineage_allows_only_authenticated_non_scientific_index_gaps(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent_path = tmp_path / "s00.json"
+    parent = {
+        "_manifest_path": str(parent_path),
+        "identity": ("4762472", "R03", "s00_rankio_t0_t0p5", "clean_partial"),
+        "final_time": 0.312823,
+        "parent": None,
+        "command": {"executable_sha256": "e", "input_sha256": "i"},
+    }
+    cancelled = {
+        "_manifest_path": str(tmp_path / "s01.json"),
+        "identity": ("4766485", "R03", "s01_rankio_t0p312823_t0p5", "cancelled"),
+        "final_time": 0.0,
+        "parent": parent_path,
+    }
+    accepted = {
+        "_manifest_path": str(tmp_path / "s02.json"),
+        "identity": ("4766828", "R03", "s02_rankio_t0p312823_t0p5", "accepted"),
+        "final_time": 0.5,
+        "parent": parent_path,
+        "command": {
+            "parent_segment": {
+                "execution_epoch": EPOCH,
+                "segment": "s00_rankio_t0_t0p5",
+                "result": "clean_partial",
+                "job_id": "4762472",
+                "final_time": 0.312823,
+                "restart_time": 0.312823,
+                "executable_sha256": "e",
+                "input_sha256": "i",
+                "restart_sha256": "r",
+                "restart_files": ["rank0.rst"],
+            }
+        },
+    }
+    monkeypatch.setattr(module, "manifest_identity", lambda manifest: manifest["identity"])
+    monkeypatch.setattr(module, "final_time", lambda manifest: manifest["final_time"])
+    monkeypatch.setattr(module, "manifest_parent_path", lambda manifest: manifest["parent"])
+    monkeypatch.setattr(
+        module,
+        "terminal_restart_binding",
+        lambda root, manifest, label: {
+            "sha256": "r",
+            "rank_files": [{"path": "rank0.rst"}],
+        },
+    )
+    assert module.authenticated_case_lineages(tmp_path, [parent, cancelled, accepted]) == {
+        "R03": [parent, accepted]
+    }
+    with pytest.raises(ValueError, match="parent identity differs"):
+        module.authenticated_case_lineages(tmp_path, [parent, accepted])
 
 
 def test_locked_reconcile_uses_authenticated_in_process_report(tmp_path):

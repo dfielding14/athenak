@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import ctypes
 import csv
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -32,6 +33,7 @@ import subprocess
 import sys
 import tempfile
 from typing import Iterator
+import uuid
 
 
 DEFAULT_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
@@ -76,6 +78,15 @@ F116_AUTHORIZATION = {
     "scientific_configuration_change_authorized": False,
     "historical_manifest_rebinding_authorized": False,
 }
+F116_REQUIRED_COMMITTED_TOOLS = {
+    "scripts/frontier/cgl_lf_stage_i.py": "0644",
+    "scripts/frontier/cgl_lf_stage_i_checkpoint.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_qualification.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_recost.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_source_authority.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_validate_segment.py": "0644",
+    "scripts/frontier/cgl_lf_stage_i_wave_plan.py": "0644",
+}
 QUALIFICATION_APPROVAL_RELATIVE = Path(
     "accounting/mks24_stage_i_E03_forcing_policy_qualification_approval.json"
 )
@@ -97,6 +108,15 @@ LEGACY_F114_PUBLICATION_AUDIT_SHA256 = (
 AUTHORIZED_CASE_IDS = frozenset(f"R{number:02d}" for number in range(2, 18))
 R17_CASE_ID = "R17"
 R17_PREDECESSOR_CASE_IDS = tuple(f"R{number:02d}" for number in range(2, 17))
+R12_HISTORICAL_JOB_ID = "4766856"
+R12_HISTORICAL_SEGMENT = "s00_rankio_t0_t0p25"
+R12_FRESH_RERUN_SEGMENT = "s01_rankio_t0_t0p12"
+R12_FRESH_RERUN_NODES = 4
+R12_FRESH_RERUN_RANKS_PER_NODE = 8
+R12_FRESH_RERUN_TOTAL_RANKS = 32
+R12_FRESH_RERUN_WALLTIME = "02:00:00"
+R12_FRESH_RERUN_ATHENA_WALLTIME = "01:50:00"
+R12_FRESH_RERUN_TARGET = 0.12
 REQUIRED_CASE_FINAL_TIME = 10.0
 MAX_WAVE_NODES = 10
 MAX_WALLTIME_SECONDS = 2 * 60 * 60
@@ -106,6 +126,64 @@ EXPECTED_CPUS_PER_TASK = 7
 ACCOUNT = "AST207"
 PARTITION = "batch"
 R17_MINIMUM_RETAINED_BYTES = 958_271_710_272
+R17_MAX_NORMALIZED_CT_DIVB_TEXT = "1e-12"
+R17_PHYSICS_MEASUREMENT_KEYS = {
+    "finite_rank_outputs",
+    "mass_relative_drift_max",
+    "mhd_user_mass_mismatch_max",
+    "lf_bad_counts_total",
+    "normalized_ct_divb_max",
+    "normalized_ct_divb_threshold",
+    "normalized_ct_divb_below_threshold",
+}
+R17_SCIENTIFIC_CHECKS = {
+    "exact_endpoint": True,
+    "complete_rank_inventory": True,
+    "finite_synchronized_histories": True,
+    "mass_conserved": True,
+    "strict_lf_failure_counters_zero": True,
+    "hard_volume_zero": True,
+    "snapshot_hard_bounds_independently_verified": True,
+    "normalized_ct_divb_below_threshold": True,
+    "interval_cap_counts_valid": True,
+    "nontrivial_forcing_and_pressure_work": True,
+    "case_aware_policy_passed": True,
+    "snapshot_cadence_complete": True,
+    "terminal_snapshot_unique": True,
+    "snapshots_structurally_complete": True,
+    "restart_headers_authenticated": True,
+    "terminal_restart_unique": True,
+    "restart_load_smoke_passed": True,
+}
+R17_SCIENTIFIC_EVIDENCE_KEYS = {
+    "schema_version",
+    "record_type",
+    "case_id",
+    "nodes",
+    "target_time",
+    "scientific_policy",
+    "executable",
+    "execution_intent_sha256",
+    "execution_contract_sha256",
+    "forcing_closure_normalized_residual",
+    "mhd_history",
+    "user_history",
+    "snapshots",
+    "snapshot_times",
+    "restarts",
+    "restart_times",
+    "restart_load_smoke",
+    "terminal_rank_local_outputs",
+    "terminal_rank_local_output_inventory_sha256",
+    "r17_decomposition",
+    "terminal_rank_local_restarts",
+    "terminal_rank_local_restart_inventory_sha256",
+    "physics_measurements",
+    "scientific_agreement_signature",
+    "checks",
+    "accepted_for_profile_selection",
+    "accepted_for_operational_qualification",
+}
 MINIMUM_PROFILE_STORAGE_BYTES = 1024
 STORAGE_EVIDENCE_MAX_AGE = timedelta(hours=24)
 AUTHORIZATION_MAX_LIFETIME = timedelta(hours=24)
@@ -139,6 +217,8 @@ TERMINAL_SCHEDULER_STATES = frozenset(
     }
 )
 CONTINUATION_RUNTIME_SAFETY_FACTOR = Decimal("0.90")
+DEFAULT_CONTINUATION_TARGET_ALIGNMENT = Decimal("0.25")
+CONTINUATION_TARGET_ALIGNMENTS = {"R12": Decimal("0.02")}
 NODE_HOUR_QUANTUM = Decimal("0.000001")
 CONTROLLER_CLEAN_PARTIAL_SCHEMA_VERSION = 4
 CONTROLLER_STRICT_LF_FAILURE_COLUMNS = (
@@ -205,6 +285,12 @@ FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY = (
 FROZEN_E03_CT_DIVERGENCE_REASON = (
     "the qualified historical E03 executable did not retain normalized CT "
     "divB in its exact user-history schema"
+)
+R17_CT_LIMITATION = FROZEN_E03_CT_DIVERGENCE_REASON
+REQUEST_REVIEW_IDENTITY_ASSURANCE = "declared-process-independence-non-cryptographic"
+REQUEST_REVIEW_IDENTITY_LIMITATION = (
+    "Reviewer identity and process independence are declared evidence, "
+    "not cryptographically proven."
 )
 FROZEN_E03_NO_MAX_NDIV_MIGRATIONS = {
     ("R03", "4762472"): {
@@ -329,7 +415,9 @@ FROZEN_E03_EXECUTABLE_SHA256 = (
 PLAN_INITIAL_TARGETS = {
     **{f"R{number:02d}": 0.25 for number in range(3, 6)},
     "R06": 0.50,
-    **{f"R{number:02d}": 0.25 for number in range(7, 16)},
+    **{f"R{number:02d}": 0.25 for number in range(7, 12)},
+    "R12": R12_FRESH_RERUN_TARGET,
+    **{f"R{number:02d}": 0.25 for number in range(13, 16)},
     "R16": 1.50,
     "R17": 0.25,
 }
@@ -411,9 +499,11 @@ SEGMENT_PATTERN = re.compile(
 )
 CANONICAL_NODE_HOURS_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{6}")
 SELF_DESCRIPTOR_ENV = "_CGL_LF_STAGE_I_RECOST_DESCRIPTOR"
+PYTHON_DESCRIPTOR_ENV = "_CGL_LF_STAGE_I_RECOST_PYTHON_DESCRIPTOR"
 SELF_SOURCE_ENV = "_CGL_LF_STAGE_I_RECOST_SOURCE"
 REPOSITORY_ROOT_ENV = "_CGL_LF_STAGE_I_RECOST_REPOSITORY_ROOT"
 CGL_JOB_NAME_PREFIX = "cgl_"
+RENAME_NOREPLACE = 1
 SQUEUE = Path("/usr/bin/squeue")
 SACCT = Path("/usr/bin/sacct")
 GIT = Path("/usr/lib/git/git")
@@ -704,6 +794,24 @@ def walltime_seconds(value: object, label: str) -> int:
     return total
 
 
+def require_continuation_target_alignment(case_id: str, target: float) -> None:
+    """Require the case-specific exact retained-output continuation cadence."""
+
+    alignment = CONTINUATION_TARGET_ALIGNMENTS.get(
+        case_id, DEFAULT_CONTINUATION_TARGET_ALIGNMENT
+    )
+    if Decimal(str(target)) % alignment:
+        if case_id == "R12":
+            raise ValueError(
+                "next profile R12 target is not aligned to the exact 0.02 "
+                "fresh-R12 output cadence"
+            )
+        raise ValueError(
+            f"next profile {case_id} target is not aligned to the exact "
+            "quarter-time output cadence"
+        )
+
+
 def expected_self_sha256(argv: list[str]) -> str:
     """Read the externally supplied self digest before normal argument parsing."""
 
@@ -762,28 +870,21 @@ def inherited_reexec_path(name: str, label: str) -> Path:
 
 
 def reexec_environment(
-    descriptor: int, source: Path, repository: Path
+    descriptor: int, python_descriptor: int, source: Path, repository: Path
 ) -> dict[str, str]:
     """Return a reexec environment without caller-controlled interpreter/loader state."""
 
-    private = {SELF_DESCRIPTOR_ENV, SELF_SOURCE_ENV, REPOSITORY_ROOT_ENV}
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in private
-        and not key.startswith("PYTHON")
-        and not key.startswith("LD_")
-        and not key.startswith("GIT_")
+    return {
+        SELF_DESCRIPTOR_ENV: str(descriptor),
+        PYTHON_DESCRIPTOR_ENV: str(python_descriptor),
+        SELF_SOURCE_ENV: str(source),
+        REPOSITORY_ROOT_ENV: str(repository),
+        "HOME": "/nonexistent",
+        "LC_ALL": "C",
+        "PATH": TRUSTED_SYSTEM_PATH,
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "XDG_CONFIG_HOME": "/nonexistent",
     }
-    environment.update(
-        {
-            SELF_DESCRIPTOR_ENV: str(descriptor),
-            SELF_SOURCE_ENV: str(source),
-            REPOSITORY_ROOT_ENV: str(repository),
-            "PYTHONDONTWRITEBYTECODE": "1",
-        }
-    )
-    return environment
 
 
 def require_regular_profile(profile: os.stat_result, label: str, *,
@@ -817,18 +918,47 @@ def require_system_executable_profile(profile: os.stat_result, label: str) -> No
         raise ValueError(f"{label} does not have the trusted system executable profile")
 
 
+def same_inode(first: os.stat_result, second: os.stat_result) -> bool:
+    """Return whether two profiles identify the same retained filesystem object."""
+
+    return (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino)
+
+
+def inherited_descriptor(name: str, label: str) -> int:
+    """Parse one authenticated inherited descriptor marker."""
+
+    retained = os.environ.get(name)
+    if retained is None or re.fullmatch(r"[0-9]+", retained) is None:
+        raise ValueError(f"{label} descriptor marker is invalid")
+    try:
+        return int(retained)
+    except ValueError as error:
+        raise ValueError(f"{label} descriptor marker is invalid") from error
+
+
+def require_isolated_python_reexec(descriptor: int) -> None:
+    """Bind inherited execution to one authenticated isolated Python interpreter."""
+
+    profile = os.fstat(descriptor)
+    require_system_executable_profile(profile, "authenticated Python interpreter")
+    running = os.stat("/proc/self/exe", follow_symlinks=True)
+    if not same_inode(profile, running):
+        raise ValueError("authenticated Python descriptor is not the running interpreter")
+    if (
+        sys.flags.isolated != 1
+        or sys.flags.no_site != 1
+        or sys.flags.dont_write_bytecode != 1
+    ):
+        raise ValueError("authenticated Python reexecution is not isolated")
+
+
 def authenticate_self(argv: list[str]) -> tuple[Path, Path, str]:
     """Re-execute immutable generator bytes and return retained source metadata."""
 
     expected = expected_self_sha256(argv)
     inherited = os.environ.get(SELF_DESCRIPTOR_ENV)
     if inherited is not None:
-        if re.fullmatch(r"[0-9]+", inherited) is None:
-            raise ValueError("generator descriptor marker is invalid")
-        try:
-            descriptor = int(inherited)
-        except ValueError as error:
-            raise ValueError("generator descriptor marker is invalid") from error
+        descriptor = inherited_descriptor(SELF_DESCRIPTOR_ENV, "generator")
         if __file__ != f"/proc/self/fd/{descriptor}":
             raise ValueError("generator descriptor marker is not attached to this execution")
         require_regular_profile(
@@ -837,12 +967,33 @@ def authenticate_self(argv: list[str]) -> tuple[Path, Path, str]:
         )
         if sha256_descriptor(descriptor) != expected:
             raise ValueError("authenticated generator descriptor checksum changed")
+        python_descriptor = inherited_descriptor(
+            PYTHON_DESCRIPTOR_ENV, "Python interpreter"
+        )
+        require_isolated_python_reexec(python_descriptor)
         source = inherited_reexec_path(SELF_SOURCE_ENV, "source path")
         repository = inherited_reexec_path(REPOSITORY_ROOT_ENV, "repository root")
         require_reexec_source_relationship(source, repository)
+        require_directory(repository, "authenticated generator repository root")
+        with absolute_descriptor(
+            source, "authenticated generator source pathname", flags=os.O_RDONLY
+        ) as named_source:
+            require_regular_profile(
+                os.fstat(named_source),
+                "authenticated generator source pathname",
+                expected_mode=0o755,
+            )
+            if not same_inode(os.fstat(named_source), os.fstat(descriptor)):
+                raise ValueError(
+                    "authenticated generator source pathname is not the inherited descriptor"
+                )
+            if sha256_descriptor(named_source) != expected:
+                raise ValueError("authenticated generator source pathname checksum changed")
         return source, repository, expected
     orphaned = [
-        name for name in (SELF_SOURCE_ENV, REPOSITORY_ROOT_ENV) if name in os.environ
+        name
+        for name in (PYTHON_DESCRIPTOR_ENV, SELF_SOURCE_ENV, REPOSITORY_ROOT_ENV)
+        if name in os.environ
     ]
     if orphaned:
         raise ValueError(
@@ -858,12 +1009,31 @@ def authenticate_self(argv: list[str]) -> tuple[Path, Path, str]:
         )
         if sha256_descriptor(descriptor) != expected:
             raise ValueError("retained generator checksum differs")
-        os.set_inheritable(descriptor, True)
-        os.execve(
-            sys.executable,
-            [sys.executable, "-B", f"/proc/self/fd/{descriptor}", *argv],
-            reexec_environment(descriptor, source, repository),
-        )
+        python = Path("/proc/self/exe").resolve(strict=True)
+        with absolute_descriptor(
+            python, "authenticated Python interpreter", flags=os.O_RDONLY
+        ) as python_descriptor:
+            require_system_executable_profile(
+                os.fstat(python_descriptor), "authenticated Python interpreter"
+            )
+            if not same_inode(
+                os.fstat(python_descriptor), os.stat("/proc/self/exe", follow_symlinks=True)
+            ):
+                raise ValueError("authenticated Python pathname differs from running interpreter")
+            os.set_inheritable(descriptor, True)
+            os.set_inheritable(python_descriptor, True)
+            os.execve(
+                f"/proc/self/fd/{python_descriptor}",
+                [
+                    str(python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    f"/proc/self/fd/{descriptor}",
+                    *argv,
+                ],
+                reexec_environment(descriptor, python_descriptor, source, repository),
+            )
     raise AssertionError("descriptor re-execution unexpectedly returned")
 
 
@@ -886,7 +1056,12 @@ def hardened_git_environment() -> dict[str, str]:
 def hardened_child_environment(*forbidden_prefixes: str) -> dict[str, str]:
     """Strip private reexec, loader, interpreter, Git, and caller PATH controls."""
 
-    private = {SELF_DESCRIPTOR_ENV, SELF_SOURCE_ENV, REPOSITORY_ROOT_ENV}
+    private = {
+        SELF_DESCRIPTOR_ENV,
+        PYTHON_DESCRIPTOR_ENV,
+        SELF_SOURCE_ENV,
+        REPOSITORY_ROOT_ENV,
+    }
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -1021,6 +1196,57 @@ def require_revision_file(repository: Path, relative: PurePosixPath, revision: s
     )
     if retained.returncode or sha256_bytes(retained.stdout) != expected:
         raise ValueError(f"{label} historical revision bytes differ")
+
+
+def authenticate_f116_committed_tools(
+    value: object, repository: Path, expected_head: str
+) -> list[dict[str, object]]:
+    """Authenticate the exact seven committed tools published by F116."""
+
+    if not isinstance(value, list) or len(value) != len(F116_REQUIRED_COMMITTED_TOOLS):
+        raise ValueError("F116 committed_tools must contain exactly seven tools")
+    retained = []
+    for index, (relative, expected_mode) in enumerate(
+        sorted(F116_REQUIRED_COMMITTED_TOOLS.items())
+    ):
+        record = require_exact_keys(
+            value[index],
+            {"path", "revision", "sha256", "mode"},
+            f"F116 committed tool {index}",
+        )
+        digest = require_sha256(record["sha256"], f"F116 committed tool {relative} SHA-256")
+        if record != {
+            "path": relative,
+            "revision": expected_head,
+            "sha256": digest,
+            "mode": expected_mode,
+        }:
+            raise ValueError("F116 committed_tools identity, order, revision, or mode differs")
+        require_revision_file(
+            repository,
+            PurePosixPath(relative),
+            expected_head,
+            digest,
+            f"F116 committed tool {relative}",
+        )
+        tree = git_run(
+            repository,
+            ["ls-tree", expected_head, "--", relative],
+            capture_output=True,
+        )
+        git_mode = "100755" if expected_mode == "0755" else "100644"
+        try:
+            tree_line = tree.stdout.decode("ascii").strip()
+        except UnicodeDecodeError as error:
+            raise ValueError(f"F116 committed tool {relative} mode is not ASCII") from error
+        if (
+            tree.returncode
+            or not tree_line.startswith(f"{git_mode} blob ")
+            or not tree_line.endswith(f"\t{relative}")
+        ):
+            raise ValueError(f"F116 committed tool {relative} Git mode differs")
+        retained.append(dict(record))
+    return retained
 
 
 def require_relative_path(value: object, label: str) -> PurePosixPath:
@@ -1337,7 +1563,13 @@ def parse_request_independent_review(
         raise ValueError("recost request independent review chronology differs")
     reviewer = require_exact_keys(
         retained["reviewer"],
-        {"agent_id", "role", "independent_from_request_author"},
+        {
+            "agent_id",
+            "role",
+            "declared_process_independence",
+            "identity_assurance",
+            "identity_assurance_limitation",
+        },
         "recost request reviewer",
     )
     reviewer_agent = require_nonempty_string(
@@ -1345,25 +1577,21 @@ def parse_request_independent_review(
     )
     if (
         reviewer["role"] != "independent recost request reviewer"
-        or reviewer["independent_from_request_author"] is not True
+        or reviewer["declared_process_independence"] is not True
+        or reviewer["identity_assurance"] != REQUEST_REVIEW_IDENTITY_ASSURANCE
+        or reviewer["identity_assurance_limitation"] != REQUEST_REVIEW_IDENTITY_LIMITATION
         or reviewer_agent == request_author
     ):
-        raise ValueError("recost request reviewer is not independently scoped")
+        raise ValueError(
+            "recost request reviewer lacks the exact declared non-cryptographic "
+            "process-independence assurance"
+        )
     if retained["candidate"] != {
         "path": str(request_path),
         "sha256": request_sha256,
     }:
         raise ValueError("recost request independent review candidate binding differs")
-    scope = require_exact_keys(
-        retained["scope"],
-        {"non_authorizing", "scheduler_mutation_authorized", "canonical_mutation_authorized"},
-        "recost request review scope",
-    )
-    if scope != {
-        "non_authorizing": True,
-        "scheduler_mutation_authorized": False,
-        "canonical_mutation_authorized": False,
-    }:
+    if retained["scope"] != {"non_authorizing": True}:
         raise ValueError("recost request independent review over-authorizes")
     return retained
 
@@ -1541,6 +1769,7 @@ def parse_historical_f115_source_authority(
 
 def parse_current_source_authority(
     root: Path,
+    repository: Path,
     bindings: object,
     source_bundle_path: Path,
     source_bundle_sha256: str,
@@ -1686,6 +1915,9 @@ def parse_current_source_authority(
         or current_head not in source_bundle_revisions
     ):
         raise ValueError("F116 current source authority bundle binding differs")
+    authenticate_f116_committed_tools(
+        implementation["committed_tools"], repository, current_head
+    )
     require_nonempty_string(current_bundle["subject"], "F116 current source bundle subject")
     require_exact_keys(
         current_bundle["advertised_tip"], {"revision", "name"}, "F116 advertised tip"
@@ -2004,8 +2236,40 @@ def require_lock_profile(profile: os.stat_result, path: Path) -> None:
         raise ValueError(f"Stage I lock profile differs: {path}")
 
 
+@dataclass(frozen=True)
+class MutationLock:
+    """Retain the exact locked pathname and inode across every mutation."""
+
+    path: Path
+    descriptor: int
+    device: int
+    inode: int
+
+    def authenticate(self) -> None:
+        """Require the named lock and held descriptor to remain the retained inode."""
+
+        opened = os.fstat(self.descriptor)
+        require_lock_profile(opened, self.path)
+        if (opened.st_dev, opened.st_ino) != (self.device, self.inode):
+            raise ValueError("held Stage I lock descriptor identity changed")
+        with absolute_descriptor(
+            self.path, "Stage I lock", flags=os.O_RDWR
+        ) as named_descriptor:
+            named = os.fstat(named_descriptor)
+        require_lock_profile(named, self.path)
+        if not same_inode(named, opened):
+            raise ValueError("Stage I lock pathname changed while mutation lock is held")
+
+
+def authenticate_mutation_lock(lock: MutationLock | None) -> None:
+    """Reauthenticate a production mutation lock when one is supplied."""
+
+    if lock is not None:
+        lock.authenticate()
+
+
 @contextmanager
-def stage_i_lock(root: Path) -> Iterator[None]:
+def stage_i_lock(root: Path) -> Iterator[MutationLock]:
     """Acquire the existing Stage I mutation lock without creating it."""
 
     path = root / f".mks24_stage_i_{EXECUTION_EPOCH_SLUG}.lock"
@@ -2020,17 +2284,17 @@ def stage_i_lock(root: Path) -> Iterator[None]:
             if error.errno not in (errno.EACCES, errno.EAGAIN):
                 raise
             raise ValueError(f"another Stage I mutation holds {path}") from error
-        with absolute_descriptor(path, "Stage I lock", flags=os.O_RDWR) as named_descriptor:
-            named = os.fstat(named_descriptor)
         opened = os.fstat(descriptor)
-        if (named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino):
-            raise ValueError("Stage I lock path changed while locking")
-        require_lock_profile(named, path)
+        lock = MutationLock(path, descriptor, opened.st_dev, opened.st_ino)
+        lock.authenticate()
         try:
-            yield
+            yield lock
         finally:
-            if acquired:
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            try:
+                lock.authenticate()
+            finally:
+                if acquired:
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -3108,10 +3372,17 @@ def require_frozen_e03_no_max_ndiv_migration(
     evidence = reproduce_continuation_plasma_evidence(
         case_id, mhd, user, allow_frozen_e03_no_max_ndiv=True
     )
+    evidence["policy"] = FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY
+    evidence["continuation_authorized"] = False
+    evidence["continuation_eligible"] = False
+    evidence["eligibility_only"] = True
     evidence["normalized_ct_divb_evidence"] = normalized_ct_divb_evidence
     evidence["ct_divergence_claimed"] = False
     evidence["ct_divergence_reason"] = FROZEN_E03_CT_DIVERGENCE_REASON
-    evidence["authorization_basis"] = FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY
+    evidence["authorization_basis"] = (
+        "none; historical frozen-E03 evidence is inventory-only and cannot "
+        "authorize continuation"
+    )
     evidence["checks"]["frozen_e03_exact_migration"] = True
     evidence["migration_contract"] = {
         "schema_version": 1,
@@ -3121,6 +3392,12 @@ def require_frozen_e03_no_max_ndiv_migration(
         "segment": segment,
         "frozen_science_executable": executable,
         "bindings": bindings,
+        "authority": {
+            "continuation_authorized": False,
+            "submission_authorized": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+        },
     }
     return evidence
 
@@ -3381,7 +3658,18 @@ def require_clean_partial_controller_evidence(
         or inspection["accepted"] is not False
         or inspection["clean_for_continuation"] is not True
         or not plasma_binding_valid
-        or current_plasma["continuation_authorized"] is not True
+        or (
+            frozen_e03_migration
+            and (
+                current_plasma.get("continuation_authorized") is not False
+                or current_plasma.get("continuation_eligible") is not False
+                or current_plasma.get("eligibility_only") is not True
+            )
+        )
+        or (
+            not frozen_e03_migration
+            and current_plasma["continuation_authorized"] is not True
+        )
         or inspection["restart_time_marker_bypass"] is not False
         or matching_restarts != [len(restart_paths) - 1]
         or restart_paths[matching_restarts[0]] != terminal_paths
@@ -4762,9 +5050,11 @@ def authenticated_case_lineages(
     """Build each case's unique latest authenticated restart lineage."""
 
     by_case: dict[str, list[dict[str, object]]] = {}
+    all_by_case: dict[str, list[dict[str, object]]] = {}
     by_path: dict[Path, dict[str, object]] = {}
     for manifest in manifests:
         _, case_id, _, result = manifest_identity(manifest)
+        all_by_case.setdefault(case_id, []).append(manifest)
         if result not in SCIENTIFIC_RESULTS:
             continue
         path = Path(str(manifest.get("_manifest_path", ""))).absolute()
@@ -4774,7 +5064,46 @@ def authenticated_case_lineages(
         by_case.setdefault(case_id, []).append(manifest)
 
     retained: dict[str, list[dict[str, object]]] = {}
-    for case_id, candidates in by_case.items():
+    for case_id, retained_candidates in by_case.items():
+        entries_by_index: dict[int, list[dict[str, object]]] = {}
+        for item in all_by_case[case_id]:
+            index, _, _ = parse_segment(
+                manifest_identity(item)[2], f"{case_id} recorded segment"
+            )
+            entries_by_index.setdefault(index, []).append(item)
+
+        def indexes_are_non_scientific(start: int, stop: int) -> bool:
+            return all(
+                len(entries_by_index.get(index, [])) == 1
+                and manifest_identity(entries_by_index[index][0])[3]
+                not in SCIENTIFIC_RESULTS
+                for index in range(start, stop)
+            )
+
+        candidates = list(retained_candidates)
+        r12_historical_inventory = [
+            item
+            for item in candidates
+            if manifest_identity(item)
+            == (
+                R12_HISTORICAL_JOB_ID,
+                "R12",
+                R12_HISTORICAL_SEGMENT,
+                "clean_partial",
+            )
+        ]
+        if (
+            case_id == "R12"
+            and len(r12_historical_inventory) == 1
+            and any(
+                manifest_identity(item)[2] == R12_FRESH_RERUN_SEGMENT
+                and manifest_parent_path(item) is None
+                for item in candidates
+            )
+        ):
+            candidates = [
+                item for item in candidates if item is not r12_historical_inventory[0]
+            ]
         maximum = max(final_time(item) for item in candidates)
         terminals = [item for item in candidates if final_time(item) == maximum]
         if len(terminals) != 1:
@@ -4828,7 +5157,8 @@ def authenticated_case_lineages(
                 or parent_record.get("restart_sha256") != terminal.get("sha256")
                 or parent_record.get("restart_files")
                 != [item.get("path") for item in terminal_rank_files]
-                or current_index != parent_index + 1
+                or current_index <= parent_index
+                or not indexes_are_non_scientific(parent_index + 1, current_index)
                 or abs(current_start - final_time(parent)) > 1.0e-6
             ):
                 raise ValueError(f"{case_id} recorded lineage parent identity differs")
@@ -4837,7 +5167,21 @@ def authenticated_case_lineages(
         root_index, root_start, _ = parse_segment(
             manifest_identity(lineage[0])[2], f"{case_id} recorded lineage root segment"
         )
-        if root_index != 0 or abs(root_start) > 1.0e-12:
+        r12_fresh_root = (
+            case_id == "R12"
+            and len(r12_historical_inventory) == 1
+            and manifest_identity(lineage[0])[2] == R12_FRESH_RERUN_SEGMENT
+            and root_index == 1
+            and abs(root_start) <= 1.0e-12
+        )
+        retry_root = (
+            root_index > 0
+            and abs(root_start) <= 1.0e-12
+            and indexes_are_non_scientific(0, root_index)
+        )
+        if (
+            root_index != 0 or abs(root_start) > 1.0e-12
+        ) and not r12_fresh_root and not retry_root:
             raise ValueError(f"{case_id} recorded lineage root is not s00 from t=0")
         if {Path(str(item["_manifest_path"])).absolute() for item in lineage} != {
             Path(str(item["_manifest_path"])).absolute() for item in candidates
@@ -5019,6 +5363,14 @@ def compact_json_sha256(value: object) -> str:
         json.dumps(
             value, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode()
+    )
+
+
+def publication_json_sha256(value: object) -> str:
+    """Return the controller publisher's canonical indented JSON digest."""
+
+    return sha256_bytes(
+        (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
     )
 
 
@@ -5700,6 +6052,325 @@ def reproduce_r17_frozen_science_build_contract(
     return contract, intent
 
 
+def r17_relative_difference(first: float, second: float) -> float:
+    """Reproduce the qualification producer's stable relative difference."""
+
+    return abs(first - second) / max(abs(first), abs(second), 1.0)
+
+
+def r17_expected_times(target: float, cadence: float) -> list[float]:
+    """Reproduce the qualification producer's exact cadence schedule."""
+
+    count = int(math.floor(target / cadence + 1.0e-10))
+    retained = [index * cadence for index in range(count + 1)]
+    if abs(retained[-1] - target) > 1.0e-10:
+        retained.append(target)
+    else:
+        retained[-1] = target
+    return retained
+
+
+def authenticate_r17_product_groups(
+    groups: object,
+    times: object,
+    root: Path,
+    tracker: InputTracker,
+    *,
+    kind: str,
+) -> list[list[dict[str, object]]]:
+    """Authenticate complete 64-rank producer snapshot or restart groups."""
+
+    if (
+        not isinstance(groups, list)
+        or not groups
+        or not isinstance(times, list)
+        or len(groups) != len(times)
+    ):
+        raise ValueError(f"R17 {kind} groups or times differ")
+    retained_groups = []
+    names: set[str] = set()
+    parsed_times = [
+        require_finite_float(value, f"R17 {kind} time") for value in times
+    ]
+    if parsed_times != sorted(parsed_times):
+        raise ValueError(f"R17 {kind} times are not ordered")
+    for group_index, (group_value, group_time) in enumerate(zip(groups, parsed_times)):
+        group = require_exact_keys(
+            group_value, {"name", "rank_files"}, f"R17 {kind} group {group_index}"
+        )
+        name = require_nonempty_string(group["name"], f"R17 {kind} group name")
+        rank_files = group["rank_files"]
+        if name in names or not isinstance(rank_files, list) or len(rank_files) != 64:
+            raise ValueError(f"R17 {kind} group rank inventory differs")
+        names.add(name)
+        retained_files = []
+        observed_ranks = set()
+        logical_locations = []
+        for rank, record_value in enumerate(rank_files):
+            record = require_exact_keys(
+                record_value,
+                {"path", "sha256", "size_bytes", "inspection"},
+                f"R17 {kind} group {group_index} rank {rank}",
+            )
+            path, _ = authenticate_r17_absolute_file_record(
+                {key: record[key] for key in ("path", "sha256", "size_bytes")},
+                f"R17 {kind} group {group_index} rank {rank}",
+                tracker,
+                expected_mode=0o644,
+            )
+            rank_names = [
+                part for part in path.relative_to(root).parts
+                if re.fullmatch(r"rank_[0-9]{8}", part)
+            ]
+            if rank_names != [f"rank_{rank:08d}"]:
+                raise ValueError(f"R17 {kind} group rank pathname differs")
+            observed_ranks.add(rank_names[0])
+            inspection = record["inspection"]
+            if (
+                not isinstance(inspection, dict)
+                or abs(
+                    require_finite_float(
+                        inspection.get("time"), f"R17 {kind} inspection time"
+                    )
+                    - group_time
+                )
+                > 1.0e-10
+            ):
+                raise ValueError(f"R17 {kind} group inspection time differs")
+            if kind == "snapshot":
+                locations = inspection.get("logical_locations")
+                minima = inspection.get("positive_variable_minima")
+                if (
+                    inspection.get("meshblock_count") != 27
+                    or inspection.get("hard_bound_violation_cells") != 0
+                    or not isinstance(locations, list)
+                    or len(locations) != 27
+                    or not isinstance(minima, dict)
+                    or any(
+                        require_finite_float(
+                            minima.get(variable),
+                            f"R17 snapshot positive {variable}",
+                        )
+                        <= 0.0
+                        for variable in ("dens", "eint", "p_perp")
+                    )
+                    or require_finite_float(
+                        inspection.get("minimum_mirror_hard_margin"),
+                        "R17 snapshot mirror hard margin",
+                    )
+                    <= 0.0
+                    or require_finite_float(
+                        inspection.get("minimum_firehose_hard_margin"),
+                        "R17 snapshot firehose hard margin",
+                    )
+                    <= 0.0
+                ):
+                    raise ValueError("R17 snapshot independently verified physics differs")
+                logical_locations.extend(tuple(location) for location in locations)
+            retained_files.append(dict(record))
+        if observed_ranks != {f"rank_{rank:08d}" for rank in range(64)}:
+            raise ValueError(f"R17 {kind} group rank inventory differs")
+        if kind == "snapshot" and (
+            len(logical_locations) != 1728
+            or len(set(logical_locations)) != 1728
+        ):
+            raise ValueError("R17 snapshot logical meshblock inventory differs")
+        retained_groups.append(retained_files)
+    return retained_groups
+
+
+def authenticate_r17_physics_contract(
+    scientific: dict[str, object],
+    root: Path,
+    outputs: list[dict[str, str]],
+    restarts: list[dict[str, str]],
+    tracker: InputTracker,
+) -> dict[str, object]:
+    """Independently reproduce the producer's complete R17 physics gate."""
+
+    if require_exact_keys(
+        scientific["checks"], set(R17_SCIENTIFIC_CHECKS), "R17 scientific checks"
+    ) != R17_SCIENTIFIC_CHECKS:
+        raise ValueError("R17 scientific checks differ or contain a failed check")
+    histories = {}
+    for key, label in (("mhd_history", "R17 MHD history"), ("user_history", "R17 user history")):
+        path, record = authenticate_r17_absolute_file_record(
+            scientific[key], label, tracker, expected_mode=0o644
+        )
+        payload = tracker.read(
+            path, str(record["sha256"]), label, expected_mode=0o644
+        )
+        histories[key] = parse_controller_history(payload, label)
+    mhd = histories["mhd_history"]
+    user = histories["user_history"]
+    mhd_required = {
+        "time", "mass", "tot-E", "lf_nstage", "lf_qface", "lf_qprcap",
+        "lf_qpecap", "lf_qprwrk", "lf_qpewrk", "lf_hwproj", "lf_cpwrk",
+        "lf_cawrk", *CONTROLLER_STRICT_LF_FAILURE_COLUMNS,
+    }
+    user_required = {"time", "mass", "hard_vol", "force_pwr", "force_work", "max_ndiv"}
+    if mhd_required - set(mhd) or user_required - set(user):
+        raise ValueError("R17 histories lack required independent physics columns")
+    expected_times = r17_expected_times(0.25, 0.02)
+    if (
+        len(mhd["time"]) != len(user["time"])
+        or len(mhd["time"]) != len(expected_times)
+        or any(
+            abs(observed - expected) > 1.0e-10
+            for observed, expected in zip(mhd["time"], expected_times)
+        )
+        or any(
+            abs(observed - expected) > 1.0e-10
+            for observed, expected in zip(user["time"], expected_times)
+        )
+    ):
+        raise ValueError("R17 histories fail the exact synchronized endpoint schedule")
+    mass_relative_drift_max = max(
+        [
+            r17_relative_difference(mhd["mass"][0], value)
+            for value in mhd["mass"]
+        ]
+        + [
+            r17_relative_difference(user["mass"][0], value)
+            for value in user["mass"]
+        ]
+    )
+    mass_mismatch_max = max(
+        r17_relative_difference(first, second)
+        for first, second in zip(mhd["mass"], user["mass"])
+    )
+    strict_total = math.fsum(
+        value
+        for name in CONTROLLER_STRICT_LF_FAILURE_COLUMNS
+        for value in mhd[name]
+    )
+    normalized_ct_divb_max = max(user["max_ndiv"])
+    if (
+        mass_relative_drift_max > 1.0e-12
+        or mass_mismatch_max > 1.0e-12
+        or strict_total != 0.0
+        or any(value != 0.0 for value in user["hard_vol"])
+        or any(value < 0.0 for value in user["max_ndiv"])
+        or normalized_ct_divb_max >= float(R17_MAX_NORMALIZED_CT_DIVB_TEXT)
+    ):
+        raise ValueError("R17 independently reproduced mass, LF, hard-bound, or CT gate failed")
+    count_columns = ("lf_nstage", "lf_qface", "lf_qprcap", "lf_qpecap", "lf_hwproj")
+    if (
+        any(
+            value < 0.0 or not value.is_integer()
+            for name in count_columns
+            for value in mhd[name]
+        )
+        or any(
+            later < earlier
+            for name in count_columns
+            for earlier, later in zip(mhd[name], mhd[name][1:])
+        )
+        or any(
+            later <= earlier
+            for name in ("lf_nstage", "lf_qface")
+            for earlier, later in zip(mhd[name], mhd[name][1:])
+        )
+        or any(
+            value > qface
+            for name in ("lf_qprcap", "lf_qpecap")
+            for value, qface in zip(mhd[name], mhd["lf_qface"])
+        )
+    ):
+        raise ValueError("R17 independently reproduced LF interval-count gate failed")
+    for name in ("lf_qprcap", "lf_qpecap"):
+        if any(
+            cap - previous_cap > qface - previous_qface
+            for previous_cap, cap, previous_qface, qface in zip(
+                mhd[name], mhd[name][1:], mhd["lf_qface"], mhd["lf_qface"][1:]
+            )
+        ):
+            raise ValueError("R17 independently reproduced LF cap-increment gate failed")
+    forcing_delta = user["force_work"][-1] - user["force_work"][0]
+    energy_delta = mhd["tot-E"][-1] - mhd["tot-E"][0]
+    pressure_work_delta = sum(
+        abs(mhd[name][-1] - mhd[name][0]) for name in ("lf_cpwrk", "lf_cawrk")
+    )
+    lf_work_delta = sum(
+        abs(mhd[name][-1] - mhd[name][0]) for name in ("lf_qprwrk", "lf_qpewrk")
+    )
+    if (
+        abs(forcing_delta) < 0.25 * 1.0e-4
+        or max(abs(value) for value in user["force_pwr"]) < 1.0e-4
+        or pressure_work_delta < 0.25 * 1.0e-7
+        or lf_work_delta < 0.25 * 1.0e-7
+        or abs(user["force_work"][-1] - user["force_work"][-2]) < 0.02 * 1.0e-4
+        or sum(
+            abs(mhd[name][-1] - mhd[name][-2]) for name in ("lf_cpwrk", "lf_cawrk")
+        )
+        < pressure_work_delta * 1.0e-4
+        or sum(
+            abs(mhd[name][-1] - mhd[name][-2]) for name in ("lf_qprwrk", "lf_qpewrk")
+        )
+        < lf_work_delta * 1.0e-4
+        or r17_relative_difference(energy_delta, forcing_delta) > 1.0e-8
+    ):
+        raise ValueError("R17 independently reproduced activity or closure gate failed")
+    snapshot_groups = authenticate_r17_product_groups(
+        scientific["snapshots"], scientific["snapshot_times"], root, tracker, kind="snapshot"
+    )
+    restart_groups = authenticate_r17_product_groups(
+        scientific["restarts"], scientific["restart_times"], root, tracker, kind="restart"
+    )
+    snapshot_times = [float(value) for value in scientific["snapshot_times"]]
+    restart_times = [float(value) for value in scientific["restart_times"]]
+    if (
+        len(snapshot_times) != 2
+        or any(
+            abs(observed - expected) > 1.0e-10
+            for observed, expected in zip(snapshot_times, [0.0, 0.25])
+        )
+        or sum(abs(value - 0.25) <= 1.0e-10 for value in snapshot_times) != 1
+        or sum(abs(value - 0.25) <= 1.0e-10 for value in restart_times) != 1
+        or any(value > 0.25 + 1.0e-10 for value in restart_times)
+    ):
+        raise ValueError("R17 independently reproduced snapshot or restart endpoint gate failed")
+
+    def terminal_inventory(group: list[dict[str, object]]) -> list[dict[str, str]]:
+        return [
+            {
+                "path": Path(str(record["path"])).relative_to(root).as_posix(),
+                "sha256": str(record["sha256"]),
+            }
+            for record in group
+        ]
+
+    terminal_snapshot = snapshot_groups[
+        next(index for index, value in enumerate(snapshot_times) if abs(value - 0.25) <= 1.0e-10)
+    ]
+    terminal_restart = restart_groups[
+        next(index for index, value in enumerate(restart_times) if abs(value - 0.25) <= 1.0e-10)
+    ]
+    if terminal_inventory(terminal_snapshot) != outputs or terminal_inventory(terminal_restart) != restarts:
+        raise ValueError("R17 terminal product inventories differ from scientific groups")
+    measurements = {
+        "finite_rank_outputs": len(outputs),
+        "mass_relative_drift_max": format(mass_relative_drift_max, ".17g"),
+        "mhd_user_mass_mismatch_max": format(mass_mismatch_max, ".17g"),
+        "lf_bad_counts_total": 0,
+        "normalized_ct_divb_max": format(normalized_ct_divb_max, ".17g"),
+        "normalized_ct_divb_threshold": R17_MAX_NORMALIZED_CT_DIVB_TEXT,
+        "normalized_ct_divb_below_threshold": True,
+    }
+    if (
+        require_exact_keys(
+            scientific["physics_measurements"],
+            R17_PHYSICS_MEASUREMENT_KEYS,
+            "R17 physics measurements",
+        )
+        != measurements
+        or scientific["forcing_closure_normalized_residual"]
+        != r17_relative_difference(energy_delta, forcing_delta)
+    ):
+        raise ValueError("R17 physics measurements differ from independent reproduction")
+    return measurements
+
+
 def parse_r17_operational_qualification(
     value: object,
     root: Path,
@@ -5891,15 +6562,24 @@ def parse_r17_operational_qualification(
     _, _, scientific_payload = authenticate_r17_root_binding(
         retained["scientific_evidence"], root, "R17 scientific evidence", tracker
     )
-    scientific = parse_json(scientific_payload, "R17 scientific evidence")
-    if not isinstance(scientific, dict):
-        raise ValueError("R17 scientific evidence must be an object")
+    scientific = require_exact_keys(
+        parse_json(scientific_payload, "R17 scientific evidence"),
+        R17_SCIENTIFIC_EVIDENCE_KEYS,
+        "R17 scientific evidence",
+    )
     if (
         scientific.get("schema_version") != 6
         or scientific.get("record_type")
         != "cgl_lf_stage_i_qualification_scientific_evidence"
         or scientific.get("case_id") != R17_CASE_ID
         or scientific.get("nodes") != 8
+        or scientific.get("target_time") != 0.25
+        or scientific.get("scientific_policy") != "active_hardwall"
+        or scientific.get("executable")
+        != {
+            "revision": profile["executable_revision"],
+            "sha256": profile["executable_sha256"],
+        }
         or scientific.get("execution_intent_sha256") != frozen["execution_intent_sha256"]
         or scientific.get("execution_contract_sha256")
         != frozen["execution_contract_sha256"]
@@ -5912,6 +6592,9 @@ def parse_r17_operational_qualification(
         or scientific.get("accepted_for_profile_selection") is not False
     ):
         raise ValueError("R17 scientific evidence differs from canonical contract")
+    physics_measurements = authenticate_r17_physics_contract(
+        scientific, root, outputs, restarts, tracker
+    )
 
     evidence_bindings: dict[str, dict[str, object]] = {}
     for key, record_type, expected_measurements in (
@@ -5930,7 +6613,7 @@ def parse_r17_operational_qualification(
             "stage-i-r17-physics-validation-evidence",
             {
                 "rank_local_output_inventory_sha256": outputs_sha256,
-                **scientific["physics_measurements"],
+                **physics_measurements,
             },
         ),
     ):
@@ -6370,6 +7053,55 @@ def parse_r17_readiness_publication_chain(
     }
 
 
+def require_authoritative_r12_fresh_rerun(
+    case_id: str,
+    terminal_identity: tuple[str | None, str, str, str] | None,
+    segment: str,
+    segment_index: int,
+    segment_start: float,
+    target: float,
+    nodes: int,
+    ranks_per_node: int,
+    walltime: object,
+    athena_walltime: object,
+    parent_fields: tuple[object, ...],
+    expected_segment_index: int,
+) -> bool:
+    """Require the exact fresh R12 rerun when historical s00 is terminal inventory."""
+
+    if (
+        case_id != "R12"
+        or terminal_identity
+        != (
+            R12_HISTORICAL_JOB_ID,
+            "R12",
+            R12_HISTORICAL_SEGMENT,
+            "clean_partial",
+        )
+    ):
+        return False
+    if (
+        segment != R12_FRESH_RERUN_SEGMENT
+        or segment_index != expected_segment_index
+        or abs(segment_start) > 1.0e-12
+        or abs(target - R12_FRESH_RERUN_TARGET) > 1.0e-12
+        or abs(target - PLAN_INITIAL_TARGETS["R12"]) > 1.0e-12
+        or nodes != R12_FRESH_RERUN_NODES
+        or ranks_per_node != R12_FRESH_RERUN_RANKS_PER_NODE
+        or nodes * ranks_per_node != R12_FRESH_RERUN_TOTAL_RANKS
+        or walltime != R12_FRESH_RERUN_WALLTIME
+        or athena_walltime != R12_FRESH_RERUN_ATHENA_WALLTIME
+        or any(item is not None for item in parent_fields)
+    ):
+        raise ValueError(
+            "R12 historical clean partial is inventory-only; the authoritative "
+            "next profile is fresh R12/s01_rankio_t0_t0p12 on 4 nodes / 32 ranks "
+            "with Slurm 02:00:00 and Athena 01:50:00 from t=0 to t=0.12 with "
+            "null parent and restart fields"
+        )
+    return True
+
+
 def validate_profiles(
     authorization: dict[str, object],
     root: Path,
@@ -6621,7 +7353,21 @@ def validate_profiles(
             profile["restart_file_sha256"],
             profile["restart_time"],
         )
-        if not parents:
+        r12_historical_inventory = require_authoritative_r12_fresh_rerun(
+            case_id,
+            manifest_identity(parents[-1]) if parents else None,
+            segment,
+            segment_index,
+            segment_start,
+            target,
+            nodes,
+            int(profile["ranks_per_node"]),
+            profile["walltime"],
+            profile["athena_walltime"],
+            parent_fields,
+            expected_segment_index,
+        )
+        if not parents or r12_historical_inventory:
             if any(item is not None for item in parent_fields):
                 raise ValueError(f"fresh next profile {case_id} has ambiguous parent fields")
             if segment_index != expected_segment_index or abs(segment_start) > 1.0e-12:
@@ -6681,8 +7427,7 @@ def validate_profiles(
                 raise ValueError(f"next profile {case_id} segment lineage differs")
             if target - restart_time > PLAN_MAX_INCREMENTS[case_id] + 1.0e-12:
                 raise ValueError(f"next profile {case_id} increment exceeds the plan")
-            if abs(target * 4.0 - round(target * 4.0)) > 1.0e-10:
-                raise ValueError(f"next profile {case_id} target is not output-aligned")
+            require_continuation_target_alignment(case_id, target)
             if not isinstance(paths, dict):
                 raise ValueError(f"next profile {case_id} parent lacks output path")
             output_dir = absolute_root_member(
@@ -7073,6 +7818,7 @@ def build_payload(
     )
     request = parse_request(request_payload)
     request_review_sha256 = None
+    request_review = None
     artifact_name = args.output.name.removesuffix(".staged")
     if request["artifact_name"] != artifact_name:
         raise ValueError("recost request artifact name differs from the output namespace")
@@ -7088,7 +7834,7 @@ def build_payload(
             "recost request independent review",
             expected_mode=0o444,
         )
-        parse_request_independent_review(
+        request_review = parse_request_independent_review(
             parse_json(request_review_payload, "recost request independent review"),
             request_path,
             args.expected_request_sha256,
@@ -7282,6 +8028,7 @@ def build_payload(
     )
     source_authority, adoption, source_authority_published_utc = parse_current_source_authority(
         root,
+        repository,
         inputs["source_authority"],
         bundle_path,
         bundle_sha256,
@@ -7736,45 +8483,266 @@ def fsync_directory(path: Path) -> None:
         os.fsync(descriptor)
 
 
-def write_exact_or_verify(path: Path, payload: bytes, *, mode: int, label: str) -> bool:
-    """Create exact bytes without overwrite, or verify an existing exact copy."""
+@dataclass(frozen=True)
+class EntryIdentity:
+    """Retain one newly created entry and its parent for inode-bound rollback."""
 
-    require_no_symlink_components(path, label, include_leaf=False)
-    if os.path.lexists(path):
-        with absolute_descriptor(path, label, flags=os.O_RDONLY) as descriptor:
-            require_regular_profile(os.fstat(descriptor), label, expected_mode=mode)
-            if sha256_descriptor(descriptor) != sha256_bytes(payload):
-                raise ValueError(f"{label} exists with different bytes; refusing to clobber")
-        return False
+    path: Path
+    device: int
+    inode: int
+    parent_device: int
+    parent_inode: int
+
+
+def retained_entry_identity(path: Path, label: str) -> EntryIdentity:
+    """Capture one exact retained entry without following a substituted symlink."""
+
     with absolute_descriptor(
         path.parent,
         f"{label} parent",
         flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
     ) as directory:
+        parent = os.fstat(directory)
         descriptor = os.open(
-            path.name,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
-            mode,
-            dir_fd=directory,
+            path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
         )
         try:
-            os.fchmod(descriptor, mode)
-            offset = 0
-            while offset < len(payload):
-                written = os.write(descriptor, payload[offset:])
-                if written <= 0:
-                    raise ValueError(f"{label} write made no progress")
-                offset += written
-            os.fsync(descriptor)
-            require_regular_profile(os.fstat(descriptor), label, expected_mode=mode)
+            profile = os.fstat(descriptor)
+            require_regular_profile(profile, label)
+            return EntryIdentity(
+                path, profile.st_dev, profile.st_ino, parent.st_dev, parent.st_ino
+            )
         finally:
             os.close(descriptor)
+
+
+def renameat2(parent: int, source: str, target: str, flags: int, label: str) -> None:
+    """Perform one descriptor-relative Linux renameat2 operation."""
+
+    if (
+        not source
+        or source in {".", ".."}
+        or "/" in source
+        or not target
+        or target in {".", ".."}
+        or "/" in target
+    ):
+        raise ValueError(f"{label} contains an invalid direct-child name")
+    try:
+        operation = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError as error:
+        raise ValueError("descriptor-bound publication requires renameat2") from error
+    operation.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    operation.restype = ctypes.c_int
+    if operation(
+        parent,
+        os.fsencode(source),
+        parent,
+        os.fsencode(target),
+        flags,
+    ) != 0:
+        retained_errno = ctypes.get_errno()
+        raise OSError(
+            retained_errno, os.strerror(retained_errno), f"{source} -> {target}"
+        )
+
+
+def rollback_created_entry(
+    identity: EntryIdentity,
+    label: str,
+    *,
+    mutation_lock: MutationLock | None = None,
+) -> Path:
+    """Atomically move an exact created inode to retained rollback forensics."""
+
+    authenticate_mutation_lock(mutation_lock)
+    with absolute_descriptor(
+        identity.path.parent,
+        f"{label} rollback parent",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent = os.fstat(directory)
+        if (parent.st_dev, parent.st_ino) != (
+            identity.parent_device,
+            identity.parent_inode,
+        ):
+            raise ValueError(f"{label} rollback parent inode changed; refusing cleanup")
+        named = os.stat(identity.path.name, dir_fd=directory, follow_symlinks=False)
+        if (named.st_dev, named.st_ino) != (identity.device, identity.inode):
+            raise ValueError(f"{label} rollback target inode changed; refusing cleanup")
+        forensic_name = (
+            f".{identity.path.name}.recost-rollback-forensic."
+            f"{os.getpid()}.{uuid.uuid4().hex}.retained"
+        )
+        try:
+            renameat2(
+                directory,
+                identity.path.name,
+                forensic_name,
+                RENAME_NOREPLACE,
+                f"{label} rollback forensic retention",
+            )
+        except FileExistsError as error:
+            raise ValueError(
+                f"{label} rollback forensic target raced; refusing cleanup"
+            ) from error
+        retained = os.stat(forensic_name, dir_fd=directory, follow_symlinks=False)
         os.fsync(directory)
-    with absolute_descriptor(path, label, flags=os.O_RDONLY) as descriptor:
-        require_regular_profile(os.fstat(descriptor), label, expected_mode=mode)
-        if sha256_descriptor(descriptor) != sha256_bytes(payload):
-            raise ValueError(f"{label} checksum differs after creation")
-    return True
+        if (retained.st_dev, retained.st_ino) != (identity.device, identity.inode):
+            raise ValueError(
+                f"{label} rollback target inode changed during atomic forensic move; "
+                f"retained substituted entry as {forensic_name}"
+            )
+        try:
+            os.stat(identity.path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise ValueError(
+                f"{label} rollback target was recreated after atomic forensic move; "
+                f"retained exact created entry as {forensic_name}"
+            )
+    authenticate_mutation_lock(mutation_lock)
+    return identity.path.with_name(forensic_name)
+
+
+def write_exact_or_verify(
+    path: Path,
+    payload: bytes,
+    *,
+    mode: int,
+    label: str,
+    mutation_lock: MutationLock | None = None,
+    identity_sink: list[EntryIdentity] | None = None,
+) -> bool:
+    """Atomically publish exact bytes without overwrite, or verify an exact copy."""
+
+    authenticate_mutation_lock(mutation_lock)
+    require_no_symlink_components(path, label, include_leaf=False)
+    identity = None
+    parent_profile = None
+    try:
+        with absolute_descriptor(
+            path.parent,
+            f"{label} parent",
+            flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+        ) as directory:
+            parent_profile = os.fstat(directory)
+            try:
+                descriptor = os.open(
+                    path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
+                )
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is not None:
+                try:
+                    profile = os.fstat(descriptor)
+                    require_regular_profile(profile, label, expected_mode=mode)
+                    if sha256_descriptor(descriptor) != sha256_bytes(payload):
+                        raise ValueError(f"{label} exists with different bytes; refusing to clobber")
+                    if not same_inode(
+                        profile, os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+                    ):
+                        raise ValueError(f"{label} pathname changed during exact verification")
+                finally:
+                    os.close(descriptor)
+                authenticate_mutation_lock(mutation_lock)
+                created = False
+            else:
+                temporary = (
+                    f".{path.name}.recost-publish-forensic."
+                    f"{os.getpid()}.{uuid.uuid4().hex}.tmp"
+                )
+                descriptor = os.open(
+                    temporary,
+                    os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                    mode,
+                    dir_fd=directory,
+                )
+                try:
+                    temporary_profile = os.fstat(descriptor)
+                    os.fchmod(descriptor, mode)
+                    offset = 0
+                    while offset < len(payload):
+                        written = os.write(descriptor, payload[offset:])
+                        if written <= 0:
+                            raise ValueError(f"{label} write made no progress")
+                        offset += written
+                    os.fsync(descriptor)
+                    require_regular_profile(
+                        os.fstat(descriptor), label, expected_mode=mode
+                    )
+                    if sha256_descriptor(descriptor) != sha256_bytes(payload):
+                        raise ValueError(f"{label} temporary checksum differs before publication")
+                finally:
+                    os.close(descriptor)
+                authenticate_mutation_lock(mutation_lock)
+                try:
+                    renameat2(
+                        directory,
+                        temporary,
+                        path.name,
+                        RENAME_NOREPLACE,
+                        f"{label} atomic publication",
+                    )
+                except FileExistsError as error:
+                    raise ValueError(
+                        f"{label} target appeared during atomic no-clobber publication; "
+                        f"retained forensic temporary {temporary}"
+                    ) from error
+                identity = EntryIdentity(
+                    path,
+                    temporary_profile.st_dev,
+                    temporary_profile.st_ino,
+                    parent_profile.st_dev,
+                    parent_profile.st_ino,
+                )
+                os.fsync(directory)
+                target_profile = os.stat(
+                    path.name, dir_fd=directory, follow_symlinks=False
+                )
+                if not same_inode(temporary_profile, target_profile):
+                    raise ValueError(f"{label} pathname changed after atomic publication")
+                descriptor = os.open(
+                    path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
+                )
+                try:
+                    profile = os.fstat(descriptor)
+                    require_regular_profile(profile, label, expected_mode=mode)
+                    if (
+                        not same_inode(profile, temporary_profile)
+                        or sha256_descriptor(descriptor) != sha256_bytes(payload)
+                    ):
+                        raise ValueError(
+                            f"{label} identity or checksum differs after atomic publication"
+                        )
+                finally:
+                    os.close(descriptor)
+                authenticate_mutation_lock(mutation_lock)
+                created = True
+        assert parent_profile is not None
+        with absolute_descriptor(
+            path.parent,
+            f"{label} parent",
+            flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+        ) as named_parent:
+            if not same_inode(parent_profile, os.fstat(named_parent)):
+                raise ValueError(f"{label} parent pathname changed during publication")
+        authenticate_mutation_lock(mutation_lock)
+    except BaseException:
+        if identity is not None:
+            rollback_created_entry(identity, label, mutation_lock=mutation_lock)
+        raise
+    if identity_sink is not None and created:
+        assert identity is not None
+        identity_sink.append(identity)
+    return created
 
 
 def parse_draft_packet(payload: bytes) -> dict[str, object]:
@@ -7885,6 +8853,7 @@ def locked_install_f117_draft_packet(
     source_path: Path,
     repository: Path,
     generator_sha256: str,
+    mutation_lock: MutationLock | None = None,
 ) -> None:
     """Install or exact-verify the initial F117 packet without out-of-band writes."""
 
@@ -7921,15 +8890,29 @@ def locked_install_f117_draft_packet(
         / "accounting"
         / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F117_recost_draft_packet.json"
     )
+    identities: list[EntryIdentity] = []
     created = write_exact_or_verify(
         target,
         packet_payload,
         mode=0o644,
         label="managed initial F117 recost request draft packet",
+        mutation_lock=mutation_lock,
+        identity_sink=identities,
     )
-    require_empty_transaction_stores(root)
-    require_drained_queue(args, root)
-    tracker.reauthenticate_all()
+    identity = identities[0] if created else None
+    try:
+        require_empty_transaction_stores(root)
+        require_drained_queue(args, root)
+        tracker.reauthenticate_all()
+        authenticate_mutation_lock(mutation_lock)
+    except BaseException:
+        if identity is not None:
+            rollback_created_entry(
+                identity,
+                "managed initial F117 recost request draft packet",
+                mutation_lock=mutation_lock,
+            )
+        raise
     next_action = [
         str(source_path),
         "--root",
@@ -7970,6 +8953,7 @@ def locked_draft_request(
     source_path: Path,
     repository: Path,
     generator_sha256: str,
+    mutation_lock: MutationLock | None = None,
 ) -> None:
     """Draft exact live prerequisites without creating an independent review."""
 
@@ -8179,15 +9163,23 @@ def locked_draft_request(
     request_payload = stable_json_bytes(request)
     parse_request(request_payload)
 
-    created: list[Path] = []
+    created: list[tuple[EntryIdentity, str]] = []
     try:
         for path, payload, label in (
             (paths["reconciliation"], reconcile_payload, "draft reconciliation evidence"),
             (paths["storage"], storage_payload, "draft storage evidence"),
             (paths["request"], request_payload, "schema-2 recost request draft"),
         ):
-            if write_exact_or_verify(path, payload, mode=0o644, label=label):
-                created.append(path)
+            identities: list[EntryIdentity] = []
+            if write_exact_or_verify(
+                path,
+                payload,
+                mode=0o644,
+                label=label,
+                mutation_lock=mutation_lock,
+                identity_sink=identities,
+            ):
+                created.append((identities[0], label))
         build_args = argparse.Namespace(**vars(args))
         build_args.request = paths["request"]
         build_args.expected_request_sha256 = sha256_bytes(request_payload)
@@ -8217,10 +9209,9 @@ def locked_draft_request(
             build.storage_required_safety_bytes,
             build.projected_storage_bytes,
         )
-    except Exception:
-        for path in reversed(created):
-            path.unlink(missing_ok=True)
-            fsync_directory(path.parent)
+    except BaseException:
+        for identity, label in reversed(created):
+            rollback_created_entry(identity, label, mutation_lock=mutation_lock)
         raise
     generation_command = [
         sys.executable,
@@ -8309,6 +9300,7 @@ def locked_install_request_review(
     source_path: Path,
     repository: Path,
     generator_sha256: str,
+    mutation_lock: MutationLock | None = None,
 ) -> None:
     """Install exact externally reviewed request approval without canonical hand writes."""
 
@@ -8382,13 +9374,19 @@ def locked_install_request_review(
         require_nonempty_string(request["requested_by"], "recost request author"),
     )
     created = False
+    identity = None
     try:
+        identities: list[EntryIdentity] = []
         created = write_exact_or_verify(
             review_target,
             review_payload,
             mode=0o444,
             label="managed recost request independent review",
+            mutation_lock=mutation_lock,
+            identity_sink=identities,
         )
+        if created:
+            identity = identities[0]
         tracker.authenticate(
             review_target,
             args.expected_review_sha256,
@@ -8405,10 +9403,13 @@ def locked_install_request_review(
             "Stage I recost generator",
             expected_mode=0o755,
         )
-    except Exception:
-        if created:
-            review_target.unlink(missing_ok=True)
-            fsync_directory(review_target.parent)
+    except BaseException:
+        if identity is not None:
+            rollback_created_entry(
+                identity,
+                "managed recost request independent review",
+                mutation_lock=mutation_lock,
+            )
         raise
     output = paths["artifact"].with_name(f"{paths['artifact'].name}.staged")
     generation_command = [
@@ -8459,12 +9460,15 @@ def locked_install_request_review(
     )
 
 
-def ensure_utilities_directory(root: Path) -> Path:
+def ensure_utilities_directory(
+    root: Path, mutation_lock: MutationLock | None = None
+) -> Path:
     """Create or authenticate the direct accounting utilities directory."""
 
     accounting = root / "accounting"
     utilities = accounting / "utilities"
     if not os.path.lexists(utilities):
+        authenticate_mutation_lock(mutation_lock)
         with absolute_descriptor(
             accounting,
             "accounting directory",
@@ -8472,6 +9476,7 @@ def ensure_utilities_directory(root: Path) -> Path:
         ) as descriptor:
             os.mkdir("utilities", mode=0o755, dir_fd=descriptor)
             os.fsync(descriptor)
+        authenticate_mutation_lock(mutation_lock)
     require_directory(utilities, "accounting utilities directory")
     return utilities
 
@@ -8482,6 +9487,7 @@ def locked_retain_generator(
     source_path: Path,
     repository: Path,
     generator_sha256: str,
+    mutation_lock: MutationLock | None = None,
 ) -> None:
     """Retain exact committed generator bytes without overwriting any existing copy."""
 
@@ -8507,15 +9513,27 @@ def locked_retain_generator(
     payload = b"".join(chunks)
     if sha256_bytes(payload) != generator_sha256:
         raise ValueError("Stage I recost generator bytes changed before retention")
-    target = ensure_utilities_directory(root) / "cgl_lf_stage_i_recost.py"
+    target = ensure_utilities_directory(root, mutation_lock) / "cgl_lf_stage_i_recost.py"
+    identities: list[EntryIdentity] = []
     created = write_exact_or_verify(
         target,
         payload,
         mode=0o755,
         label="retained Stage I recost generator",
+        mutation_lock=mutation_lock,
+        identity_sink=identities,
     )
-    require_empty_transaction_stores(root)
-    require_drained_queue(args, root)
+    identity = identities[0] if created else None
+    try:
+        require_empty_transaction_stores(root)
+        require_drained_queue(args, root)
+        authenticate_mutation_lock(mutation_lock)
+    except BaseException:
+        if identity is not None:
+            rollback_created_entry(
+                identity, "retained Stage I recost generator", mutation_lock=mutation_lock
+            )
+        raise
     print(
         json.dumps(
             {
@@ -8536,63 +9554,21 @@ def locked_retain_generator(
     )
 
 
-def write_staged_output(output: Path, payload: bytes) -> None:
-    """Create exactly one explicit staged artifact without overwrite."""
+def write_staged_output(
+    output: Path,
+    payload: bytes,
+    mutation_lock: MutationLock | None = None,
+) -> None:
+    """Atomically create exactly one explicit staged artifact without overwrite."""
 
-    with absolute_descriptor(
-        output.parent,
-        "accounting directory",
-        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
-    ) as directory:
-        directory_profile = os.fstat(directory)
-        require_directory(output.parent, "accounting directory")
-        descriptor = os.open(
-            output.name,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
-            0o644,
-            dir_fd=directory,
-        )
-        try:
-            os.fchmod(descriptor, 0o644)
-            offset = 0
-            while offset < len(payload):
-                written = os.write(descriptor, payload[offset:])
-                if written <= 0:
-                    raise ValueError("staged recost output write made no progress")
-                offset += written
-            os.fchmod(descriptor, 0o444)
-            os.fsync(descriptor)
-            profile = os.fstat(descriptor)
-            require_regular_profile(
-                profile, "staged recost output", expected_mode=0o444
-            )
-            if profile.st_size != len(payload):
-                raise ValueError("staged recost output size differs after write")
-        finally:
-            os.close(descriptor)
-        os.fsync(directory)
-        descriptor = os.open(
-            output.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
-        )
-        try:
-            require_regular_profile(
-                os.fstat(descriptor), "staged recost output", expected_mode=0o444
-            )
-            if sha256_descriptor(descriptor) != sha256_bytes(payload):
-                raise ValueError("staged recost output checksum differs after write")
-        finally:
-            os.close(descriptor)
-        with absolute_descriptor(
-            output.parent,
-            "accounting directory",
-            flags=os.O_RDONLY | os.O_DIRECTORY,
-        ) as named_directory:
-            named_profile = os.fstat(named_directory)
-        if (directory_profile.st_dev, directory_profile.st_ino) != (
-            named_profile.st_dev,
-            named_profile.st_ino,
-        ):
-            raise ValueError("accounting directory identity changed during output creation")
+    if not write_exact_or_verify(
+        output,
+        payload,
+        mode=0o444,
+        label="staged recost output",
+        mutation_lock=mutation_lock,
+    ):
+        raise ValueError("staged recost output already exists; refusing exact-copy reuse")
 
 
 def locked_main(
@@ -8602,6 +9578,7 @@ def locked_main(
     source_path: Path,
     repository: Path,
     generator_sha256: str,
+    mutation_lock: MutationLock | None = None,
 ) -> None:
     """Generate one staged artifact after final barrier revalidation."""
 
@@ -8663,7 +9640,7 @@ def locked_main(
     require_empty_transaction_stores(root)
     require_drained_queue(args, root)
     require_output_namespace_empty(output)
-    write_staged_output(output, build.payload)
+    write_staged_output(output, build.payload, mutation_lock)
     print(output)
 
 
@@ -8676,22 +9653,36 @@ def main(argv: list[str] | None = None) -> int:
     if args.expected_generator_sha256 != generator_sha256:
         raise ValueError("parsed generator SHA-256 differs from authenticated self")
     root = validate_root(args)
-    with stage_i_lock(root):
+    with stage_i_lock(root) as mutation_lock:
+        mutation_lock.authenticate()
         if args.action == "generate":
             _, output = validate_root_and_output(args)
-            locked_main(args, root, output, source_path, repository, generator_sha256)
+            locked_main(
+                args,
+                root,
+                output,
+                source_path,
+                repository,
+                generator_sha256,
+                mutation_lock,
+            )
         elif args.action == "install-f117-draft-packet":
             locked_install_f117_draft_packet(
-                args, root, source_path, repository, generator_sha256
+                args, root, source_path, repository, generator_sha256, mutation_lock
             )
         elif args.action == "draft-request":
-            locked_draft_request(args, root, source_path, repository, generator_sha256)
+            locked_draft_request(
+                args, root, source_path, repository, generator_sha256, mutation_lock
+            )
         elif args.action == "install-request-review":
             locked_install_request_review(
-                args, root, source_path, repository, generator_sha256
+                args, root, source_path, repository, generator_sha256, mutation_lock
             )
         else:
-            locked_retain_generator(args, root, source_path, repository, generator_sha256)
+            locked_retain_generator(
+                args, root, source_path, repository, generator_sha256, mutation_lock
+            )
+        mutation_lock.authenticate()
     return 0
 
 

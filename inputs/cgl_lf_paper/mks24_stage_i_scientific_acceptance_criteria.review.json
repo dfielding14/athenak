@@ -1,0 +1,31 @@
+{
+  "acceptance_utility": {
+    "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+    "sha256": "f27e317711cb917439b4d03c0216fccd117cd061f16e01121e331d55fb63b63e"
+  },
+  "criteria": {
+    "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+    "sha256": "2e83d61bad785fd378dbdd9feb9518e82810ef539fcdefeb6fbe5d5ab12be195"
+  },
+  "identity_limitation": "Reviewer identity and process independence are declared evidence, not cryptographically proven.",
+  "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
+  "record_type": "stage-i-scientific-acceptance-criteria-review",
+  "retained_ct_observation": {
+    "approval_identity_available": false,
+    "case_id": "R02",
+    "maximum_normalized_ct_divb": 1.743292792971505e-13,
+    "meshblocks_sampled": 216,
+    "meshblocks_total": 216,
+    "rank_count": 8,
+    "scope": "terminal retained state t=10 only; not plasma/statistical criteria approval",
+    "state_time": 10.0,
+    "status": "retained_observation_not_criteria_approval"
+  },
+  "required_review_roles": [
+    "plasma_physics",
+    "statistical_methodology"
+  ],
+  "review_status": "changes_required",
+  "reviews": [],
+  "schema_version": 1
+}

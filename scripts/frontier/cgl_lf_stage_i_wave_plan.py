@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Emit an evidence-bound, deterministic, read-only CGL-LF Stage I wave plan.
 
-The planner never launches work and never mutates campaign state.  It accepts
-only a fresh review packet retained at the exact canonical campaign root.  The
-packet checksum-binds the frozen matrix, promoted controller/helper/source/build
-provenance, controller summary, a controller-reconciliation snapshot, canonical
-ledger/reservation/manifest/transaction stores, independently published
-allocation profiles, any required exact published F-115 R03 continuation
-authority chain, live Slurm state for submitted jobs, and evidence-backed R17
-readiness artifacts.
+The planner never launches work and never mutates campaign state.  It consumes
+only one promoted schema-2 recost recommendation and its exact independent
+review/publication audit.  That publication is the sole current authority for
+the wave profiles, promoted controller/source identity, projection,
+reconciliation, and any R17 readiness chain.  Current source identity must in
+turn be authorized by the exact independently reviewed F-116 supersession
+chain.  The planner independently re-authenticates canonical stores and
+preserves the immutable historical F-115 R03 continuation checks without
+treating F-115 as current controller identity.
 """
 
 from __future__ import annotations
@@ -43,14 +44,14 @@ CONTROLLER_HELPER = Path(
 )
 SQUEUE = Path("/usr/bin/squeue")
 SCONTROL = Path("/usr/bin/scontrol")
-GIT = Path("/usr/bin/git")
+GIT = Path("/usr/lib/git/git")
+GIT_EXEC_PATH = Path("/usr/lib/git")
+TRUSTED_SYSTEM_PATH = "/usr/bin:/bin"
 ACCOUNT = "AST207"
+PARTITION = "batch"
 
-CONTROLLER_REVISION = "5834a91e448a69ec0df5d011b7be3fe786666806"
-CONTROLLER_SHA256 = "0a6b30a60ba70faf32dae722c4472e96acb38031d8c1a4b52b816fc93e58e53a"
 SOURCE_REVISION = "9e07542281e4e6d125582f253df3ad2e3b8b154d"
 MATRIX_SHA256 = "bf31b88b985d1ad4ffe823108dd7c1132bdfa4d5e4a6abde51f66bb7778415c9"
-SOURCE_BUNDLE_SHA256 = "a6aa40f8f3350d65022be6d898d5575a60185b05bba7b72f184c3f2ebd401ec8"
 EXECUTABLE_SHA256 = "68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c"
 BUILD_FILE_SHA256 = {
     "athena.sha256": "8dedf6bbb74aaa1d62a0f1d9c46b050d254085d33843134d8b4278ee5777d4ab",
@@ -76,9 +77,225 @@ RESTART_MESH_HEADER_SIZE = 252
 RESTART_TIME_OFFSET = 232
 RESTART_TIME_FORMAT = "<d"
 ALLOWED_RESTART_MARKER_MODES = frozenset(("full_precision", "legacy_default_precision"))
+CONTINUATION_MASS_TOLERANCE = 1.0e-12
+CONTINUATION_MAX_NORMALIZED_CT_DIVB = 1.0e-12
+CONTINUATION_ACTIVITY_ABSOLUTE_GT = 1.0e-6
+CONTINUATION_ACTIVITY_NORMALIZED_GT = 1.0e-8
+CONTINUATION_PLASMA_POLICY = "stage-i-clean-partial-continuation-v2"
+FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY = (
+    "stage-i-frozen-e03-exact-retained-continuation-migration-v1"
+)
+FROZEN_E03_CT_DIVERGENCE_REASON = (
+    "the qualified historical E03 executable did not retain normalized CT "
+    "divB in its exact user-history schema"
+)
+R12_HISTORICAL_PARTIAL_JOB_ID = "4766856"
+R12_HISTORICAL_PARTIAL_SEGMENT = "s00_rankio_t0_t0p25"
+R12_FRESH_RERUN_SEGMENT = "s01_rankio_t0_t0p12"
+R12_FRESH_RERUN_TARGET = Decimal("0.12")
+R12_FRESH_RERUN_NODES = 4
+R12_FRESH_RERUN_RANKS = 32
+R12_FRESH_RERUN_WALLTIME = "02:00:00"
+R12_FRESH_RERUN_ATHENA_WALLTIME = "01:50:00"
+R12_FRESH_RERUN_POLICY = "stage-i-r12-fresh-rerun-after-inventory-only-partial-v2"
+R12_CONTINUATION_ALIGNMENT = Decimal("0.02")
+STANDARD_CONTINUATION_ALIGNMENT = Decimal("0.25")
+REQUEST_REVIEW_IDENTITY_ASSURANCE = "declared-process-independence-non-cryptographic"
+REQUEST_REVIEW_IDENTITY_LIMITATION = (
+    "Reviewer identity and process independence are declared evidence, "
+    "not cryptographically proven."
+)
+CONTROLLER_CLEAN_PARTIAL_CHECKS = {
+    "required_time_reached": False,
+    "strict_lf_failure_counters_zero": True,
+    "snapshots_retained": True,
+    "terminal_snapshot_retained": True,
+    "restart_retained": True,
+    "terminal_restart_physical_time_matches_final": True,
+    "plasma_continuation_policy": True,
+}
+FROZEN_E03_NO_MAX_NDIV_CHECKS = {
+    key: value
+    for key, value in CONTROLLER_CLEAN_PARTIAL_CHECKS.items()
+    if key != "plasma_continuation_policy"
+}
+CONTROLLER_CLEAN_PARTIAL_INSPECTION_KEYS = frozenset(
+    (
+        "schema_version", "execution_epoch", "inspected_utc", "manifest", "job_id",
+        "case_id", "segment", "required_time", "final_time",
+        "maximum_strict_failure_counts", "checks", "accepted",
+        "clean_for_continuation", "mhd_history", "user_history",
+        "plasma_continuation_policy", "plasma_continuation_evidence",
+        "snapshots", "snapshot_times", "restarts", "restart_times",
+        "restart_time_marker_modes", "terminal_restart", "terminal_restart_time",
+        "restart_time_marker_bypass", "final_hardwall_projection_count",
+    )
+)
+FROZEN_E03_NO_MAX_NDIV_INSPECTION_KEYS = (
+    CONTROLLER_CLEAN_PARTIAL_INSPECTION_KEYS
+    - {"plasma_continuation_policy", "plasma_continuation_evidence"}
+)
+FROZEN_E03_NO_MAX_NDIV_MIGRATIONS = {
+    ("R03", "4762472"): {
+        "segment": "s00_rankio_t0_t0p5",
+        "ranks": 8,
+        "manifest": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R03/"
+                "s00_rankio_t0_t0p5/manifest/prepared_run.json"
+            ),
+            "mode": 0o644,
+            "size_bytes": 34030,
+            "sha256": "ad3428b51945d65bed2b9ddeb337f4972bdc5b6ec07ac0cd6105ae6368055444",
+        },
+        "inspection": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R03/"
+                "s00_rankio_t0_t0p5/manifest/segment_inspection.json"
+            ),
+            "mode": 0o644,
+            "size_bytes": 23551,
+            "sha256": "24de23eaac2805eb7a0aa6e1c86ee6f1f133b573c9815548052fc618c5d3a643",
+        },
+        "mhd_history": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R03/"
+                "s00_rankio_t0_t0p5/output/"
+                "E03_forcing_policy_paper_standard_active_alfvenic_beta100_"
+                "s00_rankio_t0_t0p5.mhd.hst"
+            ),
+            "mode": 0o644,
+            "size_bytes": 14145,
+            "sha256": "7cb77ecf6d756b5a64c5bb02d917a5e75482df94b67f678cc34a68e05299f5af",
+        },
+        "user_history": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R03/"
+                "s00_rankio_t0_t0p5/output/"
+                "E03_forcing_policy_paper_standard_active_alfvenic_beta100_"
+                "s00_rankio_t0_t0p5.user.hst"
+            ),
+            "mode": 0o644,
+            "size_bytes": 10621,
+            "sha256": "766a79819ad14653042f578af6aa7f0ab8feba2abf5ca640fc4009a528001551",
+        },
+        "independent_validation": {
+            "path": "accounting/4762472.stage_i.independent_validation.json",
+            "mode": 0o644,
+            "size_bytes": 24565,
+            "sha256": "da15fc8a74013fd0f13276b3421ccc827ce0319c350cf265b4548297bfa1185e",
+            "schema_version": 1,
+            "record_type": "stage-i-binary-aware-clean-partial-validation",
+        },
+        "independent_review": None,
+    },
+    ("R12", "4766856"): {
+        "segment": "s00_rankio_t0_t0p25",
+        "ranks": 32,
+        "manifest": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R12/"
+                "s00_rankio_t0_t0p25/manifest/prepared_run.json"
+            ),
+            "mode": 0o644,
+            "size_bytes": 78976,
+            "sha256": "ae1bc8256b3713dcf70ec99dde05a60d9d018650766e80ba29d49214c5e9bd19",
+        },
+        "inspection": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R12/"
+                "s00_rankio_t0_t0p25/manifest/segment_inspection.json"
+            ),
+            "mode": 0o644,
+            "size_bytes": 66333,
+            "sha256": "f901e51978a2e07d90728a10e8ca0f2c5abc393020a0c3ce8a4064ee5c914ab0",
+        },
+        "mhd_history": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R12/"
+                "s00_rankio_t0_t0p25/output/"
+                "E03_forcing_policy_paper_heat_flux_beta10_strong_"
+                "s00_rankio_t0_t0p25.mhd.hst"
+            ),
+            "mode": 0o644,
+            "size_bytes": 6936,
+            "sha256": "19f2fd19c003f644c9a53f0ba7bed5a754de46dd905d374eaf6cc65661e6d9b5",
+        },
+        "user_history": {
+            "path": (
+                "runs/mks24-stage-i/E03-forcing-policy/R12/"
+                "s00_rankio_t0_t0p25/output/"
+                "E03_forcing_policy_paper_heat_flux_beta10_strong_"
+                "s00_rankio_t0_t0p25.user.hst"
+            ),
+            "mode": 0o644,
+            "size_bytes": 5212,
+            "sha256": "06507bd49e5b10f9db2c75f8858d70187b5ea7b0ce9a6e139db35aecd45d88aa",
+        },
+        "independent_validation": {
+            "path": "accounting/4766856.stage_i.independent_validation.json",
+            "mode": 0o444,
+            "size_bytes": 278070,
+            "sha256": "1d69d1b8f6cb35928f2334336399f3f7eee07aa511bf9ef36490670fe4da27e5",
+            "schema_version": 3,
+            "record_type": "stage-i-independent-segment-validation",
+        },
+        "independent_review": {
+            "path": (
+                "accounting/4766856.stage_i.independent_validation.json."
+                "independent_review.json"
+            ),
+            "mode": 0o444,
+            "size_bytes": 5628,
+            "sha256": "45c20708e5619bcd46b3ec16f82f517c8acee415c1d2002ec0d43386c89d94f9",
+        },
+    },
+}
+FROZEN_E03_EXECUTABLE_REVISION = "9e07542281e4e6d125582f253df3ad2e3b8b154d"
+FROZEN_E03_EXECUTABLE_SHA256 = (
+    "68f243f9204df388b24365ae65a567f6f567dbe422a6d7a43b9fb4a499ef118c"
+)
+R17_MAX_NORMALIZED_CT_DIVB_TEXT = "1e-12"
+R17_SCIENTIFIC_CHECKS = {
+    "exact_endpoint": True,
+    "complete_rank_inventory": True,
+    "finite_synchronized_histories": True,
+    "mass_conserved": True,
+    "strict_lf_failure_counters_zero": True,
+    "hard_volume_zero": True,
+    "snapshot_hard_bounds_independently_verified": True,
+    "normalized_ct_divb_below_threshold": True,
+    "interval_cap_counts_valid": True,
+    "nontrivial_forcing_and_pressure_work": True,
+    "case_aware_policy_passed": True,
+    "snapshot_cadence_complete": True,
+    "terminal_snapshot_unique": True,
+    "snapshots_structurally_complete": True,
+    "restart_headers_authenticated": True,
+    "terminal_restart_unique": True,
+    "restart_load_smoke_passed": True,
+}
+INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION = (
+    "Reviewer roles, agent identifiers, and process separation are retained "
+    "declarations; exact artifact digests authenticate reviewed bytes but do not "
+    "cryptographically authenticate a human or agent identity."
+)
 ACTIVE_SCHEDULER_STATES = frozenset(
     ("PENDING", "RUNNING", "CONFIGURING", "COMPLETING", "SUSPENDED")
 )
+STRICT_LF_FAILURE_COLUMNS = (
+    "lf_dfloor",
+    "lf_pfloor",
+    "lf_nonfin",
+    "lf_nonpos",
+    "lf_hardbd",
+)
+ACCOUNT_SACCT_FIELDS = (
+    "JobIDRaw", "JobName", "State", "ExitCode", "NNodes", "ElapsedRaw",
+    "Submit", "Start", "End", "Partition", "Account", "User",
+)
+ACCOUNT_SCHEDULER_HEADER = "|".join(ACCOUNT_SACCT_FIELDS)
+ACCOUNT_MISSING_TIMESTAMPS = frozenset(("", "Unknown", "N/A", "None"))
 
 R03_F115_RELATIVE = Path(
     "accounting/"
@@ -103,12 +320,20 @@ R03_F114_SOURCE_BUNDLE_SHA256 = (
     "d94d559108470157f07981c9da8fec343a992128c0c4333df87181b81f0c505e"
 )
 R03_F114_CONTROLLER_REVISION = "c7e4fa30ea7162e4d5ce070a45dfec5b56ca2052"
+R03_F115_CONTROLLER_REVISION = "5834a91e448a69ec0df5d011b7be3fe786666806"
+R03_F115_CONTROLLER_SHA256 = (
+    "0a6b30a60ba70faf32dae722c4472e96acb38031d8c1a4b52b816fc93e58e53a"
+)
+R03_F115_SOURCE_BUNDLE = "source-archives/athenak-feature-cgl-through-5834a91e4.bundle"
+R03_F115_SOURCE_BUNDLE_SHA256 = (
+    "a6aa40f8f3350d65022be6d898d5575a60185b05bba7b72f184c3f2ebd401ec8"
+)
 F115_SOURCE_BUNDLE_REQUIRED_REVISIONS = (
     SOURCE_REVISION,
     R03_F114_CONTROLLER_REVISION,
     "b0d3e8d526d8f3b4e5977333000db24c09d4eab1",
     "38aedd2a65c3c11855721858f5dbcce20bae11e4",
-    CONTROLLER_REVISION,
+    R03_F115_CONTROLLER_REVISION,
 )
 F115_PROVENANCE_REVIEWER = {
     "agent_id": "019e9618-899e-7142-a748-ba57bf3efdd3",
@@ -149,9 +374,82 @@ F115_PLASMA_AUTHORIZATION_LIMITATIONS = {
     "sole_authorized_case": "R03",
     "sole_authorized_segment": R03_F115_SEGMENT,
 }
-ALLOCATION_AUTHORITY_RELATIVE = Path(
-    "accounting/mks24_stage_i_E03_forcing_policy_independent_wave_allocation_authority.json"
+R17_READINESS_RELATIVE = Path(
+    "accounting/mks24_stage_i_E03_forcing_policy_R17_readiness_evidence.json"
 )
+F116_CURRENT_SOURCE_AUTHORITY_RELATIVE = Path(
+    "accounting/"
+    "mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json"
+)
+F116_BRIDGE_REVISION = "36140ea825cb853b298714c27720440fdab60b9e"
+F116_BRIDGE_SHA256 = "2c2f57a166877387244dd5bb6bdf87beb12492ea075a7431939b78e5df7307a0"
+F116_BRIDGE_SOURCE_BUNDLE = "source-archives/athenak-feature-cgl-through-36140ea82.bundle"
+F116_PRODUCTION_REQUIRED_REVISIONS = (
+    SOURCE_REVISION,
+    R03_F114_CONTROLLER_REVISION,
+    "b0d3e8d526d8f3b4e5977333000db24c09d4eab1",
+    "38aedd2a65c3c11855721858f5dbcce20bae11e4",
+    R03_F115_CONTROLLER_REVISION,
+    "469d38a841ef25d5c044713071adccd55ff90fef",
+    "e1f4f4a0b62c3649b4d80a25a188b991f856ebbe",
+    F116_BRIDGE_REVISION,
+)
+F116_REQUIRED_TOOLS = {
+    "scripts/frontier/cgl_lf_stage_i.py": "0644",
+    "scripts/frontier/cgl_lf_stage_i_checkpoint.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_qualification.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_recost.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_source_authority.py": "0755",
+    "scripts/frontier/cgl_lf_stage_i_validate_segment.py": "0644",
+    "scripts/frontier/cgl_lf_stage_i_wave_plan.py": "0644",
+}
+F116_PUBLISHER_RELATIVE = "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+F116_AUTHORIZATION = {
+    "current_source_selection_authorized": True,
+    "source_authority_publication_authorized": True,
+    "prepare_authorized": False,
+    "submit_authorized": False,
+    "direct_sbatch_authorized": False,
+    "scheduler_mutation_authorized": False,
+    "stage_i_execution_state_mutation_authorized": False,
+    "scientific_configuration_change_authorized": False,
+    "historical_manifest_rebinding_authorized": False,
+}
+F116_SCOPE_PRESERVES = [
+    "The immutable F-115 evidence, reviews, publication audit, and historical R03 s02 authority.",
+    "The qualified executable, frozen source revision, inputs, matrix, restart lineages, targets, resources, qualification, and Stage I budget policy.",
+    "Every prior active source-archive checksum-ledger entry and the corrupt-C7 incident-evidence exclusion.",
+]
+F116_SCOPE_DOES_NOT_AUTHORIZE = [
+    "prepare",
+    "submit",
+    "direct sbatch",
+    "scheduler mutation",
+    "Stage I execution-state mutation",
+    "scientific configuration change",
+    "historical manifest rebinding",
+]
+F116_PUBLICATION_REQUIREMENTS = {
+    "published_evidence_mode": "0444",
+    "published_review_mode": "0444",
+    "published_audit_mode": "0444",
+    "published_links": 1,
+    "publication_audit_is_authority_commit_marker": True,
+    "recovery_required_after_interruption": True,
+}
+F116_VALIDATION_CLAIMS = {
+    "historical_f115_chain": "passed",
+    "bridge_bundle_complete_history": "passed",
+    "final_bundle_complete_history": "passed",
+    "final_bundle_single_head_tip": "passed",
+    "final_bundle_required_revisions": "passed",
+    "committed_tool_bytes": "passed",
+    "corrupt_c7_exclusion_preserved": True,
+}
+F116_PUBLICATION_METHOD = (
+    "recoverable-forward-transaction-with-publication-audit-commit-marker-under-stage-i-lock"
+)
+F116_CORRUPT_C7_NAME = "athenak-feature-cgl-through-c7e4fa30e.bundle"
 
 R03 = "R03"
 R17 = "R17"
@@ -167,6 +465,7 @@ HARDWALL_CASES = frozenset(ALL_CASES) - FINITE_LIMITER_CASES
 INITIAL_TARGETS = {
     **{case_id: Decimal("0.25") for case_id in PROFILE_CASES},
     "R06": Decimal("0.50"),
+    "R12": R12_FRESH_RERUN_TARGET,
     "R16": Decimal("1.50"),
 }
 MAX_REVIEWED_INCREMENTS = {
@@ -267,8 +566,13 @@ RESERVATION_OPTIONAL_COLUMNS = frozenset(
     ("execution_intent_sha256", "job_id", "actual_node_hours", "result", "notes")
 )
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+GIT_REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 JOB_RE = re.compile(r"^[1-9][0-9]*$")
+ACCOUNT_JOB_RE = re.compile(r"^[1-9][0-9]*(?:_[0-9]+|\+[0-9]+)?$")
 DIGITS_RE = re.compile(r"^[0-9]+$")
+RECOST_ARTIFACT_RE = re.compile(
+    r"^mks24_stage_i_E03_forcing_policy_F(?P<number>[0-9]+)_recost_evidence\.json$"
+)
 SCHEDULER_NAIVE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$")
 SEGMENT_RE = re.compile(
     r"^s(?P<index>[0-9]+)_rankio_t(?P<start>[0-9]+(?:p[0-9]+)?)"
@@ -450,6 +754,48 @@ def require_nonempty_string(value: object, label: str) -> str:
     return value
 
 
+def declared_process_independence_assurance(
+    role_agents: dict[str, str], label: str
+) -> dict[str, object]:
+    """Represent strict declared process independence without identity overclaim."""
+
+    if len(role_agents) < 2:
+        raise ValueError(f"{label} must declare at least two distinct process roles")
+    retained = {
+        require_nonempty_string(role, f"{label} role"): require_nonempty_string(
+            agent, f"{label} agent"
+        )
+        for role, agent in role_agents.items()
+    }
+    if len(retained) != len(role_agents) or len(set(retained.values())) != len(retained):
+        raise ValueError(f"{label} roles or agents are not strictly distinct")
+    return {
+        "basis": "declared-process-independence",
+        "strict_distinct_role_and_agent_declarations": True,
+        "declared_role_agents": retained,
+        "cryptographic_identity_verified": False,
+        "non_cryptographic_limitation": INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION,
+    }
+
+
+def require_git_revision(value: object, label: str) -> str:
+    """Require one exact lowercase full Git object ID."""
+
+    revision = require_nonempty_string(value, label)
+    if GIT_REVISION_RE.fullmatch(revision) is None:
+        raise ValueError(f"{label} must be a lowercase 40-hex Git revision")
+    return revision
+
+
+def require_sha256(value: object, label: str) -> str:
+    """Require one exact lowercase SHA-256 digest."""
+
+    digest = require_nonempty_string(value, label)
+    if SHA256_RE.fullmatch(digest) is None:
+        raise ValueError(f"{label} must be a lowercase SHA-256 digest")
+    return digest
+
+
 def require_utc(value: object, label: str) -> datetime:
     """Require one timezone-aware UTC timestamp."""
 
@@ -581,10 +927,6 @@ def input_path(case_id: str) -> Path:
     return normalized_path(FROZEN_SOURCE / "inputs/cgl_lf_paper" / EXPECTED_CASES[case_id][1])
 
 
-def summary_path() -> Path:
-    return expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_budget_summary.md")
-
-
 def ledger_path() -> Path:
     return expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_node_hours.csv")
 
@@ -595,14 +937,6 @@ def reservations_path() -> Path:
 
 def qualification_path() -> Path:
     return expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_qualification_approval.json")
-
-
-def profile_path() -> Path:
-    return expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_reviewed_wave_profile.json")
-
-
-def reconciliation_path() -> Path:
-    return expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_reconciliation_snapshot.json")
 
 
 def transaction_store_paths() -> tuple[Path, Path]:
@@ -639,26 +973,117 @@ def r03_f115_plasma_scientific_review_path() -> Path:
     return expected_path(f"{R03_F115_RELATIVE.as_posix()}.plasma_scientific_review.json")
 
 
-def allocation_authority_path() -> Path:
-    """Return the exact independently published allocation-authority path."""
+def f116_current_source_authority_path() -> Path:
+    """Return the exact published F-116 current-source-authority path."""
 
-    return expected_path(ALLOCATION_AUTHORITY_RELATIVE.as_posix())
-
-
-def allocation_authority_audit_path() -> Path:
-    """Return the exact allocation-authority publication-audit path."""
-
-    return expected_path(f"{ALLOCATION_AUTHORITY_RELATIVE.as_posix()}.publication_audit.json")
+    return expected_path(F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix())
 
 
-def source_bundle_path() -> Path:
-    return expected_path("source-archives/athenak-feature-cgl-through-5834a91e4.bundle")
+def f116_provenance_security_review_path() -> Path:
+    """Return the exact published F-116 provenance/security review path."""
+
+    return expected_path(
+        f"{F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix()}.provenance_security_review.json"
+    )
+
+
+def f116_plasma_scientific_review_path() -> Path:
+    """Return the exact published F-116 plasma/scientific review path."""
+
+    return expected_path(
+        f"{F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix()}.plasma_scientific_review.json"
+    )
+
+
+def f116_publication_audit_path() -> Path:
+    """Return the exact published F-116 publication-audit path."""
+
+    return expected_path(
+        f"{F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix()}.publication_audit.json"
+    )
+
+
+def promoted_source_bundle_path(controller_revision: str) -> Path:
+    """Return the exact canonical bundle path for one reviewed promoted revision."""
+
+    revision = require_git_revision(controller_revision, "promoted controller revision")
+    return expected_path(f"source-archives/athenak-feature-cgl-through-{revision[:9]}.bundle")
+
+
+def f115_source_bundle_path() -> Path:
+    """Return the exact immutable historical R03 F-115 source-bundle path."""
+
+    return expected_path(R03_F115_SOURCE_BUNDLE)
+
+
+def recost_independent_review_path(recost_path: Path) -> Path:
+    """Return one schema-2 recost artifact's exact independent-review path."""
+
+    return recost_path.with_name(f"{recost_path.name}.independent_review.json")
+
+
+def recost_publication_audit_path(recost_path: Path) -> Path:
+    """Return one schema-2 recost artifact's exact publication-audit path."""
+
+    return recost_path.with_name(f"{recost_path.name}.publication_audit.json")
+
+
+def r17_readiness_path() -> Path:
+    """Return the sole recost-compatible R17 readiness artifact path."""
+
+    return expected_path(R17_READINESS_RELATIVE.as_posix())
 
 
 def controller_repository_path() -> Path:
     """Return the exact repository containing the promoted controller helper."""
 
     return normalized_path(CONTROLLER_HELPER.parents[2])
+
+
+def require_trusted_system_executable(path: Path, label: str) -> str:
+    """Require one absolute root-owned, single-link, non-writable executable."""
+
+    path = normalized_path(path)
+    component_identity(path, label)
+    profile = path.stat()
+    mode = stat.S_IMODE(profile.st_mode)
+    if (
+        not stat.S_ISREG(profile.st_mode)
+        or profile.st_uid != 0
+        or profile.st_nlink != 1
+        or mode & 0o022
+        or mode & 0o111 == 0
+    ):
+        raise ValueError(f"{label} does not have the trusted system executable profile")
+    return str(path)
+
+
+def hardened_child_environment() -> dict[str, str]:
+    """Return a scheduler child environment without caller execution controls."""
+
+    return {
+        "HOME": "/nonexistent",
+        "LC_ALL": "C",
+        "PATH": TRUSTED_SYSTEM_PATH,
+        "XDG_CONFIG_HOME": "/nonexistent",
+    }
+
+
+def hardened_git_environment() -> dict[str, str]:
+    """Return Git's complete caller-independent execution environment."""
+
+    return {
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_SYSTEM": os.devnull,
+        "GIT_EXEC_PATH": str(GIT_EXEC_PATH),
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_TERMINAL_PROMPT": "0",
+        "HOME": "/nonexistent",
+        "LC_ALL": "C",
+        "PATH": TRUSTED_SYSTEM_PATH,
+        "XDG_CONFIG_HOME": "/nonexistent",
+    }
 
 
 def git_read_only(
@@ -669,26 +1094,16 @@ def git_read_only(
 ) -> subprocess.CompletedProcess:
     """Run one bounded, environment-sanitized, non-shell Git query."""
 
-    environment = {
-        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
-    }
-    environment.update(
-        {
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_OPTIONAL_LOCKS": "0",
-            "LC_ALL": "C",
-        }
-    )
+    git = require_trusted_system_executable(GIT, "Git executable")
     try:
         return subprocess.run(
             [
-                str(GIT), "--no-replace-objects", "-C", str(repository), *arguments
+                git, "--no-replace-objects", "-C", str(repository), *arguments
             ],
             check=False,
             stdin=subprocess.DEVNULL,
             capture_output=True,
-            env=environment,
+            env=hardened_git_environment(),
             pass_fds=(() if descriptor is None else (descriptor,)),
             timeout=60,
         )
@@ -697,36 +1112,67 @@ def git_read_only(
 
 
 def validate_source_bundle_coverage(
+    path: Path,
+    *,
+    bundle_sha256: str,
+    controller_revision: str,
+    controller_sha256: str,
+    required_revisions: Iterable[str],
     expected_evidence: dict[str, object] | None = None,
+    allow_branch_ref: bool,
+    label: str,
 ) -> dict[str, object]:
-    """Independently require a usable self-contained bundle covering F-115 revisions."""
+    """Independently require one exact usable self-contained controller bundle."""
 
-    path = source_bundle_path()
-    payload, evidence = read_stable_regular_file(path, "promoted source bundle")
-    if evidence["sha256"] != SOURCE_BUNDLE_SHA256:
-        raise ValueError("promoted source bundle digest changed")
+    path = normalized_path(path)
+    bundle_sha256 = require_sha256(bundle_sha256, f"{label} SHA-256")
+    controller_revision = require_git_revision(
+        controller_revision, f"{label} controller revision"
+    )
+    controller_sha256 = require_sha256(controller_sha256, f"{label} controller SHA-256")
+    revisions = tuple(
+        require_git_revision(revision, f"{label} required revision")
+        for revision in required_revisions
+    )
+    if not revisions or len(set(revisions)) != len(revisions):
+        raise ValueError(f"{label} required revisions are empty or duplicated")
+
+    payload, evidence = read_stable_regular_file(path, label)
+    if evidence["sha256"] != bundle_sha256:
+        raise ValueError(f"{label} digest changed")
     if expected_evidence is not None and evidence != expected_evidence:
-        raise ValueError("promoted source bundle changed before Git validation")
+        raise ValueError(f"{label} changed before Git validation")
     try:
         header = payload.split(b"\n\n", 1)[0].decode("utf-8").splitlines()
     except UnicodeDecodeError as error:
-        raise ValueError("promoted source bundle header is not UTF-8") from error
+        raise ValueError(f"{label} header is not UTF-8") from error
     if not header or header[0] not in {"# v2 git bundle", "# v3 git bundle"}:
-        raise ValueError("promoted source bundle is not a Git bundle")
+        raise ValueError(f"{label} is not a Git bundle")
     if any(line.startswith("-") for line in header[1:]):
-        raise ValueError("promoted source bundle is not self-contained")
+        raise ValueError(f"{label} is not self-contained")
     advertised_header = []
     for line in header[1:]:
         if line.startswith("@"):
             continue
         match = re.fullmatch(r"([0-9a-f]{40}) (.+)", line)
         if match is None:
-            raise ValueError("promoted source bundle advertised reference is malformed")
+            raise ValueError(f"{label} advertised reference is malformed")
         advertised_header.append((match.group(1), match.group(2)))
-    if (CONTROLLER_REVISION, "HEAD") not in advertised_header:
-        raise ValueError("promoted source bundle does not advertise the exact controller HEAD")
+    if len(advertised_header) != 1:
+        raise ValueError(f"{label} must advertise exactly one tip")
+    advertised_revision, advertised_name = advertised_header[0]
+    branch_ref = (
+        advertised_name.startswith("refs/heads/")
+        and len(advertised_name) > len("refs/heads/")
+        and not any(character.isspace() for character in advertised_name)
+    )
+    if (
+        advertised_revision != controller_revision
+        or not (advertised_name == "HEAD" or (allow_branch_ref and branch_ref))
+    ):
+        raise ValueError(f"{label} does not advertise the exact promoted controller tip")
 
-    components_before = component_identity(path, "promoted source bundle Git validation")
+    components_before = component_identity(path, f"{label} Git validation")
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
         before = os.fstat(descriptor)
@@ -736,8 +1182,8 @@ def validate_source_bundle_coverage(
             if not block:
                 break
             blocks.append(block)
-        if sha256_bytes(b"".join(blocks)) != SOURCE_BUNDLE_SHA256:
-            raise ValueError("promoted source bundle descriptor digest changed")
+        if sha256_bytes(b"".join(blocks)) != bundle_sha256:
+            raise ValueError(f"{label} descriptor digest changed")
         os.lseek(descriptor, 0, os.SEEK_SET)
         descriptor_path = f"/proc/self/fd/{descriptor}"
         repository = controller_repository_path()
@@ -745,12 +1191,12 @@ def validate_source_bundle_coverage(
             repository, ["bundle", "verify", descriptor_path], descriptor=descriptor
         )
         if verify.returncode:
-            raise ValueError("promoted source bundle fails git bundle verify")
+            raise ValueError(f"{label} fails git bundle verify")
         heads = git_read_only(
             repository, ["bundle", "list-heads", descriptor_path], descriptor=descriptor
         )
         if heads.returncode:
-            raise ValueError("promoted source bundle heads cannot be listed")
+            raise ValueError(f"{label} heads cannot be listed")
         try:
             advertised = [
                 tuple(line.split(" ", 1))
@@ -758,9 +1204,9 @@ def validate_source_bundle_coverage(
                 if line
             ]
         except UnicodeDecodeError as error:
-            raise ValueError("promoted source bundle heads are not UTF-8") from error
+            raise ValueError(f"{label} heads are not UTF-8") from error
         if advertised != advertised_header:
-            raise ValueError("promoted source bundle header and Git-advertised heads differ")
+            raise ValueError(f"{label} header and Git-advertised heads differ")
         after = os.fstat(descriptor)
     finally:
         os.close(descriptor)
@@ -769,33 +1215,33 @@ def validate_source_bundle_coverage(
         "st_mtime_ns", "st_ctime_ns",
     )
     if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
-        raise ValueError("promoted source bundle changed during Git validation")
-    if component_identity(path, "promoted source bundle Git validation") != components_before:
-        raise ValueError("promoted source bundle path changed during Git validation")
-    _, retained = read_stable_regular_file(path, "promoted source bundle")
+        raise ValueError(f"{label} changed during Git validation")
+    if component_identity(path, f"{label} Git validation") != components_before:
+        raise ValueError(f"{label} path changed during Git validation")
+    _, retained = read_stable_regular_file(path, label)
     if retained != evidence:
-        raise ValueError("promoted source bundle changed after Git validation")
+        raise ValueError(f"{label} changed after Git validation")
 
     repository = controller_repository_path()
-    for revision in F115_SOURCE_BUNDLE_REQUIRED_REVISIONS:
+    for revision in revisions:
         if git_read_only(
             repository, ["cat-file", "-e", f"{revision}^{{commit}}"]
         ).returncode:
-            raise ValueError(f"F-115 required bundle revision is unknown: {revision}")
+            raise ValueError(f"{label} required revision is unknown: {revision}")
         if git_read_only(
             repository,
-            ["merge-base", "--is-ancestor", revision, CONTROLLER_REVISION],
+            ["merge-base", "--is-ancestor", revision, controller_revision],
         ).returncode:
-            raise ValueError(f"F-115 required revision is not covered by bundle HEAD: {revision}")
+            raise ValueError(f"{label} required revision is not covered by its tip: {revision}")
     try:
         helper_relative = CONTROLLER_HELPER.relative_to(repository).as_posix()
     except ValueError as error:
-        raise ValueError("promoted controller helper is outside its repository") from error
+        raise ValueError(f"{label} controller helper is outside its repository") from error
     committed_helper = git_read_only(
-        repository, ["show", f"{CONTROLLER_REVISION}:{helper_relative}"]
+        repository, ["show", f"{controller_revision}:{helper_relative}"]
     )
-    if committed_helper.returncode or sha256_bytes(committed_helper.stdout) != CONTROLLER_SHA256:
-        raise ValueError("bundle HEAD does not bind the promoted controller helper bytes")
+    if committed_helper.returncode or sha256_bytes(committed_helper.stdout) != controller_sha256:
+        raise ValueError(f"{label} tip does not bind the declared controller helper bytes")
     return {
         "evidence": evidence,
         "git_bundle_verify": "passed",
@@ -803,9 +1249,26 @@ def validate_source_bundle_coverage(
         "advertised_heads": [
             {"revision": revision, "name": name} for revision, name in advertised
         ],
-        "required_revisions": list(F115_SOURCE_BUNDLE_REQUIRED_REVISIONS),
-        "committed_controller_helper_sha256": CONTROLLER_SHA256,
+        "required_revisions": list(revisions),
+        "committed_controller_helper_sha256": controller_sha256,
     }
+
+
+def validate_f115_source_bundle_coverage(
+    expected_evidence: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Require the immutable historical R03 F-115 bundle and its exact HEAD."""
+
+    return validate_source_bundle_coverage(
+        f115_source_bundle_path(),
+        bundle_sha256=R03_F115_SOURCE_BUNDLE_SHA256,
+        controller_revision=R03_F115_CONTROLLER_REVISION,
+        controller_sha256=R03_F115_CONTROLLER_SHA256,
+        required_revisions=F115_SOURCE_BUNDLE_REQUIRED_REVISIONS,
+        expected_evidence=expected_evidence,
+        allow_branch_ref=False,
+        label="R03 F-115 source bundle",
+    )
 
 
 def executable_path() -> Path:
@@ -1011,61 +1474,63 @@ def validate_matrix(
 
 
 def validate_static_provenance(
-    profile: dict[str, object],
+    recost: dict[str, object],
     matrix_evidence: dict[str, object],
     input_evidence: dict[str, dict[str, object]],
 ) -> dict[str, object]:
-    """Authenticate the promoted helper/source/build and qualification records."""
+    """Authenticate current promoted identity from the reviewed schema-2 recost."""
 
-    provenance = profile["provenance"]
+    provenance = recost.get("provenance")
     if not isinstance(provenance, dict):
-        raise ValueError("profile provenance must be an object")
-    expected_provenance = {
-        "controller_revision": CONTROLLER_REVISION,
-        "controller_sha256": CONTROLLER_SHA256,
-        "source_revision": SOURCE_REVISION,
-        "matrix_sha256": MATRIX_SHA256,
-        "source_bundle_sha256": SOURCE_BUNDLE_SHA256,
-        "executable_revision": SOURCE_REVISION,
-        "executable_sha256": EXECUTABLE_SHA256,
-        "build_manifest": str(build_manifest_path()),
+        raise ValueError("recost provenance must be an object")
+    required = {
+        "generator_sha256",
+        "generator_revision",
+        "stage_i_helper_sha256",
+        "stage_i_helper_revision",
+        "matrix_sha256",
+        "matrix_revision",
+        "source_bundle_sha256",
+        "source_bundle_verified_revisions",
+        "source_authority",
+        "qualification_approval_sha256",
     }
-    if provenance != expected_provenance:
-        raise ValueError("profile provenance differs from the promoted production identity")
+    if not required.issubset(provenance):
+        raise ValueError("recost provenance omits current promoted identity")
+    current_source = validate_f116_current_source_authority(provenance["source_authority"])
+    controller_helper = current_source["controller_helper"]
+    generator = current_source["generator"]
+    matrix_identity = current_source["matrix"]
+    source_bundle = current_source["source_bundle"]
+    controller_revision = controller_helper["revision"]
+    controller_sha256 = controller_helper["sha256"]
+    generator_revision = generator["revision"]
+    matrix_revision = matrix_identity["revision"]
+    source_bundle_sha256 = source_bundle["sha256"]
+    revisions = tuple(source_bundle["verified_revisions"])
+    if provenance["matrix_sha256"] != MATRIX_SHA256 or matrix_evidence["sha256"] != MATRIX_SHA256:
+        raise ValueError("recost matrix identity differs from the frozen Stage I matrix")
+    if (
+        provenance["stage_i_helper_revision"] != controller_revision
+        or provenance["stage_i_helper_sha256"] != controller_sha256
+        or provenance["generator_revision"] != generator_revision
+        or provenance["generator_sha256"] != generator["sha256"]
+        or provenance["matrix_revision"] != matrix_revision
+        or provenance["matrix_sha256"] != matrix_identity["sha256"]
+        or provenance["source_bundle_sha256"] != source_bundle_sha256
+        or provenance["source_bundle_verified_revisions"] != list(revisions)
+    ):
+        raise ValueError("recost current-source identity differs from F116 authority")
 
-    bindings = profile["evidence"]
-    if not isinstance(bindings, dict):
-        raise ValueError("profile evidence must be an object")
-    require_exact_keys(
-        bindings,
-        (
-            "matrix", "summary", "reconciliation", "ledger", "reservations",
-            "qualification", "controller_helper", "source_bundle", "executable",
-            "build_manifest", "inputs", "manifests",
-        ),
-        "profile evidence",
-    )
-    validate_binding(bindings["matrix"], matrix_evidence, frozen_matrix_path(), "matrix")
-
-    _, helper_evidence = read_stable_regular_file(CONTROLLER_HELPER, "promoted controller helper")
-    if helper_evidence["sha256"] != CONTROLLER_SHA256:
-        raise ValueError("promoted controller helper digest changed")
-    validate_binding(bindings["controller_helper"], helper_evidence, CONTROLLER_HELPER, "controller helper")
-
-    _, bundle_evidence = read_stable_regular_file(source_bundle_path(), "promoted source bundle")
-    if bundle_evidence["sha256"] != SOURCE_BUNDLE_SHA256:
-        raise ValueError("promoted source bundle digest changed")
-    validate_binding(bindings["source_bundle"], bundle_evidence, source_bundle_path(), "source bundle")
-    bundle_validation = validate_source_bundle_coverage(bundle_evidence)
+    repository = controller_repository_path()
+    matrix_relative = "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
+    committed_matrix = git_read_only(repository, ["show", f"{matrix_revision}:{matrix_relative}"])
+    if committed_matrix.returncode or sha256_bytes(committed_matrix.stdout) != MATRIX_SHA256:
+        raise ValueError("recost matrix revision does not bind the frozen matrix bytes")
 
     _, executable_evidence = read_stable_regular_file(executable_path(), "qualified executable")
     if executable_evidence["sha256"] != EXECUTABLE_SHA256:
         raise ValueError("qualified executable digest changed")
-    validate_binding(bindings["executable"], executable_evidence, executable_path(), "executable")
-
-    build_bindings = bindings["build_manifest"]
-    if not isinstance(build_bindings, dict) or set(build_bindings) != set(BUILD_FILE_SHA256):
-        raise ValueError("build-manifest evidence is incomplete")
     build_evidence: dict[str, dict[str, object]] = {}
     build_payloads: dict[str, bytes] = {}
     for filename, digest in BUILD_FILE_SHA256.items():
@@ -1073,7 +1538,6 @@ def validate_static_provenance(
         payload, retained = read_stable_regular_file(path, f"build manifest {filename}")
         if retained["sha256"] != digest:
             raise ValueError(f"build manifest {filename} digest changed")
-        validate_binding(build_bindings[filename], retained, path, f"build manifest {filename}")
         build_evidence[filename] = retained
         build_payloads[filename] = payload
     if build_payloads["athena.sha256"].decode("utf-8").split()[0] != EXECUTABLE_SHA256:
@@ -1087,11 +1551,9 @@ def validate_static_provenance(
     qualification, qualification_evidence = read_json_file(
         qualification_path(), "qualification approval"
     )
-    validate_binding(
-        bindings["qualification"], qualification_evidence, qualification_path(), "qualification"
-    )
     if (
-        qualification.get("schema_version") != 1
+        qualification_evidence["sha256"] != provenance["qualification_approval_sha256"]
+        or qualification.get("schema_version") != 1
         or qualification.get("execution_epoch") != EXECUTION_EPOCH
         or qualification.get("approved_executable") != str(executable_path())
         or qualification.get("approved_executable_revision") != SOURCE_REVISION
@@ -1100,29 +1562,26 @@ def validate_static_provenance(
     ):
         raise ValueError("qualification approval differs from the promoted build")
 
-    input_bindings = bindings["inputs"]
-    if not isinstance(input_bindings, dict) or set(input_bindings) != set(ALL_CASES):
-        raise ValueError("profile input evidence differs from the exact R02-R17 set")
-    for case_id in ALL_CASES:
-        validate_binding(
-            input_bindings[case_id], input_evidence[case_id], input_path(case_id),
-            f"{case_id} frozen input",
-        )
     return {
         "controller_helper": {
             "path": str(CONTROLLER_HELPER),
-            "revision": CONTROLLER_REVISION,
-            "sha256": CONTROLLER_SHA256,
-            "evidence": helper_evidence,
+            "revision": controller_revision,
+            "sha256": controller_sha256,
+            "evidence": controller_helper["evidence"],
         },
         "source_revision": SOURCE_REVISION,
         "source_bundle": {
-            "path": str(source_bundle_path()),
-            "sha256": SOURCE_BUNDLE_SHA256,
-            "verified_revisions": list(F115_SOURCE_BUNDLE_REQUIRED_REVISIONS),
-            "evidence": bundle_evidence,
-            "independent_validation": bundle_validation,
+            "path": source_bundle["path"],
+            "sha256": source_bundle_sha256,
+            "verified_revisions": list(revisions),
+            "evidence": source_bundle["evidence"],
+            "independent_validation": source_bundle["independent_validation"],
         },
+        "current_source_authority": provenance["source_authority"],
+        "current_source_authority_evidence": current_source["authority_evidence"],
+        "current_source_authority_review_assurance": current_source[
+            "independent_review_assurance"
+        ],
         "matrix": matrix_evidence,
         "executable": {
             "path": str(executable_path()),
@@ -1284,16 +1743,18 @@ def collect_live_scheduler_job(job_id: str) -> dict[str, object]:
 
     if JOB_RE.fullmatch(job_id) is None:
         raise ValueError("live scheduler query has invalid job ID")
+    squeue = require_trusted_system_executable(SQUEUE, "squeue executable")
     try:
         completed = subprocess.run(
             [
-                str(SQUEUE), "-j", job_id, "-h",
+                squeue, "-j", job_id, "-h",
                 "-t", ",".join(sorted(ACTIVE_SCHEDULER_STATES)),
                 "-o", "%i|%j|%T|%D|%u|%a",
             ],
             check=True,
             capture_output=True,
             text=True,
+            env=hardened_child_environment(),
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise ValueError(f"live squeue query failed for job {job_id}") from error
@@ -1331,11 +1792,13 @@ def collect_live_batch_script(job_id: str) -> bytes:
 
     if JOB_RE.fullmatch(job_id) is None:
         raise ValueError("scheduler batch-script query has invalid job ID")
+    scontrol = require_trusted_system_executable(SCONTROL, "scontrol executable")
     try:
         completed = subprocess.run(
-            [str(SCONTROL), "write", "batch_script", job_id, "-"],
+            [scontrol, "write", "batch_script", job_id, "-"],
             check=True,
             capture_output=True,
+            env=hardened_child_environment(),
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise ValueError(f"Slurm batch-script query failed for job {job_id}") from error
@@ -1423,6 +1886,7 @@ def validate_manifest(
     manifest: dict[str, object],
     evidence: dict[str, object],
     cases: dict[str, dict[str, object]],
+    promoted: dict[str, object],
 ) -> dict[str, object]:
     """Validate one canonical manifest sufficiently for read-only wave planning."""
 
@@ -1495,17 +1959,19 @@ def validate_manifest(
     if state in {"prepared", "submitted"}:
         utility = command.get("production_utility")
         bundle = command.get("source_bundle")
+        promoted_helper = promoted["controller_helper"]
+        promoted_bundle = promoted["source_bundle"]
         if utility != {
             "committed": True,
             "path": str(CONTROLLER_HELPER),
-            "revision": CONTROLLER_REVISION,
-            "sha256": CONTROLLER_SHA256,
+            "revision": promoted_helper["revision"],
+            "sha256": promoted_helper["sha256"],
         }:
             raise ValueError(f"{case_id}/{segment} active helper provenance is not promoted")
         if not isinstance(bundle, dict) or (
-            bundle.get("path") != str(source_bundle_path())
-            or bundle.get("sha256") != SOURCE_BUNDLE_SHA256
-            or bundle.get("verified_revisions") != [SOURCE_REVISION, CONTROLLER_REVISION]
+            bundle.get("path") != promoted_bundle["path"]
+            or bundle.get("sha256") != promoted_bundle["sha256"]
+            or bundle.get("verified_revisions") != promoted_bundle["verified_revisions"]
         ):
             raise ValueError(f"{case_id}/{segment} active source-bundle provenance is not promoted")
     return {
@@ -1686,6 +2152,9 @@ def terminal_restart(info: dict[str, object]) -> dict[str, object]:
         label=f"{info['case_id']}/{info['segment']}",
     )
     result = {"parent_manifest": info["evidence"], **validated}
+    continuation_evidence = info.get("clean_partial_continuation_evidence")
+    if isinstance(continuation_evidence, dict):
+        result["clean_partial_continuation_evidence"] = continuation_evidence
     info["restart_validation"] = result
     return result
 
@@ -1723,18 +2192,876 @@ def validate_parent_link(current: dict[str, object], prior: dict[str, object]) -
         raise ValueError(f"{current['case_id']}/{current['segment']} start token differs from its parent")
 
 
+def authenticate_controller_retained_file(
+    value: object, label: str
+) -> tuple[bytes, dict[str, object]]:
+    """Authenticate one exact file record emitted by the production controller."""
+
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} record must be an object")
+    require_exact_keys(value, ("path", "size_bytes", "sha256"), f"{label} record")
+    path = normalized_path(Path(require_nonempty_string(value["path"], f"{label} path")))
+    payload, evidence = read_stable_regular_file(path, label)
+    if (
+        value["sha256"] != evidence["sha256"]
+        or value["size_bytes"] != evidence["size_bytes"]
+    ):
+        raise ValueError(f"{label} bytes differ from retained controller metadata")
+    return payload, evidence
+
+
+def authenticate_controller_product(
+    value: object, root: Path, expected_ranks: int, label: str
+) -> list[dict[str, object]]:
+    """Authenticate one exact rank-local product record emitted by the controller."""
+
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} product must be an object")
+    require_exact_keys(
+        value,
+        ("path", "size_bytes", "sha256", "storage", "rank_files"),
+        f"{label} product",
+    )
+    rank_files = value["rank_files"]
+    if value["storage"] != "per_rank" or not isinstance(rank_files, list):
+        raise ValueError(f"{label} is not an exact rank-local controller product")
+    if len(rank_files) != expected_ranks:
+        raise ValueError(f"{label} rank-local inventory is incomplete")
+    retained = []
+    common_name = None
+    for rank, item in enumerate(rank_files):
+        _, evidence = authenticate_controller_retained_file(item, f"{label} rank {rank}")
+        path = normalized_path(Path(str(evidence["path"])))
+        if path.parent != root / f"rank_{rank:08d}":
+            raise ValueError(f"{label} rank-local path inventory differs")
+        if common_name is None:
+            common_name = path.name
+        elif path.name != common_name:
+            raise ValueError(f"{label} rank-local file names disagree")
+        retained.append({key: item[key] for key in ("path", "size_bytes", "sha256")})
+    if any(value[key] != retained[0][key] for key in ("path", "size_bytes", "sha256")):
+        raise ValueError(f"{label} representative differs from rank zero")
+    return retained
+
+
+def parse_controller_history(payload: bytes, label: str) -> dict[str, list[float]]:
+    """Parse exact finite Athena history bytes using the controller's grammar."""
+
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{label} is not UTF-8") from error
+    labels: list[str] = []
+    rows: list[list[float]] = []
+    for line in text.splitlines():
+        if line.startswith("#"):
+            found = re.findall(r"\[(\d+)\]=([^\s]+)", line)
+            if found:
+                indices = [int(index) for index, _ in found]
+                candidate = [name for _, name in found]
+                if (
+                    indices != list(range(1, len(candidate) + 1))
+                    or len(candidate) != len(set(candidate))
+                    or (labels and candidate != labels)
+                ):
+                    raise ValueError(f"{label} labels are ambiguous or invalid")
+                labels = candidate
+            continue
+        elif line.strip():
+            try:
+                rows.append([float(value) for value in line.split()])
+            except ValueError as error:
+                raise ValueError(f"{label} contains a nonnumeric row") from error
+    if (
+        not labels
+        or len(labels) != len(set(labels))
+        or not rows
+        or any(len(row) != len(labels) for row in rows)
+        or any(not math.isfinite(value) for row in rows for value in row)
+    ):
+        raise ValueError(f"{label} is incomplete or non-finite")
+    return {
+        name: [row[index] for row in rows] for index, name in enumerate(labels)
+    }
+
+
+def continuation_plasma_evidence(
+    case_id: str,
+    mhd: dict[str, list[float]],
+    user: dict[str, list[float]],
+    *,
+    allow_frozen_e03_no_max_ndiv: bool = False,
+) -> dict[str, object]:
+    """Reproduce the controller's complete clean-partial plasma policy evidence."""
+
+    mhd_required = {
+        "time", "mass", "tot-E", "lf_nstage", "lf_qface", "lf_qprcap",
+        "lf_qpr10", "lf_qpecap", "lf_qpe10", "lf_qprwrk", "lf_qpewrk",
+        "lf_cpwrk", "lf_cawrk", "lf_hwproj", *STRICT_LF_FAILURE_COLUMNS,
+    }
+    user_required = {"time", "mass", "hard_vol", "force_work"}
+    missing_mhd = sorted(mhd_required - set(mhd))
+    missing_user = sorted(user_required - set(user))
+    if missing_mhd or missing_user:
+        raise ValueError(
+            "continuation histories lack required plasma columns: "
+            f"MHD={missing_mhd}, user={missing_user}"
+        )
+    has_max_ndiv = "max_ndiv" in user
+    if not has_max_ndiv and not allow_frozen_e03_no_max_ndiv:
+        raise ValueError(
+            "continuation normalized CT divB is irreducibly unavailable for the "
+            "qualified historical E03 executable: user history lacks max_ndiv, "
+            "retained mhd_w_bcc snapshots are cell-centered, and retained restart "
+            "face fields have no authenticated CT-divergence interpretation"
+        )
+    lengths = {len(values) for values in [*mhd.values(), *user.values()]}
+    if len(lengths) != 1 or not lengths or next(iter(lengths)) < 2:
+        raise ValueError("continuation histories have inconsistent or insufficient rows")
+    if mhd["time"] != user["time"] or any(
+        right <= left for left, right in zip(mhd["time"], mhd["time"][1:])
+    ):
+        raise ValueError("continuation histories are not exactly synchronized and monotonic")
+    floor = 1.0e-30
+
+    def relative_drift(values: list[float]) -> float:
+        return max(abs(value - values[0]) for value in values) / max(
+            abs(values[0]), floor
+        )
+
+    mhd_mass_drift = relative_drift(mhd["mass"])
+    user_mass_drift = relative_drift(user["mass"])
+    mass_mismatch = max(
+        abs(left - right) / max(abs(left), abs(right), floor)
+        for left, right in zip(mhd["mass"], user["mass"])
+    )
+    maximum_divb = max(user["max_ndiv"]) if has_max_ndiv else None
+    if (
+        mhd_mass_drift > CONTINUATION_MASS_TOLERANCE
+        or user_mass_drift > CONTINUATION_MASS_TOLERANCE
+        or mass_mismatch > CONTINUATION_MASS_TOLERANCE
+    ):
+        raise ValueError("continuation mass conservation exceeds accepted policy")
+    if maximum_divb is not None and (
+        maximum_divb < 0.0 or maximum_divb >= CONTINUATION_MAX_NORMALIZED_CT_DIVB
+    ):
+        raise ValueError("continuation normalized CT divB exceeds accepted policy")
+    if any(value != 0.0 for value in user["hard_vol"]):
+        raise ValueError("continuation hard_vol is nonzero")
+    strict_maxima = {name: max(mhd[name]) for name in STRICT_LF_FAILURE_COLUMNS}
+    if any(value != 0.0 for name in STRICT_LF_FAILURE_COLUMNS for value in mhd[name]):
+        raise ValueError("continuation strict LF failure counter is nonzero")
+    count_columns = [
+        "lf_nstage", "lf_qface", "lf_qprcap", "lf_qpr10", "lf_qpecap",
+        "lf_qpe10", "lf_hwproj",
+        *[name for name in ("lf_mirror", "lf_firehs") if name in mhd],
+    ]
+    for name in count_columns:
+        values = mhd[name]
+        if (
+            any(value < 0.0 or not value.is_integer() for value in values)
+            or any(right < left for left, right in zip(values, values[1:]))
+        ):
+            raise ValueError(f"continuation {name} violates count policy")
+    for name in ("lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10"):
+        if any(value > qface for value, qface in zip(mhd[name], mhd["lf_qface"])):
+            raise ValueError(f"continuation {name} exceeds lf_qface")
+        if any(
+            right - left > qright - qleft
+            for left, right, qleft, qright in zip(
+                mhd[name], mhd[name][1:], mhd["lf_qface"], mhd["lf_qface"][1:]
+            )
+        ):
+            raise ValueError(f"continuation {name} increment exceeds lf_qface")
+    if (
+        mhd["lf_nstage"][-1] <= mhd["lf_nstage"][0]
+        or mhd["lf_qface"][-1] <= mhd["lf_qface"][0]
+    ):
+        raise ValueError("continuation LF stage or qface diagnostics did not advance")
+    state_scale = max(abs(mhd["tot-E"][0]), abs(mhd["tot-E"][-1]), floor)
+
+    def activity(delta: float, label: str) -> dict[str, float]:
+        absolute = abs(delta)
+        normalized = absolute / state_scale
+        if (
+            absolute <= CONTINUATION_ACTIVITY_ABSOLUTE_GT
+            or normalized <= CONTINUATION_ACTIVITY_NORMALIZED_GT
+        ):
+            raise ValueError(f"continuation {label} did not exceed accepted policy")
+        return {
+            "delta": delta,
+            "absolute": absolute,
+            "state_normalized": normalized,
+        }
+
+    forcing = activity(
+        user["force_work"][-1] - user["force_work"][0], "forcing work"
+    )
+    passive = case_id in PASSIVE_CASES
+    finite_limiter = case_id in FINITE_LIMITER_CASES
+    if passive:
+        if any(value != 0.0 for name in ("lf_cpwrk", "lf_cawrk") for value in mhd[name]):
+            raise ValueError("passive continuation contains pressure-work feedback")
+        pressure_activity = None
+        closure = None
+    else:
+        pressure_delta = max(
+            (
+                mhd[name][-1] - mhd[name][0]
+                for name in ("lf_cpwrk", "lf_cawrk")
+            ),
+            key=abs,
+        )
+        pressure_activity = activity(pressure_delta, "active pressure work")
+        delta_energy = mhd["tot-E"][-1] - mhd["tot-E"][0]
+        delta_force = user["force_work"][-1] - user["force_work"][0]
+        closure = abs(delta_energy - delta_force) / max(
+            abs(delta_energy), abs(delta_force), floor
+        )
+        if closure >= 1.0e-8:
+            raise ValueError("continuation forcing-work closure exceeds accepted policy")
+    if finite_limiter and any(value != 0.0 for value in mhd["lf_hwproj"]):
+        raise ValueError("finite-limiter continuation contains hardwall projections")
+    evidence = {
+        "schema_version": 2,
+        "policy": CONTINUATION_PLASMA_POLICY,
+        "case_id": case_id,
+        "continuation_authorized": True,
+        "checks": {
+            "finite_synchronized_histories": True,
+            "mass_conservation": True,
+            "normalized_ct_divb": True,
+            "strict_lf_policy": True,
+            "forcing_policy": True,
+            "pressure_feedback_policy": True,
+            "limiter_policy": True,
+        },
+        "normalized_ct_divb_evidence": {
+            "source": "authenticated user history max_ndiv",
+            "comparison": "strictly-less-than",
+            "threshold": CONTINUATION_MAX_NORMALIZED_CT_DIVB,
+            "maximum": maximum_divb,
+            "passed": True,
+        },
+        "measurements": {
+            "mhd_mass_relative_drift": mhd_mass_drift,
+            "user_mass_relative_drift": user_mass_drift,
+            "mhd_user_mass_relative_mismatch": mass_mismatch,
+            "normalized_ct_divb_max": maximum_divb,
+            "strict_lf_maxima": strict_maxima,
+            "forcing_activity": forcing,
+            "pressure_activity": pressure_activity,
+            "forcing_work_closure_normalized_residual": closure,
+            "final_hardwall_projection_count": mhd["lf_hwproj"][-1],
+        },
+    }
+    if maximum_divb is None:
+        evidence["checks"]["normalized_ct_divb"] = False
+        evidence["normalized_ct_divb_evidence"] = None
+        evidence["measurements"]["normalized_ct_divb_max"] = None
+    return evidence
+
+
+def read_frozen_e03_migration_binding(
+    binding: dict[str, object], label: str
+) -> tuple[Path, bytes, dict[str, object]]:
+    """Read one exact owner-controlled frozen-E03 migration artifact."""
+
+    if not isinstance(binding, dict):
+        raise ValueError(f"{label} binding is invalid")
+    relative_text = require_nonempty_string(binding.get("path"), f"{label} path")
+    relative = Path(relative_text)
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or relative.as_posix() != relative_text
+    ):
+        raise ValueError(f"{label} path is not normalized and root-relative")
+    mode = binding.get("mode")
+    size_bytes = binding.get("size_bytes")
+    expected_sha256 = require_sha256(binding.get("sha256"), f"{label} SHA-256")
+    if (
+        isinstance(mode, bool)
+        or not isinstance(mode, int)
+        or isinstance(size_bytes, bool)
+        or not isinstance(size_bytes, int)
+        or size_bytes < 1
+    ):
+        raise ValueError(f"{label} binding is invalid")
+    path = expected_path(relative_text)
+    retained, profile = read_stable_regular_file(path, label)
+    if (
+        profile["mode"] != f"{mode:04o}"
+        or profile["size_bytes"] != size_bytes
+        or profile["sha256"] != expected_sha256
+    ):
+        raise ValueError(f"{label} differs from the controller migration binding")
+    return path, retained, {
+        "path": str(path),
+        "sha256": expected_sha256,
+        "size_bytes": size_bytes,
+        "mode": f"{mode:04o}",
+        "links": 1,
+    }
+
+
+def read_frozen_e03_migration_json(
+    binding: dict[str, object], label: str
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Read and decode one exact JSON frozen-E03 migration artifact."""
+
+    _, payload, public_binding = read_frozen_e03_migration_binding(binding, label)
+    try:
+        value = json.loads(
+            payload.decode("utf-8"), object_pairs_hook=duplicate_rejecting_object
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise ValueError(f"{label} is not unambiguous UTF-8 JSON") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must contain an object")
+    return value, public_binding
+
+
+def validate_frozen_e03_independent_validation(
+    contract: dict[str, object],
+    validation: dict[str, object],
+    review: dict[str, object] | None,
+    bindings: dict[str, dict[str, object] | None],
+) -> None:
+    """Require the controller/recost exact independent migration validation."""
+
+    manifest = contract["manifest"]
+    inspection = contract["inspection"]
+    validation_contract = contract["independent_validation"]
+    if not all(
+        isinstance(item, dict)
+        for item in (manifest, inspection, validation_contract)
+    ):
+        raise ValueError("frozen-E03 migration contract differs")
+    case_id = str(contract["case_id"])
+    job_id = str(contract["job_id"])
+    segment = str(contract["segment"])
+    expected_common = {
+        "case_id": case_id,
+        "job_id": job_id,
+        "segment": segment,
+        "schema_version": validation_contract["schema_version"],
+        "record_type": validation_contract["record_type"],
+        "validation_accepted": True,
+        "inspection_sha256": inspection["sha256"],
+    }
+    if any(validation.get(key) != value for key, value in expected_common.items()):
+        raise ValueError("frozen-E03 independent validation differs")
+    product_sha256 = validation.get("product_sha256")
+    product_sizes = validation.get("product_sizes")
+    if not isinstance(product_sha256, dict) or not isinstance(product_sizes, dict):
+        raise ValueError("frozen-E03 independent validation lacks product inventory")
+    for key in ("mhd_history", "user_history"):
+        history = bindings.get(key)
+        if (
+            not isinstance(history, dict)
+            or product_sha256.get(history["path"]) != history["sha256"]
+            or product_sizes.get(history["path"]) != history["size_bytes"]
+        ):
+            raise ValueError("frozen-E03 independent validation history binding differs")
+    if validation.get("strict_failure_maxima") != {
+        name: 0 for name in STRICT_LF_FAILURE_COLUMNS
+    }:
+        raise ValueError("frozen-E03 independent validation strict LF evidence differs")
+    if case_id == "R03":
+        if (
+            validation.get("clean_for_continuation") is not True
+            or validation.get("formal_inspection_accepted") is not False
+            or validation.get("product_count") != validation.get("expected_product_count")
+            or review is not None
+        ):
+            raise ValueError("R03 frozen-E03 migration validation differs")
+        return
+    executable = {
+        "revision": FROZEN_E03_EXECUTABLE_REVISION,
+        "sha256": FROZEN_E03_EXECUTABLE_SHA256,
+    }
+    expected_ct = {
+        "authorizing": False,
+        "executable_revision": executable["revision"],
+        "executable_sha256": executable["sha256"],
+        "reason": FROZEN_E03_CT_DIVERGENCE_REASON,
+        "status": "historically_unavailable",
+    }
+    expected_face = {
+        "authorizing": False,
+        "reason": (
+            "native restart values are fully finite-decoded, but face-centered "
+            "magnetic fields are not independently interpreted for CT divergence"
+        ),
+        "status": "unavailable",
+    }
+    independent = validation.get("independent_authorization")
+    if (
+        validation.get("record_role") != "historical_read_only_non_authorizing"
+        or validation.get("authorization_effect") != "none"
+        or validation.get("normalized_ct_divb_validation") != expected_ct
+        or validation.get("restart_face_field_validation") != expected_face
+        or not isinstance(independent, dict)
+        or independent.get("authorizing") is not False
+        or independent.get("status") != "non_authorizing"
+        or not isinstance(review, dict)
+    ):
+        raise ValueError("R12 frozen-E03 migration validation differs")
+    reviewed = review.get("reviewed_validation")
+    verified = review.get("verified_validation")
+    validation_binding = bindings.get("independent_validation")
+    if (
+        review.get("schema_version") != 1
+        or review.get("record_type")
+        != "stage-i-independent-segment-validation-independent-review"
+        or review.get("case_id") != case_id
+        or review.get("job_id") != job_id
+        or review.get("segment") != segment
+        or review.get("validation_accepted") is not True
+        or review.get("decision") != "approved-for-publication"
+        or not isinstance(reviewed, dict)
+        or not isinstance(validation_binding, dict)
+        or reviewed.get("sha256") != validation_binding["sha256"]
+        or not isinstance(verified, dict)
+        or verified.get("case_id") != case_id
+        or verified.get("job_id") != job_id
+        or verified.get("segment") != segment
+        or verified.get("inspection_sha256") != inspection["sha256"]
+        or verified.get("validation_accepted") is not True
+        or verified.get("non_authorizing") is not True
+        or verified.get("authorization_effect") != "none"
+    ):
+        raise ValueError("R12 frozen-E03 independent review binding differs")
+
+
+def require_frozen_e03_no_max_ndiv_migration(
+    info: dict[str, object],
+    inspection: dict[str, object],
+    mhd: dict[str, list[float]],
+    user: dict[str, list[float]],
+    expected_ranks: int,
+) -> dict[str, object]:
+    """Reproduce the controller/recost exact retained R03/R12 migration."""
+
+    case_id = str(info["case_id"])
+    segment = str(info["segment"])
+    manifest = info["manifest"]
+    job_id = str(manifest.get("job_id", ""))
+    retained_contract = FROZEN_E03_NO_MAX_NDIV_MIGRATIONS.get((case_id, job_id))
+    if retained_contract is None:
+        raise ValueError(
+            f"manifest {job_id} is not eligible for frozen-E03 no-max_ndiv migration"
+        )
+    contract = {**retained_contract, "case_id": case_id, "job_id": job_id}
+    command = manifest.get("command")
+    run = manifest.get("run")
+    allocation = manifest.get("allocation")
+    accounting = manifest.get("accounting")
+    if (
+        manifest.get("project_root") != str(CANONICAL_ROOT)
+        or manifest.get("execution_epoch") != EXECUTION_EPOCH
+        or manifest.get("state") != "recorded"
+        or not isinstance(command, dict)
+        or command.get("executable_revision") != FROZEN_E03_EXECUTABLE_REVISION
+        or command.get("executable_sha256") != FROZEN_E03_EXECUTABLE_SHA256
+        or not isinstance(run, dict)
+        or run.get("case_id") != case_id
+        or run.get("segment") != segment
+        or segment != contract["segment"]
+        or not isinstance(allocation, dict)
+        or allocation.get("nodes") * RANKS_PER_NODE != expected_ranks
+        or expected_ranks != contract["ranks"]
+        or not isinstance(accounting, dict)
+        or accounting.get("result") != "clean_partial"
+        or accounting.get("job_id") != job_id
+        or "max_ndiv" in user
+    ):
+        raise ValueError(
+            f"manifest {job_id} frozen-E03 no-max_ndiv migration provenance differs"
+        )
+    exact_manifest, manifest_binding = read_frozen_e03_migration_json(
+        contract["manifest"], "frozen-E03 migration manifest"
+    )
+    exact_inspection, inspection_binding = read_frozen_e03_migration_json(
+        contract["inspection"], "frozen-E03 migration inspection"
+    )
+    retained_manifest = {
+        key: value for key, value in manifest.items() if not key.startswith("_")
+    }
+    if exact_manifest != retained_manifest or exact_inspection != inspection:
+        raise ValueError("frozen-E03 migration manifest or inspection bytes differ")
+    if (
+        exact_manifest.get("scientific_inspection") != exact_inspection
+        or set(inspection) != FROZEN_E03_NO_MAX_NDIV_INSPECTION_KEYS
+        or inspection.get("checks") != FROZEN_E03_NO_MAX_NDIV_CHECKS
+        or inspection.get("manifest") != manifest_binding["path"]
+        or normalized_path(Path(str(info["path"]))) != Path(manifest_binding["path"])
+    ):
+        raise ValueError("frozen-E03 migration inspection identity differs")
+    bindings: dict[str, dict[str, object] | None] = {
+        "manifest": manifest_binding,
+        "inspection": inspection_binding,
+    }
+    histories = {"mhd_history": mhd, "user_history": user}
+    for key in histories:
+        path, payload, public_binding = read_frozen_e03_migration_binding(
+            contract[key], f"frozen-E03 migration {key}"
+        )
+        bindings[key] = public_binding
+        if (
+            inspection.get(key)
+            != {
+                "path": str(path),
+                "size_bytes": public_binding["size_bytes"],
+                "sha256": public_binding["sha256"],
+            }
+            or parse_controller_history(payload, f"frozen-E03 migration {key}")
+            != histories[key]
+        ):
+            raise ValueError(f"frozen-E03 migration {key} binding differs")
+    validation, validation_binding = read_frozen_e03_migration_json(
+        contract["independent_validation"],
+        "frozen-E03 migration independent validation",
+    )
+    bindings["independent_validation"] = validation_binding
+    review_contract = contract["independent_review"]
+    if review_contract is None:
+        review = None
+        bindings["independent_review"] = None
+    else:
+        if not isinstance(review_contract, dict):
+            raise ValueError("frozen-E03 migration independent review differs")
+        review, review_binding = read_frozen_e03_migration_json(
+            review_contract, "frozen-E03 migration independent review"
+        )
+        bindings["independent_review"] = review_binding
+    validate_frozen_e03_independent_validation(contract, validation, review, bindings)
+    executable = {
+        "revision": FROZEN_E03_EXECUTABLE_REVISION,
+        "sha256": FROZEN_E03_EXECUTABLE_SHA256,
+    }
+    normalized_ct_divb_evidence = {
+        "ct_divergence_claimed": False,
+        "status": "historically_unavailable",
+        "reason": FROZEN_E03_CT_DIVERGENCE_REASON,
+        "authorizing": False,
+        "source": "authenticated frozen-E03 migration contract",
+        "qualified_executable": executable,
+        "independent_validation": validation_binding,
+        "independent_review": bindings["independent_review"],
+    }
+    evidence = continuation_plasma_evidence(
+        case_id, mhd, user, allow_frozen_e03_no_max_ndiv=True
+    )
+    r12_historical_inventory = case_id == "R12"
+    evidence["policy"] = FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY
+    evidence["continuation_authorized"] = False
+    evidence["continuation_eligible"] = not r12_historical_inventory
+    evidence["eligibility_only"] = True
+    evidence["normalized_ct_divb_evidence"] = normalized_ct_divb_evidence
+    evidence["ct_divergence_claimed"] = False
+    evidence["ct_divergence_reason"] = FROZEN_E03_CT_DIVERGENCE_REASON
+    evidence["authorization_basis"] = (
+        (
+            "none; historical frozen-E03 evidence is inventory-only and cannot "
+            "authorize continuation"
+        )
+        if r12_historical_inventory
+        else (
+            "none; frozen-E03 migration evidence is historical inventory only and "
+            "cannot authorize continuation"
+        )
+    )
+    evidence["checks"]["frozen_e03_exact_migration"] = True
+    evidence["migration_contract"] = {
+        "schema_version": 1,
+        "policy": FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY,
+        "case_id": case_id,
+        "job_id": job_id,
+        "segment": segment,
+        "frozen_science_executable": executable,
+        "bindings": bindings,
+        "authority": {
+            "continuation_authorized": False,
+            "submission_authorized": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+        },
+    }
+    return evidence
+
+
+def clean_partial_continuation_summary(
+    inspection_profile: dict[str, object],
+    plasma_evidence: dict[str, object],
+    mhd: dict[str, list[float]],
+    user: dict[str, list[float]],
+    *,
+    frozen_e03_migration: bool,
+) -> dict[str, object]:
+    """Expose the authenticated available diagnostics without overstating CT proof."""
+
+    migration_eligibility = None
+    if frozen_e03_migration:
+        migration_contract = plasma_evidence.get("migration_contract")
+        if not isinstance(migration_contract, dict):
+            raise ValueError("frozen-E03 migration lacks its exact retained contract")
+        migration_eligibility = {
+            "schema_version": 1,
+            "policy": FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY,
+            "eligible": plasma_evidence["continuation_eligible"],
+            "authorizing": False,
+            "authorization_effect": "none",
+            "requires_exact_recommended_profile_waiver": False,
+            "migration_contract": migration_contract,
+            "migration_contract_sha256": compact_json_sha256(migration_contract),
+        }
+    return {
+        "inspection": inspection_profile,
+        "policy": (
+            FROZEN_E03_NO_MAX_NDIV_MIGRATION_POLICY
+            if frozen_e03_migration
+            else plasma_evidence["policy"]
+        ),
+        "authorizing": not frozen_e03_migration,
+        "authorization_effect": "none" if frozen_e03_migration else "continuation-eligible",
+        "ct_divergence_claimed": not frozen_e03_migration,
+        "ct_divergence_reason": (
+            FROZEN_E03_CT_DIVERGENCE_REASON if frozen_e03_migration else None
+        ),
+        "reason": FROZEN_E03_CT_DIVERGENCE_REASON if frozen_e03_migration else None,
+        "migration_eligibility": migration_eligibility,
+        "available_diagnostics": {
+            "mhd_history_columns": sorted(mhd),
+            "user_history_columns": sorted(user),
+            "plasma_continuation_evidence": plasma_evidence,
+        },
+    }
+
+
+def validate_clean_partial_continuation_evidence(
+    info: dict[str, object], inspection: dict[str, object], final_time: Decimal
+) -> dict[str, object]:
+    """Authenticate current schema-4 or the exact frozen-E03 migration proof."""
+
+    label = f"{info['case_id']}/{info['segment']} clean_partial continuation evidence"
+    retained_path = normalized_path(Path(info["path"]).parent / "segment_inspection.json")
+    retained, evidence = read_json_file(retained_path, label)
+    if evidence["mode"] != "0644" or retained != inspection:
+        raise ValueError(f"{label} differs from the retained schema-4 inspection")
+    frozen_e03_migration = set(inspection) == FROZEN_E03_NO_MAX_NDIV_INSPECTION_KEYS
+    expected_inspection_keys = (
+        FROZEN_E03_NO_MAX_NDIV_INSPECTION_KEYS
+        if frozen_e03_migration
+        else CONTROLLER_CLEAN_PARTIAL_INSPECTION_KEYS
+    )
+    require_exact_keys(inspection, expected_inspection_keys, label)
+    manifest = info["manifest"]
+    if (
+        inspection["schema_version"] != 4
+        or inspection["execution_epoch"] != EXECUTION_EPOCH
+        or inspection["manifest"] != info["path"]
+        or inspection["job_id"] != manifest["job_id"]
+        or inspection["case_id"] != info["case_id"]
+        or inspection["segment"] != info["segment"]
+        or inspection["accepted"] is not False
+        or inspection["clean_for_continuation"] is not True
+        or (
+            not frozen_e03_migration
+            and inspection["plasma_continuation_policy"] != CONTINUATION_PLASMA_POLICY
+        )
+        or inspection["restart_time_marker_bypass"] is not False
+        or require_utc(inspection["inspected_utc"], f"{label} timestamp")
+        > current_utc() + FUTURE_SKEW
+    ):
+        raise ValueError(f"{label} identity or disposition differs")
+    checks = inspection["checks"]
+    if not isinstance(checks, dict):
+        raise ValueError(f"{label} checks must be an object")
+    expected_checks = (
+        FROZEN_E03_NO_MAX_NDIV_CHECKS
+        if frozen_e03_migration
+        else CONTROLLER_CLEAN_PARTIAL_CHECKS
+    )
+    require_exact_keys(checks, expected_checks, f"{label} checks")
+    if checks != expected_checks:
+        raise ValueError(f"{label} does not prove a physically clean partial endpoint")
+
+    output_root = normalized_path(Path(info["path"]).parents[1] / "output")
+    mhd_payload, mhd_profile = authenticate_controller_retained_file(
+        inspection["mhd_history"], f"{label} MHD history"
+    )
+    user_payload, user_profile = authenticate_controller_retained_file(
+        inspection["user_history"], f"{label} user history"
+    )
+    if (
+        Path(str(mhd_profile["path"])).parent != output_root
+        or Path(str(user_profile["path"])).parent != output_root
+        or not Path(str(mhd_profile["path"])).name.endswith(".mhd.hst")
+        or not Path(str(user_profile["path"])).name.endswith(".user.hst")
+    ):
+        raise ValueError(f"{label} retained history paths differ from controller output")
+    mhd = parse_controller_history(mhd_payload, f"{label} MHD history")
+    user = parse_controller_history(user_payload, f"{label} user history")
+    expected_ranks = int(info["nodes"]) * RANKS_PER_NODE
+    reproduced_plasma = (
+        require_frozen_e03_no_max_ndiv_migration(
+            info, inspection, mhd, user, expected_ranks
+        )
+        if frozen_e03_migration
+        else continuation_plasma_evidence(str(info["case_id"]), mhd, user)
+    )
+    if (
+        (
+            not frozen_e03_migration
+            and inspection["plasma_continuation_evidence"] != reproduced_plasma
+        )
+        or Decimal(str(mhd["time"][-1])) != final_time
+        or inspection["final_hardwall_projection_count"] != mhd["lf_hwproj"][-1]
+    ):
+        raise ValueError(f"{label} plasma continuation evidence is absent, stale, or changed")
+
+    maxima = inspection["maximum_strict_failure_counts"]
+    if not isinstance(maxima, dict):
+        raise ValueError(f"{label} strict-failure maxima must be an object")
+    require_exact_keys(maxima, STRICT_LF_FAILURE_COLUMNS, f"{label} strict-failure maxima")
+    expected_maxima = {key: max(mhd[key]) for key in STRICT_LF_FAILURE_COLUMNS}
+    if maxima != expected_maxima or any(value != 0.0 for value in expected_maxima.values()):
+        raise ValueError(f"{label} retains a nonzero or stale strict LF failure maximum")
+
+    snapshots = inspection["snapshots"]
+    snapshot_times = inspection["snapshot_times"]
+    restarts = inspection["restarts"]
+    restart_times = inspection["restart_times"]
+    marker_modes = inspection["restart_time_marker_modes"]
+    if not all(isinstance(value, list) and value for value in (
+        snapshots, snapshot_times, restarts, restart_times, marker_modes
+    )):
+        raise ValueError(f"{label} retained product/time evidence is incomplete")
+    if (
+        len(snapshots) != len(snapshot_times)
+        or len(restarts) != len(restart_times)
+        or len(restarts) != len(marker_modes)
+    ):
+        raise ValueError(f"{label} retained product/time cardinality differs")
+    for index, snapshot in enumerate(snapshots):
+        authenticate_controller_product(
+            snapshot, output_root / "bin", expected_ranks, f"{label} snapshot {index}"
+        )
+    for index, (restart, time_value, modes) in enumerate(
+        zip(restarts, restart_times, marker_modes)
+    ):
+        authenticate_controller_product(
+            restart, output_root / "rst", expected_ranks, f"{label} restart {index}"
+        )
+        validated = validate_restart_group(
+            restart,
+            expected_root=output_root / "rst",
+            expected_count=expected_ranks,
+            expected_time=decimal_value(time_value, f"{label} restart time {index}"),
+            label=f"{label} restart {index}",
+        )
+        observed_modes = [
+            item["loadability"]["marker_mode"] for item in validated["restart_files"]
+        ]
+        if modes != observed_modes:
+            raise ValueError(f"{label} restart marker-mode evidence differs")
+    for key, values in (("snapshot_times", snapshot_times), ("restart_times", restart_times)):
+        times = [decimal_value(value, f"{label} {key}") for value in values]
+        if (
+            times != sorted(times)
+            or any(not (info["start"] <= value <= final_time) for value in times)
+            or sum(value == final_time for value in times) != 1
+        ):
+            raise ValueError(f"{label} {key} does not authenticate the unique endpoint")
+    terminal = inspection["terminal_restart"]
+    terminal_matches = [record for record, value in zip(restarts, restart_times) if decimal_value(value, label) == final_time]
+    if (
+        terminal_matches != [terminal]
+        or decimal_value(inspection["terminal_restart_time"], f"{label} terminal restart time")
+        != final_time
+    ):
+        raise ValueError(f"{label} terminal restart evidence differs")
+    return clean_partial_continuation_summary(
+        evidence,
+        reproduced_plasma,
+        mhd,
+        user,
+        frozen_e03_migration=frozen_e03_migration,
+    )
+
+
+def validate_r12_historical_partial_inventory(
+    infos: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Authenticate the exact retained R12 partial without making it a parent."""
+
+    claimed = [
+        info
+        for info in infos
+        if info["segment"] == R12_HISTORICAL_PARTIAL_SEGMENT
+        or str(info["manifest"].get("job_id")) == R12_HISTORICAL_PARTIAL_JOB_ID
+    ]
+    exact = [
+        info
+        for info in claimed
+        if info["segment"] == R12_HISTORICAL_PARTIAL_SEGMENT
+        and str(info["manifest"].get("job_id")) == R12_HISTORICAL_PARTIAL_JOB_ID
+    ]
+    if claimed and (len(claimed) != 1 or len(exact) != 1):
+        raise ValueError("R12 historical clean_partial inventory identity differs")
+    if not exact:
+        return []
+    info = exact[0]
+    manifest = info["manifest"]
+    accounting = manifest.get("accounting")
+    inspection = manifest.get("scientific_inspection")
+    if (
+        info["case_id"] != "R12"
+        or info["state"] != "recorded"
+        or info["index"] != 0
+        or info["start"] != 0
+        or info["target"] != Decimal("0.25")
+        or info["nodes"] != R12_FRESH_RERUN_NODES
+        or not isinstance(accounting, dict)
+        or accounting.get("result") != "clean_partial"
+        or not isinstance(inspection, dict)
+    ):
+        raise ValueError("R12 historical clean_partial inventory contract differs")
+    final_time = decimal_value(
+        inspection.get("final_time"), "R12 historical clean_partial final time"
+    )
+    if (
+        decimal_value(
+            inspection.get("required_time"), "R12 historical clean_partial required time"
+        )
+        != info["target"]
+        or not (info["start"] < final_time < info["target"])
+    ):
+        raise ValueError("R12 historical clean_partial inventory endpoint differs")
+    info["clean_partial_continuation_evidence"] = (
+        validate_clean_partial_continuation_evidence(info, inspection, final_time)
+    )
+    terminal_restart(info)
+    return exact
+
+
 def validated_lineage(
-    case_id: str, infos: list[dict[str, object]]
+    case_id: str,
+    infos: list[dict[str, object]],
+    historical_inventory: list[dict[str, object]] | None = None,
 ) -> tuple[list[dict[str, object]], dict[str, object] | None]:
     """Return one parent-authenticated lineage while preserving cancelled identities."""
 
+    historical_inventory = historical_inventory or []
     recorded = [info for info in infos if info["state"] == "recorded"]
     active = [info for info in infos if info["state"] in {"prepared", "submitted"}]
     cancelled = [info for info in infos if info["state"] == "cancelled"]
     if len(active) > 1:
         raise ValueError(f"{case_id} has multiple active manifests")
     index_owners: dict[int, dict[str, object]] = {}
-    for info in infos:
+    for info in [*infos, *historical_inventory]:
         index = int(info["index"])
         if index in index_owners:
             raise ValueError(f"{case_id} reuses operational segment index {index}")
@@ -1751,8 +3078,6 @@ def validated_lineage(
         result = accounting.get("result")
         if result not in {"accepted", "clean_partial"}:
             raise ValueError(f"{case_id} has a non-accepted recorded result")
-        if result == "clean_partial" and case_id != R03:
-            raise ValueError(f"{case_id} clean_partial requires a dedicated reviewed recovery path")
         final_time = decimal_value(inspection.get("final_time"), "inspection final_time")
         required_time = decimal_value(inspection.get("required_time"), "inspection required_time")
         if required_time != info["target"]:
@@ -1761,9 +3086,22 @@ def validated_lineage(
             raise ValueError(f"{case_id}/{info['segment']} accepted endpoint is not exact")
         if result == "clean_partial" and not (info["start"] < final_time < info["target"]):
             raise ValueError(f"{case_id}/{info['segment']} clean_partial endpoint is invalid")
+        if result == "clean_partial":
+            info["clean_partial_continuation_evidence"] = (
+                validate_clean_partial_continuation_evidence(info, inspection, final_time)
+            )
         if prior is None:
-            if info["index"] != 0 or info["start"] != 0 or manifest["command"].get("parent_segment") is not None:
-                raise ValueError(f"{case_id} recorded lineage does not start fresh at index zero")
+            expected_root_index = max(
+                (int(item["index"]) for item in historical_inventory), default=-1
+            ) + 1
+            if (
+                info["index"] != expected_root_index
+                or info["start"] != 0
+                or manifest["command"].get("parent_segment") is not None
+            ):
+                raise ValueError(
+                    f"{case_id} recorded lineage does not start fresh after retained identities"
+                )
         else:
             skipped = set(range(int(prior["index"]) + 1, int(info["index"])))
             if int(info["index"]) <= int(prior["index"]) or skipped != (
@@ -1780,7 +3118,7 @@ def validated_lineage(
     active_info = active[0] if active else None
     if active_info is not None:
         prior_operational_indexes = [
-            int(info["index"]) for info in recorded + cancelled
+            int(info["index"]) for info in recorded + cancelled + historical_inventory
         ]
         expected_index = max(prior_operational_indexes, default=-1) + 1
         if active_info["index"] != expected_index:
@@ -1796,256 +3134,484 @@ def validated_lineage(
     return recorded, active_info
 
 
-def validate_reconciliation_snapshot(
-    snapshot: dict[str, object],
-    snapshot_evidence: dict[str, object],
-    actual_evidence: dict[str, object],
-    counts: dict[str, int],
-    observed_utc: str,
-) -> None:
-    """Require a fresh promoted-controller snapshot bound to exact canonical stores."""
+def recost_json_sha256(value: object) -> str:
+    """Return the schema-2 recost generator's stable JSON-line digest."""
 
-    require_exact_keys(
-        snapshot,
-        ("schema_version", "record_type", "execution_epoch", "generated_utc", "observed_utc", "generator", "evidence", "report"),
-        "reconciliation snapshot",
+    return sha256_bytes((json.dumps(value, sort_keys=True) + "\n").encode())
+
+
+def compact_json_sha256(value: object) -> str:
+    """Return the qualification utility's compact canonical JSON digest."""
+
+    return sha256_bytes(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     )
-    if (
-        snapshot["schema_version"] != 1
-        or snapshot["record_type"] != "cgl_lf_stage_i_controller_reconciliation_snapshot"
-        or snapshot["execution_epoch"] != EXECUTION_EPOCH
-        or snapshot["observed_utc"] != observed_utc
-    ):
-        raise ValueError("reconciliation snapshot identity is invalid")
-    generated = require_fresh(snapshot_evidence, snapshot["generated_utc"], "reconciliation snapshot")
-    if generated < require_utc(observed_utc, "observed state"):
-        raise ValueError("reconciliation snapshot predates its observed state")
-    if snapshot["generator"] != {
-        "path": str(CONTROLLER_HELPER),
-        "revision": CONTROLLER_REVISION,
-        "sha256": CONTROLLER_SHA256,
-    }:
-        raise ValueError("reconciliation snapshot generator is not the promoted controller")
-    evidence = snapshot["evidence"]
-    if not isinstance(evidence, dict) or evidence != actual_evidence:
-        raise ValueError("reconciliation snapshot does not bind the exact canonical stores")
-    report = snapshot["report"]
-    if not isinstance(report, dict):
-        raise ValueError("reconciliation report must be an object")
-    require_exact_keys(
-        report, ("execution_epoch", "root", "qualification", "consistent", "counts", "issues"),
-        "reconciliation report",
-    )
-    if (
-        report["execution_epoch"] != EXECUTION_EPOCH
-        or report["root"] != str(CANONICAL_ROOT)
-        or report["consistent"] is not True
-        or report["issues"] != []
-        or report["counts"] != counts
-    ):
-        raise ValueError("controller reconciliation report is not clean/current")
-    qualification = report["qualification"]
-    if not isinstance(qualification, dict) or (
-        qualification.get("state") != "approved"
-        or qualification.get("path") != str(qualification_path())
-        or qualification.get("sha256") != actual_evidence["qualification"]["sha256"]
-        or qualification.get("approved_executable_revision") != SOURCE_REVISION
-        or qualification.get("approved_executable_sha256") != EXECUTABLE_SHA256
-    ):
-        raise ValueError("reconciliation qualification does not match the promoted build")
 
 
-def validate_publication_audit(
-    value: dict[str, object],
-    artifact_path: Path,
-    artifact_sha256: str,
-    *,
-    record_type: str,
-    label: str,
-    profile_reviewer: str | None = None,
-) -> None:
-    """Require one independently reviewed exact-path publication audit."""
+def validate_latest_recost_publication(audit_path: Path) -> None:
+    """Require one uniquely latest promoted schema-2 recost publication."""
 
-    require_exact_keys(
-        value,
-        ("schema_version", "record_type", "execution_epoch", "published_utc", "artifact", "review"),
-        label,
-    )
-    published = require_utc(value["published_utc"], f"{label} published_utc")
-    if (
-        value["schema_version"] != 1
-        or value["record_type"] != record_type
-        or value["execution_epoch"] != EXECUTION_EPOCH
-        or published > current_utc() + FUTURE_SKEW
-    ):
-        raise ValueError(f"{label} identity is invalid")
-    artifact = value["artifact"]
-    if artifact != {
-        "path": str(artifact_path),
-        "sha256": artifact_sha256,
-        "mode": "0644",
-    }:
-        raise ValueError(f"{label} artifact binding differs")
-    review = value["review"]
-    if not isinstance(review, dict):
-        raise ValueError(f"{label} review must be an object")
-    require_exact_keys(
-        review, ("status", "reviewed_by", "independent_from_profile_author"), f"{label} review"
-    )
-    reviewer = require_nonempty_string(review["reviewed_by"], f"{label} reviewer")
-    if (
-        review["status"] != "approved"
-        or review["independent_from_profile_author"] is not True
-        or (profile_reviewer is not None and reviewer == profile_reviewer)
-    ):
-        raise ValueError(f"{label} lacks independent approval")
+    publications: list[tuple[datetime, Path]] = []
+    accounting = expected_path("accounting")
+    for candidate in sorted(accounting.glob("*_recost_evidence.json.publication_audit.json")):
+        value, evidence = read_json_file(candidate, f"recost publication inventory {candidate.name}")
+        if value.get("record_type") != "stage-i-recost-recommendation-publication-audit":
+            continue
+        require_immutable_publication_evidence(
+            evidence, evidence["sha256"], f"recost publication inventory {candidate.name}"
+        )
+        if value.get("schema_version") != 1 or value.get("execution_epoch") != EXECUTION_EPOCH:
+            raise ValueError("recost publication inventory contains an invalid schema-2 audit")
+        publications.append(
+            (
+                require_utc(value.get("published_utc"), "recost inventory publication"),
+                normalized_path(candidate),
+            )
+        )
+    if not publications:
+        raise ValueError("schema-2 recost publication inventory is empty")
+    latest_time = max(timestamp for timestamp, _ in publications)
+    latest = [path for timestamp, path in publications if timestamp == latest_time]
+    if len(latest) != 1 or latest[0] != normalized_path(audit_path):
+        raise ValueError("selected recost is not the uniquely latest promoted publication")
 
 
-def validate_allocation_authority(
-    profile: dict[str, object],
-    profile_evidence: dict[str, object],
-    profiles: dict[str, dict[str, object]],
+def validate_recost_request_review_chain(
+    request_binding: object,
+    recost: dict[str, object],
 ) -> dict[str, object]:
-    """Require profiles to come from a separately published exact authority."""
+    """Authenticate the exact recost request review and its process assurance."""
 
-    binding = profile["allocation_authority"]
-    if not isinstance(binding, dict):
-        raise ValueError("allocation authority binding must be an object")
-    require_exact_keys(binding, ("artifact", "publication_audit"), "allocation authority binding")
-    artifact_path = allocation_authority_path()
-    artifact, artifact_evidence = read_json_file(artifact_path, "allocation authority")
-    validate_binding(binding["artifact"], artifact_evidence, artifact_path, "allocation authority")
-    require_exact_keys(
-        artifact,
-        (
-            "schema_version", "record_type", "execution_epoch", "canonical_root",
-            "generated_utc", "expires_utc", "matrix_sha256", "controller_revision",
-            "controller_sha256", "profiles_sha256", "profiles", "projection",
-        ),
-        "allocation authority",
+    if not isinstance(request_binding, dict):
+        raise ValueError("recost publication request binding must be an object")
+    require_exact_keys(request_binding, ("path", "sha256"), "recost publication request")
+    request_path = normalized_path(
+        Path(require_nonempty_string(request_binding["path"], "recost request path"))
     )
-    generated = require_fresh(artifact_evidence, artifact["generated_utc"], "allocation authority")
-    expires = require_utc(artifact["expires_utc"], "allocation authority expiry")
-    ordered_profiles = [profiles[case_id] for case_id in sorted(profiles)]
-    serialized_profiles = [
-        {**value, "next_increment": decimal_text(value["next_increment"])}
-        for value in ordered_profiles
-    ]
+    request_sha256 = require_sha256(request_binding["sha256"], "recost request SHA-256")
+    provenance = recost.get("provenance")
     if (
-        artifact["schema_version"] != 1
-        or artifact["record_type"] != "cgl_lf_stage_i_independent_wave_allocation_authority"
-        or artifact["execution_epoch"] != EXECUTION_EPOCH
-        or artifact["canonical_root"] != str(CANONICAL_ROOT)
-        or artifact["matrix_sha256"] != MATRIX_SHA256
-        or artifact["controller_revision"] != CONTROLLER_REVISION
-        or artifact["controller_sha256"] != CONTROLLER_SHA256
-        or expires <= generated
-        or expires < current_utc()
-        or artifact["profiles"] != serialized_profiles
-        or artifact["profiles_sha256"] != sha256_bytes(canonical_json(serialized_profiles))
+        request_path.parent != expected_path("accounting")
+        or not isinstance(provenance, dict)
+        or request_sha256 != provenance.get("request_sha256")
     ):
-        raise ValueError("allocation profiles differ from independent published authority")
-    audit_path = allocation_authority_audit_path()
-    audit, audit_evidence = read_json_file(audit_path, "allocation authority publication audit")
-    validate_binding(
-        binding["publication_audit"], audit_evidence, audit_path,
-        "allocation authority publication audit",
+        raise ValueError("recost request publication binding differs")
+    request, request_evidence = read_json_file(request_path, "recost request")
+    if (
+        request_evidence["mode"] != "0644"
+        or request_evidence["sha256"] != request_sha256
+        or request.get("schema_version") != 2
+        or request.get("record_type") != "stage-i-recost-recommendation-request"
+        or request.get("execution_epoch") != EXECUTION_EPOCH
+        or request.get("checkpoint") != recost["checkpoint"]
+        or request.get("generated_utc") != recost["generated_utc"]
+        or request.get("expires_utc") != recost["expires_utc"]
+        or request.get("requested_by") != recost["requested_by"]
+        or request.get("scope") != recost["scope"]
+    ):
+        raise ValueError("recost request bytes or promoted identity differ")
+
+    review_path = request_path.with_name(f"{request_path.name}.independent_review.json")
+    review, review_evidence = read_json_file(
+        review_path, "recost request independent review"
     )
-    validate_publication_audit(
-        audit,
-        artifact_path,
-        artifact_evidence["sha256"],
-        record_type="cgl_lf_stage_i_wave_allocation_authority_publication_audit",
-        label="allocation authority publication audit",
-        profile_reviewer=str(profile["review"]["reviewed_by"]),
+    review_sha256 = require_sha256(
+        provenance.get("request_independent_review_sha256"),
+        "recost request independent review SHA-256",
     )
-    if require_utc(audit["published_utc"], "allocation authority publication") < generated:
-        raise ValueError("allocation authority publication predates the authority artifact")
+    if review_evidence["mode"] != "0444" or review_evidence["sha256"] != review_sha256:
+        raise ValueError("recost request independent review bytes or mode differ")
+    require_exact_keys(
+        review,
+        (
+            "schema_version", "record_type", "execution_epoch", "reviewed_utc",
+            "decision", "reviewer", "candidate", "scope",
+        ),
+        "recost request independent review",
+    )
+    reviewer = review["reviewer"]
+    scope = review["scope"]
+    if not isinstance(reviewer, dict) or not isinstance(scope, dict):
+        raise ValueError("recost request independent review fields differ")
+    require_exact_keys(
+        reviewer,
+        (
+            "agent_id", "role", "declared_process_independence",
+            "identity_assurance", "identity_assurance_limitation",
+        ),
+        "recost request reviewer",
+    )
+    reviewer_agent = require_nonempty_string(
+        reviewer["agent_id"], "recost request reviewer agent ID"
+    )
+    base_scope = {"non_authorizing": True}
+    reviewed = require_utc(
+        review["reviewed_utc"], "recost request independent review timestamp"
+    )
+    generated = require_utc(recost["generated_utc"], "schema-2 recost generation timestamp")
+    if (
+        review["schema_version"] != 1
+        or review["record_type"] != "stage-i-recost-request-independent-review"
+        or review["execution_epoch"] != EXECUTION_EPOCH
+        or review["decision"] != "approved-for-evidence-generation"
+        or reviewer["role"] != "independent recost request reviewer"
+        or reviewer["declared_process_independence"] is not True
+        or reviewer["identity_assurance"] != REQUEST_REVIEW_IDENTITY_ASSURANCE
+        or reviewer["identity_assurance_limitation"] != REQUEST_REVIEW_IDENTITY_LIMITATION
+        or review["candidate"] != {"path": str(request_path), "sha256": request_sha256}
+        or scope != base_scope
+        or reviewed < generated
+        or reviewed > current_utc() + FUTURE_SKEW
+    ):
+        raise ValueError(
+            "recost request review or declared non-cryptographic process independence differs"
+        )
+    assurance = declared_process_independence_assurance(
+        {
+            "recost-request-author": require_nonempty_string(
+                recost["requested_by"], "schema-2 recost requester"
+            ),
+            "recost-request-independent-reviewer": reviewer_agent,
+        },
+        "recost request independent review",
+    )
     return {
-        "artifact": artifact,
-        "artifact_evidence": artifact_evidence,
-        "publication_audit": audit,
-        "publication_audit_evidence": audit_evidence,
-        "profile_evidence": profile_evidence,
+        "request": request,
+        "request_evidence": request_evidence,
+        "independent_review": review,
+        "independent_review_evidence": review_evidence,
+        "independent_review_assurance": assurance,
     }
 
 
-def validate_profile(
-    profile: dict[str, object],
-    profile_evidence: dict[str, object],
-    matrix_evidence: dict[str, object],
-    input_evidence: dict[str, dict[str, object]],
-) -> tuple[dict[str, dict[str, object]], dict[str, object], dict[str, object]]:
-    """Validate the fixed-path fresh reviewed profile artifact."""
+def validate_recost_publication_chain(
+    recost_path: Path,
+    review_path: Path,
+    audit_path: Path,
+) -> dict[str, object]:
+    """Authenticate the sole current profile/projection/reconciliation authority."""
 
-    if normalized_path(Path(str(profile_evidence["path"]))) != profile_path():
-        raise ValueError("allocation profile is not retained at the exact canonical path")
+    recost_path = normalized_path(recost_path)
+    review_path = normalized_path(review_path)
+    audit_path = normalized_path(audit_path)
+    if (
+        recost_path.parent != expected_path("accounting")
+        or RECOST_ARTIFACT_RE.fullmatch(recost_path.name) is None
+        or review_path != recost_independent_review_path(recost_path)
+        or audit_path != recost_publication_audit_path(recost_path)
+    ):
+        raise ValueError("recost publication chain paths differ from the canonical schema")
+    recost, recost_evidence = read_json_file(recost_path, "promoted schema-2 recost")
+    review, review_evidence = read_json_file(review_path, "recost independent review")
+    audit, audit_evidence = read_json_file(audit_path, "recost publication audit")
+    for evidence, label in (
+        (recost_evidence, "promoted schema-2 recost"),
+        (review_evidence, "recost independent review"),
+        (audit_evidence, "recost publication audit"),
+    ):
+        require_immutable_publication_evidence(evidence, evidence["sha256"], label)
+
     require_exact_keys(
-        profile,
+        recost,
         (
-            "schema_version", "record_type", "execution_epoch", "canonical_root",
-            "review", "provenance", "evidence", "profiles", "r03_authorization",
-            "r17_readiness", "allocation_authority",
+            "schema_version", "record_type", "checkpoint", "artifact_name",
+            "execution_epoch", "generated_utc", "expires_utc", "requested_by",
+            "scope", "predecessor_recost", "authority", "publication_requirements",
+            "recommendations", "barrier", "budget", "storage", "ledger",
+            "reservations", "manifests", "r17_readiness", "promoted_f113",
+            "reconcile", "provenance",
         ),
-        "allocation profile",
+        "schema-2 recost",
+    )
+    match = RECOST_ARTIFACT_RE.fullmatch(recost_path.name)
+    assert match is not None
+    generated = require_fresh(
+        recost_evidence, recost["generated_utc"], "schema-2 recost", R17_READINESS_MAX_AGE
+    )
+    expires = require_utc(recost["expires_utc"], "schema-2 recost expiry")
+    if (
+        recost["schema_version"] != 2
+        or recost["record_type"] != "stage-i-recost-recommendation-evidence"
+        or recost["artifact_name"] != recost_path.name
+        or recost["checkpoint"] != f"F-{match.group('number')}"
+        or recost["execution_epoch"] != EXECUTION_EPOCH
+        or expires <= generated
+        or expires - generated > R17_READINESS_MAX_AGE
+        or current_utc() > expires
+        or recost["authority"]
+        != {
+            "authorizing": False,
+            "action_authority": "none-until-independent-review-and-publication",
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+        }
+        or recost["publication_requirements"]
+        != {
+            "independent_review_required": True,
+            "publication_audit_required": True,
+            "published_mode": "0444",
+            "published_links": 1,
+            "controller_consumption_requires_exact_published_sha256": True,
+        }
+    ):
+        raise ValueError("schema-2 recost identity, lifetime, or non-authority boundary differs")
+    require_nonempty_string(recost["requested_by"], "schema-2 recost requester")
+    require_nonempty_string(recost["scope"], "schema-2 recost scope")
+
+    require_exact_keys(
+        review,
+        (
+            "schema_version", "record_type", "execution_epoch", "reviewed_utc",
+            "decision", "reviewer", "candidate", "scope",
+        ),
+        "recost independent review",
+    )
+    reviewer = review["reviewer"]
+    if not isinstance(reviewer, dict):
+        raise ValueError("recost reviewer must be an object")
+    require_exact_keys(reviewer, ("agent_id", "independent_from_generator"), "recost reviewer")
+    require_nonempty_string(reviewer["agent_id"], "recost reviewer agent ID")
+    review_scope = review["scope"]
+    if (
+        not isinstance(review_scope, dict)
+        or review_scope != {"non_authorizing": True}
+    ):
+        raise ValueError("recost independent review scope differs")
+    reviewed = require_utc(review["reviewed_utc"], "recost review timestamp")
+    if (
+        review["schema_version"] != 1
+        or review["record_type"] != "stage-i-recost-recommendation-independent-review"
+        or review["execution_epoch"] != EXECUTION_EPOCH
+        or review["decision"] != "approved-for-publication"
+        or reviewer["independent_from_generator"] is not True
+        or review["candidate"]
+        != {"path": str(recost_path), "sha256": recost_evidence["sha256"]}
+    ):
+        raise ValueError("recost independent review differs")
+    review_assurance = declared_process_independence_assurance(
+        {
+            "recost-requester": require_nonempty_string(
+                recost["requested_by"], "schema-2 recost requester"
+            ),
+            "recost-independent-reviewer": str(reviewer["agent_id"]),
+        },
+        "recost independent review",
+    )
+
+    require_exact_keys(
+        audit,
+        (
+            "schema_version", "record_type", "execution_epoch", "published_utc",
+            "transaction_id", "artifact", "recost_recommendations",
+            "independent_review", "authority", "counts", "generator",
+            "scheduler_evidence", "source_bundle", "stage_i_helper", "utility",
+            "forensic_copy", "publication", "generalized_publication_context",
+        ),
+        "recost publication audit",
+    )
+    published = require_utc(audit["published_utc"], "recost publication timestamp")
+    if (
+        audit["schema_version"] != 1
+        or audit["record_type"] != "stage-i-recost-recommendation-publication-audit"
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or audit["authority"]
+        != {
+            "action_authority": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+        }
+        or reviewed < generated
+        or published < reviewed
+        or published > current_utc() + FUTURE_SKEW
+        or not require_nonempty_string(audit["transaction_id"], "recost transaction ID")
+        or audit["recost_recommendations"] != recost["recommendations"]
+        or audit["counts"] != recost["reconcile"].get("counts")
+        or audit["publication"]
+        != "same-directory-link-fsync-copy-exchange-forensic-retirement-fsync"
+    ):
+        raise ValueError("recost publication audit or chronology differs")
+    validate_declared_publication_binding(
+        audit["artifact"],
+        expected=recost_path,
+        digest=recost_evidence["sha256"],
+        mode="0444",
+        label="recost publication artifact",
+    )
+    validate_declared_publication_binding(
+        audit["independent_review"],
+        expected=review_path,
+        digest=review_evidence["sha256"],
+        mode="0444",
+        label="recost publication review",
+    )
+    provenance = recost["provenance"]
+    assert isinstance(provenance, dict)
+    expected_generator = {
+        "sha256": provenance.get("generator_sha256"),
+        "revision": provenance.get("generator_revision"),
+        "mode": "0755",
+    }
+    generator = audit["generator"]
+    stage_i_helper = audit["stage_i_helper"]
+    source_bundle = audit["source_bundle"]
+    utility = audit["utility"]
+    if (
+        not isinstance(generator, dict)
+        or not isinstance(stage_i_helper, dict)
+        or not isinstance(source_bundle, dict)
+        or not isinstance(utility, dict)
+    ):
+        raise ValueError("recost checkpoint publication provenance must be objects")
+    require_exact_keys(generator, ("path", "sha256", "mode", "revision"), "recost audit generator")
+    require_exact_keys(
+        stage_i_helper,
+        ("path", "sha256", "committed", "reconcile_execution", "revision"),
+        "recost audit Stage I helper",
+    )
+    require_exact_keys(
+        source_bundle,
+        ("path", "sha256", "mode", "verified_revisions"),
+        "recost audit source bundle",
+    )
+    require_exact_keys(
+        utility,
+        ("path", "sha256", "execution", "committed"),
+        "recost audit checkpoint utility",
     )
     if (
-        profile["schema_version"] != 2
-        or profile["record_type"] != "cgl_lf_stage_i_authenticated_wave_profile"
-        or profile["execution_epoch"] != EXECUTION_EPOCH
-        or profile["canonical_root"] != str(CANONICAL_ROOT)
+        {key: generator[key] for key in expected_generator} != expected_generator
+        or stage_i_helper
+        != {
+            "path": str(CONTROLLER_HELPER),
+            "sha256": provenance.get("stage_i_helper_sha256"),
+            "committed": True,
+            "reconcile_execution": "descriptor",
+            "revision": provenance.get("stage_i_helper_revision"),
+        }
+        or source_bundle
+        != {
+            "path": str(promoted_source_bundle_path(str(provenance.get("stage_i_helper_revision")))),
+            "sha256": provenance.get("source_bundle_sha256"),
+            "mode": "0644",
+            "verified_revisions": provenance.get("source_bundle_verified_revisions"),
+        }
+        or utility["execution"] != "authenticated-descriptor"
+        or utility["committed"] is not True
+        or SHA256_RE.fullmatch(str(utility["sha256"])) is None
     ):
-        raise ValueError("allocation profile identity/root is invalid")
-    review = profile["review"]
-    if not isinstance(review, dict):
-        raise ValueError("allocation profile review must be an object")
+        raise ValueError("recost checkpoint publication provenance differs")
+
+    forensic = audit["forensic_copy"]
+    if not isinstance(forensic, dict):
+        raise ValueError("recost checkpoint forensic binding must be an object")
     require_exact_keys(
-        review, ("decision", "reviewed_by", "reviewed_utc", "state_observed_utc", "notes"),
-        "allocation profile review",
+        forensic,
+        ("path", "sha256", "mode", "links", "generalized_vectors"),
+        "recost checkpoint forensic binding",
     )
-    if review["decision"] != "approved":
-        raise ValueError("allocation profile review decision must be approved")
-    require_nonempty_string(review["reviewed_by"], "allocation profile reviewer")
-    require_nonempty_string(review["notes"], "allocation profile review notes")
-    reviewed = require_fresh(profile_evidence, review["reviewed_utc"], "allocation profile")
-    observed = require_utc(review["state_observed_utc"], "allocation profile observed state")
-    if reviewed < observed:
-        raise ValueError("allocation profile review predates its observed state")
-    static = validate_static_provenance(profile, matrix_evidence, input_evidence)
-    values = profile["profiles"]
-    if not isinstance(values, list):
-        raise ValueError("allocation profiles must be a list")
-    profiles: dict[str, dict[str, object]] = {}
-    for index, value in enumerate(values):
-        if not isinstance(value, dict):
-            raise ValueError(f"allocation profile {index} must be an object")
-        require_exact_keys(
-            value,
-            ("case_id", "nodes", "walltime", "athena_walltime", "next_increment", "estimated_runtime_seconds", "rationale"),
-            f"allocation profile {index}",
-        )
-        case_id = require_nonempty_string(value["case_id"], f"profile {index} case_id")
-        if case_id not in PROFILE_CASES or case_id in profiles:
-            raise ValueError(f"allocation profile case {case_id} is unsupported or duplicated")
-        increment = decimal_value(value["next_increment"], f"{case_id} next_increment")
-        if increment <= 0 or increment > MAX_REVIEWED_INCREMENTS[case_id]:
-            raise ValueError(f"{case_id} next_increment exceeds the reviewed packet bound")
-        estimate = value["estimated_runtime_seconds"]
-        if isinstance(estimate, bool) or not isinstance(estimate, int) or not 1 <= estimate <= 6000:
-            raise ValueError(f"{case_id} estimated runtime must be in [1, 6000] seconds")
-        if isinstance(value["nodes"], bool) or not isinstance(value["nodes"], int):
-            raise ValueError(f"{case_id} reviewed profile nodes must be an integer")
-        validate_resource_values(
-            case_id, value["nodes"], value["walltime"], value["athena_walltime"],
-            Decimal(int(value["nodes"]) * walltime_seconds(value["walltime"], "profile walltime")) / Decimal(3600),
-            f"{case_id} reviewed profile",
-        )
-        require_nonempty_string(value["rationale"], f"{case_id} profile rationale")
-        profiles[case_id] = {**value, "next_increment": increment}
-    if set(profiles) != set(PROFILE_CASES):
-        raise ValueError("allocation profile cases differ from the exact R04-R17 set")
-    authority = validate_allocation_authority(profile, profile_evidence, profiles)
-    return profiles, static, authority
+    forensic_path = normalized_path(Path(str(forensic["path"])))
+    if (
+        forensic_path.parent
+        != expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_recost_forensics")
+        or forensic["sha256"] != recost_evidence["sha256"]
+        or forensic["mode"] != "0444"
+        or forensic["links"] != 1
+        or forensic["generalized_vectors"] != "exact-artifact-payload"
+    ):
+        raise ValueError("recost checkpoint forensic binding differs")
+    _, forensic_evidence = read_stable_regular_file(forensic_path, "recost checkpoint forensic copy")
+    require_immutable_publication_evidence(
+        forensic_evidence, recost_evidence["sha256"], "recost checkpoint forensic copy"
+    )
+
+    context = audit["generalized_publication_context"]
+    if not isinstance(context, dict):
+        raise ValueError("recost generalized publication context must be an object")
+    require_exact_keys(
+        context,
+        (
+            "schema_version", "artifact_name", "checkpoint", "generated_utc",
+            "expires_utc", "request", "artifact", "independent_review",
+            "authority", "publication_requirements", "recommendations", "barrier",
+            "provenance", "predecessor_recost", "reconciliation", "budget",
+            "storage", "r17_readiness", "controller_enforcement",
+        ),
+        "recost generalized publication context",
+    )
+    if (
+        context["schema_version"] != 2
+        or context["artifact_name"] != recost["artifact_name"]
+        or context["checkpoint"] != recost["checkpoint"]
+        or context["generated_utc"] != recost["generated_utc"]
+        or context["expires_utc"] != recost["expires_utc"]
+        or context["artifact"]
+        != {"basename": recost_path.name, "sha256": recost_evidence["sha256"]}
+        or context["independent_review"] != audit["independent_review"]
+        or context["authority"] != recost["authority"]
+        or context["publication_requirements"] != recost["publication_requirements"]
+        or context["recommendations"] != recost["recommendations"]
+        or context["barrier"] != recost["barrier"]
+        or context["provenance"] != recost["provenance"]
+        or context["predecessor_recost"] != recost["predecessor_recost"]
+        or context["reconciliation"] != recost["reconcile"]
+        or context["budget"] != recost["budget"]
+        or context["storage"] != recost["storage"]
+        or context["r17_readiness"] != recost["r17_readiness"]
+        or context["controller_enforcement"]
+        != {
+            "state": recost["recommendations"]["controller_consumption_state"],
+            "launch_authority": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+        }
+    ):
+        raise ValueError("recost generalized publication context differs")
+    request_review_chain = validate_recost_request_review_chain(
+        context["request"], recost
+    )
+    validate_latest_recost_publication(audit_path)
+    return {
+        "artifact": recost,
+        "artifact_evidence": recost_evidence,
+        "independent_review": review,
+        "independent_review_evidence": review_evidence,
+        "independent_review_assurance": review_assurance,
+        "request_review_chain": request_review_chain,
+        "publication_audit": audit,
+        "publication_audit_evidence": audit_evidence,
+        "generated_utc": generated,
+        "expires_utc": expires,
+        "published_utc": published,
+    }
+
+
+def validate_recost_reconciliation(
+    recost: dict[str, object],
+    counts: dict[str, int],
+    qualification_evidence: dict[str, object],
+) -> None:
+    """Require embedded recost reconciliation to match independently read stores."""
+
+    report = recost.get("reconcile")
+    if not isinstance(report, dict):
+        raise ValueError("recost reconciliation must be an object")
+    if (
+        report.get("execution_epoch") != EXECUTION_EPOCH
+        or report.get("root") != str(CANONICAL_ROOT)
+        or report.get("consistent") is not True
+        or report.get("issues") != []
+        or report.get("counts") != counts
+    ):
+        raise ValueError("recost reconciliation differs from canonical state")
+    qualification = report.get("qualification")
+    if not isinstance(qualification, dict) or (
+        qualification.get("state") != "approved"
+        or qualification.get("path") != str(qualification_path())
+        or qualification.get("sha256") != qualification_evidence["sha256"]
+        or qualification.get("approved_executable_revision") != SOURCE_REVISION
+        or qualification.get("approved_executable_sha256") != EXECUTABLE_SHA256
+    ):
+        raise ValueError("recost reconciliation qualification differs")
 
 
 def validate_recorded_accounting(
@@ -2146,52 +3712,72 @@ def validate_operational_job_id_bindings(
 
 def validate_canonical_state(
     cases: dict[str, dict[str, object]],
-    profile: dict[str, object],
-    summary: dict[str, object],
-    summary_evidence: dict[str, object],
-    reconciliation: dict[str, object],
-    reconciliation_evidence: dict[str, object],
+    authority: dict[str, object],
+    promoted: dict[str, object],
 ) -> dict[str, object]:
-    """Authenticate exact canonical stores and return validated case lineages."""
+    """Authenticate exact drained-barrier stores bound by the promoted recost."""
 
     transaction_state = discover_transaction_state()
-    bindings = profile["evidence"]
-    validate_binding(bindings["summary"], summary_evidence, summary_path(), "summary")
-    summary_observed = require_fresh(summary_evidence, summary["updated_utc"], "controller summary")
-    if profile["review"]["state_observed_utc"] != summary["updated_utc"]:
-        raise ValueError("allocation profile does not review the current controller summary")
+    recost = authority["artifact"]
+    assert isinstance(recost, dict)
+    provenance = recost["provenance"]
+    assert isinstance(provenance, dict)
 
     ledger, ledger_evidence = read_ledger(ledger_path())
-    validate_binding(bindings["ledger"], ledger_evidence, ledger_path(), "ledger")
+    ledger_binding = recost.get("ledger")
+    if not isinstance(ledger_binding, dict) or (
+        ledger_binding.get("rows") != len(ledger)
+        or ledger_binding.get("sha256") != ledger_evidence["sha256"]
+        or provenance.get("ledger_sha256") != ledger_evidence["sha256"]
+    ):
+        raise ValueError("recost ledger binding differs from the canonical ledger")
     reservations_value, reservations_evidence = read_json_value(reservations_path(), "reservations")
     if not isinstance(reservations_value, list):
         raise ValueError("reservations store must contain a list")
     reservations = reservations_value
-    validate_binding(bindings["reservations"], reservations_evidence, reservations_path(), "reservations")
+    reservations_binding = recost.get("reservations")
+    if not isinstance(reservations_binding, dict) or (
+        reservations_binding.get("rows") != len(reservations)
+        or reservations_binding.get("active") != 0
+        or reservations_binding.get("sha256") != reservations_evidence["sha256"]
+        or provenance.get("reservations_sha256") != reservations_evidence["sha256"]
+    ):
+        raise ValueError("recost reservations binding differs from the canonical store")
     qualification, qualification_evidence = read_json_file(qualification_path(), "qualification")
-    validate_binding(bindings["qualification"], qualification_evidence, qualification_path(), "qualification")
+    if qualification_evidence != promoted["qualification"]:
+        raise ValueError("canonical qualification changed after recost review")
 
-    manifest_bindings = bindings["manifests"]
-    if not isinstance(manifest_bindings, list):
-        raise ValueError("manifest bindings must be a list")
+    manifest_block = recost.get("manifests")
+    if not isinstance(manifest_block, dict):
+        raise ValueError("recost manifest authority must be an object")
+    manifest_bindings = manifest_block.get("bindings")
+    if not isinstance(manifest_bindings, list) or manifest_block.get("rows") != len(manifest_bindings):
+        raise ValueError("recost manifest bindings must be an exact list")
     discovered = sorted(
         normalized_path(path)
         for path in expected_path(f"runs/mks24-stage-i/{EXECUTION_EPOCH}").glob(
             "*/*/manifest/prepared_run.json"
         )
     )
-    bound_paths = sorted(normalized_path(Path(str(item.get("path", "")))) for item in manifest_bindings if isinstance(item, dict))
+    bound_paths = sorted(
+        expected_path(str(item.get("path", "")))
+        for item in manifest_bindings
+        if isinstance(item, dict)
+    )
     if discovered != bound_paths:
-        raise ValueError("reviewed manifest bindings differ from the exact canonical manifest store")
+        raise ValueError("recost manifest bindings differ from the canonical manifest store")
     infos: list[dict[str, object]] = []
     manifest_evidence = []
     for binding in manifest_bindings:
-        if not isinstance(binding, dict):
-            raise ValueError("manifest binding must be an object")
-        path = normalized_path(Path(str(binding.get("path", ""))))
+        if not isinstance(binding, dict) or set(binding) != {"path", "sha256"}:
+            raise ValueError("recost manifest binding must contain exact path/SHA-256")
+        path = expected_path(str(binding["path"]))
         manifest, retained = read_json_file(path, "canonical manifest")
-        validate_binding(binding, retained, path, "manifest")
-        infos.append(validate_manifest(manifest, retained, cases))
+        if retained["sha256"] != binding["sha256"]:
+            raise ValueError("canonical manifest changed after recost review")
+        if manifest.get("state") not in {"recorded", "cancelled"}:
+            raise ValueError("recost authority is not a drained-barrier snapshot")
+        infos.append(validate_manifest(manifest, retained, cases, promoted))
         manifest_evidence.append(retained)
 
     by_manifest = {info["path"]: info for info in infos}
@@ -2305,36 +3891,12 @@ def validate_canonical_state(
     if actual + active_reserved > STAGE_I_BUDGET_NODE_HOURS or actual + active_reserved > PROJECT_BUDGET_NODE_HOURS:
         raise ValueError("canonical state exceeds a controller budget ceiling")
 
-    expected_recorded = [
-        {
-            "job": row["job_id"], "case": row["case_id"], "segment": row["segment"],
-            "state": row["state"], "hours": f"{decimal_value(row['actual_node_hours'], 'actual'):.6f}",
-            "result": row["result"],
-        }
-        for row in ledger
-    ]
-    expected_active = [
-        {
-            "case": info["case_id"],
-            "segment": info["segment"],
-            "nodes": str(info["nodes"]),
-            "walltime": info["manifest"]["allocation"]["requested_walltime"],
-            "hours": f"{info['reserved']:.6f}",
-            "state": info["state"],
-        }
-        for info in active_infos
-    ]
-    if summary["recorded"] != expected_recorded or summary["active"] != expected_active:
-        raise ValueError("controller summary rows differ from canonical ledger/reservations")
-    expected_values = {
-        "actual": actual,
-        "reserved": active_reserved,
-        "stage_remaining": max(Decimal("0"), STAGE_I_BUDGET_NODE_HOURS - actual - active_reserved),
-        "project_remaining": PROJECT_BUDGET_NODE_HOURS - actual - active_reserved,
-    }
-    for key, expected in expected_values.items():
-        if abs(summary[key] - expected) > Decimal("0.000001"):
-            raise ValueError(f"controller summary {key} differs from canonical accounting")
+    if active_infos or active_reserved != 0:
+        raise ValueError("schema-2 recost authority may be consumed only at a drained barrier")
+    if ledger_binding.get("cumulative_stage_i_node_hours") != ledger[-1][
+        "cumulative_stage_i_node_hours"
+    ]:
+        raise ValueError("recost ledger cumulative use differs from canonical accounting")
 
     counts = {
         "transactions": sum(
@@ -2346,26 +3908,54 @@ def validate_canonical_state(
         "manifests": len(infos),
     }
     actual_evidence = {
-        "summary": summary_evidence,
         "ledger": ledger_evidence,
         "reservations": reservations_evidence,
         "qualification": qualification_evidence,
         "manifests": manifest_evidence,
     }
-    validate_binding(
-        bindings["reconciliation"], reconciliation_evidence, reconciliation_path(),
-        "reconciliation snapshot",
-    )
-    validate_reconciliation_snapshot(
-        reconciliation, reconciliation_evidence, actual_evidence, counts, summary["updated_utc"]
-    )
+    validate_recost_reconciliation(recost, counts, qualification_evidence)
 
     by_case: dict[str, list[dict[str, object]]] = {case_id: [] for case_id in ALL_CASES}
     for info in infos:
         by_case[info["case_id"]].append(info)
+    r12_historical_inventory = validate_r12_historical_partial_inventory(by_case["R12"])
+    r12_historical_paths = {str(info["path"]) for info in r12_historical_inventory}
     lineages = {}
     for case_id in ALL_CASES:
-        lineages[case_id] = validated_lineage(case_id, by_case[case_id])
+        case_inventory = r12_historical_inventory if case_id == "R12" else []
+        lineage_infos = [
+            info
+            for info in by_case[case_id]
+            if str(info["path"]) not in r12_historical_paths
+        ]
+        lineages[case_id] = validated_lineage(case_id, lineage_infos, case_inventory)
+    lineage_digest = authenticated_lineages_sha256(lineages)
+    if (
+        manifest_block.get("authenticated_lineages_sha256") != lineage_digest
+        or provenance.get("authenticated_lineages_sha256") != lineage_digest
+    ):
+        raise ValueError("recost authenticated-lineage digest differs from canonical state")
+    barrier = recost.get("barrier")
+    if not isinstance(barrier, dict):
+        raise ValueError("recost barrier must be an object")
+    recorded_segments = barrier.get("recorded_segments")
+    if not isinstance(recorded_segments, list) or not recorded_segments:
+        raise ValueError("recost barrier recorded segments must be nonempty")
+    expected_barrier = [
+        {
+            "job_id": row["job_id"],
+            "case_id": row["case_id"],
+            "segment": row["segment"],
+            "result": row["result"],
+        }
+        for row in ledger[-len(recorded_segments):]
+    ]
+    if (
+        recorded_segments != expected_barrier
+        or barrier.get("job_ids") != sorted(item["job_id"] for item in expected_barrier)
+        or not isinstance(barrier.get("scheduler_evidence"), list)
+    ):
+        raise ValueError("recost barrier differs from the canonical ledger suffix")
     next_indexes = {
         case_id: max((int(info["index"]) for info in by_case[case_id]), default=-1) + 1
         for case_id in ALL_CASES
@@ -2378,12 +3968,26 @@ def validate_canonical_state(
         "counts": counts,
         "lineages": lineages,
         "case_infos": by_case,
+        "historical_inventory": {"R12": r12_historical_inventory},
         "next_indexes": next_indexes,
-        "summary_observed": summary_observed,
+        "authority_observed": authority["generated_utc"],
         "evidence": {
             **actual_evidence,
             "transaction_stores": transaction_state,
             "submitted_authentication": submitted_authentication,
+            "historical_inventory": {
+                "R12": [
+                    {
+                        "manifest": info["evidence"],
+                        "job_id": str(info["manifest"]["job_id"]),
+                        "segment": info["segment"],
+                        "result": info["manifest"]["accounting"]["result"],
+                        "classification": "inventory-only-non-authorizing",
+                        "continuation_authorized": False,
+                    }
+                    for info in r12_historical_inventory
+                ]
+            },
         },
         "transaction_state": transaction_state,
         "submitted_scheduler": {
@@ -2404,6 +4008,454 @@ def lineage_endpoint(lineage: list[dict[str, object]]) -> Decimal:
     return decimal_value(
         lineage[-1]["manifest"]["scientific_inspection"]["final_time"], "lineage endpoint"
     )
+
+
+def lineage_complete(lineage: list[dict[str, object]]) -> bool:
+    """Return whether one lineage terminates in accepted exact t=10 evidence."""
+
+    if not lineage or lineage_endpoint(lineage) != Decimal("10"):
+        return False
+    accounting = lineage[-1]["manifest"].get("accounting")
+    return isinstance(accounting, dict) and accounting.get("result") == "accepted"
+
+
+def authenticated_lineages_sha256(
+    lineages: dict[str, tuple[list[dict[str, object]], dict[str, object] | None]]
+) -> str:
+    """Reproduce the schema-2 recost authenticated-lineage digest."""
+
+    value = {
+        case_id: [
+            {
+                "manifest": item["path"],
+                "sha256": item["evidence"]["sha256"],
+                "job_id": item["manifest"]["job_id"],
+                "segment": item["segment"],
+                "result": item["manifest"]["accounting"]["result"],
+                "final_time": item["manifest"]["scientific_inspection"]["final_time"],
+            }
+            for item in lineage
+        ]
+        for case_id, (lineage, _) in sorted(lineages.items())
+        if lineage
+    }
+    return recost_json_sha256(value)
+
+
+def build_manifest_inventory_sha256() -> str:
+    """Return the recost-compatible digest of the qualified build manifest."""
+
+    inventory = []
+    for path in sorted(build_manifest_path().iterdir(), key=lambda item: item.name):
+        payload, evidence = read_stable_regular_file(path, f"build manifest inventory {path.name}")
+        if not payload:
+            raise ValueError("qualified build manifest contains an empty file")
+        inventory.append(
+            {
+                "name": path.name,
+                "mode": evidence["mode"],
+                "sha256": evidence["sha256"],
+            }
+        )
+    return recost_json_sha256(inventory)
+
+
+def validate_recost_profiles(
+    recost: dict[str, object],
+    state: dict[str, object],
+    promoted: dict[str, object],
+) -> tuple[list[dict[str, object]], dict[str, dict[str, object]]]:
+    """Validate exact next profiles supplied by the promoted recost authority."""
+
+    recommendations = recost.get("recommendations")
+    if not isinstance(recommendations, dict):
+        raise ValueError("recost recommendations must be an object")
+    required = {
+        "mode",
+        "authorizing",
+        "recommended_next_profiles",
+        "bounded_concurrency",
+        "controller_consumption_state",
+        "non_authorizing_reason",
+    }
+    allowed = required | {"sole_next_segment_recommendation"}
+    if not required.issubset(recommendations) or not set(recommendations).issubset(allowed):
+        raise ValueError("recost recommendation schema differs")
+    mode = recommendations["mode"]
+    profiles_value = recommendations["recommended_next_profiles"]
+    bounded = recommendations["bounded_concurrency"]
+    if (
+        mode not in {"sole-next-profile", "bounded-wave"}
+        or recommendations["authorizing"] is not False
+        or not isinstance(profiles_value, list)
+        or not profiles_value
+        or not isinstance(bounded, dict)
+        or bounded
+        != {
+            "max_active_segments": MAX_LANES,
+            "max_wave_nodes": sum(
+                int(profile.get("nodes", 0)) for profile in profiles_value
+                if isinstance(profile, dict)
+            ),
+            "r17_exclusive_and_last": True,
+        }
+        or not require_nonempty_string(
+            recommendations["controller_consumption_state"],
+            "recost controller-consumption state",
+        )
+        or not require_nonempty_string(
+            recommendations["non_authorizing_reason"], "recost non-authorizing reason"
+        )
+    ):
+        raise ValueError("recost bounded-concurrency recommendation differs")
+    if mode == "sole-next-profile" and len(profiles_value) != 1:
+        raise ValueError("recost sole-next-profile mode must contain one profile")
+    if mode == "bounded-wave" and len(profiles_value) < 2:
+        raise ValueError("recost bounded-wave mode must contain multiple profiles")
+    if len(profiles_value) > MAX_LANES or int(bounded["max_wave_nodes"]) > MAX_NODES:
+        raise ValueError("recost recommendation exceeds promoted concurrency ceilings")
+
+    exact_keys = {
+        "acceptance_criterion",
+        "acceptance_policy",
+        "athena_walltime",
+        "build_manifest",
+        "build_manifest_sha256",
+        "case_id",
+        "controller_walltime_max_seconds",
+        "cpus_per_task",
+        "estimated_storage_bytes",
+        "executable",
+        "executable_revision",
+        "executable_sha256",
+        "input_file",
+        "input_revision",
+        "input_sha256",
+        "nodes",
+        "output_layout",
+        "segment",
+        "parent_job_id",
+        "parent_result",
+        "parent_segment",
+        "restart_file",
+        "restart_file_sha256",
+        "restart_time",
+        "ranks_per_node",
+        "recommendation_basis",
+        "time_tlim_target",
+        "walltime",
+        "source_bundle",
+        "source_bundle_sha256",
+    }
+    build_digest = build_manifest_inventory_sha256()
+    profiles: list[dict[str, object]] = []
+    by_case: dict[str, dict[str, object]] = {}
+    for index, item in enumerate(profiles_value):
+        if not isinstance(item, dict):
+            raise ValueError(f"recost next profile {index} must be an object")
+        require_exact_keys(item, exact_keys, f"recost next profile {index}")
+        case_id = require_nonempty_string(item["case_id"], f"recost next profile {index} case")
+        if case_id not in ALL_CASES or case_id in by_case or case_id == "R02":
+            raise ValueError(f"recost next profile case {case_id} is unsupported or duplicated")
+        segment_id = require_nonempty_string(item["segment"], f"recost next profile {case_id} segment")
+        segment_index, start, target = parse_segment(segment_id, f"recost next profile {case_id}")
+        target_alignment = (
+            R12_CONTINUATION_ALIGNMENT
+            if case_id == "R12"
+            else STANDARD_CONTINUATION_ALIGNMENT
+        )
+        if (
+            segment_index != state["next_indexes"][case_id]
+            or decimal_value(item["time_tlim_target"], f"{case_id} recost target") != target
+        ):
+            raise ValueError(f"recost next profile {case_id} segment lineage differs")
+        nodes, slurm_seconds, _, _ = validate_resource_values(
+            case_id,
+            item["nodes"],
+            item["walltime"],
+            item["athena_walltime"],
+            Decimal(int(item["nodes"]) * walltime_seconds(item["walltime"], "recost walltime"))
+            / Decimal(3600),
+            f"recost next profile {case_id}",
+        )
+        if (
+            item["ranks_per_node"] != RANKS_PER_NODE
+            or item["cpus_per_task"] != CPUS_PER_TASK
+            or item["controller_walltime_max_seconds"] != MAX_SEGMENT_SECONDS
+            or item["output_layout"] != "rank-local"
+            or item["executable"] != str(executable_path())
+            or item["executable_revision"] != SOURCE_REVISION
+            or item["executable_sha256"] != EXECUTABLE_SHA256
+            or item["build_manifest"] != str(build_manifest_path())
+            or item["build_manifest_sha256"] != build_digest
+            or item["input_file"] != f"inputs/cgl_lf_paper/{EXPECTED_CASES[case_id][1]}"
+            or item["input_revision"] != SOURCE_REVISION
+            or item["input_sha256"] != EXPECTED_CASES[case_id][3]
+            or not isinstance(item["estimated_storage_bytes"], int)
+            or item["estimated_storage_bytes"] <= 0
+            or not isinstance(item["recommendation_basis"], dict)
+            or not item["recommendation_basis"]
+            or not require_nonempty_string(item["acceptance_policy"], f"{case_id} acceptance policy")
+            or not require_nonempty_string(
+                item["acceptance_criterion"], f"{case_id} acceptance criterion"
+            )
+        ):
+            raise ValueError(f"recost next profile {case_id} scientific/build profile differs")
+        expected_bundle = (
+            {
+                "path": str(f115_source_bundle_path()),
+                "sha256": R03_F115_SOURCE_BUNDLE_SHA256,
+            }
+            if case_id == R03 and segment_id == R03_F115_SEGMENT
+            else {
+                "path": promoted["source_bundle"]["path"],
+                "sha256": promoted["source_bundle"]["sha256"],
+            }
+        )
+        if (
+            item["source_bundle"] != expected_bundle["path"]
+            or item["source_bundle_sha256"] != expected_bundle["sha256"]
+        ):
+            raise ValueError(f"recost next profile {case_id} source bundle differs")
+        lineage, active = state["lineages"][case_id]
+        if active is not None:
+            raise ValueError("drained recost recommendation collides with an active lane")
+        parent_fields = (
+            item["parent_job_id"],
+            item["parent_result"],
+            item["parent_segment"],
+            item["restart_file"],
+            item["restart_file_sha256"],
+            item["restart_time"],
+        )
+        if not lineage:
+            if any(value is not None for value in parent_fields) or start != 0:
+                raise ValueError(f"fresh recost next profile {case_id} has parent ambiguity")
+            if target != INITIAL_TARGETS[case_id]:
+                raise ValueError(f"fresh recost next profile {case_id} target differs")
+        else:
+            parent = lineage[-1]
+            restart = terminal_restart(parent)
+            endpoint = lineage_endpoint(lineage)
+            historical_r03_f115 = case_id == R03 and segment_id == R03_F115_SEGMENT
+            if (
+                abs(start - endpoint) > Decimal("0.000001")
+                or target <= endpoint
+                or (
+                    not historical_r03_f115
+                    and (target - start) % target_alignment != 0
+                )
+                or target - endpoint
+                > (
+                    Decimal("1.0")
+                    if case_id == R03
+                    else MAX_REVIEWED_INCREMENTS[case_id]
+                )
+                or item["parent_job_id"] != str(parent["manifest"]["job_id"])
+                or item["parent_result"] != parent["manifest"]["accounting"]["result"]
+                or item["parent_segment"] != parent["segment"]
+                or item["restart_file"] != restart["restart_file"]
+                or item["restart_file_sha256"] != restart["restart_sha256"]
+                or decimal_value(item["restart_time"], f"{case_id} recost restart time")
+                != endpoint
+                or nodes != parent["nodes"]
+            ):
+                raise ValueError(f"continuation recost next profile {case_id} lineage differs")
+        if case_id == "R12" and state["historical_inventory"]["R12"] and not lineage:
+            if (
+                segment_id != R12_FRESH_RERUN_SEGMENT
+                or nodes != R12_FRESH_RERUN_NODES
+                or nodes * int(item["ranks_per_node"]) != R12_FRESH_RERUN_RANKS
+                or item["walltime"] != R12_FRESH_RERUN_WALLTIME
+                or item["athena_walltime"] != R12_FRESH_RERUN_ATHENA_WALLTIME
+                or any(value is not None for value in parent_fields)
+                or start != 0
+                or target != R12_FRESH_RERUN_TARGET
+            ):
+                raise ValueError("R12 fresh-rerun recost profile differs")
+        profiles.append(item)
+        by_case[case_id] = item
+
+    if R17 in by_case:
+        if len(profiles) != 1 or int(profiles[0]["nodes"]) != 8:
+            raise ValueError("R17 recost recommendation must be exclusive on eight nodes")
+        incomplete = [
+            case_id for case_id in tuple(f"R{index:02d}" for index in range(2, 17))
+            if not lineage_complete(state["lineages"][case_id][0])
+        ]
+        if incomplete:
+            raise ValueError("R17 recost recommendation precedes accepted exact t=10 predecessors")
+    elif recost.get("r17_readiness") is not None:
+        raise ValueError("non-R17 recost retains an R17 readiness chain")
+    return profiles, by_case
+
+
+def validate_r12_fresh_rerun_transition(
+    state: dict[str, object],
+    profiles_by_case: dict[str, dict[str, object]],
+) -> dict[str, object] | None:
+    """Bind retained R12 s00 to inventory and require the exact fresh s01 rerun."""
+
+    inventory = state.get("historical_inventory")
+    if not isinstance(inventory, dict):
+        raise ValueError("canonical state lacks historical-inventory classification")
+    retained = inventory.get("R12")
+    if not isinstance(retained, list):
+        raise ValueError("canonical R12 historical inventory differs")
+    profile = profiles_by_case.get("R12")
+    if not retained:
+        if profile is not None and profile.get("segment") == R12_FRESH_RERUN_SEGMENT:
+            raise ValueError("R12 fresh rerun lacks its exact historical s00 inventory")
+        return None
+    if len(retained) != 1:
+        raise ValueError("R12 historical inventory is not unique")
+    historical = retained[0]
+    manifest = historical.get("manifest")
+    accounting = manifest.get("accounting") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(manifest, dict)
+        or historical.get("segment") != R12_HISTORICAL_PARTIAL_SEGMENT
+        or str(manifest.get("job_id")) != R12_HISTORICAL_PARTIAL_JOB_ID
+        or not isinstance(accounting, dict)
+        or accounting.get("result") != "clean_partial"
+    ):
+        raise ValueError("R12 historical inventory identity differs")
+    lineage, active = state["lineages"]["R12"]
+    if active is not None:
+        raise ValueError("drained R12 fresh-rerun transition has an active lane")
+    transition_state = "fresh-rerun-required"
+    fresh_lineage_root = None
+    if lineage:
+        root = lineage[0]
+        root_manifest = root.get("manifest")
+        command = root_manifest.get("command") if isinstance(root_manifest, dict) else None
+        allocation = (
+            root_manifest.get("allocation") if isinstance(root_manifest, dict) else None
+        )
+        if (
+            root.get("segment") != R12_FRESH_RERUN_SEGMENT
+            or root.get("index") != 1
+            or root.get("start") != 0
+            or root.get("target") != R12_FRESH_RERUN_TARGET
+            or root.get("nodes") != R12_FRESH_RERUN_NODES
+            or not isinstance(command, dict)
+            or not isinstance(allocation, dict)
+            or allocation.get("ranks_per_node") != RANKS_PER_NODE
+            or root.get("nodes") * allocation["ranks_per_node"] != R12_FRESH_RERUN_RANKS
+            or allocation.get("requested_walltime") != R12_FRESH_RERUN_WALLTIME
+            or command.get("athena_walltime") != R12_FRESH_RERUN_ATHENA_WALLTIME
+            or command.get("parent_segment") is not None
+            or command.get("source_restart_file") is not None
+            or command.get("restart_sha256") is not None
+        ):
+            raise ValueError("R12 scientific lineage does not begin at the fresh s01 rerun")
+        transition_state = "fresh-rerun-established"
+        fresh_lineage_root = root["evidence"]
+    elif profile is not None:
+        parent_fields = (
+            profile.get("parent_job_id"),
+            profile.get("parent_result"),
+            profile.get("parent_segment"),
+            profile.get("restart_file"),
+            profile.get("restart_file_sha256"),
+            profile.get("restart_time"),
+        )
+        _, start, target = parse_segment(
+            str(profile.get("segment")), "R12 fresh-rerun profile"
+        )
+        if (
+            profile.get("segment") != R12_FRESH_RERUN_SEGMENT
+            or profile.get("nodes") != R12_FRESH_RERUN_NODES
+            or profile.get("ranks_per_node") != RANKS_PER_NODE
+            or profile.get("nodes") * profile["ranks_per_node"] != R12_FRESH_RERUN_RANKS
+            or profile.get("walltime") != R12_FRESH_RERUN_WALLTIME
+            or profile.get("athena_walltime") != R12_FRESH_RERUN_ATHENA_WALLTIME
+            or any(value is not None for value in parent_fields)
+            or start != 0
+            or target != R12_FRESH_RERUN_TARGET
+        ):
+            raise ValueError("R12 fresh-rerun transition profile differs")
+    return {
+        "policy": R12_FRESH_RERUN_POLICY,
+        "authorizing": False,
+        "authorization_effect": "none",
+        "continuation_authorized": False,
+        "waiver_authorized": False,
+        "transition_state": transition_state,
+        "historical_inventory": {
+            "manifest": historical["evidence"],
+            "job_id": R12_HISTORICAL_PARTIAL_JOB_ID,
+            "segment": R12_HISTORICAL_PARTIAL_SEGMENT,
+            "result": "clean_partial",
+            "classification": "inventory-only-non-authorizing",
+        },
+        "fresh_rerun_profile": profile if not lineage else None,
+        "fresh_lineage_root": fresh_lineage_root,
+    }
+
+
+def validate_recost_budget(
+    recost: dict[str, object],
+    state: dict[str, object],
+    profiles: list[dict[str, object]],
+) -> dict[str, object]:
+    """Validate the recost publication as the sole current projection authority."""
+
+    budget = recost.get("budget")
+    provenance = recost.get("provenance")
+    storage = recost.get("storage")
+    if not isinstance(budget, dict) or not isinstance(provenance, dict):
+        raise ValueError("recost budget/provenance must be objects")
+    if recost_json_sha256(budget) != provenance.get("computed_projection_sha256"):
+        raise ValueError("recost projection digest differs")
+    reserved = sum(
+        (
+            Decimal(int(profile["nodes"]) * walltime_seconds(profile["walltime"], "recost profile"))
+            / Decimal(3600)
+            for profile in profiles
+        ),
+        Decimal("0"),
+    )
+    actual = state["actual_node_hours"]
+    if (
+        decimal_value(budget.get("actual_stage_i_node_hours"), "recost actual use") != actual
+        or decimal_value(
+            budget.get("authorized_wave_reserved_node_hours"), "recost authorized-wave use"
+        )
+        != reserved
+        or decimal_value(
+            budget.get("actual_plus_authorized_wave_node_hours"), "recost committed use"
+        )
+        != actual + reserved
+        or decimal_value(
+            budget.get("promoted_stage_i_envelope_node_hours"), "recost Stage I envelope"
+        )
+        != STAGE_I_BUDGET_NODE_HOURS
+        or decimal_value(
+            budget.get("project_ceiling_node_hours"), "recost project ceiling"
+        )
+        != PROJECT_BUDGET_NODE_HOURS
+    ):
+        raise ValueError("recost projection differs from canonical accounting or ceilings")
+    require_projection_within_budget(budget, "promoted recost")
+    if not isinstance(storage, dict):
+        raise ValueError("recost storage projection must be an object")
+    for key in (
+        "available_bytes",
+        "retained_stage_i_bytes",
+        "required_safety_bytes",
+        "projected_authorized_wave_growth_bytes",
+        "headroom_after_authorized_wave_and_safety_bytes",
+    ):
+        if isinstance(storage.get(key), bool) or not isinstance(storage.get(key), int):
+            raise ValueError("recost storage projection contains a non-integer value")
+    if (
+        storage["headroom_after_authorized_wave_and_safety_bytes"] < 0
+        or available_storage_bytes(CANONICAL_ROOT)
+        < storage["required_safety_bytes"] + storage["projected_authorized_wave_growth_bytes"]
+    ):
+        raise ValueError("recost storage projection no longer has required live headroom")
+    return budget
 
 
 def campaign_projection(
@@ -2543,6 +4595,617 @@ def validate_declared_publication_binding(
         raise ValueError(f"{label} path differs")
 
 
+def validate_f116_current_source_authority(binding: object) -> dict[str, object]:
+    """Authenticate the production F116 current-source supersession publication."""
+
+    if not isinstance(binding, dict):
+        raise ValueError("recost F116 current-source authority binding must be an object")
+    require_exact_keys(
+        binding,
+        (
+            "checkpoint", "evidence", "provenance_review", "plasma_review",
+            "publication_audit", "final_source_bundle",
+        ),
+        "recost F116 current-source authority binding",
+    )
+    if binding["checkpoint"] != "F-116":
+        raise ValueError("recost current-source authority is not F-116")
+
+    def recost_binding(value: object, expected: Path, label: str) -> str:
+        if not isinstance(value, dict):
+            raise ValueError(f"{label} binding must be an object")
+        require_exact_keys(value, ("path", "sha256"), f"{label} binding")
+        relative = Path(require_nonempty_string(value["path"], f"{label} path"))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(f"{label} path must be canonical-root relative")
+        if expected_path(relative.as_posix()) != normalized_path(expected):
+            raise ValueError(f"{label} path differs")
+        return require_sha256(value["sha256"], f"{label} SHA-256")
+
+    artifact_path = f116_current_source_authority_path()
+    provenance_review_path = f116_provenance_security_review_path()
+    plasma_review_path = f116_plasma_scientific_review_path()
+    audit_path = f116_publication_audit_path()
+    artifact_sha256 = recost_binding(binding["evidence"], artifact_path, "F116 evidence")
+    provenance_review_sha256 = recost_binding(
+        binding["provenance_review"], provenance_review_path, "F116 provenance review"
+    )
+    plasma_review_sha256 = recost_binding(
+        binding["plasma_review"], plasma_review_path, "F116 plasma review"
+    )
+    audit_sha256 = recost_binding(binding["publication_audit"], audit_path, "F116 audit")
+
+    evidence, evidence_file = read_json_file(artifact_path, "F116 current-source authority")
+    provenance_review, provenance_review_file = read_json_file(
+        provenance_review_path, "F116 provenance/security review"
+    )
+    plasma_review, plasma_review_file = read_json_file(
+        plasma_review_path, "F116 plasma/scientific review"
+    )
+    audit, audit_file = read_json_file(audit_path, "F116 publication audit")
+    for retained, digest, label in (
+        (evidence_file, artifact_sha256, "F116 current-source authority"),
+        (provenance_review_file, provenance_review_sha256, "F116 provenance/security review"),
+        (plasma_review_file, plasma_review_sha256, "F116 plasma/scientific review"),
+        (audit_file, audit_sha256, "F116 publication audit"),
+    ):
+        require_immutable_publication_evidence(retained, digest, label)
+
+    require_exact_keys(
+        evidence,
+        (
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "generated_utc", "scope", "predecessor_authorities", "implementation",
+            "source_archive_catalog", "authorization", "validation",
+            "publication_requirements",
+        ),
+        "F116 current-source authority",
+    )
+    generated = require_utc(evidence["generated_utc"], "F116 generation time")
+    scope = evidence["scope"]
+    predecessors = evidence["predecessor_authorities"]
+    implementation = evidence["implementation"]
+    catalog = evidence["source_archive_catalog"]
+    if not all(isinstance(value, dict) for value in (scope, predecessors, implementation, catalog)):
+        raise ValueError("F116 scope, predecessors, implementation, and catalog must be objects")
+    require_exact_keys(
+        scope, ("relationship", "summary", "preserves", "does_not_authorize"), "F116 scope"
+    )
+    require_exact_keys(predecessors, ("historical_f115",), "F116 predecessor authorities")
+    require_exact_keys(
+        implementation,
+        ("publisher", "committed_tools", "intermediate_36140_bundle", "current_source_bundle"),
+        "F116 implementation",
+    )
+    require_exact_keys(catalog, ("before", "after"), "F116 source-archive catalog")
+    if (
+        evidence["schema_version"] != 1
+        or evidence["record_type"] != "stage-i-current-source-authority-supersession-evidence"
+        or evidence["checkpoint"] != "F-116"
+        or evidence["execution_epoch"] != EXECUTION_EPOCH
+        or generated > current_utc() + FUTURE_SKEW
+        or scope["relationship"] != "current-source-selection-only-supersession"
+        or not require_nonempty_string(scope["summary"], "F116 scope summary")
+        or scope["preserves"] != F116_SCOPE_PRESERVES
+        or scope["does_not_authorize"] != F116_SCOPE_DOES_NOT_AUTHORIZE
+        or evidence["authorization"] != F116_AUTHORIZATION
+        or evidence["validation"] != F116_VALIDATION_CLAIMS
+        or evidence["publication_requirements"] != F116_PUBLICATION_REQUIREMENTS
+    ):
+        raise ValueError("F116 identity, source-selection-only scope, or authority differs")
+
+    historical = predecessors["historical_f115"]
+    if not isinstance(historical, dict):
+        raise ValueError("F116 historical F115 predecessor binding must be an object")
+    require_exact_keys(
+        historical,
+        ("evidence", "publication_audit", "provenance_review", "plasma_review"),
+        "F116 historical F115 predecessor binding",
+    )
+    historical_expected = {
+        "evidence": (r03_f115_path(), R03_F115_SHA256),
+        "publication_audit": (
+            r03_f115_publication_audit_path(),
+            R03_F115_PUBLICATION_AUDIT_SHA256,
+        ),
+        "provenance_review": (
+            r03_f115_provenance_security_review_path(),
+            R03_F115_PROVENANCE_SECURITY_REVIEW_SHA256,
+        ),
+        "plasma_review": (
+            r03_f115_plasma_scientific_review_path(),
+            R03_F115_PLASMA_SCIENTIFIC_REVIEW_SHA256,
+        ),
+    }
+    historical_digests = {}
+    for key, (path, digest) in historical_expected.items():
+        value = historical[key]
+        if not isinstance(value, dict):
+            raise ValueError(f"F116 historical F115 {key} binding must be an object")
+        require_exact_keys(value, ("path", "sha256"), f"F116 historical F115 {key} binding")
+        relative = path.relative_to(CANONICAL_ROOT).as_posix()
+        if value != {"path": relative, "sha256": digest}:
+            raise ValueError(f"F116 historical F115 {key} binding differs")
+        _, retained = read_stable_regular_file(path, f"F116 historical F115 {key}")
+        require_immutable_publication_evidence(retained, digest, f"F116 historical F115 {key}")
+        historical_digests[f"{key}_sha256"] = digest
+
+    def bundle_declaration(value: object, *, current: bool, label: str) -> dict[str, object]:
+        if not isinstance(value, dict):
+            raise ValueError(f"{label} must be an object")
+        keys = {
+            "path", "sha256", "complete_history", "head", "advertised_tip",
+            "verified_revisions", "selected_as_current",
+        }
+        keys |= {"candidate_path", "subject"} if current else {"role"}
+        require_exact_keys(value, keys, label)
+        relative = Path(require_nonempty_string(value["path"], f"{label} path"))
+        head = require_git_revision(value["head"], f"{label} head")
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or relative.parent.as_posix() != "source-archives"
+            or relative.name != f"athenak-feature-cgl-through-{head[:9]}.bundle"
+        ):
+            raise ValueError(f"{label} path does not bind its head")
+        revisions_value = value["verified_revisions"]
+        if not isinstance(revisions_value, list) or not revisions_value:
+            raise ValueError(f"{label} verified revisions must be a nonempty list")
+        revisions = [
+            require_git_revision(revision, f"{label} verified revision")
+            for revision in revisions_value
+        ]
+        tip = value["advertised_tip"]
+        if not isinstance(tip, dict):
+            raise ValueError(f"{label} advertised tip must be an object")
+        require_exact_keys(tip, ("revision", "name"), f"{label} advertised tip")
+        tip_name = require_nonempty_string(tip["name"], f"{label} advertised tip name")
+        branch_tip = (
+            tip_name.startswith("refs/heads/")
+            and len(tip_name) > len("refs/heads/")
+            and not any(character.isspace() for character in tip_name)
+        )
+        if (
+            len(set(revisions)) != len(revisions)
+            or value["complete_history"] is not True
+            or tip["revision"] != head
+            or not (tip_name == "HEAD" or branch_tip)
+        ):
+            raise ValueError(f"{label} history or advertised tip differs")
+        if current:
+            candidate = Path(
+                require_nonempty_string(value["candidate_path"], f"{label} candidate path")
+            )
+            require_nonempty_string(value["subject"], f"{label} subject")
+            if not candidate.is_absolute() or value["selected_as_current"] is not True:
+                raise ValueError(f"{label} current-selection declaration differs")
+        elif (
+            value["selected_as_current"] is not False
+            or value["role"] != "retained-non-current-bridge"
+        ):
+            raise ValueError(f"{label} retained-bridge declaration differs")
+        return {
+            "path": relative.as_posix(),
+            "path_object": expected_path(relative.as_posix()),
+            "sha256": require_sha256(value["sha256"], f"{label} SHA-256"),
+            "head": head,
+            "tip_name": tip_name,
+            "verified_revisions": revisions,
+        }
+
+    bridge = bundle_declaration(
+        implementation["intermediate_36140_bundle"],
+        current=False,
+        label="F116 retained bridge bundle",
+    )
+    final = bundle_declaration(
+        implementation["current_source_bundle"],
+        current=True,
+        label="F116 current source bundle",
+    )
+    if (
+        bridge["path"] != F116_BRIDGE_SOURCE_BUNDLE
+        or bridge["head"] != F116_BRIDGE_REVISION
+        or bridge["sha256"] != F116_BRIDGE_SHA256
+        or bridge["tip_name"] != "refs/heads/feature/cgl-landau-fluid"
+        or final["path_object"] != promoted_source_bundle_path(str(final["head"]))
+    ):
+        raise ValueError("F116 bridge or final source-bundle identity differs")
+
+    promoted_revision = str(final["head"])
+    recost_bundle_binding = binding["final_source_bundle"]
+    if not isinstance(recost_bundle_binding, dict):
+        raise ValueError("recost F116 final source bundle binding must be an object")
+    require_exact_keys(
+        recost_bundle_binding,
+        ("path", "sha256", "verified_revisions"),
+        "recost F116 final source bundle binding",
+    )
+    if recost_bundle_binding != {
+        "path": final["path"],
+        "sha256": final["sha256"],
+        "verified_revisions": final["verified_revisions"],
+    }:
+        raise ValueError("recost current-source authority does not bind the F116 final bundle")
+
+    repository = controller_repository_path()
+    head = git_read_only(repository, ["rev-parse", "--verify", "HEAD^{commit}"])
+    try:
+        live_head = head.stdout.decode("ascii").strip()
+    except UnicodeDecodeError as error:
+        raise ValueError("live promoted source-authority HEAD is not ASCII") from error
+    if head.returncode or live_head != promoted_revision:
+        raise ValueError("F116 promoted revision is not live repository HEAD")
+
+    tools = implementation["committed_tools"]
+    if not isinstance(tools, list) or len(tools) != len(F116_REQUIRED_TOOLS):
+        raise ValueError("F116 committed-tool vector differs")
+    if [item.get("path") for item in tools if isinstance(item, dict)] != sorted(
+        F116_REQUIRED_TOOLS
+    ):
+        raise ValueError("F116 committed-tool vector is not in production deterministic order")
+    retained_tools: dict[str, dict[str, str]] = {}
+    for item in tools:
+        if not isinstance(item, dict):
+            raise ValueError("F116 committed-tool record must be an object")
+        require_exact_keys(item, ("path", "revision", "sha256", "mode"), "F116 committed tool")
+        path = require_nonempty_string(item["path"], "F116 committed-tool path")
+        if path in retained_tools or path not in F116_REQUIRED_TOOLS:
+            raise ValueError("F116 committed-tool vector contains unsupported or duplicate paths")
+        identity = {
+            "path": path,
+            "revision": require_git_revision(item["revision"], f"F116 committed tool {path} revision"),
+            "sha256": require_sha256(item["sha256"], f"F116 committed tool {path} SHA-256"),
+            "mode": require_nonempty_string(item["mode"], f"F116 committed tool {path} mode"),
+        }
+        if identity["revision"] != promoted_revision or identity["mode"] != F116_REQUIRED_TOOLS[path]:
+            raise ValueError(f"F116 committed tool identity differs: {path}")
+        committed = git_read_only(repository, ["show", f"{promoted_revision}:{path}"])
+        _, live = read_stable_regular_file(repository / path, f"F116 live committed tool {path}")
+        tree = git_read_only(repository, ["ls-tree", promoted_revision, "--", path])
+        expected_git_mode = "100755" if identity["mode"] == "0755" else "100644"
+        try:
+            tree_line = tree.stdout.decode("ascii").strip()
+        except UnicodeDecodeError as error:
+            raise ValueError(f"F116 committed tool mode is not ASCII: {path}") from error
+        if (
+            committed.returncode
+            or sha256_bytes(committed.stdout) != identity["sha256"]
+            or live["sha256"] != identity["sha256"]
+            or live["mode"] != identity["mode"]
+            or tree.returncode
+            or not tree_line.startswith(f"{expected_git_mode} blob ")
+            or not tree_line.endswith(f"\t{path}")
+        ):
+            raise ValueError(f"F116 committed/live tool bytes or mode differ: {path}")
+        retained_tools[path] = identity
+    if set(retained_tools) != set(F116_REQUIRED_TOOLS):
+        raise ValueError("F116 committed-tool vector differs")
+    publisher = implementation["publisher"]
+    if publisher != retained_tools[F116_PUBLISHER_RELATIVE]:
+        raise ValueError("F116 publisher binding differs from the committed-tool vector")
+
+    helper = retained_tools["scripts/frontier/cgl_lf_stage_i.py"]
+    generator = retained_tools["scripts/frontier/cgl_lf_stage_i_recost.py"]
+    matrix_relative = "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
+    committed_matrix = git_read_only(repository, ["show", f"{promoted_revision}:{matrix_relative}"])
+    if committed_matrix.returncode or sha256_bytes(committed_matrix.stdout) != MATRIX_SHA256:
+        raise ValueError("F116 final source does not preserve the frozen Stage I matrix")
+    matrix = {"path": matrix_relative, "revision": promoted_revision, "sha256": MATRIX_SHA256}
+
+    required_revisions = set(F116_PRODUCTION_REQUIRED_REVISIONS) | {promoted_revision}
+    if not required_revisions.issubset(final["verified_revisions"]):
+        raise ValueError("F116 final source bundle omits required retained history")
+    _, bridge_evidence = read_stable_regular_file(
+        bridge["path_object"], "F116 retained bridge source bundle"
+    )
+    _, bundle_evidence = read_stable_regular_file(
+        final["path_object"], "F116 final source bundle"
+    )
+    bridge_helper = git_read_only(
+        repository, ["show", f"{F116_BRIDGE_REVISION}:scripts/frontier/cgl_lf_stage_i.py"]
+    )
+    if bridge_helper.returncode:
+        raise ValueError("F116 bridge revision lacks the Stage I helper")
+    bridge_validation = validate_source_bundle_coverage(
+        bridge["path_object"],
+        bundle_sha256=str(bridge["sha256"]),
+        controller_revision=F116_BRIDGE_REVISION,
+        controller_sha256=sha256_bytes(bridge_helper.stdout),
+        required_revisions=bridge["verified_revisions"],
+        expected_evidence=bridge_evidence,
+        allow_branch_ref=True,
+        label="F116 retained bridge source bundle",
+    )
+    bundle_validation = validate_source_bundle_coverage(
+        final["path_object"],
+        bundle_sha256=str(final["sha256"]),
+        controller_revision=promoted_revision,
+        controller_sha256=helper["sha256"],
+        required_revisions=final["verified_revisions"],
+        expected_evidence=bundle_evidence,
+        allow_branch_ref=True,
+        label="F116 final source bundle",
+    )
+    if (
+        bridge_validation["advertised_heads"]
+        != [{"revision": bridge["head"], "name": bridge["tip_name"]}]
+        or bundle_validation["advertised_heads"]
+        != [{"revision": final["head"], "name": final["tip_name"]}]
+    ):
+        raise ValueError("F116 source-bundle advertised-tip declaration differs")
+
+    before_catalog = catalog["before"]
+    after_catalog = catalog["after"]
+    if not isinstance(before_catalog, dict) or not isinstance(after_catalog, dict):
+        raise ValueError("F116 before/after source-archive catalogs must be objects")
+    require_exact_keys(
+        before_catalog,
+        ("readme_sha256", "sha256sums_sha256", "bridge_listed", "final_bundle_listed", "corrupt_c7_listed"),
+        "F116 predecessor source-archive catalog",
+    )
+    require_exact_keys(
+        after_catalog,
+        (
+            "readme_sha256", "sha256sums_sha256", "bridge_listed_exactly_once",
+            "final_bundle_listed_exactly_once", "corrupt_c7_listed",
+            "historical_f115_preserved", "sole_current_source_bundle",
+        ),
+        "F116 current source-archive catalog",
+    )
+    for value, label in (
+        (before_catalog["readme_sha256"], "F116 predecessor README SHA-256"),
+        (before_catalog["sha256sums_sha256"], "F116 predecessor SHA256SUMS SHA-256"),
+        (after_catalog["readme_sha256"], "F116 current README SHA-256"),
+        (after_catalog["sha256sums_sha256"], "F116 current SHA256SUMS SHA-256"),
+    ):
+        require_sha256(value, label)
+    readme_path = expected_path("source-archives/README.md")
+    sums_path = expected_path("source-archives/SHA256SUMS")
+    _, readme_evidence = read_stable_regular_file(readme_path, "F116 source-archive README")
+    sums_payload, sums_evidence = read_stable_regular_file(sums_path, "F116 source-archive SHA256SUMS")
+    if (
+        before_catalog["bridge_listed"] is not False
+        or before_catalog["final_bundle_listed"] is not False
+        or before_catalog["corrupt_c7_listed"] is not False
+        or after_catalog["readme_sha256"] != readme_evidence["sha256"]
+        or after_catalog["sha256sums_sha256"] != sums_evidence["sha256"]
+        or after_catalog["bridge_listed_exactly_once"] is not True
+        or after_catalog["final_bundle_listed_exactly_once"] is not True
+        or after_catalog["corrupt_c7_listed"] is not False
+        or after_catalog["historical_f115_preserved"] is not True
+        or after_catalog["sole_current_source_bundle"] != final["path"]
+        or readme_evidence["mode"] != "0644"
+        or sums_evidence["mode"] != "0644"
+    ):
+        raise ValueError("F116 source-archive catalog declaration differs")
+    try:
+        sums_rows = [
+            tuple(line.split("  ", 1))
+            for line in sums_payload.decode("utf-8").splitlines()
+        ]
+    except UnicodeDecodeError as error:
+        raise ValueError("F116 source-archive SHA256SUMS is not UTF-8") from error
+    if any(
+        len(row) != 2
+        or SHA256_RE.fullmatch(row[0]) is None
+        or not row[1]
+        for row in sums_rows
+    ):
+        raise ValueError("F116 source-archive SHA256SUMS contains malformed rows")
+    sums = {name: digest for digest, name in sums_rows}
+    if len(sums) != len(sums_rows) or sums.get(Path(str(bridge["path"])).name) != bridge["sha256"]:
+        raise ValueError("F116 source-archive SHA256SUMS bridge binding differs")
+    if (
+        sums.get(Path(str(final["path"])).name) != final["sha256"]
+        or sums.get(Path(R03_F115_SOURCE_BUNDLE).name) != R03_F115_SOURCE_BUNDLE_SHA256
+        or F116_CORRUPT_C7_NAME in sums
+    ):
+        raise ValueError("F116 source-archive SHA256SUMS current/historical authority differs")
+
+    verified_expected = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": final["sha256"],
+        "final_head": final["head"],
+        "historical_f115_preserved": True,
+    }
+    reviewers = []
+    candidate_paths = []
+    reviewed_times = []
+    for value, kind, decision, label in (
+        (
+            provenance_review,
+            "provenance-security",
+            "approved-for-publication",
+            "F116 provenance/security review",
+        ),
+        (
+            plasma_review,
+            "plasma-scientific-continuation",
+            "approved",
+            "F116 plasma/scientific review",
+        ),
+    ):
+        require_exact_keys(
+            value,
+            (
+                "schema_version", "record_type", "checkpoint", "execution_epoch",
+                "review_kind", "decision", "reviewed_candidate", "published_f116",
+                "reviewer", "reviewed_utc", "findings", "limitations", "verified",
+            ),
+            label,
+        )
+        reviewer = value["reviewer"]
+        if not isinstance(reviewer, dict):
+            raise ValueError(f"{label} reviewer must be an object")
+        require_exact_keys(reviewer, ("agent_id", "identity"), f"{label} reviewer")
+        reviewer_id = require_nonempty_string(reviewer["agent_id"], f"{label} reviewer ID")
+        require_nonempty_string(reviewer["identity"], f"{label} reviewer identity")
+        candidate = value["reviewed_candidate"]
+        if not isinstance(candidate, dict):
+            raise ValueError(f"{label} reviewed candidate must be an object")
+        require_exact_keys(candidate, ("path", "sha256"), f"{label} reviewed candidate")
+        require_nonempty_string(candidate["path"], f"{label} reviewed-candidate path")
+        reviewed = require_utc(value["reviewed_utc"], f"{label} timestamp")
+        if (
+            value["schema_version"] != 1
+            or value["record_type"]
+            != "stage-i-current-source-authority-supersession-independent-review"
+            or value["checkpoint"] != "F-116"
+            or value["execution_epoch"] != EXECUTION_EPOCH
+            or value["review_kind"] != kind
+            or value["decision"] != decision
+            or candidate["sha256"] != artifact_sha256
+            or value["published_f116"] != {"path": str(artifact_path), "sha256": artifact_sha256}
+            or value["verified"] != verified_expected
+            or not isinstance(value["findings"], list)
+            or not value["findings"]
+            or any(not isinstance(item, str) or not item for item in value["findings"])
+            or not isinstance(value["limitations"], list)
+            or not value["limitations"]
+            or any(not isinstance(item, str) or not item for item in value["limitations"])
+            or reviewed < generated
+            or reviewed > current_utc() + FUTURE_SKEW
+        ):
+            raise ValueError(f"{label} identity, independence, or verification differs")
+        reviewers.append(reviewer_id)
+        candidate_paths.append(candidate["path"])
+        reviewed_times.append(reviewed)
+    if len(set(reviewers)) != 2 or len(set(candidate_paths)) != 1:
+        raise ValueError("F116 independent reviews must have distinct reviewers and one candidate")
+    review_assurance = declared_process_independence_assurance(
+        {
+            "F116-provenance-security-reviewer": reviewers[0],
+            "F116-plasma-scientific-reviewer": reviewers[1],
+        },
+        "F116 independent reviews",
+    )
+
+    require_exact_keys(
+        audit,
+        (
+            "schema_version", "record_type", "checkpoint", "execution_epoch",
+            "published_utc", "artifact", "independent_reviews",
+            "historical_f115_authority", "source_archive_catalog",
+            "authority_and_enforcement", "publication",
+        ),
+        "F116 publication audit",
+    )
+    reviews = audit["independent_reviews"]
+    audit_catalog = audit["source_archive_catalog"]
+    if not isinstance(reviews, dict) or not isinstance(audit_catalog, dict):
+        raise ValueError("F116 audit reviews/catalog must be objects")
+    require_exact_keys(
+        reviews,
+        (
+            "reviews_bind_exact_published_f116_sha256",
+            "provenance_security", "plasma_scientific_continuation",
+        ),
+        "F116 audit reviews",
+    )
+    require_exact_keys(
+        audit_catalog,
+        (
+            "readme", "sha256sums", "bridge_bundle", "current_source_bundle",
+            "corrupt_c7_absent_from_active_checksum_ledger", "sole_current_source_bundle",
+        ),
+        "F116 audit source-archive catalog",
+    )
+    validate_declared_publication_binding(
+        audit["artifact"],
+        expected=artifact_path,
+        digest=artifact_sha256,
+        mode="0444",
+        label="F116 audit artifact",
+    )
+    validate_declared_publication_binding(
+        reviews["provenance_security"],
+        expected=provenance_review_path,
+        digest=provenance_review_sha256,
+        mode="0444",
+        label="F116 audit provenance review",
+    )
+    validate_declared_publication_binding(
+        reviews["plasma_scientific_continuation"],
+        expected=plasma_review_path,
+        digest=plasma_review_sha256,
+        mode="0444",
+        label="F116 audit plasma review",
+    )
+    validate_declared_publication_binding(
+        audit_catalog["readme"],
+        expected=readme_path,
+        digest=readme_evidence["sha256"],
+        mode="0644",
+        label="F116 audit source-archive README",
+    )
+    validate_declared_publication_binding(
+        audit_catalog["sha256sums"],
+        expected=sums_path,
+        digest=sums_evidence["sha256"],
+        mode="0644",
+        label="F116 audit source-archive SHA256SUMS",
+    )
+    expected_bridge_audit = {
+        "path": str(bridge["path_object"]),
+        "sha256": bridge["sha256"],
+        "mode": "0644",
+        "links": 1,
+        "head": bridge["head"],
+        "role": "retained-non-current-bridge",
+        "selected_as_current": False,
+    }
+    expected_final_audit = {
+        "path": str(final["path_object"]),
+        "sha256": final["sha256"],
+        "mode": "0644",
+        "links": 1,
+        "head": final["head"],
+        "selected_as_current": True,
+    }
+    published = require_utc(audit["published_utc"], "F116 publication time")
+    if (
+        audit["schema_version"] != 1
+        or audit["record_type"] != "stage-i-current-source-authority-supersession-publication-audit"
+        or audit["checkpoint"] != "F-116"
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or audit["publication"] != F116_PUBLICATION_METHOD
+        or audit["historical_f115_authority"] != historical_digests
+        or audit["authority_and_enforcement"] != F116_AUTHORIZATION
+        or reviews["reviews_bind_exact_published_f116_sha256"] != artifact_sha256
+        or audit_catalog["bridge_bundle"] != expected_bridge_audit
+        or audit_catalog["current_source_bundle"] != expected_final_audit
+        or audit_catalog["corrupt_c7_absent_from_active_checksum_ledger"] is not True
+        or audit_catalog["sole_current_source_bundle"] != str(final["path_object"])
+        or published < max(reviewed_times)
+        or published > current_utc() + FUTURE_SKEW
+    ):
+        raise ValueError("F116 publication audit identity, chronology, or authority differs")
+
+    return {
+        "controller_helper": {**helper, "evidence": read_stable_regular_file(CONTROLLER_HELPER, "F116 promoted helper")[1]},
+        "generator": generator,
+        "matrix": matrix,
+        "source_bundle": {
+            "path": str(final["path_object"]),
+            "sha256": final["sha256"],
+            "verified_revisions": final["verified_revisions"],
+            "evidence": bundle_evidence,
+            "independent_validation": bundle_validation,
+        },
+        "authority_evidence": {
+            "artifact": evidence_file,
+            "provenance_review": provenance_review_file,
+            "plasma_review": plasma_review_file,
+            "publication_audit": audit_file,
+        },
+        "independent_review_assurance": review_assurance,
+    }
+
+
 def validate_f115_independent_review(
     value: dict[str, object],
     evidence: dict[str, object],
@@ -2624,14 +5287,14 @@ def validate_f115_s02_manifest(
         != {
             "committed": True,
             "path": str(CONTROLLER_HELPER),
-            "revision": CONTROLLER_REVISION,
-            "sha256": CONTROLLER_SHA256,
+            "revision": R03_F115_CONTROLLER_REVISION,
+            "sha256": R03_F115_CONTROLLER_SHA256,
         }
         or command.get("source_bundle")
         != {
-            "path": str(source_bundle_path()),
-            "sha256": SOURCE_BUNDLE_SHA256,
-            "verified_revisions": [SOURCE_REVISION, CONTROLLER_REVISION],
+            "path": str(f115_source_bundle_path()),
+            "sha256": R03_F115_SOURCE_BUNDLE_SHA256,
+            "verified_revisions": [SOURCE_REVISION, R03_F115_CONTROLLER_REVISION],
         }
     ):
         raise ValueError("retained R03 F-115 s02 helper/source/resource profile differs")
@@ -2650,14 +5313,12 @@ def validate_f115_s02_manifest(
 
 
 def validate_r03_authorization(
-    profile: dict[str, object],
     lineage: list[dict[str, object]],
     active: dict[str, object] | None,
     case_infos: list[dict[str, object]],
 ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
     """Validate the permanent published F-115 anchor and any exact R03 s02 intent."""
 
-    binding = profile["r03_authorization"]
     s00 = [
         info for info in case_infos
         if info["state"] == "recorded" and info["segment"] == "s00_rankio_t0_t0p5"
@@ -2669,21 +5330,10 @@ def validate_r03_authorization(
         parent["manifest"]["scientific_inspection"]["final_time"],
         "R03 F-115 parent endpoint",
     )
-    if binding is None and not any(
-        info["segment"] == R03_F115_SEGMENT for info in case_infos
-    ):
-        raise ValueError("incomplete R03 requires one bound sole-next authorization")
-    if binding is not None and not isinstance(binding, dict):
-        raise ValueError("R03 F-115 profile binding is malformed")
     path = r03_f115_path()
-    if isinstance(binding, dict):
-        bound_path = normalized_path(Path(str(binding.get("path", ""))))
-        if bound_path != path:
-            raise ValueError("R03 authorization is not the exact published F-115 artifact")
     authorization, evidence = read_json_file(path, "R03 sole-next authorization")
-    if isinstance(binding, dict):
-        validate_binding(binding, evidence, path, "R03 sole-next authorization")
     require_immutable_publication_evidence(evidence, R03_F115_SHA256, "R03 F-115 authority")
+    f115_bundle_validation = validate_f115_source_bundle_coverage()
     if (
         authorization.get("schema_version") != 1
         or authorization.get("execution_epoch") != EXECUTION_EPOCH
@@ -2719,8 +5369,8 @@ def validate_r03_authorization(
         "restart_file": restart["restart_file"],
         "restart_time": float(parent_endpoint),
         "segment": R03_F115_SEGMENT,
-        "source_bundle": str(source_bundle_path()),
-        "source_bundle_sha256": SOURCE_BUNDLE_SHA256,
+        "source_bundle": str(f115_source_bundle_path()),
+        "source_bundle_sha256": R03_F115_SOURCE_BUNDLE_SHA256,
         "source_dir": str(FROZEN_SOURCE),
         "time_tlim_target": 0.5,
         "walltime": "02:00:00",
@@ -2797,11 +5447,11 @@ def validate_r03_authorization(
         },
         "source_bundle": {
             "from": str(expected_path(R03_F114_SOURCE_BUNDLE)),
-            "to": str(source_bundle_path()),
+            "to": str(f115_source_bundle_path()),
         },
         "source_bundle_sha256": {
             "from": R03_F114_SOURCE_BUNDLE_SHA256,
-            "to": SOURCE_BUNDLE_SHA256,
+            "to": R03_F115_SOURCE_BUNDLE_SHA256,
         },
     }
     if (
@@ -2830,18 +5480,18 @@ def validate_r03_authorization(
     )
     if implementation_bundle != {
         "complete_history": True,
-        "head": CONTROLLER_REVISION,
+        "head": R03_F115_CONTROLLER_REVISION,
         "links": 1,
         "mode": "0644",
-        "path": source_bundle_path().relative_to(CANONICAL_ROOT).as_posix(),
-        "sha256": SOURCE_BUNDLE_SHA256,
+        "path": f115_source_bundle_path().relative_to(CANONICAL_ROOT).as_posix(),
+        "sha256": R03_F115_SOURCE_BUNDLE_SHA256,
         "verified_revisions": list(F115_SOURCE_BUNDLE_REQUIRED_REVISIONS),
     }:
         raise ValueError("R03 F-115 source-bundle implementation declaration differs")
     if not isinstance(implementation_helper, dict) or (
         implementation_helper.get("links") != 1
         or implementation_helper.get("mode") != "0644"
-        or implementation_helper.get("sha256") != CONTROLLER_SHA256
+        or implementation_helper.get("sha256") != R03_F115_CONTROLLER_SHA256
     ):
         raise ValueError("R03 F-115 helper implementation declaration differs")
 
@@ -2970,6 +5620,13 @@ def validate_r03_authorization(
         retained_reviews[key] = review_evidence
     if len(set(reviewers)) != len(reviewers):
         raise ValueError("R03 F-115 independent reviews do not have distinct reviewers")
+    review_assurance = declared_process_independence_assurance(
+        {
+            "F115-provenance-security-reviewer": reviewers[0],
+            "F115-plasma-scientific-reviewer": reviewers[1],
+        },
+        "R03 F-115 independent reviews",
+    )
 
     reproducible = audit.get("reproducible_implementation_authority")
     if not isinstance(reproducible, dict):
@@ -2982,18 +5639,18 @@ def validate_r03_authorization(
         {
             key: bundle.get(key) for key in ("path", "sha256", "mode", "links")
         },
-        expected=source_bundle_path(),
-        digest=SOURCE_BUNDLE_SHA256,
+        expected=f115_source_bundle_path(),
+        digest=R03_F115_SOURCE_BUNDLE_SHA256,
         mode="0644",
         label="R03 F-115 authoritative source bundle",
     )
     if (
         bundle.get("complete_history") is not True
-        or bundle.get("head") != CONTROLLER_REVISION
+        or bundle.get("head") != R03_F115_CONTROLLER_REVISION
         or helper
         != {
             "path": "scripts/frontier/cgl_lf_stage_i.py",
-            "sha256": CONTROLLER_SHA256,
+            "sha256": R03_F115_CONTROLLER_SHA256,
         }
     ):
         raise ValueError("R03 F-115 reproducible controller provenance differs")
@@ -3017,6 +5674,8 @@ def validate_r03_authorization(
         "artifact": evidence,
         "publication_audit": audit_evidence,
         "independent_reviews": retained_reviews,
+        "independent_review_assurance": review_assurance,
+        "source_bundle_validation": f115_bundle_validation,
         "planner_scope": {
             "planning_only": True,
             "direct_sbatch_authorized": False,
@@ -3059,214 +5718,1242 @@ def parse_scheduler_evidence(payload: bytes, job_id: str) -> dict[str, str]:
     return result
 
 
-def validate_r17_rank_readiness(value: dict[str, object]) -> dict[str, object]:
-    """Require measured 64-rank scheduler, output, restart, and performance evidence."""
+def parse_account_scheduler_timestamp(value: object, label: str) -> datetime:
+    """Require one offset-qualified Slurm accounting timestamp."""
 
+    text = require_nonempty_string(value, label)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as error:
+        raise ValueError(f"{label} must be an ISO-8601 timestamp") from error
+    if parsed.tzinfo is None:
+        raise ValueError(f"{label} must include an explicit UTC offset")
+    return parsed
+
+
+def parse_optional_account_scheduler_timestamp(
+    value: object, label: str
+) -> datetime | None:
+    """Parse one optional account-wide Slurm timestamp as UTC."""
+
+    if value in ACCOUNT_MISSING_TIMESTAMPS:
+        return None
+    return parse_account_scheduler_timestamp(value, label).astimezone(timezone.utc)
+
+
+def parse_account_scheduler_evidence(payload: bytes) -> list[dict[str, object]]:
+    """Parse one complete all-users top-level Slurm account query."""
+
+    try:
+        lines = payload.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise ValueError("R17 account scheduler evidence is not UTF-8") from error
+    if not lines or lines[0] != ACCOUNT_SCHEDULER_HEADER:
+        raise ValueError("R17 account scheduler evidence has an invalid header")
+    records = []
+    seen = set()
+    for line in lines[1:]:
+        if not line:
+            continue
+        fields = line.split("|")
+        if len(fields) != len(ACCOUNT_SACCT_FIELDS):
+            raise ValueError("R17 account scheduler evidence has invalid columns")
+        (
+            job_id, job_name, state_value, exit_code, nodes_text, elapsed_text,
+            submit, start, end, partition, account, owner,
+        ) = fields
+        state_parts = state_value.split()
+        state = state_parts[0].split("+")[0] if state_parts else ""
+        if (
+            ACCOUNT_JOB_RE.fullmatch(job_id) is None
+            or job_id in seen
+            or not job_name
+            or not state
+            or not exit_code
+            or not partition
+            or account.casefold() != ACCOUNT.casefold()
+            or not owner
+        ):
+            raise ValueError("R17 account scheduler evidence has invalid job identity")
+        try:
+            nodes = int(nodes_text)
+            elapsed = int(elapsed_text)
+        except ValueError as error:
+            raise ValueError("R17 account scheduler evidence has invalid numeric values") from error
+        submit_time = parse_optional_account_scheduler_timestamp(
+            submit, "R17 account scheduler submit time"
+        )
+        start_time = parse_optional_account_scheduler_timestamp(
+            start, "R17 account scheduler start time"
+        )
+        end_time = parse_optional_account_scheduler_timestamp(
+            end, "R17 account scheduler end time"
+        )
+        if (
+            nodes < 0
+            or elapsed < 0
+            or submit_time is None
+            or (
+                start_time is None
+                and (
+                    elapsed != 0
+                    or state in {"RUNNING", "COMPLETING", "SUSPENDED", "COMPLETED"}
+                    or (end_time is not None and submit_time > end_time)
+                )
+            )
+            or (start_time is not None and nodes <= 0)
+            or (start_time is not None and submit_time > start_time)
+            or (
+                start_time is not None
+                and end_time is not None
+                and (
+                    end_time < start_time
+                    or abs((end_time - start_time).total_seconds() - elapsed) > 1.0
+                )
+            )
+        ):
+            raise ValueError("R17 account scheduler evidence has invalid time ordering")
+        seen.add(job_id)
+        records.append(
+            {
+                "job_id": job_id,
+                "job_name": job_name,
+                "state": state,
+                "exit_code": exit_code,
+                "nodes": nodes,
+                "elapsed_seconds": elapsed,
+                "submit_utc": submit,
+                "start_utc": start,
+                "end_utc": end,
+                "partition": partition,
+                "account": account,
+                "owner": owner,
+            }
+        )
+    if not records:
+        raise ValueError("R17 account scheduler evidence is empty")
+    return sorted(records, key=lambda record: str(record["job_id"]))
+
+
+def r17_account_scheduler_query_contract(start: datetime, end: datetime) -> dict[str, object]:
+    """Reproduce the producer's exact all-users execution-interval query."""
+
+    if start.tzinfo is None or end.tzinfo is None or not start < end:
+        raise ValueError("R17 account scheduler query interval is invalid")
+    query_start = start - timedelta(seconds=1)
+    query_end = end + timedelta(seconds=1)
+    return {
+        "account": ACCOUNT,
+        "all_users": True,
+        "allocations_only": True,
+        "expanded_arrays": True,
+        "start_utc": query_start.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        "end_utc": query_end.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        "start_argument": query_start.strftime("%Y-%m-%dT%H:%M:%S"),
+        "end_argument": query_end.strftime("%Y-%m-%dT%H:%M:%S"),
+        "start_scheduler_offset": query_start.strftime("%z"),
+        "end_scheduler_offset": query_end.strftime("%z"),
+        "fields": list(ACCOUNT_SACCT_FIELDS),
+    }
+
+
+def read_r17_relative_artifact(
+    binding: object, label: str, mode: str, expected_relative: Path
+) -> tuple[bytes, dict[str, object]]:
+    """Read one exact root-relative R17 artifact through its retained binding."""
+
+    if not isinstance(binding, dict):
+        raise ValueError(f"{label} binding must be an object")
+    require_exact_keys(binding, ("path", "sha256"), f"{label} binding")
+    relative = Path(require_nonempty_string(binding["path"], f"{label} path"))
+    if relative.is_absolute() or ".." in relative.parts or relative != expected_relative:
+        raise ValueError(f"{label} path differs")
+    digest = require_sha256(binding["sha256"], f"{label} SHA-256")
+    payload, evidence = read_stable_regular_file(expected_path(relative.as_posix()), label)
+    if evidence["sha256"] != digest or evidence["mode"] != mode:
+        raise ValueError(f"{label} digest or mode differs")
+    return payload, evidence
+
+
+def validate_r17_account_exclusivity_artifacts(
+    qualification: dict[str, object], qualification_reviewed: datetime
+) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
+    """Reproduce the retained all-users R17 execution-exclusivity proof."""
+
+    job_id = require_nonempty_string(qualification.get("job_id"), "R17 qualification job ID")
+    if JOB_RE.fullmatch(job_id) is None:
+        raise ValueError("R17 qualification job ID is invalid")
+    scheduler_payload, scheduler_profile = read_r17_relative_artifact(
+        qualification.get("scheduler_evidence"),
+        "R17 qualification scheduler evidence",
+        "0444",
+        Path(f"accounting/{job_id}.r17_qualification.sacct.txt"),
+    )
+    scheduler = parse_scheduler_evidence(scheduler_payload, job_id)
+    account_payload, account_profile = read_r17_relative_artifact(
+        qualification.get("account_scheduler_evidence"),
+        "R17 account scheduler evidence",
+        "0444",
+        Path(f"accounting/{job_id}.r17_qualification.account.sacct.txt"),
+    )
+    exclusivity_payload, exclusivity_profile = read_r17_relative_artifact(
+        qualification.get("account_exclusivity_evidence"),
+        "R17 account exclusivity evidence",
+        "0444",
+        Path(
+            "accounting/"
+            f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_R17_account_exclusivity_evidence.json"
+        ),
+    )
+    try:
+        exclusivity = json.loads(
+            exclusivity_payload.decode("utf-8"),
+            object_pairs_hook=duplicate_rejecting_object,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise ValueError("R17 account exclusivity evidence is not unambiguous UTF-8 JSON") from error
+    if not isinstance(exclusivity, dict):
+        raise ValueError("R17 account exclusivity evidence must be an object")
+    require_exact_keys(
+        exclusivity,
+        (
+            "schema_version",
+            "record_type",
+            "execution_epoch",
+            "measured_utc",
+            "query_contract",
+            "visibility_contract",
+            "raw_account_scheduler_sha256",
+            "qualification_job",
+            "qualification_job_sha256",
+            "account_jobs",
+            "account_jobs_sha256",
+            "overlapping_job_ids",
+            "exclusive_entire_execution_interval",
+        ),
+        "R17 account exclusivity evidence",
+    )
+    records = parse_account_scheduler_evidence(account_payload)
+    target_jobs = [record for record in records if record["job_id"] == job_id]
+    if len(target_jobs) != 1:
+        raise ValueError("R17 account scheduler evidence lacks one exact qualification job")
+    target = target_jobs[0]
+    start = parse_account_scheduler_timestamp(target["start_utc"], "R17 account target start")
+    end = parse_account_scheduler_timestamp(target["end_utc"], "R17 account target end")
+    measured = require_utc(exclusivity["measured_utc"], "R17 account exclusivity measurement")
+    visibility = exclusivity["visibility_contract"]
+    if not isinstance(visibility, dict):
+        raise ValueError("R17 account exclusivity visibility contract must be an object")
+    require_exact_keys(
+        visibility,
+        ("private_data", "all_users_job_visibility"),
+        "R17 account exclusivity visibility contract",
+    )
+    private_data = require_nonempty_string(
+        visibility["private_data"], "R17 account exclusivity PrivateData"
+    )
+    private_settings = {
+        item.strip().casefold() for item in private_data.split(",") if item.strip()
+    }
+    target_scheduler = {
+        key: target[key]
+        for key in (
+            "job_id",
+            "job_name",
+            "state",
+            "exit_code",
+            "nodes",
+            "elapsed_seconds",
+            "submit_utc",
+            "start_utc",
+            "end_utc",
+            "partition",
+            "account",
+        )
+    }
+    overlapping = []
+    for record in records:
+        record_start = parse_optional_account_scheduler_timestamp(
+            record["start_utc"], "R17 account scheduler overlap start"
+        )
+        record_end = parse_optional_account_scheduler_timestamp(
+            record["end_utc"], "R17 account scheduler overlap end"
+        )
+        if record_start is not None and record_start < end.astimezone(timezone.utc) and (
+            record_end is None or record_end > start.astimezone(timezone.utc)
+        ):
+            overlapping.append(str(record["job_id"]))
+    expected = {
+        "schema_version": 1,
+        "record_type": "stage-i-r17-account-exclusivity-evidence",
+        "execution_epoch": EXECUTION_EPOCH,
+        "measured_utc": exclusivity["measured_utc"],
+        "query_contract": r17_account_scheduler_query_contract(start, end),
+        "visibility_contract": {
+            "private_data": private_data,
+            "all_users_job_visibility": True,
+        },
+        "raw_account_scheduler_sha256": sha256_bytes(account_payload),
+        "qualification_job": target_scheduler,
+        "qualification_job_sha256": compact_json_sha256(target_scheduler),
+        "account_jobs": records,
+        "account_jobs_sha256": compact_json_sha256(records),
+        "overlapping_job_ids": [job_id],
+        "exclusive_entire_execution_interval": True,
+    }
+    if (
+        target["job_name"] != scheduler["job_name"]
+        or target["state"] != scheduler["state"]
+        or target["exit_code"] != scheduler["exit_code"]
+        or target["nodes"] != int(scheduler["nodes"])
+        or target["elapsed_seconds"] != int(scheduler["elapsed_seconds"])
+        or target["submit_utc"] != scheduler["submitted_utc"]
+        or target["end_utc"] != scheduler["completed_utc"]
+        or target["end_utc"] != qualification.get("completed_utc")
+        or target["state"] != qualification.get("state")
+        or target["exit_code"] != qualification.get("exit_code")
+        or target["nodes"] != qualification.get("nodes")
+        or target["partition"] != PARTITION
+        or visibility["all_users_job_visibility"] is not True
+        or not private_settings
+        or any(item in {"all", "jobs"} for item in private_settings)
+        or measured < end.astimezone(timezone.utc)
+        or measured > qualification_reviewed
+        or measured > current_utc() + FUTURE_SKEW
+        or overlapping != [job_id]
+        or exclusivity != expected
+    ):
+        raise ValueError("R17 account-wide execution exclusivity evidence differs")
+    return exclusivity, {
+        "scheduler_evidence": scheduler_profile,
+        "account_scheduler_evidence": account_profile,
+        "account_exclusivity_evidence": exclusivity_profile,
+    }
+
+
+def validate_r17_rank_inventory(value: object, label: str) -> str:
+    """Authenticate exactly one retained 0644 file for each of the 64 R17 ranks."""
+
+    if not isinstance(value, list) or len(value) != 64:
+        raise ValueError(f"{label} must contain exactly one file for each of 64 ranks")
+    ranks = set()
+    paths = set()
+    for index, binding in enumerate(value):
+        if not isinstance(binding, dict):
+            raise ValueError(f"{label} binding {index} must be an object")
+        require_exact_keys(binding, ("path", "sha256"), f"{label} binding {index}")
+        relative = Path(require_nonempty_string(binding["path"], f"{label} binding {index} path"))
+        rank_parts = [
+            part for part in relative.parts if re.fullmatch(r"rank_[0-9]{8}", part)
+        ]
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or len(rank_parts) != 1
+            or relative.as_posix() in paths
+        ):
+            raise ValueError(f"{label} binding {index} is not one unique rank-local file")
+        require_sha256(binding["sha256"], f"{label} binding {index} SHA-256")
+        payload, evidence = read_stable_regular_file(
+            expected_path(relative.as_posix()), f"{label} file {index}"
+        )
+        if (
+            not payload
+            or evidence["sha256"] != binding["sha256"]
+            or evidence["mode"] != "0644"
+        ):
+            raise ValueError(f"{label} binding {index} bytes or mode differ")
+        paths.add(relative.as_posix())
+        ranks.add(rank_parts[0])
+    if ranks != {f"rank_{rank:08d}" for rank in range(64)}:
+        raise ValueError(f"{label} must contain exactly one file for each of 64 ranks")
+    if value != sorted(value, key=lambda item: str(item["path"])):
+        raise ValueError(f"{label} is not in deterministic rank-local path order")
+    return recost_json_sha256(value)
+
+
+def validate_r17_meshblock_decomposition_proof(
+    value: object, terminal_output_inventory_sha256: str
+) -> None:
+    """Require a complete balanced 64-rank proof of the R17 logical mesh."""
+
+    label = "R17 meshblock decomposition proof"
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be an object")
     require_exact_keys(
         value,
         (
-            "schema_version", "record_type", "execution_epoch", "generated_utc",
-            "reviewed_utc", "reviewed_by", "decision", "nodes", "ranks", "job_id",
-            "final_time", "scheduler_evidence", "batch_script", "output_inventory",
-            "terminal_restart", "performance",
+            "schema_version",
+            "record_type",
+            "resolution",
+            "mesh_shape",
+            "meshblock_shape",
+            "logical_meshblock_grid",
+            "logical_meshblocks",
+            "ranks",
+            "meshblocks_per_rank",
+            "complete_block_rank_inventory",
+            "complete_block_rank_inventory_sha256",
+            "terminal_rank_local_output_inventory_sha256",
+            "checks",
         ),
-        "R17 rank readiness",
+        label,
     )
-    job_id = require_nonempty_string(value["job_id"], "R17 readiness job ID")
+    rank_records = value["complete_block_rank_inventory"]
     if (
-        value["record_type"] != "cgl_lf_stage_i_r17_64_rank_readiness"
-        or value["nodes"] != 8
+        value["schema_version"] != 1
+        or value["record_type"] != "stage-i-r17-decomposition-evidence"
+        or value["resolution"] != "384x384x768"
+        or value["mesh_shape"] != [384, 384, 768]
+        or value["meshblock_shape"] != [32, 32, 64]
+        or value["logical_meshblock_grid"] != [12, 12, 12]
+        or value["logical_meshblocks"] != 1728
         or value["ranks"] != 64
-        or JOB_RE.fullmatch(job_id) is None
+        or value["meshblocks_per_rank"] != 27
+        or not isinstance(rank_records, list)
+        or len(rank_records) != 64
     ):
-        raise ValueError("R17 64-rank readiness identity is incomplete")
-    readiness_root = expected_path(
-        f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_R17_64_rank_readiness"
-    )
-    scheduler_path = expected_path(f"accounting/{job_id}.stage_i.sacct.txt")
-    scheduler_payload, scheduler_evidence = read_stable_regular_file(
-        scheduler_path, "R17 rank-readiness scheduler evidence"
-    )
-    validate_binding(
-        value["scheduler_evidence"], scheduler_evidence, scheduler_path,
-        "R17 rank-readiness scheduler evidence",
-    )
-    scheduler = parse_scheduler_evidence(scheduler_payload, job_id)
-    elapsed = scheduler["elapsed_seconds"]
+        raise ValueError(f"{label} dimensions or counts differ")
+
+    observed_locations = []
+    for expected_rank, record in enumerate(rank_records):
+        if not isinstance(record, dict):
+            raise ValueError(f"{label} rank record {expected_rank} must be an object")
+        require_exact_keys(
+            record,
+            ("rank", "rank_name", "logical_meshblocks"),
+            f"{label} rank record {expected_rank}",
+        )
+        locations = record["logical_meshblocks"]
+        if (
+            record["rank"] != expected_rank
+            or record["rank_name"] != f"rank_{expected_rank:08d}"
+            or not isinstance(locations, list)
+            or len(locations) != 27
+            or locations != sorted(locations)
+        ):
+            raise ValueError(f"{label} does not retain exactly 27 meshblocks per rank")
+        rank_locations = set()
+        for location in locations:
+            if (
+                not isinstance(location, list)
+                or len(location) != 4
+                or any(type(coordinate) is not int for coordinate in location)
+                or location[3] != 0
+            ):
+                raise ValueError(f"{label} contains an invalid logical location")
+            logical = tuple(location)
+            if logical in rank_locations:
+                raise ValueError(f"{label} duplicates a logical location within one rank")
+            rank_locations.add(logical)
+            observed_locations.append(logical)
+
+    expected_locations = {
+        (lx1, lx2, lx3, 0)
+        for lx1 in range(12)
+        for lx2 in range(12)
+        for lx3 in range(12)
+    }
     if (
-        scheduler["job_name"] != "cgl_mks24_r17_64_rank_readiness"
-        or scheduler["state"] != "COMPLETED"
-        or scheduler["exit_code"] != "0:0"
-        or scheduler["nodes"] != "8"
-        or DIGITS_RE.fullmatch(elapsed) is None
-        or int(elapsed) <= 0
+        value["complete_block_rank_inventory_sha256"] != compact_json_sha256(rank_records)
+        or value["terminal_rank_local_output_inventory_sha256"]
+        != terminal_output_inventory_sha256
+        or value["checks"]
+        != {
+            "exact_resolution": True,
+            "exact_rank_count": True,
+            "exact_meshblocks_per_rank": True,
+            "complete_unique_logical_inventory": True,
+        }
+        or len(observed_locations) != 1728
+        or len(set(observed_locations)) != 1728
+        or set(observed_locations) != expected_locations
     ):
-        raise ValueError("R17 64-rank scheduler evidence is not a successful measured run")
-    submitted = require_scheduler_timestamp(
-        scheduler["submitted_utc"], "R17 rank-readiness submitted time"
-    )
-    completed = require_scheduler_timestamp(
-        scheduler["completed_utc"], "R17 rank-readiness completed time"
-    )
-    if completed < submitted or completed > current_utc() + FUTURE_SKEW:
-        raise ValueError("R17 64-rank scheduler chronology is invalid")
-    batch_path = readiness_root / "r17_64_rank_readiness.sbatch"
-    batch_payload, batch_evidence = read_stable_regular_file(
-        batch_path, "R17 rank-readiness batch script"
-    )
-    validate_binding(value["batch_script"], batch_evidence, batch_path, "R17 rank-readiness batch script")
-    if normalized_batch_script_sha256(batch_payload) != BATCH_SCRIPT_DIGEST_PATTERN.findall(
-        batch_payload.decode("utf-8")
-    )[0]:
-        raise ValueError("R17 rank-readiness batch script self-digest is invalid")
-    outputs = value["output_inventory"]
-    if not isinstance(outputs, list) or len(outputs) != 64:
-        raise ValueError("R17 rank-readiness output inventory is incomplete")
-    output_evidence = []
-    seen: set[Path] = set()
-    for index, binding in enumerate(outputs):
-        if not isinstance(binding, dict):
-            raise ValueError("R17 rank-readiness output binding is malformed")
-        path = normalized_path(Path(str(binding.get("path", ""))))
-        if path.parent != readiness_root / "output" / f"rank_{index:08d}":
-            raise ValueError("R17 rank-readiness output inventory is not exact per rank")
-        if path in seen:
-            raise ValueError("R17 rank-readiness output inventory contains duplicates")
-        seen.add(path)
-        _, retained = read_stable_regular_file(path, f"R17 rank-readiness output {index}")
-        validate_binding(binding, retained, path, f"R17 rank-readiness output {index}")
-        output_evidence.append(retained)
-    final_time = decimal_value(value["final_time"], "R17 rank-readiness final time")
-    if final_time <= 0:
-        raise ValueError("R17 rank-readiness final time must be positive")
-    restart = validate_restart_group(
-        value["terminal_restart"],
-        expected_root=readiness_root / "restarts",
-        expected_count=64,
-        expected_time=final_time,
-        label="R17 rank readiness",
-    )
-    performance = value["performance"]
-    if not isinstance(performance, dict):
-        raise ValueError("R17 rank-readiness performance must be an object")
-    require_exact_keys(
-        performance,
-        ("elapsed_seconds", "node_hours", "simulated_time", "meshblocks_per_rank"),
-        "R17 rank-readiness performance",
-    )
-    expected_node_hours = Decimal(8 * int(elapsed)) / Decimal(3600)
-    if (
-        performance["elapsed_seconds"] != int(elapsed)
-        or abs(decimal_value(performance["node_hours"], "R17 readiness node-hours") - expected_node_hours)
-        > Decimal("0.000001")
-        or decimal_value(performance["simulated_time"], "R17 readiness simulated time") != final_time
-        or isinstance(performance["meshblocks_per_rank"], bool)
-        or not isinstance(performance["meshblocks_per_rank"], int)
-        or performance["meshblocks_per_rank"] <= 0
-    ):
-        raise ValueError("R17 rank-readiness performance differs from measured evidence")
+        raise ValueError(f"{label} does not authenticate the exact 1728 logical meshblocks")
+
+
+def r17_parameter_contract() -> dict[str, str]:
+    """Return the producer's exact frozen R17 qualification parameter contract."""
+
     return {
-        "scheduler": scheduler_evidence,
-        "batch_script": batch_evidence,
-        "outputs": output_evidence,
-        "restart": restart,
+        "job/basename": "qualification_R17_n08",
+        "mesh/ix1_bc": "periodic",
+        "mesh/ix2_bc": "periodic",
+        "mesh/ix3_bc": "periodic",
+        "mesh/nghost": "2",
+        "mesh/nx1": "384",
+        "mesh/nx2": "384",
+        "mesh/nx3": "768",
+        "mesh/ox1_bc": "periodic",
+        "mesh/ox2_bc": "periodic",
+        "mesh/ox3_bc": "periodic",
+        "mesh/x1max": "1.0",
+        "mesh/x1min": "0.0",
+        "mesh/x2max": "1.0",
+        "mesh/x2min": "0.0",
+        "mesh/x3max": "2.0",
+        "mesh/x3min": "0.0",
+        "meshblock/nx1": "32",
+        "meshblock/nx2": "32",
+        "meshblock/nx3": "64",
+        "mhd/backup_limiters": "false",
+        "mhd/cgl_firehose_threshold": "parallel",
+        "mhd/cgl_heat_flux": "landau_fluid",
+        "mhd/cgl_heat_flux_integrator": "sts",
+        "mhd/cgl_lf_record_pressure_work": "true",
+        "mhd/cgl_lf_strict_admissibility": "true",
+        "mhd/eos": "cgl",
+        "mhd/firehose_limiter": "true",
+        "mhd/lf_coefficient_mode": "local",
+        "mhd/lf_k_parallel": "6.283185307179586",
+        "mhd/limiter_hardwall": "true",
+        "mhd/limiter_nu_coll": "1.0e10",
+        "mhd/mirror_limiter": "true",
+        "mhd/passive": "false",
+        "mhd/reconstruct": "plm",
+        "mhd/rsolver": "hlle",
+        "output1/dt": "0.02",
+        "output1/file_type": "hst",
+        "output2/dt": "0.25",
+        "output2/file_type": "bin",
+        "output2/single_file_per_rank": "true",
+        "output2/variable": "mhd_w_bcc",
+        "output3/dt": "1.0",
+        "output3/file_type": "rst",
+        "output3/single_file_per_rank": "true",
+        "problem/beta0": "10.0",
+        "problem/paper_mode": "turbulence",
+        "problem/passive_delta": "false",
+        "problem/pgen_name": "cgl_lf_paper",
+        "problem/user_hist": "true",
+        "time/evolution": "dynamic",
+        "time/integrator": "rk2",
+        "time/sts_integrator": "rkl2",
+        "time/tlim": "0.25",
+        "turb_driving/dedt": "0.32",
+        "turb_driving/driving_type": "1",
+        "turb_driving/projection_policy": "mks24_alfvenic_perpendicular",
+        "turb_driving/record_injected_work": "true",
+        "turb_driving/tcorr": "2.0",
     }
 
 
-def validate_r17_readiness(
-    profile: dict[str, object],
-    state: dict[str, object],
-    cases: dict[str, dict[str, object]],
-    profiles: dict[str, dict[str, object]],
-) -> dict[str, object]:
-    """Require digest-bound measured and independently reproduced R17 readiness."""
+def read_r17_bound_artifact(
+    binding: object, label: str, *, mode: str | None = None
+) -> tuple[bytes, dict[str, object], Path]:
+    """Authenticate one canonical-root-relative producer evidence binding."""
 
-    readiness = profile["r17_readiness"]
-    if not isinstance(readiness, dict):
-        raise ValueError("R17 readiness must be an object")
-    require_exact_keys(
-        readiness, ("decision", "reviewed_by", "reviewed_utc", "notes", "evidence"),
-        "R17 readiness",
-    )
-    if readiness["decision"] != "approved":
-        raise ValueError("R17 prerequisites are not approved")
-    require_nonempty_string(readiness["reviewed_by"], "R17 readiness reviewer")
-    require_nonempty_string(readiness["notes"], "R17 readiness notes")
-    reviewed = require_utc(readiness["reviewed_utc"], "R17 readiness reviewed_utc")
-    now = current_utc()
+    if not isinstance(binding, dict):
+        raise ValueError(f"{label} binding must be an object")
+    require_exact_keys(binding, ("path", "sha256"), f"{label} binding")
+    relative_text = require_nonempty_string(binding["path"], f"{label} path")
+    relative = Path(relative_text)
     if (
-        reviewed < state["summary_observed"]
-        or reviewed > now + FUTURE_SKEW
-        or now - reviewed > R17_READINESS_MAX_AGE
+        relative.is_absolute()
+        or ".." in relative.parts
+        or relative.as_posix() != relative_text
     ):
-        raise ValueError("R17 readiness is stale relative to canonical state")
-    evidence = readiness["evidence"]
-    if not isinstance(evidence, dict):
-        raise ValueError("R17 readiness evidence must be an object")
-    exact_paths = {
-        "storage": expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_R17_storage_readiness.json"),
-        "recost": expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_R17_node_hour_recost.json"),
-        "rank_readiness": expected_path(f"accounting/mks24_stage_i_{EXECUTION_EPOCH_SLUG}_R17_64_rank_readiness.json"),
+        raise ValueError(f"{label} path must be canonical-root relative")
+    payload, evidence = read_stable_regular_file(expected_path(relative_text), label)
+    if evidence["sha256"] != binding["sha256"] or (
+        mode is not None and evidence["mode"] != mode
+    ):
+        raise ValueError(f"{label} bytes or mode differ")
+    return payload, evidence, relative
+
+
+def parse_bound_json(payload: bytes, label: str) -> dict[str, object]:
+    """Parse one unambiguous bound JSON object."""
+
+    try:
+        value = json.loads(
+            payload.decode("utf-8"), object_pairs_hook=duplicate_rejecting_object
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise ValueError(f"{label} is not unambiguous UTF-8 JSON") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must contain an object")
+    return value
+
+
+def validate_r17_physics_contract(scientific: dict[str, object]) -> dict[str, object]:
+    """Independently enforce the qualification producer's R17 physics gates."""
+
+    measurements = scientific.get("physics_measurements")
+    checks = scientific.get("checks")
+    if not isinstance(measurements, dict) or not isinstance(checks, dict):
+        raise ValueError("R17 scientific evidence lacks complete physics measurements/checks")
+    require_exact_keys(
+        measurements,
+        (
+            "finite_rank_outputs", "mass_relative_drift_max",
+            "mhd_user_mass_mismatch_max", "lf_bad_counts_total",
+            "normalized_ct_divb_max", "normalized_ct_divb_threshold",
+            "normalized_ct_divb_below_threshold",
+        ),
+        "R17 physics measurements",
+    )
+    require_exact_keys(checks, R17_SCIENTIFIC_CHECKS, "R17 scientific checks")
+
+    def producer_float_text(key: str) -> float:
+        value = measurements[key]
+        if not isinstance(value, str):
+            raise ValueError(f"R17 physics measurement {key} is not producer text")
+        try:
+            parsed = float(value)
+        except ValueError as error:
+            raise ValueError(f"R17 physics measurement {key} is invalid") from error
+        if not math.isfinite(parsed) or format(parsed, ".17g") != value:
+            raise ValueError(f"R17 physics measurement {key} is not canonical finite text")
+        return parsed
+
+    mass_drift = producer_float_text("mass_relative_drift_max")
+    mass_mismatch = producer_float_text("mhd_user_mass_mismatch_max")
+    normalized_divb = producer_float_text("normalized_ct_divb_max")
+    if (
+        measurements["finite_rank_outputs"] != 64
+        or isinstance(measurements["lf_bad_counts_total"], bool)
+        or measurements["lf_bad_counts_total"] != 0
+        or measurements["normalized_ct_divb_threshold"]
+        != R17_MAX_NORMALIZED_CT_DIVB_TEXT
+        or measurements["normalized_ct_divb_below_threshold"] is not True
+        or mass_drift < 0.0
+        or mass_drift > CONTINUATION_MASS_TOLERANCE
+        or mass_mismatch < 0.0
+        or mass_mismatch > CONTINUATION_MASS_TOLERANCE
+        or normalized_divb < 0.0
+        or normalized_divb >= float(R17_MAX_NORMALIZED_CT_DIVB_TEXT)
+        or checks != R17_SCIENTIFIC_CHECKS
+    ):
+        raise ValueError("R17 physics measurements or scientific checks fail policy")
+    return measurements
+
+
+def validate_r17_frozen_science_build_contract(
+    value: object, profile: dict[str, object]
+) -> dict[str, object]:
+    """Authenticate the producer's exact frozen R17 science/build contract."""
+
+    if not isinstance(value, dict):
+        raise ValueError("R17 frozen science/build contract must be an object")
+    require_exact_keys(
+        value,
+        (
+            "case_id", "case_name", "profile_class", "resolution", "mesh_shape",
+            "meshblock_shape", "target_time", "scientific_policy", "run_basename",
+            "source_revision", "source_bundle_sha256", "matrix_sha256", "input_sha256",
+            "provenance_sha256", "execution_intent_sha256",
+            "execution_contract_sha256", "parameter_contract",
+            "parameter_contract_sha256", "executable_revision", "executable_sha256",
+            "build_manifest_inventory_sha256",
+        ),
+        "R17 frozen science/build contract",
+    )
+    parameter_contract = r17_parameter_contract()
+    exact = {
+        "case_id": R17,
+        "case_name": EXPECTED_CASES[R17][0],
+        "profile_class": "scale_separation_384x384x768",
+        "resolution": "384x384x768",
+        "mesh_shape": [384, 384, 768],
+        "meshblock_shape": [32, 32, 64],
+        "target_time": 0.25,
+        "scientific_policy": "active_hardwall",
+        "run_basename": "qualification_R17_n08",
+        "source_revision": SOURCE_REVISION,
+        "matrix_sha256": MATRIX_SHA256,
+        "input_sha256": EXPECTED_CASES[R17][3],
+        "parameter_contract": parameter_contract,
+        "parameter_contract_sha256": compact_json_sha256(parameter_contract),
+        "executable_revision": SOURCE_REVISION,
+        "executable_sha256": profile["executable_sha256"],
+        "build_manifest_inventory_sha256": profile["build_manifest_sha256"],
     }
-    if set(evidence) != set(exact_paths):
-        raise ValueError("R17 readiness evidence set is incomplete")
-    values = {}
-    retained = {}
-    for key, path in exact_paths.items():
-        value, file_evidence = read_json_file(path, f"R17 {key}")
-        validate_binding(evidence[key], file_evidence, path, f"R17 {key}")
-        require_fresh(file_evidence, value.get("generated_utc"), f"R17 {key}", R17_READINESS_MAX_AGE)
-        artifact_reviewed = require_fresh(
-            file_evidence, value.get("reviewed_utc"), f"R17 {key} review",
-            R17_READINESS_MAX_AGE,
+    if any(value.get(key) != expected for key, expected in exact.items()):
+        raise ValueError("R17 frozen science/build contract differs")
+    for key in (
+        "source_bundle_sha256", "provenance_sha256", "execution_intent_sha256",
+        "execution_contract_sha256",
+    ):
+        require_sha256(value[key], f"R17 frozen contract {key}")
+    return value
+
+
+def validate_r17_operational_qualification_contract(
+    qualification: dict[str, object],
+    profile: dict[str, object],
+    qualification_path: Path,
+    qualification_profile: dict[str, object],
+    qualification_review: dict[str, object],
+    qualification_reviewed: datetime,
+) -> tuple[dict[str, object], dict[str, dict[str, object]], set[str]]:
+    """Authenticate the full exact schema-2 contract emitted by the R17 producer."""
+
+    raw_keys = {
+        "schema_version", "record_type", "execution_epoch", "completed_utc",
+        "measured_utc", "measured_by", "job_id", "state", "exit_code", "nodes",
+        "ranks", "prepared_wave", "qualification_evidence", "scientific_evidence",
+        "scheduler_evidence", "account_scheduler_evidence",
+        "account_exclusivity_evidence", "executable_sha256",
+        "build_manifest_inventory", "build_manifest_inventory_sha256",
+        "rank_local_outputs", "rank_local_output_inventory_sha256",
+        "rank_local_restarts", "rank_local_restart_inventory_sha256",
+        "decomposition_evidence", "restart_load_evidence",
+        "physics_validation_evidence", "frozen_science_build_contract",
+        "independent_review_contract", "authority",
+    }
+    require_exact_keys(qualification, raw_keys, "R17 operational qualification")
+    expected_qualification = Path(
+        "accounting/"
+        f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_R17_operational_qualification.json"
+    )
+    completed = parse_account_scheduler_timestamp(
+        qualification["completed_utc"], "R17 qualification completion"
+    ).astimezone(timezone.utc)
+    measured = require_utc(
+        qualification["measured_utc"], "R17 qualification measurement"
+    )
+    measured_by = require_nonempty_string(
+        qualification["measured_by"], "R17 qualification measurement author"
+    )
+    if (
+        qualification_path != expected_path(expected_qualification.as_posix())
+        or qualification_profile["mode"] != "0444"
+        or qualification["schema_version"] != 2
+        or qualification["record_type"] != "stage-i-r17-operational-qualification"
+        or qualification["execution_epoch"] != EXECUTION_EPOCH
+        or qualification["state"] != "COMPLETED"
+        or qualification["exit_code"] != "0:0"
+        or qualification["nodes"] != 8
+        or qualification["ranks"] != 64
+        or qualification["executable_sha256"] != profile["executable_sha256"]
+        or measured < completed
+        or measured > qualification_reviewed
+        or qualification["authority"]
+        != {
+            "r17_launch_authorized": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+        }
+    ):
+        raise ValueError("R17 operational qualification identity or authority differs")
+    frozen = validate_r17_frozen_science_build_contract(
+        qualification["frozen_science_build_contract"], profile
+    )
+
+    expected_review_contract = {
+        "required": True,
+        "path": (
+            expected_qualification.with_name(
+                f"{expected_qualification.name}.independent_review.json"
+            ).as_posix()
+        ),
+        "mode": "0444",
+        "schema_version": 1,
+        "record_type": "stage-i-r17-operational-qualification-independent-review",
+        "execution_epoch": EXECUTION_EPOCH,
+        "decision": "approved",
+        "candidate_path": str(qualification_path),
+        "candidate_sha256_required": True,
+        "reviewer_must_differ_from": [measured_by],
+        "reviewed_after_utc": qualification["measured_utc"],
+    }
+    if (
+        qualification["independent_review_contract"] != expected_review_contract
+        or qualification_reviewed < measured
+        or qualification_review.get("reviewer") == measured_by
+    ):
+        raise ValueError("R17 independent-review contract differs")
+
+    profiles: dict[str, dict[str, object]] = {}
+    wave_payload, profiles["prepared_wave"], _ = read_r17_bound_artifact(
+        qualification["prepared_wave"], "R17 prepared wave"
+    )
+    evidence_payload, profiles["qualification_evidence"], _ = read_r17_bound_artifact(
+        qualification["qualification_evidence"], "R17 qualification evidence"
+    )
+    scientific_payload, profiles["scientific_evidence"], _ = read_r17_bound_artifact(
+        qualification["scientific_evidence"], "R17 scientific evidence"
+    )
+    wave = parse_bound_json(wave_payload, "R17 prepared wave")
+    evidence = parse_bound_json(evidence_payload, "R17 qualification evidence")
+    scientific = parse_bound_json(scientific_payload, "R17 scientific evidence")
+    provenance = wave.get("provenance")
+    packets = [
+        packet
+        for wave_record in wave.get("waves", [])
+        if isinstance(wave_record, dict)
+        for packet in wave_record.get("packets", [])
+        if isinstance(packet, dict)
+        and isinstance(packet.get("execution_intent"), dict)
+        and packet["execution_intent"].get("case_id") == R17
+    ] if isinstance(wave.get("waves"), list) else []
+    if not isinstance(provenance, dict) or len(packets) != 1:
+        raise ValueError("R17 prepared wave does not retain one exact R17 packet")
+    packet = packets[0]
+    intent = packet["execution_intent"]
+    source = provenance.get("source")
+    source_bundle = provenance.get("source_bundle")
+    matrix = provenance.get("matrix")
+    executable = provenance.get("executable")
+    build = provenance.get("build_manifest")
+    if (
+        wave.get("provenance_sha256") != frozen["provenance_sha256"]
+        or compact_json_sha256(provenance) != frozen["provenance_sha256"]
+        or not all(isinstance(item, dict) for item in (
+            source, source_bundle, matrix, executable, build
+        ))
+        or source.get("revision") != frozen["source_revision"]
+        or source_bundle.get("sha256") != frozen["source_bundle_sha256"]
+        or matrix.get("sha256") != frozen["matrix_sha256"]
+        or executable.get("revision") != frozen["executable_revision"]
+        or executable.get("sha256") != frozen["executable_sha256"]
+        or build.get("inventory_sha256") != frozen["build_manifest_inventory_sha256"]
+        or packet.get("execution_intent_sha256") != frozen["execution_intent_sha256"]
+        or intent.get("execution_intent_sha256") != frozen["execution_intent_sha256"]
+        or intent.get("execution_contract_sha256") != frozen["execution_contract_sha256"]
+        or any(intent.get(key) != frozen[key] for key in (
+            "case_id", "case_name", "profile_class", "target_time",
+            "scientific_policy", "run_basename",
+        ))
+        or not isinstance(intent.get("input"), dict)
+        or intent["input"].get("sha256") != frozen["input_sha256"]
+    ):
+        raise ValueError("R17 prepared wave differs from frozen science/build contract")
+
+    require_exact_keys(
+        evidence,
+        (
+            "schema_version", "record_type", "project_root", "qualification_root",
+            "prepared_wave", "case_id", "target_time", "results",
+        ),
+        "R17 qualification evidence",
+    )
+    prepared_evidence = evidence["prepared_wave"]
+    if (
+        not isinstance(prepared_evidence, dict)
+        or set(prepared_evidence) != {"path", "sha256", "size_bytes"}
+        or evidence["schema_version"] != 2
+        or evidence["record_type"] != "cgl_lf_stage_i_qualification_evidence"
+        or evidence["project_root"] != str(CANONICAL_ROOT)
+        or evidence["case_id"] != R17
+        or evidence["target_time"] != 0.25
+        or prepared_evidence["path"] != str(expected_path(qualification["prepared_wave"]["path"]))
+        or prepared_evidence["sha256"] != qualification["prepared_wave"]["sha256"]
+    ):
+        raise ValueError("R17 qualification evidence binding differs")
+
+    output_sha256 = validate_r17_rank_inventory(
+        qualification["rank_local_outputs"], "R17 qualification terminal outputs"
+    )
+    restart_sha256 = validate_r17_rank_inventory(
+        qualification["rank_local_restarts"], "R17 qualification terminal restarts"
+    )
+    if (
+        qualification["rank_local_output_inventory_sha256"] != output_sha256
+        or qualification["rank_local_restart_inventory_sha256"] != restart_sha256
+    ):
+        raise ValueError("R17 terminal rank-local inventory digest differs")
+    validate_r17_meshblock_decomposition_proof(
+        qualification["decomposition_evidence"], output_sha256
+    )
+    build_inventory = qualification["build_manifest_inventory"]
+    if (
+        not isinstance(build_inventory, list)
+        or build_inventory != sorted(build_inventory, key=lambda item: str(item.get("name", "")))
+        or qualification["build_manifest_inventory_sha256"]
+        != recost_json_sha256(build_inventory)
+        or qualification["build_manifest_inventory_sha256"] != profile["build_manifest_sha256"]
+    ):
+        raise ValueError("R17 build-manifest inventory digest differs")
+    for item in build_inventory:
+        if not isinstance(item, dict):
+            raise ValueError("R17 build-manifest inventory record must be an object")
+        require_exact_keys(item, ("name", "mode", "sha256"), "R17 build-manifest inventory record")
+        name = require_nonempty_string(item["name"], "R17 build-manifest file name")
+        payload, retained = read_stable_regular_file(
+            build_manifest_path() / name, f"R17 build-manifest file {name}"
         )
         if (
-            value.get("schema_version") != 1
-            or value.get("execution_epoch") != EXECUTION_EPOCH
-            or value.get("decision") != "approved"
-            or not require_nonempty_string(value.get("reviewed_by"), f"R17 {key} reviewer")
-            or artifact_reviewed < state["summary_observed"]
+            not payload
+            or item["mode"] != "0644"
+            or retained["mode"] != "0644"
+            or retained["sha256"] != item["sha256"]
         ):
-            raise ValueError(f"R17 {key} evidence is not approved for current state")
-        values[key] = value
-        retained[key] = file_evidence
-    storage = values["storage"]
-    if storage.get("record_type") != "cgl_lf_stage_i_r17_storage_readiness":
-        raise ValueError("R17 storage evidence record_type is invalid")
-    available = storage.get("available_bytes")
-    required = storage.get("required_retention_bytes")
-    live_available = available_storage_bytes(CANONICAL_ROOT)
+            raise ValueError("R17 build-manifest inventory bytes or mode differ")
     if (
-        isinstance(available, bool) or not isinstance(available, int)
-        or isinstance(required, bool) or not isinstance(required, int)
-        or required < R17_REQUIRED_RETENTION_BYTES
-        or available < required
-        or live_available < required
+        scientific.get("schema_version") != 6
+        or scientific.get("record_type")
+        != "cgl_lf_stage_i_qualification_scientific_evidence"
+        or scientific.get("case_id") != R17
+        or scientific.get("nodes") != 8
+        or scientific.get("execution_intent_sha256") != frozen["execution_intent_sha256"]
+        or scientific.get("execution_contract_sha256") != frozen["execution_contract_sha256"]
+        or scientific.get("terminal_rank_local_outputs") != qualification["rank_local_outputs"]
+        or scientific.get("terminal_rank_local_output_inventory_sha256") != output_sha256
+        or scientific.get("terminal_rank_local_restarts") != qualification["rank_local_restarts"]
+        or scientific.get("terminal_rank_local_restart_inventory_sha256") != restart_sha256
+        or scientific.get("r17_decomposition") != qualification["decomposition_evidence"]
+        or scientific.get("accepted_for_operational_qualification") is not True
+        or scientific.get("accepted_for_profile_selection") is not False
     ):
-        raise ValueError("R17 storage evidence does not satisfy retained-capacity policy")
-    recost = values["recost"]
-    if recost.get("record_type") != "cgl_lf_stage_i_r17_node_hour_recost":
-        raise ValueError("R17 recost evidence record_type is invalid")
-    r17_reserved = Decimal(
-        int(profiles[R17]["nodes"])
-        * walltime_seconds(profiles[R17]["walltime"], "R17 profile walltime")
-    ) / Decimal(3600)
-    projection = campaign_projection(cases, state, {R17: r17_reserved})
-    if (
-        recost.get("projection") != projection
-        or recost.get("projection_sha256") != sha256_bytes(canonical_json(projection))
-        or decimal_value(
-            recost.get("projected_r17_reserved_node_hours"), "R17 projected reserved use"
+        raise ValueError("R17 scientific evidence differs from qualification contract")
+    physics_measurements = validate_r17_physics_contract(scientific)
+
+    validation_records = {}
+    expected_measurements = {
+        "restart_load_evidence": {
+            "rank_local_restart_inventory_sha256": restart_sha256,
+            "loaded_rank_count": 64,
+            "load_state": "COMPLETED",
+            "load_exit_code": "0:0",
+        },
+        "physics_validation_evidence": {
+            "rank_local_output_inventory_sha256": output_sha256,
+            **physics_measurements,
+        },
+    }
+    record_types = {
+        "restart_load_evidence": "stage-i-r17-restart-load-evidence",
+        "physics_validation_evidence": "stage-i-r17-physics-validation-evidence",
+    }
+    measurement_authors = set()
+    for key in ("restart_load_evidence", "physics_validation_evidence"):
+        payload, profiles[key], relative = read_r17_bound_artifact(
+            qualification[key], f"R17 {key.replace('_', ' ')}", mode="0444"
         )
-        != r17_reserved
+        expected_relative = Path(
+            "accounting/"
+            f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_R17_{key}.json"
+        )
+        record = parse_bound_json(payload, f"R17 {key.replace('_', ' ')}")
+        require_exact_keys(
+            record,
+            (
+                "schema_version", "record_type", "execution_epoch", "measured_utc",
+                "measured_by", "job_id", "executable_sha256",
+                "build_manifest_inventory_sha256", "passed", "measurements",
+            ),
+            f"R17 {key.replace('_', ' ')}",
+        )
+        author = require_nonempty_string(record["measured_by"], f"R17 {key} author")
+        measurement_authors.add(author)
+        if (
+            relative != expected_relative
+            or record["schema_version"] != 1
+            or record["record_type"] != record_types[key]
+            or record["execution_epoch"] != EXECUTION_EPOCH
+            or record["measured_utc"] != qualification["measured_utc"]
+            or author != measured_by
+            or record["job_id"] != qualification["job_id"]
+            or record["executable_sha256"] != qualification["executable_sha256"]
+            or record["build_manifest_inventory_sha256"]
+            != qualification["build_manifest_inventory_sha256"]
+            or record["passed"] is not True
+            or record["measurements"] != expected_measurements[key]
+        ):
+            raise ValueError("R17 retained validation evidence differs")
+        validation_records[key] = {
+            **qualification[key],
+            "measured_utc": measured.isoformat(),
+            "measured_by": author,
+            "measurements": record["measurements"],
+        }
+    return validation_records, profiles, measurement_authors
+
+
+def validate_recost_r17_readiness(
+    recost: dict[str, object],
+    authority: dict[str, object],
+    state: dict[str, object],
+    profile: dict[str, object],
+    budget: dict[str, object],
+) -> dict[str, object]:
+    """Require the sole strong recost-compatible R17 readiness publication chain."""
+
+    readiness = recost.get("r17_readiness")
+    provenance = recost.get("provenance")
+    if not isinstance(readiness, dict) or not isinstance(provenance, dict):
+        raise ValueError("R17 recost recommendation lacks strong readiness publication")
+    expanded = dict(readiness)
+    qualification_expanded = expanded.pop("operational_qualification_evidence", None)
+    publication_chain = expanded.pop("publication_chain", None)
+    path = r17_readiness_path()
+    value, evidence = read_json_file(path, "R17 readiness evidence")
+    readiness_sha256 = require_sha256(
+        provenance.get("r17_readiness_evidence_sha256"), "R17 readiness evidence SHA-256"
+    )
+    require_immutable_publication_evidence(evidence, readiness_sha256, "R17 readiness evidence")
+    if value != expanded:
+        raise ValueError("embedded R17 readiness differs from its promoted artifact")
+    require_exact_keys(
+        value,
+        (
+            "schema_version", "record_type", "execution_epoch", "root", "generated_utc",
+            "expires_utc", "reviewed_by", "predecessor_lineages_sha256",
+            "storage_evidence_sha256", "computed_projection_sha256", "executable_sha256",
+            "build_manifest_sha256", "required_retained_bytes", "nodes", "ranks",
+            "storage_ready", "node_hour_ready", "rank_64_ready",
+            "operational_qualification", "operational_qualification_review",
+            "current_source_authority",
+        ),
+        "R17 readiness evidence",
+    )
+    generated = require_fresh(evidence, value["generated_utc"], "R17 readiness", R17_READINESS_MAX_AGE)
+    expires = require_utc(value["expires_utc"], "R17 readiness expiry")
+    lineage_sha = authenticated_lineages_sha256(state["lineages"])
+    if (
+        value["schema_version"] != 1
+        or value["record_type"] != "stage-i-r17-readiness"
+        or value["execution_epoch"] != EXECUTION_EPOCH
+        or value["root"] != str(CANONICAL_ROOT)
+        or expires <= generated
+        or expires - generated > R17_READINESS_MAX_AGE
+        or current_utc() > expires
+        or expires < authority["expires_utc"]
+        or value["predecessor_lineages_sha256"] != lineage_sha
+        or value["storage_evidence_sha256"] != provenance.get("storage_evidence_sha256")
+        or value["computed_projection_sha256"] != provenance.get("computed_projection_sha256")
+        or value["current_source_authority"] != provenance.get("source_authority")
+        or value["executable_sha256"] != profile["executable_sha256"]
+        or value["build_manifest_sha256"] != profile["build_manifest_sha256"]
+        or value["required_retained_bytes"] < R17_REQUIRED_RETENTION_BYTES
+        or value["nodes"] != 8
+        or value["ranks"] != 64
+        or any(
+            value[key] is not True
+            for key in ("storage_ready", "node_hour_ready", "rank_64_ready")
+        )
+        or available_storage_bytes(CANONICAL_ROOT) < value["required_retained_bytes"]
+        or recost_json_sha256(budget) != value["computed_projection_sha256"]
     ):
-        raise ValueError("R17 recost evidence differs from reproduced campaign projection")
-    require_projection_within_budget(projection, "R17 recost")
-    rank = values["rank_readiness"]
-    retained["rank_readiness_support"] = validate_r17_rank_readiness(rank)
-    retained["live_available_bytes"] = live_available
-    retained["reproduced_recost_projection"] = projection
-    return retained
+        raise ValueError("R17 readiness reviewed bindings or 24-hour launch window differ")
+    readiness_reviewer = require_nonempty_string(value["reviewed_by"], "R17 readiness reviewer")
+
+    review_path = recost_independent_review_path(path)
+    audit_path = recost_publication_audit_path(path)
+    review, review_evidence = read_json_file(review_path, "R17 readiness independent review")
+    audit, audit_evidence = read_json_file(audit_path, "R17 readiness publication audit")
+    require_immutable_publication_evidence(
+        review_evidence, review_evidence["sha256"], "R17 readiness independent review"
+    )
+    require_immutable_publication_evidence(
+        audit_evidence, audit_evidence["sha256"], "R17 readiness publication audit"
+    )
+    require_exact_keys(
+        review,
+        (
+            "schema_version", "record_type", "execution_epoch", "reviewed_utc",
+            "decision", "reviewer", "candidate",
+        ),
+        "R17 readiness independent review",
+    )
+    reviewed = require_utc(review["reviewed_utc"], "R17 readiness review timestamp")
+    require_exact_keys(
+        audit,
+        (
+            "schema_version", "record_type", "execution_epoch", "published_utc",
+            "artifact", "independent_review", "authority",
+        ),
+        "R17 readiness publication audit",
+    )
+    published = require_utc(audit["published_utc"], "R17 readiness publication timestamp")
+    if (
+        review["schema_version"] != 1
+        or review["record_type"] != "stage-i-r17-readiness-independent-review"
+        or review["execution_epoch"] != EXECUTION_EPOCH
+        or review["decision"] != "approved-for-publication"
+        or review["reviewer"] != readiness_reviewer
+        or review["candidate"] != {"path": str(path), "sha256": readiness_sha256}
+        or audit["schema_version"] != 1
+        or audit["record_type"] != "stage-i-r17-readiness-publication-audit"
+        or audit["execution_epoch"] != EXECUTION_EPOCH
+        or audit["authority"]
+        != {
+            "r17_launch_authorized": False,
+            "scheduler_mutation_authorized": False,
+            "canonical_mutation_authorized": False,
+        }
+        or reviewed < generated
+        or published < reviewed
+        or authority["generated_utc"] < published
+        or current_utc() - reviewed > R17_READINESS_MAX_AGE
+        or current_utc() - published > R17_READINESS_MAX_AGE
+    ):
+        raise ValueError("R17 readiness review/publication chain or freshness differs")
+    validate_declared_publication_binding(
+        audit["artifact"],
+        expected=path,
+        digest=readiness_sha256,
+        mode="0444",
+        label="R17 readiness publication artifact",
+    )
+    validate_declared_publication_binding(
+        audit["independent_review"],
+        expected=review_path,
+        digest=review_evidence["sha256"],
+        mode="0444",
+        label="R17 readiness publication review",
+    )
+    expected_chain = {
+        "independent_review_sha256": review_evidence["sha256"],
+        "publication_audit_sha256": audit_evidence["sha256"],
+        "reviewed_by": readiness_reviewer,
+        "published_utc": published.isoformat(),
+    }
+    if publication_chain != expected_chain:
+        raise ValueError("embedded R17 readiness publication chain differs")
+
+    def read_relative_binding(binding: object, label: str, mode: str) -> tuple[dict[str, object], dict[str, object]]:
+        if not isinstance(binding, dict) or set(binding) != {"path", "sha256"}:
+            raise ValueError(f"{label} binding differs")
+        relative = Path(require_nonempty_string(binding["path"], f"{label} path"))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(f"{label} path must be canonical-root relative")
+        retained_path = expected_path(relative.as_posix())
+        retained, retained_evidence = read_json_file(retained_path, label)
+        if retained_evidence["sha256"] != binding["sha256"] or retained_evidence["mode"] != mode:
+            raise ValueError(f"{label} bytes/mode differ")
+        return retained, retained_evidence
+
+    qualification, qualification_evidence = read_relative_binding(
+        value["operational_qualification"], "R17 operational qualification", "0444"
+    )
+    qualification_review, qualification_review_evidence = read_relative_binding(
+        value["operational_qualification_review"],
+        "R17 operational qualification independent review",
+        "0444",
+    )
+    if not isinstance(qualification_expanded, dict):
+        raise ValueError("recost omits expanded R17 operational qualification")
+    raw_qualification_keys = {
+        "schema_version", "record_type", "execution_epoch", "completed_utc",
+        "measured_utc", "measured_by", "job_id", "state", "exit_code", "nodes",
+        "ranks", "prepared_wave", "qualification_evidence", "scientific_evidence",
+        "scheduler_evidence", "account_scheduler_evidence",
+        "account_exclusivity_evidence", "executable_sha256",
+        "build_manifest_inventory", "build_manifest_inventory_sha256",
+        "rank_local_outputs", "rank_local_output_inventory_sha256",
+        "rank_local_restarts", "rank_local_restart_inventory_sha256",
+        "decomposition_evidence", "restart_load_evidence",
+        "physics_validation_evidence", "frozen_science_build_contract",
+        "independent_review_contract", "authority",
+    }
+    expanded_qualification_keys = raw_qualification_keys | {
+        "authenticated_rank_local_outputs",
+        "authenticated_rank_local_restarts",
+        "authenticated_decomposition_evidence",
+        "authenticated_account_exclusivity_evidence",
+        "authenticated_validation_evidence",
+        "reviewed_by",
+    }
+    require_exact_keys(
+        qualification, raw_qualification_keys, "R17 operational qualification"
+    )
+    require_exact_keys(
+        qualification_expanded,
+        expanded_qualification_keys,
+        "expanded R17 operational qualification",
+    )
+    require_exact_keys(
+        qualification_review,
+        (
+            "schema_version", "record_type", "execution_epoch", "reviewed_utc",
+            "decision", "reviewer", "candidate",
+        ),
+        "R17 operational qualification independent review",
+    )
+    expanded_base = {
+        key: item
+        for key, item in qualification_expanded.items()
+        if key
+        not in {
+            "authenticated_rank_local_outputs",
+            "authenticated_rank_local_restarts",
+            "authenticated_decomposition_evidence",
+            "authenticated_account_exclusivity_evidence",
+            "authenticated_validation_evidence",
+            "reviewed_by",
+        }
+    }
+    qualification_reviewer = require_nonempty_string(
+        qualification_review["reviewer"], "R17 operational qualification reviewer"
+    )
+    qualification_reviewed = require_utc(
+        qualification_review["reviewed_utc"], "R17 operational qualification review timestamp"
+    )
+    (
+        authenticated_validation_evidence,
+        qualification_profiles,
+        measurement_authors,
+    ) = validate_r17_operational_qualification_contract(
+        qualification,
+        profile,
+        normalized_path(Path(str(qualification_evidence["path"]))),
+        qualification_evidence,
+        qualification_review,
+        qualification_reviewed,
+    )
+    (
+        authenticated_account_exclusivity,
+        account_exclusivity_profiles,
+    ) = validate_r17_account_exclusivity_artifacts(qualification, qualification_reviewed)
+    if (
+        qualification_expanded["authenticated_decomposition_evidence"]
+        != qualification["decomposition_evidence"]
+    ):
+        raise ValueError("expanded R17 decomposition evidence differs")
+    if (
+        qualification_expanded["authenticated_account_exclusivity_evidence"]
+        != authenticated_account_exclusivity
+    ):
+        raise ValueError("expanded R17 account exclusivity evidence differs")
+    if (
+        expanded_base != qualification
+        or qualification_expanded["authenticated_rank_local_outputs"]
+        != qualification["rank_local_outputs"]
+        or qualification_expanded["authenticated_rank_local_restarts"]
+        != qualification["rank_local_restarts"]
+        or qualification_expanded["authenticated_validation_evidence"]
+        != authenticated_validation_evidence
+        or qualification_review.get("schema_version") != 1
+        or qualification_review.get("record_type")
+        != "stage-i-r17-operational-qualification-independent-review"
+        or qualification_review.get("execution_epoch") != EXECUTION_EPOCH
+        or qualification_review.get("decision") != "approved"
+        or qualification_review.get("candidate")
+        != {
+            "path": qualification_evidence["path"],
+            "sha256": qualification_evidence["sha256"],
+        }
+        or qualification_expanded.get("reviewed_by") != qualification_reviewer
+        or qualification_reviewer == readiness_reviewer
+        or qualification_reviewer in measurement_authors
+        or qualification_reviewed > current_utc() + FUTURE_SKEW
+    ):
+        raise ValueError("R17 operational qualification/review chain differs")
+    review_assurance = declared_process_independence_assurance(
+        {
+            "R17-readiness-reviewer": readiness_reviewer,
+            "R17-operational-qualification-reviewer": qualification_reviewer,
+            **{
+                f"R17-measurement-author-{index}": agent
+                for index, agent in enumerate(sorted(measurement_authors))
+            },
+        },
+        "R17 qualification/readiness review chain",
+    )
+    return {
+        "artifact": evidence,
+        "independent_review": review_evidence,
+        "publication_audit": audit_evidence,
+        "operational_qualification": qualification_evidence,
+        "operational_qualification_review": qualification_review_evidence,
+        **qualification_profiles,
+        **account_exclusivity_profiles,
+        "independent_review_assurance": review_assurance,
+        "live_available_bytes": available_storage_bytes(CANONICAL_ROOT),
+    }
 
 
 def acceptance_prose(case_id: str, target: Decimal, codes: tuple[str, ...]) -> str:
@@ -3293,14 +6980,15 @@ def build_packet(
 ) -> dict[str, object]:
     """Build one exact command-free, explicitly non-launching packet specification."""
 
-    increment = profile["next_increment"]
-    if start == 0 and increment != INITIAL_TARGETS[case_id]:
-        raise ValueError(f"{case_id} fresh next_increment differs from the reviewed initial target")
-    target = min(Decimal("10"), start + increment)
-    if target <= start:
-        raise ValueError(f"{case_id} has no positive exact next interval")
+    segment = require_nonempty_string(profile["segment"], f"{case_id} recost profile segment")
+    segment_index, segment_start, target = parse_segment(segment, f"{case_id} recost profile segment")
+    if (
+        segment_index != next_index
+        or abs(segment_start - start) > Decimal("0.000001")
+        or decimal_value(profile["time_tlim_target"], f"{case_id} recost profile target") != target
+    ):
+        raise ValueError(f"{case_id} recost profile differs from packet lineage")
     codes = policy_codes(case_id)
-    segment = f"s{next_index:02d}_rankio_t{time_token(start)}_t{time_token(target)}"
     if authorization is not None:
         sole = authorization.get("sole_next_segment_profile")
         if not isinstance(sole, dict):
@@ -3324,6 +7012,18 @@ def build_packet(
         key: value for key, value in static.items() if key != "inputs"
     }
     production_provenance["frozen_input"] = static["inputs"][case_id]
+    if authorization is not None:
+        production_provenance["controller_helper"] = {
+            "path": str(CONTROLLER_HELPER),
+            "revision": R03_F115_CONTROLLER_REVISION,
+            "sha256": R03_F115_CONTROLLER_SHA256,
+        }
+        production_provenance["source_bundle"] = {
+            "path": str(f115_source_bundle_path()),
+            "sha256": R03_F115_SOURCE_BUNDLE_SHA256,
+            "verified_revisions": list(F115_SOURCE_BUNDLE_REQUIRED_REVISIONS),
+            "independent_validation": authorization["source_bundle_validation"],
+        }
     return {
         "case_id": case_id,
         "case_name": case["name"],
@@ -3335,7 +7035,7 @@ def build_packet(
         "authorization_state": (
             "planning_only_f115_profile_reference_non_authorizing"
             if authorization is not None
-            else "planning_only_independent_profile_non_authorizing"
+            else "planning_only_reviewed_recost_profile_non_authorizing"
         ),
         "authorization_evidence": authorization,
         "lineage": {
@@ -3353,8 +7053,8 @@ def build_packet(
             "cpus_per_task": CPUS_PER_TASK,
             "walltime": profile["walltime"],
             "athena_walltime": profile["athena_walltime"],
-            "estimated_runtime_seconds": profile["estimated_runtime_seconds"],
-            "review_rationale": profile["rationale"],
+            "estimated_storage_bytes": profile["estimated_storage_bytes"],
+            "recommendation_basis": profile["recommendation_basis"],
         },
         "runtime_parameters": {"time_tlim": decimal_text(target)},
         "production_provenance": production_provenance,
@@ -3373,197 +7073,109 @@ def packet_reserved_node_hours(packet: dict[str, object]) -> Decimal:
 def build_wave_plan(
     matrix: dict[str, object],
     matrix_evidence: dict[str, object],
-    profile: dict[str, object],
-    profile_evidence: dict[str, object],
-    summary: dict[str, object],
-    summary_evidence: dict[str, object],
-    reconciliation: dict[str, object],
-    reconciliation_evidence: dict[str, object],
+    authority: dict[str, object],
 ) -> dict[str, object]:
     """Build one evidence-bound deterministic read-only advisory diagnostic."""
 
     cases, input_evidence = validate_matrix(matrix, matrix_evidence)
-    profiles, static, allocation_authority = validate_profile(
-        profile, profile_evidence, matrix_evidence, input_evidence
-    )
-    state = validate_canonical_state(
-        cases, profile, summary, summary_evidence, reconciliation, reconciliation_evidence
-    )
-    base_projection = campaign_projection(cases, state)
-    validate_authority_projection(allocation_authority, base_projection)
+    recost = authority["artifact"]
+    assert isinstance(recost, dict)
+    static = validate_static_provenance(recost, matrix_evidence, input_evidence)
+    state = validate_canonical_state(cases, authority, static)
     lineages = state["lineages"]
-    active_map = {info["case_id"]: info for info in state["active_infos"]}
 
     r03_lineage, r03_active = lineages[R03]
-    r03_sole, r03_authority = validate_r03_authorization(
-        profile, r03_lineage, r03_active, state["case_infos"][R03]
+    r03_pending_f115_sole, r03_authority = validate_r03_authorization(
+        r03_lineage, r03_active, state["case_infos"][R03]
     )
-    for case_id in PROFILE_CASES:
-        lineage, active = lineages[case_id]
-        if not lineage and profiles[case_id]["next_increment"] != INITIAL_TARGETS[case_id]:
-            raise ValueError(f"{case_id} fresh next_increment differs from the reviewed initial target")
-        if lineage and lineage[0]["target"] != INITIAL_TARGETS[case_id]:
-            raise ValueError(f"{case_id} first accepted target differs from the reviewed plan")
-        validate_active_reviewed_profile(case_id, lineage, active, profiles[case_id])
-    lower_state = {
-        case_id: {
-            "lineage": lineages[case_id][0],
-            "active": lineages[case_id][1],
-            "endpoint": lineage_endpoint(lineages[case_id][0]),
-        }
-        for case_id in LOWER_CASES
-    }
+    profiles, profiles_by_case = validate_recost_profiles(recost, state, static)
+    r12_fresh_rerun = validate_r12_fresh_rerun_transition(state, profiles_by_case)
+    budget = validate_recost_budget(recost, state, profiles)
     predecessor_state = {
-        case_id: lineage_endpoint(lineages[case_id][0]) == Decimal("10")
+        case_id: lineage_complete(lineages[case_id][0])
         for case_id in tuple(f"R{index:02d}" for index in range(2, 17))
     }
     r17_lineage, r17_active = lineages[R17]
-    r17_endpoint = lineage_endpoint(r17_lineage)
     if r17_lineage or r17_active:
         if not all(predecessor_state.values()):
             raise ValueError("R17 started before every authenticated R02-R16 lineage reached exact t=10")
-        if any(info["case_id"] != R17 for info in state["active_infos"]):
-            raise ValueError("R17 is not exclusive")
+    if R17 not in profiles_by_case and (r17_lineage or r17_active):
+        raise ValueError("R17 has started; a lower-resolution recost recommendation is forbidden")
 
+    r17_readiness = (
+        validate_recost_r17_readiness(
+            recost, authority, state, profiles_by_case[R17], budget
+        )
+        if R17 in profiles_by_case
+        else None
+    )
     packets = []
-    deferred: list[dict[str, str]] = []
-    if r17_endpoint == Decimal("10"):
-        if state["active_infos"]:
-            raise ValueError("R17 is complete but an active Stage I lane remains")
-        wave_status = "campaign_complete"
-        r17_readiness = None
-    elif r17_active is not None:
-        wave_status = "r17_active"
-        r17_readiness = validate_r17_readiness(profile, state, cases, profiles)
-    elif all(predecessor_state.values()):
-        if state["active_infos"]:
-            raise ValueError("R17-ready predecessor state still has an active lower lane")
-        r17_readiness = validate_r17_readiness(profile, state, cases, profiles)
-        continuation = terminal_restart(r17_lineage[-1]) if r17_lineage else None
+    for profile_value in profiles:
+        case_id = str(profile_value["case_id"])
+        lineage, active = lineages[case_id]
+        if active is not None or lineage_complete(lineage):
+            raise ValueError(f"recost recommends occupied or complete case {case_id}")
+        endpoint = lineage_endpoint(lineage)
+        continuation = terminal_restart(lineage[-1]) if lineage else None
+        authorization = None
+        if case_id == R03 and r03_pending_f115_sole is not None:
+            if r03_authority is None:
+                raise ValueError("recost R03 recommendation lacks exact F115 sole-next authority")
+            compatible = {
+                "case_id": profile_value["case_id"],
+                "segment": profile_value["segment"],
+                "nodes": profile_value["nodes"],
+                "walltime": profile_value["walltime"],
+                "athena_walltime": profile_value["athena_walltime"],
+                "cpus_per_task": profile_value["cpus_per_task"],
+                "ranks_per_node": profile_value["ranks_per_node"],
+                "executable": profile_value["executable"],
+                "executable_revision": profile_value["executable_revision"],
+                "executable_sha256": profile_value["executable_sha256"],
+                "input_sha256": profile_value["input_sha256"],
+                "parent_job_id": profile_value["parent_job_id"],
+                "parent_result": profile_value["parent_result"],
+                "parent_segment": profile_value["parent_segment"],
+                "restart_file": profile_value["restart_file"],
+                "restart_time": profile_value["restart_time"],
+                "source_bundle": profile_value["source_bundle"],
+                "source_bundle_sha256": profile_value["source_bundle_sha256"],
+                "time_tlim_target": profile_value["time_tlim_target"],
+            }
+            if any(
+                compatible.get(key) != value
+                for key, value in r03_pending_f115_sole.items()
+                if key in compatible
+            ):
+                raise ValueError("recost R03 profile differs from immutable F115 sole-next profile")
+            continuation = r03_authority["continuation"]
+            authorization = {
+                **{
+                    key: value for key, value in r03_authority.items()
+                    if key != "continuation"
+                },
+                "sole_next_segment_profile": r03_pending_f115_sole,
+            }
         packets.append(
             build_packet(
-                R17, cases[R17], profiles[R17], int(state["next_indexes"][R17]),
-                r17_endpoint,
-                static, continuation,
+                case_id,
+                cases[case_id],
+                profile_value,
+                int(state["next_indexes"][case_id]),
+                endpoint,
+                static,
+                continuation,
+                authorization,
             )
         )
-        wave_status = "r17_exclusive"
-    else:
-        if r17_lineage or r17_active:
-            raise ValueError("R17 cannot coexist with incomplete predecessors")
-        r17_readiness = None
-        candidates: list[str] = []
-        if lineage_endpoint(r03_lineage) < Decimal("10") and r03_active is None:
-            candidates.append(R03)
-        candidates.extend(
-            case_id for case_id in PRODUCTION_PRIORITY[1:]
-            if lower_state[case_id]["lineage"]
-            and lower_state[case_id]["endpoint"] < Decimal("10")
-            and lower_state[case_id]["active"] is None
-        )
-        candidates.extend(
-            case_id for case_id in PRODUCTION_PRIORITY[1:]
-            if not lower_state[case_id]["lineage"] and lower_state[case_id]["active"] is None
-        )
-        planned_nodes = state["active_nodes"]
-        planned_lanes = len(state["active_infos"])
-        planned_reserved = state["active_reserved_node_hours"]
-        planned_reserved_by_case: dict[str, Decimal] = {}
-        active_nonconcurrent = any(
-            info["case_id"] not in CONCURRENT_CASES for info in state["active_infos"]
-        )
-        for case_id in candidates:
-            if active_nonconcurrent:
-                deferred.append({"case_id": case_id, "reason": "active_nonconcurrent_case"})
-                continue
-            if planned_lanes >= MAX_LANES:
-                deferred.append({"case_id": case_id, "reason": "four_lane_ceiling"})
-                continue
-            if case_id == R03:
-                if r03_sole is None or r03_authority is None:
-                    raise ValueError("incomplete inactive R03 lacks sole-next authorization")
-                profile_value = {
-                    "nodes": 1,
-                    "walltime": r03_sole["walltime"],
-                    "athena_walltime": r03_sole["athena_walltime"],
-                    "next_increment": decimal_value(r03_sole["time_tlim_target"], "R03 target")
-                    - lineage_endpoint(r03_lineage),
-                    "estimated_runtime_seconds": 6000,
-                    "rationale": (
-                        "planning-only reference to the exact published F-115 R03 s02 "
-                        "continuation profile"
-                    ),
-                }
-                nodes = 1
-            else:
-                profile_value = profiles[case_id]
-                nodes = int(profile_value["nodes"])
-            if planned_nodes + nodes > MAX_NODES:
-                deferred.append({"case_id": case_id, "reason": "ten_node_ceiling"})
-                continue
-            candidate_reserved = Decimal(
-                nodes * walltime_seconds(profile_value["walltime"], f"{case_id} profile walltime")
-            ) / Decimal(3600)
-            candidate_projection = campaign_projection(
-                cases,
-                state,
-                {
-                    **planned_reserved_by_case,
-                    case_id: planned_reserved_by_case.get(case_id, Decimal("0"))
-                    + candidate_reserved,
-                },
-            )
-            if (
-                state["actual_node_hours"] + planned_reserved + candidate_reserved
-                > STAGE_I_BUDGET_NODE_HOURS
-                or state["actual_node_hours"] + planned_reserved + candidate_reserved
-                > PROJECT_BUDGET_NODE_HOURS
-                or projection_total(candidate_projection) > STAGE_I_BUDGET_NODE_HOURS
-                or projection_total(candidate_projection) > PROJECT_BUDGET_NODE_HOURS
-            ):
-                deferred.append({"case_id": case_id, "reason": "budget_ceiling"})
-                continue
-            if case_id == R03:
-                continuation = r03_authority["continuation"]
-                authorization = {
-                    **{
-                        key: value for key, value in r03_authority.items()
-                        if key != "continuation"
-                    },
-                    "sole_next_segment_profile": r03_sole,
-                }
-                lineage = r03_lineage
-                endpoint = lineage_endpoint(lineage)
-            else:
-                lineage = lower_state[case_id]["lineage"]
-                endpoint = lower_state[case_id]["endpoint"]
-                continuation = terminal_restart(lineage[-1]) if lineage else None
-                authorization = None
-            packets.append(
-                build_packet(
-                    case_id, cases[case_id], profile_value,
-                    int(state["next_indexes"][case_id]), endpoint,
-                    static, continuation, authorization,
-                )
-            )
-            planned_nodes += nodes
-            planned_lanes += 1
-            planned_reserved += candidate_reserved
-            planned_reserved_by_case[case_id] = (
-                planned_reserved_by_case.get(case_id, Decimal("0")) + candidate_reserved
-            )
-        wave_status = "lower_resolution"
 
-    total_nodes = state["active_nodes"] + sum(int(packet["allocation"]["nodes"]) for packet in packets)
-    total_lanes = len(state["active_infos"]) + len(packets)
+    wave_status = "r17_exclusive" if R17 in profiles_by_case else "drained_barrier_wave"
+    total_nodes = sum(int(packet["allocation"]["nodes"]) for packet in packets)
+    total_lanes = len(packets)
     planned_reserved_node_hours = sum(
         (packet_reserved_node_hours(packet) for packet in packets), Decimal("0")
     )
-    total_committed_node_hours = (
-        state["actual_node_hours"]
-        + state["active_reserved_node_hours"]
-        + planned_reserved_node_hours
-    )
+    total_committed_node_hours = state["actual_node_hours"] + planned_reserved_node_hours
     if (
         total_committed_node_hours > STAGE_I_BUDGET_NODE_HOURS
         or total_committed_node_hours > PROJECT_BUDGET_NODE_HOURS
@@ -3575,20 +7187,11 @@ def build_wave_plan(
     elif total_lanes > MAX_LANES or total_nodes > MAX_NODES:
         raise ValueError("planned wave exceeds reviewed concurrency ceilings")
     packet_cases = [packet["case_id"] for packet in packets]
-    if len(packet_cases) != len(set(packet_cases)) or set(packet_cases) & set(active_map):
+    if len(packet_cases) != len(set(packet_cases)):
         raise ValueError("planned wave contains duplicate case lanes")
-    final_projection = campaign_projection(
-        cases,
-        state,
-        {
-            packet["case_id"]: packet_reserved_node_hours(packet)
-            for packet in packets
-        },
-    )
-    require_projection_within_budget(final_projection, "planned wave")
 
     core = {
-        "schema_version": 3,
+        "schema_version": 4,
         "record_type": "cgl_lf_stage_i_read_only_wave_diagnostic",
         "execution_epoch": EXECUTION_EPOCH,
         "authority": (
@@ -3618,15 +7221,26 @@ def build_wave_plan(
             "a CT/divergence metric, set a numerical CT threshold, or accept a run.",
             "Every emitted packet requires separate controller/checkpoint consumption of "
             "its underlying authority before launch.",
+            "The promoted schema-2 recost artifact and its independent review/publication "
+            "audit are the sole current profile, projection, and reconciliation authority.",
+            "The exact F-116 evidence/reviews/publication-audit chain is the sole current "
+            "helper/source-bundle authority; F-115 remains historical R03 s02 authority only.",
+            "Independent-review separation is authenticated only as exact retained process, "
+            "role, and agent declarations; artifact digests do not cryptographically "
+            "authenticate reviewer identity.",
+            "Retained R12 s00/job 4766856 is authenticated only as historical inventory. "
+            "It cannot authorize continuation or a waiver; R12 resumes only as fresh "
+            "s01_rankio_t0_t0p12 with no parent or restart.",
         ],
         "evidence": {
             "matrix": matrix_evidence,
-            "allocation_profile": profile_evidence,
-            "controller_summary": summary_evidence,
-            "reconciliation": reconciliation_evidence,
+            "recost_authority": {
+                key: value.isoformat() if isinstance(value, datetime) else value
+                for key, value in authority.items()
+            },
             "canonical_state": state["evidence"],
-            "allocation_authority": allocation_authority,
             "r03_f115_authority": r03_authority,
+            "r12_fresh_rerun_transition": r12_fresh_rerun,
             "r17_readiness": r17_readiness,
         },
         "policy": {
@@ -3636,45 +7250,41 @@ def build_wave_plan(
             "shutdown_margin_seconds": SHUTDOWN_MARGIN_SECONDS,
             "ranks_per_node": RANKS_PER_NODE,
             "cpus_per_task": CPUS_PER_TASK,
-            "initial_lower_wave_priority": list(PRODUCTION_PRIORITY[:4]),
-            "rolling_priority": list(ROLLING_PRIORITY),
+            "recost_bounded_concurrency": recost["recommendations"]["bounded_concurrency"],
             "r17_exclusive_last": True,
         },
         "physics_policies": POLICY_TEXT,
         "observed_state": {
-            "updated_utc": summary["updated_utc"],
+            "updated_utc": authority["generated_utc"].isoformat(),
             "reconciliation_counts": state["counts"],
             "actual_node_hours": decimal_text(state["actual_node_hours"]),
-            "active_reserved_node_hours": decimal_text(state["active_reserved_node_hours"]),
+            "active_reserved_node_hours": "0",
             "planned_reserved_node_hours": decimal_text(planned_reserved_node_hours),
             "total_committed_node_hours": decimal_text(total_committed_node_hours),
-            "credible_remaining_campaign_projection": final_projection,
-            "active_lanes": summary["active"],
+            "credible_remaining_campaign_projection": budget,
+            "active_lanes": [],
             "predecessors_accepted_exact_t10": predecessor_state,
         },
         "wave": {
             "status": wave_status,
-            "active_lane_count": len(state["active_infos"]),
-            "active_nodes": state["active_nodes"],
+            "active_lane_count": 0,
+            "active_nodes": 0,
             "planned_lane_count": len(packets),
             "planned_nodes": sum(int(packet["allocation"]["nodes"]) for packet in packets),
             "total_lane_count": total_lanes,
             "total_nodes": total_nodes,
             "packets": packets,
-            "deferred": sorted(deferred, key=lambda item: (item["case_id"], item["reason"])),
+            "deferred": [],
         },
     }
     core["evidence"]["global_toctou_boundary"] = revalidate_global_boundary(
         [
-            profile,
             matrix_evidence,
-            profile_evidence,
-            summary_evidence,
-            reconciliation_evidence,
+            authority,
             static,
             state,
-            allocation_authority,
             r03_authority,
+            r12_fresh_rerun,
             r17_readiness,
             packets,
         ],
@@ -3685,34 +7295,26 @@ def build_wave_plan(
 
 
 def plan_from_paths(
-    matrix_path_value: Path,
-    profile_path_value: Path,
-    summary_path_value: Path,
-    reconciliation_path_value: Path,
+    recost_path_value: Path,
+    review_path_value: Path,
+    audit_path_value: Path,
 ) -> dict[str, object]:
     """Read all exact evidence and build one non-authorizing advisory diagnostic."""
 
-    matrix, matrix_evidence = read_json_file(matrix_path_value, "matrix")
-    profile, profile_evidence = read_json_file(profile_path_value, "allocation profile")
-    summary_payload, summary_evidence = read_stable_regular_file(summary_path_value, "controller summary")
-    summary = parse_summary(summary_payload)
-    reconciliation, reconciliation_evidence = read_json_file(
-        reconciliation_path_value, "reconciliation snapshot"
+    matrix, matrix_evidence = read_json_file(frozen_matrix_path(), "matrix")
+    authority = validate_recost_publication_chain(
+        recost_path_value, review_path_value, audit_path_value
     )
-    return build_wave_plan(
-        matrix, matrix_evidence, profile, profile_evidence, summary, summary_evidence,
-        reconciliation, reconciliation_evidence,
-    )
+    return build_wave_plan(matrix, matrix_evidence, authority)
 
 
 def parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
 
     command = argparse.ArgumentParser(description=__doc__)
-    command.add_argument("--matrix", required=True, type=Path)
-    command.add_argument("--allocation-profile", required=True, type=Path)
-    command.add_argument("--summary", required=True, type=Path)
-    command.add_argument("--reconciliation", required=True, type=Path)
+    command.add_argument("--recost-artifact", required=True, type=Path)
+    command.add_argument("--recost-independent-review", required=True, type=Path)
+    command.add_argument("--recost-publication-audit", required=True, type=Path)
     return command
 
 
@@ -3721,16 +7323,10 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser().parse_args(argv)
     try:
-        if normalized_path(args.matrix) != frozen_matrix_path():
-            raise ValueError("CLI matrix path is not the exact frozen matrix")
-        if normalized_path(args.allocation_profile) != profile_path():
-            raise ValueError("CLI allocation-profile path is not the exact canonical profile")
-        if normalized_path(args.summary) != summary_path():
-            raise ValueError("CLI summary path is not the exact canonical controller summary")
-        if normalized_path(args.reconciliation) != reconciliation_path():
-            raise ValueError("CLI reconciliation path is not the exact canonical snapshot")
         plan = plan_from_paths(
-            args.matrix, args.allocation_profile, args.summary, args.reconciliation
+            args.recost_artifact,
+            args.recost_independent_review,
+            args.recost_publication_audit,
         )
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"Stage I wave planner failed: {error}", file=sys.stderr)

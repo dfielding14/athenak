@@ -3,54 +3,50 @@
 ## 1. Purpose
 
 This document is the execution-focused plan for completing the corrected
-AthenaK CGL-LF MKS24 Stage I matrix from the present `R03` stop line through
-accepted `R17` completion and the final campaign analysis bundle.
+AthenaK CGL-LF MKS24 Stage I matrix from the drained first accelerated wave
+through accepted `R17` completion and the final campaign analysis bundle.
 
 The goal is to move quickly. The implementation is already scientifically
 credible, the corrected forcing policies are qualified, `R02` is complete,
 and independent use by Stephen Majeski provides encouraging external evidence.
-The remaining work is a production campaign with one known restart-metadata
-hardening issue, not an open-ended physics-development program.
+The remaining work is a production campaign plus the current F116/F117 release
+gate, not an open-ended physics-development program.
 
 This plan preserves fail-closed controller behavior while using parallel
 subagents aggressively for software hardening, packet review, scientific
-monitoring, recosting, analysis, provenance, and documentation. After the R03
-recovery gate, it deliberately promotes a bounded-concurrency controller
-transition: shared-root metadata mutations remain serial, but independent
-Frontier case lanes may run concurrently.
+monitoring, recosting, analysis, provenance, and documentation. The first
+accelerated wave demonstrated the bounded-concurrency model: shared-root
+metadata mutations remain serial, but independent Frontier case lanes may run
+concurrently.
 
 ### 1.1 Acceleration Transition Status
 
-The bounded-concurrency controller transition is implemented in the live
-working tree. Commit `9a33f375f` established the initial four-lane policy, and
-the required follow-up hardening closes three independently reviewed gaps
-before promotion:
-
-- prospective replay-budget validation before any ledger append,
-  reservation-store rewrite, or manifest rewrite, while permitting the durable
-  recovery journal;
-- a second authenticated queue query immediately before the durable
-  submit-pending barrier and real `sbatch`;
-- retained R17-last lifecycle enforcement during replay and reconciliation,
-  not only during preparation.
-
-The combined implementation:
+The bounded-concurrency controller transition is active and was exercised by
+the first accelerated wave across four independent lanes and ten concurrent
+nodes. The combined implementation:
 
 - permits up to four active distinct `R03` through `R16` case lanes;
 - preserves at most one prepared packet globally while allowing already
   submitted lanes to remain active;
-- authenticates allowed scheduler overlap against retained submitted
-  reservation manifests and rejects unknown user jobs;
+- authenticates every queued `cgl_` job against retained submitted reservation
+  manifests, permits well-formed unrelated non-CGL jobs, and rejects unbound
+  or malformed Stage I jobs;
 - authorizes `1/2/4`-node profiles for `R04` through `R15`, `1/2` for `R16`,
   one node for `R03`, and eight exclusive nodes for `R17`;
 - retains summed reservation accounting, prospective durable replay
   validation, root-lock serialization, and retained R17-last enforcement.
 
-This is staged source code, not a production promotion. Before a shared-root
-writer uses the transition, commit, independently review, archive, checksum,
-catalog, and verify the helper revision through the ordinary production
-provenance gates. Keep the active retained campaign root unchanged until that
-promotion packet is complete.
+The next release boundary is not yet complete. Before the next shared-root
+production mutation, finish the reviewed release commit and publish:
+
+- `F-116`, the independently reviewed current-source-authority supersession
+  that selects the final committed seven-tool release and complete-history
+  source bundle; then
+- `F-117`, the independently reviewed recost and next-wave recommendation,
+  including the fresh R12 rerun.
+
+Until both publications are promoted and verified, retain the drained canonical
+campaign state and do not claim the next wave is authorized.
 
 ## 2. Governing Documents And Boundaries
 
@@ -78,11 +74,22 @@ shared campaign root:
   /lustre/orion/ast207/proj-shared/dfielding/CGL
 ```
 
-The active source branch is:
+The active source branch and pre-F116 source boundary are:
 
 ```text
-feature/cgl-landau-fluid
+branch:
+  feature/cgl-landau-fluid
+
+pre-F116 local baseline:
+  c4ddb25d574816f469c4fc61f756de5b9cf82d25
+
+currently published bridge head:
+  36140ea825cb853b298714c27720440fdab60b9e
 ```
+
+F116 must replace the pre-release baseline with the exact final committed and
+pushed release HEAD. Do not copy either hash above into a post-F116 production
+packet without recomputing and verifying the release identity.
 
 Production packets must pin the validated frozen E03 source tree rather than
 the moving live checkout:
@@ -91,15 +98,20 @@ the moving live checkout:
 /autofs/nccs-svm1_home2/dfielding/athenak-cgl-e03-9e075422
 ```
 
-The current complete-history source bundle retained by the submitted R03
-packet is:
+The retained bridge bundle for the currently published production history is:
 
 ```text
-/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/athenak-feature-cgl-through-dbe7e5004.bundle
+/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/athenak-feature-cgl-through-36140ea82.bundle
 
 SHA-256:
-  b8437f066f8391a696efaaaf0de531430a9dac27c95dfc38aa7328dd49fb19fe
+  2c2f57a166877387244dd5bb6bdf87beb12492ea075a7431939b78e5df7307a0
 ```
+
+This bridge terminates at revision
+`36140ea825cb853b298714c27720440fdab60b9e`. It remains historical bridge
+evidence, not the final F116-selected current-source bundle. F116 must bind the
+final release HEAD and its new complete-history bundle before F117 or the next
+production wave is promoted.
 
 The Stage I controller is:
 
@@ -150,7 +162,7 @@ whole-case bundle, and analyzed successfully:
 runs/mks24-stage-i/E03-forcing-policy/bundles/R02
 ```
 
-The F-112 recost publication projected:
+The historical F-112 recost publication projected:
 
 ```text
 mapped-matrix envelope:
@@ -166,58 +178,55 @@ incremental project ceiling:
   4000.000000 node-hours
 ```
 
-### 3.2 R03 Diagnostic Stop Line
+### 3.2 Current Campaign Snapshot
 
-Fresh `R03/s00_rankio_t0_t0p5` was submitted as Frontier job `4762472`.
-Slurm reports `COMPLETED 0:0`, but AthenaK reached its wall-clock guard at:
+The first accelerated wave is drained, recorded, and independently reviewed.
+It used four overlapping case lanes and ten concurrent Frontier nodes:
 
-```text
-t = 0.31282347945569927
-```
+| Case | Current retained production state |
+| --- | --- |
+| `R02` | Fully complete through exact `t = 10`, bundled, and analyzed |
+| `R03` | Exact `t = 0.5` accepted from job `4766828` |
+| `R04` | Exact `t = 0.25` accepted from job `4766847` |
+| `R12` | `s00_rankio_t0_t0p25`, job `4766856`, retained as `clean_partial` at exact `t = 0.1371931229426507`; inventory-only and explicitly not continuation-authorizing |
+| `R16` | Exact `t = 1.5` accepted from job `4766866` |
+| `R05-R11`, `R13-R15`, `R17` | Not started |
 
-instead of:
-
-```text
-t = 0.5
-```
-
-The ranked outputs are present and the strict LF failure counters remain zero.
-The current controller does not authorize the terminal restart siblings as
-continuation sources because their explicit parameter-dump marker is rounded:
+The next R12 production lineage is a fresh rerun:
 
 ```text
-restart_time = 0.312823
+case:          R12
+segment:       s01_rankio_t0_t0p12
+start:         t = 0
+target:        t = 0.12
+parent:        null
+restart:       null
+nodes:         4
+ranks:         32
+Slurm:         02:00:00
+Athena:        01:50:00
 ```
 
-The hardened inspector correctly rejects the `4.79e-7` mismatch against its
-`1e-10` restart-marker tolerance. Do not relax that check and do not enable a
-production marker bypass.
+Do not use job `4766856`, its restart siblings, or its `clean_partial` result as
+continuation authority. Preserve it as exact historical inventory and evidence.
+That job reached `t = 0.1371931229426507` in `6657` seconds. The measured rate
+projects the fresh `t = 0.12` target at `5822.7` seconds, making `0.12` the
+largest natural `0.02`-aligned target below the `5940`-second 90% runtime
+limit.
 
-The checkpoint payload itself is not rounded. A read-only audit found the exact
-binary double `0.31282347945569927` in every one of the eight terminal
-`.00001.rst` siblings. AthenaK writes `pm->time` separately into the restart
-header in `src/outputs/restart.cpp` and reloads that binary value into
-`Mesh::time` in `src/mesh/build_tree.cpp`. The R03 stop is therefore an
-audit-metadata defect with a recoverable checkpoint candidate, not evidence of
-a scientifically invalid checkpoint. Recovery still requires an explicit
-fail-closed controller transition before any continuation.
-
-The last promoted helper reconciled the shared root cleanly before the
-acceleration work. The current live checkout intentionally fails closed during
-reconciliation until the submitted-R03 helper transition, binary-aware restart
-recovery, controller hardening, archive, and catalog promotion complete. The
-retained store itself remains:
+The canonical campaign root is currently drained:
 
 ```text
-ledger rows:         29
-manifests:           30
-reservations:        30
-active reservations: 1
-transactions:         0
-issues:              []
+ledger rows:                  34
+reservations:                 36 total; 34 recorded and 2 cancelled
+active reservations:         0
+manifests:                    36
+transactions:                0
+E03 cumulative node-hours:   36.577224
 ```
 
-The one active reservation belongs to unrecorded job `4762472`.
+The next production action is gated on completed F116 and F117 publication, not
+on additional interpretation of the first-wave jobs.
 
 ### 3.3 External Scientific Evidence
 
@@ -249,9 +258,9 @@ the retained Stage I acceptance checks or paper-panel comparisons.
 
 Stage I is complete only when all of the following are true:
 
-1. Job `4762472` is retained and accounted either as a binary-authenticated
-   `clean_partial` under the reviewed recovery transition or as an `aborted`
-   diagnostic segment followed by a fresh launch.
+1. The inventory-only R12 job `4766856` remains non-authorizing, and the fresh
+   `R12/s01_rankio_t0_t0p12` lineage starts from `t = 0` with null parent and
+   restart.
 2. Every mapped case `R03` through `R16` reaches exact `t = 10` through
    authenticated accepted segments.
 3. `R17` reaches exact `t = 10` last, on eight nodes, through authenticated
@@ -260,12 +269,21 @@ Stage I is complete only when all of the following are true:
 5. `bundle-campaign` succeeds for the frozen 16-case matrix.
 6. The campaign-level paper analyzer succeeds and regenerates the panel-status
    table.
-7. Comparison-ready panels are reviewed against their retained references.
-8. Reference-blocked panels remain explicitly disclosed unless author data,
+7. Every admitted comparison panel has preregistered quantitative criteria and
+   is either `passed` or explicitly `blocked_out_of_scope`; `not_run`,
+   `pending_review`, `failed`, and `inconclusive` do not satisfy final release.
+8. Every case passes the preregistered steady-state, statistical-adequacy, and
+   family-specific physics gates, or an inconclusive case is extended and
+   reevaluated under the same criteria.
+9. Retained terminal and late-time restart states pass the independent sampled
+   normalized CT-`divB` audit, with the historical limitation disclosed.
+10. The `R16`/`R02`/`R17` lane passes the preregistered resolution-convergence
+    criteria.
+11. Reference-blocked panels remain explicitly disclosed unless author data,
    archive data, donor diagnostics, or a qualified conversion unblock them.
-9. The final ledger, reservation store, transactions, source archives,
+12. The final ledger, reservation store, transactions, source archives,
    controller provenance, scheduler evidence, and analysis products reconcile.
-10. The durable handoff is refreshed with the exact R17 completion boundary.
+13. The durable handoff is refreshed with the exact R17 completion boundary.
 
 ## 5. Execution Philosophy
 
@@ -288,12 +306,28 @@ Only one lead execution agent may mutate the shared production root or issue a
 Stage I submission. Every controller mutation remains serialized under the
 canonical root lock. This does not require Frontier compute to remain serial.
 
-Keep the R03 recovery lane exclusive until its binary-aware disposition,
-continuation or fallback prefix, recost, and controller transition are closed.
-After the bounded-concurrency transition in Section 9.1 is promoted, run
-independent `R03` through `R16` case lanes concurrently. Preserve one in-flight
-segment per case lineage. Drain all lower-resolution lanes before starting
-`R17`, which remains an exclusive final lane.
+The first accelerated wave established that independent `R03` through `R16`
+case lanes may overlap while controller mutations remain serialized. Continue
+with rolling bounded-concurrency waves, preserve one in-flight segment per case
+lineage, and use up to the reviewed ten-node wave envelope. Drain all
+lower-resolution lanes before starting `R17`, which remains exclusive and last.
+
+The production filesystem threat model is explicit:
+
+- the canonical Frontier hierarchy intentionally traverses the trusted
+  project-owned mode-`2770` `/lustre/orion/ast207/proj-shared` directory;
+  production tools must not reject this deployment solely for group
+  writability;
+- tools must reject world-writable or otherwise untrusted authority profiles
+  and bind the exact public-root, parent, lock, and target identities through
+  every operation;
+- tools defend against concurrent namespace, profile, link, and content
+  mutation observable before or after a raw filesystem syscall;
+- if authority is lost during an ambiguous syscall, tools durably classify the
+  resulting state, fail closed, and perform no rollback or second namespace
+  mutation;
+- user-space code does not claim it can prevent a hostile actor from
+  interposing inside the kernel syscall itself.
 
 Parallel subagents should do everything else:
 
@@ -369,8 +403,8 @@ Run these work streams concurrently whenever possible:
 
 | While the lead lane is doing this | Parallel subagent work |
 | --- | --- |
-| Dispositioning job `4762472` | Binary-aware controller patch, precision patch, fixture regression, salvaged R03 `.5` packet, fresh `.25` fallback packet, updated recost draft |
-| Running the accepted R03 prefix | Concurrency patch, multi-reservation regression, authenticated-queue regression, `1/2/4`-node scaling packets, wave composition |
+| Closing the current F116/F117 release gate | Final seven-tool validation, adversarial security review, source-bundle construction, F116 reviews, F117 recost/review, next-wave packet preparation |
+| Preparing the next wave | R03/R04/R16 continuation packets, fresh R12 packet, queue and storage review, provisional later-wave composition |
 | Running one R03-R16 wave | Per-lane output monitoring, completed-lane inspection drafts, next-packet preparation, provisional recost, storage review, completed-case analysis |
 | Draining a wave barrier | Authoritative recost publication, allocation-profile update, storage audit, lane-cap ratchet review, next-wave packet review |
 | Running the final R04-R16 lanes | Final R17 readiness review, campaign-bundle dry-run, 64-rank storage audit, final-analysis staging |
@@ -424,74 +458,52 @@ directory lease or a scratch output directory before it runs `paper-analyze`.
 Only the lead agent invokes controller writers against retained shared-root
 paths.
 
-## 7. Binary-Aware Recovery And Writer Precision Strategy
+## 7. Closed Recovery Decisions And Retained Hardening
 
-### 7.1 Production Fast Lane
+### 7.1 Production Lineage Decisions
 
-Keep Stage I on the already qualified corrected-E03 executable. Run one focused
-controller-hardening sprint, salvage job `4762472` if every binary-aware gate
-passes, and continue R03 from its exact binary checkpoint. If any salvage gate
-fails, account the job as `aborted` and relaunch fresh immediately.
+Keep Stage I on the already qualified corrected-E03 executable. The R03 recovery
+decision is closed: job `4766828` reached exact `t = 0.5`, was accepted, and is
+the authoritative R03 continuation boundary.
 
-The diagnostic run measured:
-
-```text
-6600 seconds / 0.31282347945569927 = 21098.161 seconds per simulated time unit
-```
-
-The inferred targets are:
-
-```text
-0.31282347945569927 -> 0.50: approximately 3949 seconds
-0.25 simulated time units:          approximately 5275 seconds
-0.50 simulated time units:         approximately 10549 seconds
-```
-
-The preferred next packet is the salvaged exact continuation to `t = 0.5`.
-After that, use absolute output-aligned quarter-unit endpoints unless measured
-evidence supports larger exact increments. The fresh fallback starts at
-`t = 0` and targets `t = 0.25`.
+The R12 decision is also closed. Job `4766856` stopped cleanly at
+`t = 0.1371931229426507`, but its retained evidence is inventory-only and does
+not authorize continuation. The next R12 packet is
+`s01_rankio_t0_t0p12`, fresh from `t = 0`, with null parent and restart. Its
+four-node, 32-rank, `02:00:00` Slurm / `01:50:00` Athena profile targets
+`t = 0.12`: the measured `6657` seconds to `t = 0.1371931229426507` projects
+`5822.7` seconds to `t = 0.12`, the largest natural `0.02` target below the
+`5940`-second 90% limit.
 
 For the qualified E03 executable:
 
-- continue only from inspector-authenticated complete restart sibling sets;
+- continue exact accepted lineages only from inspector-authenticated complete
+  restart sibling sets;
 - accept ordinary exact-target segments through the existing strict path;
-- accept a non-round `clean_partial` only through the reviewed binary-aware
-  path;
-- reduce the next exact target immediately after any wall-clock partial.
+- retain non-authorizing partials as inventory without forcing continuation;
+- reduce the next exact target immediately after any wall-clock partial;
+- prefer a fresh rerun whenever retained evidence does not independently
+  authorize the intended continuation.
 
-### 7.2 Controller Salvage Hardening
+### 7.2 Retained Historical Recovery Boundary
 
-Extend:
-
-```text
-scripts/frontier/cgl_lf_stage_i.py
-```
-
-with a narrow restart-header authenticator bound to the qualified E03
-executable ABI and retained build manifest. It must:
+The binary-aware restart-header authenticator and checksum-bound historical
+helper transition remain important retained protections. They must continue to:
 
 1. parse the binary `Mesh::time` field from each selected restart sibling;
 2. require one complete ranked sibling set and exact sibling agreement;
-3. require the terminal binary time to match final synchronized history within
-   the existing strict tolerance;
-4. retain and parse the text `time/restart_time` marker;
-5. require either full-precision marker agreement or exact agreement with the
-   legacy default-precision serialization of the authenticated binary time;
-6. reject unknown executable revisions, unknown ABI layouts, absent markers,
-   sibling disagreements, nonfinite values, and arbitrary tolerance bypasses.
+3. require terminal binary time to match final synchronized history;
+4. reject unknown executable revisions, unknown ABI layouts, absent markers,
+   sibling disagreements, nonfinite values, and arbitrary tolerance bypasses;
+5. preserve historical submitted-manifest evidence without introducing a
+   general manifest bypass.
 
-Changing the live helper also invalidates the strict live-helper authentication
-recorded by the already submitted R03 manifest. Add a narrow, checksum-bound,
-tested transition for this one historical submitted segment: retain the
-original prepared helper bytes, authenticate them from their retained bundle,
-authenticate the promoted helper transition, and preserve the full audit
-chain. Do not introduce a general submitted-manifest bypass.
+These protections do not turn the R12 `clean_partial` into continuation
+authority. Fresh R12 execution is the selected production strategy.
 
-### 7.3 Parallel Writer Repair Lane
+### 7.3 Writer Precision Repair
 
-Develop the restart-marker precision repair concurrently. The minimum patch is
-local to restart metadata:
+Retain the scoped restart-marker precision repair local to restart metadata:
 
 ```text
 src/outputs/restart.cpp
@@ -512,15 +524,15 @@ multiple restart-critical real-valued fields, introduce a reusable exact-real
 setter as a separate reviewed change.
 
 Do not switch the E03 production executable merely to gain the writer repair.
-The binary-aware controller path is the immediate recovery tool; the writer
-repair is qualification-ready code for a deliberate future executable
+The binary-aware controller path remains retained historical protection; the
+writer repair is qualification-ready code for a deliberate future executable
 transition.
 
-### 7.4 Required Hardening Tests
+### 7.4 Required Retained Hardening Tests
 
-Add and run:
+Retain and rerun as part of the release suite:
 
-1. A controller fixture with final time `0.31282347945569927` proving:
+1. A controller fixture with a non-round final time proving:
    - a binary-exact sibling set with legacy text marker `0.312823` is accepted
      only by the binary-aware path;
    - full-precision text and binary agreement is accepted;
@@ -530,14 +542,15 @@ Add and run:
    - an unknown ABI or executable revision is rejected;
    - `record --result clean_partial` succeeds only after valid inspection.
 2. A historical submitted-manifest fixture proving the checksum-bound helper
-   transition permits exactly the reviewed R03 recovery shape and rejects a
-   broad bypass.
+   transition permits only its reviewed historical shape and rejects a broad
+   bypass.
 3. A CGL-LF restart regression that parses emitted `time/restart_time` and
    requires full-precision round-trip agreement with terminal history.
 4. The modal forcing restart regression across an OU refresh.
 5. Focused CPU, MPI CPU, turbulence-driver CPU, and turbulence-driver MPI CPU
    suites.
-6. A compact Frontier one-node, eight-rank restart qualification:
+6. A compact Frontier one-node, eight-rank restart qualification when an
+   executable transition requires it:
    - uninterrupted comparator;
    - arbitrary non-round wall-clock partial;
    - resumed continuation through an OU refresh.
@@ -565,117 +578,71 @@ cross-epoch campaign bundling. Before any E04 promotion, explicitly implement,
 test, qualify, and document an accepted-case import path that preserves
 completed E03 `R02` and deliberately assembles E03 and E04 case bundles.
 
-## 8. Immediate Recovery: Job 4762472 And R03
+## 8. Current Release Gate And Next Wave
 
-### 8.1 Run The Bounded Salvage Decision
+### 8.1 Complete F116 And F117
 
-The lead agent should retain the job `4762472` log, rank-local outputs,
-restart siblings, and scheduler evidence while the controller and test agents
-complete Section 7.2 through 7.4. The read-only evidence already establishes:
+The campaign is drained at the first-wave barrier. Before the next production
+submission:
 
-```text
-Slurm state:                 COMPLETED 0:0
-charged elapsed:             6613 seconds
-charged node-hours:          1.836944
-Athena terminal time:        0.31282347945569927
-strict LF counters:          zero
-terminal restart siblings:   eight complete .00001.rst files
-binary Mesh::time siblings:  exact 0.31282347945569927
-text restart_time siblings:  rounded 0.312823
-```
+1. finish the final seven-tool implementation, focused adversarial tests, full
+   release suite, and independent security and plasma review;
+2. commit and push the final release revision;
+3. construct and verify its complete-history source bundle while retaining the
+   `36140ea82` bridge bundle as historical evidence;
+4. publish and verify F116 current-source authority;
+5. publish and verify F117 recost and next-wave recommendation;
+6. reconcile again with zero active reservations and zero transactions.
 
-Promote the narrow controller transition only after focused tests, independent
-review, committed helper bytes, retained source archive, checksum cataloging,
-and publication audit. Then inspect the existing segment through the
-binary-aware path.
+F116 and F117 are release gates, not completed work. F116 changes current source
+selection only. F117 must preserve job `4766856` as non-authorizing inventory
+and recommend the fresh R12 rerun.
 
-If inspection passes, record job `4762472` as `clean_partial` and state that:
+F116 and F117 authenticate exactly the retained seven-tool production-control
+vector. The standalone scientific-acceptance utility and criteria may be
+present in the complete-history source bundle, but they are non-authorizing
+until their separate independent plasma/statistical and restart-format reviews
+are approved and bind their exact final digests.
 
-- AthenaK stopped cleanly on its wall-clock guard;
-- the complete rank-local restart sibling set is binary-authenticated;
-- text markers match the exact legacy serialization of the binary time;
-- strict LF counters are zero;
-- same-executable E03 continuation is authorized.
+### 8.2 Next Ten-Node Wave
 
-If any requirement fails, record job `4762472` as `aborted`, state the precise
-failed gate, and prohibit continuation from its outputs. Do not turn the
-focused salvage sprint into an open-ended delay.
+Subject to promoted F116/F117 authority and ordinary preflight, the intended
+next rolling wave is:
 
-After either disposition, reconcile until:
+| Case | Segment | Start | Target | Nodes | Parent/restart |
+| --- | --- | ---: | ---: | ---: | --- |
+| `R03` | `s03_rankio_t0p5_t0p75` | `0.5` | `0.75` | `1` | accepted job `4766828` lineage |
+| `R04` | `s02_rankio_t0p25_t1p25` | `0.25` | `1.25` | `4` | accepted job `4766847` lineage |
+| `R12` | `s01_rankio_t0_t0p12` | `0` | `0.12` | `4` | null parent; null restart |
+| `R16` | `s01_rankio_t1p5_t4p5` | `1.5` | `4.5` | `1` | accepted job `4766866` lineage |
 
-```text
-active reservations: 0
-transactions:        0
-issues:              []
-```
+This preserves the demonstrated ten-node envelope while allowing all four
+allocations to overlap. Issue `prepare`, `check-submit`, and `submit` serially;
+the Frontier allocations may run concurrently.
 
-Do not delete the diagnostic outputs.
+### 8.3 Fresh R12 Rule
 
-### 8.2 Preferred R03 Continuation
+The fresh R12 rerun is not a continuation workaround or waiver:
 
-After an authenticated `clean_partial` record, prepare a uniquely named R03
-continuation from the retained terminal sibling set:
-
-```text
-start:           t = 0.31282347945569927
-target:          t = 0.5
-nodes:           1
-Slurm walltime:  02:00:00
-Athena timeout:  01:50:00
-expected time:   approximately 3949 seconds
-```
-
-Require the ordinary controller preflight:
-
-- no queued user jobs;
-- free strict root lock;
-- no pending transactions;
-- authenticated source bundle;
-- reviewed stale shared-root campaign acknowledgement;
-- clean reconciliation;
-- committed helper bytes.
-
-After the accepted exact `t = 0.5` prefix:
-
-1. record and reconcile immediately;
-2. generate an updated timing and budget projection;
-3. choose the largest measured successor target that retains useful wall-clock
-   margin;
-4. remain on absolute quarter-unit endpoints unless measurements justify a
-   larger exact increment.
-
-### 8.3 Fail-Fast Fresh Fallback
-
-If the binary-aware transition or R03 inspection fails, prepare a new uniquely
-named fresh `R03` segment from `t = 0` with:
-
-```text
-target:          t = 0.25
-nodes:           1
-Slurm walltime:  02:00:00
-Athena timeout:  01:50:00
-expected time:   approximately 5275 seconds
-```
-
-Use the same preflight and recost lifecycle. Continue from accepted
-output-aligned quarter-unit endpoints.
+- use segment `s01_rankio_t0_t0p12`;
+- start at `t = 0`;
+- target exact `t = 0.12`;
+- set parent and restart to null;
+- use four nodes, 32 ranks, Slurm `02:00:00`, and Athena `01:50:00`;
+- keep later R12 continuation increments on the natural `0.02` cadence,
+  subject to authoritative recosting; all other cases retain the quarter-unit
+  increment rule;
+- preserve `R12/s00` job `4766856` unchanged as inventory-only evidence;
+- prohibit any later planner, recost, or controller path from treating job
+  `4766856` as continuation authority.
 
 ## 9. Concurrent Production Cadence For R03 Through R16
 
 ### 9.1 Bounded-Concurrency Transition
 
-The historical promoted helper intentionally enforces an earlier conservative
-policy:
-
-- exactly one active prepared or submitted reservation globally;
-- rejection of submission whenever any user job is queued;
-- exactly one node for every canonical `R02` through `R16` segment;
-- exactly eight nodes for `R17`.
-
-The combined binary-recovery and acceleration revision is implemented and
-locally verified ahead of the R03 recovery gate. Promote it before inspecting
-job `4762472`, so the binary-aware disposition and subsequent concurrent
-campaign use the reviewed controller revision that:
+The first accelerated wave demonstrated the bounded-concurrency policy with
+R03, R04, R12, and R16 allocations overlapping across ten nodes. The next
+release must retain the reviewed controller behavior that:
 
 1. permits multiple active reservations only when they belong to distinct
    `R03` through `R16` case lanes;
@@ -685,9 +652,9 @@ campaign use the reviewed controller revision that:
    Stage I envelope and the `4000` node-hour project ceiling;
 5. permits queued or running Stage I jobs only when each one matches an
    authenticated submitted reservation and exact retained manifest;
-6. continues to reject unknown user jobs, unreviewed shared-root campaign
-   records, orphaned run directories, pending transactions, and ambiguous
-   scheduler state;
+6. continues to reject unbound, malformed, forged, or duplicate Stage I CGL
+   queue rows, unreviewed shared-root campaign records, orphaned run
+   directories, pending transactions, and ambiguous scheduler state;
 7. allows reviewed multi-node allocation profiles for `R04` through `R16`;
 8. keeps `R17` fixed at eight nodes, requires accepted `t = 10` predecessors,
    and permanently locks out lower-resolution preparation after R17 starts;
@@ -708,8 +675,8 @@ Complete focused controller fixtures proving:
   either completion order;
 - a second active segment for the same case is rejected;
 - summed reservations and the lane cap fail closed;
-- an exact authenticated Stage I queue set is accepted while one unknown user
-  job is rejected;
+- an exact authenticated Stage I queue set and well-formed unrelated non-CGL
+  jobs are accepted while an unbound Stage I CGL job is rejected;
 - a queue change between preflight and real `sbatch` is rejected before the
   ambiguity barrier;
 - prepared and recorded replay budget overruns fail before any ledger append,
@@ -721,12 +688,12 @@ Complete focused controller fixtures proving:
   while unapproved or decomposition-infeasible profiles are rejected;
 - R17 remains exclusive and last.
 
-The local coverage tranche proves node-profile authorization, duplicate case
-rejection, the four-lane cap, one-prepared-packet enforcement, R17 exclusivity,
-authenticated submitted-job queue overlap, unknown-job rejection, and durable
-preservation of an unrelated submitted lane while a completed lane is
-recorded. Commit, push, archive, checksum, catalog, and independently review
-this transition before the first concurrent wave.
+The first wave supplies production evidence for authenticated submitted-job
+overlap and durable preservation of unrelated submitted lanes while completed
+lanes are recorded. The F116/F117 release gate must retain focused coverage for
+node-profile authorization, duplicate-case rejection, the four-lane cap,
+one-prepared-packet enforcement, unbound-CGL-job rejection, fresh-R12 lineage
+selection, and R17 exclusivity before the next concurrent wave.
 
 ### 9.2 Case-Lane Lifecycle
 
@@ -769,11 +736,10 @@ wall-clock termination.
 
 Treat node count as a measured optimization variable:
 
-- keep the salvaged or fallback R03 lane on one node while it closes the
-  immediate recovery and cost-calibration gate;
-- qualify `1`, `2`, and `4` node profiles promptly for the standard-layout
-  `R04` through `R15` cases;
-- qualify `1` and `2` node profiles for lower-resolution `R16`;
+- keep R03 on one node under its measured accepted profile;
+- use the reviewed four-node standard-layout profile for R04 and the fresh R12
+  rerun, then apply measured family evidence to later standard cases;
+- use the reviewed one-node profile for lower-resolution R16;
 - permit a larger R04-R16 profile only after explicit decomposition,
   throughput, I/O, budget, and replay review;
 - keep R17 at its separately qualified eight-node profile.
@@ -787,15 +753,16 @@ concurrent case lane over weak strong-scaling gains.
 Do not mechanically reuse the R02 half-unit profile for beta-100, random,
 compressive, heat-flux-extreme, or finite-limiter cases.
 
-### 9.4 Initial Aggressive Profiles
+### 9.4 Aggressive Profiles
 
-These are first-packet proposals, not permanent limits. Recost provisionally
-after each first accepted prefix and authoritatively at wave barriers.
+The first-wave rows report retained results; the unstarted rows remain initial
+proposals, not permanent limits. Recost provisionally after each accepted
+prefix and authoritatively at wave barriers.
 
-| Case | Runtime family | Initial exact increment | Initial node study | Reason |
+| Case | Runtime family | Current or initial exact increment | Reviewed node profile | Reason |
 | --- | --- | ---: | --- | --- |
-| `R03` | active Alfvenic beta-100 hard wall | Salvage to `0.5`, then `0.25` | `1` | Directly inferred from job `4762472` |
-| `R04` | active random beta-10 | `0.25` | `1`, `2`, `4` scaling leader | Establish standard-layout multi-node profile and random-forcing cost |
+| `R03` | active Alfvenic beta-100 hard wall | Accepted exact `0.5`; next target `0.75` | `1` | Accepted job `4766828` establishes the current lineage |
+| `R04` | active random beta-10 | Accepted exact `0.25`; next target `1.25` | `4` | Accepted job `4766847` establishes the four-node standard profile |
 | `R05` | active random beta-100 | `0.25` | Reuse reviewed standard winner | Beta-100 and random forcing both merit measured calibration |
 | `R06` | passive Alfvenic beta-10 | `0.50` | Reuse reviewed standard winner | Closest passive counterpart to completed R02 |
 | `R07` | passive Alfvenic beta-100 | `0.25` | Reuse reviewed standard winner | Reuse R03 beta-100 bound until measured faster |
@@ -803,11 +770,11 @@ after each first accepted prefix and authoritatively at wave barriers.
 | `R09` | passive random beta-100 | `0.25` | Reuse reviewed standard winner | Reuse beta-100 random-family calibration |
 | `R10` | compressive active random beta-1 | `0.25` | Recheck reviewed standard winner | New compressive family |
 | `R11` | compressive active random beta-100 sonic-correlation | `0.25` | Recheck reviewed standard winner | New beta-100 sonic-correlation family |
-| `R12` | stronger LF heat flux | `0.25` | Recheck reviewed standard winner | Extreme closure coefficient needs measured calibration |
+| `R12` | stronger LF heat flux | Fresh `0 -> 0.12`; then `0.02`-aligned continuation increments; prior partial is inventory-only | `4` | Start `s01_rankio_t0_t0p12` with null parent/restart |
 | `R13` | weaker LF heat flux | `0.25` | Recheck reviewed standard winner | Distinct closure-cost profile |
 | `R14` | beta-100 finite limiter `nu_lim = 20` | `0.25` | Reuse reviewed standard winner | New finite-limiter profile |
 | `R15` | beta-100 finite limiter `nu_lim = 200` | `0.25` | Reuse reviewed standard winner | New finite-limiter profile |
-| `R16` | beta-10 `96 x 96 x 192` scale separation | `1.50` | `1`, `2`; test `4` only if useful | Retained low-resolution timing supports larger increments |
+| `R16` | beta-10 `96 x 96 x 192` scale separation | Accepted exact `1.5`; next target `4.5` | `1` | Accepted job `4766866` supports a larger next increment |
 
 Complete each case through exact `t = 10`, bundle it once, and start analysis
 as soon as that individual case closes.
@@ -831,27 +798,21 @@ work once a family profile is stable.
 
 ### 9.6 Wave Rollout
 
-After the R03 recovery prefix and concurrency transition close:
+The initial four-lane R03/R04/R12/R16 wave is complete and drained. It used ten
+concurrent nodes and established the accepted R03, R04, and R16 prefixes plus
+the inventory-only R12 partial. Continue as follows:
 
-1. Run qualification-only fresh `R04` packets from `0 -> 0.25` on `1`, `2`,
-   and `4` nodes, plus fresh `R16` packets from `0 -> 1.50` on `1` and `2`
-   nodes. Drain these packets before production preflight. Select `Nstd` and
-   `N16` from elapsed time, node-hours, decomposition balance, I/O behavior,
-   and ranked-output completeness. Do not fork accepted production lineages
-   merely to benchmark scaling.
-2. Start an initial four-lane packet wave using `R03`, `R04`, `R12`, and
-   `R16`.
-3. Let that first packet wave drain, then promote the authoritative recost,
-   allocation-profile table, and storage audit.
-4. Keep the controller cap at four lanes. Any increase requires a separate
-   reviewed controller transition.
-5. Refill a lane immediately after its accepted segment is recorded if the
+1. Complete and verify the F116/F117 release gate.
+2. Launch the Section 8.2 ten-node wave, including fresh R12 from `t = 0`.
+3. Keep the controller cap at four lanes and the reviewed wave envelope at ten
+   nodes. Any increase requires a separate reviewed transition.
+4. Refill a lane immediately after its accepted segment is recorded if the
    provisional model, storage monitor, and reservation sum remain healthy.
-6. Fill subsequent lanes in this order:
+5. Fill subsequent unstarted lanes in this order:
    `R06 -> R10 -> R11 -> R13 -> R05 -> R07 -> R14 -> R15 -> R08 -> R09`.
-7. Drain periodically for authoritative recost barriers and always before a
+6. Drain periodically for authoritative recost barriers and always before a
    lane-cap or allocation-profile increase.
-8. Drain every lower-resolution lane, publish the final predecessor recost,
+7. Drain every lower-resolution lane, publish the final predecessor recost,
    and only then authorize R17.
 
 ## 10. R17 High-Resolution Completion
@@ -921,7 +882,7 @@ Before R17 submission:
    output and verify available retention capacity against the larger of that
    projection and `958271710272` bytes;
 3. estimate per-snapshot and per-restart 64-rank size from retained pilots;
-4. confirm the required retained cadence for the `t = 8` through `10`
+4. confirm the required retained cadence for the `t = 4` through `10`
    analysis window;
 5. retain all controller-required restart siblings;
 6. avoid unnecessary debug outputs;
@@ -951,8 +912,9 @@ the first wave and at every drained-wave barrier:
 
 ### 11.1 Record Reality Early
 
-Job `4762472` consumes `6613 / 3600 = 1.836944` node-hours. Account for it,
-then update the Stage I projection from measured R03 throughput.
+The drained canonical campaign currently records `36.577224` cumulative E03
+node-hours. The first accelerated wave contributes measured R03, R04, R12, and
+R16 throughput for the F117 recost.
 
 The F-112 projection had limited margin inside the historical `900` node-hour
 Stage I reservation. The measured R03 rate gives the conservative refreshed
@@ -965,32 +927,26 @@ remaining planning headroom:        182.745115 node-hours
 incremental project ceiling:       4000.000000 node-hours
 ```
 
-Promote the reviewed `1400` node-hour envelope before the next production
-submission. Increase it again only when measured scaling or family timing
-requires another reviewed transition.
+Retain the reviewed `1400` node-hour Stage I envelope unless the F117 measured
+recost requires a reviewed change. Increase it again only when measured scaling
+or family timing requires another reviewed transition.
 
 ### 11.2 Reservation Transition
 
-Before the next R03 production submission:
+Before the next concurrent wave:
 
-1. have the recost agent produce a measured case-family projection;
-2. have an independent reviewer audit arithmetic and contingency;
-3. select a revised Stage I reservation with useful headroom;
-4. patch the controller constant and documentation surgically;
-5. run focused controller and recost regressions;
-6. commit, push, archive, checksum, and catalog the transition;
-7. resume R03 under the retained `4000` node-hour project ceiling.
-
-Before concurrent fan-out:
-
-1. refresh the matrix model from the accepted R03 recovery prefix;
+1. have F117 consume the accepted first-wave results and the inventory-only R12
+   partial without granting it continuation authority;
 2. include projected multi-node node-hours plus the summed maximum active-wave
    reservation;
-3. promote the bounded-concurrency controller transition from Section 9.1;
-4. run the expanded controller and recost regressions;
-5. commit, push, archive, checksum, catalog, and independently review the
-   transition;
-6. start the compact scaling packets and first concurrent wave.
+3. retain `required_storage_safety_bytes = 1099511627776` (exactly `1 TiB`),
+   which exceeds the reviewed `65,998,006,704`-byte F117 wave projection and
+   preserves the separately required R17 storage margin;
+4. have an independent reviewer audit arithmetic, contingency, and the fresh
+   R12 profile;
+5. promote F116 current source authority before F117;
+6. verify both publications and reconcile the canonical root;
+7. resume under the retained `4000` node-hour project ceiling.
 
 This is an accounting-control update, not a reason to reopen qualified
 physics.
@@ -999,8 +955,7 @@ physics.
 
 Update the provisional throughput and node-efficiency model:
 
-- after accounting for job `4762472`;
-- after every scaling packet;
+- after every accepted or inventory-only measured packet;
 - after the first accepted prefix of each new runtime family;
 - after any early wall-clock termination;
 - after every completed case.
@@ -1008,8 +963,7 @@ Update the provisional throughput and node-efficiency model:
 Publish an authoritative recost under the retained zero-active-reservation
 companion contract:
 
-- after the R03 recovery prefix;
-- after the first drained concurrent-wave barrier;
+- at the current F117 first-wave barrier;
 - before raising the lane cap or adding a larger node profile;
 - at later drained-wave barriers when the projected envelope moves materially;
 - before R17;
@@ -1058,7 +1012,9 @@ After each case reaches exact `t = 10`, review:
 - limiter and hard-wall activity;
 - LF heat-flux cap fractions;
 - forcing-work and pressure-work accounting;
-- steady-window selection over `t = 8` through `10`;
+- steady-window selection over retained `t = 4` through `10`, with
+  stationarity comparison between `t = 4` through `7` and `t = 7` through
+  `10`;
 - PDFs, spectra, transfer, alignment, and local-strain products relevant to
   that case.
 
@@ -1112,6 +1068,81 @@ Contact Stephen Majeski immediately for raw curves, FFT-normalization details,
 or donor diagnostic code so reference work cannot become the final campaign
 stall.
 
+### 12.4 Preregistered Scientific Acceptance
+
+Use the standalone Stage I scientific-acceptance utility and its independently
+reviewed criteria artifact. Do not make final scientific acceptance depend on
+uncommitted analyzer work. Evaluate each completed case concurrently from
+immutable whole-case products over:
+
+```text
+full window:   t = 4 through 10
+early window:  t = 4 through 7
+late window:   t = 7 through 10
+```
+
+The preregistered default gates are:
+
+- endpoint-clipped trapezoidal time-weighted means;
+- full-window independent forcing-correlation blocks `>= 3` and half-window
+  blocks `>= 1.5`; never claim more independent blocks than the physical
+  window duration divided by the authenticated forcing correlation time;
+- deterministic moving-block-bootstrap uncertainties;
+- reject or mark inconclusive histories with physical-time gaps larger than
+  the preregistered cadence/forcing-correlation threshold;
+- early/late scalar drift `z <= 3` and relative change `<= 25%`;
+- occupancy drift `z <= 3` and absolute change `<= 0.002`;
+- forcing-power relative drift `<= 10%`;
+- reference-panel normalized-residual RMS `<= 2` and maximum absolute
+  normalized residual `<= 5`;
+- generic meaningful accumulated activity `> 1e-6` and normalized activity
+  `> 1e-8`.
+
+An undersampled but otherwise healthy case is `inconclusive`, not failed.
+Extend only that case under the retained extension policy; do not relax the
+criteria after results are visible.
+
+Require the following family gates:
+
+- finite-limiter `R14`/`R15`: exact zero hard-wall projections, positive
+  late-time effective collisionality, threshold occupancy in both halves, and
+  statistically resolved `nu_eff(R15) > nu_eff(R14)`;
+- hard-wall cases: hard-wall activity in both halves, nonzero threshold
+  occupancy, and exact zero hard-bound volume;
+- LF-strength `R12`/`R02`/`R06`/`R13`: nonzero LF face activity, meaningful
+  LF work, and statistically resolved retained-response differences;
+- active/passive pairs `R02/R06`, `R03/R07`, `R04/R08`, and `R05/R09`:
+  exact-zero passive CGL pressure-work terms, meaningful active work, and at
+  least one Holm-corrected standardized contrast `>= 0.5`;
+- forcing families: Alfvenic parallel-forcing fraction `<= 1e-10` and random
+  parallel-forcing fraction lower 95% bound `> 0.05`.
+
+Audit sampled normalized CT-`divB` from authenticated native restart face
+fields at every retained terminal and late-time state. Require:
+
+```text
+abs(divB) * min(dx) / max(abs(B), bfloor) < 1e-12
+```
+
+Qualify the independent restart parser against a diagnostic-enabled test. The
+historical E03 claim is limited to sampled retained states because those runs
+did not retain a full-time-history `max_ndiv` diagnostic.
+
+Before inspecting R17 results, retain the resolution-convergence interval:
+
+```text
+4 <= k_perp / pi <= 24
+alignment shells = [4, 6, 8, 12, 16, 24]
+```
+
+Require `R02`/`R17` alignment difference `<= 0.05`, spectral log-RMS
+difference `<= 0.15`, and global scalar differences `<= 10%` or within two
+combined standard errors. Where `R16`/`R02` disagreement is resolved, require:
+
+```text
+distance(R02, R17) <= 0.75 * distance(R16, R02)
+```
+
 ## 13. Case Bundling And Analysis
 
 ### 13.1 Bundle Each Completed Case Immediately
@@ -1122,7 +1153,8 @@ After one case reaches accepted exact `t = 10`:
 2. authenticate the lineage and merged histories;
 3. run the paper analyzer once for that whole-case bundle;
 4. retain diagnostics and generated figures;
-5. review the exact `t = 8` through `10` steady window;
+5. review the exact `t = 4` through `10` steady window and its `t = 4..7`
+   versus `t = 7..10` stationarity split;
 6. update panel dependencies;
 7. start the next production case without waiting for every scientific
    interpretation to finish.
@@ -1153,28 +1185,27 @@ REPO=/autofs/nccs-svm1_home2/dfielding/athenak-df
 FROZEN_SOURCE=/autofs/nccs-svm1_home2/dfielding/athenak-cgl-e03-9e075422
 STAGE="$REPO/scripts/frontier/cgl_lf_stage_i.py"
 MATRIX="$REPO/inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
-SOURCE_BUNDLE="$ROOT/source-archives/athenak-feature-cgl-through-dbe7e5004.bundle"
+SOURCE_BUNDLE="$ROOT/source-archives/athenak-feature-cgl-through-36140ea82.bundle"
 
-# Rotate SOURCE_BUNDLE only after the replacement complete-history bundle is
-# committed, cataloged, checksum-validated, and independently reviewed.
+# Replace the historical bridge SOURCE_BUNDLE only after F116 publishes and
+# verifies the final complete-history bundle.
 
 python3 "$STAGE" --root "$ROOT" reconcile
 
-# Preferred route after binary-aware inspection and clean_partial accounting.
+# Fresh R12 rerun; no parent or restart-file is permitted.
 python3 "$STAGE" --root "$ROOT" prepare \
-  --case-id R03 \
-  --segment s01_rankio_t0p312823_t0p5 \
+  --case-id R12 \
+  --segment s01_rankio_t0_t0p12 \
   --acceptance-criterion "<reviewed exact-boundary acceptance prose>" \
   --executable "<qualified executable>" \
   --build-manifest "<qualified build manifest>" \
   --source-dir "$FROZEN_SOURCE" \
-  --source-bundle "$SOURCE_BUNDLE" \
+  --source-bundle "<F116-selected final complete-history bundle>" \
   --matrix "$MATRIX" \
-  --restart-file "<authenticated terminal R03 .00001 restart sibling>" \
-  --nodes 1 \
+  --nodes 4 \
   --walltime 02:00:00 \
   --athena-walltime 01:50:00 \
-  --override time/tlim=0.5
+  --override time/tlim=0.12
 
 python3 "$STAGE" --root "$ROOT" check-submit \
   --manifest "<prepared manifest>" \
@@ -1197,14 +1228,12 @@ python3 "$STAGE" --root "$ROOT" record \
 python3 "$STAGE" --root "$ROOT" reconcile
 ```
 
-For job `4762472`, prefer `record --result clean_partial` after the reviewed
-binary-aware transition and successful inspection. If any salvage gate fails,
-use `record --result aborted` with explicit non-continuation notes and prepare a
-fresh uniquely named R03 `t = 0` to `0.25` fallback without `--restart-file`.
+Do not add a parent or `--restart-file` to the fresh R12 packet. Job `4766856`
+remains retained inventory only and is not a continuation source.
 
-After the bounded-concurrency transition is promoted, issue `prepare`,
-`check-submit`, and `submit` serially for each selected `R03` through `R16`
-lane, but allow authenticated submitted allocations to overlap on Frontier.
+After F116 and F117 are promoted and verified, issue `prepare`, `check-submit`,
+and `submit` serially for each selected `R03` through `R16` lane, but allow
+authenticated submitted allocations to overlap on Frontier.
 Use:
 
 ```bash
@@ -1220,10 +1249,9 @@ Stage I job.
 
 Commit, push, bundle, checksum, and catalog at these boundaries:
 
-1. disposition of job `4762472` and authorization of the salvaged R03
-   continuation or fresh quarter-unit fallback;
-2. bounded-concurrency, allocation-profile, and Stage I reservation transition;
-3. every drained-wave authoritative recost and lane-cap change;
+1. F116 current-source-authority publication and final complete-history bundle;
+2. F117 first-wave recost and next-wave recommendation, including fresh R12;
+3. every later drained-wave authoritative recost and lane-cap change;
 4. any executable qualification or execution-epoch transition;
 5. completion of each mapped case;
 6. R17 readiness authorization;
@@ -1238,31 +1266,32 @@ into a large documentation rewrite.
 
 ### Immediate
 
-- [ ] Implement, test, review, archive, and catalog the binary-aware controller
-      recovery transition.
-- [ ] Inspect job `4762472` through the binary-aware path.
-- [ ] Record job `4762472` as `clean_partial` if every salvage gate passes;
-      otherwise record it `aborted` and activate the fresh fallback.
-- [ ] Reconcile to zero active reservations and `issues = []`.
-- [ ] Prepare and review salvaged R03 `t = 0.31282347945569927` to `0.5`, or
-      fresh fallback `t = 0` to `0.25`.
+- [x] Complete, bundle, and analyze R02 through exact `t = 10`.
+- [x] Run and drain the first accelerated four-lane, ten-node wave.
+- [x] Accept R03 job `4766828` at exact `t = 0.5`.
+- [x] Accept R04 job `4766847` at exact `t = 0.25`.
+- [x] Retain R12 job `4766856` as inventory-only `clean_partial` at
+      `t = 0.1371931229426507` and prohibit continuation from it.
+- [x] Accept R16 job `4766866` at exact `t = 1.5`.
+- [x] Reconcile the first-wave barrier to zero active reservations and zero
+      transactions.
 - [x] Implement the scoped restart-marker precision patch in parallel.
-- [ ] Promote the reviewed `1400` node-hour Stage I budget reservation before
-      the next submission.
 - [x] Implement and run the first focused regression tranche for the
       bounded-concurrency controller transition.
-- [ ] Independently review, archive, catalog, and promote the
-      bounded-concurrency controller transition.
-- [ ] Run qualification-only fresh R04 `1/2/4`-node and R16 `1/2`-node
-      scaling packets.
+- [ ] Finish the final seven-tool release implementation, validation, and
+      independent audits.
+- [ ] Commit, push, bundle, independently review, publish, and verify F116.
+- [ ] Generate, independently review, publish, and verify F117.
+- [ ] Prepare and launch the next ten-node wave, including fresh
+      `R12/s01_rankio_t0_t0p12` with null parent/restart.
 - [ ] Request raw curves, FFT-normalization details, or donor diagnostics from
       Stephen Majeski in parallel.
 
 ### Standard Matrix
 
-- [ ] Launch the initial four-lane `R03`, `R04`, `R12`, `R16` wave.
-- [ ] Promote the first drained-wave recost, storage audit, and node-profile
-      table.
+- [x] Launch and drain the initial four-lane `R03`, `R04`, `R12`, `R16` wave.
+- [ ] Promote the first drained-wave F117 recost, storage audit, and
+      next-wave profile table.
 - [ ] Keep the rolling campaign at the reviewed four-lane cap.
 - [ ] Complete and bundle `R03`.
 - [ ] Complete and bundle `R04`.
@@ -1289,7 +1318,13 @@ into a large documentation rewrite.
 
 - [ ] Assemble the 16-case campaign bundle.
 - [ ] Run final paper analysis.
-- [ ] Review comparison-ready panels.
+- [ ] Validate and independently review the preregistered scientific-acceptance
+      criteria.
+- [ ] Pass steady-state, statistical-adequacy, and family-specific case gates.
+- [ ] Pass sampled retained-state normalized CT-`divB` audit.
+- [ ] Pass the `R16`/`R02`/`R17` resolution-convergence gate.
+- [ ] Require every admitted comparison panel to pass or be explicitly
+      blocked out of scope.
 - [ ] Disclose or resolve reference-blocked panels.
 - [ ] Reconcile the final ledger, archives, and provenance.
 - [ ] Refresh the durable handoff at accepted R17 completion.
@@ -1297,18 +1332,18 @@ into a large documentation rewrite.
 ## 17. Completion Decision
 
 The campaign should proceed aggressively. The code has broad retained tests,
-corrected forcing-policy qualification, one complete corrected-E03 production
-case, a controller that fails closed, and encouraging independent physics
-evidence from Stephen Majeski. The shortest robust path is:
+corrected forcing-policy qualification, one complete and analyzed
+corrected-E03 production case, a successful ten-node accelerated wave, a
+controller that fails closed, and encouraging independent physics evidence
+from Stephen Majeski. The shortest robust path is:
 
-1. promote the narrow binary-aware controller transition and account for R03
-   as an authenticated `clean_partial`, or fail fast to the fresh fallback;
-2. continue salvaged R03 to exact `t = 0.5`, then use output-aligned
-   quarter-unit endpoints;
-3. promote bounded multi-case concurrency and reviewed multi-node profiles;
-4. run R03 through R16 as at most four concurrent case lanes while serializing
+1. finish and publish F116 current source authority, then F117 first-wave
+   recost and next-wave recommendation;
+2. launch the next four-lane, ten-node wave with R03, R04, fresh R12, and R16;
+3. run R03 through R16 as rolling bounded-concurrency waves while serializing
    shared-root mutations and preserving one in-flight segment per case;
-5. use wave barriers for authoritative recost, storage review, and allocation
-   review while analysis continues in parallel;
-6. execute R17 last with eight-node, recosted exact increments;
-7. assemble and review the final campaign bundle.
+4. use drained barriers for authoritative recost, storage review, and
+   allocation review while analysis continues in parallel;
+5. drain every lower-resolution lane and execute R17 exclusively and last with
+   eight-node, recosted exact increments;
+6. assemble and review the final campaign bundle.
