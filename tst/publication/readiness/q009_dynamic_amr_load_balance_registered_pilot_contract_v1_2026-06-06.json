@@ -1,0 +1,110 @@
+{
+  "record_type": "q009_dynamic_amr_load_balance_registered_pilot_contract_readiness",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-009",
+  "contract_id": "q009_dynamic_amr_load_balance_registered_pilot_contract_v1",
+  "status": "source_local_contract_validated_execution_blocked",
+  "qualification_effect": "registered_engineering_pilot_preregistration_only_no_launch_no_policy_no_science_no_publication_authority",
+  "scope": "Versioned source-local readiness record for a fail-closed registered Frontier multi-rank HIP engineering-pilot contract covering dynamic-AMR particle migration, particle-aware load-balance off/on pairs, restart continuity through t>45, aggregate conservation and resource telemetry, and a held-out full Section 5.4 geometry attempt.",
+  "source_constraints": {
+    "new_files_only_under_tst_publication": true,
+    "existing_files_modified": false,
+    "core_source_modified": false,
+    "control_plane_modified": false,
+    "live_policy_modified": false,
+    "scheduler_called": false,
+    "runtime_outputs_inspected": false,
+    "new_files": [
+      "tst/publication/q009_dynamic_amr_load_balance_registered_pilot_contract_v1.json",
+      "tst/publication/q009_dynamic_amr_load_balance_registered_pilot_contract_v1.py",
+      "tst/publication/test_q009_dynamic_amr_load_balance_registered_pilot_contract_v1.py",
+      "tst/publication/readiness/q009_dynamic_amr_load_balance_registered_pilot_contract_v1_2026-06-06.json"
+    ]
+  },
+  "source_bindings": {
+    "contract": {
+      "path": "tst/publication/q009_dynamic_amr_load_balance_registered_pilot_contract_v1.json",
+      "sha256": "2567bd9490e1e643c37cc63973307eead271a781b6ebbe8abc60edfefbb71450"
+    },
+    "validator": {
+      "path": "tst/publication/q009_dynamic_amr_load_balance_registered_pilot_contract_v1.py",
+      "sha256": "3f64dd6f9b70e4dea6f0b335ebfbf03d008fbd174f775f393f0d24571acd6e72"
+    },
+    "focused_tests": {
+      "path": "tst/publication/test_q009_dynamic_amr_load_balance_registered_pilot_contract_v1.py",
+      "sha256": "734e9239348fae9a7a71429cb402fa78f65d940e39755d90b48e8a5ba3b00dd6"
+    }
+  },
+  "contract_summary": {
+    "case_count": 5,
+    "paired_reduced_dynamic_amr_migration_cases": 2,
+    "paired_reduced_shock_restart_post45_cases": 2,
+    "scheduler_jobs_per_restart_logical_attempt": 2,
+    "held_out_full_geometry_cases": 1,
+    "all_cases_multi_rank_frontier_hip": true,
+    "all_cases_maximum_attempts": 1,
+    "hard_cap_node_hours": 100.0,
+    "hard_cap_artifact_storage_gib": 200.0,
+    "load_balance_off_weight": 0.0,
+    "load_balance_on_weight": 0.001,
+    "physical_field_and_particle_dump_outputs": "disabled",
+    "allowed_output_read": "preregistered_aggregate_telemetry_only"
+  },
+  "scientific_boundary": {
+    "uniform_mesh_exact_conservation_qualifies_dynamic_amr": false,
+    "paper_smooth_amr_exact_conservation_claimed": false,
+    "engineering_pilot_closes_scientific_amr": false,
+    "held_out_full_geometry_is_production_science": false,
+    "interpretation": "Uniform-mesh exact conservation does not qualify AMR. Missing or nonfinite AMR accounting fails the pilot, but this contract intentionally selects no scientific AMR conservation tolerance."
+  },
+  "fail_closed_execution_boundary": {
+    "empty_user_queue_required_before_every_submission": true,
+    "separate_live_registered_science_policy_slice_required_per_case": true,
+    "final_clean_candidate_and_installed_control_plane_required": true,
+    "project_wide_budget_ledger_and_other_campaign_reserves_required": true,
+    "orion_storage_reservation_required": true,
+    "serial_case_order_required": true,
+    "same_contract_output_driven_retuning_forbidden": true,
+    "overrun_action": "stop_fail_closed_no_retry"
+  },
+  "verification": {
+    "focused_test_command": "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q --import-mode=importlib tst/publication/test_q009_dynamic_amr_load_balance_registered_pilot_contract_v1.py",
+    "focused_tests": 21,
+    "focused_result": "passed",
+    "validator_command": "PYTHONDONTWRITEBYTECODE=1 python3 -m tst.publication.q009_dynamic_amr_load_balance_registered_pilot_contract_v1",
+    "validator_result": "passed_non_authorizing_case_count_5_node_hours_100_storage_gib_200",
+    "adversarial_coverage": [
+      "missing case and matrix-order drift",
+      "MPI rank and resource drift",
+      "load-balance pair drift",
+      "restart-through-t45 drift",
+      "held-out full-geometry drift",
+      "node-hour and storage ceiling drift",
+      "empty-queue gate removal",
+      "forbidden inspection authorization",
+      "publication authority injection",
+      "uniform-conservation-over-AMR overclaim",
+      "bound-source digest drift",
+      "duplicate-key nonfinite-JSON and symlink substitution"
+    ]
+  },
+  "authorization": {
+    "launch_authorized": false,
+    "scheduler_submission_authorized": false,
+    "policy_mutation_authorized": false,
+    "live_policy_slice_created": false,
+    "q009_qualified": false,
+    "dynamic_amr_science_qualified": false,
+    "q011_production_authorized": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false
+  },
+  "limitations_and_open_dependencies": [
+    "No registered deck materializer, admission worker, telemetry producer, policy slice, or scheduler execution is implemented by this contract.",
+    "The current primary source does not yet provide every aggregate AMR conservation, migration, load-cost, restart-fingerprint, and HIP-memory telemetry field required by the contract.",
+    "The 0.001 particle load-cost weight is a fixed engineering candidate anchored to the existing AMR load-balance smoke input; this contract cannot select it for production science.",
+    "The held-out full-geometry attempt is capped at 512 cycles and is engineering feasibility evidence only, not nonlinear shock-acceleration production evidence.",
+    "Successful pilots would characterize the registered candidate but would not qualify paper_smooth AMR as exactly conservative or authorize Q011 production."
+  ]
+}

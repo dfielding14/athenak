@@ -1,0 +1,479 @@
+{
+  "record_type": "q009_dynamic_amr_load_balance_registered_pilot_contract",
+  "schema_version": 1,
+  "contract_id": "q009_dynamic_amr_load_balance_registered_pilot_contract_v1",
+  "date": "2026-06-06",
+  "gate": "Q-009",
+  "status": "preregistered_non_authorizing_execution_blocked",
+  "qualification_effect": "registered_engineering_pilot_preregistration_only_no_launch_no_policy_no_science_no_publication_authority",
+  "scope": "Minimal registered Frontier multi-rank HIP engineering-pilot matrix for dynamic-AMR particle migration, particle-aware load-balance off/on comparison, restart continuity through t>45, aggregate conservation and resource telemetry, and one held-out full Section 5.4 geometry attempt.",
+  "predecessor_evidence": {
+    "amr_policy": {
+      "path": "tst/publication/readiness/q009_amr_lifetime_policy_successor_2026-05-30.json",
+      "sha256": "028931da9675a5cb304bd88c879aa369acd2af812a33550bcc4782bd417cadc7",
+      "role": "documents paper_smooth policy and explicitly open MPI HIP and load-balance work"
+    },
+    "coupled_boundary_local": {
+      "path": "tst/publication/readiness/q009_coupled_boundary_lifetime_bounded_local_2026-05-30.json",
+      "sha256": "0c2a92fb2c20a53755cd46db3e9cf05644aada81f25881f3597138937718e072",
+      "role": "bounded serial-host coupled dynamic-AMR lifetime predecessor only"
+    },
+    "coupled_inflow_repaired_local": {
+      "path": "tst/publication/readiness/q009_coupled_inflow_lifetime_repaired_bounded_local_2026-05-30.json",
+      "sha256": "63ad40549cac46b1ee55918c7fb609672c173b17145657f9a935a0065a6a9629",
+      "role": "bounded serial-host repaired restart predecessor only"
+    }
+  },
+  "source_templates": {
+    "q009_coupled_boundary_lifetime": {
+      "path": "inputs/tests/pic_q009_coupled_boundary_lifetime.athinput",
+      "sha256": "382aca7642a2ca554b75c1d6fb45b2edbc9a1c8035416611b5e4e70db2268205",
+      "role": "reduced repeated refine-derefine coupled lifetime template"
+    },
+    "q011_section54_production_preparation": {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+      "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1",
+      "role": "Section 5.4 production-geometry preparation template; not launch authority"
+    }
+  },
+  "scientific_boundary": {
+    "uniform_mesh_exact_conservation_qualifies_dynamic_amr": false,
+    "paper_smooth_amr_individually_conservative_claimed": false,
+    "engineering_pilot_can_close_scientific_amr": false,
+    "full_geometry_pilot_is_production_science": false,
+    "required_interpretation": "Uniform-mesh exact conservation does not qualify AMR. These pilots characterize dynamic-AMR lifetime, migration, restart, accounting, and resource behavior only."
+  },
+  "registered_execution_gates": [
+    "final_clean_candidate_exact_source_archive_executable_and_environment_bound",
+    "installed_registered_control_plane_generation_exactly_bound",
+    "separate_reviewed_registered_science_policy_slice_for_each_case",
+    "project_wide_node_hour_ledger_and_other_campaign_reserves_bound",
+    "orion_only_artifact_root_and_storage_reservation_bound",
+    "user_queue_empty_immediately_before_every_submission",
+    "directive_only_normal_qos_job_template_and_fresh_operator_attestations_bound",
+    "serial_case_order_and_one_attempt_per_case_enforced",
+    "required_q009_telemetry_and_restart_receipt_producer_installed_and_bound",
+    "no_runtime_output_bytes_inspected_before_this_preregistration_is_frozen"
+  ],
+  "inspection_policy": {
+    "pre_preregistration_runtime_output_inspection": "forbidden",
+    "post_preregistration_allowed_inspection": [
+      "scheduler_state_elapsed_and_charged_node_hours",
+      "artifact_byte_counts_and_publication_times",
+      "aggregate_meshblock_cell_particle_and_migration_counters",
+      "aggregate_load_cost_imbalance_and_timing_telemetry",
+      "aggregate_conservation_accounting_terms_and_residuals",
+      "restart_identity_continuity_and_terminal_time_receipts",
+      "hip_memory_high_water_and_failure_telemetry"
+    ],
+    "forbidden_inspection": [
+      "cell_or_particle_field_values",
+      "shock_morphology_or_profiles",
+      "particle_spectra_or_acceleration_efficiency",
+      "magnetic_amplification_or_instability_growth",
+      "scientific_residual_threshold_selection",
+      "publication_figures_or_claim_metrics",
+      "qualifying_campaign_outputs"
+    ],
+    "same_contract_output_driven_tuning": "forbidden_requires_new_version",
+    "held_out_opening_rule": "open_aggregate_telemetry_only_after_terminal_receipt_and_artifact_seal"
+  },
+  "required_telemetry": {
+    "execution_identity": [
+      "clean_candidate_source_archive_executable_environment_and_deck_digests",
+      "scheduler_job_step_node_gpu_mpi_rank_and_terminal_receipts",
+      "exact_runtime_parameter_dump_and_case_id"
+    ],
+    "amr_and_migration": [
+      "simulation_time_cycle_and_amr_event_sequence",
+      "created_deleted_and_active_meshblocks_by_level_and_rank",
+      "active_cells_and_particles_by_level_and_rank",
+      "particle_rank_migration_and_meshblock_ownership_change_counts",
+      "unexplained_particle_loss_duplicate_and_invalid_owner_counts"
+    ],
+    "load_balance": [
+      "configured_particle_cost_weight",
+      "per_rank_meshblock_particle_and_total_load_costs_before_and_after_balance",
+      "rank_ownership_map_digest_after_each_amr_balance",
+      "per_rank_particle_update_and_amr_balance_timings"
+    ],
+    "conservation_accounting": [
+      "aggregate_gas_and_particle_mass_momentum_energy",
+      "aggregate_boundary_injection_removal_reflection_and_floor_terms",
+      "aggregate_accounted_closure_residuals_at_each_amr_restart_and_terminal_event",
+      "all_accounting_terms_present_and_finite"
+    ],
+    "restart_continuity": [
+      "checkpoint_digest_and_inventory",
+      "pre_restart_and_first_resumed_state_fingerprints",
+      "pre_restart_and_first_resumed_integer_counter_identity",
+      "observed_checkpoint_and_resumed_terminal_times"
+    ],
+    "hip_resource": [
+      "per_rank_gpu_identity_and_hip_runtime_identity",
+      "per_rank_device_and_host_memory_high_water",
+      "artifact_bytes_and_publication_elapsed_time"
+    ],
+    "fail_closed_rules": [
+      "missing_or_nonfinite_conservation_accounting_fails",
+      "unexplained_particle_loss_or_duplicate_count_must_equal_zero",
+      "invalid_particle_owner_count_must_equal_zero",
+      "restart_boundary_fingerprint_or_integer_counter_mismatch_fails",
+      "missing_required_amr_or_inter_rank_migration_event_fails",
+      "eos_floor_event_requires_separate_review_and_fails_this_contract",
+      "no_scientific_conservation_tolerance_is_selected_by_this_pilot"
+    ]
+  },
+  "profile_definitions": {
+    "geometry_profiles": {
+      "reduced_lifetime": {
+        "classification": "reduced_engineering_geometry",
+        "template_geometry": "unchanged",
+        "purpose": "force repeated refine-derefine and rank migration cheaply"
+      },
+      "reduced_transverse_shock": {
+        "classification": "reduced_engineering_geometry",
+        "exact_overrides": {
+          "mesh/nx2": 20,
+          "mesh/x2max": 240.0,
+          "time/tlim": 50.0
+        },
+        "purpose": "exercise shock injection removal dynamic AMR and restart beyond t=45 without full transverse cost"
+      },
+      "full_section54_geometry": {
+        "classification": "full_production_geometry_engineering_pilot",
+        "exact_geometry": {
+          "mesh/nx1": 4000,
+          "mesh/nx2": 260,
+          "mesh/x1max": 48000.0,
+          "mesh/x2max": 3120.0,
+          "meshblock/nx1": 20,
+          "meshblock/nx2": 20
+        },
+        "exact_overrides": {
+          "time/nlim": 512
+        },
+        "held_out": true
+      }
+    },
+    "dynamic_amr_profiles": {
+      "repeated_refine_derefine": {
+        "dynamic_amr_required": true,
+        "minimum_refine_events": 3,
+        "minimum_derefine_events": 3,
+        "inter_rank_particle_migration_required": true,
+        "rank_ownership_change_required": true,
+        "load_balance_event_required": true
+      },
+      "shock_curvature_dynamic_amr": {
+        "dynamic_amr_required": true,
+        "minimum_refine_events": 1,
+        "minimum_derefine_events": 0,
+        "inter_rank_particle_migration_required": true,
+        "rank_ownership_change_required": true,
+        "load_balance_event_required": true
+      }
+    },
+    "restart_profiles": {
+      "none": {
+        "restart_required": false
+      },
+      "checkpoint_before45_resume_after45": {
+        "restart_required": true,
+        "checkpoint_time_min_inclusive": 40.0,
+        "checkpoint_time_max_exclusive": 45.0,
+        "resumed_terminal_time_min_exclusive": 45.0,
+        "resumed_terminal_time_max_inclusive": 50.0,
+        "distinct_scheduler_job_ids_required": true,
+        "checkpoint_and_restart_receipts_byte_bound": true,
+        "restart_boundary_state_fingerprint_exact": true,
+        "restart_boundary_integer_counters_exact": true
+      }
+    },
+    "output_profiles": {
+      "telemetry_only": {
+        "physical_field_outputs": "disabled",
+        "particle_dump_outputs": "disabled",
+        "aggregate_telemetry": "required",
+        "restart_output": "disabled",
+        "artifact_inventory_required": true
+      },
+      "telemetry_and_bound_restart": {
+        "physical_field_outputs": "disabled",
+        "particle_dump_outputs": "disabled",
+        "aggregate_telemetry": "required",
+        "restart_output": "required_immutable_and_cross_linked",
+        "artifact_inventory_required": true
+      }
+    }
+  },
+  "budget_and_storage_envelope": {
+    "project_frontier_cap_node_hours": 10000.0,
+    "contract_hard_cap_node_hours": 100.0,
+    "contract_hard_cap_artifact_storage_gib": 200.0,
+    "derived_sum_case_node_hour_ceilings": 100.0,
+    "derived_sum_case_storage_ceilings_gib": 200.0,
+    "maximum_attempts_per_case": 1,
+    "overrun_action": "stop_fail_closed_no_retry",
+    "other_registered_campaign_reserve_rule": "must_be_bound_before_first_q009_submission",
+    "project_cap_admission_equation": "consumed_node_hours + reserved_node_hours + 100.0 Q009_node_hours + bound_other_campaign_reserves <= 10000.0"
+  },
+  "pilot_matrix": [
+    {
+      "case_id": "q009-amr-migration-lb-off-v1",
+      "sequence": 1,
+      "role": "paired_reduced_dynamic_amr_migration",
+      "pair_id": "migration_pair_v1",
+      "template_id": "q009_coupled_boundary_lifetime",
+      "geometry_profile_id": "reduced_lifetime",
+      "dynamic_amr_profile_id": "repeated_refine_derefine",
+      "restart_profile_id": "none",
+      "output_profile_id": "telemetry_only",
+      "random_seed": 9009,
+      "load_balance": {
+        "mode": "off",
+        "pic_load_balance_cost_per_particle": 0.0
+      },
+      "resources": {
+        "platform": "Frontier",
+        "accelerator": "HIP",
+        "qos": "normal",
+        "nodes": 2,
+        "mpi_ranks": 16,
+        "gpus_per_node": 8,
+        "gpus_per_rank": 1,
+        "cpus_per_rank": 7,
+        "scheduler_jobs_per_attempt": 1,
+        "walltime_seconds_per_scheduler_job": 3600
+      },
+      "ceilings": {
+        "maximum_attempts": 1,
+        "maximum_node_hours": 2.0,
+        "maximum_artifact_storage_gib": 4.0
+      },
+      "execution_boundary": {
+        "submission_scope": "registered_science",
+        "launch_state": "blocked_pending_separate_admission",
+        "policy_slice_state": "absent_not_authorized_by_this_contract",
+        "serial_order_required": true,
+        "science_output_inspection_authorized": false,
+        "qualification_authority": false
+      }
+    },
+    {
+      "case_id": "q009-amr-migration-lb-on-v1",
+      "sequence": 2,
+      "role": "paired_reduced_dynamic_amr_migration",
+      "pair_id": "migration_pair_v1",
+      "template_id": "q009_coupled_boundary_lifetime",
+      "geometry_profile_id": "reduced_lifetime",
+      "dynamic_amr_profile_id": "repeated_refine_derefine",
+      "restart_profile_id": "none",
+      "output_profile_id": "telemetry_only",
+      "random_seed": 9009,
+      "load_balance": {
+        "mode": "particle_weight_0p001",
+        "pic_load_balance_cost_per_particle": 0.001
+      },
+      "resources": {
+        "platform": "Frontier",
+        "accelerator": "HIP",
+        "qos": "normal",
+        "nodes": 2,
+        "mpi_ranks": 16,
+        "gpus_per_node": 8,
+        "gpus_per_rank": 1,
+        "cpus_per_rank": 7,
+        "scheduler_jobs_per_attempt": 1,
+        "walltime_seconds_per_scheduler_job": 3600
+      },
+      "ceilings": {
+        "maximum_attempts": 1,
+        "maximum_node_hours": 2.0,
+        "maximum_artifact_storage_gib": 4.0
+      },
+      "execution_boundary": {
+        "submission_scope": "registered_science",
+        "launch_state": "blocked_pending_separate_admission",
+        "policy_slice_state": "absent_not_authorized_by_this_contract",
+        "serial_order_required": true,
+        "science_output_inspection_authorized": false,
+        "qualification_authority": false
+      }
+    },
+    {
+      "case_id": "q009-shock-restart-post45-lb-off-v1",
+      "sequence": 3,
+      "role": "paired_reduced_shock_restart_post45",
+      "pair_id": "restart_post45_pair_v1",
+      "template_id": "q011_section54_production_preparation",
+      "geometry_profile_id": "reduced_transverse_shock",
+      "dynamic_amr_profile_id": "shock_curvature_dynamic_amr",
+      "restart_profile_id": "checkpoint_before45_resume_after45",
+      "output_profile_id": "telemetry_and_bound_restart",
+      "random_seed": 23050101,
+      "load_balance": {
+        "mode": "off",
+        "pic_load_balance_cost_per_particle": 0.0
+      },
+      "resources": {
+        "platform": "Frontier",
+        "accelerator": "HIP",
+        "qos": "normal",
+        "nodes": 8,
+        "mpi_ranks": 64,
+        "gpus_per_node": 8,
+        "gpus_per_rank": 1,
+        "cpus_per_rank": 7,
+        "scheduler_jobs_per_attempt": 2,
+        "walltime_seconds_per_scheduler_job": 3600
+      },
+      "ceilings": {
+        "maximum_attempts": 1,
+        "maximum_node_hours": 16.0,
+        "maximum_artifact_storage_gib": 32.0
+      },
+      "execution_boundary": {
+        "submission_scope": "registered_science",
+        "launch_state": "blocked_pending_separate_admission",
+        "policy_slice_state": "absent_not_authorized_by_this_contract",
+        "serial_order_required": true,
+        "science_output_inspection_authorized": false,
+        "qualification_authority": false
+      }
+    },
+    {
+      "case_id": "q009-shock-restart-post45-lb-on-v1",
+      "sequence": 4,
+      "role": "paired_reduced_shock_restart_post45",
+      "pair_id": "restart_post45_pair_v1",
+      "template_id": "q011_section54_production_preparation",
+      "geometry_profile_id": "reduced_transverse_shock",
+      "dynamic_amr_profile_id": "shock_curvature_dynamic_amr",
+      "restart_profile_id": "checkpoint_before45_resume_after45",
+      "output_profile_id": "telemetry_and_bound_restart",
+      "random_seed": 23050101,
+      "load_balance": {
+        "mode": "particle_weight_0p001",
+        "pic_load_balance_cost_per_particle": 0.001
+      },
+      "resources": {
+        "platform": "Frontier",
+        "accelerator": "HIP",
+        "qos": "normal",
+        "nodes": 8,
+        "mpi_ranks": 64,
+        "gpus_per_node": 8,
+        "gpus_per_rank": 1,
+        "cpus_per_rank": 7,
+        "scheduler_jobs_per_attempt": 2,
+        "walltime_seconds_per_scheduler_job": 3600
+      },
+      "ceilings": {
+        "maximum_attempts": 1,
+        "maximum_node_hours": 16.0,
+        "maximum_artifact_storage_gib": 32.0
+      },
+      "execution_boundary": {
+        "submission_scope": "registered_science",
+        "launch_state": "blocked_pending_separate_admission",
+        "policy_slice_state": "absent_not_authorized_by_this_contract",
+        "serial_order_required": true,
+        "science_output_inspection_authorized": false,
+        "qualification_authority": false
+      }
+    },
+    {
+      "case_id": "q009-shock-heldout-full-geometry-lb-on-v1",
+      "sequence": 5,
+      "role": "held_out_full_geometry_engineering_feasibility",
+      "pair_id": null,
+      "template_id": "q011_section54_production_preparation",
+      "geometry_profile_id": "full_section54_geometry",
+      "dynamic_amr_profile_id": "shock_curvature_dynamic_amr",
+      "restart_profile_id": "none",
+      "output_profile_id": "telemetry_only",
+      "random_seed": 23050101,
+      "load_balance": {
+        "mode": "particle_weight_0p001",
+        "pic_load_balance_cost_per_particle": 0.001
+      },
+      "resources": {
+        "platform": "Frontier",
+        "accelerator": "HIP",
+        "qos": "normal",
+        "nodes": 32,
+        "mpi_ranks": 256,
+        "gpus_per_node": 8,
+        "gpus_per_rank": 1,
+        "cpus_per_rank": 7,
+        "scheduler_jobs_per_attempt": 1,
+        "walltime_seconds_per_scheduler_job": 7200
+      },
+      "ceilings": {
+        "maximum_attempts": 1,
+        "maximum_node_hours": 64.0,
+        "maximum_artifact_storage_gib": 128.0
+      },
+      "execution_boundary": {
+        "submission_scope": "registered_science",
+        "launch_state": "blocked_pending_separate_admission",
+        "policy_slice_state": "absent_not_authorized_by_this_contract",
+        "serial_order_required": true,
+        "science_output_inspection_authorized": false,
+        "qualification_authority": false
+      }
+    }
+  ],
+  "pairwise_acceptance": {
+    "required_pair_ids": [
+      "migration_pair_v1",
+      "restart_post45_pair_v1"
+    ],
+    "common_requirements": [
+      "same_candidate_executable_deck_seed_resources_and_stage_plan",
+      "only_load_balance_mode_and_case_identity_may_differ",
+      "both_cases_terminally_reconciled_within_case_ceilings",
+      "both_cases_observe_required_dynamic_amr_and_inter_rank_particle_migration",
+      "both_cases_have_complete_finite_accounting_and_zero_unexplained_particle_loss_duplicates_or_invalid_owners"
+    ],
+    "load_balance_pair_requirements": [
+      "lb_off_cost_weight_must_equal_zero",
+      "lb_on_cost_weight_must_equal_0p001",
+      "lb_on_must_change_at_least_one_post_amr_rank_ownership_assignment",
+      "retain_timing_cost_imbalance_and_accounting_differences_without_science_claim"
+    ]
+  },
+  "held_out_acceptance": {
+    "case_id": "q009-shock-heldout-full-geometry-lb-on-v1",
+    "launch_preconditions": [
+      "both_required_pairs_terminally_reconciled_and_operational_requirements_pass",
+      "full_geometry_exact_template_geometry_and_fixed_0p001_load_weight_bound",
+      "fresh_project_budget_storage_queue_policy_and_operator_gates_pass",
+      "no_forbidden_output_from_any_prior_case_inspected"
+    ],
+    "same_contract_retuning_after_pair_telemetry": "forbidden",
+    "allowed_postrun_read": "aggregate_preregistered_telemetry_only",
+    "qualification_effect": "engineering_feasibility_only"
+  },
+  "authority_boundary": {
+    "launch_authorized": false,
+    "scheduler_submission_authorized": false,
+    "policy_mutation_authorized": false,
+    "live_policy_slice_created": false,
+    "q009_qualified": false,
+    "dynamic_amr_science_qualified": false,
+    "exact_amr_conservation_claim_authorized": false,
+    "q011_production_authorized": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false
+  },
+  "open_dependencies": [
+    "implement_and_review_exact_registered_deck_materializer_and_admission",
+    "implement_and_review_required_amr_conservation_and_migration_telemetry",
+    "freeze_final_clean_candidate_executable_environment_and_installed_control_plane",
+    "bind_project_wide_budget_ledger_other_campaign_reserves_and_orion_storage",
+    "create_separate_live_registered_science_policy_slices_after_review",
+    "wait_for_empty_user_queue_before_each_serial_submission"
+  ]
+}
