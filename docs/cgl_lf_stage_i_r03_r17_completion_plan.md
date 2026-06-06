@@ -9,8 +9,9 @@ through accepted `R17` completion and the final campaign analysis bundle.
 The goal is to move quickly. The implementation is already scientifically
 credible, the corrected forcing policies are qualified, `R02` is complete,
 and independent use by Stephen Majeski provides encouraging external evidence.
-The remaining work is a production campaign plus the current F116/F117 release
-gate, not an open-ended physics-development program.
+The remaining work is a production campaign plus the mandatory
+`F118 -> F120 -> F119` release gate, not an open-ended physics-development
+program.
 
 This plan preserves fail-closed controller behavior while using parallel
 subagents aggressively for software hardening, packet review, scientific
@@ -37,16 +38,23 @@ nodes. The combined implementation:
   validation, root-lock serialization, and retained R17-last enforcement.
 
 The next release boundary is not yet complete. Before the next shared-root
-production mutation, finish the reviewed release commit and publish:
+production mutation, complete this exact ordered gate:
 
-- `F-116`, the independently reviewed current-source-authority supersession
-  that selects the final committed seven-tool release and complete-history
-  source bundle; then
-- `F-117`, the independently reviewed recost and next-wave recommendation,
-  including the fresh R12 rerun.
+1. publish and verify `F-118`, the final current-source authority selecting the
+   final committed and pushed release HEAD and complete-history source bundle;
+2. publish and verify `F-120`, the managed shared-root isolation clearance bound
+   to the exact F118 source-authority chain;
+3. publish and verify `F-119`, the authorizing recost and exact four-lane wave
+   recommendation;
+4. issue the exact `R03`, `R04`, fresh-null-lineage `R12`, and `R16` lane
+   `prepare`, `check-submit`, and `submit` operations serially in that order,
+   while allowing their authenticated submitted allocations to overlap.
 
-Until both publications are promoted and verified, retain the drained canonical
-campaign state and do not claim the next wave is authorized.
+`F-116` is immutable historical source-authority evidence. The retained failed
+`F-117` attempt is immutable non-authorizing evidence: it must not be promoted,
+treated as a recost authority, or used to launch production. Until F118, F120,
+and F119 are each promoted and verified, retain the drained canonical campaign
+state and do not claim the next wave is authorized.
 
 ## 2. Governing Documents And Boundaries
 
@@ -74,22 +82,23 @@ shared campaign root:
   /lustre/orion/ast207/proj-shared/dfielding/CGL
 ```
 
-The active source branch and pre-F116 source boundary are:
+The active source branch and historical source boundary are:
 
 ```text
 branch:
   feature/cgl-landau-fluid
 
-pre-F116 local baseline:
+historical pre-F116 local baseline:
   c4ddb25d574816f469c4fc61f756de5b9cf82d25
 
-currently published bridge head:
+retained historical bridge head:
   36140ea825cb853b298714c27720440fdab60b9e
 ```
 
-F116 must replace the pre-release baseline with the exact final committed and
-pushed release HEAD. Do not copy either hash above into a post-F116 production
-packet without recomputing and verifying the release identity.
+F116 subsequently became the immutable historical current-source-authority
+baseline. F118 must supersede it with the exact final committed and pushed
+release HEAD. Do not copy either hash above into an F118-authorized production
+packet without recomputing and verifying the final release identity.
 
 Production packets must pin the validated frozen E03 source tree rather than
 the moving live checkout:
@@ -98,7 +107,7 @@ the moving live checkout:
 /autofs/nccs-svm1_home2/dfielding/athenak-cgl-e03-9e075422
 ```
 
-The retained bridge bundle for the currently published production history is:
+The retained historical bridge bundle for the production history is:
 
 ```text
 /lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/athenak-feature-cgl-through-36140ea82.bundle
@@ -109,9 +118,10 @@ SHA-256:
 
 This bridge terminates at revision
 `36140ea825cb853b298714c27720440fdab60b9e`. It remains historical bridge
-evidence, not the final F116-selected current-source bundle. F116 must bind the
-final release HEAD and its new complete-history bundle before F117 or the next
-production wave is promoted.
+evidence, not the final F118-selected current-source bundle. The immutable
+historical F116 publication and retained failed F117 attempt do not authorize
+the next wave. F118 must bind the final release HEAD and its new
+complete-history bundle before F120 and F119 are promoted.
 
 The Stage I controller is:
 
@@ -225,8 +235,9 @@ transactions:                0
 E03 cumulative node-hours:   36.577224
 ```
 
-The next production action is gated on completed F116 and F117 publication, not
-on additional interpretation of the first-wave jobs.
+The next production action is gated on the exact completed
+`F118 -> F120 -> F119` publication chain, not on additional interpretation of
+the first-wave jobs.
 
 ### 3.3 External Scientific Evidence
 
@@ -403,7 +414,7 @@ Run these work streams concurrently whenever possible:
 
 | While the lead lane is doing this | Parallel subagent work |
 | --- | --- |
-| Closing the current F116/F117 release gate | Final seven-tool validation, adversarial security review, source-bundle construction, F116 reviews, F117 recost/review, next-wave packet preparation |
+| Closing the current F118/F120/F119 release gate | Final source and science-product validation, adversarial security review, complete-history F118 bundle and reviews, F120 managed-clearance reviews, F119 recost/review, exact four-lane packet preparation |
 | Preparing the next wave | R03/R04/R16 continuation packets, fresh R12 packet, queue and storage review, provisional later-wave composition |
 | Running one R03-R16 wave | Per-lane output monitoring, completed-lane inspection drafts, next-packet preparation, provisional recost, storage review, completed-case analysis |
 | Draining a wave barrier | Authoritative recost publication, allocation-profile update, storage audit, lane-cap ratchet review, next-wave packet review |
@@ -415,6 +426,9 @@ Run these work streams concurrently whenever possible:
 The lead agent owns these commands against the shared root:
 
 ```text
+F118 draft-evidence / draft-audit / promote / verify
+F120 render / promote / recover / verify shared-root-clearance-refresh
+F119 render / verify / install / request / generate / retain / audit / promote
 prepare
 check-submit
 submit
@@ -433,8 +447,9 @@ The command-safety classification is:
 
 | Class | Commands |
 | --- | --- |
-| Read-only controller actions | `validate-matrix`, `check-submit`, `reconcile` |
-| Shared-root controller writes | `init`, `approve-qualification`, `prepare`, `submit`, `mark-submitted`, `recover-submit`, `clear-submit-pending`, `inspect-segment`, `record`, `bundle-case`, `bundle-campaign`, `cancel`, `summary`, `recover-transactions` |
+| Read-only controller actions | `validate-matrix`, `check-submit`, `reconcile`, `render-shared-root-clearance-refresh`, `verify-shared-root-clearance-refresh` |
+| Shared-root controller writes | `init`, `approve-qualification`, `prepare`, `submit`, `mark-submitted`, `recover-submit`, `clear-submit-pending`, `promote-shared-root-clearance-refresh`, `recover-shared-root-clearance-refresh`, `inspect-segment`, `record`, `bundle-case`, `bundle-campaign`, `cancel`, `summary`, `recover-transactions` |
+| Other release-gate shared-root mutations | F118 publisher `promote`/`recover`; F119 recost request/review/generator installation and checkpoint promotion lifecycle |
 | Read-only system inspection | `squeue`, `sacct`, `find`, `du`, `sha256sum`, `git status`, `git diff` |
 
 Subagents may run read-only commands such as:
@@ -580,45 +595,77 @@ completed E03 `R02` and deliberately assembles E03 and E04 case bundles.
 
 ## 8. Current Release Gate And Next Wave
 
-### 8.1 Complete F116 And F117
+### 8.1 Complete F118, F120, And F119 In Order
 
 The campaign is drained at the first-wave barrier. Before the next production
-submission:
+submission, execute this mandatory ordered transition without an intervening
+production mutation:
 
-1. finish the final seven-tool implementation, focused adversarial tests, full
-   release suite, and independent security and plasma review;
-2. commit and push the final release revision;
-3. construct and verify its complete-history source bundle while retaining the
-   `36140ea82` bridge bundle as historical evidence;
-4. publish and verify F116 current-source authority;
-5. publish and verify F117 recost and next-wave recommendation;
-6. reconcile again with zero active reservations and zero transactions.
+1. finish the final implementation, scientific-product and acceptance bindings,
+   focused adversarial tests, full release suite, and independent security,
+   plasma, and statistical reviews;
+2. commit and push the final release revision, require the live repository
+   `HEAD` to equal the pushed branch tip, and make no later source change before
+   production resumes;
+3. construct and verify the final complete-history source bundle advertising
+   exactly that final `HEAD`, while retaining the `36140ea82` bridge and F116
+   publication as immutable historical evidence;
+4. draft, independently review, audit, promote, and separately verify F118 final
+   current-source authority;
+5. render, independently review and audit, independently review the audit,
+   promote, and separately verify the checkpoint-120 managed shared-root
+   isolation clearance bound to the exact F118 chain;
+6. render, verify, and install the F119 draft packet; draft and independently
+   review its request; generate and retain the recost generator; install and
+   verify the recost review; audit, promote, separately verify, and audit the
+   promoted F119 authorizing recost;
+7. reconcile again with zero active reservations, zero transactions, and no CGL
+   jobs before the first `prepare`.
 
-F116 and F117 are release gates, not completed work. F116 changes current source
-selection only. F117 must preserve job `4766856` as non-authorizing inventory
-and recommend the fresh R12 rerun.
+The authority roles are distinct:
 
-F116 and F117 authenticate exactly the retained seven-tool production-control
-vector. The standalone scientific-acceptance utility and criteria may be
-present in the complete-history source bundle, but they are non-authorizing
-until their separate independent plasma/statistical and restart-format reviews
-are approved and bind their exact final digests.
+- F116 is immutable historical current-source-authority evidence superseded by
+  F118.
+- The retained failed F117 packet, request, reconciliation, and storage records
+  are immutable non-authorizing evidence. They must remain unpromoted and may
+  be consumed only as the authenticated failed-attempt history superseded by
+  exact F119.
+- F118 is the final current-source authority and selects the final
+  complete-history bundle.
+- F120 is the managed shared-root isolation clearance required by
+  `check-submit` and `submit`; it does not authorize a wave by itself.
+- F119 is the authorizing recost and exact next-wave recommendation.
+
+F118 authenticates the retained seven-tool production-control vector and the
+complete final source history. The scientific-products generator, acceptance
+utility, criteria, reviews, and tests must therefore have their final tracked
+bytes committed before F118 is published.
 
 ### 8.2 Next Ten-Node Wave
 
-Subject to promoted F116/F117 authority and ordinary preflight, the intended
-next rolling wave is:
+Subject to promoted and separately verified F118, F120, and F119 authority plus
+ordinary preflight, the exact next rolling wave is:
 
-| Case | Segment | Start | Target | Nodes | Parent/restart |
-| --- | --- | ---: | ---: | ---: | --- |
-| `R03` | `s03_rankio_t0p5_t0p75` | `0.5` | `0.75` | `1` | accepted job `4766828` lineage |
-| `R04` | `s02_rankio_t0p25_t1p25` | `0.25` | `1.25` | `4` | accepted job `4766847` lineage |
-| `R12` | `s01_rankio_t0_t0p12` | `0` | `0.12` | `4` | null parent; null restart |
-| `R16` | `s01_rankio_t1p5_t4p5` | `1.5` | `4.5` | `1` | accepted job `4766866` lineage |
+| Order | Case | Segment | Start | Target | Nodes | Ranks | Parent/restart |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1 | `R03` | `s03_rankio_t0p5_t0p75` | `0.5` | `0.75` | `1` | `8` | accepted job `4766828` lineage |
+| 2 | `R04` | `s02_rankio_t0p25_t1p25` | `0.25` | `1.25` | `4` | `32` | accepted job `4766847` lineage |
+| 3 | `R12` | `s01_rankio_t0_t0p12` | `0` | `0.12` | `4` | `32` | null parent; null restart |
+| 4 | `R16` | `s01_rankio_t1p5_t4p5` | `1.5` | `4.5` | `1` | `8` | accepted job `4766866` lineage |
 
-This preserves the demonstrated ten-node envelope while allowing all four
-allocations to overlap. Issue `prepare`, `check-submit`, and `submit` serially;
-the Frontier allocations may run concurrently.
+Every lane uses Slurm `02:00:00`, Athena `01:50:00`, and eight ranks per node.
+This is exactly ten nodes and 80 ranks. Preserve the global one-prepared-packet
+invariant by issuing the mutations in exact table order:
+
+1. R03 `prepare`, R03 `check-submit`, R03 `submit`;
+2. R04 `prepare`, R04 `check-submit`, R04 `submit`;
+3. R12 `prepare`, R12 `check-submit`, R12 `submit`;
+4. R16 `prepare`, R16 `check-submit`, R16 `submit`.
+
+Each `check-submit` and `submit` must consume the exact promoted F120 managed
+clearance for `beta25-accel05-gamma10001-purecgl-256`. The four authenticated
+submitted Frontier allocations may overlap after their serial mutation trios
+complete.
 
 ### 8.3 Fresh R12 Rule
 
@@ -690,10 +737,11 @@ Complete focused controller fixtures proving:
 
 The first wave supplies production evidence for authenticated submitted-job
 overlap and durable preservation of unrelated submitted lanes while completed
-lanes are recorded. The F116/F117 release gate must retain focused coverage for
-node-profile authorization, duplicate-case rejection, the four-lane cap,
-one-prepared-packet enforcement, unbound-CGL-job rejection, fresh-R12 lineage
-selection, and R17 exclusivity before the next concurrent wave.
+lanes are recorded. The F118/F120/F119 release gate must retain focused coverage
+for node-profile authorization, duplicate-case rejection, the four-lane cap,
+one-prepared-packet enforcement, unbound-CGL-job rejection, managed shared-root
+clearance consumption, fresh-R12 null-lineage selection, and R17 exclusivity
+before the next concurrent wave.
 
 ### 9.2 Case-Lane Lifecycle
 
@@ -802,7 +850,7 @@ The initial four-lane R03/R04/R12/R16 wave is complete and drained. It used ten
 concurrent nodes and established the accepted R03, R04, and R16 prefixes plus
 the inventory-only R12 partial. Continue as follows:
 
-1. Complete and verify the F116/F117 release gate.
+1. Complete and verify the exact F118, then F120, then F119 release gate.
 2. Launch the Section 8.2 ten-node wave, including fresh R12 from `t = 0`.
 3. Keep the controller cap at four lanes and the reviewed wave envelope at ten
    nodes. Any increase requires a separate reviewed transition.
@@ -914,39 +962,45 @@ the first wave and at every drained-wave barrier:
 
 The drained canonical campaign currently records `36.577224` cumulative E03
 node-hours. The first accelerated wave contributes measured R03, R04, R12, and
-R16 throughput for the F117 recost.
+R16 throughput for the F119 authorizing recost.
 
 The F-112 projection had limited margin inside the historical `900` node-hour
-Stage I reservation. The measured R03 rate gives the conservative refreshed
-transition arithmetic:
+Stage I reservation. The current pre-F119 conservative transition arithmetic
+is:
 
 ```text
-measured conservative projection: 1217.254885 node-hours
-promoted Stage I envelope:         1400.000000 node-hours
-remaining planning headroom:        182.745115 node-hours
+current total projection:          1786.497607467427316981173717 node-hours
+historical internal envelope:      1400.000000 node-hours
 incremental project ceiling:       4000.000000 node-hours
 ```
 
-Retain the reviewed `1400` node-hour Stage I envelope unless the F117 measured
-recost requires a reviewed change. Increase it again only when measured scaling
-or family timing requires another reviewed transition.
+The exact F119 first wave may use the reviewed aggressive exception because it
+contains the mandatory fresh R12 calibration: the total projection may exceed
+the historical `1400` envelope only while actual use plus the authorized wave
+remains at or below `1400` and the total projection remains at or below `4000`.
+Every successor above-envelope recost fails closed until the fresh R12
+calibration supports a reviewed envelope transition. R17 readiness rejects a
+provisional above-envelope state.
 
 ### 11.2 Reservation Transition
 
 Before the next concurrent wave:
 
-1. have F117 consume the accepted first-wave results and the inventory-only R12
+1. have F119 consume the accepted first-wave results and the inventory-only R12
    partial without granting it continuation authority;
 2. include projected multi-node node-hours plus the summed maximum active-wave
    reservation;
 3. retain `required_storage_safety_bytes = 1099511627776` (exactly `1 TiB`),
-   which exceeds the reviewed `65,998,006,704`-byte F117 wave projection and
+   which exceeds the retained failed-F117 `65,998,006,704`-byte historical wave
+   projection and
    preserves the separately required R17 storage margin;
 4. have an independent reviewer audit arithmetic, contingency, and the fresh
    R12 profile;
-5. promote F116 current source authority before F117;
-6. verify both publications and reconcile the canonical root;
-7. resume under the retained `4000` node-hour project ceiling.
+5. promote and verify F118 final source authority, then F120 managed shared-root
+   clearance, then F119 authorizing recost;
+6. verify all three publications and reconcile the canonical root;
+7. resume under the retained `4000` node-hour project ceiling and the exact F119
+   first-wave authorization.
 
 This is an accounting-control update, not a reason to reopen qualified
 physics.
@@ -963,7 +1017,7 @@ Update the provisional throughput and node-efficiency model:
 Publish an authoritative recost under the retained zero-active-reservation
 companion contract:
 
-- at the current F117 first-wave barrier;
+- at the current F119 first-wave barrier;
 - before raising the lane cap or adding a larger node profile;
 - at later drained-wave barriers when the projected envelope moves materially;
 - before R17;
@@ -1177,86 +1231,201 @@ After accepted R17 completion:
 ## 14. Command Skeleton
 
 Use exact reviewed paths and acceptance prose from the current retained
-packet. The following is a skeleton, not a substitute for packet review.
+packet. The following is the mandatory operation order, not a substitute for
+packet review. Resolve every `<freeze-time ...>` placeholder only after final
+source freeze; do not invent or predeclare F118, F120, or F119 hashes.
 
 ```bash
 ROOT=/lustre/orion/ast207/proj-shared/dfielding/CGL
 REPO=/autofs/nccs-svm1_home2/dfielding/athenak-df
 FROZEN_SOURCE=/autofs/nccs-svm1_home2/dfielding/athenak-cgl-e03-9e075422
+PY=/usr/bin/python3.11
 STAGE="$REPO/scripts/frontier/cgl_lf_stage_i.py"
+SOURCE_AUTHORITY="$REPO/scripts/frontier/cgl_lf_stage_i_source_authority.py"
+RECOST="$REPO/scripts/frontier/cgl_lf_stage_i_recost.py"
+CHECKPOINT="$REPO/scripts/frontier/cgl_lf_stage_i_checkpoint.py"
 MATRIX="$REPO/inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
-SOURCE_BUNDLE="$ROOT/source-archives/athenak-feature-cgl-through-36140ea82.bundle"
+EXE="$ROOT/build/frontier-hip-9e07542281e4-cpe25.09-cce20-rocm6.4.2/src/athena"
+BUILD="$ROOT/runs/build-manifests/9e07542281e4-cpe25.09-cce20-rocm6.4.2"
+ACK=beta25-accel05-gamma10001-purecgl-256
+F118_BUNDLE="$ROOT/source-archives/athenak-feature-cgl-through-<F118-final-head-prefix>.bundle"
+R03_RESTART="$ROOT/runs/mks24-stage-i/E03-forcing-policy/R03/s02_rankio_t0p312823_t0p5/output/rst/rank_00000000/E03_forcing_policy_paper_standard_active_alfvenic_beta100_s02_rankio_t0p312823_t0p5.00002.rst"
+R04_RESTART="$ROOT/runs/mks24-stage-i/E03-forcing-policy/R04/s01_rankio_t0_t0p25/output/rst/rank_00000000/E03_forcing_policy_paper_standard_active_random_beta10_s01_rankio_t0_t0p25.00001.rst"
+R16_RESTART="$ROOT/runs/mks24-stage-i/E03-forcing-policy/R16/s00_rankio_t0_t1p5/output/rst/rank_00000000/E03_forcing_policy_paper_scale_separation_active_alfvenic_beta10_nperp96_s00_rankio_t0_t1p5.00002.rst"
 
-# Replace the historical bridge SOURCE_BUNDLE only after F116 publishes and
-# verifies the final complete-history bundle.
+# Require final committed and pushed HEAD, clean required source paths, a
+# drained queue, zero active reservations, zero transactions, and clean
+# reconciliation. Construct and independently verify the complete-history
+# F118 bundle before invoking the publisher.
 
-python3 "$STAGE" --root "$ROOT" reconcile
+"$PY" -I -S -B "$SOURCE_AUTHORITY" --root "$ROOT" \
+  --expected-publisher-sha256 "<freeze-time publisher sha256>" \
+  draft-evidence "<exact reviewed F118 draft-evidence arguments>"
+# Produce distinct external provenance/security and plasma/scientific reviews.
+"$PY" -I -S -B "$SOURCE_AUTHORITY" --root "$ROOT" \
+  --expected-publisher-sha256 "<freeze-time publisher sha256>" \
+  draft-audit "<exact reviewed F118 draft-audit arguments>"
+"$PY" -I -S -B "$SOURCE_AUTHORITY" --root "$ROOT" \
+  --expected-publisher-sha256 "<freeze-time publisher sha256>" \
+  promote "<exact reviewed F118 promotion arguments>"
+"$PY" -I -S -B "$SOURCE_AUTHORITY" --root "$ROOT" \
+  --expected-publisher-sha256 "<freeze-time publisher sha256>" \
+  verify --expected-audit-sha256 "<freeze-time F118 audit sha256>"
 
-# Fresh R12 rerun; no parent or restart-file is permitted.
-python3 "$STAGE" --root "$ROOT" prepare \
-  --case-id R12 \
-  --segment s01_rankio_t0_t0p12 \
-  --acceptance-criterion "<reviewed exact-boundary acceptance prose>" \
-  --executable "<qualified executable>" \
-  --build-manifest "<qualified build manifest>" \
-  --source-dir "$FROZEN_SOURCE" \
-  --source-bundle "<F116-selected final complete-history bundle>" \
+# F120: render, externally review/audit/review-the-audit, then promote and
+# separately verify the managed shared-root clearance bound to exact F118.
+"$PY" -I -S -B "$STAGE" --root "$ROOT" \
+  render-shared-root-clearance-refresh --checkpoint 120 \
+  > "<external F120 artifact candidate>"
+"$PY" -I -S -B "$STAGE" --root "$ROOT" \
+  promote-shared-root-clearance-refresh --checkpoint 120 \
+  "<exact F120 artifact/review/audit/audit-review candidates and hashes>"
+"$PY" -I -S -B "$STAGE" --root "$ROOT" \
+  verify-shared-root-clearance-refresh --checkpoint 120 \
+  --expected-audit-review-sha256 "<freeze-time F120 audit-review sha256>"
+
+# F119: render/verify/install packet, draft/review/install request, generate,
+# retain generator, install review, verify/audit/promote/verify/audit recost.
+"$PY" -I -S -B "$RECOST" --root "$ROOT" \
+  --expected-generator-sha256 "<freeze-time recost-generator sha256>" \
+  render-f119-draft-packet "<exact failed-F117 and F118 pins and lifetime>" \
+  > "<external F119 draft-packet candidate>"
+"$PY" -I -S -B "$RECOST" --root "$ROOT" \
+  --expected-generator-sha256 "<freeze-time recost-generator sha256>" \
+  verify-f119-draft-packet "<exact F119 packet and hash>"
+"$PY" -I -S -B "$RECOST" --root "$ROOT" \
+  --expected-generator-sha256 "<freeze-time recost-generator sha256>" \
+  install-f119-draft-packet "<exact F119 packet and hash>"
+"$PY" -I -S -B "$RECOST" --root "$ROOT" \
+  --expected-generator-sha256 "<freeze-time recost-generator sha256>" \
+  draft-request "<exact installed F119 packet and hash>"
+# Produce an external independent F119 request review.
+"$PY" -I -S -B "$RECOST" --root "$ROOT" \
+  --expected-generator-sha256 "<freeze-time recost-generator sha256>" \
+  install-request-review "<exact F119 request/review paths and hashes>"
+"$PY" -I -S -B "$RECOST" --root "$ROOT" \
+  --expected-generator-sha256 "<freeze-time recost-generator sha256>" \
+  generate "<exact reviewed F119 request and staged-output arguments>"
+"$PY" -I -S -B "$RECOST" --root "$ROOT" \
+  --expected-generator-sha256 "<freeze-time recost-generator sha256>" \
+  retain-generator
+"$PY" -I -S -B "$CHECKPOINT" --root "$ROOT" \
+  --expected-utility-sha256 "<freeze-time checkpoint-utility sha256>" \
+  --expected-stage-i-sha256 "<freeze-time controller sha256>" \
+  install-artifact-review "<exact F119 artifact/review bindings>"
+"$PY" -I -S -B "$CHECKPOINT" --root "$ROOT" \
+  --expected-utility-sha256 "<freeze-time checkpoint-utility sha256>" \
+  --expected-stage-i-sha256 "<freeze-time controller sha256>" \
+  verify-staged-recost "<exact F119 artifact bindings>"
+"$PY" -I -S -B "$CHECKPOINT" --root "$ROOT" \
+  --expected-utility-sha256 "<freeze-time checkpoint-utility sha256>" \
+  --expected-stage-i-sha256 "<freeze-time controller sha256>" \
+  audit-recost --publication-state staged "<exact F119 artifact bindings>"
+"$PY" -I -S -B "$CHECKPOINT" --root "$ROOT" \
+  --expected-utility-sha256 "<freeze-time checkpoint-utility sha256>" \
+  --expected-stage-i-sha256 "<freeze-time controller sha256>" \
+  promote-recost "<exact F119 artifact bindings>"
+"$PY" -I -S -B "$CHECKPOINT" --root "$ROOT" \
+  --expected-utility-sha256 "<freeze-time checkpoint-utility sha256>" \
+  --expected-stage-i-sha256 "<freeze-time controller sha256>" \
+  verify-promoted-recost "<exact F119 artifact bindings>"
+"$PY" -I -S -B "$CHECKPOINT" --root "$ROOT" \
+  --expected-utility-sha256 "<freeze-time checkpoint-utility sha256>" \
+  --expected-stage-i-sha256 "<freeze-time controller sha256>" \
+  audit-recost --publication-state promoted "<exact F119 artifact bindings>"
+
+"$PY" -I -S -B "$STAGE" --root "$ROOT" reconcile
+
+# Exact serialized first-wave mutation order. Use the exact reviewed
+# acceptance prose and retained restart paths for continuation lanes.
+
+# 1. R03: accepted job 4766828 lineage, 0.5 -> 0.75, 1 node / 8 ranks.
+"$PY" -I -S -B "$STAGE" --root "$ROOT" prepare \
+  --case-id R03 --segment s03_rankio_t0p5_t0p75 \
+  --acceptance-criterion "<reviewed R03 exact-boundary acceptance prose>" \
+  --executable "$EXE" --build-manifest "$BUILD" \
+  --source-dir "$FROZEN_SOURCE" --source-bundle "$F118_BUNDLE" \
+  --matrix "$MATRIX" --restart-file "$R03_RESTART" \
+  --nodes 1 --walltime 02:00:00 --athena-walltime 01:50:00 \
+  --override time/tlim=0.75
+"$PY" -I -S -B "$STAGE" --root "$ROOT" check-submit \
+  --manifest "<R03 prepared manifest>" --allow-shared-root-campaign "$ACK"
+"$PY" -I -S -B "$STAGE" --root "$ROOT" submit \
+  --manifest "<R03 prepared manifest>" --allow-shared-root-campaign "$ACK"
+
+# 2. R04: accepted job 4766847 lineage, 0.25 -> 1.25, 4 nodes / 32 ranks.
+"$PY" -I -S -B "$STAGE" --root "$ROOT" prepare \
+  --case-id R04 --segment s02_rankio_t0p25_t1p25 \
+  --acceptance-criterion "<reviewed R04 exact-boundary acceptance prose>" \
+  --executable "$EXE" --build-manifest "$BUILD" \
+  --source-dir "$FROZEN_SOURCE" --source-bundle "$F118_BUNDLE" \
+  --matrix "$MATRIX" --restart-file "$R04_RESTART" \
+  --nodes 4 --walltime 02:00:00 --athena-walltime 01:50:00 \
+  --override time/tlim=1.25
+"$PY" -I -S -B "$STAGE" --root "$ROOT" check-submit \
+  --manifest "<R04 prepared manifest>" --allow-shared-root-campaign "$ACK"
+"$PY" -I -S -B "$STAGE" --root "$ROOT" submit \
+  --manifest "<R04 prepared manifest>" --allow-shared-root-campaign "$ACK"
+
+# 3. R12: mandatory fresh null lineage, 0 -> 0.12, 4 nodes / 32 ranks.
+# No --restart-file and no parent are permitted.
+"$PY" -I -S -B "$STAGE" --root "$ROOT" prepare \
+  --case-id R12 --segment s01_rankio_t0_t0p12 \
+  --acceptance-criterion "<reviewed R12 exact-boundary acceptance prose>" \
+  --executable "$EXE" --build-manifest "$BUILD" \
+  --source-dir "$FROZEN_SOURCE" --source-bundle "$F118_BUNDLE" \
   --matrix "$MATRIX" \
-  --nodes 4 \
-  --walltime 02:00:00 \
-  --athena-walltime 01:50:00 \
+  --nodes 4 --walltime 02:00:00 --athena-walltime 01:50:00 \
   --override time/tlim=0.12
+"$PY" -I -S -B "$STAGE" --root "$ROOT" check-submit \
+  --manifest "<R12 prepared manifest>" --allow-shared-root-campaign "$ACK"
+"$PY" -I -S -B "$STAGE" --root "$ROOT" submit \
+  --manifest "<R12 prepared manifest>" --allow-shared-root-campaign "$ACK"
 
-python3 "$STAGE" --root "$ROOT" check-submit \
-  --manifest "<prepared manifest>" \
-  --allow-shared-root-campaign beta25-accel05-gamma10001-purecgl-256
-
-python3 "$STAGE" --root "$ROOT" submit \
-  --manifest "<prepared manifest>" \
-  --allow-shared-root-campaign beta25-accel05-gamma10001-purecgl-256
-
-python3 "$STAGE" --root "$ROOT" inspect-segment \
-  --manifest "<submitted manifest>" \
-  --required-time "<exact target>"
-
-python3 "$STAGE" --root "$ROOT" record \
-  --manifest "<submitted manifest>" \
-  --job-id "<slurm job id>" \
-  --result accepted \
-  --notes "<reviewed endpoint summary>"
-
-python3 "$STAGE" --root "$ROOT" reconcile
+# 4. R16: accepted job 4766866 lineage, 1.5 -> 4.5, 1 node / 8 ranks.
+"$PY" -I -S -B "$STAGE" --root "$ROOT" prepare \
+  --case-id R16 --segment s01_rankio_t1p5_t4p5 \
+  --acceptance-criterion "<reviewed R16 exact-boundary acceptance prose>" \
+  --executable "$EXE" --build-manifest "$BUILD" \
+  --source-dir "$FROZEN_SOURCE" --source-bundle "$F118_BUNDLE" \
+  --matrix "$MATRIX" --restart-file "$R16_RESTART" \
+  --nodes 1 --walltime 02:00:00 --athena-walltime 01:50:00 \
+  --override time/tlim=4.5
+"$PY" -I -S -B "$STAGE" --root "$ROOT" check-submit \
+  --manifest "<R16 prepared manifest>" --allow-shared-root-campaign "$ACK"
+"$PY" -I -S -B "$STAGE" --root "$ROOT" submit \
+  --manifest "<R16 prepared manifest>" --allow-shared-root-campaign "$ACK"
 ```
 
-Do not add a parent or `--restart-file` to the fresh R12 packet. Job `4766856`
-remains retained inventory only and is not a continuation source.
+Do not add a parent or `--restart-file` to the fresh R12 packet. Historical R12
+job `4766856` remains retained inventory only and is not a continuation source
+or global throughput basis. It may inform only the explicitly reviewed,
+R12-local fresh-run cost basis.
 
-After F116 and F117 are promoted and verified, issue `prepare`, `check-submit`,
-and `submit` serially for each selected `R03` through `R16` lane, but allow
-authenticated submitted allocations to overlap on Frontier.
-Use:
-
-```bash
-  --nodes "<reviewed lane allocation profile>"
-```
-
-Keep R03 on one node. Do not hard-code one node for `R04` through `R16`.
-Retain one active segment per case, the reviewed total lane cap, summed
-reservation accounting, and exact manifest binding for every queued or running
-Stage I job.
+Do not prepare a later lane until the preceding lane has completed both
+`check-submit` and `submit`. Once submitted, allocations may overlap. Keep R03
+and R16 on one node and use the exact F119-authorized four-node profiles for R04
+and fresh R12. Retain one active segment per case, the reviewed four-lane cap,
+summed reservation accounting, and exact manifest binding for every queued or
+running Stage I job.
 
 ## 15. Durable Checkpoints
 
 Commit, push, bundle, checksum, and catalog at these boundaries:
 
-1. F116 current-source-authority publication and final complete-history bundle;
-2. F117 first-wave recost and next-wave recommendation, including fresh R12;
-3. every later drained-wave authoritative recost and lane-cap change;
-4. any executable qualification or execution-epoch transition;
-5. completion of each mapped case;
-6. R17 readiness authorization;
-7. R17 completion;
-8. final campaign bundle and scientific report.
+1. F118 final current-source-authority publication and final complete-history
+   bundle;
+2. F120 managed shared-root isolation clearance;
+3. F119 authorizing recost and exact next-wave recommendation, including fresh
+   null-lineage R12;
+4. the submitted exact R03/R04/R12/R16 four-lane wave after all four serial
+   mutation trios complete;
+5. every later drained-wave authoritative recost and lane-cap change;
+6. any executable qualification or execution-epoch transition;
+7. completion of each mapped case;
+8. R17 readiness authorization;
+9. R17 completion;
+10. final campaign bundle and scientific report.
 
 For ordinary exact-boundary continuations within one stable profile, retain
 controller evidence and recost publications without turning every segment
@@ -1278,20 +1447,30 @@ into a large documentation rewrite.
 - [x] Implement the scoped restart-marker precision patch in parallel.
 - [x] Implement and run the first focused regression tranche for the
       bounded-concurrency controller transition.
-- [ ] Finish the final seven-tool release implementation, validation, and
-      independent audits.
-- [ ] Commit, push, bundle, independently review, publish, and verify F116.
-- [ ] Generate, independently review, publish, and verify F117.
-- [ ] Prepare and launch the next ten-node wave, including fresh
-      `R12/s01_rankio_t0_t0p12` with null parent/restart.
+- [ ] Finish the final release source, seven-tool production-control vector,
+      scientific-product and acceptance bindings, validation, and independent
+      audits.
+- [ ] Commit and push the final release revision; construct and verify its
+      complete-history source bundle.
+- [ ] Draft, independently review, audit, promote, and separately verify F118
+      final current-source authority.
+- [ ] Render, independently review and audit, independently review the audit,
+      promote, and separately verify F120 managed shared-root isolation
+      clearance.
+- [ ] Render, verify, install, independently review, generate, retain, audit,
+      promote, separately verify, and audit F119 authorizing recost.
+- [ ] Confirm the retained failed F117 attempt remains immutable, unpromoted,
+      and non-authorizing.
+- [ ] Prepare/check-submit/submit R03, then R04, then fresh null-lineage R12,
+      then R16; allow only their submitted allocations to overlap.
 - [ ] Request raw curves, FFT-normalization details, or donor diagnostics from
       Stephen Majeski in parallel.
 
 ### Standard Matrix
 
 - [x] Launch and drain the initial four-lane `R03`, `R04`, `R12`, `R16` wave.
-- [ ] Promote the first drained-wave F117 recost, storage audit, and
-      next-wave profile table.
+- [ ] Promote the first drained-wave F119 authorizing recost, storage audit, and
+      exact next-wave profile table.
 - [ ] Keep the rolling campaign at the reviewed four-lane cap.
 - [ ] Complete and bundle `R03`.
 - [ ] Complete and bundle `R04`.
@@ -1337,9 +1516,12 @@ corrected-E03 production case, a successful ten-node accelerated wave, a
 controller that fails closed, and encouraging independent physics evidence
 from Stephen Majeski. The shortest robust path is:
 
-1. finish and publish F116 current source authority, then F117 first-wave
-   recost and next-wave recommendation;
-2. launch the next four-lane, ten-node wave with R03, R04, fresh R12, and R16;
+1. finish the final committed and pushed source, then publish and separately
+   verify F118 final source authority, F120 managed shared-root clearance, and
+   F119 authorizing recost in that exact order;
+2. issue the exact serial R03, R04, fresh null-lineage R12, and R16
+   `prepare`/`check-submit`/`submit` trios, then run the four submitted
+   allocations concurrently across ten nodes;
 3. run R03 through R16 as rolling bounded-concurrency waves while serializing
    shared-root mutations and preserving one in-flight segment per case;
 4. use drained barriers for authoritative recost, storage review, and
