@@ -6008,6 +6008,71 @@ def test_r12_fresh_rerun_supersedes_historical_inventory_in_authoritative_lineag
     assert lineages == {"R12": [fresh]}
 
 
+def test_budget_treats_historical_r12_as_inventory_only_but_preserves_accounting(
+    monkeypatch,
+):
+    module = load_recost_module()
+    r03 = {
+        "identity": ("5000000", "R03", "s00_rankio_t0_t0p25", "accepted"),
+        "final_time": 0.25,
+    }
+    historical_r12 = {
+        "identity": ("4766856", "R12", "s00_rankio_t0_t0p25", "clean_partial"),
+        "final_time": 0.1371931229426507,
+    }
+    monkeypatch.setattr(module, "manifest_identity", lambda manifest: manifest["identity"])
+    monkeypatch.setattr(module, "final_time", lambda manifest: manifest["final_time"])
+
+    budget = module.calculate_budget(
+        [
+            {"job_id": "5000000", "actual_node_hours": "1"},
+            {"job_id": "4766856", "actual_node_hours": "100"},
+        ],
+        {"R03": [r03], "R12": [historical_r12]},
+        {
+            "R03": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+            "R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")},
+        },
+        [],
+        Decimal("0"),
+        Decimal("1000"),
+        Decimal("1000"),
+    )
+
+    assert budget["actual_stage_i_node_hours"] == "101"
+    assert budget["measurement_basis"]["job_id"] == "5000000"
+    assert budget["case_breakdown"]["R12"]["authenticated_progress_fraction"] == "0"
+    assert budget["case_breakdown"]["R12"]["remaining_simulation_time"] == "10.0"
+
+
+def test_budget_uses_fresh_r12_for_throughput_and_progress(monkeypatch):
+    module = load_recost_module()
+    fresh_r12 = {
+        "identity": ("5000001", "R12", "s01_rankio_t0_t0p12", "clean_partial"),
+        "final_time": 0.12,
+    }
+    monkeypatch.setattr(module, "manifest_identity", lambda manifest: manifest["identity"])
+    monkeypatch.setattr(module, "final_time", lambda manifest: manifest["final_time"])
+
+    budget = module.calculate_budget(
+        [
+            {"job_id": "4766856", "actual_node_hours": "100"},
+            {"job_id": "5000001", "actual_node_hours": "1"},
+        ],
+        {"R12": [fresh_r12]},
+        {"R12": {"_cell_count": 1, "_estimated_node_hours": Decimal("10")}},
+        [],
+        Decimal("0"),
+        Decimal("1000"),
+        Decimal("1000"),
+    )
+
+    assert budget["actual_stage_i_node_hours"] == "101"
+    assert budget["measurement_basis"]["job_id"] == "5000001"
+    assert budget["case_breakdown"]["R12"]["authenticated_progress_fraction"] == "0.012"
+    assert budget["case_breakdown"]["R12"]["remaining_simulation_time"] == "9.8800"
+
+
 def test_authoritative_lineage_allows_only_authenticated_non_scientific_index_gaps(
     tmp_path, monkeypatch,
 ):

@@ -7685,6 +7685,12 @@ def calculate_budget(
 ) -> dict[str, object]:
     """Project remaining use from authenticated observed Stage I node-hour rates."""
 
+    r12_historical_inventory = (
+        R12_HISTORICAL_JOB_ID,
+        "R12",
+        R12_HISTORICAL_SEGMENT,
+        "clean_partial",
+    )
     actual = sum(
         (require_decimal(row["actual_node_hours"], "ledger actual node-hours") for row in rows),
         Decimal("0"),
@@ -7711,7 +7717,10 @@ def calculate_budget(
     for case_id, lineage in sorted(lineages.items()):
         cells = require_integer(matrix[case_id]["_cell_count"], f"{case_id} matrix cells", minimum=1)
         for manifest in lineage:
-            job_id, _, segment, _ = manifest_identity(manifest)
+            identity = manifest_identity(manifest)
+            job_id, _, segment, _ = identity
+            if identity == r12_historical_inventory:
+                continue
             row = rows_by_job[job_id]
             actual_job = require_decimal(row["actual_node_hours"], f"ledger job {job_id} actual")
             _, start, _ = parse_segment(segment, f"ledger job {job_id} segment")
@@ -7750,7 +7759,7 @@ def calculate_budget(
         assert isinstance(estimated, Decimal)
         lineage = lineages.get(case_id, [])
         progress = Decimal("0")
-        if lineage:
+        if lineage and manifest_identity(lineage[-1]) != r12_historical_inventory:
             progress = Decimal(str(final_time(lineage[-1]))) / Decimal(
                 str(REQUIRED_CASE_FINAL_TIME)
             )
