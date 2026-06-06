@@ -1,6 +1,6 @@
 # PIC Sun and Bai release qualification handoff
 
-Last updated: 2026-06-05T09:20:03Z
+Last updated: 2026-06-06T07:43:34Z
 
 ## Purpose
 
@@ -257,7 +257,8 @@ Remaining:
 4. Accept only a canonical schema-v3 human selection receipt for that recorded
    choice that binds and verifies the exact immutable packet and aggregate
    receipts, exact historical recomputation, sealed source-bound authoritative
-   reanalysis, and sealed post-gate human reviewer attestation.
+   reanalysis, and a separately sealed post-reanalysis human reviewer
+   attestation.
 5. Make `planner_retention` conditionally mandatory at manifest creation and
    reservation before any qualifying-science policy authorization.
 6. Materialize and validate a fresh qualifying campaign plan only after the
@@ -515,9 +516,10 @@ current producer generation.
 
 ### Pressure-selection schema-v3 acceptance chain
 
-The v3 pressure-selection gate validates a human-authored selection but never
-creates, ranks, or infers one. Acceptance is fail closed through this exact
-chain:
+The v3 pressure-selection gate validates an explicitly recorded human
+selection but never creates, ranks, or infers one. The software authenticates
+the decision record, not human authorship; the operational human stop remains
+mandatory. Acceptance is fail closed through this exact chain:
 
 1. The standalone verifier reopens and verifies the exact immutable
    pressure-review packet, aggregate receipt, aggregate bundle, aggregate
@@ -529,11 +531,14 @@ chain:
    result to `clean_candidate_archive_reanalysis`, one clean-candidate Git
    commit, its source-archive SHA-256, the exact reanalysis source closure, and
    the immutable v5 historical production source authorization.
-4. A separately sealed human reviewer attestation binds exactly one registered
-   pressure case, the exact packet and aggregate receipts, and the sealed
-   reanalysis. Its chronology must satisfy the pressure-gate review not-before
-   time `2026-06-05T09:09:42Z`, follow the reanalysis seal, and complete its
-   review-to-seal interval within the bounded gate window.
+4. A separately sealed post-reanalysis human reviewer attestation binds one
+   registered pressure case, the exact packet and aggregate receipts, and the
+   sealed reanalysis. It consumes an independently supplied human decision
+   record, preserves the reviewed rationale verbatim, requires its review
+   timestamp to be strictly later than the reanalysis seal, and completes its
+   review-to-seal interval within the bounded gate window. The software
+   authenticates the decision record, not human authorship, so the operational
+   human stop remains mandatory.
 5. The canonical schema-v3 pressure-selection receipt binds the immutable
    publication tuple, all four case descriptors, the selected case, and both
    sealed attestation bindings.
@@ -1111,6 +1116,44 @@ After integrating the repairs, rerun focused tests, the explicit full suite,
 `git diff --check`, and `python3 -B -m py_compile` for every changed Python
 module before committing.
 
+## Current Stage-4 pressure-selection publication candidate
+
+The active handoff is the no-science p0=1.0 Stage-4 publication candidate, not
+the older exact-predecessor control-plane repair. The live paired controller is
+`930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246`;
+the active policy and promotion SHA-256 values are `aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1`
+and `ef11cb301ec4917cd32aaca8af56e4f2d753367682c6ba28fc048c004904613e`.
+The authorized clean-candidate manifest SHA-256 is
+`ea5f295096b04d7e5f338873c2a29213f173677568fd33220e1e34ea239739e4`
+and its source archive SHA-256 is
+`7d4d84a11b5db5b1231c39a9e6a4fbe0f358c0187e0348dec4097f9a69de61cf`.
+The registered-science allowlist is empty, admission smoke is closed, and no
+pending submission or incomplete manual-accounting marker exists.
+
+The current publisher's machine command prepares only a sealed authoritative
+reanalysis, a sealed Stage-4 preparation-source attestation, and an empty
+private human-decision root. It cannot create a reviewer attestation or
+candidate receipt. A second command consumes a separately supplied
+post-reanalysis human decision record, seals the reviewer attestation, and
+creates the read-only non-authorizing candidate receipt plus its publication
+authorization. The preparation attestation, human decision, candidate
+authorization, and controller-state attestation require all mutation stages to
+use one replacement-ref-disabled authenticated publisher archive. The software
+authenticates the decision record and its strict post-reanalysis chronology,
+not the human author's identity; the operational human stop is mandatory.
+Publication then seals the schema-v3 receipt against an immutable
+launch-prohibited controller-state attestation. Reanalysis, human sealing,
+publication, and reconciliation require execution from an authenticated
+read-only archive of the exact committed source. The separate
+scientific scope interpretation remains bounded: p0=1.0 matches Bai et al.
+(2015)'s stated P0=T0=1 normalization, while the short AthenaK pilots do not
+establish pressure independence or a physics-preferred Bell/DSA baseline.
+
+No production pressure-selection receipt exists yet. Do not run the Stage-4
+publication sequence until the candidate is committed and pushed, the exact
+clean-worker wrapper passes, and the independent security, integration, and
+science rereviews close. This boundary authorizes no science launch.
+
 ## New-agent restart checklist
 
 Run these first:
@@ -1140,19 +1183,19 @@ Then:
 1. Read this file and both governing plans.
 2. Verify the exact aggregate and review-packet receipts and their success
    seals without mutating or republishing them.
-3. Read the exact-predecessor migration-repair pressure-gate successor, inspect
-   the packet-bound pressure-selection schema-v3 gate, and recompute its bound
-   evidence. Confirm `problem/ps_p0=1.0` is recorded but unsealed and that no
-   selection receipt exists or is accepted by the gate.
-4. Finish focused and full local validation, independent adversarial review,
-   commit, push, and clean committed worker validation. The repaired preflight
-   capture must bind the executing common module, reject namespace
-   substitution, preserve ambiguous residue, and use only exact commit-forward
-   pair recovery.
-5. Pair-install and promote the repaired control plane under a
-   launch-prohibited policy.
-6. Seal the already recorded human `problem/ps_p0=1.0` choice through the
-   authoritative reanalysis, reviewer attestation, and schema-v3 receipt chain.
+3. Read the Stage-4 pressure-selection publication candidate successor,
+   inspect the packet-bound schema-v3 gate and publisher, and recompute its
+   bound evidence. Confirm `problem/ps_p0=1.0` is recorded but that no
+   production selection receipt exists yet.
+4. Finish focused and full local validation, independent rereview, commit,
+   push, and exact clean committed worker validation.
+5. From the authenticated committed-source snapshot only, seal the
+   authoritative reanalysis and stop at the human pressure-selection gate.
+6. After an explicit post-reanalysis human decision record, seal the reviewer
+   attestation and schema-v3 receipt chain, then independently verify the
+   receipt, success seal, controller-state
+   attestation, absent guard, unchanged empty allowlist, and launch-prohibited
+   active state.
 7. Only then materialize a fresh qualifying campaign plan and proceed through the
    staged release plan.
 

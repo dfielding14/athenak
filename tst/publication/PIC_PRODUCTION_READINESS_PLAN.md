@@ -2555,6 +2555,38 @@ Future implementation agents should execute the following successor sequence:
     permission before exceeding 10000 cumulative node-hours or expanding beyond
     the authorized QOS, partition, account or campaign envelope.
 
+### Current Q011 Stage-4 no-science publication boundary
+
+The current Q011 action is to publish the reviewed `problem/ps_p0=1.0`
+pressure selection, not to launch a qualifying campaign. The live paired
+controller `930a04d1` and candidate-only policy retain an empty
+registered-science allowlist, closed admission smoke, no pending submission,
+and no incomplete manual-accounting marker. Preserve the exact earlier human
+selection and rationale verbatim. As a separate scientific scope
+interpretation, the selected case is a provenance-first baseline because it
+matches Bai et al. (2015)'s explicit P0=T0=1 normalization; the short pressure
+pilots do not establish pressure independence or a physics-preferred Bell/DSA
+baseline.
+
+Before production publication, require the exact Stage-4 source commit to be
+pushed, independently rereviewed, and passed by the clean-snapshot
+pressure-gate worker. Run machine reanalysis, human sealing, publication, and
+any reconciliation only from one authenticated read-only Git archive of that
+exact commit. Machine reanalysis must stop without creating a reviewer
+attestation or candidate receipt. Publication requires a separately supplied
+post-reanalysis human decision record that binds the exact sealed reanalysis
+and has a strictly later review timestamp. The software authenticates the
+decision record, not human authorship, so the operational human stop remains
+mandatory. Require the sealed Stage-4 preparation-source attestation, human
+decision, candidate publication authorization, and controller-state
+attestation to prove that preparation, sealing, and publication used the same
+replacement-ref-disabled authenticated publisher archive.
+Accept the result only after independently verifying the canonical schema-v3
+receipt, sealed reanalysis and reviewer attestations, launch-prohibited
+controller-state attestation, inode-bound success seal, absent publication
+guard, unchanged empty allowlist, and unchanged active policy/promotion.
+Stage-4 publication grants no science authority.
+
 ## Initial Change Log
 
 | Date | Change | Reason |

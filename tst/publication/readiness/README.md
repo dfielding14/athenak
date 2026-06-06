@@ -855,6 +855,23 @@ qualify any scientific claim by itself.
   promotion compare-and-swap anchors.
   It records the human `p0=1.0` choice as unsealed and non-authoritative, keeps
   the packet gate blocked, and grants no launch or science authority.
+- `q011_section54_pressure_selection_publication_candidate_successor_2026-06-05.json`:
+  current append-only Stage-4 candidate checkpoint. It supersedes the
+  exact-predecessor repair checkpoint as the active handoff, binds the paired
+  launch-prohibited `930a04d1` controller, candidate-only policy and promotion,
+  authorized `67a418c4` clean candidate, closed admission smoke, empty
+  registered-science allowlist, absent pending markers, and the exact
+  p0=1.0 publication source/test/runbook closure. It preserves the exact
+  earlier human-selected case and rationale, separately records the tighter
+  scientific scope interpretation, requires mutating publication commands to
+  run from one authenticated read-only Git archive, and keeps the production
+  selection receipt absent pending commit, push, clean-worker validation,
+  independent rereview, machine reanalysis, and an explicit post-reanalysis
+  human decision. Machine reanalysis cannot create a reviewer attestation or
+  candidate receipt. Its sealed Stage-4 preparation attestation, the human
+  decision, candidate publication authorization, and controller-state
+  attestation require all three mutation stages to use one authenticated
+  replacement-ref-disabled publisher archive.
 
 ### Q011 pressure-selection schema-v3 gate
 
@@ -872,12 +889,14 @@ boundary, not a selection creator. Its exact chain is:
    clean-candidate Git commit, its source-archive SHA-256, the exact reanalysis
    source closure, and the immutable v5 historical production source
    authorization.
-4. Verify a separately sealed human reviewer attestation binding exactly one
-   registered pressure case, the packet and aggregate receipts, and the sealed
-   authoritative reanalysis. The review must occur after the gate not-before
-   time `2026-06-05T09:09:42Z` and after the reanalysis seal, with bounded
-   review-to-seal chronology.
-5. Validate one canonical schema-v3 human-only pressure-selection receipt
+4. Verify a separately sealed post-reanalysis human reviewer attestation
+   binding exactly one registered pressure case, the packet and aggregate
+   receipts, and the sealed authoritative reanalysis. It must consume an
+   independently supplied decision record, preserve the reviewed rationale
+   verbatim, and use strict post-reanalysis and bounded review-to-seal
+   chronology. The software authenticates the decision record, not human
+   authorship, so the operational human stop remains mandatory.
+5. Validate one canonical schema-v3 explicitly reviewed pressure-selection receipt
    binding the immutable publication tuple, four case descriptors, selected
    case, authoritative-reanalysis attestation, and reviewer attestation.
 6. Reopen and revalidate the complete chain during source-local

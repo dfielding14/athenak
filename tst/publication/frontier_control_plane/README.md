@@ -3374,3 +3374,194 @@ available when the storage policy is relocked. Terminal reconciliation cleanup
 is idempotent: rerunning reconciliation for an already-recorded terminal event
 clears a matching stale pending marker and returns the existing event without
 duplicating accounting.
+
+## Q011 Stage-4 pressure-selection publication
+
+This is a no-science publication boundary. Machine preparation seals only the
+exact deterministic reanalysis and then stops at a human pressure-selection
+gate. It does not register a science slice, authorize admission smoke, submit a
+job, or grant a science claim. A candidate receipt can exist only after the
+sealer consumes an independently supplied decision record that explicitly
+binds the sealed reanalysis. The software authenticates that record's exact
+reviewed content, private location, read-only mode, and strict post-reanalysis
+chronology; it does not cryptographically authenticate human authorship. The
+operational human stop and independent review are mandatory authority
+controls.
+
+Run this sequence only after the Stage-4 source commit has passed the exact
+clean-worker wrapper. The active candidate-only generation must remain:
+
+- controller `930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246`;
+- policy SHA-256 `aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1`;
+- promotion SHA-256 `ef11cb301ec4917cd32aaca8af56e4f2d753367682c6ba28fc048c004904613e`;
+- clean-candidate manifest SHA-256
+  `ea5f295096b04d7e5f338873c2a29213f173677568fd33220e1e34ea239739e4`;
+- empty `registered_science_slices`, closed admission smoke, no pending
+  submission, and no incomplete manual-accounting marker.
+
+Machine reanalysis, human sealing, and publication are separate mutations. All
+must execute from the same read-only extracted Git archive for the exact
+committed Stage-4 source. Run the machine-reanalysis command first, retain its
+output, and stop for human review:
+
+```bash
+set -euo pipefail
+umask 077
+
+REPO_ROOT=/ccs/home/dfielding/athenak-pic
+PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
+PROJECT_HOME_ROOT=/autofs/nccs-svm1_proj/ast207/proj-shared/PIC
+PROJECT_LEDGER_ROOT=/ccs/proj/ast207/proj-shared/PIC
+PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
+
+trusted_git() {
+  /usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/git --no-replace-objects \
+    -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"
+}
+
+cd "$REPO_ROOT"
+FULL_GIT_COMMIT=$(trusted_git rev-parse HEAD)
+test "$FULL_GIT_COMMIT" = "$(trusted_git rev-parse origin/PIC)"
+test "$FULL_GIT_COMMIT" = "$(
+  trusted_git ls-remote origin refs/heads/PIC | /usr/bin/awk '{print $1}'
+)"
+test -z "$(trusted_git status --porcelain --untracked-files=all)"
+
+test "$(/usr/bin/sha256sum "$PIC_ROOT/policy/storage_policy.json" | /usr/bin/awk '{print $1}')" \
+  = aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1
+test "$(/usr/bin/sha256sum "$PIC_ROOT/policy/active_promotion.json" | /usr/bin/awk '{print $1}')" \
+  = ef11cb301ec4917cd32aaca8af56e4f2d753367682c6ba28fc048c004904613e
+test "$(/usr/bin/sha256sum "$PIC_ROOT/clean_candidates/83dce7b7-0b03-4be2-b6da-17bb211d1fd4/clean_candidate_manifest.json" | /usr/bin/awk '{print $1}')" \
+  = ea5f295096b04d7e5f338873c2a29213f173677568fd33220e1e34ea239739e4
+test -z "$(/usr/bin/squeue -u "$USER" -h -o '%i|%j|%t|%Z' | /usr/bin/grep -Ei 'pic|q011|athena' || true)"
+test ! -e "$PIC_ROOT/ledger/pending_submission.json"
+test ! -e "$PIC_ROOT/ledger/pending_manual_accounting.json"
+test ! -e "$PROJECT_LEDGER_ROOT/ledger/pending_manual_accounting.json"
+
+SOURCE_ARCHIVE=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/pic-q011-stage4-source.XXXXXXXX.tar")
+SOURCE_SNAPSHOT=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/pic-q011-stage4-snapshot.XXXXXXXX")
+trusted_git archive --format=tar "$FULL_GIT_COMMIT" > "$SOURCE_ARCHIVE"
+/usr/bin/tar -xf "$SOURCE_ARCHIVE" -C "$SOURCE_SNAPSHOT"
+/usr/bin/find "$SOURCE_SNAPSHOT" -type f -exec /usr/bin/chmod 0400 {} +
+/usr/bin/find "$SOURCE_SNAPSHOT" -type d -exec /usr/bin/chmod 0500 {} +
+/usr/bin/chmod 0400 "$SOURCE_ARCHIVE"
+
+cd "$SOURCE_SNAPSHOT"
+
+run_stage4() {
+  /usr/bin/env -i \
+    HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin TMPDIR=/tmp \
+    PIC_PRESSURE_PUBLICATION_SOURCE_ARCHIVE_PATH="$SOURCE_ARCHIVE" \
+    PIC_PRESSURE_PUBLICATION_SOURCE_SNAPSHOT_ROOT="$SOURCE_SNAPSHOT" \
+    "$PYTHON" -I -B -S -c \
+    'import runpy, sys; root, site, *args = sys.argv[1:]; sys.path[:0] = [root, root + "/tst/publication/frontier_control_plane", site]; sys.argv = ["publish_q011_section54_pressure_selection.py", *args]; runpy.run_path(root + "/tst/publication/publish_q011_section54_pressure_selection.py", run_name="__main__")' \
+    "$SOURCE_SNAPSHOT" \
+    /opt/cray/pe/python/3.11.7/lib/python3.11/site-packages \
+    "$@"
+}
+
+run_stage4 \
+  prepare-reanalysis \
+  --reanalysis-operator-id codex \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --authorized-pic-root "$PIC_ROOT" \
+  --authorized-project-home-root "$PROJECT_HOME_ROOT" \
+  | /usr/bin/tee /tmp/pic-q011-stage4-reanalysis.json
+
+test -z "$(/usr/bin/squeue -u "$USER" -h -o '%i|%j|%t|%Z' | /usr/bin/grep -Ei 'pic|q011|athena' || true)"
+test ! -e "$PIC_ROOT/ledger/pending_submission.json"
+test ! -e "$PIC_ROOT/ledger/pending_manual_accounting.json"
+test ! -e "$PROJECT_LEDGER_ROOT/ledger/pending_manual_accounting.json"
+test "$(/usr/bin/jq -r '.candidate_pressure_selection_receipt // empty' /tmp/pic-q011-stage4-reanalysis.json)" = ""
+test "$(/usr/bin/jq -r '.reviewer_attestation // empty' /tmp/pic-q011-stage4-reanalysis.json)" = ""
+```
+
+**Stop here for the human pressure-selection gate.** The reviewer must inspect
+the immutable pressure-review packet and the exact sealed reanalysis, then
+independently create one canonical read-only decision JSON as a direct child
+of the private `human_decision_root` printed above. It must bind the printed
+`authoritative_reanalysis_attestation`, include `"schema_version": 1` and
+`"record_type": "q011_section54_pressure_selection_human_decision"`, state
+reviewer `dfielding`, select `ps_p0_1p00` with `problem_ps_p0=1.0`, preserve
+the reviewed rationale exactly, include a `reviewed_utc` strictly later than
+the sealed reanalysis, and include the exact `reviewer_statement` printed
+under `required_human_confirmation`. It must also bind the printed
+`stage4_preparation_attestation`, which durably binds the reanalysis to the
+authenticated Stage-4 publisher archive. The reanalysis operator must not
+create or pre-populate this decision. The sealer authenticates the decision
+record, not the human author's identity.
+
+Only after that independently supplied decision exists:
+
+```bash
+HUMAN_DECISION="${HUMAN_DECISION:?set to the reviewed direct-child decision JSON}"
+test "$(stat -c '%a' "$HUMAN_DECISION")" = 400
+
+run_stage4 \
+  seal-human-selection \
+  --human-decision "$HUMAN_DECISION" \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --authorized-pic-root "$PIC_ROOT" \
+  --authorized-project-home-root "$PROJECT_HOME_ROOT" \
+  | /usr/bin/tee /tmp/pic-q011-stage4-human-seal.json
+
+CANDIDATE_RECEIPT=$(
+  /usr/bin/jq -r '.candidate_pressure_selection_receipt.path' \
+    /tmp/pic-q011-stage4-human-seal.json
+)
+CANDIDATE_AUTHORIZATION=$(
+  /usr/bin/jq -r '.candidate_publication_authorization.path' \
+    /tmp/pic-q011-stage4-human-seal.json
+)
+test -f "$CANDIDATE_RECEIPT"
+test -f "$CANDIDATE_AUTHORIZATION"
+
+if run_stage4 \
+  publish-selection \
+  --receipt "$CANDIDATE_RECEIPT" \
+  --candidate-authorization "$CANDIDATE_AUTHORIZATION" \
+  --controller-operator-id codex \
+  --expected-git-commit "$FULL_GIT_COMMIT" \
+  --authorized-pic-root "$PIC_ROOT" \
+  --authorized-project-home-root "$PROJECT_HOME_ROOT" \
+  > /tmp/pic-q011-stage4-publish.json \
+  2> /tmp/pic-q011-stage4-publish-failure.json; then
+  :
+else
+  /usr/bin/jq -e '.status == "failed_closed"' \
+    /tmp/pic-q011-stage4-publish-failure.json
+  /usr/bin/jq -e '.recovery != null' \
+    /tmp/pic-q011-stage4-publish-failure.json
+  CONTROLLER_PATH=$(/usr/bin/jq -r '.recovery.controller_state_attestation.path' /tmp/pic-q011-stage4-publish-failure.json)
+  CONTROLLER_SHA256=$(/usr/bin/jq -r '.recovery.controller_state_attestation.sha256' /tmp/pic-q011-stage4-publish-failure.json)
+  run_stage4 \
+    reconcile-published \
+    --controller-state-attestation "$CONTROLLER_PATH" \
+    --expected-controller-state-sha256 "$CONTROLLER_SHA256" \
+    --expected-git-commit "$FULL_GIT_COMMIT" \
+    --authorized-pic-root "$PIC_ROOT" \
+    --authorized-project-home-root "$PROJECT_HOME_ROOT" \
+    | /usr/bin/tee /tmp/pic-q011-stage4-reconcile.json
+fi
+
+run_stage4 \
+  verify-published \
+  --receipt "$PIC_ROOT/publication/q011_section54_pressure_selection_receipt.json" \
+  --authorized-pic-root "$PIC_ROOT" \
+  --authorized-project-home-root "$PROJECT_HOME_ROOT" \
+  | /usr/bin/tee /tmp/pic-q011-stage4-verify.json
+```
+
+Keep `SOURCE_ARCHIVE`, `SOURCE_SNAPSHOT`, the reanalysis output, human decision,
+human-seal output, publication output, and any reconciliation output until the
+receipt, success seal, recovery-guard state, controller-state attestation,
+paired live active state, and absent publication guard have been independently
+reviewed. If publication fails, inspect its canonical failure JSON. Do not
+republish or delete artifacts. A non-null `.recovery` must be reconciled in the
+same shell from the same authenticated source snapshot, as the command block
+above does; a null `.recovery` is a failed-closed stop requiring review.
+The sealed Stage-4 preparation attestation, human decision, candidate
+publication authorization, and controller-state attestation form the durable
+chain requiring preparation, human sealing, and publication to use the same
+replacement-ref-disabled authenticated publisher archive.

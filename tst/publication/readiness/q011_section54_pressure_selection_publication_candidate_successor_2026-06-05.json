@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "record_type": "q011_section54_pressure_selection_publication_candidate_successor",
+  "recorded_utc": "2026-06-06T06:56:40Z",
+  "source_checkpoint_commit": "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4",
+  "historical_predecessor_final_binding_commit": "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4",
+  "predecessor_record": "tst/publication/readiness/q011_section54_pressure_gate_exact_predecessor_migration_repair_successor_2026-06-05.json",
+  "predecessor_sha256": "71aa5f5e6c033db5e51e2a225d4bf233a9f52d4ab5d39f5148c19779ba16b661",
+  "active_candidate_only_state": {
+    "control_plane_version": "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246",
+    "active_policy": {
+      "orion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json",
+      "project_home_path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/storage_policy.json",
+      "sha256": "aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1"
+    },
+    "active_promotion": {
+      "orion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json",
+      "project_home_path": "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/policy/active_promotion.json",
+      "sha256": "ef11cb301ec4917cd32aaca8af56e4f2d753367682c6ba28fc048c004904613e"
+    },
+    "clean_candidate": {
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/83dce7b7-0b03-4be2-b6da-17bb211d1fd4/clean_candidate_manifest.json",
+      "manifest_sha256": "ea5f295096b04d7e5f338873c2a29213f173677568fd33220e1e34ea239739e4",
+      "git_commit": "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4",
+      "source_archive_sha256": "7d4d84a11b5db5b1231c39a9e6a4fbe0f358c0187e0348dec4097f9a69de61cf"
+    },
+    "registered_science_slices": [],
+    "frontier_admission_smoke": {
+      "status": "closed_after_pass"
+    },
+    "pending_submission_marker": "absent",
+    "manual_accounting_authorization_count": 4,
+    "pending_manual_accounting_marker": "absent",
+    "active_promotion_transaction": "absent"
+  },
+  "human_pressure_selection": {
+    "status": "prior_p0_1p0_choice_recorded_post_reanalysis_human_decision_required",
+    "selected_case": {
+      "case_id": "ps_p0_1p00",
+      "problem_ps_p0": 1.0
+    },
+    "reviewer_id": "dfielding",
+    "rationale": "Selected p0=1.0 as the recommended baseline because it explicitly matches Bai et al. (2015), which uses P0=T0=1 and treats the choice as unimportant while thermal pressure is much smaller than ram pressure.",
+    "production_selection_receipt": null
+  },
+  "stage4_publication_candidate": {
+    "status": "source_local_uncommitted_candidate_pending_commit_push_clean_worker_and_publication",
+    "publisher_mutation_execution_mode": "authenticated_read_only_git_archive_expected_commit_and_active_candidate_archive_reanalysis",
+    "preparation_outputs": [
+      "sealed_authoritative_reanalysis_attestation",
+      "sealed_stage4_preparation_source_attestation",
+      "empty_private_human_decision_root",
+      "no_reviewer_attestation_or_candidate_receipt"
+    ],
+    "publication_outputs": [
+      "explicit_post_reanalysis_human_decision_required",
+      "sealed_post_reanalysis_human_reviewer_attestation",
+      "read_only_non_authorizing_candidate_receipt",
+      "read_only_candidate_publication_authorization",
+      "canonical_schema_v3_pressure_selection_receipt",
+      "sealed_launch_prohibited_controller_state_attestation",
+      "inode_bound_publication_success_seal",
+      "paired_live_active_state_reverification",
+      "absent_publication_guard"
+    ],
+    "no_science_contract": [
+      "no_registered_science_slice",
+      "no_admission_smoke_authority",
+      "no_scheduler_submission",
+      "no_science_claim",
+      "active_policy_and_promotion_unchanged"
+    ],
+    "source_test_closure": {
+      "file_count": 10,
+      "closure_sha256": "1bfffc201448c89c2aeeefd795b7d0213039360adb267d3c30db79321b6fe726",
+      "files": [
+        {
+          "path": "tst/publication/publish_q011_section54_pressure_selection.py",
+          "sha256": "5581f109bde765ff56c079b43bf4845e548497b8fedcc508db5c31378864014e"
+        },
+        {
+          "path": "tst/publication/test_publish_q011_section54_pressure_selection.py",
+          "sha256": "24e338ddaf232a99d5539d307cac552e33fb32bdd42f55d982aa80f865918684"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
+          "sha256": "26cfec86d1f3d0f2583d57cc1c8d8994a09199b110e3a55afd01201dbd96a902"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/test_q011_pressure_review_packet_verifier.py",
+          "sha256": "ba2ef033f0d5eab3247397c7c18a0d9278d6a8617e8174496845cb485a29ea86"
+        },
+        {
+          "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+          "sha256": "de5a1a90ef361e875375bc4574b23af74c56a585dabd96c118fb4c9bdbd4b497"
+        },
+        {
+          "path": "tst/publication/frontier_control_plane/README.md",
+          "sha256": "708f19b30a22dbcfa2930a0bdd1c34a2d7de5f3b1aa43c960ac352310484d9fa"
+        },
+        {
+          "path": "tst/publication/test_pic_readiness_registry.py",
+          "sha256": "49a806571c369c65c72e66f528280b37e6688157e5011a4abbab3f6b5b654793"
+        },
+        {
+          "path": "tst/publication/readiness/README.md",
+          "sha256": "efc16823670514a08e49c3908c92eb741cc8988d1ec59dfa4e46560d01ece482"
+        },
+        {
+          "path": "tst/publication/PIC_SUN_BAI_RELEASE_HANDOFF.md",
+          "sha256": "6f35f08e456669d20a17d0f7c827f04f73512bde7c90b492b352abe4896fc61d"
+        },
+        {
+          "path": "tst/publication/PIC_PRODUCTION_READINESS_PLAN.md",
+          "sha256": "25796122d2491fff6c56bfbc1cfcf6a9d5879b9c16fee4dcabd8dfa79f20fe11"
+        }
+      ]
+    }
+  },
+  "source_local_validation": {
+    "focused_publisher_tests_passed": 39,
+    "related_pressure_gate_tests_passed": 102,
+    "readiness_registry_status": "pending_candidate_successor_finalization",
+    "full_publication_suite_status": "pending_clean_committed_worker",
+    "independent_rereview_status": "in_progress"
+  },
+  "next_clean_worker": {
+    "path": "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+    "sha256": "de5a1a90ef361e875375bc4574b23af74c56a585dabd96c118fb4c9bdbd4b497",
+    "expected_publication_python_files": 147,
+    "expected_publication_shell_files": 17,
+    "expected_publication_json_files": 292,
+    "expected_publication_test_modules": 66,
+    "status": "pending_clean_committed_worker_validation"
+  },
+  "packet_gate": {
+    "status": "blocked_pending_stage4_no_science_publication",
+    "required_receipt_schema_version": 3,
+    "remaining_actions": [
+      "commit_and_push_stage4_publication_candidate",
+      "pass_exact_clean_committed_pressure_gate_worker",
+      "close_independent_security_integration_and_science_rereviews",
+      "prepare_machine_reanalysis_from_authenticated_committed_source_snapshot",
+      "stop_for_explicit_post_reanalysis_human_pressure_selection",
+      "seal_human_selection_and_publish_from_same_authenticated_source_snapshot",
+      "independently_verify_receipt_seal_attestation_guard_and_active_state"
+    ],
+    "authority": "none"
+  },
+  "frontier_launch_authorization": "none_launch_prohibited",
+  "qualification_effect": "none_no_science_claim",
+  "status": "stage4_pressure_selection_publication_candidate_pending_commit_push_clean_worker_rereview_and_no_science_publication"
+}

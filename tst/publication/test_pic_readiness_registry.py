@@ -123,6 +123,18 @@ _Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS = (
     "tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh",
     "tst/publication/test_pic_readiness_registry.py",
 )
+_Q011_STAGE4_PRESSURE_SELECTION_CANDIDATE_CLOSURE_PATHS = (
+    "tst/publication/publish_q011_section54_pressure_selection.py",
+    "tst/publication/test_publish_q011_section54_pressure_selection.py",
+    "tst/publication/frontier_control_plane/q011_pressure_review_packet_verifier.py",
+    "tst/publication/frontier_control_plane/test_q011_pressure_review_packet_verifier.py",
+    "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh",
+    "tst/publication/frontier_control_plane/README.md",
+    "tst/publication/test_pic_readiness_registry.py",
+    "tst/publication/readiness/README.md",
+    "tst/publication/PIC_SUN_BAI_RELEASE_HANDOFF.md",
+    "tst/publication/PIC_PRODUCTION_READINESS_PLAN.md",
+)
 
 
 def _load(name: str) -> dict[str, object]:
@@ -1180,6 +1192,7 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
         != list(_Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS)
     ):
         raise ValueError("source-local exact-predecessor repair binding drifted")
+    historical_closure_commit = "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4"
     for binding in closure_files:
         if (
             type(binding) is not dict
@@ -1187,7 +1200,8 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
             or type(binding["path"]) is not str
             or type(binding["sha256"]) is not str
             or re.fullmatch(r"[0-9a-f]{64}", binding["sha256"]) is None
-            or _sha256(REPO_ROOT / binding["path"]) != binding["sha256"]
+            or _git_blob_sha256(historical_closure_commit, binding["path"])
+            != binding["sha256"]
         ):
             raise ValueError("exact-predecessor repair source/test closure drifted")
     if closure["closure_sha256"] != inventory_digest(closure_files):
@@ -1256,6 +1270,262 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
         },
     ):
         raise ValueError("exact-predecessor repair packet-gate state drifted")
+
+
+def _validate_q011_stage4_pressure_selection_candidate_successor(
+    value: object,
+) -> None:
+    if type(value) is not dict or set(value) != {
+        "schema_version",
+        "record_type",
+        "recorded_utc",
+        "source_checkpoint_commit",
+        "historical_predecessor_final_binding_commit",
+        "predecessor_record",
+        "predecessor_sha256",
+        "active_candidate_only_state",
+        "human_pressure_selection",
+        "stage4_publication_candidate",
+        "source_local_validation",
+        "next_clean_worker",
+        "packet_gate",
+        "frontier_launch_authorization",
+        "qualification_effect",
+        "status",
+    }:
+        raise ValueError("Stage-4 pressure-selection candidate successor shape drifted")
+    if not _exact_json_equal(
+        {
+            key: value[key]
+            for key in (
+                "schema_version",
+                "record_type",
+                "recorded_utc",
+                "source_checkpoint_commit",
+                "historical_predecessor_final_binding_commit",
+                "predecessor_record",
+                "predecessor_sha256",
+                "frontier_launch_authorization",
+                "qualification_effect",
+                "status",
+            )
+        },
+        {
+            "schema_version": 1,
+            "record_type": (
+                "q011_section54_pressure_selection_publication_candidate_successor"
+            ),
+            "recorded_utc": "2026-06-06T06:56:40Z",
+            "source_checkpoint_commit": "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4",
+            "historical_predecessor_final_binding_commit": (
+                "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4"
+            ),
+            "predecessor_record": (
+                "tst/publication/readiness/"
+                "q011_section54_pressure_gate_exact_predecessor_migration_repair_"
+                "successor_2026-06-05.json"
+            ),
+            "predecessor_sha256": (
+                "71aa5f5e6c033db5e51e2a225d4bf233a9f52d4ab5d39f5148c19779ba16b661"
+            ),
+            "frontier_launch_authorization": "none_launch_prohibited",
+            "qualification_effect": "none_no_science_claim",
+            "status": (
+                "stage4_pressure_selection_publication_candidate_pending_commit_"
+                "push_clean_worker_rereview_and_no_science_publication"
+            ),
+        },
+    ):
+        raise ValueError("Stage-4 pressure-selection candidate successor scalar drifted")
+    if type(value["schema_version"]) is not int:
+        raise ValueError("Stage-4 pressure-selection candidate schema type drifted")
+    orion_root = "/lustre/orion/ast207/proj-shared/dfielding/PIC"
+    project_root = "/autofs/nccs-svm1_proj/ast207/proj-shared/PIC"
+    control_plane_version = (
+        "930a04d1d39c873ea49abfcf500069011f6d5759240a8f5c5b3341a6d243b246"
+    )
+    if not _exact_json_equal(
+        value["active_candidate_only_state"],
+        {
+            "control_plane_version": control_plane_version,
+            "active_policy": {
+                "orion_path": f"{orion_root}/policy/storage_policy.json",
+                "project_home_path": f"{project_root}/policy/storage_policy.json",
+                "sha256": (
+                    "aeab7e4ef92c7cbbd5b84fcd139c046f2a96f21b4f280fa6dd89c80deca981d1"
+                ),
+            },
+            "active_promotion": {
+                "orion_path": f"{orion_root}/policy/active_promotion.json",
+                "project_home_path": f"{project_root}/policy/active_promotion.json",
+                "sha256": (
+                    "ef11cb301ec4917cd32aaca8af56e4f2d753367682c6ba28fc048c004904613e"
+                ),
+            },
+            "clean_candidate": {
+                "manifest_path": (
+                    f"{orion_root}/clean_candidates/"
+                    "83dce7b7-0b03-4be2-b6da-17bb211d1fd4/"
+                    "clean_candidate_manifest.json"
+                ),
+                "manifest_sha256": (
+                    "ea5f295096b04d7e5f338873c2a29213f173677568fd33220e1e34ea239739e4"
+                ),
+                "git_commit": "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4",
+                "source_archive_sha256": (
+                    "7d4d84a11b5db5b1231c39a9e6a4fbe0f358c0187e0348dec4097f9a69de61cf"
+                ),
+            },
+            "registered_science_slices": [],
+            "frontier_admission_smoke": {"status": "closed_after_pass"},
+            "pending_submission_marker": "absent",
+            "manual_accounting_authorization_count": 4,
+            "pending_manual_accounting_marker": "absent",
+            "active_promotion_transaction": "absent",
+        },
+    ):
+        raise ValueError("Stage-4 active candidate-only state drifted")
+    rationale = (
+        "Selected p0=1.0 as the recommended baseline because it explicitly matches "
+        "Bai et al. (2015), which uses P0=T0=1 and treats the choice as unimportant "
+        "while thermal pressure is much smaller than ram pressure."
+    )
+    if not _exact_json_equal(
+        value["human_pressure_selection"],
+        {
+            "status": (
+                "prior_p0_1p0_choice_recorded_post_reanalysis_human_decision_required"
+            ),
+            "selected_case": {"case_id": "ps_p0_1p00", "problem_ps_p0": 1.0},
+            "reviewer_id": "dfielding",
+            "rationale": rationale,
+            "production_selection_receipt": None,
+        },
+    ):
+        raise ValueError("Stage-4 human pressure selection drifted")
+    candidate = value["stage4_publication_candidate"]
+    closure = candidate.get("source_test_closure") if type(candidate) is dict else None
+    closure_files = closure.get("files") if type(closure) is dict else None
+    if (
+        type(candidate) is not dict
+        or set(candidate)
+        != {
+            "status",
+            "publisher_mutation_execution_mode",
+            "preparation_outputs",
+            "publication_outputs",
+            "no_science_contract",
+            "source_test_closure",
+        }
+        or candidate["status"]
+        != "source_local_uncommitted_candidate_pending_commit_push_clean_worker_and_publication"
+        or candidate["publisher_mutation_execution_mode"]
+        != (
+            "authenticated_read_only_git_archive_expected_commit_and_active_"
+            "candidate_archive_reanalysis"
+        )
+        or candidate["preparation_outputs"]
+        != [
+            "sealed_authoritative_reanalysis_attestation",
+            "sealed_stage4_preparation_source_attestation",
+            "empty_private_human_decision_root",
+            "no_reviewer_attestation_or_candidate_receipt",
+        ]
+        or candidate["publication_outputs"]
+        != [
+            "explicit_post_reanalysis_human_decision_required",
+            "sealed_post_reanalysis_human_reviewer_attestation",
+            "read_only_non_authorizing_candidate_receipt",
+            "read_only_candidate_publication_authorization",
+            "canonical_schema_v3_pressure_selection_receipt",
+            "sealed_launch_prohibited_controller_state_attestation",
+            "inode_bound_publication_success_seal",
+            "paired_live_active_state_reverification",
+            "absent_publication_guard",
+        ]
+        or candidate["no_science_contract"]
+        != [
+            "no_registered_science_slice",
+            "no_admission_smoke_authority",
+            "no_scheduler_submission",
+            "no_science_claim",
+            "active_policy_and_promotion_unchanged",
+        ]
+        or type(closure) is not dict
+        or set(closure) != {"file_count", "closure_sha256", "files"}
+        or closure["file_count"]
+        != len(_Q011_STAGE4_PRESSURE_SELECTION_CANDIDATE_CLOSURE_PATHS)
+        or type(closure_files) is not list
+        or [binding.get("path") for binding in closure_files if type(binding) is dict]
+        != list(_Q011_STAGE4_PRESSURE_SELECTION_CANDIDATE_CLOSURE_PATHS)
+    ):
+        raise ValueError("Stage-4 publication candidate binding drifted")
+    for binding in closure_files:
+        if (
+            type(binding) is not dict
+            or set(binding) != {"path", "sha256"}
+            or type(binding["path"]) is not str
+            or type(binding["sha256"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", binding["sha256"]) is None
+            or _sha256(REPO_ROOT / binding["path"]) != binding["sha256"]
+        ):
+            raise ValueError("Stage-4 publication candidate source/test closure drifted")
+    if closure["closure_sha256"] != inventory_digest(closure_files):
+        raise ValueError("Stage-4 publication candidate closure digest drifted")
+    if not _exact_json_equal(
+        value["source_local_validation"],
+        {
+            "focused_publisher_tests_passed": 39,
+            "related_pressure_gate_tests_passed": 102,
+            "readiness_registry_status": "pending_candidate_successor_finalization",
+            "full_publication_suite_status": "pending_clean_committed_worker",
+            "independent_rereview_status": "in_progress",
+        },
+    ):
+        raise ValueError("Stage-4 source-local validation state drifted")
+    worker = value["next_clean_worker"]
+    worker_path = (
+        "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh"
+    )
+    if (
+        type(worker) is not dict
+        or set(worker)
+        != {
+            "path",
+            "sha256",
+            "expected_publication_python_files",
+            "expected_publication_shell_files",
+            "expected_publication_json_files",
+            "expected_publication_test_modules",
+            "status",
+        }
+        or worker["path"] != worker_path
+        or worker["sha256"] != _sha256(REPO_ROOT / worker_path)
+        or worker["expected_publication_python_files"] != 147
+        or worker["expected_publication_shell_files"] != 17
+        or worker["expected_publication_json_files"] != 292
+        or worker["expected_publication_test_modules"] != 66
+        or worker["status"] != "pending_clean_committed_worker_validation"
+    ):
+        raise ValueError("Stage-4 next clean-worker binding drifted")
+    if not _exact_json_equal(
+        value["packet_gate"],
+        {
+            "status": "blocked_pending_stage4_no_science_publication",
+            "required_receipt_schema_version": 3,
+            "remaining_actions": [
+                "commit_and_push_stage4_publication_candidate",
+                "pass_exact_clean_committed_pressure_gate_worker",
+                "close_independent_security_integration_and_science_rereviews",
+                "prepare_machine_reanalysis_from_authenticated_committed_source_snapshot",
+                "stop_for_explicit_post_reanalysis_human_pressure_selection",
+                "seal_human_selection_and_publish_from_same_authenticated_source_snapshot",
+                "independently_verify_receipt_seal_attestation_guard_and_active_state",
+            ],
+            "authority": "none",
+        },
+    ):
+        raise ValueError("Stage-4 pressure-selection packet-gate state drifted")
 
 
 def _validation_manifest_schema() -> dict[str, object]:
@@ -3857,6 +4127,46 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(_regular_files_below(root, "test_*.py"), [regular])
 
+    def test_q011_pressure_gate_validation_worker_isolates_python(self) -> None:
+        wrapper = (
+            REPO_ROOT
+            / "tst/publication/frontier_q011_section54_pressure_gate_validation_job.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "TRUSTED_SYSTEM_SITE_PACKAGES="
+            "/opt/cray/pe/python/3.11.7/lib/python3.11/site-packages",
+            wrapper,
+        )
+        self.assertIn("PYTHON_ENV=(\n  /usr/bin/env -i", wrapper)
+        self.assertIn('set_authenticated_python_roots "$SNAPSHOT_ROOT"', wrapper)
+        self.assertIn('set_authenticated_python_roots "$FULL_SUITE_ROOT"', wrapper)
+        self.assertIn(
+            'clone --no-checkout --shared "$REPO_ROOT" "$FULL_SUITE_ROOT"',
+            wrapper,
+        )
+        self.assertNotIn('set_authenticated_python_roots "$REPO_ROOT"', wrapper)
+        self.assertNotIn("/usr/bin/git -c core.fsmonitor=false", wrapper)
+        self.assertGreaterEqual(wrapper.count("--no-replace-objects"), 10)
+        self.assertIn(
+            "sys.path[:0] = [source_root, control_plane_root, site_packages]",
+            wrapper,
+        )
+        self.assertEqual(
+            wrapper.count(
+                '"$AUTHENTICATED_SOURCE_ROOT" "$AUTHENTICATED_CONTROL_PLANE_ROOT" \\\n'
+                '    "$TRUSTED_SYSTEM_SITE_PACKAGES"'
+            ),
+            2,
+        )
+        self.assertNotIn("export PYTHONPATH=", wrapper)
+        python_launches = [
+            line.strip() for line in wrapper.splitlines() if '"$PYTHON"' in line
+        ]
+        self.assertEqual(
+            python_launches,
+            ['"${PYTHON_ENV[@]}" "$PYTHON" -I -B -S -c \\'] * 2,
+        )
+
     def test_q011_historical_status_binds_installed_controller_inventory(self) -> None:
         status = _load(
             "q011_section54_post_publication_pressure_gate_status_successor_"
@@ -4393,18 +4703,26 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ("active_policies", "active_policies_byte_identical"),
             ("active_promotions", "active_promotions_byte_identical"),
         ):
-            payloads = []
-            for binding in live[bindings_key]:
-                payload = Path(binding["path"]).read_bytes()
-                self.assertEqual(hashlib.sha256(payload).hexdigest(), binding["sha256"])
-                payloads.append(payload)
-            self.assertEqual(len(set(payloads)), 1)
+            self.assertEqual(
+                len({binding["sha256"] for binding in live[bindings_key]}),
+                1,
+            )
             self.assertTrue(live[identical_key])
-        live_policy = json.loads(
-            Path(live["active_policies"][0]["path"]).read_text(encoding="utf-8")
+        stage4_successor = _load(
+            "q011_section54_pressure_selection_publication_candidate_"
+            "successor_2026-06-05.json"
         )
-        live_promotion = json.loads(
-            Path(live["active_promotions"][0]["path"]).read_text(encoding="utf-8")
+        self.assertEqual(
+            stage4_successor["predecessor_record"],
+            (
+                "tst/publication/readiness/"
+                "q011_section54_pressure_gate_exact_predecessor_migration_repair_"
+                "successor_2026-06-05.json"
+            ),
+        )
+        self.assertNotEqual(
+            live["active_policies"][0]["sha256"],
+            stage4_successor["active_candidate_only_state"]["active_policy"]["sha256"],
         )
         active_predecessor_controller = failed_build["worker_inputs"][
             "control_plane_version"
@@ -4412,64 +4730,49 @@ class PicReadinessRegistryTests(unittest.TestCase):
         preserved_freeze_controller = failed_build["worker_inputs"][
             "expected_authorized_freeze_build_controller"
         ]
-        self.assertEqual(
-            live_policy["olcf_side_storage"]["installed_control_plane_version"],
-            active_predecessor_controller,
-        )
-        self.assertEqual(
-            live_policy["olcf_side_storage"][
-                "staged_control_plane_candidate_version"
-            ],
-            active_predecessor_controller,
-        )
-        self.assertEqual(
-            live_promotion["control_plane_version"],
-            active_predecessor_controller,
-        )
-        self.assertEqual(
-            live_policy["science_submission_freeze"][
-                "build_profile_control_plane_version"
-            ],
-            preserved_freeze_controller,
-        )
         self.assertNotEqual(active_predecessor_controller, preserved_freeze_controller)
-        self.assertEqual(live_policy["registered_science_slices"], [])
-        self.assertEqual(
-            live_policy["science_submission_freeze"]["status"],
-            "authorized",
-        )
 
+        historical_closure_commit = "67a418c432e2d424aa9e6cf5ed16316ea40fc0a4"
         repair = successor["source_local_exact_predecessor_repair"]
-        current_control_plane_bindings = [
-            {"path": name, "sha256": _sha256(CONTROL_PLANE_DIR / name)}
+        checkpoint_control_plane_bindings = [
+            {
+                "path": name,
+                "sha256": _git_blob_sha256(
+                    historical_closure_commit,
+                    f"tst/publication/frontier_control_plane/{name}",
+                ),
+            }
             for name in CONTROL_PLANE_FILES
         ]
-        current_control_plane_version = inventory_digest(
-            current_control_plane_bindings
+        checkpoint_control_plane_version = inventory_digest(
+            checkpoint_control_plane_bindings
         )
-        self.assertRegex(current_control_plane_version, r"^[0-9a-f]{64}$")
+        self.assertRegex(checkpoint_control_plane_version, r"^[0-9a-f]{64}$")
         self.assertEqual(
             repair["control_plane_version"],
-            current_control_plane_version,
+            checkpoint_control_plane_version,
         )
         self.assertEqual(
             repair["inventoried_file_count"],
-            len(current_control_plane_bindings),
+            len(checkpoint_control_plane_bindings),
         )
-        current_closure = [
-            {"path": relative, "sha256": _sha256(REPO_ROOT / relative)}
+        checkpoint_closure = [
+            {
+                "path": relative,
+                "sha256": _git_blob_sha256(historical_closure_commit, relative),
+            }
             for relative in _Q011_EXACT_PREDECESSOR_REPAIR_SOURCE_TEST_CLOSURE_PATHS
         ]
         closure = repair["source_test_closure"]
-        current_closure_sha256 = inventory_digest(current_closure)
-        self.assertRegex(current_closure_sha256, r"^[0-9a-f]{64}$")
+        checkpoint_closure_sha256 = inventory_digest(checkpoint_closure)
+        self.assertRegex(checkpoint_closure_sha256, r"^[0-9a-f]{64}$")
         self.assertEqual(
             closure["files"],
-            current_closure,
+            checkpoint_closure,
         )
         self.assertEqual(
             [binding["path"] for binding in closure["files"]],
-            [binding["path"] for binding in current_closure],
+            [binding["path"] for binding in checkpoint_closure],
         )
         self.assertEqual(
                 repair["final_binding_refresh"],
@@ -4481,21 +4784,36 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
 
         next_worker = successor["next_clean_worker"]
-        next_worker_path = REPO_ROOT / next_worker["path"]
-        self.assertEqual(_sha256(next_worker_path), next_worker["sha256"])
-        publication_root = REPO_ROOT / "tst" / "publication"
+        self.assertEqual(
+            _git_blob_sha256(historical_closure_commit, next_worker["path"]),
+            next_worker["sha256"],
+        )
+        publication_paths = subprocess.check_output(
+            [
+                "git",
+                "ls-tree",
+                "-r",
+                "--name-only",
+                historical_closure_commit,
+                "--",
+                "tst/publication",
+            ],
+            cwd=REPO_ROOT,
+            text=True,
+        ).splitlines()
         expected_counts = {
-            "expected_publication_python_files": len(
-                _regular_files_below(publication_root, "*.py")
+            "expected_publication_python_files": sum(
+                path.endswith(".py") for path in publication_paths
             ),
-            "expected_publication_shell_files": len(
-                _regular_files_below(publication_root, "*.sh")
+            "expected_publication_shell_files": sum(
+                path.endswith(".sh") for path in publication_paths
             ),
-            "expected_publication_json_files": len(
-                _regular_files_below(publication_root, "*.json")
+            "expected_publication_json_files": sum(
+                path.endswith(".json") for path in publication_paths
             ),
-            "expected_publication_test_modules": len(
-                _regular_files_below(publication_root, "test_*.py")
+            "expected_publication_test_modules": sum(
+                Path(path).name.startswith("test_") and path.endswith(".py")
+                for path in publication_paths
             ),
         }
         for key, observed in expected_counts.items():
@@ -4630,6 +4948,147 @@ class PicReadinessRegistryTests(unittest.TestCase):
         successor_with_extra_key["unexpected"] = True
         with self.assertRaises(ValueError):
             _validate_q011_exact_predecessor_migration_repair_successor(
+                successor_with_extra_key
+            )
+
+    def test_q011_stage4_pressure_selection_candidate_successor_recomputes(
+        self,
+    ) -> None:
+        successor_path = (
+            READINESS_DIR
+            / "q011_section54_pressure_selection_publication_candidate_"
+            "successor_2026-06-05.json"
+        )
+        successor_payload = successor_path.read_text(encoding="utf-8")
+        successor = json.loads(successor_payload)
+        _validate_q011_stage4_pressure_selection_candidate_successor(successor)
+        self.assertEqual(successor_payload, json.dumps(successor, indent=2) + "\n")
+
+        predecessor_path = REPO_ROOT / successor["predecessor_record"]
+        self.assertEqual(_sha256(predecessor_path), successor["predecessor_sha256"])
+        predecessor = json.loads(predecessor_path.read_text(encoding="utf-8"))
+        self.assertGreater(
+            _canonical_utc_second(successor["recorded_utc"]),
+            _canonical_utc_second(predecessor["recorded_utc"]),
+        )
+
+        active = successor["active_candidate_only_state"]
+        for key in ("active_policy", "active_promotion"):
+            binding = active[key]
+            payloads = [
+                Path(binding[path_key]).read_bytes()
+                for path_key in ("orion_path", "project_home_path")
+            ]
+            self.assertEqual(len(set(payloads)), 1)
+            self.assertEqual(hashlib.sha256(payloads[0]).hexdigest(), binding["sha256"])
+        manifest_path = Path(active["clean_candidate"]["manifest_path"])
+        self.assertEqual(
+            _sha256(manifest_path),
+            active["clean_candidate"]["manifest_sha256"],
+        )
+        source_archive = manifest_path.parent / "source.tar"
+        self.assertEqual(
+            _sha256(source_archive),
+            active["clean_candidate"]["source_archive_sha256"],
+        )
+        self.assertFalse(
+            (
+                Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/publication")
+                / "q011_section54_pressure_selection_receipt.json"
+            ).exists()
+        )
+        for marker in (
+            Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/pending_submission.json"),
+            Path("/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/pending_manual_accounting.json"),
+            Path("/autofs/nccs-svm1_proj/ast207/proj-shared/PIC/ledger/pending_manual_accounting.json"),
+        ):
+            self.assertFalse(marker.exists())
+
+        closure = successor["stage4_publication_candidate"]["source_test_closure"]
+        current_closure = [
+            {"path": relative, "sha256": _sha256(REPO_ROOT / relative)}
+            for relative in _Q011_STAGE4_PRESSURE_SELECTION_CANDIDATE_CLOSURE_PATHS
+        ]
+        self.assertEqual(closure["files"], current_closure)
+        self.assertEqual(closure["closure_sha256"], inventory_digest(current_closure))
+        worker = successor["next_clean_worker"]
+        self.assertEqual(_sha256(REPO_ROOT / worker["path"]), worker["sha256"])
+
+    def test_q011_stage4_pressure_selection_candidate_successor_rejects_drift(
+        self,
+    ) -> None:
+        successor = _load(
+            "q011_section54_pressure_selection_publication_candidate_"
+            "successor_2026-06-05.json"
+        )
+        rejection_cases = [
+            ("schema numeric alias", ("schema_version",), 1.0),
+            ("predecessor", ("predecessor_sha256",), "0" * 64),
+            (
+                "active policy",
+                ("active_candidate_only_state", "active_policy", "sha256"),
+                "0" * 64,
+            ),
+            (
+                "active slices",
+                ("active_candidate_only_state", "registered_science_slices"),
+                [{}],
+            ),
+            (
+                "admission smoke",
+                ("active_candidate_only_state", "frontier_admission_smoke", "status"),
+                "authorized",
+            ),
+            (
+                "selected pressure",
+                (
+                    "human_pressure_selection",
+                    "selected_case",
+                    "problem_ps_p0",
+                ),
+                0.1,
+            ),
+            (
+                "production receipt invented",
+                ("human_pressure_selection", "production_selection_receipt"),
+                {},
+            ),
+            (
+                "publisher execution mode",
+                (
+                    "stage4_publication_candidate",
+                    "publisher_mutation_execution_mode",
+                ),
+                "trusted_checkout",
+            ),
+            (
+                "source closure member",
+                (
+                    "stage4_publication_candidate",
+                    "source_test_closure",
+                    "files",
+                    0,
+                    "sha256",
+                ),
+                "0" * 64,
+            ),
+            ("worker", ("next_clean_worker", "sha256"), "0" * 64),
+            ("packet gate", ("packet_gate", "status"), "ready"),
+            ("launch authority", ("frontier_launch_authorization",), "authorized"),
+        ]
+        for label, path, replacement in rejection_cases:
+            with self.subTest(label=label):
+                candidate = copy.deepcopy(successor)
+                _replace_nested(candidate, path, replacement)
+                with self.assertRaises(ValueError):
+                    _validate_q011_stage4_pressure_selection_candidate_successor(
+                        candidate
+                    )
+
+        successor_with_extra_key = copy.deepcopy(successor)
+        successor_with_extra_key["unexpected"] = True
+        with self.assertRaises(ValueError):
+            _validate_q011_stage4_pressure_selection_candidate_successor(
                 successor_with_extra_key
             )
 
