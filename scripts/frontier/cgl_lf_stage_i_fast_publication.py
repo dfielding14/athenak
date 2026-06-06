@@ -77,6 +77,7 @@ SCIENCE_PROVENANCE_RECORD_TYPE = (
 )
 SCIENCE_AUTHORITY = "non-authorizing-direct-fast-scientific-assessment"
 CT_AUDIT_RECORD_TYPE = "stage-i-direct-fast-ct-audit"
+HYPERBOLICITY_JOB_RECORD_TYPE = "cgl_lf_stage_i_direct_fast_hyperbolicity_job"
 EVIDENCE_RESULTS = {"pass", "fail", "inconclusive"}
 SCIENCE_CONTRAST_RESULTS = {*EVIDENCE_RESULTS, "available"}
 R15_STRICT_FAILURE_RECORD_TYPE = "cgl-lf-stage-i-retained-strict-failure-evidence"
@@ -485,9 +486,216 @@ def referenced_case_ids(path: Path, record: dict[str, Any]) -> set[str]:
     }
 
 
+def hyperbolicity_manifest_errors(
+    path: Path, record: dict[str, Any]
+) -> list[str]:
+    """Authenticate one retained-state selection and any completed audit result."""
+
+    label = f"hyperbolicity manifest {path}"
+    errors: list[str] = []
+    if record.get("schema_version") != 1:
+        errors.append(f"{label} has unsupported schema_version")
+    case_id = record.get("case_id")
+    if case_id not in CASE_IDS:
+        errors.append(f"{label} does not identify a Stage I case")
+    for name in ("case_lineage", "snapshot_index", "audit_script", "launcher"):
+        errors.extend(verify_file_binding(record.get(name), f"{label} {name}"))
+
+    selected_value = record.get("selected_snapshots")
+    selected = (
+        selected_value
+        if isinstance(selected_value, list)
+        else [record["selected_snapshot"]]
+        if isinstance(record.get("selected_snapshot"), dict)
+        else []
+    )
+    coverage = record.get("snapshot_coverage")
+    if coverage is None:
+        return errors
+    if not isinstance(coverage, dict) or not selected or not all(
+        isinstance(snapshot, dict) for snapshot in selected
+    ):
+        errors.append(f"{label} all-snapshot coverage declaration is malformed")
+        return errors
+    policy = record.get("snapshot_policy")
+    if policy not in {"all", "latest"} or coverage.get("snapshot_policy") != policy:
+        errors.append(f"{label} snapshot policy differs from coverage")
+    selected_times = [
+        as_float(snapshot.get("time")) for snapshot in selected
+        if isinstance(snapshot, dict)
+    ]
+    selected_positions = [
+        snapshot.get("index_position") for snapshot in selected
+        if isinstance(snapshot, dict)
+    ]
+    selected_digest = hashlib.sha256(canonical_json(selected)).hexdigest()
+    complete_count = coverage.get("snapshot_index_complete_count")
+    if (
+        coverage.get("selected_snapshot_count") != len(selected)
+        or coverage.get("selected_snapshot_positions") != selected_positions
+        or selected_times.count(None) > 0
+        or coverage.get("selected_snapshot_times") != selected_times
+        or coverage.get("selected_snapshots_sha256") != selected_digest
+        or not isinstance(complete_count, int)
+        or complete_count < len(selected)
+        or not isinstance(
+            coverage.get("all_complete_retained_snapshots_selected"), bool
+        )
+    ):
+        errors.append(f"{label} selected retained-snapshot coverage differs")
+    if policy == "all" and (
+        coverage.get("all_complete_retained_snapshots_selected") is not True
+        or complete_count != len(selected)
+    ):
+        errors.append(f"{label} does not select every complete retained snapshot")
+
+    result_record = record.get("result")
+    if not isinstance(result_record, dict):
+        return errors
+    if (
+        result_record.get("required_coverage")
+        != "exactly_once_per_selected_snapshot"
+        or result_record.get("expected_snapshot_count") != len(selected)
+        or result_record.get("expected_selected_snapshots_sha256") != selected_digest
+    ):
+        errors.append(f"{label} result coverage requirement differs")
+        return errors
+    result_path_value = result_record.get("path")
+    result_sha_value = result_record.get("sha256_path")
+    if not isinstance(result_path_value, str) or not isinstance(result_sha_value, str):
+        errors.append(f"{label} result paths are malformed")
+        return errors
+    result_path = Path(result_path_value).expanduser().absolute()
+    result_sha_path = Path(result_sha_value).expanduser().absolute()
+    if (
+        result_path != path.parent / "result.json"
+        or result_sha_path != path.parent / "result.sha256"
+    ):
+        errors.append(f"{label} result paths differ from manifest attempt directory")
+        return errors
+    if not result_path.is_file() and not result_sha_path.is_file():
+        return errors
+    if not result_path.is_file() or not result_sha_path.is_file():
+        errors.append(f"{label} has an incomplete result/sidecar pair")
+        return errors
+    try:
+        declared_sha = result_sha_path.read_text(encoding="utf-8").split()[0]
+        result = load_json(result_path)
+    except (OSError, IndexError, json.JSONDecodeError, PublicationError) as error:
+        errors.append(f"{label} result is unreadable: {error}")
+        return errors
+    if (
+        SHA256_PATTERN.fullmatch(declared_sha) is None
+        or sha256_file(result_path) != declared_sha
+    ):
+        errors.append(f"{label} result SHA-256 sidecar differs")
+        return errors
+    if result.get("record_type") == HYPERBOLICITY_JOB_RECORD_TYPE:
+        errors.append(f"{label} result recursively identifies as a job manifest")
+        return errors
+    result_errors = audit_record_errors(result_path, result)
+    if result_errors:
+        errors.extend(result_errors)
+        return errors
+    result_snapshots = result.get("snapshots")
+    if not isinstance(result_snapshots, list) or len(result_snapshots) != len(selected):
+        errors.append(f"{label} result snapshot count differs")
+        return errors
+    result_provenance = result.get("provenance")
+    audit_binding = record.get("audit_script")
+    selected_patterns = [
+        snapshot.get("audit_input_pattern")
+        for snapshot in selected if isinstance(snapshot, dict)
+    ]
+    if (
+        not isinstance(result_provenance, dict)
+        or not isinstance(audit_binding, dict)
+        or result_provenance.get("script_path") != audit_binding.get("path")
+        or result_provenance.get("script_sha256") != audit_binding.get("sha256")
+        or result_provenance.get("input_patterns") != selected_patterns
+        or result_provenance.get("hash_inputs") is not True
+    ):
+        errors.append(f"{label} result provenance differs from selected coverage")
+        return errors
+
+    def profile(snapshot: dict[str, Any]) -> tuple[tuple[object, ...], ...] | None:
+        rank_files = snapshot.get("rank_files")
+        if not isinstance(rank_files, list) or not all(
+            isinstance(rank_file, dict) for rank_file in rank_files
+        ):
+            return None
+        if not all(
+            isinstance(rank_file.get("path"), str)
+            and isinstance(rank_file.get("size_bytes"), int)
+            and isinstance(rank_file.get("mtime_ns"), int)
+            for rank_file in rank_files
+        ):
+            return None
+        return tuple(sorted(
+            (
+                rank_file.get("path"),
+                rank_file.get("size_bytes"),
+                rank_file.get("mtime_ns"),
+            )
+            for rank_file in rank_files
+        ))
+
+    selected_by_profile: dict[tuple[tuple[object, ...], ...], float] = {}
+    for snapshot in selected:
+        assert isinstance(snapshot, dict)
+        snapshot_profile = profile(snapshot)
+        time = as_float(snapshot.get("time"))
+        if (
+            snapshot_profile is None
+            or time is None
+            or snapshot_profile in selected_by_profile
+        ):
+            errors.append(f"{label} selected snapshot inventory is ambiguous")
+            return errors
+        selected_by_profile[snapshot_profile] = time
+    for snapshot in result_snapshots:
+        if not isinstance(snapshot, dict):
+            errors.append(f"{label} result snapshot is malformed")
+            return errors
+        rank_files = snapshot.get("rank_files")
+        if (
+            snapshot.get("active_cgl_signal_speed") is not True
+            or snapshot.get("ranks_contiguous_from_zero") is not True
+            or not isinstance(rank_files, list)
+            or any(
+                not isinstance(rank_file, dict)
+                or SHA256_PATTERN.fullmatch(str(rank_file.get("sha256"))) is None
+                for rank_file in rank_files
+            )
+        ):
+            errors.append(f"{label} result lacks active hash-bound rank coverage")
+            return errors
+        snapshot_profile = profile(snapshot)
+        selected_time = selected_by_profile.pop(snapshot_profile, None)
+        observed_time = as_float(snapshot.get("time"))
+        if (
+            selected_time is None
+            or observed_time is None
+            or not math.isclose(
+                selected_time, observed_time, rel_tol=0.0, abs_tol=1.0e-12
+            )
+        ):
+            errors.append(f"{label} result differs from selected retained coverage")
+            return errors
+    if selected_by_profile:
+        errors.append(f"{label} result omits selected retained snapshots")
+        return errors
+    record["_publication_hyperbolicity_result"] = result
+    record["_publication_hyperbolicity_result_path"] = str(result_path)
+    record["_publication_hyperbolicity_result_sha_path"] = str(result_sha_path)
+    return errors
+
+
 def audit_record_errors(path: Path, record: dict[str, Any]) -> list[str]:
     """Return provenance and retained-input freshness errors for one audit."""
 
+    if record.get("record_type") == HYPERBOLICITY_JOB_RECORD_TYPE:
+        return hyperbolicity_manifest_errors(path, record)
     label = f"hyperbolicity audit {path}"
     provenance = record.get("provenance")
     if not isinstance(provenance, dict):
@@ -1028,6 +1236,8 @@ def discover_acceptance_paths(analysis: Path, extras: Iterable[Path]) -> list[Pa
 def contains_hyperbolicity_evidence(record: dict[str, Any]) -> bool:
     """Return whether one JSON record carries retained-state hyperbolicity data."""
 
+    if record.get("record_type") == HYPERBOLICITY_JOB_RECORD_TYPE:
+        return True
     snapshots = record.get("snapshots")
     if isinstance(snapshots, list) and any(
         isinstance(snapshot, dict) and isinstance(snapshot.get("aggregate"), dict)
@@ -1217,6 +1427,13 @@ def discover_data(analysis: Path, acceptance_paths: Iterable[Path]) -> Publicati
             loaded["_publication_source_path"] = str(path)
             loaded["_publication_case_ids"] = sorted(referenced_case_ids(path, record))
             loaded_audits.append((path, loaded))
+            for private_name in (
+                "_publication_hyperbolicity_result_path",
+                "_publication_hyperbolicity_result_sha_path",
+            ):
+                private_path = loaded.get(private_name)
+                if isinstance(private_path, str):
+                    source_paths.add(Path(private_path).absolute())
     for case_id, case in cases.items():
         matching = [
             (path, record)
@@ -2367,6 +2584,39 @@ def authenticated_case_diagnostics(
     return diagnostics
 
 
+def authenticated_case_lineage(
+    data: PublicationData, case_id: str
+) -> dict[str, Any] | None:
+    """Return current lineage only when bound by authenticated evidence."""
+
+    case = data.cases[case_id]
+    path = case.lineage_path
+    if path is None:
+        return None
+    bindings: list[object] = []
+    direct = authenticated_direct_acceptance(case)
+    if isinstance(direct, dict):
+        bindings.append(nested(direct, "provenance.lineage"))
+    if (
+        isinstance(data.science_record, dict)
+        and data.science_record.get("_publication_evidence_validated") is True
+    ):
+        bindings.append(
+            nested(data.science_record, f"provenance.case_lineages.{case_id}")
+        )
+    if all(
+        binding_freshness_errors(binding, path, f"{case_id} authenticated lineage")
+        for binding in bindings
+    ):
+        return None
+    try:
+        lineage = load_json(path)
+    except (OSError, json.JSONDecodeError, PublicationError):
+        return None
+    data.source_paths.add(path.absolute())
+    return lineage
+
+
 def authenticated_direct_acceptance(case: CaseRecord) -> dict[str, Any] | None:
     """Return one selected direct-fast case record only after provenance validation."""
 
@@ -2634,6 +2884,584 @@ def primary_full_window_scalar_rows(
                     else "standard"
                 ),
             })
+    return rows
+
+
+def authenticated_hyperbolicity_manifest(
+    data: PublicationData, case_id: str
+) -> dict[str, Any] | None:
+    """Select the most complete authenticated current hyperbolicity manifest."""
+
+    case = data.cases[case_id]
+
+    def current(record: dict[str, Any]) -> bool:
+        snapshot_path_value = nested(case.lineage, "snapshots.path")
+        snapshot_path = (
+            Path(snapshot_path_value)
+            if isinstance(snapshot_path_value, str) else None
+        )
+        return (
+            not binding_freshness_errors(
+                record.get("case_lineage"), case.lineage_path,
+                f"{case_id} hyperbolicity manifest lineage",
+            )
+            and not binding_freshness_errors(
+                record.get("snapshot_index"), snapshot_path,
+                f"{case_id} hyperbolicity manifest snapshot index",
+            )
+            and isinstance(record.get("_publication_source_path"), str)
+            and not audit_record_errors(
+                Path(str(record["_publication_source_path"])), record
+            )
+        )
+
+    records = [
+        record for record in data.audit_records
+        if record.get("_publication_evidence_validated") is True
+        and record.get("record_type") == HYPERBOLICITY_JOB_RECORD_TYPE
+        and record.get("case_id") == case_id
+        and current(record)
+    ]
+    if not records:
+        return None
+    return max(
+        records,
+        key=lambda record: (
+            int(record.get("snapshot_policy") == "all"),
+            int(isinstance(record.get("_publication_hyperbolicity_result"), dict)),
+            int(nested(record, "snapshot_coverage.selected_snapshot_count") or 0),
+            int(record.get("attempt") or 0),
+            str(record.get("_publication_source_path", "")),
+        ),
+    )
+
+
+def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]]:
+    """Return authenticated all-retained-snapshot coverage and numerical results."""
+
+    rows: list[dict[str, object]] = []
+    for case_id in CASE_IDS:
+        if case_id not in ACTIVE_ENERGY_CASES:
+            rows.append({
+                "case_id": case_id,
+                "coverage_result": "not_applicable",
+                "numerical_result": "not_applicable",
+                "coverage_reason": (
+                    "passive-delta case has no active CGL signal-speed audit"
+                ),
+                "claim_scope": "passive_delta",
+                "selection_provenance": "not_applicable",
+                "result_provenance": "not_applicable",
+            })
+            continue
+        manifest = authenticated_hyperbolicity_manifest(data, case_id)
+        coverage = (
+            manifest.get("snapshot_coverage") if isinstance(manifest, dict) else None
+        )
+        result = (
+            manifest.get("_publication_hyperbolicity_result")
+            if isinstance(manifest, dict) else None
+        )
+        snapshots = result.get("snapshots") if isinstance(result, dict) else None
+        snapshot_times = [
+            value
+            for value in (
+                as_float(snapshot.get("time"))
+                for snapshot in snapshots
+                if isinstance(snapshot, dict)
+            )
+            if value is not None
+        ] if isinstance(snapshots, list) else []
+        policy = manifest.get("snapshot_policy") if isinstance(manifest, dict) else None
+        all_selected = (
+            coverage.get("all_complete_retained_snapshots_selected")
+            if isinstance(coverage, dict) else None
+        )
+        complete_count = (
+            coverage.get("snapshot_index_complete_count")
+            if isinstance(coverage, dict) else None
+        )
+        selected_count = (
+            coverage.get("selected_snapshot_count")
+            if isinstance(coverage, dict) else None
+        )
+        result_count = len(snapshots) if isinstance(snapshots, list) else None
+        coverage_pass = (
+            policy == "all"
+            and all_selected is True
+            and isinstance(complete_count, int)
+            and complete_count > 0
+            and complete_count == selected_count == result_count
+        )
+        hyper = hyperbolicity_diagnostics(data, case_id)
+        coverage_reason = (
+            "authenticated all-snapshot result covers every complete retained snapshot"
+            if coverage_pass
+            else "no authenticated current hyperbolicity selection"
+            if not isinstance(manifest, dict)
+            else "authenticated manifest lacks all-snapshot coverage metadata"
+            if not isinstance(coverage, dict)
+            else "authenticated selection is not snapshot_policy=all"
+            if policy != "all"
+            else "authenticated all-snapshot selection lacks a completed bound result"
+        )
+        rows.append({
+            "case_id": case_id,
+            "coverage_result": "pass" if coverage_pass else "inconclusive",
+            "numerical_result": (
+                hyper["result"] if isinstance(result, dict) else "inconclusive"
+            ),
+            "snapshot_policy": policy,
+            "complete_retained_snapshot_count": complete_count,
+            "selected_snapshot_count": selected_count,
+            "audited_snapshot_count": result_count,
+            "all_complete_retained_snapshots_selected": all_selected,
+            "time_first": min(snapshot_times) if snapshot_times else None,
+            "time_last": max(snapshot_times) if snapshot_times else None,
+            "negative_discriminant_count": (
+                hyper["negative_discriminant_count"]
+                if isinstance(result, dict) else None
+            ),
+            "nonfinite_discriminant_count": (
+                hyper.get("nonfinite_discriminant_count")
+                if isinstance(result, dict) else None
+            ),
+            "cell_direction_evaluations": (
+                hyper["cell_direction_evaluations"]
+                if isinstance(result, dict) else None
+            ),
+            "minimum_discriminant": (
+                hyper["minimum_discriminant"] if isinstance(result, dict) else None
+            ),
+            "coverage_reason": coverage_reason,
+            "claim_scope": (
+                "restricted" if scope_status(case_id) == "restricted" else "standard"
+            ),
+            "selection_provenance": (
+                "authenticated" if isinstance(manifest, dict) else "inconclusive"
+            ),
+            "result_provenance": (
+                "authenticated" if isinstance(result, dict) else "inconclusive"
+            ),
+        })
+    return rows
+
+
+def signed_lf_cap_work_ledger_rows(
+    data: PublicationData,
+) -> list[dict[str, object]]:
+    """Return signed applied ledgers and distinct snapshot reconstructions."""
+
+    rows: list[dict[str, object]] = []
+    for case_id in CASE_IDS:
+        diagnostics = authenticated_case_diagnostics(data, case_id)
+        lf = nested(diagnostics, "windows.steady.lf_history")
+        applied_heat = (
+            lf.get("applied_heat_flux_work") if isinstance(lf, dict) else None
+        )
+        applied_pressure = (
+            lf.get("applied_pressure_work") if isinstance(lf, dict) else None
+        )
+        caps = lf.get("heat_flux_cap_fractions") if isinstance(lf, dict) else None
+        ensemble = authenticated_snapshot_ensemble(data, case_id)
+        pressure = nested(ensemble, "pressure_work_decomposition")
+        heat_proxy = nested(ensemble, "heat_flux_transport_proxy")
+        pressure_integral = nested(pressure, "time_integral_estimate")
+        heat_integral = nested(heat_proxy, "time_integral_estimate")
+        applied_heat_available = (
+            isinstance(applied_heat, dict)
+            and applied_heat.get("signed") is True
+        )
+        applied_pressure_available = (
+            isinstance(applied_pressure, dict)
+            and applied_pressure.get("signed") is True
+        )
+        pressure_available = (
+            isinstance(pressure, dict) and pressure.get("available") is True
+        )
+        heat_proxy_available = (
+            isinstance(heat_proxy, dict) and heat_proxy.get("available") is True
+        )
+        rows.append({
+            "case_id": case_id,
+            "availability": (
+                "available"
+                if applied_heat_available or applied_pressure_available
+                or pressure_available or heat_proxy_available
+                else "inconclusive"
+            ),
+            "diagnostics_provenance": (
+                "authenticated" if isinstance(diagnostics, dict) else "inconclusive"
+            ),
+            "applied_heat_flux_availability": (
+                "available" if applied_heat_available else "inconclusive"
+            ),
+            "applied_pressure_work_availability": (
+                "available" if applied_pressure_available else "inconclusive"
+            ),
+            "reconstructed_pressure_availability": (
+                "available" if pressure_available else "inconclusive"
+            ),
+            "reconstructed_heat_flux_availability": (
+                "available" if heat_proxy_available else "inconclusive"
+            ),
+            "applied_ledgers_signed": (
+                True if applied_heat_available and applied_pressure_available else None
+            ),
+            "applied_heat_flux_parallel": (
+                as_float(applied_heat.get("parallel"))
+                if applied_heat_available else None
+            ),
+            "applied_heat_flux_perpendicular": (
+                as_float(applied_heat.get("perpendicular"))
+                if applied_heat_available else None
+            ),
+            "applied_heat_flux_total": (
+                as_float(applied_heat.get("total")) if applied_heat_available else None
+            ),
+            "applied_pressure_work_total": (
+                as_float(applied_pressure.get("total"))
+                if applied_pressure_available else None
+            ),
+            "applied_pressure_work_anisotropic": (
+                as_float(applied_pressure.get("anisotropic"))
+                if applied_pressure_available else None
+            ),
+            "cap_parallel_over_1": (
+                as_float(caps.get("parallel_over_1"))
+                if applied_heat_available and isinstance(caps, dict) else None
+            ),
+            "cap_parallel_over_10": (
+                as_float(caps.get("parallel_over_10"))
+                if applied_heat_available and isinstance(caps, dict) else None
+            ),
+            "cap_perpendicular_over_1": (
+                as_float(caps.get("perpendicular_over_1"))
+                if applied_heat_available and isinstance(caps, dict) else None
+            ),
+            "cap_perpendicular_over_10": (
+                as_float(caps.get("perpendicular_over_10"))
+                if applied_heat_available and isinstance(caps, dict) else None
+            ),
+            "reconstructed_pressure_snapshot_count": (
+                pressure.get("snapshot_count") if pressure_available else None
+            ),
+            "reconstructed_pressure_applied_to_flow": (
+                pressure.get("applied_to_flow") if pressure_available else None
+            ),
+            "reconstructed_isotropic_perpendicular_pressure_power_mean": (
+                as_float(pressure.get("isotropic_perpendicular_pressure_power_mean"))
+                if pressure_available else None
+            ),
+            "reconstructed_anisotropic_stress_power_mean": (
+                as_float(pressure.get("anisotropic_stress_power_mean"))
+                if pressure_available else None
+            ),
+            "reconstructed_total_cgl_pressure_power_mean": (
+                as_float(pressure.get("total_cgl_pressure_power_mean"))
+                if pressure_available else None
+            ),
+            "reconstructed_anisotropic_stress_power_integral": (
+                as_float(pressure_integral.get("anisotropic_stress_power_integral"))
+                if isinstance(pressure_integral, dict)
+                and pressure_integral.get("available") is True else None
+            ),
+            "reconstructed_heat_flux_snapshot_count": (
+                heat_proxy.get("snapshot_count") if heat_proxy_available else None
+            ),
+            "reconstructed_regularized_heat_flux_power_mean": (
+                as_float(heat_proxy.get("regularized_total_power_mean"))
+                if heat_proxy_available else None
+            ),
+            "reconstructed_unlimited_heat_flux_power_mean": (
+                as_float(heat_proxy.get("unlimited_total_power_mean"))
+                if heat_proxy_available else None
+            ),
+            "reconstructed_parallel_cap_active_volume_fraction_mean": (
+                as_float(heat_proxy.get("parallel_cap_active_volume_fraction_mean"))
+                if heat_proxy_available else None
+            ),
+            "reconstructed_perpendicular_cap_active_volume_fraction_mean": (
+                as_float(heat_proxy.get("perpendicular_cap_active_volume_fraction_mean"))
+                if heat_proxy_available else None
+            ),
+            "reconstructed_regularized_heat_flux_power_integral": (
+                as_float(heat_integral.get("regularized_total_power_integral"))
+                if isinstance(heat_integral, dict)
+                and heat_integral.get("available") is True else None
+            ),
+            "reconstructed_unlimited_heat_flux_power_integral": (
+                as_float(heat_integral.get("unlimited_total_power_integral"))
+                if isinstance(heat_integral, dict)
+                and heat_integral.get("available") is True else None
+            ),
+            "semantics": (
+                "applied columns are signed stage ledgers; reconstructed columns are "
+                "sparse retained-snapshot estimates and are not applied accounting"
+            ),
+        })
+    return rows
+
+
+def mks24_panel_disposition_rows(
+    data: PublicationData,
+) -> list[dict[str, object]]:
+    """Return admitted and explicitly blocked/external MKS24 panel dispositions."""
+
+    rows: list[dict[str, object]] = []
+    panels = (
+        nested(data.science_record, "mks24.panels")
+        if isinstance(data.science_record, dict)
+        and data.science_record.get("_publication_evidence_validated") is True
+        else None
+    )
+    if isinstance(panels, dict):
+        for panel_id, panel in sorted(panels.items()):
+            products = panel.get("products") if isinstance(panel, dict) else None
+            product_records = [
+                product for product in products if isinstance(product, dict)
+            ] if isinstance(products, list) else []
+            results = [
+                validated_result(product.get("result")) for product in product_records
+            ]
+            rows.append({
+                "panel": panel_id,
+                "disposition": "admitted",
+                "result": (
+                    validated_result(panel.get("result"))
+                    if isinstance(panel, dict) else "inconclusive"
+                ),
+                "product_count": len(product_records),
+                "pass_count": results.count("pass"),
+                "fail_count": results.count("fail"),
+                "inconclusive_count": results.count("inconclusive"),
+                "sources": sorted({
+                    str(product.get("source"))
+                    for product in product_records if product.get("source") is not None
+                }),
+                "reason": panel.get("reason") if isinstance(panel, dict) else None,
+                "evidence": "authenticated reviewed science",
+            })
+    for gate in acceptance_gate_rows(data):
+        name = str(gate.get("gate") or "")
+        if gate.get("result") != "blocked_out_of_scope" or "panel" not in name.lower():
+            continue
+        rows.append({
+            "panel": name.split(":", 1)[1] if ":" in name else name,
+            "disposition": "blocked_or_external",
+            "result": "blocked_out_of_scope",
+            "product_count": None,
+            "pass_count": None,
+            "fail_count": None,
+            "inconclusive_count": None,
+            "sources": None,
+            "reason": gate.get("reason"),
+            "evidence": gate.get("record_type"),
+        })
+    if not rows:
+        rows.append({
+            "panel": None,
+            "disposition": "inconclusive",
+            "result": "inconclusive",
+            "reason": "no authenticated admitted or blocked/external panel evidence",
+            "evidence": "inconclusive",
+        })
+    return rows
+
+
+def lineage_disposition_rows(data: PublicationData) -> list[dict[str, object]]:
+    """Return authenticated selected and unselected fast-lineage dispositions."""
+
+    rows: list[dict[str, object]] = []
+    for case_id in CASE_IDS:
+        lineage = authenticated_case_lineage(data, case_id)
+        if not isinstance(lineage, dict):
+            rows.append({
+                "case_id": case_id,
+                "lineage_index": None,
+                "selected": None,
+                "disposition": "inconclusive",
+                "reason": "current lineage lacks authenticated binding",
+                "provenance": "inconclusive",
+            })
+            continue
+        candidates: list[tuple[bool, str, dict[str, Any], int]] = []
+        selected = lineage.get("selected_fast_lineage")
+        if isinstance(selected, dict):
+            terminal = selected.get("terminal")
+            if isinstance(terminal, dict):
+                candidates.append((
+                    True, str(selected.get("reason") or "selected_fast_lineage"),
+                    terminal, len(selected.get("segments", []))
+                    if isinstance(selected.get("segments"), list) else 0,
+                ))
+        elif isinstance(lineage.get("lineage"), list) and lineage["lineage"]:
+            terminal = lineage["lineage"][-1]
+            if isinstance(terminal, dict):
+                candidates.append((
+                    True, "selected_reporter_lineage", terminal, len(lineage["lineage"])
+                ))
+        unselected = lineage.get("unselected_lineages")
+        if isinstance(unselected, list):
+            for record in unselected:
+                if not isinstance(record, dict):
+                    continue
+                terminal = record.get("terminal")
+                candidates.append((
+                    False, str(record.get("reason") or "unselected"),
+                    terminal if isinstance(terminal, dict) else {},
+                    len(record.get("segments", []))
+                    if isinstance(record.get("segments"), list) else 0,
+                ))
+        if not candidates:
+            rows.append({
+                "case_id": case_id,
+                "lineage_index": None,
+                "selected": None,
+                "disposition": "inconclusive",
+                "reason": "authenticated lineage contains no lineage candidates",
+                "provenance": "authenticated",
+            })
+            continue
+        for index, (
+            is_selected, reason, terminal, segment_count
+        ) in enumerate(candidates):
+            state = terminal.get("state")
+            disposition = (
+                "selected" if is_selected
+                else "failed" if state == "failed"
+                else "superseded" if reason == "lower_ranked_restart_linked_lineage"
+                else "unselected"
+            )
+            rows.append({
+                "case_id": case_id,
+                "lineage_index": index,
+                "selected": is_selected,
+                "disposition": disposition,
+                "reason": reason,
+                "terminal_state": state,
+                "source_family": terminal.get("source_family"),
+                "variant": terminal.get("variant"),
+                "job_id": terminal.get("job_id"),
+                "observed_final_time": terminal.get("observed_final_time"),
+                "run_exit_code": terminal.get("run_exit_code"),
+                "restart_link_valid": terminal.get("restart_link_valid"),
+                "segment_count": segment_count,
+                "terminal_segment": terminal.get("segment"),
+                "provenance": "authenticated",
+            })
+    return rows
+
+
+def mechanism_metric_value(
+    data: PublicationData, case_id: str, metric: str
+) -> float | None:
+    """Return one authenticated descriptive mechanism quantity."""
+
+    if metric == "c_b2_full_window_mean":
+        case = data.cases[case_id]
+        direct = authenticated_direct_acceptance(case)
+        if (
+            not authenticated_science_response_case(data, case_id)
+            or not isinstance(direct, dict)
+            or binding_freshness_errors(
+                nested(direct, "provenance.histories.user"),
+                case.history_paths.get("user"),
+                f"{case_id} coherent-direction user history",
+            )
+        ):
+            return None
+        series = normalized_history_series(case, "c_b2")
+        return time_weighted_mean(*series) if series is not None else None
+    diagnostics = authenticated_case_diagnostics(data, case_id)
+    applied_paths = {
+        "applied_pressure_work_total": (
+            "windows.steady.lf_history.applied_pressure_work.total"
+        ),
+        "applied_pressure_work_anisotropic": (
+            "windows.steady.lf_history.applied_pressure_work.anisotropic"
+        ),
+    }
+    if metric in applied_paths:
+        return as_float(nested(diagnostics, applied_paths[metric]))
+    ensemble = authenticated_snapshot_ensemble(data, case_id)
+    reconstructed_paths = {
+        "reconstructed_anisotropic_stress_power_mean": (
+            "pressure_work_decomposition.anisotropic_stress_power_mean"
+        ),
+        "parallel_strain_rms_mean": (
+            "pressure_work_decomposition.parallel_strain_rms_mean"
+        ),
+    }
+    if metric in reconstructed_paths:
+        return as_float(nested(ensemble, reconstructed_paths[metric]))
+    if metric == "reviewed_abs_dp_standardized_effect":
+        effects = [
+            row for active, passive in ACTIVE_PASSIVE_PAIRS
+            if active == case_id
+            for row in reviewed_pair_effect_rows(data, active, passive)
+            if row.get("metric") == "abs_dp"
+        ]
+        return (
+            as_float(effects[0].get("standardized_effect")) if len(effects) == 1
+            else None
+        )
+    raise PublicationError(f"unsupported mechanism metric: {metric}")
+
+
+def coherent_direction_mechanism_rows(
+    data: PublicationData,
+) -> list[dict[str, object]]:
+    """Summarize descriptive active-minus-passive directions without a pass gate."""
+
+    metrics = (
+        "c_b2_full_window_mean",
+        "applied_pressure_work_total",
+        "applied_pressure_work_anisotropic",
+        "reconstructed_anisotropic_stress_power_mean",
+        "parallel_strain_rms_mean",
+        "reviewed_abs_dp_standardized_effect",
+    )
+    rows: list[dict[str, object]] = []
+    for metric in metrics:
+        differences: dict[str, float | None] = {}
+        for active, passive in ACTIVE_PASSIVE_PAIRS:
+            if metric == "reviewed_abs_dp_standardized_effect":
+                active_value = mechanism_metric_value(data, active, metric)
+                passive_value = 0.0 if active_value is not None else None
+            else:
+                active_value = mechanism_metric_value(data, active, metric)
+                passive_value = mechanism_metric_value(data, passive, metric)
+            differences[f"{active}_{passive}"] = (
+                active_value - passive_value
+                if active_value is not None and passive_value is not None else None
+            )
+        available = [value for value in differences.values() if value is not None]
+        positive = sum(value > 0.0 for value in available)
+        negative = sum(value < 0.0 for value in available)
+        equal = sum(value == 0.0 for value in available)
+        direction = (
+            "active_gt_passive"
+            if len(available) == len(ACTIVE_PASSIVE_PAIRS) and positive == len(available)
+            else "active_lt_passive"
+            if len(available) == len(ACTIVE_PASSIVE_PAIRS) and negative == len(available)
+            else "equal"
+            if len(available) == len(ACTIVE_PASSIVE_PAIRS) and equal == len(available)
+            else "mixed"
+            if len(available) == len(ACTIVE_PASSIVE_PAIRS)
+            else "inconclusive"
+        )
+        rows.append({
+            "metric": metric,
+            "available_pair_count": len(available),
+            "positive_active_minus_passive_count": positive,
+            "negative_active_minus_passive_count": negative,
+            "equal_count": equal,
+            "inconclusive_pair_count": len(ACTIVE_PASSIVE_PAIRS) - len(available),
+            "descriptive_direction": direction,
+            "pair_active_minus_passive": differences,
+            "inference_scope": "descriptive_only_no_preregistered_pass_gate",
+        })
     return rows
 
 
@@ -3667,6 +4495,9 @@ def case_evidence_roots(data: PublicationData, case_id: str) -> list[dict[str, A
             isinstance(case_ids, list) and case_id in case_ids
         ):
             roots.append(record)
+            result = record.get("_publication_hyperbolicity_result")
+            if isinstance(result, dict):
+                roots.append(result)
         case_record = nested(record, f"cases.{case_id}")
         if isinstance(case_record, dict):
             roots.append(case_record)
@@ -3814,6 +4645,15 @@ def hyperbolicity_diagnostics(
             "minimum",
         ),
     ))
+    nonfinite_count = as_float(first_evidence_value(
+        roots,
+        (
+            "hyperbolicity.nonfinite_discriminant_count",
+            "retained_state_hyperbolicity.nonfinite_discriminant_count",
+            "summary.nonfinite_discriminant_count",
+            "nonfinite_discriminant_count",
+        ),
+    ))
     if normalized_status is None:
         if (
             (negative_fraction is not None and negative_fraction > 0.0)
@@ -3831,6 +4671,7 @@ def hyperbolicity_diagnostics(
         "negative_discriminant_count": negative_count,
         "cell_direction_evaluations": evaluation_count,
         "minimum_discriminant": minimum,
+        "nonfinite_discriminant_count": nonfinite_count,
     }
 
 
@@ -4006,6 +4847,53 @@ def render_scope(
             "transport semantics. Any selected R15 nonfatal variant is diagnostic "
             "only; strict-R15 failure details require authenticated evidence. "
             "Strict-policy cells report configuration only except the explicit R15 fail."
+        ),
+    )
+
+
+def render_hyperbolicity_coverage(
+    data: PublicationData, plt: Any, colors: Any, patches: Any, path: Path
+) -> None:
+    """Render compact authenticated all-retained-snapshot coverage."""
+
+    rows = [
+        row for row in hyperbolicity_coverage_rows(data)
+        if row["case_id"] in ACTIVE_ENERGY_CASES
+    ]
+    statuses: list[list[str]] = []
+    labels: list[list[str]] = []
+    for row in rows:
+        case_id = str(row["case_id"])
+        coverage = str(row["coverage_result"])
+        numerical = str(row["numerical_result"])
+        scope = "restricted" if scope_status(case_id) == "restricted" else "configuration"
+        selected = row.get("selected_snapshot_count")
+        complete = row.get("complete_retained_snapshot_count")
+        audited = row.get("audited_snapshot_count")
+        statuses.append([coverage, numerical, scope])
+        labels.append([
+            (
+                f"{text_value(audited)}/{text_value(complete)} audited"
+                if audited is not None or complete is not None else "inconclusive"
+            ),
+            display_status(numerical),
+            "restricted" if scope == "restricted" else "standard",
+        ])
+        if selected is not None and audited is None:
+            labels[-1][0] = f"{text_value(selected)}/{text_value(complete)} selected"
+    status_matrix_figure(
+        plt, colors, patches,
+        [str(row["case_id"]) for row in rows],
+        ["All retained snapshots", "Numerical result", "Claim scope"],
+        statuses,
+        labels,
+        "Authenticated all-snapshot active-CGL hyperbolicity coverage",
+        path,
+        (
+            "Coverage passes only when an authenticated snapshot_policy=all manifest "
+            "and completed result cover every complete retained snapshot exactly once. "
+            "A numerically clean latest-snapshot or unbound result remains inconclusive "
+            "for all-snapshot coverage. Passive-delta cases are not applicable."
         ),
     )
 
@@ -4236,6 +5124,16 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         "evidence remains inconclusive.",
         "- Primary full-window scalar rows reproduce authenticated direct-acceptance "
         "source-history statistics without additional publication-layer normalization.",
+        "- All-snapshot hyperbolicity coverage passes only for an authenticated "
+        "snapshot_policy=all selection with an exactly once completed result. "
+        "Latest-only, missing, or stale results remain inconclusive.",
+        "- Signed LF applied-stage ledgers remain distinct from sparse retained-"
+        "snapshot pressure-work and heat-flux reconstructions; signs are preserved.",
+        "- MKS24 panel and lineage disposition tables report authenticated admitted, "
+        "blocked/external, selected, superseded, failed, and unselected evidence "
+        "without promoting absent evidence.",
+        "- The coherent-direction mechanism summary is descriptive only and does not "
+        "define or imply a new preregistered pass gate.",
         "- Resolution self-ratios for R02/R02 are suppressed. Non-reference cases "
         f"with developed-window scalars: `{', '.join(nonreference_resolution_cases) or 'none'}`.",
         "- Parameter-scan trends require at least two populated developed-window cases.",
@@ -4277,6 +5175,7 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
         "science_ct": figures / "fig07_reviewed_science_ct_summary.pdf",
         "causal_mechanism": figures / "fig08_causal_mechanism.pdf",
         "resolution_curves": figures / "fig09_resolution_curves.pdf",
+        "hyperbolicity_coverage": figures / "fig10_hyperbolicity_coverage.pdf",
     }
     render_health(data, plt, colors, patches, figure_paths["health"])
     render_active_passive(data, plt, figure_paths["active_passive"])
@@ -4289,6 +5188,9 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
     )
     render_causal_mechanism(data, plt, figure_paths["causal_mechanism"])
     render_resolution_curves(data, plt, figure_paths["resolution_curves"])
+    render_hyperbolicity_coverage(
+        data, plt, colors, patches, figure_paths["hyperbolicity_coverage"]
+    )
     products.extend(figure_paths.values())
 
     table_specs = (
@@ -4313,6 +5215,78 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
                 "stationarity", "sampling_adequacy", "acceptance", "claim_scope",
             ],
             primary_full_window_scalar_rows(data),
+        ),
+        (
+            "hyperbolicity_all_snapshot_coverage",
+            [
+                "case_id", "coverage_result", "numerical_result", "snapshot_policy",
+                "complete_retained_snapshot_count", "selected_snapshot_count",
+                "audited_snapshot_count",
+                "all_complete_retained_snapshots_selected", "time_first", "time_last",
+                "negative_discriminant_count", "nonfinite_discriminant_count",
+                "cell_direction_evaluations", "minimum_discriminant",
+                "coverage_reason", "claim_scope", "selection_provenance",
+                "result_provenance",
+            ],
+            hyperbolicity_coverage_rows(data),
+        ),
+        (
+            "signed_lf_cap_work_ledger",
+            [
+                "case_id", "availability", "diagnostics_provenance",
+                "applied_heat_flux_availability",
+                "applied_pressure_work_availability",
+                "reconstructed_pressure_availability",
+                "reconstructed_heat_flux_availability",
+                "applied_ledgers_signed", "applied_heat_flux_parallel",
+                "applied_heat_flux_perpendicular", "applied_heat_flux_total",
+                "applied_pressure_work_total", "applied_pressure_work_anisotropic",
+                "cap_parallel_over_1", "cap_parallel_over_10",
+                "cap_perpendicular_over_1", "cap_perpendicular_over_10",
+                "reconstructed_pressure_snapshot_count",
+                "reconstructed_pressure_applied_to_flow",
+                "reconstructed_isotropic_perpendicular_pressure_power_mean",
+                "reconstructed_anisotropic_stress_power_mean",
+                "reconstructed_total_cgl_pressure_power_mean",
+                "reconstructed_anisotropic_stress_power_integral",
+                "reconstructed_heat_flux_snapshot_count",
+                "reconstructed_regularized_heat_flux_power_mean",
+                "reconstructed_unlimited_heat_flux_power_mean",
+                "reconstructed_parallel_cap_active_volume_fraction_mean",
+                "reconstructed_perpendicular_cap_active_volume_fraction_mean",
+                "reconstructed_regularized_heat_flux_power_integral",
+                "reconstructed_unlimited_heat_flux_power_integral", "semantics",
+            ],
+            signed_lf_cap_work_ledger_rows(data),
+        ),
+        (
+            "mks24_panel_dispositions",
+            [
+                "panel", "disposition", "result", "product_count", "pass_count",
+                "fail_count", "inconclusive_count", "sources", "reason", "evidence",
+            ],
+            mks24_panel_disposition_rows(data),
+        ),
+        (
+            "lineage_dispositions",
+            [
+                "case_id", "lineage_index", "selected", "disposition", "reason",
+                "terminal_state", "source_family", "variant", "job_id",
+                "observed_final_time", "run_exit_code", "restart_link_valid",
+                "segment_count", "terminal_segment", "provenance",
+            ],
+            lineage_disposition_rows(data),
+        ),
+        (
+            "coherent_direction_mechanism",
+            [
+                "metric", "available_pair_count",
+                "positive_active_minus_passive_count",
+                "negative_active_minus_passive_count", "equal_count",
+                "inconclusive_pair_count", "descriptive_direction",
+                "pair_active_minus_passive", "inference_scope",
+            ],
+            coherent_direction_mechanism_rows(data),
         ),
         (
             "health_completion",
@@ -4474,6 +5448,10 @@ exclude failed, incomplete, and numerically inconclusive cases.
    spectra and peak-alignment curves over the preregistered common range, accompanied
    by the reviewed convergence decisions and limits. All three authenticated curves
    are required in each panel.
+10. **All-snapshot hyperbolicity coverage.** Authenticated active-CGL retained-state
+    coverage and numerical disposition. Coverage passes only when every complete
+    retained snapshot is selected and represented exactly once in a completed bound
+    result; latest-only or missing results remain inconclusive.
 """
     captions_path = output / "captions.md"
     write_text(captions_path, captions)

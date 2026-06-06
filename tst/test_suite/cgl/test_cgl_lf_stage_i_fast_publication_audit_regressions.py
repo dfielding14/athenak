@@ -900,8 +900,58 @@ def material_diagnostics(case_id: str) -> dict[str, object]:
             "mhd_user_mass_relative_mismatch": 0.0,
         },
         "snapshot_analysis_status": "complete",
+        "windows": {
+            "steady": {
+                "lf_history": {
+                    "available": True,
+                    "applied_heat_flux_work": {
+                        "signed": True,
+                        "parallel": 2.0 + offset,
+                        "perpendicular": -0.5 - offset,
+                        "total": 1.5,
+                    },
+                    "applied_pressure_work": {
+                        "signed": True,
+                        "total": -1.0 - offset,
+                        "anisotropic": -0.8 - offset,
+                    },
+                    "heat_flux_cap_fractions": {
+                        "parallel_over_1": 1.0e-4 + offset * 1.0e-4,
+                        "parallel_over_10": 0.0,
+                        "perpendicular_over_1": 2.0e-4 + offset * 1.0e-4,
+                        "perpendicular_over_10": 0.0,
+                    },
+                }
+            }
+        },
         "snapshot_ensemble": {
             "snapshot_count": 3,
+            "pressure_work_decomposition": {
+                "available": True,
+                "snapshot_count": 3,
+                "applied_to_flow": True,
+                "isotropic_perpendicular_pressure_power_mean": 0.5 + offset,
+                "anisotropic_stress_power_mean": -0.2 - offset,
+                "total_cgl_pressure_power_mean": 0.3,
+                "parallel_strain_rms_mean": 0.7 + offset,
+                "time_integral_estimate": {
+                    "available": True,
+                    "anisotropic_stress_power_integral": -1.2 - offset,
+                },
+            },
+            "heat_flux_transport_proxy": {
+                "available": True,
+                "snapshot_count": 3,
+                "regularized_total_power_mean": 0.4 + offset,
+                "unlimited_total_power_mean": 0.6 + offset,
+                "parallel_cap_active_volume_fraction_mean": 0.01 + offset,
+                "perpendicular_cap_active_volume_fraction_mean": 0.02 + offset,
+                "time_integral_estimate": {
+                    "available": True,
+                    "regularized_total_power_integral": 2.4 + offset,
+                    "unlimited_total_power_integral": 3.6 + offset,
+                },
+            },
             "pdf": {
                 "bb_grad_velocity": {
                     "edges": [-1.0, 0.0, 1.0],
@@ -943,13 +993,52 @@ def install_material_case(publication, data, analysis: Path, case_id: str) -> di
     write_json(diagnostics_path, diagnostics)
     case = data.cases[case_id]
     case.diagnostics = diagnostics
-    case.lineage = {"status": "complete", "final_time": 10.0}
+    case.lineage = {
+        "status": "complete",
+        "final_time": 10.0,
+        "selected_fast_lineage": {
+            "reason": "highest_ranked_restart_linked_lineage",
+            "terminal": {
+                "state": "complete",
+                "source_family": "original",
+                "job_id": f"selected-{case_id}",
+                "observed_final_time": 10.0,
+                "restart_link_valid": True,
+                "segment": f"/selected/{case_id}",
+            },
+            "segments": [{"segment": f"/selected/{case_id}"}],
+        },
+        "unselected_lineages": [{
+            "reason": "lower_ranked_restart_linked_lineage",
+            "terminal": {
+                "state": "failed",
+                "source_family": "race",
+                "job_id": f"failed-{case_id}",
+                "observed_final_time": 1.0,
+                "run_exit_code": 143,
+                "restart_link_valid": True,
+                "segment": f"/failed/{case_id}",
+            },
+            "segments": [{"segment": f"/failed/{case_id}"}],
+        }],
+    }
+    lineage_path = analysis / "cases" / case_id / "lineage.json"
+    write_json(lineage_path, case.lineage)
+    case.lineage_path = lineage_path
     case.user_history = {
         "time": [0.0, 4.0, 10.0],
         "volume": [1.0, 1.0, 1.0],
         "b2": [2.0, 2.0, 2.0],
         "b4": [4.08, 4.16, 4.2],
     }
+    user_history_path = analysis / "cases" / case_id / "history/material.user.hst"
+    user_history_path.parent.mkdir(parents=True, exist_ok=True)
+    user_history_path.write_text(
+        "# [1]=time [2]=volume [3]=b2 [4]=b4\n"
+        "0 1 2 4.08\n4 1 2 4.16\n10 1 2 4.2\n",
+        encoding="utf-8",
+    )
+    case.history_paths["user"] = user_history_path
     case.direct_acceptance = {
         "_publication_evidence_validated": True,
         "result": "pass",
@@ -965,6 +1054,10 @@ def install_material_case(publication, data, analysis: Path, case_id: str) -> di
             },
         },
         "scope": {"classification": "standard_claim_scope"},
+        "provenance": {
+            "lineage": binding(lineage_path),
+            "histories": {"user": binding(user_history_path)},
+        },
         "history_statistics": {
             metric: {
                 "history": "user",
@@ -1052,6 +1145,118 @@ def install_material_science(publication, data, bindings: dict[str, dict]) -> No
     }
 
 
+def write_all_snapshot_hyperbolicity_evidence(
+    publication, analysis: Path, root: Path, case_id: str = "R02"
+) -> tuple[Path, Path]:
+    case_dir = analysis / "cases" / case_id
+    rank_records = []
+    selected = []
+    result_snapshots = []
+    for index, time in enumerate((4.0, 10.0)):
+        rank = case_dir / "snapshots" / f"snapshot-{index}" / "rank_00000000.bin"
+        rank.parent.mkdir(parents=True, exist_ok=True)
+        rank.write_text(f"rank {index}\n", encoding="utf-8")
+        rank_record = {
+            **binding(rank),
+            "mtime_ns": rank.stat().st_mtime_ns,
+            "rank_id": 0,
+        }
+        rank_records.append(rank_record)
+        selected.append({
+            "index_position": index,
+            "time": time,
+            "audit_input_pattern": str(rank),
+            "rank_files": [rank_record],
+        })
+        result_snapshots.append({
+            "time": time,
+            "active_cgl_signal_speed": True,
+            "rank_files": [rank_record],
+            "ranks_contiguous_from_zero": True,
+            "input_inventory_sha256": hashlib.sha256(
+                json.dumps(
+                    [rank_record], sort_keys=True, separators=(",", ":")
+                ).encode("utf-8")
+            ).hexdigest(),
+            "aggregate": {
+                "evaluated": 1000,
+                "negative": 0,
+                "nonfinite_discriminant": 0,
+                "minimum": 0.25,
+            },
+        })
+    snapshot_index = case_dir / "snapshots.json"
+    write_json(snapshot_index, {
+        "complete_snapshot_count": 2,
+        "snapshots": [{"time": 4.0}, {"time": 10.0}],
+    })
+    lineage = case_dir / "lineage.json"
+    write_json(lineage, {
+        "case_id": case_id,
+        "snapshots": {
+            "path": str(snapshot_index.absolute()),
+            "complete_snapshot_count": 2,
+        },
+    })
+    audit_script = root / "audit.py"
+    bin_convert = root / "bin_convert.py"
+    launcher = root / "launcher.py"
+    for path in (audit_script, bin_convert, launcher):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(path.name + "\n", encoding="utf-8")
+    result = {
+        "provenance": {
+            "script_path": str(audit_script.absolute()),
+            "script_sha256": sha256(audit_script),
+            "bin_convert_path": str(bin_convert.absolute()),
+            "bin_convert_sha256": sha256(bin_convert),
+            "input_patterns": [str(record["audit_input_pattern"]) for record in selected],
+            "hash_inputs": True,
+        },
+        "snapshots": result_snapshots,
+    }
+    attempt = root / case_id / "attempt-000"
+    result_path = attempt / "result.json"
+    write_json(result_path, result)
+    result_sha = attempt / "result.sha256"
+    result_sha.write_text(f"{sha256(result_path)}  result.json\n", encoding="utf-8")
+    selected_digest = hashlib.sha256(
+        json.dumps(selected, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    manifest = {
+        "schema_version": 1,
+        "record_type": publication.HYPERBOLICITY_JOB_RECORD_TYPE,
+        "case_id": case_id,
+        "attempt": 0,
+        "case_lineage": binding(lineage),
+        "snapshot_index": binding(snapshot_index),
+        "audit_script": binding(audit_script),
+        "launcher": binding(launcher),
+        "snapshot_policy": "all",
+        "snapshot_coverage": {
+            "snapshot_policy": "all",
+            "snapshot_index_complete_count": 2,
+            "selected_snapshot_count": 2,
+            "selected_snapshot_positions": [0, 1],
+            "selected_snapshot_times": [4.0, 10.0],
+            "selected_snapshots_sha256": selected_digest,
+            "all_complete_retained_snapshots_selected": True,
+        },
+        "selected_snapshots": selected,
+        "selected_snapshot": selected[-1],
+        "result": {
+            "path": str(result_path.absolute()),
+            "sha256_path": str(result_sha.absolute()),
+            "required_coverage": "exactly_once_per_selected_snapshot",
+            "expected_snapshot_count": 2,
+            "expected_selected_snapshots_sha256": selected_digest,
+        },
+    }
+    manifest_path = attempt / "manifest.json"
+    write_json(manifest_path, manifest)
+    return manifest_path, Path(str(rank_records[-1]["path"]))
+
+
 def test_material_tables_authenticate_health_energy_and_r14_r15_failures(
     publication, tmp_path
 ):
@@ -1125,10 +1330,16 @@ def test_material_figures_and_tables_are_integrated(publication, tmp_path):
     for relative in (
         "figures/fig08_causal_mechanism.pdf",
         "figures/fig09_resolution_curves.pdf",
+        "figures/fig10_hyperbolicity_coverage.pdf",
         "tables/numerical_health_provenance.csv",
         "tables/numerical_health_provenance.tex",
         "tables/primary_full_window_scalars.csv",
         "tables/primary_full_window_scalars.tex",
+        "tables/hyperbolicity_all_snapshot_coverage.csv",
+        "tables/signed_lf_cap_work_ledger.csv",
+        "tables/mks24_panel_dispositions.csv",
+        "tables/lineage_dispositions.csv",
+        "tables/coherent_direction_mechanism.csv",
     ):
         assert output / relative in products
         assert (output / relative).is_file()
@@ -1150,3 +1361,149 @@ def test_material_figures_and_tables_are_integrated(publication, tmp_path):
     assert "mass_relative_drift_maximum" in health
     assert "strict_failure" in health
     assert "effective_sample_count" in scalar
+
+
+def test_all_snapshot_hyperbolicity_requires_authenticated_exact_coverage(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    _, rank = write_all_snapshot_hyperbolicity_evidence(
+        publication, analysis, tmp_path / "hyper"
+    )
+
+    data = publication.discover_data(analysis, [tmp_path / "hyper"])
+    row = {
+        value["case_id"]: value
+        for value in publication.hyperbolicity_coverage_rows(data)
+    }["R02"]
+
+    assert row["coverage_result"] == "pass"
+    assert row["numerical_result"] == "pass"
+    assert row["snapshot_policy"] == "all"
+    assert row["complete_retained_snapshot_count"] == 2
+    assert row["selected_snapshot_count"] == 2
+    assert row["audited_snapshot_count"] == 2
+    assert row["cell_direction_evaluations"] == 2000
+    assert row["minimum_discriminant"] == pytest.approx(0.25)
+    assert row["selection_provenance"] == "authenticated"
+    assert row["result_provenance"] == "authenticated"
+    assert {
+        value["case_id"]: value
+        for value in publication.hyperbolicity_coverage_rows(data)
+    }["R06"]["coverage_result"] == "not_applicable"
+
+    rank.write_text("changed after authenticated audit\n", encoding="utf-8")
+    stale = {
+        value["case_id"]: value
+        for value in publication.hyperbolicity_coverage_rows(data)
+    }["R02"]
+    assert stale["coverage_result"] == "inconclusive"
+    assert stale["numerical_result"] == "inconclusive"
+    assert stale["selection_provenance"] == "inconclusive"
+    assert stale["result_provenance"] == "inconclusive"
+
+
+def test_final_evidence_tables_preserve_semantics_and_fail_closed(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    data = empty_data(publication, analysis)
+    bindings = {
+        case_id: install_material_case(publication, data, analysis, case_id)
+        for case_id in ("R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09")
+    }
+    install_material_science(publication, data, bindings)
+    data.science_record["mks24"] = {
+        "result": "pass",
+        "panels": {
+            "fig2b": {
+                "result": "pass",
+                "reason": "all admitted products passed",
+                "products": [{
+                    "product_id": "fig2b_active",
+                    "case_id": "R02",
+                    "source": "authenticated_direct_fast_recomputation",
+                    "result": "pass",
+                }],
+            }
+        },
+    }
+    data.acceptance_records = [{
+        "_publication_evidence_validated": True,
+        "record_type": "stage-i-scientific-campaign-evidence",
+        "gates": [{
+            "name": "panel:fig3external",
+            "result": "blocked_out_of_scope",
+            "reason": "panel is explicitly blocked or external",
+        }],
+    }]
+
+    ledgers = {
+        row["case_id"]: row for row in publication.signed_lf_cap_work_ledger_rows(data)
+    }
+    assert ledgers["R02"]["applied_heat_flux_parallel"] == pytest.approx(2.02)
+    assert ledgers["R02"]["applied_heat_flux_perpendicular"] == pytest.approx(-0.52)
+    assert ledgers["R02"]["applied_pressure_work_total"] == pytest.approx(-1.02)
+    assert ledgers["R02"]["reconstructed_anisotropic_stress_power_mean"] == pytest.approx(
+        -0.22
+    )
+    assert "not applied accounting" in ledgers["R02"]["semantics"]
+
+    panels = publication.mks24_panel_disposition_rows(data)
+    assert next(row for row in panels if row["panel"] == "fig2b")[
+        "disposition"
+    ] == "admitted"
+    assert next(row for row in panels if row["panel"] == "fig3external")[
+        "disposition"
+    ] == "blocked_or_external"
+
+    lineage = [
+        row for row in publication.lineage_disposition_rows(data)
+        if row["case_id"] == "R02"
+    ]
+    assert [row["disposition"] for row in lineage] == ["selected", "failed"]
+    assert lineage[1]["run_exit_code"] == 143
+
+    directions = {
+        row["metric"]: row
+        for row in publication.coherent_direction_mechanism_rows(data)
+    }
+    assert directions["applied_pressure_work_total"]["descriptive_direction"] == (
+        "active_gt_passive"
+    )
+    assert directions["parallel_strain_rms_mean"]["descriptive_direction"] == (
+        "active_lt_passive"
+    )
+    assert directions["c_b2_full_window_mean"]["descriptive_direction"] == "equal"
+    assert directions["reviewed_abs_dp_standardized_effect"][
+        "descriptive_direction"
+    ] == "inconclusive"
+    assert directions["applied_pressure_work_total"]["inference_scope"] == (
+        "descriptive_only_no_preregistered_pass_gate"
+    )
+
+    data.cases["R02"].history_paths["user"].write_text(
+        "changed after binding\n", encoding="utf-8"
+    )
+    stale_direction = {
+        row["metric"]: row
+        for row in publication.coherent_direction_mechanism_rows(data)
+    }["c_b2_full_window_mean"]
+    assert stale_direction["descriptive_direction"] == "inconclusive"
+    assert stale_direction["available_pair_count"] == 3
+
+    diagnostics_path = analysis / "cases/R02/diagnostics.json"
+    diagnostics_path.write_text("{}\n", encoding="utf-8")
+    stale_ledger = {
+        row["case_id"]: row for row in publication.signed_lf_cap_work_ledger_rows(data)
+    }["R02"]
+    assert stale_ledger["availability"] == "inconclusive"
+    assert stale_ledger["applied_pressure_work_total"] is None
+    lineage_path = analysis / "cases/R02/lineage.json"
+    lineage_path.write_text("{}\n", encoding="utf-8")
+    stale_lineage = [
+        row for row in publication.lineage_disposition_rows(data)
+        if row["case_id"] == "R02"
+    ]
+    assert len(stale_lineage) == 1
+    assert stale_lineage[0]["disposition"] == "inconclusive"
