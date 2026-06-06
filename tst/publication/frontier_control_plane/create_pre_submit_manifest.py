@@ -24,12 +24,27 @@ from control_plane_common import read_json, require_below
 from control_plane_common import require_canonical_path_below
 from control_plane_common import require_no_symlink_components_below
 from control_plane_common import sha256, snapshot_file, verify_installed_control_plane
-from control_plane_common import validate_launch_contract
+from control_plane_common import launch_contract_sha256, validate_launch_contract
 from control_plane_common import validate_planner_retention_binding, write_json_exclusive
 from operator_attestation import validate_sealed_operator_attestation
 
 
 SCRIPT_DIR = Path(__file__).absolute().parent
+Q011_JOB_SCRIPT_SHA256 = (
+    "3048493d376dfa7954595e586c7cebe6740460a7455110d0fc4020bedf697999"
+)
+Q011_INPUT_DECK_SHA256 = (
+    "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+)
+Q011_LAUNCH_CONTRACT_SHA256 = {
+    "2413a91247d32fb6d93d4903bddab65ed518badc1be6c514ad29c03ca8eafb7b",
+    "f9f615bfaa4cc18479dcd02ed4f688f3723fc3dd30a50e754e9f69e10616a8ea",
+    "8ab4528b55bdf71e4a13047971aa5ccf8da35c28896ba0bf875a7dca368dfd2f",
+    "d84b9217c8810f33ffda995f9611b44f7eeb519bb2e7667c4691ab5833895dd4",
+}
+Q011_PLANNER_RETENTION_REQUIRED = (
+    "Registered Q011 science requires a planner-retention binding"
+)
 
 
 def _required(config: dict[str, object], key: str) -> str:
@@ -44,6 +59,34 @@ def _safe_filename_segment(config: dict[str, object], key: str) -> str:
     if value in {".", ".."} or Path(value).name != value:
         raise ValueError(f"Pre-submit config key must be one filename segment: {key}")
     return value
+
+
+def _requires_q011_planner_retention(
+    *,
+    submission_scope: object,
+    authorization_id: object,
+    campaign: object,
+    test_id: object,
+    job_script_sha256: object,
+    input_deck_sha256: object,
+    launch_contract_sha256_value: object,
+) -> bool:
+    if submission_scope != REGISTERED_SCIENCE_SCOPE:
+        return False
+    return any(
+        (
+            isinstance(authorization_id, str)
+            and authorization_id.startswith(("q011-", "q011_")),
+            isinstance(campaign, str)
+            and campaign.startswith(("q011-", "q011_")),
+            isinstance(test_id, str)
+            and test_id.startswith(("q011-", "q011_", "pic_parallel_shock_section54_")),
+            job_script_sha256 == Q011_JOB_SCRIPT_SHA256,
+            input_deck_sha256 == Q011_INPUT_DECK_SHA256,
+            isinstance(launch_contract_sha256_value, str)
+            and launch_contract_sha256_value in Q011_LAUNCH_CONTRACT_SHA256,
+        )
+    )
 
 
 def create_manifest(
@@ -63,6 +106,7 @@ def create_manifest(
     campaign = _safe_filename_segment(config, "campaign")
     test_id = _safe_filename_segment(config, "test_id")
     submission_scope = _required(config, "submission_scope")
+    physical_mode = _required(config, "physical_mode")
     if submission_scope not in SUBMISSION_SCOPES:
         raise ValueError(f"Unsupported submission scope: {submission_scope}")
     executable_env = _required(config, "job_script_executable_env")
@@ -97,6 +141,7 @@ def create_manifest(
         )
         clean_candidate_manifest = None
         pre_manifest_attestation = None
+        authorization_id = None
         if submission_scope == REGISTERED_SCIENCE_SCOPE:
             authorization_id = _safe_filename_segment(
                 config, "registered_science_authorization_id"
@@ -128,14 +173,13 @@ def create_manifest(
             raise ValueError(
                 "Admission-smoke configs must not claim a clean-candidate manifest"
             )
-        snapshot_files.append(
-            snapshot_file(
-                Path(_required(config, "job_script")),
-                snapshot_dir / "job.sh",
-                role="job-script",
-                destination_root=snapshot_dir,
-            )
+        job_script_record = snapshot_file(
+            Path(_required(config, "job_script")),
+            snapshot_dir / "job.sh",
+            role="job-script",
+            destination_root=snapshot_dir,
         )
+        snapshot_files.append(job_script_record)
         snapshot_files.append(
             snapshot_file(
                 Path(_required(config, "executable")),
@@ -145,14 +189,26 @@ def create_manifest(
                 scrub=False,
             )
         )
-        snapshot_files.append(
-            snapshot_file(
-                Path(_required(config, "input_deck")),
-                snapshot_dir / f"{test_id}.athinput",
-                role="input-deck",
-                destination_root=snapshot_dir,
-            )
+        input_deck_record = snapshot_file(
+            Path(_required(config, "input_deck")),
+            snapshot_dir / f"{test_id}.athinput",
+            role="input-deck",
+            destination_root=snapshot_dir,
         )
+        snapshot_files.append(input_deck_record)
+        if (
+            _requires_q011_planner_retention(
+                submission_scope=submission_scope,
+                authorization_id=authorization_id,
+                campaign=campaign,
+                test_id=test_id,
+                job_script_sha256=job_script_record["sha256"],
+                input_deck_sha256=input_deck_record["sha256"],
+                launch_contract_sha256_value=launch_contract_sha256(launch_contract),
+            )
+            and config.get("planner_retention") is None
+        ):
+            raise ValueError(Q011_PLANNER_RETENTION_REQUIRED)
         snapshot_files.append(
             snapshot_file(
                 Path(_required(config, "environment_profile")),
@@ -253,7 +309,7 @@ def create_manifest(
             "launch_contract": launch_contract,
             "git_commit": _required(config, "git_commit"),
             "evidence_class": _required(config, "evidence_class"),
-            "physical_mode": _required(config, "physical_mode"),
+            "physical_mode": physical_mode,
             "selected_qos": _required(config, "selected_qos"),
             "qos_selection_reason": _required(config, "qos_selection_reason"),
             "site_policy_checked_utc": _required(config, "site_policy_checked_utc"),

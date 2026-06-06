@@ -163,6 +163,9 @@ Q011_JOB_SCRIPT_SHA256 = (
 Q011_INPUT_DECK_SHA256 = (
     "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
 )
+Q011_PLANNER_RETENTION_REQUIRED = (
+    "Registered Q011 science requires a planner-retention binding"
+)
 Q011_REPAIRED_GENERATOR_PATH = "src/pgen/tests/pic_parallel_shock.cpp"
 Q011_REPAIRED_GENERATOR_SHA256 = (
     "c0a01e4960f4ebb1a96bedc61fd918b4f7fc76addb59e0f9db3f9ab35eb8c9f9"
@@ -180,6 +183,63 @@ Q011_FAILED_V1_CLEAN_CANDIDATE_MANIFEST_SHA256 = (
 Q011_FAILED_V1_EXECUTABLE_SHA256 = (
     "c7c3a986fdbd1bb68dd2e8a0aa95df13934acacb33714b38bdb77ef73a1579c5"
 )
+
+
+def _requires_q011_planner_retention(
+    *,
+    submission_scope: object,
+    authorization_id: object,
+    campaign: object,
+    test_id: object,
+    job_script_sha256: object,
+    input_deck_sha256: object,
+    launch_contract_sha256_value: object,
+) -> bool:
+    if submission_scope != REGISTERED_SCIENCE_SCOPE:
+        return False
+    return any(
+        (
+            isinstance(authorization_id, str)
+            and authorization_id.startswith(("q011-", "q011_")),
+            isinstance(campaign, str)
+            and campaign.startswith(("q011-", "q011_")),
+            isinstance(test_id, str)
+            and test_id.startswith(("q011-", "q011_", "pic_parallel_shock_section54_")),
+            job_script_sha256 == Q011_JOB_SCRIPT_SHA256,
+            input_deck_sha256 == Q011_INPUT_DECK_SHA256,
+            isinstance(launch_contract_sha256_value, str)
+            and launch_contract_sha256_value
+            in Q011_PRESSURE_BY_LAUNCH_CONTRACT_SHA256,
+        )
+    )
+
+
+def _manifest_requires_q011_planner_retention(manifest: dict[str, object]) -> bool:
+    if isinstance(manifest.get("snapshot_files"), list):
+        try:
+            job_script_sha256 = record_for_role(manifest, "job-script").get("sha256")
+        except ValueError:
+            job_script_sha256 = None
+        try:
+            input_deck_sha256 = record_for_role(manifest, "input-deck").get("sha256")
+        except ValueError:
+            input_deck_sha256 = None
+    else:
+        job_script_sha256 = None
+        input_deck_sha256 = None
+    try:
+        contract_sha256 = launch_contract_sha256(manifest.get("launch_contract"))
+    except ValueError:
+        contract_sha256 = None
+    return _requires_q011_planner_retention(
+        submission_scope=manifest.get("submission_scope"),
+        authorization_id=manifest.get("registered_science_authorization_id"),
+        campaign=manifest.get("campaign"),
+        test_id=manifest.get("test_id"),
+        job_script_sha256=job_script_sha256,
+        input_deck_sha256=input_deck_sha256,
+        launch_contract_sha256_value=contract_sha256,
+    )
 
 
 def _q011_open_read_only_source(path: Path, *, label: str) -> tuple[int, bytes]:
@@ -533,6 +593,11 @@ def _verify_manifest(
     scope = manifest.get("submission_scope")
     if scope not in SUBMISSION_SCOPES:
         raise ValueError("Manifest does not declare a recognized submission scope")
+    if (
+        _manifest_requires_q011_planner_retention(manifest)
+        and "planner_retention" not in manifest
+    ):
+        raise ValueError(Q011_PLANNER_RETENTION_REQUIRED)
     expected_manifest_keys = PRE_SUBMIT_MANIFEST_REQUIRED_KEYS | (
         REGISTERED_SCIENCE_MANIFEST_KEYS if scope == REGISTERED_SCIENCE_SCOPE else set()
     )
@@ -832,6 +897,24 @@ def _registered_science_authorization(
     if len(matches) != 1:
         raise ValueError("Registered science authorization ID is not active")
     authorization = matches[0]
+    if (
+        "planner_retention" not in manifest
+        and (
+            _manifest_requires_q011_planner_retention(manifest)
+            or _requires_q011_planner_retention(
+                submission_scope=REGISTERED_SCIENCE_SCOPE,
+                authorization_id=authorization.get("authorization_id"),
+                campaign=authorization.get("campaign"),
+                test_id=authorization.get("test_id"),
+                job_script_sha256=authorization.get("job_script_sha256"),
+                input_deck_sha256=authorization.get("input_deck_sha256"),
+                launch_contract_sha256_value=authorization.get(
+                    "launch_contract_sha256"
+                ),
+            )
+        )
+    ):
+        raise ValueError(Q011_PLANNER_RETENTION_REQUIRED)
     expected_fields = {
         "campaign": manifest.get("campaign"),
         "test_id": manifest.get("test_id"),

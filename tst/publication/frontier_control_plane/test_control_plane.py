@@ -10731,6 +10731,10 @@ PY
     def test_registered_science_accepts_exact_authorized_clean_candidate(self) -> None:
         candidate = self._write_science_config(authorize=True)
         manifest_path = self._create_manifest()
+        self.assertNotIn(
+            "planner_retention",
+            json.loads(manifest_path.read_text(encoding="utf-8")),
+        )
         reservation = self._reserve(manifest_path)
         candidate_sha256 = str(reservation["clean_candidate_manifest_sha256"])
         self.assertEqual(len(candidate_sha256), 64)
@@ -10740,6 +10744,146 @@ PY
         self.assertEqual(len(prepared["paper_decks"]), 2)
         self.assertEqual(len(prepared["analyzers"]), 1)
         self.assertIn("clean_candidate_manifest_sha256", self.csv.read_text())
+
+    def test_registered_non_q011_shared_physical_mode_keeps_retention_optional(
+        self,
+    ) -> None:
+        self._write_science_config(
+            authorize=True,
+            physical_mode="paper_mhd_pic_vl2_tsc",
+        )
+        manifest_path = self._create_manifest()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertNotIn("planner_retention", manifest)
+        reservation = self._reserve(manifest_path)
+        self.assertEqual(reservation["submission_scope"], "registered_science")
+
+    def test_nonregistered_q011_looking_manifest_keeps_retention_optional(self) -> None:
+        campaign = "q011_section54_nonregistered_probe"
+        self._write_config(
+            campaign=campaign,
+            test_id="pic_parallel_shock_section54_nonregistered_probe",
+            physical_mode="paper_mhd_pic_vl2_tsc",
+            artifact_dir=str(self.pic_root / "runs" / campaign / self.submission_id),
+        )
+        manifest_path = self._create_manifest()
+        manifest = validate_and_reserve_frontier_job._verify_manifest(
+            manifest_path,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(manifest["submission_scope"], "frontier_admission_smoke")
+        self.assertNotIn("planner_retention", manifest)
+
+    def test_registered_q011_manifest_creation_requires_planner_retention(self) -> None:
+        _, authorization_id, campaign, test_id = (
+            validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[0]
+        )
+        self._write_science_config(
+            authorize=True,
+            registered_science_authorization_id=authorization_id,
+            campaign=campaign,
+            test_id=test_id,
+            artifact_dir=str(self.pic_root / "runs" / campaign / self.submission_id),
+        )
+        with self.assertRaisesRegex(ValueError, "requires a planner-retention binding"):
+            self._create_manifest()
+        self.assertFalse(
+            (self.pic_root / "manifests" / campaign / self.submission_id).exists()
+        )
+
+    def test_registered_q011_manifest_creation_rejects_deck_alias_without_retention(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        self.assertNotEqual(
+            sha256(self.sources / "job.sh"),
+            validate_and_reserve_frontier_job.Q011_JOB_SCRIPT_SHA256,
+        )
+        self.assertNotIn(
+            launch_contract_sha256(self._launch_contract()),
+            validate_and_reserve_frontier_job.Q011_PRESSURE_BY_LAUNCH_CONTRACT_SHA256,
+        )
+        with patch(
+            "create_pre_submit_manifest.Q011_INPUT_DECK_SHA256",
+            sha256(self.sources / "input.athinput"),
+        ), self.assertRaisesRegex(ValueError, "requires a planner-retention binding"):
+            self._create_manifest()
+        self.assertFalse(
+            (
+                self.pic_root
+                / "manifests"
+                / "f1_gpu_gyro"
+                / self.submission_id
+            ).exists()
+        )
+
+    def test_registered_q011_manifest_verification_rejects_stripped_retention(
+        self,
+    ) -> None:
+        _, authorization_id, campaign, test_id = (
+            validate_and_reserve_frontier_job.Q011_PRESSURE_CASES[0]
+        )
+        self._write_science_config(
+            authorize=True,
+            registered_science_authorization_id=authorization_id,
+            campaign=campaign,
+            test_id=test_id,
+            artifact_dir=str(self.pic_root / "runs" / campaign / self.submission_id),
+            planner_retention=self._planner_retention(),
+        )
+        manifest_path = self._create_manifest()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertIn("planner_retention", manifest)
+        manifest_path.chmod(0o644)
+        manifest.pop("planner_retention")
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        manifest_path.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, "requires a planner-retention binding"):
+            validate_and_reserve_frontier_job._verify_manifest(
+                manifest_path,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_registered_q011_authorization_rejects_renamed_manifest_without_retention(
+        self,
+    ) -> None:
+        identifier = "renamed-registered-science-v1"
+        manifest = {
+            "submission_scope": "registered_science",
+            "registered_science_authorization_id": identifier,
+            "campaign": "renamed_campaign",
+            "test_id": "renamed_test",
+            "physical_mode": "renamed_mode",
+            "snapshot_files": [],
+        }
+        policy = {
+            "registered_science_slices": [
+                {
+                    "authorization_id": identifier,
+                    "campaign": "renamed_campaign",
+                    "test_id": "renamed_test",
+                    "physical_mode": "renamed_mode",
+                    "input_deck_sha256": "b" * 64,
+                    "job_script_sha256": "c" * 64,
+                    "launch_contract_sha256": next(
+                        iter(
+                            validate_and_reserve_frontier_job.Q011_PRESSURE_BY_LAUNCH_CONTRACT_SHA256
+                        )
+                    ),
+                }
+            ]
+        }
+        with self.assertRaisesRegex(ValueError, "requires a planner-retention binding"):
+            validate_and_reserve_frontier_job._registered_science_authorization(
+                manifest,
+                policy,
+                {},
+                candidate_sha256="a" * 64,
+            )
 
     def test_q011_first_pressure_case_accepts_empty_ordered_closure_list(self) -> None:
         _, authorization_id, campaign, test_id = (
