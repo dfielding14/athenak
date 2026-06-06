@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import math
+import struct
 import unittest
 
 import numpy as np
@@ -74,6 +75,62 @@ def _reduce(arguments: dict[str, object] | None = None) -> dict[str, object]:
     )
 
 
+def _restart_payload(arguments: dict[str, object] | None = None, **overrides: int) -> bytes:
+    values = arguments or _arguments()
+    count = len(values["species"])
+    real_fields = overrides.get("real_fields", 26)
+    integer_fields = overrides.get("integer_fields", 4)
+    restart_schema = overrides.get("restart_schema", 7)
+    state_kind = overrides.get("state_kind", 1)
+    deltaf_mode = overrides.get("deltaf_mode", 0)
+    metadata = struct.pack(
+        "<15i",
+        restart_schema,
+        1,
+        real_fields,
+        integer_fields,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        state_kind,
+        0,
+    )
+    model_ints = [0] * 31
+    model_ints[0] = deltaf_mode
+    model_reals = [0.0] * 37
+    model_reals[20] = values["deposit_qscale"]
+    real_rows = np.zeros((count, real_fields), dtype="<f8")
+    if real_fields >= 26:
+        real_rows[:, [1, 3, 5]] = values["momentum_per_mass"]
+        real_rows[:, 6] = values["particle_q_over_mc"]
+        real_rows[:, [7, 8, 9]] = values["sampled_magnetic_field"]
+        real_rows[:, 22] = values["macro_weight"]
+    integer_rows = np.zeros((count, integer_fields), dtype="<i4")
+    if integer_fields >= 4:
+        integer_rows[:, 0] = 0
+        integer_rows[:, 1] = np.arange(count)
+        integer_rows[:, 2] = values["species"]
+        integer_rows[:, 3] = 0
+    return (
+        b"<job>\nbasename=q019-schema7-fixture\n<par_end>\n"
+        + struct.pack("<Q", reducer.restart_layout.PIC_RESTART_MAGIC)
+        + metadata
+        + struct.pack("<d", values["artificial_light_speed"])
+        + struct.pack("<31i", *model_ints)
+        + struct.pack("<37d", *model_reals)
+        + struct.pack("<Q", count)
+        + struct.pack("<i", count)
+        + real_rows.tobytes()
+        + integer_rows.tobytes()
+    )
+
+
 class Q019NonlinearBellParticleStateTests(unittest.TestCase):
     def test_reconstructs_current_tensor_energy_gyroradius_and_conservation(self) -> None:
         arguments = _arguments()
@@ -123,6 +180,59 @@ class Q019NonlinearBellParticleStateTests(unittest.TestCase):
         result = _reduce(arguments)
         self.assertFalse(result["conservation"]["reference_bound"])
         self.assertNotIn("energy_residual", result["conservation"])
+
+    def test_raw_schema7_extractor_binds_required_particle_and_model_state(self) -> None:
+        arguments = _arguments()
+        payload = _restart_payload(arguments)
+        extracted = reducer.extract_schema7_particle_state(payload, source="fixture.rst")
+        np.testing.assert_array_equal(
+            extracted["momentum_per_mass"], arguments["momentum_per_mass"]
+        )
+        np.testing.assert_array_equal(
+            extracted["sampled_magnetic_field"], arguments["sampled_magnetic_field"]
+        )
+        np.testing.assert_array_equal(extracted["macro_weight"], arguments["macro_weight"])
+        np.testing.assert_array_equal(extracted["species"], arguments["species"])
+        np.testing.assert_array_equal(
+            extracted["particle_q_over_mc"], arguments["particle_q_over_mc"]
+        )
+        self.assertEqual(extracted["deposit_qscale"], arguments["deposit_qscale"])
+        self.assertEqual(
+            extracted["artificial_light_speed"], arguments["artificial_light_speed"]
+        )
+        from_payload = reducer.reduce_schema7_restart_payload(
+            payload,
+            source="fixture.rst",
+            **{
+                key: arguments[key]
+                for key in (
+                    "species_mass",
+                    "species_q_over_mc",
+                    "domain_volume",
+                    "gas_bulk_velocity",
+                    "guide_field_direction",
+                    "mhd_budget",
+                    "reference_budget",
+                )
+            },
+        )
+        self.assertEqual(from_payload, _reduce(arguments))
+
+    def test_raw_schema7_extractor_rejects_layout_and_model_drift(self) -> None:
+        for overrides, message in (
+            ({"restart_schema": 6}, "schema-7 restart probe failed"),
+            ({"real_fields": 25}, "real-field count drifted"),
+            ({"integer_fields": 5}, "integer-field count drifted"),
+            ({"state_kind": 0}, "state is not p/m"),
+            ({"deltaf_mode": 1}, "delta-f mode is not off"),
+        ):
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(reducer.ParticleStateError, message):
+                    reducer.extract_schema7_particle_state(
+                        _restart_payload(**overrides), source="fixture.rst"
+                    )
+        with self.assertRaisesRegex(reducer.ParticleStateError, "schema-7 restart probe failed"):
+            reducer.extract_schema7_particle_state(_restart_payload()[:-8], source="fixture.rst")
 
     def test_schema_state_deltaf_and_species_binding_fail_closed(self) -> None:
         for key, value, message in (

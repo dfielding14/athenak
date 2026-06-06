@@ -9,9 +9,15 @@ the arrays consumed here.  The reducer has no launch or scientific authority.
 from __future__ import annotations
 
 import math
+import struct
 from typing import Any, Mapping
 
 import numpy as np
+
+if __package__:
+    from . import q011_section54_restart as restart_layout
+else:
+    import q011_section54_restart as restart_layout
 
 
 SCHEMA_VERSION = 1
@@ -20,6 +26,21 @@ CAMPAIGN_ID = "Q019-HR-VOLUME-AWARE-NOHALL"
 CLAIM_ID = "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001"
 RESTART_SCHEMA = 7
 STATE_KIND = "mass_normalized_momentum"
+_PIC_METADATA_FORMAT = "<15i"
+_MODEL_INTEGER_COUNT = 31
+_MODEL_REAL_COUNT = 37
+_DEPOSIT_QSCALE_MODEL_REAL_INDEX = 20
+_EXPECTED_REAL_FIELDS = 26
+_EXPECTED_INTEGER_FIELDS = 4
+_IPVX = 1
+_IPVY = 3
+_IPVZ = 5
+_IPM = 6
+_IPBX = 7
+_IPBY = 8
+_IPBZ = 9
+_IPWT = 22
+_PSP = 2
 
 
 class ParticleStateError(ValueError):
@@ -135,6 +156,71 @@ def _reference_budget(value: object) -> dict[str, object]:
         "reference_budget/total_energy must be a finite non-negative float",
     )
     return {"total_momentum": momentum.tolist(), "total_energy": energy}
+
+
+def extract_schema7_particle_state(
+    payload: bytes, *, source: str = "<restart-bytes>"
+) -> dict[str, object]:
+    """Extract the exact Q019 particle fields from validated schema-7 bytes."""
+    _require(type(payload) is bytes, f"{source}: restart payload must be bytes")
+    try:
+        probe = restart_layout.probe_schema7_restart_payload(payload, source=source)
+    except restart_layout.RestartPolicyError as error:
+        raise ParticleStateError(f"{source}: schema-7 restart probe failed") from error
+    _require(
+        probe.real_fields_per_particle == _EXPECTED_REAL_FIELDS,
+        f"{source}: particle real-field count drifted",
+    )
+    _require(
+        probe.integer_fields_per_particle == _EXPECTED_INTEGER_FIELDS,
+        f"{source}: particle integer-field count drifted",
+    )
+    marker = struct.pack("<Q", restart_layout.PIC_RESTART_MAGIC)
+    marker_offset = payload.find(marker)
+    metadata_offset = marker_offset + len(marker)
+    metadata = struct.unpack_from(_PIC_METADATA_FORMAT, payload, metadata_offset)
+    state_kind = metadata[13]
+    _require(state_kind == 1, f"{source}: restart particle state is not p/m")
+    offset = metadata_offset + struct.calcsize(_PIC_METADATA_FORMAT)
+    light_speed = struct.unpack_from("<d", payload, offset)[0]
+    offset += struct.calcsize("<d")
+    model_ints = struct.unpack_from(f"<{_MODEL_INTEGER_COUNT}i", payload, offset)
+    offset += _MODEL_INTEGER_COUNT * struct.calcsize("<i")
+    model_reals = struct.unpack_from(f"<{_MODEL_REAL_COUNT}d", payload, offset)
+    _require(model_ints[0] == 0, f"{source}: restart delta-f mode is not off")
+    _positive_float(light_speed, label=f"{source}/artificial_light_speed")
+    deposit_qscale = model_reals[_DEPOSIT_QSCALE_MODEL_REAL_INDEX]
+    _positive_float(deposit_qscale, label=f"{source}/deposit_qscale")
+
+    real_values = np.frombuffer(
+        payload,
+        dtype="<f8",
+        count=probe.particle_count * probe.real_fields_per_particle,
+        offset=probe.particle_real_offset,
+    ).reshape(probe.particle_count, probe.real_fields_per_particle)
+    integer_values = np.frombuffer(
+        payload,
+        dtype="<i4",
+        count=probe.particle_count * probe.integer_fields_per_particle,
+        offset=probe.particle_integer_offset,
+    ).reshape(probe.particle_count, probe.integer_fields_per_particle)
+    required_reals = real_values[
+        :,
+        [_IPVX, _IPVY, _IPVZ, _IPM, _IPBX, _IPBY, _IPBZ, _IPWT],
+    ]
+    _require(np.all(np.isfinite(required_reals)), f"{source}: required particle fields are nonfinite")
+    return {
+        "restart_schema": probe.restart_schema,
+        "state_kind": STATE_KIND,
+        "deltaf_mode": "off",
+        "momentum_per_mass": real_values[:, [_IPVX, _IPVY, _IPVZ]].copy(),
+        "sampled_magnetic_field": real_values[:, [_IPBX, _IPBY, _IPBZ]].copy(),
+        "macro_weight": real_values[:, _IPWT].copy(),
+        "species": integer_values[:, _PSP].copy(),
+        "particle_q_over_mc": real_values[:, _IPM].copy(),
+        "deposit_qscale": float(deposit_qscale),
+        "artificial_light_speed": float(light_speed),
+    }
 
 
 def reduce_schema7_particle_state(
@@ -317,3 +403,29 @@ def reduce_schema7_particle_state(
             "no launch, qualification, mechanism classification, or scientific claim authority",
         ],
     }
+
+
+def reduce_schema7_restart_payload(
+    payload: bytes,
+    *,
+    source: str,
+    species_mass: object,
+    species_q_over_mc: object,
+    domain_volume: float,
+    gas_bulk_velocity: object,
+    guide_field_direction: object,
+    mhd_budget: object,
+    reference_budget: object | None = None,
+) -> dict[str, Any]:
+    """Extract and reduce one raw schema-7 restart payload."""
+    extracted = extract_schema7_particle_state(payload, source=source)
+    return reduce_schema7_particle_state(
+        **extracted,
+        species_mass=species_mass,
+        species_q_over_mc=species_q_over_mc,
+        domain_volume=domain_volume,
+        gas_bulk_velocity=gas_bulk_velocity,
+        guide_field_direction=guide_field_direction,
+        mhd_budget=mhd_budget,
+        reference_budget=reference_budget,
+    )
