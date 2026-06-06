@@ -244,7 +244,8 @@ def policy():
     value = acceptance.load_validated_policy(
         acceptance.DEFAULT_CRITERIA, acceptance.DEFAULT_CRITERIA_REVIEW
     )
-    value["replay_tools_approved"] = True
+    assert value["replay_tools_approved"] is True
+    assert value["replay_tools_review_status"] == "approved"
     return value
 
 
@@ -391,13 +392,22 @@ def test_offline_multistate_inventory_tests_mechanics_but_is_non_authorizing(
     ] == [2, 3]
 
 
-def test_pending_independent_review_blocks_ct_inventory_replay(tmp_path):
-    pending = acceptance.load_validated_policy(
+def test_approved_ct_inventory_replay_rejects_nonidentical_inventory(tmp_path):
+    approved = acceptance.load_validated_policy(
         acceptance.DEFAULT_CRITERIA, acceptance.DEFAULT_CRITERIA_REVIEW
     )
-    inventory_path, _ = build_inventory(pending, tmp_path, nmb_total=5, rank_count=2)
-    with pytest.raises(acceptance.AcceptanceError, match="pending independent replay review"):
-        acceptance.validate_ct_inventory(pending, "R02", inventory_path)
+    assert approved["replay_tools_approved"] is True
+    inventory_path, _ = build_inventory(approved, tmp_path, nmb_total=5, rank_count=2)
+    _, _, _, _, canonical = acceptance.validate_ct_inventory(
+        approved, "R02", inventory_path
+    )
+    assert canonical is None
+
+    inventory = json.loads(inventory_path.read_text())
+    inventory["unreviewed_extra"] = True
+    write_json(inventory_path, inventory)
+    with pytest.raises(acceptance.AcceptanceError, match="differs from exact deterministic replay"):
+        acceptance.validate_ct_inventory(approved, "R02", inventory_path)
 
 
 def test_builder_deterministically_reconstructs_inventory_accepted_by_auditor(

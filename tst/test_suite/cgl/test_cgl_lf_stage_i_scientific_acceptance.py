@@ -252,8 +252,13 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     assert policy["criteria"]["scientific_products_policy"]["reviewed_generator_binding"][
         "status"
     ] == "exact_replay_tool_bound"
-    assert policy["replay_tools_approved"] is False
-    assert policy["replay_tools_review_status"] == "pending_independent_review"
+    assert policy["replay_tools_approved"] is True
+    assert policy["replay_tools_review_status"] == "approved"
+    assert policy["review"]["replay_tool_promotion_review"]["reviewer"] == {
+        "role": "scientific_replay_security",
+        "reviewer_id": "019e9ba3-4e89-7b52-92ef-dd9df89f1aab",
+        "independent_of_implementation": True,
+    }
     assert "analyzer_contract" not in policy["criteria"]["source_bindings"]
     assert policy["verified_sources"]["reviewed_f116_source_authority_evidence"]["sha256"] == (
         "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a"
@@ -265,8 +270,10 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     acceptance.verify_evidence_digest(evidence, "criteria validation")
     assert evidence["valid"] is True
     assert evidence["independent_review_complete"] is True
-    assert evidence["replay_tool_promotion_review_status"] == "pending_independent_review"
-    assert evidence["replay_tools_approved"] is False
+    assert evidence["replay_tool_promotion_review_status"] == "approved"
+    assert evidence["replay_tools_approved"] is True
+    assert evidence["release_authorizing"] is False
+    assert evidence["authority"] == "non-authorizing-policy-validation"
 
 
 def test_approved_review_schema_requires_exact_completed_reviews(policy):
@@ -981,7 +988,7 @@ def diagnostics_contract(
     }
 
 
-def test_hand_authored_diagnostics_never_pass_without_reviewed_generator(policy, tmp_path):
+def test_hand_authored_diagnostics_fail_closed_without_exact_replay_binding(policy, tmp_path):
     mhd, user = histories(tmp_path / "history")
     bundle_path = tmp_path / "bundle.json"
     write_json(bundle_path, {"binding_only": True})
@@ -995,8 +1002,8 @@ def test_hand_authored_diagnostics_never_pass_without_reviewed_generator(policy,
         policy, "R02", "full", diagnostics, bundle, mhd_binding, user_binding
     )
     assert trusted is None
-    assert result["result"] == "inconclusive"
-    assert "hand-authored products cannot pass" in result["reason"]
+    assert result["result"] == "fail"
+    assert "lacks an exact external binding for replay" in result["reason"]
 
     forged = deepcopy(diagnostics)
     forged["scientific_acceptance_contract"]["mhd_history"]["sha256"] = "0" * 64
@@ -1004,7 +1011,8 @@ def test_hand_authored_diagnostics_never_pass_without_reviewed_generator(policy,
         policy, "R02", "full", forged, bundle, mhd_binding, user_binding
     )
     assert trusted is None
-    assert result["result"] == "inconclusive"
+    assert result["result"] == "fail"
+    assert "lacks an exact external binding for replay" in result["reason"]
 
 
 def test_promoted_scientific_products_pass_only_after_exact_replay(
@@ -1137,7 +1145,9 @@ def panel_diagnostics(product: str, full: dict, early: dict, late: dict) -> dict
     }
 
 
-def test_panel_metric_recomputation_is_available_but_hand_authored_panel_never_passes(policy):
+def test_panel_metric_recomputation_is_available_but_unreplayed_panel_never_passes(
+    policy, tmp_path
+):
     product = "fig9_alignment_active_alfvenic_beta10"
     diagnostics = panel_diagnostics(
         product,
@@ -1156,10 +1166,27 @@ def test_panel_metric_recomputation_is_available_but_hand_authored_panel_never_p
     )
     assert rms == pytest.approx(0.2)
     assert maximum == pytest.approx(0.2)
-    records = acceptance.panel_product_assessments(policy, "R02", diagnostics)
+    mhd, user = histories(tmp_path / "history")
+    bundle_path = tmp_path / "bundle.json"
+    write_json(bundle_path, {"binding_only": True})
+    trusted, contract_gate = acceptance.validate_diagnostics_contract(
+        policy,
+        "R02",
+        "full",
+        diagnostics["full"],
+        {"bundle_manifest": acceptance.regular_file_binding(bundle_path, "bundle")},
+        acceptance.regular_file_binding(mhd, "MHD"),
+        acceptance.regular_file_binding(user, "user"),
+    )
+    assert trusted is None
+    assert contract_gate["result"] == "fail"
+    assert "lacks an exact external binding for replay" in contract_gate["reason"]
+    records = acceptance.panel_product_assessments(
+        policy, "R02", {"full": trusted, "early": None, "late": None}
+    )
     record = next(item for item in records if item.get("product_id") == product)
     assert record["result"] == "inconclusive"
-    assert "reviewed scientific-products generator" in record["reason"]
+    assert "full-window reference comparison is unavailable" in record["reason"]
 
 
 def test_panel_gate_rejects_forged_summaries_and_never_passes_unavailable_product(policy):
@@ -1397,8 +1424,10 @@ def test_campaign_approved_review_passes_but_other_authorities_still_block(
         gate for gate in campaign["gates"]
         if gate["name"] == "R16_R02_R17_resolution_convergence"
     )
-    assert products_gate["result"] == "inconclusive"
+    assert products_gate["result"] == "pass"
     assert convergence_gate["result"] == "inconclusive"
+    assert campaign["release_authorizing"] is False
+    assert campaign["authority"] == "non-authorizing-scientific-assessment"
 
 
 def test_campaign_rejects_incomplete_or_voluntary_case_declaration(

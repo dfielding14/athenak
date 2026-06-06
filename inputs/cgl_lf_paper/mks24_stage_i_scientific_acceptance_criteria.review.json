@@ -39,17 +39,17 @@
       "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
       "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade"
     },
-    "decision": "pending",
+    "decision": "approved",
     "required_checks": [
       "The acceptance utility invokes the exact bound scientific-products generator replay verifier and rejects any non-identical replay.",
       "The acceptance utility invokes the exact bound CT inventory builder and rejects any inventory not exactly reconstructed from its bound accepted bundle.",
       "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
       "All replay and catalog-selection behavior remains non-authorizing and fails closed."
     ],
-    "review_status": "pending_independent_review",
+    "review_status": "approved",
     "reviewer": {
-      "independent_of_implementation": null,
-      "reviewer_id": "PENDING_INDEPENDENT_REVIEWER",
+      "independent_of_implementation": true,
+      "reviewer_id": "019e9ba3-4e89-7b52-92ef-dd9df89f1aab",
       "role": "scientific_replay_security"
     },
     "scientific_products_generator": {
