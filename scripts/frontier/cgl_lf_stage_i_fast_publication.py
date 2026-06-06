@@ -12,8 +12,10 @@ the canonical manifest is therefore the last-published authority.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import csv
 from dataclasses import dataclass, field
+import fcntl
 import hashlib
 import io
 import json
@@ -25,7 +27,7 @@ import re
 import sys
 import tempfile
 import textwrap
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 
 CASE_IDS = tuple(f"R{number:02d}" for number in range(2, 18))
@@ -5429,6 +5431,11 @@ def canonical_product_records(
 
     staging = staging.absolute()
     output = output.absolute()
+    if staging.is_symlink() or not staging.is_dir():
+        raise PublicationError(
+            f"publication staging root is missing, invalid, or a symlink: {staging}"
+        )
+    resolved_staging = staging.resolve(strict=True)
     records: list[tuple[Path, Path, dict[str, object]]] = []
     seen: set[Path] = set()
     for staged in sorted(path.absolute() for path in products):
@@ -5438,11 +5445,32 @@ def canonical_product_records(
             raise PublicationError(
                 f"staged publication product escapes staging root: {staged}"
             ) from error
-        if relative == Path("manifest.json"):
-            raise PublicationError("manifest.json may not be promoted as a product")
-        if not staged.is_file():
-            raise PublicationError(f"staged publication product is missing: {staged}")
+        if not relative.parts or ".." in relative.parts:
+            raise PublicationError(
+                f"staged publication product escapes staging root: {staged}"
+            )
+        if relative.parts[0] == "manifest.json":
+            raise PublicationError(
+                "manifest.json may not be promoted as a product or product directory"
+            )
+        if staged.is_symlink() or not staged.is_file():
+            raise PublicationError(
+                f"staged publication product is missing, invalid, or a symlink: {staged}"
+            )
+        try:
+            resolved_staged = staged.resolve(strict=True)
+            resolved_staged.relative_to(resolved_staging)
+        except (OSError, ValueError) as error:
+            raise PublicationError(
+                f"staged publication product escapes staging root: {staged}"
+            ) from error
         canonical = output / relative
+        try:
+            canonical.relative_to(output)
+        except ValueError as error:
+            raise PublicationError(
+                f"canonical publication product escapes output root: {canonical}"
+            ) from error
         if canonical in seen:
             raise PublicationError(f"duplicate canonical publication product: {canonical}")
         seen.add(canonical)
@@ -5468,8 +5496,319 @@ def canonical_product_bindings(
 def promote_file(staged: Path, canonical: Path) -> None:
     """Atomically replace one canonical file with its staged sibling-FS file."""
 
-    canonical.parent.mkdir(parents=True, exist_ok=True)
+    if canonical.parent.is_symlink() or not canonical.parent.is_dir():
+        raise PublicationError(
+            f"canonical publication parent is missing, invalid, or a symlink: "
+            f"{canonical.parent}"
+        )
     os.replace(staged, canonical)
+
+
+def publication_lock_path(output: Path) -> Path:
+    """Return the persistent sibling lock serializing canonical publication."""
+
+    return output.parent / f".{output.name}.publication.lock"
+
+
+def publication_ownership_path(output: Path) -> Path:
+    """Return the persistent sibling ownership record for canonical output."""
+
+    return output.parent / f".{output.name}.publication-owner.json"
+
+
+def normalized_filesystem_path(path: Path) -> Path:
+    """Return one absolute path with existing symlinked ancestors resolved."""
+
+    return path.expanduser().resolve(strict=False)
+
+
+def path_contains(root: Path, path: Path) -> bool:
+    """Return whether one normalized path equals or contains another."""
+
+    normalized_root = normalized_filesystem_path(root)
+    normalized_path = normalized_filesystem_path(path)
+    return (
+        normalized_path == normalized_root
+        or normalized_path.is_relative_to(normalized_root)
+    )
+
+
+def validate_publication_output_overlap(
+    analysis: Path, output: Path, evidence_paths: Iterable[Path]
+) -> None:
+    """Reject output roots that could delete analysis or discovered evidence."""
+
+    if path_contains(output, analysis):
+        raise PublicationError(
+            f"publication output may not equal or contain the analysis root: {output}"
+        )
+    overlapping = sorted({
+        normalized_filesystem_path(path)
+        for path in evidence_paths
+        if path_contains(output, path)
+    })
+    if overlapping:
+        raise PublicationError(
+            "publication output contains discovered source or acceptance evidence: "
+            + ", ".join(str(path) for path in overlapping)
+        )
+
+
+def publication_ownership_record(output: Path) -> dict[str, object]:
+    """Return the persistent ownership proof for one canonical output root."""
+
+    return {
+        "schema_version": 1,
+        "record_type": "cgl_lf_stage_i_fast_publication_output_ownership",
+        "output": str(normalized_filesystem_path(output)),
+        "authority": "cgl_lf_stage_i_fast_publication.py",
+    }
+
+
+def valid_publication_ownership(output: Path) -> bool:
+    """Return whether the persistent sibling ownership record binds output."""
+
+    path = publication_ownership_path(output)
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        return load_json(path) == publication_ownership_record(output)
+    except (OSError, json.JSONDecodeError, PublicationError):
+        return False
+
+
+def output_is_empty(output: Path) -> bool:
+    """Return whether canonical output is absent or an empty directory."""
+
+    if not output.exists():
+        return True
+    if not output.is_dir():
+        return False
+    return next(output.iterdir(), None) is None
+
+
+def manifest_output_path(record: dict[str, Any]) -> Path | None:
+    """Return the output path bound by one normalized publication invocation."""
+
+    invocation = record.get("normalized_invocation")
+    if not isinstance(invocation, list):
+        return None
+    indices = [
+        index
+        for index, value in enumerate(invocation)
+        if value == "--output" and index + 1 < len(invocation)
+    ]
+    if len(indices) != 1 or not isinstance(invocation[indices[0] + 1], str):
+        return None
+    return normalized_filesystem_path(Path(invocation[indices[0] + 1]))
+
+
+def valid_existing_publication_manifest(output: Path) -> bool:
+    """Return whether the existing canonical manifest proves output ownership."""
+
+    manifest_path = output / "manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        return False
+    try:
+        manifest = load_json(manifest_path)
+    except (OSError, json.JSONDecodeError, PublicationError):
+        return False
+    if (
+        manifest.get("record_type") != "cgl_lf_stage_i_fast_publication_products"
+        or manifest_output_path(manifest) != normalized_filesystem_path(output)
+    ):
+        return False
+    products = manifest.get("products")
+    if not isinstance(products, list) or not products:
+        return False
+    seen: set[Path] = set()
+    for index, binding in enumerate(products):
+        canonical = binding_path(binding)
+        if canonical is None or ".." in canonical.parts:
+            return False
+        canonical = normalized_filesystem_path(canonical)
+        if (
+            canonical == normalized_filesystem_path(output / "manifest.json")
+            or not canonical.is_relative_to(normalized_filesystem_path(output))
+            or canonical in seen
+            or canonical.is_symlink()
+            or verify_file_binding(binding, f"existing publication product {index}")
+        ):
+            return False
+        seen.add(canonical)
+    return True
+
+
+def require_or_create_publication_ownership(output: Path) -> None:
+    """Require ownership proof, creating it only for absent or empty output."""
+
+    ownership_path = publication_ownership_path(output)
+    if ownership_path.is_symlink():
+        raise PublicationError(
+            f"publication ownership record may not be a symlink: {ownership_path}"
+        )
+    if ownership_path.exists():
+        if valid_publication_ownership(output):
+            return
+        raise PublicationError(
+            f"publication ownership record is invalid: {ownership_path}"
+        )
+    if output_is_empty(output):
+        write_json(ownership_path, publication_ownership_record(output))
+        return
+    if valid_existing_publication_manifest(output):
+        return
+    raise PublicationError(
+        "refusing destructive publication cleanup of nonempty unowned output: "
+        f"{output}"
+    )
+
+
+@contextmanager
+def exclusive_publication_lock(output: Path) -> Iterator[Path]:
+    """Hold the exclusive sibling lock for one canonical publication commit."""
+
+    lock_path = publication_lock_path(output)
+    if lock_path.is_symlink():
+        raise PublicationError(
+            f"publication sibling lock may not be a symlink: {lock_path}"
+        )
+    flags = os.O_CREAT | os.O_RDWR
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(lock_path, flags, 0o600)
+    except OSError as error:
+        raise PublicationError(
+            f"cannot open publication sibling lock without following symlinks: {lock_path}"
+        ) from error
+    locked = False
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        locked = True
+        yield lock_path
+    finally:
+        if locked:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def validate_canonical_output_tree(output: Path) -> None:
+    """Reject canonical output roots and descendants that use symlinks."""
+
+    if output.is_symlink():
+        raise PublicationError(
+            f"publication output root may not be a symlink: {output}"
+        )
+    if not output.exists():
+        return
+    if not output.is_dir():
+        raise PublicationError(f"publication output root is not a directory: {output}")
+    for root, directories, files in os.walk(output, topdown=True, followlinks=False):
+        root_path = Path(root)
+        for name in sorted([*directories, *files]):
+            path = root_path / name
+            if path.is_symlink():
+                raise PublicationError(
+                    f"canonical publication descendant may not be a symlink: {path}"
+                )
+
+
+def expected_canonical_directories(
+    output: Path, products: Iterable[Path]
+) -> set[Path]:
+    """Return the exact canonical directories required by the products."""
+
+    expected = {output}
+    for product in products:
+        parent = product.parent
+        while parent != output:
+            try:
+                parent.relative_to(output)
+            except ValueError as error:
+                raise PublicationError(
+                    f"canonical publication product escapes output root: {product}"
+                ) from error
+            expected.add(parent)
+            parent = parent.parent
+    return expected
+
+
+def remove_obsolete_canonical_paths(
+    output: Path, products: Iterable[Path], directories: set[Path]
+) -> None:
+    """Remove every canonical file and directory not in the staged publication."""
+
+    expected_products = set(products)
+    for root, child_directories, files in os.walk(
+        output, topdown=False, followlinks=False
+    ):
+        root_path = Path(root)
+        for name in sorted(files):
+            path = root_path / name
+            if path not in expected_products:
+                path.unlink()
+        for name in sorted(child_directories):
+            path = root_path / name
+            if path not in directories:
+                path.rmdir()
+
+
+def prepare_canonical_parent(output: Path, canonical: Path) -> None:
+    """Create a canonical parent path without following output-tree symlinks."""
+
+    try:
+        relative_parent = canonical.parent.relative_to(output)
+    except ValueError as error:
+        raise PublicationError(
+            f"canonical publication product escapes output root: {canonical}"
+        ) from error
+    current = output
+    for part in relative_parent.parts:
+        current = current / part
+        if current.is_symlink():
+            raise PublicationError(
+                f"canonical publication descendant may not be a symlink: {current}"
+            )
+        if current.exists():
+            if not current.is_dir():
+                raise PublicationError(
+                    f"canonical publication parent is not a directory: {current}"
+                )
+        else:
+            current.mkdir()
+
+
+def verify_exact_canonical_products(
+    output: Path,
+    products: Iterable[Path],
+    directories: set[Path],
+    bindings: Iterable[dict[str, object]],
+) -> None:
+    """Verify the manifest-withdrawn tree exactly matches staged products."""
+
+    validate_canonical_output_tree(output)
+    expected_products = set(products)
+    actual_products: set[Path] = set()
+    actual_directories = {output}
+    for root, child_directories, files in os.walk(
+        output, topdown=True, followlinks=False
+    ):
+        root_path = Path(root)
+        actual_directories.update(root_path / name for name in child_directories)
+        actual_products.update(root_path / name for name in files)
+    if actual_products != expected_products or actual_directories != directories:
+        raise PublicationError(
+            "canonical publication tree differs from the staged publication"
+        )
+    for binding in bindings:
+        canonical = Path(str(binding["path"]))
+        if source_binding(canonical) != binding:
+            raise PublicationError(
+                f"promoted publication product differs from staged binding: {canonical}"
+            )
 
 
 def promote_staged_publication(
@@ -5477,11 +5816,17 @@ def promote_staged_publication(
     output: Path,
     products: Iterable[Path],
     manifest: dict[str, object],
+    *,
+    analysis: Path,
+    evidence_paths: Iterable[Path],
 ) -> Path:
     """Promote products atomically and publish their canonical manifest last."""
 
     staging = staging.absolute()
     output = output.absolute()
+    analysis = analysis.absolute()
+    evidence_paths = tuple(path.absolute() for path in evidence_paths)
+    validate_publication_output_overlap(analysis, output, evidence_paths)
     if staging.parent.resolve(strict=True) != output.parent.resolve(strict=True):
         raise PublicationError("publication staging directory must be a sibling of output")
     records = canonical_product_records(products, staging, output)
@@ -5493,23 +5838,33 @@ def promote_staged_publication(
 
     staged_manifest = staging / "manifest.json"
     write_json(staged_manifest, manifest)
-    output.mkdir(parents=True, exist_ok=True)
+    canonical_products = [canonical for _, canonical, _ in records]
+    canonical_directories = expected_canonical_directories(output, canonical_products)
     canonical_manifest = output / "manifest.json"
 
-    # Withdraw the previous authority before any canonical product is replaced.
-    # An interrupted promotion therefore leaves no manifest that could bless a
-    # mixed old/new product tree.  A later rerun replaces every product and
-    # republishes the authority.
-    if canonical_manifest.exists() or canonical_manifest.is_symlink():
-        canonical_manifest.unlink()
-    for staged, canonical, _ in records:
-        promote_file(staged, canonical)
-    for _, canonical, binding in records:
-        if source_binding(canonical) != binding:
-            raise PublicationError(
-                f"promoted publication product differs from staged binding: {canonical}"
-            )
-    promote_file(staged_manifest, canonical_manifest)
+    with exclusive_publication_lock(output):
+        validate_publication_output_overlap(analysis, output, evidence_paths)
+        validate_canonical_output_tree(output)
+        require_or_create_publication_ownership(output)
+        if not output.exists():
+            output.mkdir()
+        validate_canonical_output_tree(output)
+
+        # Withdraw the previous authority before any canonical path is changed.
+        # Cleanup and product promotion happen under the sibling lock, so an
+        # interrupted or concurrent publisher can never bless a mixed tree.
+        if canonical_manifest.exists() and not canonical_manifest.is_dir():
+            canonical_manifest.unlink()
+        remove_obsolete_canonical_paths(
+            output, canonical_products, canonical_directories
+        )
+        for staged, canonical, _ in records:
+            prepare_canonical_parent(output, canonical)
+            promote_file(staged, canonical)
+        verify_exact_canonical_products(
+            output, canonical_products, canonical_directories, expected_bindings
+        )
+        promote_file(staged_manifest, canonical_manifest)
     return canonical_manifest
 
 
@@ -6098,17 +6453,29 @@ def main(argv: list[str] | None = None) -> int:
         if args.output is not None
         else analysis / "publication-products"
     )
+    acceptance_candidates = discover_acceptance_paths(analysis, args.acceptance)
     data = discover_data(analysis, args.acceptance)
+    evidence_paths = set(data.source_paths) | set(acceptance_candidates)
+    validate_publication_output_overlap(analysis, output, evidence_paths)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         dir=output.parent, prefix=f".{output.name}.staging-"
     ) as staging_value:
         staging = Path(staging_value).absolute()
         products = render_products(data, staging)
+        evidence_paths.update(data.source_paths)
+        validate_publication_output_overlap(analysis, output, evidence_paths)
         manifest = build_publication_manifest(
             data, analysis, output, args.acceptance, products, staging
         )
-        promote_staged_publication(staging, output, products, manifest)
+        promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=analysis,
+            evidence_paths=evidence_paths,
+        )
     print(
         f"rendered {len(products)} publication products in {output}; "
         f"acceptance_records={len(data.acceptance_records)}, "

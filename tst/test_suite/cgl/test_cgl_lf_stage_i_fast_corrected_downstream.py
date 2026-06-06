@@ -175,7 +175,7 @@ def add_publication_attempt(
     name: str,
     dependencies: list[str],
     job_id: str,
-    exit_code: int,
+    exit_code: int | None,
 ) -> Path:
     workflow = fixture["workflow"]
     context = fixture["context"]
@@ -200,8 +200,75 @@ def add_publication_attempt(
         "dependency_job_ids": dependencies,
     })
     downstream.prepare_generic_job(manifest)
-    write_artifact(attempt / "exit_code.txt", f"{exit_code}\n")
+    if exit_code is not None:
+        write_artifact(attempt / "exit_code.txt", f"{exit_code}\n")
     return attempt
+
+
+def scheduler_observation(
+    disposition: str, state: str, reason: str = ""
+) -> dict[str, str]:
+    return {
+        "disposition": disposition,
+        "state": state,
+        "reason": reason,
+        "source": "test",
+    }
+
+
+def install_scheduler_observations(
+    downstream, monkeypatch, observations: dict[str, dict[str, str]]
+) -> None:
+    def observe(job_id: str) -> dict[str, str]:
+        if job_id not in observations:
+            raise downstream.CorrectedDownstreamError(
+                f"unexpected scheduler job in test: {job_id}"
+            )
+        return observations[job_id]
+
+    monkeypatch.setattr(downstream, "publication_scheduler_observation", observe)
+
+
+def install_retry_context(
+    downstream,
+    monkeypatch,
+    fixture: dict[str, object],
+    upstream: dict[str, object],
+) -> None:
+    monkeypatch.setattr(
+        downstream,
+        "load_workflow",
+        lambda _root: (fixture["workflow"], fixture["workflow_binding"]),
+    )
+    monkeypatch.setattr(
+        downstream, "workflow_context", lambda _workflow: fixture["context"]
+    )
+    monkeypatch.setattr(
+        downstream,
+        "completed_hyperbolicity",
+        lambda _workflow, _context: upstream["hyper"],
+    )
+    monkeypatch.setattr(
+        downstream,
+        "completed_analysis",
+        lambda _workflow, _context: upstream["analysis"],
+    )
+    monkeypatch.setattr(
+        downstream, "completed_ct", lambda _workflow, _context: upstream["ct"]
+    )
+
+
+def publication_source_bindings(upstream: dict[str, object]) -> list[dict[str, object]]:
+    sources = [
+        record[key]
+        for record in upstream["hyper"].values()
+        for key in ("manifest", "result")
+    ]
+    sources.extend(
+        record["diagnostics"] for record in upstream["analysis"].values()
+    )
+    sources.append(upstream["ct"]["audit"])
+    return sources
 
 
 def campaign_fixture(
@@ -577,30 +644,16 @@ def test_retry_publication_submits_fresh_attempt_bound_to_current_upstream_jobs(
     upstream = completed_upstream_fixture(tmp_path)
     calls: list[list[str]] = []
 
-    monkeypatch.setattr(
+    install_retry_context(downstream, monkeypatch, fixture, upstream)
+    install_scheduler_observations(
         downstream,
-        "load_workflow",
-        lambda _root: (fixture["workflow"], fixture["workflow_binding"]),
-    )
-    monkeypatch.setattr(
-        downstream, "workflow_context", lambda _workflow: fixture["context"]
-    )
-    monkeypatch.setattr(
-        downstream,
-        "completed_hyperbolicity",
-        lambda _workflow, _context: upstream["hyper"],
-    )
-    monkeypatch.setattr(
-        downstream,
-        "completed_analysis",
-        lambda _workflow, _context: upstream["analysis"],
-    )
-    monkeypatch.setattr(
-        downstream, "completed_ct", lambda _workflow, _context: upstream["ct"]
+        monkeypatch,
+        {"100": scheduler_observation("quiescent", "FAILED")},
     )
 
     def submit(command, **_kwargs):
         calls.append(command)
+        assert (Path(command[-1]).parent / downstream.SUBMISSION_INTENT_NAME).is_file()
         return SimpleNamespace(stdout="900;frontier\n")
 
     monkeypatch.setattr(downstream.subprocess, "run", submit)
@@ -632,6 +685,7 @@ def test_submit_manifest_job_records_dependencies_before_scheduler_submission(
     def submit(_command, **_kwargs):
         manifest = json.loads((job / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["dependency_job_ids"] == ["201", "202"]
+        assert (job / downstream.SUBMISSION_INTENT_NAME).is_file()
         return SimpleNamespace(stdout="900;frontier\n")
 
     monkeypatch.setattr(downstream.subprocess, "run", submit)
@@ -642,15 +696,250 @@ def test_submit_manifest_job_records_dependencies_before_scheduler_submission(
     assert manifest["dependency_job_ids"] == ["201", "202"]
 
 
-def test_retry_publication_refuses_duplicate_while_matching_attempt_is_pending(
+def test_submit_manifest_job_fault_after_intent_never_resubmits(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    job = tmp_path / "job"
+    write_json(job / "manifest.json", {"job_id": None})
+    write_artifact(job / "run.sbatch", "#!/bin/bash\n")
+    calls = 0
+
+    def interrupted(_command, **_kwargs):
+        nonlocal calls
+        calls += 1
+        assert (job / downstream.SUBMISSION_INTENT_NAME).is_file()
+        raise OSError("simulated interruption after durable intent")
+
+    monkeypatch.setattr(downstream.subprocess, "run", interrupted)
+    with pytest.raises(OSError, match="simulated interruption"):
+        downstream.submit_manifest_job(job, ["201"])
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="submission intent exists without recorded job ID; refusing resubmit",
+    ):
+        downstream.submit_manifest_job(job, ["201"])
+    assert calls == 1
+    assert json.loads(
+        (job / downstream.SUBMISSION_INTENT_NAME).read_text(encoding="utf-8")
+    )["dependency_job_ids"] == ["201"]
+
+
+def test_schema_v1_initial_publication_falls_back_to_immutable_submission(
+    downstream, tmp_path
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    manifest_path = fixture["initial"] / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.pop("dependency_job_ids")
+    write_json(manifest_path, manifest)
+    write_json(
+        fixture["root"] / "submission.json",
+        {
+            "schema_version": 1,
+            "record_type": "cgl_lf_stage_i_corrected_downstream_submission",
+            "workflow": binding(fixture["root"] / "workflow.json"),
+            "jobs": {
+                "hyperbolicity": {"R02": "101"},
+                "analysis": {"R02": "102"},
+                "ct": "103",
+                "publication": "100",
+            },
+            "publication_dependency": ["101", "102", "103"],
+        },
+    )
+
+    assert downstream.publication_attempt_dependency_ids(
+        fixture["workflow"], fixture["initial"], manifest
+    ) == ["101", "102", "103"]
+    submission_path = fixture["root"] / "submission.json"
+    submission = json.loads(submission_path.read_text(encoding="utf-8"))
+    submission["jobs"]["publication"] = "999"
+    write_json(submission_path, submission)
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="workflow submission publication dependencies differ",
+    ):
+        downstream.publication_attempt_dependency_ids(
+            fixture["workflow"], fixture["initial"], manifest
+        )
+
+    retry = add_publication_attempt(
+        downstream, fixture, "attempt-001", ["201"], "900", None
+    )
+    retry_manifest = json.loads((retry / "manifest.json").read_text(encoding="utf-8"))
+    retry_manifest.pop("dependency_job_ids")
+    write_json(retry / "manifest.json", retry_manifest)
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="publication retry attempt lacks direct dependency binding",
+    ):
+        downstream.publication_attempt_dependency_ids(
+            fixture["workflow"], retry, retry_manifest
+        )
+
+
+def test_retry_publication_is_idempotent_after_matching_success(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    successful = add_publication_attempt(
+        downstream, fixture, "attempt-001", ["201", "202", "203"], "900", 0
+    )
+    install_retry_context(downstream, monkeypatch, fixture, upstream)
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation("quiescent", "COMPLETED"),
+        },
+    )
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("successful retry must not submit"),
+    )
+
+    assert downstream.retry_publication(fixture["root"]) == successful
+    assert not (fixture["initial"].parent / "attempt-002").exists()
+
+
+def test_retry_publication_refuses_overlap_with_stale_active_attempt(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    add_publication_attempt(
+        downstream, fixture, "attempt-001", ["301", "302", "303"], "900", None
+    )
+    install_retry_context(downstream, monkeypatch, fixture, upstream)
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation("active", "PENDING"),
+        },
+    )
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("stale active retry must not submit"),
+    )
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="blocked by active stale or ambiguous attempts",
+    ):
+        downstream.retry_publication(fixture["root"])
+    assert not (fixture["initial"].parent / "attempt-002").exists()
+
+
+def test_retry_publication_unknown_scheduler_state_fails_without_submit(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    install_retry_context(downstream, monkeypatch, fixture, upstream)
+
+    def unknown(_job_id):
+        raise downstream.CorrectedDownstreamError("publication scheduler state is unknown")
+
+    monkeypatch.setattr(downstream, "publication_scheduler_observation", unknown)
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("unknown retry must not submit"),
+    )
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="publication scheduler state is unknown",
+    ):
+        downstream.retry_publication(fixture["root"])
+
+
+def test_retry_publication_is_idempotent_while_matching_attempt_is_active(
     downstream, tmp_path, monkeypatch
 ) -> None:
     fixture = publication_workflow_fixture(downstream, tmp_path)
     upstream = completed_upstream_fixture(tmp_path)
     pending = add_publication_attempt(
-        downstream, fixture, "attempt-001", ["201", "202", "203"], "900", 0
+        downstream, fixture, "attempt-001", ["201", "202", "203"], "900", None
     )
-    (pending / "exit_code.txt").unlink()
+    install_retry_context(downstream, monkeypatch, fixture, upstream)
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation("active", "RUNNING"),
+        },
+    )
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("active retry must not submit"),
+    )
+
+    assert downstream.retry_publication(fixture["root"]) == pending
+    assert not (fixture["initial"].parent / "attempt-002").exists()
+
+
+def test_publication_scheduler_observation_distinguishes_writer_states(
+    downstream, monkeypatch
+) -> None:
+    queue = {
+        "900": "900|RUNNING|None\n",
+        "901": "901|PENDING|DependencyNeverSatisfied\n",
+        "902": "",
+        "903": "",
+    }
+    accounting = {
+        "900": "",
+        "901": "901|PENDING|DependencyNeverSatisfied\n",
+        "902": "902|FAILED|NonZeroExitCode\n",
+        "903": "",
+    }
+
+    def query(command, **_kwargs):
+        job_id = command[command.index("-j") + 1]
+        if command[0] == "/usr/bin/squeue":
+            return SimpleNamespace(
+                returncode=1 if job_id == "902" else 0,
+                stdout=queue[job_id],
+                stderr=(
+                    "slurm_load_jobs error: Invalid job id specified"
+                    if job_id == "902"
+                    else ""
+                ),
+            )
+        return SimpleNamespace(
+            returncode=0, stdout=accounting[job_id], stderr=""
+        )
+
+    monkeypatch.setattr(downstream.subprocess, "run", query)
+
+    assert downstream.publication_scheduler_observation("900")["disposition"] == "active"
+    dependency = downstream.publication_scheduler_observation("901")
+    assert dependency["disposition"] == "quiescent"
+    assert dependency["reason"] == "DependencyNeverSatisfied"
+    assert downstream.publication_scheduler_observation("902")["state"] == "FAILED"
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="scheduler accounting is unknown",
+    ):
+        downstream.publication_scheduler_observation("903")
+
+
+def test_publication_quiescent_accepts_dependency_never_satisfied_and_rejects_active(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    add_publication_attempt(
+        downstream, fixture, "attempt-001", ["301"], "900", None
+    )
     monkeypatch.setattr(
         downstream,
         "load_workflow",
@@ -659,31 +948,35 @@ def test_retry_publication_refuses_duplicate_while_matching_attempt_is_pending(
     monkeypatch.setattr(
         downstream, "workflow_context", lambda _workflow: fixture["context"]
     )
-    monkeypatch.setattr(
+    install_scheduler_observations(
         downstream,
-        "completed_hyperbolicity",
-        lambda _workflow, _context: upstream["hyper"],
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation(
+                "quiescent", "PENDING", "DependencyNeverSatisfied"
+            ),
+        },
     )
-    monkeypatch.setattr(
-        downstream,
-        "completed_analysis",
-        lambda _workflow, _context: upstream["analysis"],
-    )
-    monkeypatch.setattr(
-        downstream, "completed_ct", lambda _workflow, _context: upstream["ct"]
-    )
+    assert downstream.publication_quiescent(fixture["root"]) == fixture["root"]
 
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation("active", "RUNNING"),
+        },
+    )
     with pytest.raises(
         downstream.CorrectedDownstreamError,
-        match="matching publication attempt is still pending",
+        match="publication attempts can still write",
     ):
-        downstream.retry_publication(fixture["root"])
-
-    assert not (fixture["initial"].parent / "attempt-002").exists()
+        downstream.publication_quiescent(fixture["root"])
 
 
 def test_completed_publication_selects_latest_successful_matching_attempt(
-    downstream, tmp_path
+    downstream, tmp_path, monkeypatch
 ) -> None:
     fixture = publication_workflow_fixture(downstream, tmp_path)
     upstream = completed_upstream_fixture(tmp_path)
@@ -694,21 +987,21 @@ def test_completed_publication_selects_latest_successful_matching_attempt(
         downstream, fixture, "attempt-002", ["201", "202", "203"], "901", 1
     )
     product = write_artifact(fixture["output"] / "report.md", "publication\n")
-    sources = [
-        record[key]["path"]
-        for record in upstream["hyper"].values()
-        for key in ("manifest", "result")
-    ]
-    sources.extend(
-        record["diagnostics"]["path"] for record in upstream["analysis"].values()
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation("quiescent", "COMPLETED"),
+            "901": scheduler_observation("quiescent", "FAILED"),
+        },
     )
-    sources.append(upstream["ct"]["audit"]["path"])
     write_json(
         fixture["output"] / "manifest.json",
         {
             "record_type": "cgl_lf_stage_i_fast_publication_products",
             "analysis_output": str(fixture["context"]["inventory_output"]),
-            "sources": [{"path": path} for path in sources],
+            "sources": publication_source_bindings(upstream),
             "products": [binding(product)],
         },
     )
@@ -728,13 +1021,85 @@ def test_completed_publication_selects_latest_successful_matching_attempt(
     assert completed["dependency_job_ids"] == ["201", "202", "203"]
 
 
+def test_completed_publication_rejects_stale_source_binding(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    add_publication_attempt(
+        downstream, fixture, "attempt-001", ["201", "202", "203"], "900", 0
+    )
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation("quiescent", "COMPLETED"),
+        },
+    )
+    product = write_artifact(fixture["output"] / "report.md", "publication\n")
+    sources = [dict(value) for value in publication_source_bindings(upstream)]
+    sources[0]["sha256"] = "0" * 64
+    write_json(
+        fixture["output"] / "manifest.json",
+        {
+            "record_type": "cgl_lf_stage_i_fast_publication_products",
+            "analysis_output": str(fixture["context"]["inventory_output"]),
+            "sources": sources,
+            "products": [binding(product)],
+        },
+    )
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="publication source SHA-256 differs",
+    ):
+        downstream.completed_publication(
+            fixture["workflow"],
+            fixture["context"],
+            upstream["hyper"],
+            upstream["analysis"],
+            upstream["ct"],
+        )
+    sources = [dict(value) for value in publication_source_bindings(upstream)]
+    sources[0]["size_bytes"] += 1
+    write_json(
+        fixture["output"] / "manifest.json",
+        {
+            "record_type": "cgl_lf_stage_i_fast_publication_products",
+            "analysis_output": str(fixture["context"]["inventory_output"]),
+            "sources": sources,
+            "products": [binding(product)],
+        },
+    )
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="publication source size differs",
+    ):
+        downstream.completed_publication(
+            fixture["workflow"],
+            fixture["context"],
+            upstream["hyper"],
+            upstream["analysis"],
+            upstream["ct"],
+        )
+
+
 def test_completed_publication_rejects_stale_retry_dependencies(
-    downstream, tmp_path
+    downstream, tmp_path, monkeypatch
 ) -> None:
     fixture = publication_workflow_fixture(downstream, tmp_path)
     upstream = completed_upstream_fixture(tmp_path)
     add_publication_attempt(
         downstream, fixture, "attempt-001", ["301", "302", "303"], "900", 0
+    )
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {
+            "100": scheduler_observation("quiescent", "FAILED"),
+            "900": scheduler_observation("quiescent", "COMPLETED"),
+        },
     )
 
     with pytest.raises(
@@ -758,6 +1123,12 @@ def test_retry_publication_cli_is_explicit(downstream, tmp_path) -> None:
     ])
 
     assert args.command == "retry-publication"
+    quiescent = downstream.build_parser().parse_args([
+        "publication-quiescent",
+        "--workflow-root",
+        str(tmp_path / "workflow"),
+    ])
+    assert quiescent.command == "publication-quiescent"
 
 
 def test_formula_binding_drift_is_rejected(

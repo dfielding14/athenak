@@ -7,6 +7,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import threading
 
 import pytest
 
@@ -383,6 +384,31 @@ def tree_bytes(root: Path) -> dict[str, bytes]:
     }
 
 
+def staged_publication(
+    publication,
+    staging: Path,
+    output: Path,
+    publisher: str,
+    values: dict[str, str],
+) -> tuple[list[Path], dict[str, object]]:
+    staging.mkdir()
+    products = []
+    for relative, value in values.items():
+        path = staging / relative
+        publication.write_text(path, value)
+        products.append(path)
+    return products, {
+        "record_type": "cgl_lf_stage_i_fast_publication_products",
+        "publisher": publisher,
+        "analysis_output": str((output.parent / "analysis").absolute()),
+        "normalized_invocation": ["renderer", "--output", str(output.absolute())],
+        "sources": [],
+        "products": publication.canonical_product_bindings(
+            products, staging, output
+        ),
+    }
+
+
 def test_staging_failure_preserves_previous_canonical_authority(
     publication, tmp_path, monkeypatch
 ):
@@ -421,9 +447,6 @@ def test_interrupted_promotion_withdraws_manifest_and_rerun_recovers(
     analysis = tmp_path / "analysis"
     analysis.mkdir()
     output = tmp_path / "publication"
-    publication.write_text(output / "a.txt", "old a\n")
-    publication.write_text(output / "b.txt", "old b\n")
-    publication.write_json(output / "manifest.json", {"authority": "old"})
 
     monkeypatch.setattr(
         publication,
@@ -456,9 +479,12 @@ def test_interrupted_promotion_withdraws_manifest_and_rerun_recovers(
     with pytest.raises(RuntimeError, match="interrupted promotion"):
         publication.main([str(analysis), "--output", str(output)])
 
+    ownership = publication.publication_ownership_path(output)
+    assert publication.valid_publication_ownership(output)
+    assert ownership.is_file()
     assert not (output / "manifest.json").exists()
     assert (output / "a.txt").read_text(encoding="utf-8") == "new a\n"
-    assert (output / "b.txt").read_text(encoding="utf-8") == "old b\n"
+    assert not (output / "b.txt").exists()
     assert list(tmp_path.glob(".publication.staging-*")) == []
 
     monkeypatch.setattr(publication, "promote_file", real_promote_file)
@@ -519,6 +545,437 @@ def test_main_commit_is_idempotent_and_uses_canonical_paths(
 
     assert tree_bytes(output) == first
     assert list(tmp_path.glob(".publication.staging-*")) == []
+
+
+def test_analysis_as_output_is_rejected_without_deleting_evidence(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "evidence"})
+    publication.write_text(analysis / "keep.txt", "keep evidence\n")
+    previous = tree_bytes(analysis)
+
+    with pytest.raises(
+        publication.PublicationError, match="equal or contain the analysis root"
+    ):
+        publication.main([str(analysis), "--output", str(analysis)])
+
+    assert tree_bytes(analysis) == previous
+    assert not publication.publication_ownership_path(analysis).exists()
+    assert not publication.publication_lock_path(analysis).exists()
+
+
+def test_output_containing_discovered_evidence_is_rejected_without_deletion(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    output = tmp_path / "publication"
+    evidence = output / "acceptance/evidence.json"
+    write_json(evidence, {"record_type": "discovered-evidence"})
+    publication.write_text(output / "keep.txt", "keep output evidence\n")
+    previous = tree_bytes(output)
+
+    with pytest.raises(
+        publication.PublicationError,
+        match="contains discovered source or acceptance evidence",
+    ):
+        publication.main([
+            str(analysis),
+            "--output",
+            str(output),
+            "--acceptance",
+            str(evidence.parent),
+        ])
+
+    assert tree_bytes(output) == previous
+    assert not publication.publication_ownership_path(output).exists()
+    assert not publication.publication_lock_path(output).exists()
+
+
+def test_arbitrary_nonempty_unowned_output_is_rejected(
+    publication, tmp_path, monkeypatch
+):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    output = tmp_path / "publication"
+    publication.write_text(output / "unrelated.txt", "do not delete\n")
+    previous = tree_bytes(output)
+
+    monkeypatch.setattr(
+        publication,
+        "discover_data",
+        lambda analysis_path, _acceptance: empty_data(publication, analysis_path),
+    )
+
+    def fixed_render(_data, staging):
+        product = staging / "new.txt"
+        publication.write_text(product, "new publication\n")
+        return [product]
+
+    monkeypatch.setattr(publication, "render_products", fixed_render)
+
+    with pytest.raises(
+        publication.PublicationError, match="nonempty unowned output"
+    ):
+        publication.main([str(analysis), "--output", str(output)])
+
+    assert tree_bytes(output) == previous
+    assert not publication.publication_ownership_path(output).exists()
+    assert list(tmp_path.glob(".publication.staging-*")) == []
+
+
+def test_default_output_descendant_of_analysis_works_without_evidence_overlap(
+    publication, tmp_path, monkeypatch
+):
+    analysis = tmp_path / "analysis"
+    inventory = analysis / "inventory.json"
+    write_json(inventory, {"record_type": "fixture-inventory"})
+    inventory_bytes = inventory.read_bytes()
+    output = analysis / "publication-products"
+
+    def fixed_render(_data, staging):
+        product = staging / "tables/summary.csv"
+        publication.write_text(product, "result\npass\n")
+        return [product]
+
+    monkeypatch.setattr(publication, "render_products", fixed_render)
+
+    publication.main([str(analysis)])
+
+    assert inventory.read_bytes() == inventory_bytes
+    assert publication.valid_publication_ownership(output)
+    assert (output / "tables/summary.csv").read_text(encoding="utf-8") == (
+        "result\npass\n"
+    )
+    manifest = json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["analysis_output"] == str(analysis.absolute())
+    assert manifest["normalized_invocation"] == publication.normalized_invocation(
+        analysis.absolute(), output.absolute(), []
+    )
+    assert all(
+        Path(product["path"]).is_relative_to(output.absolute())
+        for product in manifest["products"]
+    )
+    first = tree_bytes(output)
+
+    publication.main([str(analysis)])
+
+    assert tree_bytes(output) == first
+
+
+def test_valid_existing_manifest_proves_nonempty_output_ownership(
+    publication, tmp_path
+):
+    output = tmp_path / "publication"
+    old_product = output / "old.txt"
+    publication.write_text(old_product, "old publication\n")
+    publication.write_json(
+        output / "manifest.json",
+        {
+            "record_type": "cgl_lf_stage_i_fast_publication_products",
+            "normalized_invocation": [
+                "renderer",
+                "--output",
+                str(output.absolute()),
+            ],
+            "products": [publication.source_binding(old_product)],
+        },
+    )
+    assert publication.valid_existing_publication_manifest(output)
+    assert not publication.publication_ownership_path(output).exists()
+    staging = tmp_path / ".publication.staging-existing-manifest"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "existing-manifest",
+        {"new.txt": "new publication\n"},
+    )
+
+    publication.promote_staged_publication(
+        staging,
+        output,
+        products,
+        manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+
+    assert not old_product.exists()
+    assert (output / "new.txt").read_text(encoding="utf-8") == "new publication\n"
+    assert not publication.publication_ownership_path(output).exists()
+
+
+def test_concurrent_promotions_are_serialized_by_sibling_lock(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    first_staging = tmp_path / ".publication.staging-first"
+    second_staging = tmp_path / ".publication.staging-second"
+    first_products, first_manifest = staged_publication(
+        publication,
+        first_staging,
+        output,
+        "first",
+        {"a.txt": "first a\n", "b.txt": "first b\n"},
+    )
+    second_products, second_manifest = staged_publication(
+        publication,
+        second_staging,
+        output,
+        "second",
+        {"a.txt": "second a\n", "b.txt": "second b\n"},
+    )
+
+    real_promote_file = publication.promote_file
+    first_paused = threading.Event()
+    release_first = threading.Event()
+    second_started = threading.Event()
+    second_finished = threading.Event()
+    order = []
+    errors = []
+
+    def observed_promote(staged, canonical):
+        publisher = (
+            "first" if staged.is_relative_to(first_staging) else "second"
+        )
+        order.append((publisher, canonical.name))
+        real_promote_file(staged, canonical)
+        if publisher == "first" and canonical.name == "a.txt":
+            first_paused.set()
+            assert release_first.wait(10)
+
+    def run_promotion(products, manifest, staging, started=None, finished=None):
+        try:
+            if started is not None:
+                started.set()
+            publication.promote_staged_publication(
+                staging,
+                output,
+                products,
+                manifest,
+                analysis=output.parent / "analysis",
+                evidence_paths=[],
+            )
+        except BaseException as error:
+            errors.append(error)
+        finally:
+            if finished is not None:
+                finished.set()
+
+    monkeypatch.setattr(publication, "promote_file", observed_promote)
+    first = threading.Thread(
+        target=run_promotion,
+        args=(first_products, first_manifest, first_staging),
+    )
+    second = threading.Thread(
+        target=run_promotion,
+        args=(
+            second_products,
+            second_manifest,
+            second_staging,
+            second_started,
+            second_finished,
+        ),
+    )
+
+    first.start()
+    assert first_paused.wait(10)
+    second.start()
+    assert second_started.wait(10)
+    try:
+        assert not second_finished.wait(0.5)
+        assert all(publisher == "first" for publisher, _ in order)
+    finally:
+        release_first.set()
+    first.join(10)
+    second.join(10)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert errors == []
+    assert publication.publication_lock_path(output).is_file()
+    assert not publication.publication_lock_path(output).is_symlink()
+    assert [publisher for publisher, _ in order] == [
+        "first",
+        "first",
+        "first",
+        "second",
+        "second",
+        "second",
+    ]
+    assert json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    ) == second_manifest
+    assert (output / "a.txt").read_text(encoding="utf-8") == "second a\n"
+    assert (output / "b.txt").read_text(encoding="utf-8") == "second b\n"
+    for product in second_manifest["products"]:
+        assert publication.source_binding(Path(product["path"])) == product
+
+
+def test_output_root_symlink_escape_is_rejected(publication, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    output = tmp_path / "publication"
+    output.symlink_to(outside, target_is_directory=True)
+    staging = tmp_path / ".publication.staging-root-symlink"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "symlink-root",
+        {"tables/new.csv": "new\n"},
+    )
+
+    with pytest.raises(publication.PublicationError, match="output root.*symlink"):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert tree_bytes(outside) == {}
+
+
+def test_output_descendant_symlink_escape_is_rejected(publication, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    output = tmp_path / "publication"
+    output.mkdir()
+    publication.write_json(output / "manifest.json", {"authority": "old"})
+    (output / "tables").symlink_to(outside, target_is_directory=True)
+    staging = tmp_path / ".publication.staging-tables-symlink"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "symlink-tables",
+        {"tables/new.csv": "new\n"},
+    )
+
+    with pytest.raises(
+        publication.PublicationError, match="descendant.*symlink"
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    ) == {"authority": "old"}
+    assert tree_bytes(outside) == {}
+
+
+def test_output_descendant_file_symlink_is_rejected(publication, tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    output = tmp_path / "publication"
+    output.mkdir()
+    publication.write_json(output / "manifest.json", {"authority": "old"})
+    (output / "tables").mkdir()
+    (output / "tables/old.csv").symlink_to(outside)
+    staging = tmp_path / ".publication.staging-file-symlink"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "symlink-file",
+        {"tables/new.csv": "new\n"},
+    )
+
+    with pytest.raises(
+        publication.PublicationError, match="descendant.*symlink"
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    ) == {"authority": "old"}
+    assert outside.read_text(encoding="utf-8") == "outside\n"
+
+
+def test_successful_rerender_removes_obsolete_canonical_paths(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    initial_staging = tmp_path / ".publication.staging-initial-tree"
+    initial_products, initial_manifest = staged_publication(
+        publication,
+        initial_staging,
+        output,
+        "initial-tree",
+        {
+            "tables/current.csv": "old current\n",
+            "tables/obsolete.csv": "obsolete\n",
+            "obsolete/old.txt": "obsolete\n",
+        },
+    )
+    publication.promote_staged_publication(
+        initial_staging,
+        output,
+        initial_products,
+        initial_manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+    staging = tmp_path / ".publication.staging-exact-tree"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "exact-tree",
+        {"tables/current.csv": "new current\n"},
+    )
+    real_promote_file = publication.promote_file
+    observed_manifest_withdrawn_cleanup = False
+
+    def observe_cleanup_before_promotion(staged, canonical):
+        nonlocal observed_manifest_withdrawn_cleanup
+        if canonical.name != "manifest.json":
+            assert not (output / "manifest.json").exists()
+            assert not (output / "tables/obsolete.csv").exists()
+            assert not (output / "obsolete").exists()
+            observed_manifest_withdrawn_cleanup = True
+        real_promote_file(staged, canonical)
+
+    monkeypatch.setattr(publication, "promote_file", observe_cleanup_before_promotion)
+    publication.promote_staged_publication(
+        staging,
+        output,
+        products,
+        manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+
+    assert observed_manifest_withdrawn_cleanup
+    assert set(tree_bytes(output)) == {"manifest.json", "tables/current.csv"}
+    assert (output / "tables/current.csv").read_text(encoding="utf-8") == (
+        "new current\n"
+    )
+    assert not (output / "tables/obsolete.csv").exists()
+    assert not (output / "obsolete").exists()
+    assert json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    ) == manifest
 
 
 def test_stale_native_pass_cannot_override_current_direct_inconclusive(
