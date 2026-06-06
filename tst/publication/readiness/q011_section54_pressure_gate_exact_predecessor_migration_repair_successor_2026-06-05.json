@@ -92,7 +92,7 @@
     "science_submission_freeze_status": "authorized"
   },
   "source_local_exact_predecessor_repair": {
-    "control_plane_version": "a2a85b48f2d637f9c14ddb5497a8cf8baa7192ba284b7bcf450deca08e696ab7",
+    "control_plane_version": "b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48",
     "inventoried_file_count": 24,
     "state": "source_local_uncommitted_exact_predecessor_migration_repair",
     "final_binding_refresh": {
@@ -146,7 +146,7 @@
     ],
     "source_test_closure": {
       "file_count": 15,
-      "closure_sha256": "86625c66581514e0e27a3e782e80477c8d8eab093abacc86410c03a6fdcd8ce7",
+      "closure_sha256": "5e4f10e0b905dee2bf7293665cb32d84cff657b867ef4e378dcaa89d547cd2ce",
       "files": [
         {
           "path": "tst/publication/frontier_control_plane/README.md",
@@ -154,7 +154,7 @@
         },
         {
           "path": "tst/publication/frontier_control_plane/control_plane_common.py",
-          "sha256": "38523ff14b7d1ccb998874857445275391a763a20c48175b2b087d3d22d121c3"
+          "sha256": "8873527c19b46236ed66f1c8e3b0318cfcb106e017c5289eac70b482db0ef963"
         },
         {
           "path": "tst/publication/frontier_control_plane/promote_active_policy.py",
@@ -174,7 +174,7 @@
         },
         {
           "path": "tst/publication/frontier_control_plane/capture_storage_preflight_evidence.py",
-          "sha256": "0fdbbf87e69641c3196ca90297f6f4f212fb824e859ba5e1e652ab6ce06e82f8"
+          "sha256": "b6dae64b28dbcc7ce82877ad25d53bc4f0637016c4bd274431c1a4ba947ec94b"
         },
         {
           "path": "tst/publication/frontier_control_plane/storage_preflight.schema.json",
@@ -198,7 +198,7 @@
         },
         {
           "path": "tst/publication/test_capture_storage_preflight_evidence.py",
-          "sha256": "9978ed01a4cbb9707f8fa126ea48a985476eb845d70d25ec4f0cc9383d1d323f"
+          "sha256": "cdd351a308b917b8771980665d5474009e2ee3c6498b39cfea7391a06eba6888"
         },
         {
           "path": "tst/publication/frontier_q011_clean_candidate_build_freeze_job.sh",
@@ -206,7 +206,7 @@
         },
         {
           "path": "tst/publication/test_pic_readiness_registry.py",
-          "sha256": "5a65fdc0426b46ea1ba4eb432e055e0f3c2f528e2a218621024d11bac6dbaef1"
+          "sha256": "36411cfd4ec819761c677add611225b7458ab73efeb7e21e212b6928a60f32ef"
         }
       ]
     }

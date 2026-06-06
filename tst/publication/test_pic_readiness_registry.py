@@ -1034,7 +1034,7 @@ def _validate_q011_exact_predecessor_migration_repair_successor(
             "source_test_closure",
         }
         or repair["control_plane_version"]
-        != "a2a85b48f2d637f9c14ddb5497a8cf8baa7192ba284b7bcf450deca08e696ab7"
+        != "b56d96b40f2c666b9fa5b421fac589d6a4d6500a716f20b479c354a3d239cb48"
         or type(repair["inventoried_file_count"]) is not int
         or repair["inventoried_file_count"] != 24
         or repair["state"]

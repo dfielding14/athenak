@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable
 from contextlib import contextmanager
+import ctypes
 from datetime import datetime, timezone
+import errno
 import fcntl
 import hashlib
 import json
@@ -93,9 +95,38 @@ ORION_ROLE = "orion_simulation_root"
 PROJECT_HOME_ROLE = "project_home_mirror_root"
 RECOVERY_ROLES = {ORION_ROLE, PROJECT_HOME_ROLE}
 RECOVERY_STAGING_SUFFIX = ".recovery-staging"
-COMMITTED_LINK_COUNT_TIMEOUT_SECONDS = 2.0
+# Orion Lustre can retain the removed staging link in metadata for several
+# seconds after the directory commit. Keep the wait bounded and fail closed.
+COMMITTED_LINK_COUNT_TIMEOUT_SECONDS = 30.0
 COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS = 0.01
 COMMITTED_LINK_COUNT_MAX_RETRY_SECONDS = 0.25
+AT_SYMLINK_NOFOLLOW = 0x100
+AT_STATX_FORCE_SYNC = 0x2000
+# Fixed Linux UAPI values from fcntl.h and linux/stat.h.
+STATX_TYPE = 0x00000001
+STATX_MODE = 0x00000002
+STATX_NLINK = 0x00000004
+STATX_UID = 0x00000008
+STATX_INO = 0x00000100
+STATX_SIZE = 0x00000200
+STATX_BASIC_STATS = 0x000007FF
+STATX_STRUCT_SIZE = 0x100
+STATX_STRUCT_ALIGNMENT = 8
+STATX_TIMESTAMP_SIZE = 0x10
+STATX_TIMESTAMP_ALIGNMENT = 8
+STATX_REQUIRED_FIELD_OFFSETS = {
+    "stx_mask": 0x00,
+    "stx_nlink": 0x10,
+    "stx_uid": 0x14,
+    "stx_mode": 0x1C,
+    "stx_ino": 0x20,
+    "stx_size": 0x28,
+    "stx_dev_major": 0x88,
+    "stx_dev_minor": 0x8C,
+}
+REQUIRED_STATX_MASK = (
+    STATX_TYPE | STATX_MODE | STATX_NLINK | STATX_UID | STATX_INO | STATX_SIZE
+)
 STABLE_FIELDS = (
     "st_dev",
     "st_ino",
@@ -109,6 +140,45 @@ STABLE_FIELDS = (
 Clock = Callable[[], datetime]
 SourceAuthenticator = Callable[[], dict[str, object]]
 TokenBytes = Callable[[int], bytes]
+
+
+class _StatxTimestamp(ctypes.Structure):
+    _fields_ = [
+        ("tv_sec", ctypes.c_int64),
+        ("tv_nsec", ctypes.c_uint32),
+        ("reserved", ctypes.c_int32),
+    ]
+
+
+class _Statx(ctypes.Structure):
+    """Linux statx ABI through offset 0x100."""
+
+    _fields_ = [
+        ("stx_mask", ctypes.c_uint32),
+        ("stx_blksize", ctypes.c_uint32),
+        ("stx_attributes", ctypes.c_uint64),
+        ("stx_nlink", ctypes.c_uint32),
+        ("stx_uid", ctypes.c_uint32),
+        ("stx_gid", ctypes.c_uint32),
+        ("stx_mode", ctypes.c_uint16),
+        ("spare0", ctypes.c_uint16 * 1),
+        ("stx_ino", ctypes.c_uint64),
+        ("stx_size", ctypes.c_uint64),
+        ("stx_blocks", ctypes.c_uint64),
+        ("stx_attributes_mask", ctypes.c_uint64),
+        ("stx_atime", _StatxTimestamp),
+        ("stx_btime", _StatxTimestamp),
+        ("stx_ctime", _StatxTimestamp),
+        ("stx_mtime", _StatxTimestamp),
+        ("stx_rdev_major", ctypes.c_uint32),
+        ("stx_rdev_minor", ctypes.c_uint32),
+        ("stx_dev_major", ctypes.c_uint32),
+        ("stx_dev_minor", ctypes.c_uint32),
+        ("stx_mnt_id", ctypes.c_uint64),
+        ("stx_dio_mem_align", ctypes.c_uint32),
+        ("stx_dio_offset_align", ctypes.c_uint32),
+        ("spare3", ctypes.c_uint64 * 12),
+    ]
 
 
 def _canonical_json_bytes(value: object) -> bytes:
@@ -166,7 +236,13 @@ def _absolute(path: Path) -> Path:
 
 
 def _validate_component(name: str) -> None:
-    if not name or "/" in name or name in {".", ".."} or Path(name).name != name:
+    if (
+        not name
+        or "\0" in name
+        or "/" in name
+        or name in {".", ".."}
+        or Path(name).name != name
+    ):
         raise ValueError(f"Unsafe path component: {name!r}")
 
 
@@ -281,6 +357,99 @@ def _require_same_regular_entry(
         or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
     ):
         raise ValueError(f"{label} namespace entry changed")
+    return current
+
+
+def _force_synced_statx(directory_descriptor: int, name: str) -> _Statx:
+    _validate_component(name)
+    if (
+        ctypes.sizeof(_StatxTimestamp) != STATX_TIMESTAMP_SIZE
+        or ctypes.alignment(_StatxTimestamp) != STATX_TIMESTAMP_ALIGNMENT
+        or ctypes.sizeof(_Statx) != STATX_STRUCT_SIZE
+        or ctypes.alignment(_Statx) != STATX_STRUCT_ALIGNMENT
+        or any(
+            getattr(_Statx, field).offset != offset
+            for field, offset in STATX_REQUIRED_FIELD_OFFSETS.items()
+        )
+    ):
+        raise OSError(
+            errno.ENOTSUP,
+            "Storage-preflight publication requires the Linux statx ABI",
+        )
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        statx = libc.statx
+    except AttributeError as error:
+        raise OSError(
+            errno.ENOSYS,
+            "Storage-preflight publication requires statx",
+        ) from error
+    statx.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_uint,
+        ctypes.POINTER(_Statx),
+    ]
+    statx.restype = ctypes.c_int
+    metadata = _Statx()
+    ctypes.set_errno(0)
+    if (
+        statx(
+            directory_descriptor,
+            os.fsencode(name),
+            AT_SYMLINK_NOFOLLOW | AT_STATX_FORCE_SYNC,
+            STATX_BASIC_STATS,
+            ctypes.byref(metadata),
+        )
+        != 0
+    ):
+        number = ctypes.get_errno()
+        if number == 0:
+            number = errno.EIO
+        raise OSError(number, os.strerror(number), name)
+    if (metadata.stx_mask & REQUIRED_STATX_MASK) != REQUIRED_STATX_MASK:
+        raise ValueError(
+            "Published storage-preflight evidence force-synchronized metadata "
+            "is incomplete"
+        )
+    return metadata
+
+
+def _require_force_synced_evidence_entry(
+    directory_descriptor: int,
+    name: str,
+    expected: os.stat_result,
+) -> _Statx:
+    current = _force_synced_statx(directory_descriptor, name)
+    if (
+        not stat.S_ISREG(current.stx_mode)
+        or (current.stx_dev_major, current.stx_dev_minor)
+        != (os.major(expected.st_dev), os.minor(expected.st_dev))
+        or current.stx_ino != expected.st_ino
+    ):
+        raise ValueError("Published storage-preflight evidence namespace entry changed")
+    if stat.S_IMODE(current.stx_mode) != 0o400:
+        raise ValueError("Published storage-preflight evidence mode is not exactly 0400")
+    if current.stx_uid != os.getuid():
+        raise ValueError("Published storage-preflight evidence owner differs")
+    if current.stx_size != expected.st_size:
+        raise ValueError("Published storage-preflight evidence size differs")
+    return current
+
+
+def _require_force_synced_single_link_evidence_entry(
+    directory_descriptor: int,
+    name: str,
+    expected: os.stat_result,
+) -> _Statx:
+    current = _require_force_synced_evidence_entry(
+        directory_descriptor,
+        name,
+        expected,
+    )
+    if current.stx_nlink != 1:
+        raise ValueError("Published storage-preflight evidence link count is not one")
     return current
 
 
@@ -461,18 +630,22 @@ def _read_published_evidence(
     try:
         descriptor = os.open(filename, FILE_READ_FLAGS, dir_fd=parent_descriptor)
         before = os.fstat(descriptor)
-        _validate_evidence_metadata(before)
+        _validate_evidence_metadata_without_link_count(before)
+        _require_force_synced_single_link_evidence_entry(
+            parent_descriptor,
+            filename,
+            before,
+        )
         payload = _read_all(descriptor)
         after = os.fstat(descriptor)
         if not _same_metadata(before, after) or len(payload) != after.st_size:
             raise ValueError(
                 "Published storage-preflight evidence changed during readback"
             )
-        _require_same_regular_entry(
+        _require_force_synced_single_link_evidence_entry(
             parent_descriptor,
             filename,
             after,
-            label="Published storage-preflight evidence",
         )
         return payload
     finally:
@@ -516,18 +689,22 @@ def _read_optional_published_evidence(
         except FileNotFoundError:
             return None
         before = os.fstat(descriptor)
-        _validate_evidence_metadata(before)
+        _validate_evidence_metadata_without_link_count(before)
+        _require_force_synced_single_link_evidence_entry(
+            parent_descriptor,
+            filename,
+            before,
+        )
         payload = _read_all(descriptor)
         after = os.fstat(descriptor)
         if not _same_metadata(before, after) or len(payload) != after.st_size:
             raise ValueError(
                 "Published storage-preflight evidence changed during readback"
             )
-        _require_same_regular_entry(
+        _require_force_synced_single_link_evidence_entry(
             parent_descriptor,
             filename,
             after,
-            label="Published storage-preflight evidence",
         )
         return payload
     finally:
@@ -657,40 +834,51 @@ def _audit_exact_pair_with_pinned_roots(
 def _require_committed_evidence_metadata(
     parent: Path,
     parent_descriptor: int,
+    committed_descriptor: int,
     filename: str,
     expected: os.stat_result,
-) -> os.stat_result:
-    deadline = time.monotonic() + COMMITTED_LINK_COUNT_TIMEOUT_SECONDS
+    *,
+    commit_deadline: float,
+) -> _Statx:
+    def require_before_commit_deadline() -> None:
+        if time.monotonic() >= commit_deadline:
+            raise ValueError(
+                "Published storage-preflight evidence link count did not "
+                "converge to one before the commit deadline"
+            )
+
     retry_seconds = COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS
-    retrying = False
     while True:
+        require_before_commit_deadline()
         _require_same_directory(parent, parent_descriptor, label="Evidence parent")
-        committed = _require_same_regular_entry(
+        require_before_commit_deadline()
+        pinned = os.fstat(committed_descriptor)
+        require_before_commit_deadline()
+        if (pinned.st_dev, pinned.st_ino) != (expected.st_dev, expected.st_ino):
+            raise ValueError(
+                "Published storage-preflight evidence pinned descriptor changed"
+            )
+        _validate_evidence_metadata_without_link_count(pinned)
+        if pinned.st_size != expected.st_size:
+            raise ValueError("Published storage-preflight evidence size differs")
+        committed = _require_force_synced_evidence_entry(
             parent_descriptor,
             filename,
             expected,
-            label="Published storage-preflight evidence",
         )
-        _validate_evidence_metadata_without_link_count(committed)
-        if committed.st_nlink == 1:
-            if retrying and time.monotonic() >= deadline:
-                raise ValueError(
-                    "Published storage-preflight evidence link count did not "
-                    "converge to one before the commit deadline"
-                )
+        if committed.stx_nlink == 1:
+            require_before_commit_deadline()
             return committed
-        if committed.st_nlink != 2:
+        if committed.stx_nlink != 2:
             raise ValueError(
                 "Published storage-preflight evidence link count is not one"
             )
-        remaining_seconds = deadline - time.monotonic()
+        remaining_seconds = commit_deadline - time.monotonic()
         if remaining_seconds <= 0:
             raise ValueError(
                 "Published storage-preflight evidence link count did not converge "
                 "to one after commit"
             )
-        retrying = True
-        os.fsync(parent_descriptor)
         time.sleep(min(retry_seconds, remaining_seconds))
         retry_seconds = min(
             retry_seconds * 2,
@@ -712,6 +900,7 @@ def _publish_staged_evidence(
     parent = lexical.joinpath(*EVIDENCE_PARENT_PARTS)
     staging_name = f".{filename}.{secrets.token_hex(16)}{RECOVERY_STAGING_SUFFIX}"
     descriptor: int | None = None
+    committed_descriptor: int | None = None
     try:
         _require_same_directory(parent, parent_descriptor, label="Evidence parent")
         descriptor = os.open(
@@ -727,12 +916,15 @@ def _publish_staged_evidence(
         staged = os.fstat(descriptor)
         _validate_evidence_metadata(staged)
         _require_same_directory(parent, parent_descriptor, label="Evidence parent")
-        _require_same_regular_entry(
+        force_synced_staged = _require_force_synced_evidence_entry(
             parent_descriptor,
             staging_name,
             staged,
-            label="Staged storage-preflight evidence",
         )
+        if force_synced_staged.stx_nlink != 1:
+            raise ValueError(
+                "Staged storage-preflight evidence link count differs before commit"
+            )
         os.link(
             staging_name,
             filename,
@@ -740,13 +932,12 @@ def _publish_staged_evidence(
             dst_dir_fd=parent_descriptor,
             follow_symlinks=False,
         )
-        published = _require_same_regular_entry(
+        published = _require_force_synced_evidence_entry(
             parent_descriptor,
             filename,
             staged,
-            label="Published storage-preflight evidence",
         )
-        if published.st_nlink != 2:
+        if published.stx_nlink != 2:
             raise ValueError(
                 "Published storage-preflight evidence link count differs before commit"
             )
@@ -760,16 +951,41 @@ def _publish_staged_evidence(
         )
         os.unlink(staging_name, dir_fd=parent_descriptor)
         os.fsync(parent_descriptor)
+        commit_deadline = (
+            time.monotonic() + COMMITTED_LINK_COUNT_TIMEOUT_SECONDS
+        )
+        committed_descriptor = os.open(
+            filename,
+            FILE_READ_FLAGS,
+            dir_fd=parent_descriptor,
+        )
+        pinned = os.fstat(committed_descriptor)
+        if (
+            not stat.S_ISREG(pinned.st_mode)
+            or (pinned.st_dev, pinned.st_ino) != (staged.st_dev, staged.st_ino)
+        ):
+            raise ValueError(
+                "Published storage-preflight evidence namespace entry changed"
+            )
+        _validate_evidence_metadata_without_link_count(pinned)
+        if pinned.st_size != staged.st_size:
+            raise ValueError("Published storage-preflight evidence size differs")
+        os.close(descriptor)
+        descriptor = None
         _require_committed_evidence_metadata(
             parent,
             parent_descriptor,
+            committed_descriptor,
             filename,
             staged,
+            commit_deadline=commit_deadline,
         )
         return lexical.joinpath(*EVIDENCE_PARENT_PARTS, filename)
     finally:
         if descriptor is not None:
             os.close(descriptor)
+        if committed_descriptor is not None:
+            os.close(committed_descriptor)
         os.close(parent_descriptor)
 
 

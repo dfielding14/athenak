@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
+import errno
 import hashlib
 import io
 import json
@@ -36,7 +37,15 @@ SOURCE_AUTHENTICATION = {
 }
 
 
-def _with_link_count(metadata: os.stat_result, link_count: int) -> os.stat_result:
+def _with_statx_link_count(
+    metadata: storage_preflight._Statx,
+    link_count: int,
+) -> storage_preflight._Statx:
+    metadata.stx_nlink = link_count
+    return metadata
+
+
+def _with_stat_link_count(metadata: os.stat_result, link_count: int) -> os.stat_result:
     fields = list(metadata)
     fields[3] = link_count
     return os.stat_result(fields)
@@ -533,6 +542,49 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
         self._recover(expected_sha256=expected_sha256)
         self.assertEqual(audit()["state"], "valid_identical_pair")
 
+    def test_exact_pair_audit_uses_force_synced_link_count(self) -> None:
+        fragment = self._capture()
+        expected_sha256 = fragment["storage_preflight_evidence"]["sha256"]
+        real_fstat = storage_preflight.os.fstat
+
+        def report_stale_cached_link_count(descriptor: int) -> os.stat_result:
+            metadata = real_fstat(descriptor)
+            if stat.S_ISREG(metadata.st_mode) and stat.S_IMODE(metadata.st_mode) == 0o400:
+                return _with_stat_link_count(metadata, 2)
+            return metadata
+
+        with mock.patch.object(
+            storage_preflight.os,
+            "fstat",
+            side_effect=report_stale_cached_link_count,
+        ):
+            result = storage_preflight.audit_storage_preflight_evidence_pair(
+                probe_id=PROBE_ID,
+                expected_sha256=expected_sha256,
+                expected_git_commit=str(SOURCE_AUTHENTICATION["git_commit"]),
+                orion_root=self.orion_root,
+                project_home_root=self.project_home_root,
+                authenticate_source=SourceAuthenticator(),
+            )
+
+        self.assertEqual(result["state"], "valid_identical_pair")
+
+    def test_exact_pair_audit_rejects_force_synced_extra_link(self) -> None:
+        fragment = self._capture()
+        expected_sha256 = fragment["storage_preflight_evidence"]["sha256"]
+        orion_path, _ = self._evidence_paths()
+        os.link(orion_path, self.base / "retained-hardlink")
+
+        with self.assertRaisesRegex(ValueError, "link count is not one"):
+            storage_preflight.audit_storage_preflight_evidence_pair(
+                probe_id=PROBE_ID,
+                expected_sha256=expected_sha256,
+                expected_git_commit=str(SOURCE_AUTHENTICATION["git_commit"]),
+                orion_root=self.orion_root,
+                project_home_root=self.project_home_root,
+                authenticate_source=SourceAuthenticator(),
+            )
+
     def test_exact_recovery_rejects_divergent_or_missing_evidence_without_mutation(
         self,
     ) -> None:
@@ -751,7 +803,191 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
         self.assertEqual(len(staging), 1)
         self.assertEqual(staging[0].read_bytes(), replacement)
 
-    def test_staged_publication_tolerates_transient_committed_link_count(
+    def test_force_synced_statx_requests_required_server_metadata(self) -> None:
+        call: tuple[object, ...] | None = None
+
+        def populate_statx(*args: object) -> int:
+            nonlocal call
+            call = args
+            metadata = args[4]._obj
+            metadata.stx_mask = storage_preflight.REQUIRED_STATX_MASK
+            metadata.stx_nlink = 1
+            return 0
+
+        fake_statx = mock.Mock(side_effect=populate_statx)
+        fake_libc = mock.Mock()
+        fake_libc.statx = fake_statx
+        with mock.patch.object(
+            storage_preflight.ctypes,
+            "CDLL",
+            return_value=fake_libc,
+        ) as cdll:
+            metadata = storage_preflight._force_synced_statx(17, "evidence.json")
+
+        cdll.assert_called_once_with(None, use_errno=True)
+        self.assertEqual(
+            storage_preflight.ctypes.sizeof(storage_preflight._Statx),
+            storage_preflight.STATX_STRUCT_SIZE,
+        )
+        self.assertEqual(
+            storage_preflight.ctypes.alignment(storage_preflight._Statx),
+            storage_preflight.STATX_STRUCT_ALIGNMENT,
+        )
+        self.assertEqual(
+            {
+                field: getattr(storage_preflight._Statx, field).offset
+                for field in storage_preflight.STATX_REQUIRED_FIELD_OFFSETS
+            },
+            storage_preflight.STATX_REQUIRED_FIELD_OFFSETS,
+        )
+        self.assertEqual(metadata.stx_nlink, 1)
+        assert call is not None
+        self.assertEqual(call[0], 17)
+        self.assertEqual(call[1], b"evidence.json")
+        self.assertEqual(
+            call[2],
+            storage_preflight.AT_SYMLINK_NOFOLLOW
+            | storage_preflight.AT_STATX_FORCE_SYNC,
+        )
+        self.assertEqual(call[3], storage_preflight.STATX_BASIC_STATS)
+
+    def test_force_synced_statx_rejects_missing_required_metadata(self) -> None:
+        def populate_incomplete_statx(*args: object) -> int:
+            metadata = args[4]._obj
+            metadata.stx_mask = (
+                storage_preflight.REQUIRED_STATX_MASK
+                & ~storage_preflight.STATX_NLINK
+            )
+            return 0
+
+        fake_libc = mock.Mock()
+        fake_libc.statx = mock.Mock(side_effect=populate_incomplete_statx)
+        with mock.patch.object(
+            storage_preflight.ctypes,
+            "CDLL",
+            return_value=fake_libc,
+        ), self.assertRaisesRegex(ValueError, "metadata is incomplete"):
+            storage_preflight._force_synced_statx(17, "evidence.json")
+
+    def test_force_synced_statx_is_required(self) -> None:
+        with mock.patch.object(
+            storage_preflight.ctypes,
+            "CDLL",
+            return_value=object(),
+        ), self.assertRaisesRegex(OSError, "requires statx"):
+            storage_preflight._force_synced_statx(17, "evidence.json")
+
+    def test_force_synced_statx_rejects_unsafe_components_before_libc(self) -> None:
+        with mock.patch.object(storage_preflight.ctypes, "CDLL") as cdll:
+            for name in ("", ".", "..", "directory/evidence.json", "evidence\0.json"):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    ValueError,
+                    "Unsafe path component",
+                ):
+                    storage_preflight._force_synced_statx(17, name)
+        cdll.assert_not_called()
+
+    def test_force_synced_statx_fails_closed_when_libc_omits_errno(self) -> None:
+        fake_libc = mock.Mock()
+        fake_libc.statx = mock.Mock(return_value=-1)
+        with mock.patch.object(
+            storage_preflight.ctypes,
+            "CDLL",
+            return_value=fake_libc,
+        ), mock.patch.object(
+            storage_preflight.ctypes,
+            "get_errno",
+            return_value=0,
+        ), self.assertRaises(OSError) as raised:
+            storage_preflight._force_synced_statx(17, "evidence.json")
+        self.assertEqual(raised.exception.errno, errno.EIO)
+
+    def test_force_synced_statx_rejects_unexpected_abi_size(self) -> None:
+        with mock.patch.object(
+            storage_preflight.ctypes,
+            "sizeof",
+            return_value=storage_preflight.STATX_STRUCT_SIZE - 1,
+        ), self.assertRaisesRegex(OSError, "requires the Linux statx ABI"):
+            storage_preflight._force_synced_statx(17, "evidence.json")
+
+    def test_force_synced_committed_metadata_rejects_drift(self) -> None:
+        parent = self.orion_root / "evidence"
+        parent.mkdir()
+        path = parent / f"{PROBE_ID}.json"
+        path.write_bytes(b"reviewed payload\n")
+        path.chmod(0o400)
+        expected = path.stat()
+        directory_descriptor = os.open(parent, storage_preflight.DIRECTORY_FLAGS)
+        try:
+            baseline = storage_preflight._require_force_synced_evidence_entry(
+                directory_descriptor,
+                path.name,
+                expected,
+            )
+            self.assertEqual(baseline.stx_nlink, 1)
+            rejection_cases = [
+                ("namespace entry changed", "stx_ino", expected.st_ino + 1),
+                ("not exactly 0400", "stx_mode", stat.S_IFREG | 0o600),
+                ("owner differs", "stx_uid", os.getuid() + 1),
+                ("size differs", "stx_size", expected.st_size + 1),
+            ]
+            for message, field, value in rejection_cases:
+                with self.subTest(field=field):
+                    metadata = storage_preflight._force_synced_statx(
+                        directory_descriptor,
+                        path.name,
+                    )
+                    setattr(metadata, field, value)
+                    with mock.patch.object(
+                        storage_preflight,
+                        "_force_synced_statx",
+                        return_value=metadata,
+                    ), self.assertRaisesRegex(ValueError, message):
+                        storage_preflight._require_force_synced_evidence_entry(
+                            directory_descriptor,
+                            path.name,
+                            expected,
+                        )
+        finally:
+            os.close(directory_descriptor)
+
+    def test_staged_publication_requires_statx_before_destination_commit(self) -> None:
+        expected_identity = (
+            self.orion_root.stat().st_dev,
+            self.orion_root.stat().st_ino,
+        )
+        filename = f"{PROBE_ID}.json"
+        with mock.patch.object(
+            storage_preflight,
+            "_force_synced_statx",
+            side_effect=OSError(errno.ENOSYS, "statx unavailable"),
+        ), mock.patch.object(storage_preflight.os, "link") as link:
+            with self.assertRaisesRegex(OSError, "statx unavailable"):
+                storage_preflight._publish_staged_evidence(
+                    self.orion_root,
+                    expected_root_identity=expected_identity,
+                    filename=filename,
+                    payload=b"reviewed payload\n",
+                )
+
+        link.assert_not_called()
+        destination = self.orion_root.joinpath(
+            *storage_preflight.EVIDENCE_PARENT_PARTS,
+            filename,
+        )
+        self.assertFalse(destination.exists())
+        self.assertEqual(
+            len(
+                list(
+                    destination.parent.glob(
+                        f".{filename}.*{storage_preflight.RECOVERY_STAGING_SUFFIX}"
+                    )
+                )
+            ),
+            1,
+        )
+
+    def test_staged_publication_tolerates_multi_second_committed_link_count_lag(
         self,
     ) -> None:
         expected_identity = (
@@ -759,68 +995,89 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
             self.orion_root.stat().st_ino,
         )
         filename = f"{PROBE_ID}.json"
-        real_require = storage_preflight._require_same_regular_entry
+        real_force_synced_statx = storage_preflight._force_synced_statx
         real_open = storage_preflight.os.open
         real_close = storage_preflight.os.close
+        real_fsync = storage_preflight.os.fsync
         destination_checks = 0
         staging_descriptor: int | None = None
+        committed_descriptor: int | None = None
         staging_descriptor_closed = False
+        committed_descriptor_closed = False
+        fsync_calls = 0
+        poll_fsync_calls: int | None = None
 
-        def record_staging_descriptor(
+        def record_descriptors(
             path: object,
             *args: object,
             **kwargs: object,
         ) -> int:
-            nonlocal staging_descriptor
+            nonlocal committed_descriptor, staging_descriptor
             descriptor = real_open(path, *args, **kwargs)
             if (
                 isinstance(path, str)
                 and path.endswith(storage_preflight.RECOVERY_STAGING_SUFFIX)
             ):
                 staging_descriptor = descriptor
+            elif path == filename:
+                committed_descriptor = descriptor
             return descriptor
 
-        def record_staging_close(descriptor: int) -> None:
-            nonlocal staging_descriptor_closed
+        def record_close(descriptor: int) -> None:
+            nonlocal committed_descriptor_closed, staging_descriptor_closed
             if descriptor == staging_descriptor:
                 staging_descriptor_closed = True
+            if descriptor == committed_descriptor:
+                committed_descriptor_closed = True
             real_close(descriptor)
+
+        def record_fsync(descriptor: int) -> None:
+            nonlocal fsync_calls
+            fsync_calls += 1
+            real_fsync(descriptor)
 
         def report_one_stale_committed_link_count(
             directory_descriptor: int,
             name: str,
-            expected: os.stat_result,
-            *,
-            label: str,
-        ) -> os.stat_result:
-            nonlocal destination_checks
-            current = real_require(
-                directory_descriptor,
-                name,
-                expected,
-                label=label,
-            )
+        ) -> storage_preflight._Statx:
+            nonlocal destination_checks, poll_fsync_calls
+            current = real_force_synced_statx(directory_descriptor, name)
             if name == filename:
                 destination_checks += 1
+                if destination_checks == 1:
+                    self.assertFalse(staging_descriptor_closed)
+                    self.assertIsNone(committed_descriptor)
+                    self.assertEqual(current.stx_nlink, 2)
+                    return current
+                self.assertTrue(staging_descriptor_closed)
+                self.assertIsNotNone(committed_descriptor)
+                self.assertFalse(committed_descriptor_closed)
                 if destination_checks == 2:
-                    self.assertFalse(staging_descriptor_closed)
-                    return _with_link_count(current, 2)
-                if destination_checks == 3:
-                    self.assertFalse(staging_descriptor_closed)
+                    poll_fsync_calls = fsync_calls
+                    return _with_statx_link_count(current, 2)
+                self.assertEqual(fsync_calls, poll_fsync_calls)
             return current
 
         with mock.patch.object(
             storage_preflight.os,
             "open",
-            side_effect=record_staging_descriptor,
+            side_effect=record_descriptors,
         ), mock.patch.object(
             storage_preflight.os,
             "close",
-            side_effect=record_staging_close,
+            side_effect=record_close,
         ), mock.patch.object(
             storage_preflight,
-            "_require_same_regular_entry",
+            "_force_synced_statx",
             side_effect=report_one_stale_committed_link_count,
+        ), mock.patch.object(
+            storage_preflight.os,
+            "fsync",
+            side_effect=record_fsync,
+        ), mock.patch.object(
+            storage_preflight.time,
+            "monotonic",
+            side_effect=[0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.0, 3.0, 3.0],
         ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
             destination = storage_preflight._publish_staged_evidence(
                 self.orion_root,
@@ -833,6 +1090,7 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
         self.assertEqual(destination.stat().st_nlink, 1)
         self.assertEqual(destination_checks, 3)
         self.assertTrue(staging_descriptor_closed)
+        self.assertTrue(committed_descriptor_closed)
         sleep.assert_called_once_with(
             storage_preflight.COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS
         )
@@ -845,7 +1103,7 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
             [],
         )
 
-    def test_staged_publication_rejects_persistent_committed_link_count(
+    def test_staged_publication_rejects_persistent_force_synced_link_count(
         self,
     ) -> None:
         expected_identity = (
@@ -853,37 +1111,41 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
             self.orion_root.stat().st_ino,
         )
         filename = f"{PROBE_ID}.json"
-        real_require = storage_preflight._require_same_regular_entry
+        real_force_synced_statx = storage_preflight._force_synced_statx
         destination_checks = 0
+        timeout = storage_preflight.COMMITTED_LINK_COUNT_TIMEOUT_SECONDS
 
         def report_persistent_stale_committed_link_count(
             directory_descriptor: int,
             name: str,
-            expected: os.stat_result,
-            *,
-            label: str,
-        ) -> os.stat_result:
+        ) -> storage_preflight._Statx:
             nonlocal destination_checks
-            current = real_require(
-                directory_descriptor,
-                name,
-                expected,
-                label=label,
-            )
+            current = real_force_synced_statx(directory_descriptor, name)
             if name == filename:
                 destination_checks += 1
                 if destination_checks >= 2:
-                    return _with_link_count(current, 2)
+                    return _with_statx_link_count(current, 2)
             return current
 
         with mock.patch.object(
             storage_preflight,
-            "_require_same_regular_entry",
+            "_force_synced_statx",
             side_effect=report_persistent_stale_committed_link_count,
         ), mock.patch.object(
             storage_preflight.time,
             "monotonic",
-            side_effect=[0.0, 0.0, 1.0, 2.0],
+            side_effect=[
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                timeout / 2.0,
+                timeout / 2.0,
+                timeout / 2.0,
+                timeout / 2.0,
+                timeout,
+            ],
         ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
             with self.assertRaisesRegex(ValueError, "did not converge to one"):
                 storage_preflight._publish_staged_evidence(
@@ -899,7 +1161,7 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
         )
         self.assertEqual(destination.read_bytes(), b"reviewed payload\n")
         self.assertEqual(destination.stat().st_nlink, 1)
-        self.assertEqual(destination_checks, 4)
+        self.assertEqual(destination_checks, 3)
         self.assertEqual(sleep.call_count, 2)
         self.assertEqual(
             list(
@@ -918,37 +1180,40 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
             self.orion_root.stat().st_ino,
         )
         filename = f"{PROBE_ID}.json"
-        real_require = storage_preflight._require_same_regular_entry
+        real_force_synced_statx = storage_preflight._force_synced_statx
         destination_checks = 0
+        timeout = storage_preflight.COMMITTED_LINK_COUNT_TIMEOUT_SECONDS
 
         def report_overdue_committed_link_count_convergence(
             directory_descriptor: int,
             name: str,
-            expected: os.stat_result,
-            *,
-            label: str,
-        ) -> os.stat_result:
+        ) -> storage_preflight._Statx:
             nonlocal destination_checks
-            current = real_require(
-                directory_descriptor,
-                name,
-                expected,
-                label=label,
-            )
+            current = real_force_synced_statx(directory_descriptor, name)
             if name == filename:
                 destination_checks += 1
                 if destination_checks == 2:
-                    return _with_link_count(current, 2)
+                    return _with_statx_link_count(current, 2)
             return current
 
         with mock.patch.object(
             storage_preflight,
-            "_require_same_regular_entry",
+            "_force_synced_statx",
             side_effect=report_overdue_committed_link_count_convergence,
         ), mock.patch.object(
             storage_preflight.time,
             "monotonic",
-            side_effect=[0.0, 0.0, 3.0],
+            side_effect=[
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                timeout - 1.0,
+                timeout - 1.0,
+                timeout - 1.0,
+                timeout + 1.0,
+            ],
         ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
             with self.assertRaisesRegex(ValueError, "before the commit deadline"):
                 storage_preflight._publish_staged_evidence(
@@ -969,6 +1234,153 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
             storage_preflight.COMMITTED_LINK_COUNT_INITIAL_RETRY_SECONDS
         )
 
+    def test_staged_publication_rejects_initial_convergence_after_deadline(
+        self,
+    ) -> None:
+        expected_identity = (
+            self.orion_root.stat().st_dev,
+            self.orion_root.stat().st_ino,
+        )
+        filename = f"{PROBE_ID}.json"
+        timeout = storage_preflight.COMMITTED_LINK_COUNT_TIMEOUT_SECONDS
+        with mock.patch.object(
+            storage_preflight.time,
+            "monotonic",
+            side_effect=[0.0, 0.0, 0.0, 0.0, timeout + 1.0],
+        ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "before the commit deadline"):
+                storage_preflight._publish_staged_evidence(
+                    self.orion_root,
+                    expected_root_identity=expected_identity,
+                    filename=filename,
+                    payload=b"reviewed payload\n",
+                )
+
+        sleep.assert_not_called()
+        destination = self.orion_root.joinpath(
+            *storage_preflight.EVIDENCE_PARENT_PARTS,
+            filename,
+        )
+        self.assertEqual(destination.read_bytes(), b"reviewed payload\n")
+        self.assertEqual(destination.stat().st_nlink, 1)
+
+    def test_staged_publication_deadline_includes_pinned_open_and_fstat(
+        self,
+    ) -> None:
+        expected_identity = (
+            self.orion_root.stat().st_dev,
+            self.orion_root.stat().st_ino,
+        )
+        timeout = storage_preflight.COMMITTED_LINK_COUNT_TIMEOUT_SECONDS
+        for delayed_operation in (
+            "open",
+            "initial-fstat",
+            "poll-directory",
+            "poll-fstat",
+        ):
+            with self.subTest(delayed_operation=delayed_operation):
+                filename = f"delayed-{delayed_operation}.json"
+                real_open = storage_preflight.os.open
+                real_fstat = storage_preflight.os.fstat
+                real_force_synced_statx = storage_preflight._force_synced_statx
+                real_require_same_directory = storage_preflight._require_same_directory
+                clock = 0.0
+                committed_descriptor: int | None = None
+                committed_fstat_calls = 0
+                destination_checks = 0
+
+                def delay_committed_open(
+                    path: object,
+                    *args: object,
+                    **kwargs: object,
+                ) -> int:
+                    nonlocal clock, committed_descriptor
+                    descriptor = real_open(path, *args, **kwargs)
+                    if path == filename:
+                        committed_descriptor = descriptor
+                        if delayed_operation == "open":
+                            clock = timeout + 1.0
+                    return descriptor
+
+                def delay_committed_fstat(descriptor: int) -> os.stat_result:
+                    nonlocal clock, committed_fstat_calls
+                    metadata = real_fstat(descriptor)
+                    if descriptor == committed_descriptor:
+                        committed_fstat_calls += 1
+                        if (
+                            delayed_operation == "initial-fstat"
+                            and committed_fstat_calls == 1
+                        ) or (
+                            delayed_operation == "poll-fstat"
+                            and committed_fstat_calls == 2
+                        ):
+                            clock = timeout + 1.0
+                    return metadata
+
+                def delay_poll_directory_validation(
+                    *args: object,
+                    **kwargs: object,
+                ) -> tuple[int, int]:
+                    nonlocal clock
+                    metadata = real_require_same_directory(*args, **kwargs)
+                    if (
+                        delayed_operation == "poll-directory"
+                        and committed_descriptor is not None
+                    ):
+                        clock = timeout + 1.0
+                    return metadata
+
+                def record_destination_force_sync(
+                    directory_descriptor: int,
+                    name: str,
+                ) -> storage_preflight._Statx:
+                    nonlocal destination_checks
+                    metadata = real_force_synced_statx(directory_descriptor, name)
+                    if name == filename:
+                        destination_checks += 1
+                    return metadata
+
+                with mock.patch.object(
+                    storage_preflight.os,
+                    "open",
+                    side_effect=delay_committed_open,
+                ), mock.patch.object(
+                    storage_preflight.os,
+                    "fstat",
+                    side_effect=delay_committed_fstat,
+                ), mock.patch.object(
+                    storage_preflight,
+                    "_force_synced_statx",
+                    side_effect=record_destination_force_sync,
+                ), mock.patch.object(
+                    storage_preflight,
+                    "_require_same_directory",
+                    side_effect=delay_poll_directory_validation,
+                ), mock.patch.object(
+                    storage_preflight.time,
+                    "monotonic",
+                    side_effect=lambda: clock,
+                ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "before the commit deadline",
+                    ):
+                        storage_preflight._publish_staged_evidence(
+                            self.orion_root,
+                            expected_root_identity=expected_identity,
+                            filename=filename,
+                            payload=b"reviewed payload\n",
+                        )
+
+                sleep.assert_not_called()
+                self.assertEqual(destination_checks, 1)
+                destination = self.orion_root.joinpath(
+                    *storage_preflight.EVIDENCE_PARENT_PARTS,
+                    filename,
+                )
+                self.assertEqual(destination.read_bytes(), b"reviewed payload\n")
+                self.assertEqual(destination.stat().st_nlink, 1)
+
     def test_staged_publication_rejects_unexpected_committed_link_count_without_retry(
         self,
     ) -> None:
@@ -977,32 +1389,24 @@ class CaptureStoragePreflightEvidenceTest(unittest.TestCase):
             self.orion_root.stat().st_ino,
         )
         filename = f"{PROBE_ID}.json"
-        real_require = storage_preflight._require_same_regular_entry
+        real_force_synced_statx = storage_preflight._force_synced_statx
         destination_checks = 0
 
         def report_unexpected_committed_link_count(
             directory_descriptor: int,
             name: str,
-            expected: os.stat_result,
-            *,
-            label: str,
-        ) -> os.stat_result:
+        ) -> storage_preflight._Statx:
             nonlocal destination_checks
-            current = real_require(
-                directory_descriptor,
-                name,
-                expected,
-                label=label,
-            )
+            current = real_force_synced_statx(directory_descriptor, name)
             if name == filename:
                 destination_checks += 1
                 if destination_checks == 2:
-                    return _with_link_count(current, 3)
+                    return _with_statx_link_count(current, 3)
             return current
 
         with mock.patch.object(
             storage_preflight,
-            "_require_same_regular_entry",
+            "_force_synced_statx",
             side_effect=report_unexpected_committed_link_count,
         ), mock.patch.object(storage_preflight.time, "sleep") as sleep:
             with self.assertRaisesRegex(ValueError, "link count is not one"):
