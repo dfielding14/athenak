@@ -1,0 +1,245 @@
+{
+  "authorization": {
+    "claim_closure_authorized": false,
+    "launch_authorized": false,
+    "policy_mutation_authorized": false,
+    "qualifying_output_inspection_authorized": false
+  },
+  "cell_diagnostic_contract": {
+    "actual_leaf_spacing": "target_composite_spacing_times_2_to_the_target_level_minus_physical_source_level",
+    "formulae": {
+      "Lambda": "abs(J_q-rho_q*v_g)/((rho_g+rho_q)*v_A)",
+      "R": "rho_q/(rho_g+rho_q)",
+      "S_delta": "min(actual_leaf_dx1,actual_leaf_dx2)/d_i",
+      "d_i": "rho_g^(-1/2)",
+      "v_A": "abs(B)/sqrt(rho_g)"
+    },
+    "map_retention": "immutable_returned_numpy_cell_maps_and_bound_grid_faces_must_be_retained_as_production_evidence",
+    "per_cell_maxima_required": true,
+    "rare_cell_waiver_allowed": false,
+    "returned_maps": [
+      "R",
+      "Lambda",
+      "d_i",
+      "S_delta",
+      "actual_leaf_dx1",
+      "actual_leaf_dx2",
+      "gas_frame_current_magnitude"
+    ]
+  },
+  "claim_id": "CLAIM-PAPER-SHOCK-001",
+  "claim_rejection_rules": {
+    "Q011-APP-DI": [
+      "physical_precursor_turbulence_claim",
+      "physical_scattering_interpretation"
+    ],
+    "Q011-APP-LAMBDA": [
+      "Hall_negligible_claim",
+      "Bell_mechanism_claim",
+      "physical_magnetic_amplification_claim",
+      "physical_DSA_scattering_claim"
+    ],
+    "Q011-APP-NORM": [
+      "all_physical_MHD_PIC_Bell_shock_and_DSA_claims"
+    ],
+    "Q011-APP-R": [
+      "all_physical_MHD_PIC_Bell_shock_and_DSA_claims"
+    ],
+    "Q011-APP-RG": [
+      "Emax_claim",
+      "high_energy_slope_or_cutoff_claim",
+      "acceleration_rate_claim",
+      "acceleration_efficiency_claim"
+    ],
+    "Q011-APP-TIME": [
+      "all_history_and_global_applicability_claims"
+    ],
+    "Lambda_ge_1": [
+      "no_Hall_run_approximates_target_plasma_claim"
+    ],
+    "permanent": [
+      "microscopic_shock_structure_claim",
+      "self_consistent_injection_claim"
+    ]
+  },
+  "date": "2026-06-06",
+  "exact_normalization_contract": {
+    "alfven_speed_formula": "abs_B_over_sqrt_rho_g",
+    "gas_density_representation": "ion_mass_density_rho_g",
+    "gas_frame_current_formula": "J_q_minus_rho_q_times_v_g",
+    "particle_gyroradius_formula": "abs_p_over_abs_q_over_m_times_abs_B_local",
+    "particle_light_speed": 10000.0,
+    "particle_momentum_formula": "gamma_of_v_times_v",
+    "prtcl_j_representation": "deposited_J_CR_over_c_named_J_q",
+    "prtcl_rho_representation": "deposited_rho_CR_over_c_named_rho_q",
+    "reference_b0": 1.0,
+    "reference_rho0": 1.0,
+    "selected_species_abs_q_over_m": 1.0,
+    "selected_species_charge_sign": 1,
+    "selected_species_count": 1,
+    "selected_species_index": 0
+  },
+  "gate": "Q-011",
+  "gate_contract": {
+    "Q011-APP-DI": {
+      "acceptance": {
+        "S_delta_minimum_excluding_shock_transition": 1.0,
+        "lambda_B_characteristic_over_local_di_maximum_minimum": 10.0,
+        "sub_10di_magnetic_power_fraction_maximum": 0.05
+      },
+      "provenance": "AthenaK_selected_conservative_decade_scale_separation_interpretation_Bai_requirement_is_qualitative"
+    },
+    "Q011-APP-LAMBDA": {
+      "acceptance": {
+        "full_domain_per_cell_maximum": 0.1
+      },
+      "provenance": "AthenaK_selected_conservative_bound_Bai_requires_Lambda_much_less_than_one_for_no_Hall_behavior"
+    },
+    "Q011-APP-NORM": {
+      "acceptance": "exact_mapping_match_no_inference",
+      "provenance": "equation_and_normalization_identity"
+    },
+    "Q011-APP-R": {
+      "acceptance": {
+        "full_domain_per_cell_maximum": 0.01
+      },
+      "provenance": "AthenaK_selected_conservative_bound_Bai_requires_R_much_less_than_one"
+    },
+    "Q011-APP-RG": {
+      "acceptance": {
+        "energy_fraction_with_rg_above_Ly_over_4_maximum": 0.001,
+        "energy_weighted_q999_over_Ly_maximum": 0.125,
+        "macro_weighted_q999_over_Ly_maximum": 0.125,
+        "maximum_rg_over_Ly": 0.5
+      },
+      "provenance": "AthenaK_selected_conservative_interpretation_of_Sun_and_Bai_several_high_energy_gyroradii"
+    },
+    "Q011-APP-TIME": {
+      "acceptance": "complete_contiguous_every_cycle_post_startup_coverage_through_t1200_complete_particle_exposure_and_closed_escape_ledger",
+      "provenance": "engineering_and_analysis_completeness"
+    }
+  },
+  "historical_artifact_policy": {
+    "historical_decks_modified": false,
+    "historical_preregistrations_modified": false,
+    "historical_reducers_modified": false,
+    "protected_historical_files_modified": false,
+    "qualification_or_claim_authority_added": false
+  },
+  "ion_scale_contract": {
+    "magnetic_spectrum": "two_dimensional_Hann_windowed_vector_delta_B_power_weighted_mean_k_in_detected_front_precursor",
+    "magnetic_spectrum_region_offsets_c_over_omega_pi": [
+      120.0,
+      1200.0
+    ],
+    "shock_transition_excluded": true,
+    "shock_transition_half_width_c_over_omega_pi": 120.0,
+    "zero_resolvable_precursor_fluctuation_power": "fail_closed"
+  },
+  "literature_boundary": {
+    "Bai_et_al_2015": "R_much_less_than_one_Lambda_much_less_than_one_for_no_Hall_and_MHD_PIC_scales_much_larger_than_ion_inertial_length_are_qualitative_requirements_not_the_numeric_AthenaK_thresholds",
+    "Sun_and_Bai_section_5_4": "transverse_domain_contains_several_high_energy_CR_gyroradii_is_qualitative_not_the_numeric_AthenaK_thresholds"
+  },
+  "particle_contract": {
+    "local_B_sampling": "TSC_on_matched_finest_composite_periodic_x2_nonperiodic_x1_stencil_must_remain_retained",
+    "minimum_positive_weight_active_particles_for_q999": 1000,
+    "population": "cr_source_eq_1_birth_time_ge_45_positive_macro_weight",
+    "reported_weightings": [
+      "macro_weighted",
+      "CR_kinetic_energy_weighted"
+    ],
+    "R_and_Lambda_exposure_populations": [
+      "all_active",
+      "detected_front_upstream",
+      "macro_weighted_q990_specific_kinetic_energy_high_energy_tail"
+    ],
+    "R_and_Lambda_exposure_statistics": [
+      "weighted_mean",
+      "q500",
+      "q900",
+      "q990",
+      "q999",
+      "threshold_exceedance_fraction"
+    ],
+    "runtime_pusher_field_exposure_still_required": true
+  },
+  "predecessor_bindings": {
+    "deposited_current_semantics": {
+      "path": "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json",
+      "sha256": "2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342"
+    },
+    "production_science_readiness": {
+      "path": "tst/publication/readiness/q011_section54_production_science_diagnostic_successor_v1_2026-06-06.json",
+      "sha256": "ba2c48e07aeb3fa555d8fefb3e181148f7db451f96e6d2ae965760569518cc40"
+    },
+    "production_science_reducer": {
+      "path": "tst/publication/q011_section54_production_science_successor_v1.py",
+      "sha256": "c18b61990b4e95858da983b50b31334861291c50137440c5fde2b370a4f22b73"
+    }
+  },
+  "production_evidence_status": "absent_not_fabricated",
+  "qualification_effect": "source_local_non_authorizing_diagnostic_and_gate_only_no_launch_no_policy_mutation_no_qualifying_output_inspection_no_claim_closure",
+  "record_type": "q011_section54_physical_applicability_successor",
+  "regional_contract": {
+    "detected_front_downstream_offsets_c_over_omega_pi": [
+      -1200.0,
+      -120.0
+    ],
+    "detected_front_far_upstream_offsets_c_over_omega_pi": [
+      1200.0,
+      2400.0
+    ],
+    "detected_front_precursor_offsets_c_over_omega_pi": [
+      120.0,
+      1200.0
+    ],
+    "reported_statistics": [
+      "area_weighted",
+      "gas_frame_current_magnitude_weighted"
+    ],
+    "zero_total_current_weight": "report_unavailable_current_weighted_statistic_without_invention"
+  },
+  "runtime_time_escape_schema": {
+    "all_cycle_extrema_required": [
+      "R_maximum",
+      "Lambda_maximum",
+      "S_delta_minimum_excluding_shock_transition",
+      "lambda_B_characteristic_over_local_di_maximum_minimum",
+      "sub_10di_magnetic_power_fraction_maximum",
+      "macro_q999_over_Ly_maximum",
+      "energy_q999_over_Ly_maximum",
+      "particle_rg_maximum_over_Ly",
+      "energy_fraction_with_rg_above_Ly_over_4_maximum"
+    ],
+    "boundary_escape": "complete_ix1_ox1_face_ledgers_periodic_x2_inventory_exact_face_to_total_closure_zero_unaccounted_quantities_zero_source_census_residuals",
+    "coverage": "every_integrator_cycle_post_startup_removal_t45_through_terminal_t1200_with_exact_contiguous_count_and_complete_restart_segments",
+    "particle_exposure": "every_active_particle_update_and_pre_destruction_boundary_event_including_escaped_particles_with_sampled_R_Lambda_maxima_and_cumulative_macro_and_CR_energy_weighted_threshold_exceedance_fractions_consistent_with_all_cycle_cell_extrema",
+    "snapshot_dominance": "all_cycle_extrema_must_conservatively_dominate_every_supplied_snapshot_observable",
+    "record_type": "q011_section54_runtime_time_escape_applicability_v1"
+  },
+  "runtime_time_escape_telemetry_available": false,
+  "schema_version": 1,
+  "scope": "Additive source-local fail-closed Q011 Section 5.4 physical-applicability reducer and gate successor. It computes exact-normalization-bound snapshot cell maps, detected-front regional R and Lambda statistics, local ion-inertial and actual-leaf-spacing diagnostics, precursor magnetic scale separation, particle local-B gyroradius containment, and validates a future all-cycle time and boundary-escape interface. It authorizes no execution, inspection, policy change, or scientific claim.",
+  "source_bindings": {
+    "design": {
+      "path": "tst/publication/readiness/q011_section54_physical_applicability_successor_v1_2026-06-06.md",
+      "sha256": "e9f56a714c5b9dea9f6bb023d5f0545d82732f2e156f6d9bedc84f016034edae"
+    },
+    "focused_tests": {
+      "path": "tst/publication/test_q011_section54_physical_applicability_successor_v1.py",
+      "sha256": "27fe9368d409afcc46d98398fd824f88cf160b2279066ed201fccf100f70d4cc"
+    },
+    "successor_reducer": {
+      "path": "tst/publication/q011_section54_physical_applicability_successor_v1.py",
+      "sha256": "3570c314035e567d459e6521f1364f0d0a37357ed19ecbe23867d28e4e3e7e1e"
+    }
+  },
+  "successor_id": "q011_section54_physical_applicability_successor_v1",
+  "unresolved_production_obligations": [
+    "implement_and_independently_review_runtime_all_cycle_particle_exposure_and_boundary_escape_ledger_in_separate_Cpp_workstream",
+    "bind_retained_raw_snapshots_and_returned_cell_maps_to_immutable_production_attempt_provenance",
+    "confirm_composite_TSC_gyroradius_diagnostic_against_runtime_sampled_particle_fields_including_AMR_interfaces",
+    "execute_registered_production_campaign_without_post_result_threshold_changes",
+    "independently_review_physical_interpretation_and_claim_scope"
+  ]
+}
