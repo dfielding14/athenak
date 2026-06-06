@@ -607,6 +607,11 @@ SEGMENT_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,28}")
 JOB_ID_PATTERN = re.compile(r"[1-9][0-9]*")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 GIT_REVISION_PATTERN = re.compile(r"[0-9a-f]{40}")
+R17_RECOST_SEGMENT_PATTERN = re.compile(
+    r"s(?P<index>[0-9]+)_rankio_t(?P<start>[0-9]+(?:p[0-9]+)?)"
+    r"_t(?P<target>[0-9]+(?:p[0-9]+)?)"
+)
+R17_SCOPED_NODE_HOUR_METHOD = "observed-stage-i-scoped-node-hour-rate-v2"
 BATCH_SCRIPT_DIGEST_PLACEHOLDER = "0" * 64
 BATCH_SCRIPT_DIGEST_PATTERN = re.compile(
     r"(?m)^BATCH_SCRIPT_SHA256=([0-9a-f]{64})$"
@@ -3971,6 +3976,193 @@ def require_r17_decimal(value: object, label: str) -> Decimal:
     if not retained.is_finite():
         raise ValueError(f"{label} must be a finite decimal string")
     return retained
+
+
+def validate_r17_scoped_budget_projection(
+    budget: dict[str, object],
+    current_rows: list[dict[str, str]],
+) -> None:
+    """Require a final, internally coherent v2 scoped node-hour projection."""
+
+    if budget.get("method") != R17_SCOPED_NODE_HOUR_METHOD:
+        raise ValueError("latest promoted recost budget method is stale")
+
+    basis_keys = {
+        "job_id", "case_id", "segment", "actual_node_hours", "observed_cells",
+        "observed_simulation_interval",
+        "normalized_node_hours_per_cell_per_simulation_time",
+    }
+
+    def validate_basis(
+        value: object, label: str,
+    ) -> tuple[dict[str, object], Decimal, int]:
+        basis = require_r17_exact_keys(value, basis_keys, label)
+        job_id = require_r17_nonempty_string(basis["job_id"], f"{label} job ID")
+        case_id = require_r17_nonempty_string(basis["case_id"], f"{label} case ID")
+        segment = require_r17_nonempty_string(basis["segment"], f"{label} segment")
+        segment_match = R17_RECOST_SEGMENT_PATTERN.fullmatch(segment)
+        if (
+            JOB_ID_PATTERN.fullmatch(job_id) is None
+            or case_id not in AUTHORIZED_CASE_IDS
+            or segment_match is None
+        ):
+            raise ValueError(f"{label} identity is invalid")
+        try:
+            segment_start = Decimal(segment_match.group("start").replace("p", "."))
+            segment_target = Decimal(segment_match.group("target").replace("p", "."))
+        except InvalidOperation as error:
+            raise ValueError(f"{label} segment interval is invalid") from error
+        actual = require_r17_decimal(
+            basis["actual_node_hours"], f"{label} actual node-hours"
+        )
+        cells = require_r17_integer(
+            basis["observed_cells"], f"{label} observed cells", 1
+        )
+        interval = require_r17_decimal(
+            basis["observed_simulation_interval"], f"{label} observed interval"
+        )
+        rate = require_r17_decimal(
+            basis["normalized_node_hours_per_cell_per_simulation_time"],
+            f"{label} normalized rate",
+        )
+        matching_rows = [
+            row for row in current_rows
+            if isinstance(row, dict) and row.get("job_id") == job_id
+        ]
+        if (
+            segment_start < 0
+            or segment_target <= segment_start
+            or actual <= 0
+            or interval <= 0
+            or rate <= 0
+            or len(matching_rows) != 1
+            or matching_rows[0].get("case_id") != case_id
+            or matching_rows[0].get("segment") != segment
+            or require_r17_decimal(
+                matching_rows[0].get("actual_node_hours"),
+                f"{label} ledger actual node-hours",
+            )
+            != actual
+            or rate != actual / Decimal(cells) / interval
+        ):
+            raise ValueError(f"{label} is not a credible current-ledger measurement")
+        return basis, rate, int(segment_match.group("index"))
+
+    global_basis, global_rate, _ = validate_basis(
+        budget.get("measurement_basis"),
+        "latest promoted recost global measurement basis",
+    )
+    if global_basis["case_id"] == "R12":
+        raise ValueError(
+            "latest promoted recost global measurement basis must be non-R12"
+        )
+
+    breakdown = budget.get("case_breakdown")
+    if not isinstance(breakdown, dict) or set(breakdown) != set(AUTHORIZED_CASE_IDS):
+        raise ValueError("latest promoted recost scoped case breakdown differs")
+    case_keys = {
+        "matrix_full_case_node_hours_reference_only",
+        "authenticated_progress_fraction", "remaining_simulation_time",
+        "projected_cells", "projection_measurement_basis",
+        "observed_rate_projected_remaining_node_hours",
+        "authorized_profile_reserved_node_hours", "projected_remaining_node_hours",
+    }
+    total_authorized = Decimal("0")
+    total_remaining = Decimal("0")
+    required_time = Decimal(str(REQUIRED_CASE_FINAL_TIME))
+    for case_id in sorted(AUTHORIZED_CASE_IDS):
+        case = require_r17_exact_keys(
+            breakdown[case_id], case_keys, f"latest promoted recost {case_id} budget"
+        )
+        if case_id == "R12":
+            basis, rate, segment_index = validate_basis(
+                case["projection_measurement_basis"],
+                "latest promoted recost R12 measurement basis",
+            )
+            if (
+                basis["case_id"] != "R12"
+                or basis["job_id"] == R12_HISTORICAL_CLEAN_PARTIAL_JOB_ID
+                or segment_index < 1
+            ):
+                raise ValueError(
+                    "latest promoted recost R12 basis is not a fresh final measurement"
+                )
+        else:
+            if case["projection_measurement_basis"] != global_basis:
+                raise ValueError(
+                    f"latest promoted recost {case_id} basis does not reuse "
+                    "the global basis"
+                )
+            rate = global_rate
+
+        reference = require_r17_decimal(
+            case["matrix_full_case_node_hours_reference_only"],
+            f"latest promoted recost {case_id} matrix reference",
+        )
+        progress = require_r17_decimal(
+            case["authenticated_progress_fraction"],
+            f"latest promoted recost {case_id} progress",
+        )
+        remaining_time = require_r17_decimal(
+            case["remaining_simulation_time"],
+            f"latest promoted recost {case_id} remaining time",
+        )
+        projected_cells_text = case["projected_cells"]
+        if (
+            not isinstance(projected_cells_text, str)
+            or re.fullmatch(r"[1-9][0-9]*", projected_cells_text) is None
+        ):
+            raise ValueError(
+                f"latest promoted recost {case_id} projected cells are invalid"
+            )
+        projected_cells = Decimal(projected_cells_text)
+        observed = require_r17_decimal(
+            case["observed_rate_projected_remaining_node_hours"],
+            f"latest promoted recost {case_id} observed-rate projection",
+        )
+        authorized = require_r17_decimal(
+            case["authorized_profile_reserved_node_hours"],
+            f"latest promoted recost {case_id} authorized reserve",
+        )
+        projected = require_r17_decimal(
+            case["projected_remaining_node_hours"],
+            f"latest promoted recost {case_id} projected remaining node-hours",
+        )
+        if (
+            reference < 0
+            or progress < 0
+            or progress > 1
+            or remaining_time != required_time * (Decimal("1") - progress)
+            or observed != rate * projected_cells * remaining_time
+            or authorized < 0
+            or projected != max(observed, authorized)
+            or (
+                case_id in R17_PREDECESSOR_CASE_IDS
+                and (
+                    abs(progress - Decimal("1")) > Decimal("1e-10")
+                    or abs(remaining_time) > Decimal("1e-9")
+                )
+            )
+        ):
+            raise ValueError(
+                f"latest promoted recost {case_id} scoped projection is invalid"
+            )
+        total_authorized += authorized
+        total_remaining += projected
+
+    if (
+        total_authorized
+        != require_r17_decimal(
+            budget.get("authorized_wave_reserved_node_hours"),
+            "latest promoted recost scoped authorized reserve",
+        )
+        or total_remaining
+        != require_r17_decimal(
+            budget.get("computed_remaining_stage_i_node_hours"),
+            "latest promoted recost scoped remaining node-hours",
+        )
+    ):
+        raise ValueError("latest promoted recost scoped projection totals differ")
 
 
 def require_r17_utc(value: object, label: str) -> datetime:
@@ -8402,9 +8594,9 @@ def require_r17_readiness_for_prepare(
     margin = require_r17_decimal(
         budget["computed_stage_i_margin_node_hours"], "recost Stage I margin"
     )
+    validate_r17_scoped_budget_projection(budget, current_rows)
     if (
-        budget["method"] != "observed-stage-i-node-hour-rate-v1"
-        or provenance["computed_projection_sha256"] != projection_sha
+        provenance["computed_projection_sha256"] != projection_sha
         or actual_retained != actual
         or authorized_retained != authorized
         or committed != actual + authorized

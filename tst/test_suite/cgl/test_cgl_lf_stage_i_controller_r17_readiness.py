@@ -1126,6 +1126,60 @@ def make_fixed_readiness(module, paths: dict[str, Path], recost: dict[str, objec
     return readiness_path, readiness, audit
 
 
+def scoped_node_hour_basis(job_id: str, case_id: str, segment: str):
+    return {
+        "job_id": job_id,
+        "case_id": case_id,
+        "segment": segment,
+        "actual_node_hours": "1",
+        "observed_cells": 1,
+        "observed_simulation_interval": "10",
+        "normalized_node_hours_per_cell_per_simulation_time": "0.1",
+    }
+
+
+def final_r17_scoped_budget():
+    global_basis = scoped_node_hour_basis("5000003", "R03", "s00_rankio_t0_t10")
+    r12_basis = scoped_node_hour_basis("5000012", "R12", "s01_rankio_t0_t10")
+    breakdown = {}
+    for case_number in range(2, 18):
+        case_id = f"R{case_number:02d}"
+        is_r17 = case_id == "R17"
+        breakdown[case_id] = {
+            "matrix_full_case_node_hours_reference_only": "10",
+            "authenticated_progress_fraction": "0" if is_r17 else "1",
+            "remaining_simulation_time": "10" if is_r17 else "0",
+            "projected_cells": "1",
+            "projection_measurement_basis": copy.deepcopy(
+                r12_basis if case_id == "R12" else global_basis
+            ),
+            "observed_rate_projected_remaining_node_hours": "1" if is_r17 else "0",
+            "authorized_profile_reserved_node_hours": "16" if is_r17 else "0",
+            "projected_remaining_node_hours": "16" if is_r17 else "0",
+        }
+    return {
+        "method": "observed-stage-i-scoped-node-hour-rate-v2",
+        "measurement_basis": global_basis,
+        "actual_stage_i_node_hours": "2",
+        "authorized_wave_reserved_node_hours": "16",
+        "actual_plus_authorized_wave_node_hours": "18",
+        "computed_remaining_stage_i_node_hours": "16",
+        "computed_stage_i_total_node_hours": "18",
+        "promoted_stage_i_envelope_node_hours": "1400",
+        "project_ceiling_node_hours": "4000",
+        "computed_stage_i_margin_node_hours": "1382",
+        "case_breakdown": breakdown,
+        "storage_projection_evidence": {},
+    }
+
+
+def refresh_gate_budget_sha(fixture):
+    budget = fixture["recost"]["budget"]
+    fixture["recost"]["provenance"]["computed_projection_sha256"] = hashlib.sha256(
+        (json.dumps(budget, sort_keys=True) + "\n").encode()
+    ).hexdigest()
+
+
 def gate_fixture(module, tmp_path: Path, monkeypatch):
     root = tmp_path / "root"
     monkeypatch.setattr(module, "DEFAULT_ROOT", root)
@@ -1214,20 +1268,21 @@ def gate_fixture(module, tmp_path: Path, monkeypatch):
     }
     lineage_sha = "c" * 64
     manifest_bindings = [{"path": "runs/example.json", "sha256": "d" * 64}]
-    budget = {
-        "method": "observed-stage-i-node-hour-rate-v1",
-        "measurement_basis": {},
-        "actual_stage_i_node_hours": "0",
-        "authorized_wave_reserved_node_hours": "16",
-        "actual_plus_authorized_wave_node_hours": "16",
-        "computed_remaining_stage_i_node_hours": "100",
-        "computed_stage_i_total_node_hours": "100",
-        "promoted_stage_i_envelope_node_hours": "1400",
-        "project_ceiling_node_hours": "4000",
-        "computed_stage_i_margin_node_hours": "1300",
-        "case_breakdown": {},
-        "storage_projection_evidence": {},
-    }
+    current_rows = [
+        {
+            "job_id": "5000003",
+            "case_id": "R03",
+            "segment": "s00_rankio_t0_t10",
+            "actual_node_hours": "1",
+        },
+        {
+            "job_id": "5000012",
+            "case_id": "R12",
+            "segment": "s01_rankio_t0_t10",
+            "actual_node_hours": "1",
+        },
+    ]
+    budget = final_r17_scoped_budget()
     projection_sha = hashlib.sha256(
         (json.dumps(budget, sort_keys=True) + "\n").encode()
     ).hexdigest()
@@ -1316,7 +1371,7 @@ def gate_fixture(module, tmp_path: Path, monkeypatch):
             "projected_authorized_wave_growth_bytes": module.R17_MINIMUM_RETAINED_BYTES,
             "headroom_after_authorized_wave_and_safety_bytes": 1000,
         },
-        "ledger": {"rows": 0, "sha256": sha256(paths["ledger"])},
+        "ledger": {"rows": len(current_rows), "sha256": sha256(paths["ledger"])},
         "reservations": {
             "rows": 0,
             "sha256": sha256(paths["reservations"]),
@@ -1356,7 +1411,7 @@ def gate_fixture(module, tmp_path: Path, monkeypatch):
             else "f" * 64
         ),
     )
-    monkeypatch.setattr(module, "read_ledger", lambda _paths: [])
+    monkeypatch.setattr(module, "read_ledger", lambda _paths: current_rows)
     monkeypatch.setattr(
         module,
         "validate_fixed_r17_readiness_chain",
@@ -1367,6 +1422,7 @@ def gate_fixture(module, tmp_path: Path, monkeypatch):
         "args": args,
         "recost": recost,
         "profile": profile,
+        "current_rows": current_rows,
         "kwargs": {
             "source_dir": source_dir,
             "matrix_path": matrix,
@@ -2852,6 +2908,117 @@ def test_strong_r17_gate_accepts_only_exact_current_sole_profile(tmp_path, monke
     )
     assert result is not None
     assert result["recost_sha256"] == "e" * 64
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("stale-v1", "budget method is stale"),
+        ("global-r12", "global measurement basis must be non-R12"),
+        ("r12-global", "R12 basis is not a fresh final measurement"),
+        ("r12-historical", "R12 basis is not a fresh final measurement"),
+        ("r12-incomplete", "R12 scoped projection is invalid"),
+        ("non-r12-scoped", "basis does not reuse the global basis"),
+        ("missing-case", "scoped case breakdown differs"),
+        ("bad-rate", "not a credible current-ledger measurement"),
+    ),
+)
+def test_strong_r17_gate_rejects_stale_or_malformed_scoped_budget(
+    tmp_path, monkeypatch, mutation, message
+):
+    module = load_controller()
+    fixture = gate_fixture(module, tmp_path, monkeypatch)
+    budget = fixture["recost"]["budget"]
+    breakdown = budget["case_breakdown"]
+    if mutation == "stale-v1":
+        budget["method"] = "observed-stage-i-node-hour-rate-v1"
+    elif mutation == "global-r12":
+        budget["measurement_basis"]["case_id"] = "R12"
+        fixture["current_rows"][0]["case_id"] = "R12"
+    elif mutation == "r12-global":
+        breakdown["R12"]["projection_measurement_basis"] = copy.deepcopy(
+            budget["measurement_basis"]
+        )
+    elif mutation == "r12-historical":
+        breakdown["R12"]["projection_measurement_basis"][
+            "job_id"
+        ] = module.R12_HISTORICAL_CLEAN_PARTIAL_JOB_ID
+        fixture["current_rows"][1]["job_id"] = (
+            module.R12_HISTORICAL_CLEAN_PARTIAL_JOB_ID
+        )
+    elif mutation == "r12-incomplete":
+        breakdown["R12"]["authenticated_progress_fraction"] = "0"
+        breakdown["R12"]["remaining_simulation_time"] = "10"
+        breakdown["R12"]["observed_rate_projected_remaining_node_hours"] = "1"
+        breakdown["R12"]["projected_remaining_node_hours"] = "1"
+        budget["computed_remaining_stage_i_node_hours"] = "17"
+        budget["computed_stage_i_total_node_hours"] = "19"
+        budget["computed_stage_i_margin_node_hours"] = "1381"
+    elif mutation == "non-r12-scoped":
+        breakdown["R04"]["projection_measurement_basis"] = copy.deepcopy(
+            breakdown["R12"]["projection_measurement_basis"]
+        )
+    elif mutation == "missing-case":
+        breakdown.pop("R16")
+    elif mutation == "bad-rate":
+        budget["measurement_basis"][
+            "normalized_node_hours_per_cell_per_simulation_time"
+        ] = "0.2"
+    refresh_gate_budget_sha(fixture)
+    with pytest.raises(ValueError, match=message):
+        module.require_r17_readiness_for_prepare(
+            fixture["paths"], fixture["args"], [], **fixture["kwargs"]
+        )
+
+
+def test_strong_r17_gate_rejects_final_credible_projection_above_envelope(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    fixture = gate_fixture(module, tmp_path, monkeypatch)
+    budget = fixture["recost"]["budget"]
+    r17 = budget["case_breakdown"]["R17"]
+    r17["projected_cells"] = "1498"
+    r17["observed_rate_projected_remaining_node_hours"] = "1498"
+    r17["projected_remaining_node_hours"] = "1498"
+    budget["computed_remaining_stage_i_node_hours"] = "1498"
+    budget["computed_stage_i_total_node_hours"] = "1500"
+    budget["computed_stage_i_margin_node_hours"] = "-100"
+    refresh_gate_budget_sha(fixture)
+    with pytest.raises(ValueError, match="budget is stale or arithmetically invalid"):
+        module.require_r17_readiness_for_prepare(
+            fixture["paths"], fixture["args"], [], **fixture["kwargs"]
+        )
+
+
+def test_strong_r17_gate_never_accepts_provisional_fresh_r12_exception(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    fixture = gate_fixture(module, tmp_path, monkeypatch)
+    budget = fixture["recost"]["budget"]
+    r12 = budget["case_breakdown"]["R12"]
+    r12_basis = r12["projection_measurement_basis"]
+    r12_basis["job_id"] = module.R12_HISTORICAL_CLEAN_PARTIAL_JOB_ID
+    r12_basis["segment"] = "s00_rankio_t0_t0p25"
+    fixture["current_rows"][1]["job_id"] = module.R12_HISTORICAL_CLEAN_PARTIAL_JOB_ID
+    fixture["current_rows"][1]["segment"] = "s00_rankio_t0_t0p25"
+    r12["authenticated_progress_fraction"] = "0"
+    r12["remaining_simulation_time"] = "10"
+    r12["observed_rate_projected_remaining_node_hours"] = "1"
+    r12["projected_remaining_node_hours"] = "1"
+    r17 = budget["case_breakdown"]["R17"]
+    r17["projected_cells"] = "1497"
+    r17["observed_rate_projected_remaining_node_hours"] = "1497"
+    r17["projected_remaining_node_hours"] = "1497"
+    budget["computed_remaining_stage_i_node_hours"] = "1498"
+    budget["computed_stage_i_total_node_hours"] = "1500"
+    budget["computed_stage_i_margin_node_hours"] = "-100"
+    refresh_gate_budget_sha(fixture)
+    with pytest.raises(ValueError, match="R12 basis is not a fresh final measurement"):
+        module.require_r17_readiness_for_prepare(
+            fixture["paths"], fixture["args"], [], **fixture["kwargs"]
+        )
 
 
 def test_strong_r17_gate_rejects_wrong_predecessor_reservation_snapshot(
