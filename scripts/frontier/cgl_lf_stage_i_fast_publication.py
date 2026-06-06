@@ -64,6 +64,8 @@ SCIENCE_PROVENANCE_RECORD_TYPE = (
 SCIENCE_AUTHORITY = "non-authorizing-direct-fast-scientific-assessment"
 CT_AUDIT_RECORD_TYPE = "stage-i-direct-fast-ct-audit"
 EVIDENCE_RESULTS = {"pass", "fail", "inconclusive"}
+SCIENCE_CONTRAST_RESULTS = {*EVIDENCE_RESULTS, "available"}
+R15_STRICT_FAILURE_RECORD_TYPE = "cgl-lf-stage-i-retained-strict-failure-evidence"
 RENDERER_PATH = Path(__file__).resolve()
 ACCEPTANCE_RECORD_TYPES = {
     "stage-i-scientific-criteria-validation",
@@ -524,6 +526,12 @@ def validated_result(value: object) -> str:
     return str(value) if value in EVIDENCE_RESULTS else "inconclusive"
 
 
+def validated_science_contrast_result(value: object) -> str:
+    """Return one admitted reviewed-science contrast disposition."""
+
+    return str(value) if value in SCIENCE_CONTRAST_RESULTS else "inconclusive"
+
+
 def science_record_errors(
     path: Path, record: dict[str, Any], analysis: Path
 ) -> list[str]:
@@ -558,12 +566,29 @@ def science_record_errors(
         errors.append(f"{label} lacks case_dispositions")
     elif set(dispositions) != set(selected_cases):
         errors.append(f"{label} case_dispositions differ from selected_cases")
-    elif record.get("result") == "pass" and any(
-        not isinstance(disposition, dict)
-        or disposition.get("claim_eligible") is not True
-        for disposition in dispositions.values()
-    ):
-        errors.append(f"{label} passes with ineligible selected cases")
+    else:
+        for case_id, disposition in dispositions.items():
+            if not isinstance(disposition, dict):
+                errors.append(f"{label} case disposition {case_id} is not an object")
+                continue
+            claim_eligible = disposition.get("claim_eligible")
+            acceptance_result = disposition.get("acceptance_result")
+            if not isinstance(claim_eligible, bool):
+                errors.append(
+                    f"{label} case disposition {case_id} lacks boolean claim eligibility"
+                )
+            if (
+                acceptance_result is not None
+                and acceptance_result not in EVIDENCE_RESULTS
+            ):
+                errors.append(
+                    f"{label} case disposition {case_id} has an invalid acceptance result"
+                )
+            if claim_eligible is True and acceptance_result != "pass":
+                errors.append(
+                    f"{label} case disposition {case_id} is eligible without "
+                    "acceptance pass"
+                )
 
     provenance = record.get("provenance")
     if not isinstance(provenance, dict):
@@ -635,15 +660,45 @@ def science_record_errors(
                 if not isinstance(contrast, dict):
                     errors.append(f"{label} contrast {family}.{name} is not an object")
                     continue
+                result = contrast.get("result")
+                if result not in SCIENCE_CONTRAST_RESULTS:
+                    errors.append(
+                        f"{label} contrast {family}.{name} has an invalid result"
+                    )
+                references = [
+                    contrast.get(key)
+                    for key in ("active", "passive", "left", "right")
+                    if contrast.get(key) is not None
+                ]
+                if any(case_id not in CASE_IDS for case_id in references):
+                    errors.append(
+                        f"{label} contrast {family}.{name} references an invalid case"
+                    )
                 if (
-                    contrast.get("result") == "pass"
+                    result == "pass"
                     and contrast.get("claim_eligible") is not True
                 ):
                     errors.append(
-                        f"{label} contrast {family}.{name} passes without claim eligibility"
+                        f"{label} contrast {family}.{name} passes without "
+                        "claim eligibility"
+                    )
+                if (
+                    contrast.get("claim_eligible") is True
+                    and isinstance(dispositions, dict)
+                    and any(
+                        not isinstance(dispositions.get(case_id), dict)
+                        or dispositions[case_id].get("claim_eligible") is not True
+                        for case_id in references
+                    )
+                ):
+                    errors.append(
+                        f"{label} contrast {family}.{name} is eligible with "
+                        "ineligible contributing cases"
                     )
                 metrics = contrast.get("metrics")
-                if isinstance(metrics, list):
+                if not isinstance(metrics, list):
+                    errors.append(f"{label} contrast {family}.{name} lacks metrics")
+                else:
                     for metric in metrics:
                         if (
                             isinstance(metric, dict)
@@ -748,6 +803,8 @@ def ct_audit_record_errors(
     if not isinstance(cases, dict):
         errors.append(f"{label} lacks cases")
         cases = {}
+    elif set(cases) != set(selected_cases):
+        errors.append(f"{label} cases differ from selected-case inventory")
     results: list[str] = []
     for case_id in selected_cases:
         case = cases.get(case_id)
@@ -755,7 +812,10 @@ def ct_audit_record_errors(
             errors.append(f"{label} lacks selected case {case_id}")
             results.append("inconclusive")
             continue
-        result = validated_result(case.get("ct_result"))
+        raw_result = case.get("ct_result")
+        if raw_result not in EVIDENCE_RESULTS:
+            errors.append(f"{label} case {case_id} has an invalid CT result")
+        result = validated_result(raw_result)
         results.append(result)
         native = case.get("native_restart_ct")
         if not isinstance(native, dict):
@@ -766,15 +826,39 @@ def ct_audit_record_errors(
             or native.get("release_authorizing") is not False
         ):
             errors.append(f"{label} case {case_id} must remain non-authorizing")
-        if result == "pass" and not (
+        if result in {"pass", "fail"} and not (
             case.get("provenance_authenticated") is True
             and case.get("ct_evidence_available") is True
             and case.get("ct_claim_supported") is True
-            and native.get("coverage_complete") is True
             and native.get("ct_evidence_available") is True
             and native.get("ct_claim_supported") is True
+            and native.get("result") == result
         ):
-            errors.append(f"{label} case {case_id} passes without complete CT evidence")
+            errors.append(
+                f"{label} case {case_id} has a conclusive result without "
+                "consistent CT evidence"
+            )
+        if result == "pass" and native.get("coverage_complete") is not True:
+            errors.append(f"{label} case {case_id} passes without complete CT coverage")
+        if result in {"pass", "fail"}:
+            maximum = as_float(native.get("maximum_normalized_ct_divb"))
+            threshold = as_float(native.get("normalized_ct_divb_lt"))
+            numerically_consistent = (
+                maximum is not None
+                and threshold is not None
+                and threshold > 0.0
+                and native.get("numerical_result") == result
+                and (
+                    (maximum < threshold)
+                    if result == "pass"
+                    else (maximum >= threshold)
+                )
+            )
+            if not numerically_consistent:
+                errors.append(
+                    f"{label} case {case_id} has a CT result inconsistent with "
+                    "its numerical evidence"
+                )
     expected = (
         "fail" if "fail" in results
         else "pass" if results and all(result == "pass" for result in results)
@@ -1620,10 +1704,21 @@ def aggregate_ct_status(data: PublicationData) -> str:
 
 
 def ct_campaign_coverage_complete(data: PublicationData) -> bool:
-    """Return whether the authenticated CT audit covers every Stage I case."""
+    """Return whether every Stage I case has complete authenticated CT coverage."""
 
     selected = nested(data.ct_audit_record, "selection.cases")
-    return isinstance(selected, list) and set(selected) == set(CASE_IDS)
+    return (
+        isinstance(selected, list)
+        and set(selected) == set(CASE_IDS)
+        and all(
+            nested(
+                data.ct_audit_record,
+                f"cases.{case_id}.native_restart_ct.coverage_complete",
+            )
+            is True
+            for case_id in CASE_IDS
+        )
+    )
 
 
 def r15_science_scope(data: PublicationData, *labels: object) -> str:
@@ -1652,65 +1747,69 @@ def r15_strict_failure_disposition(data: PublicationData) -> str:
         isinstance(data.science_record, dict)
         and data.science_record.get("_publication_evidence_validated") is True
     ):
-        disposition = nested(data.science_record, "case_dispositions.R15")
-        if isinstance(disposition, dict):
-            roots.append(disposition)
-        lineage_binding = nested(data.science_record, "provenance.case_lineages.R15")
+        binding = nested(data.science_record, "provenance.case_acceptance.R15")
+        path = binding_path(binding)
+        if path is not None and not verify_file_binding(
+            binding, "R15 science-bound case acceptance"
+        ):
+            try:
+                roots.append(load_json(path))
+                data.source_paths.add(path.absolute())
+            except (OSError, json.JSONDecodeError, PublicationError):
+                pass
+    candidates: list[dict[str, Any]] = []
+    for root in roots:
+        if root.get("record_type") == R15_STRICT_FAILURE_RECORD_TYPE:
+            candidates.append(root)
+        for path in (
+            "retained_strict_failure_evidence",
+            "scope.retained_strict_failure_evidence",
+            "claim_scope.retained_strict_failure_evidence",
+        ):
+            values = nested(root, path)
+            if isinstance(values, list):
+                candidates.extend(value for value in values if isinstance(value, dict))
+    authenticated: list[dict[str, Any]] = []
+    for record in candidates:
+        counters = record.get("failure_counters")
+        provenance = record.get("provenance")
         if (
-            isinstance(case.lineage, dict)
-            and not binding_freshness_errors(
-                lineage_binding, case.lineage_path, "R15 science-bound lineage"
+            record.get("schema_version") != 1
+            or record.get("record_type") != R15_STRICT_FAILURE_RECORD_TYPE
+            or record.get("case_id") != "R15"
+            or record.get("result") != "fail"
+            or record.get("strict_admissibility_evidence") is not True
+            or as_float(record.get("failure_time")) is None
+            or not isinstance(counters, dict)
+            or (as_float(counters.get("lf_hardbd")) or 0.0) <= 0.0
+            or not isinstance(provenance, dict)
+            or any(
+                not isinstance(provenance.get(name), dict)
+                for name in ("manifest", "run_exit_code", "slurm_log")
+            )
+            or any(
+                verify_file_binding(
+                    provenance.get(name), f"R15 strict-failure {name} provenance"
+                )
+                for name in ("manifest", "run_exit_code", "slurm_log")
             )
         ):
-            roots.append(case.lineage)
-    result = first_evidence_value(
-        roots,
-        (
-            "strict_run.result",
-            "strict_run.disposition",
-            "strict_failure.result",
-            "strict_failure.disposition",
-            "strict_admissibility_result",
-        ),
-    )
-    failure = result in {"fail", "failed"} or first_evidence_value(
-        roots,
-        (
-            "strict_run.failed",
-            "strict_failure.failed",
-        ),
-    ) is True
-    if not failure:
+            continue
+        authenticated.append(record)
+    if not authenticated:
         return "unavailable/inconclusive"
-    time = as_float(first_evidence_value(
-        roots,
-        (
-            "strict_run.failure_time",
-            "strict_failure.time",
-            "strict_failure.failure_time",
-        ),
-    ))
-    hard_bound = as_float(first_evidence_value(
-        roots,
-        (
-            "strict_run.hard_bound",
-            "strict_failure.hard_bound",
-            "strict_failure.hard_bound_count",
-        ),
-    ))
-    job_id = first_evidence_value(
-        roots,
-        (
-            "strict_run.job_id",
-            "strict_failure.job_id",
-            "strict_failure.slurm_job_id",
+    selected = min(
+        authenticated,
+        key=lambda record: (
+            float(record["failure_time"]),
+            str(record.get("job_id", "")),
         ),
     )
-    details = ["fail"]
-    if time is not None:
-        details.append(f"t={time:.8g}")
-    if hard_bound is not None:
-        details.append(f"hard_bound={hard_bound:.8g}")
+    time = float(selected["failure_time"])
+    counters = selected["failure_counters"]
+    hard_bound = float(counters["lf_hardbd"])
+    job_id = selected.get("job_id")
+    details = ["fail", f"t={time:.8g}", f"hard_bound={hard_bound:.8g}"]
     if isinstance(job_id, (str, int)):
         details.append(f"job={job_id}")
     return "; ".join(details)
@@ -1992,7 +2091,9 @@ def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
                     "contrast": name,
                     "left": left,
                     "right": right,
-                    "result": validated_result(contrast.get("result")),
+                    "result": validated_science_contrast_result(
+                        contrast.get("result")
+                    ),
                     "claim_eligible": contrast.get("claim_eligible") is True,
                     "metric": metric.get("metric"),
                     "available": metric.get("available") is True,

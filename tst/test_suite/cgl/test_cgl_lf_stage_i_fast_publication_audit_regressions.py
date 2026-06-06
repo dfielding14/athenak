@@ -181,6 +181,16 @@ def write_science_record(root: Path, analysis: Path) -> Path:
     return path
 
 
+def rewrite_science_record(path: Path, record: dict[str, object]) -> None:
+    body = {key: value for key, value in record.items() if key != "evidence_digest"}
+    write_json(path, seal(body))
+    external_path = path.parent / "provenance.json"
+    external = json.loads(external_path.read_text(encoding="utf-8"))
+    external["inputs"] = body["provenance"]
+    external["outputs"]["science"] = binding(path)
+    write_json(external_path, external)
+
+
 def write_ct_record(root: Path, analysis: Path) -> Path:
     support = root / "ct_support.txt"
     support.parent.mkdir(parents=True, exist_ok=True)
@@ -205,6 +215,8 @@ def write_ct_record(root: Path, analysis: Path) -> Path:
                 "provenance_authenticated": True,
                 "reason": "sampled native restart CT-divB is below threshold",
                 "native_restart_ct": {
+                    "result": "pass",
+                    "numerical_result": "pass",
                     "coverage_complete": True,
                     "ct_evidence_available": True,
                     "ct_claim_supported": True,
@@ -219,6 +231,41 @@ def write_ct_record(root: Path, analysis: Path) -> Path:
     path = root / "ct_audit.json"
     write_json(path, record)
     return path
+
+
+def rewrite_ct_record(path: Path, record: dict[str, object]) -> None:
+    body = {key: value for key, value in record.items() if key != "evidence_digest"}
+    write_json(path, seal_ct(body))
+
+
+def strict_failure_record(root: Path) -> dict[str, object]:
+    manifest = root / "fast_run.json"
+    exit_code = root / "run_exit_code"
+    slurm_log = root / "strict.log"
+    write_json(manifest, {"case_id": "R15", "job_id": "4771183"})
+    exit_code.write_text("1\n", encoding="utf-8")
+    slurm_log.write_text("strict hard-bound failure\n", encoding="utf-8")
+    return {
+        "schema_version": 1,
+        "record_type": "cgl-lf-stage-i-retained-strict-failure-evidence",
+        "case_id": "R15",
+        "job_id": "4771183",
+        "result": "fail",
+        "failure_time": 1.275643,
+        "failure_counters": {
+            "lf_dfloor": 0,
+            "lf_pfloor": 0,
+            "lf_nonfin": 0,
+            "lf_nonpos": 0,
+            "lf_hardbd": 2,
+        },
+        "strict_admissibility_evidence": True,
+        "provenance": {
+            "manifest": binding(manifest),
+            "run_exit_code": binding(exit_code),
+            "slurm_log": binding(slurm_log),
+        },
+    }
 
 
 def write_history(path: Path, kinetic: float = 1.0) -> None:
@@ -593,6 +640,50 @@ def test_authenticated_science_and_ct_are_integrated_but_non_authorizing(
     assert "campaign_authority_eligible=false" in report
 
 
+def test_science_pass_allows_explicit_ineligible_r10_and_preserves_available_contrast(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
+    science = write_science_record(tmp_path / "science", analysis)
+    record = json.loads(science.read_text(encoding="utf-8"))
+    record["result"] = "pass"
+    record["selected_cases"] = list(publication.CASE_IDS)
+    record["case_dispositions"] = {
+        case_id: {
+            "claim_eligible": case_id != "R10",
+            "acceptance_result": "inconclusive" if case_id == "R10" else "pass",
+        }
+        for case_id in publication.CASE_IDS
+    }
+    record["families"]["descriptive"] = {
+        "R02_R03": {
+            "left": "R02",
+            "right": "R03",
+            "result": "available",
+            "claim_eligible": True,
+            "metrics": [{"metric": "kinetic", "available": True}],
+        }
+    }
+    record["gates"] = [{
+        "name": "reviewed_campaign_science",
+        "result": "pass",
+        "reason": "all required science gates passed",
+        "observations": [],
+    }]
+    rewrite_science_record(science, record)
+
+    data = publication.discover_data(analysis, [science])
+    rows = {
+        row["contrast"]: row for row in publication.science_contrast_rows(data)
+    }
+
+    assert data.science_record is not None
+    assert publication.aggregate_science_status(data) == "pass"
+    assert publication.science_case_status(data, "R10") == "inconclusive"
+    assert rows["R02_R03"]["result"] == "available"
+
+
 def test_rendered_products_expose_authenticated_science_and_ct(
     publication, tmp_path
 ):
@@ -650,18 +741,65 @@ def test_forged_or_stale_science_and_ct_records_are_rejected(
     )
 
 
+def test_ct_audit_rejects_unselected_case_records(publication, tmp_path):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
+    ct = write_ct_record(tmp_path / "ct", analysis)
+    record = json.loads(ct.read_text(encoding="utf-8"))
+    record["cases"]["R03"] = dict(record["cases"]["R02"])
+    rewrite_ct_record(ct, record)
+
+    data = publication.discover_data(analysis, [ct])
+
+    assert data.ct_audit_record is None
+    assert any(
+        "cases differ from selected-case inventory" in warning
+        for warning in data.ingestion_warnings
+    )
+
+
+def test_ct_audit_rejects_pass_inconsistent_with_numerical_evidence(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
+    ct = write_ct_record(tmp_path / "ct", analysis)
+    record = json.loads(ct.read_text(encoding="utf-8"))
+    record["cases"]["R02"]["native_restart_ct"]["maximum_normalized_ct_divb"] = 2.0e-10
+    rewrite_ct_record(ct, record)
+
+    data = publication.discover_data(analysis, [ct])
+
+    assert data.ct_audit_record is None
+    assert any(
+        "CT result inconsistent with its numerical evidence" in warning
+        for warning in data.ingestion_warnings
+    )
+
+
+def test_ct_campaign_coverage_requires_complete_native_coverage(publication, tmp_path):
+    data = empty_data(publication, tmp_path)
+    data.ct_audit_record = {
+        "selection": {"cases": list(publication.CASE_IDS)},
+        "cases": {
+            case_id: {"native_restart_ct": {"coverage_complete": True}}
+            for case_id in publication.CASE_IDS
+        },
+    }
+
+    assert publication.ct_campaign_coverage_complete(data) is True
+    data.ct_audit_record["cases"]["R17"]["native_restart_ct"][
+        "coverage_complete"
+    ] = False
+    assert publication.ct_campaign_coverage_complete(data) is False
+
+
 def test_r15_selected_nonfatal_variant_preserves_strict_failure_scope(
     publication, tmp_path
 ):
     data = empty_data(publication, tmp_path)
     data.cases["R15"].lineage = {
         "lineage_variants": ["finite_limiter_hard_bound_diagnostic_nonfatal"],
-        "strict_failure": {
-            "result": "fail",
-            "time": 1.275643,
-            "hard_bound": 2,
-            "job_id": 4771183,
-        },
     }
     lineage_path = tmp_path / "cases/R15/lineage.json"
     write_json(lineage_path, data.cases["R15"].lineage)
@@ -673,13 +811,24 @@ def test_r15_selected_nonfatal_variant_preserves_strict_failure_scope(
             "hard_bound_diagnostic_maximum": 2.0,
         }
     }
+    science_bound_acceptance = tmp_path / "science-bound/R15/case_acceptance.json"
+    write_json(science_bound_acceptance, {
+        "scope": {
+            "retained_strict_failure_evidence": [
+                strict_failure_record(tmp_path / "strict-failure")
+            ]
+        },
+    })
     data.science_record = {
         "_publication_evidence_validated": True,
         "result": "inconclusive",
         "case_dispositions": {
             "R15": {"claim_eligible": True, "acceptance_result": "pass"}
         },
-        "provenance": {"case_lineages": {"R15": binding(lineage_path)}},
+        "provenance": {
+            "case_acceptance": {"R15": binding(science_bound_acceptance)},
+            "case_lineages": {"R15": binding(lineage_path)},
+        },
         "gates": [{
             "name": "finite_limiter_ordering:R15_gt_R14",
             "result": "pass",
@@ -700,6 +849,20 @@ def test_r15_selected_nonfatal_variant_preserves_strict_failure_scope(
     assert publication.scope_observed_diagnostic(data, "R15") == (
         "hard-bound=2", "warning"
     )
+
+
+def test_r15_strict_failure_rejects_stale_bound_provenance(publication, tmp_path):
+    data = empty_data(publication, tmp_path)
+    failure = strict_failure_record(tmp_path / "strict-failure")
+    data.cases["R15"].direct_acceptance = {
+        "_publication_evidence_validated": True,
+        "scope": {"retained_strict_failure_evidence": [failure]},
+    }
+    Path(failure["provenance"]["slurm_log"]["path"]).write_text(
+        "changed after binding\n", encoding="utf-8"
+    )
+
+    assert publication.r15_strict_failure_disposition(data) == "unavailable/inconclusive"
 
 
 def test_r15_strict_failure_details_are_never_hardcoded(publication, tmp_path):
