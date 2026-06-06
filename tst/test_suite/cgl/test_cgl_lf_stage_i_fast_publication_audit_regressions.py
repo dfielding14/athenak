@@ -61,6 +61,166 @@ def seal(record: dict[str, object]) -> dict[str, object]:
     return body
 
 
+def seal_ct(record: dict[str, object]) -> dict[str, object]:
+    body = dict(record)
+    payload = json.dumps(
+        body, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    body["evidence_digest"] = {
+        "method": "sha256-canonical-json-without-evidence-digest",
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    return body
+
+
+def write_science_record(root: Path, analysis: Path) -> Path:
+    inventory = analysis / "inventory.json"
+    support = root / "support.txt"
+    support.parent.mkdir(parents=True, exist_ok=True)
+    support.write_text("reviewed science support\n", encoding="utf-8")
+    provenance = {
+        "inventory": binding(inventory),
+        "acceptance_provenance": binding(support),
+        "acceptance_campaign_evidence": binding(support),
+        "criteria": binding(support),
+        "criteria_review": binding(support),
+        "reviewed_acceptance_utility": binding(support),
+        "fast_report_utility": binding(support),
+        "paper_analyzer": binding(support),
+        "aggregator": binding(support),
+        "case_acceptance": {},
+        "case_lineages": {},
+        "case_diagnostics": {},
+    }
+    record = seal({
+        "schema_version": 1,
+        "record_type": "cgl-lf-stage-i-direct-fast-reviewed-science-comparisons",
+        "authority": "non-authorizing-direct-fast-scientific-assessment",
+        "release_authorizing": False,
+        "result": "inconclusive",
+        "selected_cases": ["R02", "R04"],
+        "case_dispositions": {
+            "R02": {"claim_eligible": True, "acceptance_result": "pass"},
+            "R04": {"claim_eligible": True, "acceptance_result": "pass"},
+        },
+        "families": {
+            "forcing": {
+                "R02_R04": {
+                    "left": "R02",
+                    "right": "R04",
+                    "result": "pass",
+                    "claim_eligible": True,
+                    "metrics": [{
+                        "metric": "kinetic",
+                        "available": True,
+                        "left_mean": 1.0,
+                        "right_mean": 1.4,
+                        "difference": -0.4,
+                        "combined_standard_error": 0.1,
+                        "z_score": -4.0,
+                        "two_sided_p": 0.001,
+                        "standardized_effect": -1.25,
+                        "holm_threshold": 0.01,
+                        "holm_significant": True,
+                    }],
+                }
+            }
+        },
+        "resolution": {
+            "result": "inconclusive",
+            "reason": "partial campaign",
+            "limits": {"common_k_perp_over_pi": [4, 24]},
+            "observations": [{
+                "kind": "curve",
+                "product": "velocity_spectrum_shape",
+                "available": False,
+                "reason": "R16/R17 unavailable",
+            }],
+        },
+        "mks24": {
+            "result": "inconclusive",
+            "panels": {
+                "fig11bottom": {
+                    "result": "inconclusive",
+                    "products": [{
+                        "product_id": "fig11_alignment_active_alfvenic_beta10_nperp192",
+                        "case_id": "R02",
+                        "source": "unavailable",
+                        "result": "inconclusive",
+                        "reason": "snapshot analysis unavailable",
+                    }],
+                }
+            },
+        },
+        "gates": [{
+            "name": "forcing:R02:R04",
+            "result": "pass",
+            "reason": "reviewed contrast passes",
+            "observations": [{"metric": "kinetic", "holm_significant": True}],
+            "limits": {"alpha": 0.05},
+        }, {
+            "name": "R16_R02_R17_resolution_convergence",
+            "result": "inconclusive",
+            "reason": "partial campaign",
+            "observations": [],
+            "limits": {"common_k_perp_over_pi": [4, 24]},
+        }],
+        "provenance": provenance,
+    })
+    path = root / "science.json"
+    write_json(path, record)
+    write_json(
+        root / "provenance.json",
+        {
+            "schema_version": 1,
+            "record_type": "cgl-lf-stage-i-direct-fast-reviewed-science-provenance",
+            "inputs": provenance,
+            "outputs": {"science": binding(path), "tables": []},
+        },
+    )
+    return path
+
+
+def write_ct_record(root: Path, analysis: Path) -> Path:
+    support = root / "ct_support.txt"
+    support.parent.mkdir(parents=True, exist_ok=True)
+    support.write_text("direct CT support\n", encoding="utf-8")
+    record = seal_ct({
+        "schema_version": 2,
+        "record_type": "stage-i-direct-fast-ct-audit",
+        "result": "pass",
+        "inventory": binding(analysis / "inventory.json"),
+        "source_bindings": {"audit_utility": binding(support)},
+        "claim_boundary": {
+            "campaign_authority_eligible": False,
+            "release_authorizing": False,
+        },
+        "selection": {"cases": ["R02"]},
+        "summary": {"requested_case_count": 1, "ct_pass_case_count": 1},
+        "cases": {
+            "R02": {
+                "ct_result": "pass",
+                "ct_evidence_available": True,
+                "ct_claim_supported": True,
+                "provenance_authenticated": True,
+                "reason": "sampled native restart CT-divB is below threshold",
+                "native_restart_ct": {
+                    "coverage_complete": True,
+                    "ct_evidence_available": True,
+                    "ct_claim_supported": True,
+                    "maximum_normalized_ct_divb": 2.4e-13,
+                    "normalized_ct_divb_lt": 1.0e-10,
+                    "campaign_authority_eligible": False,
+                    "release_authorizing": False,
+                },
+            }
+        },
+    })
+    path = root / "ct_audit.json"
+    write_json(path, record)
+    return path
+
+
 def write_history(path: Path, kinetic: float = 1.0) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -156,6 +316,8 @@ def empty_data(publication, analysis: Path):
         aggregate=None,
         comparisons=None,
         campaign_acceptance=None,
+        science_record=None,
+        ct_audit_record=None,
         acceptance_records=[],
         audit_records=[],
         source_paths=set(),
@@ -396,3 +558,164 @@ def test_r14_scope_prioritizes_hard_bound_and_never_invents_variant(
     assert rows["R14"]["variant"] is None
     assert rows["R10"]["variant"] is None
     assert "cannot be verified" in rows["R14"]["claim_scope"]
+
+
+def test_authenticated_science_and_ct_are_integrated_but_non_authorizing(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
+    science = write_science_record(tmp_path / "science", analysis)
+    ct = write_ct_record(tmp_path / "ct", analysis)
+
+    data = publication.discover_data(analysis, [science, ct])
+    contrast = publication.science_contrast_rows(data)[0]
+    resolution = publication.science_resolution_rows(data)[0]
+    mks24 = publication.science_mks24_rows(data)[0]
+    ct_row = next(
+        row for row in publication.ct_health_rows(data) if row["case_id"] == "R02"
+    )
+
+    assert data.science_record is not None
+    assert data.ct_audit_record is not None
+    assert contrast["standardized_effect"] == pytest.approx(-1.25)
+    assert contrast["holm_significant"] is True
+    assert contrast["release_authorizing"] is False
+    assert resolution["available"] is False
+    assert resolution["passed"] is None
+    assert mks24["result"] == "inconclusive"
+    assert ct_row["ct_result"] == "pass"
+    assert ct_row["campaign_authority_eligible"] is False
+    assert ct_row["release_authorizing"] is False
+    assert publication.health_rows(data)[0]["direct_ct_numerical"] == "pass"
+    report = publication.report_markdown(data, [], tmp_path)
+    assert "non-authorizing-direct-fast-scientific-assessment" in report
+    assert "campaign_authority_eligible=false" in report
+
+
+def test_rendered_products_expose_authenticated_science_and_ct(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
+    science = write_science_record(tmp_path / "science", analysis)
+    ct = write_ct_record(tmp_path / "ct", analysis)
+    data = publication.discover_data(analysis, [science, ct])
+    output = tmp_path / "publication"
+
+    products = publication.render_products(data, output)
+
+    assert output / "figures/fig07_reviewed_science_ct_summary.pdf" in products
+    assert (output / "figures/fig07_reviewed_science_ct_summary.pdf").is_file()
+    contrasts = (
+        output / "tables/reviewed_science_contrasts.csv"
+    ).read_text(encoding="utf-8")
+    ct_health = (output / "tables/direct_ct_health.csv").read_text(encoding="utf-8")
+    assert "standardized_effect" in contrasts
+    assert "-1.25" in contrasts
+    assert "R02,pass,true,true,true" in ct_health
+    assert "release_authorizing" in ct_health
+
+
+def test_forged_or_stale_science_and_ct_records_are_rejected(
+    publication, tmp_path
+):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
+    science = write_science_record(tmp_path / "science", analysis)
+    science_record = json.loads(science.read_text(encoding="utf-8"))
+    science_record["result"] = "pass"
+    write_json(science, science_record)
+
+    ct = write_ct_record(tmp_path / "ct", analysis)
+    ct_record = json.loads(ct.read_text(encoding="utf-8"))
+    stale_inventory = tmp_path / "stale_inventory.json"
+    write_json(stale_inventory, {"record_type": "stale-inventory"})
+    ct_record["inventory"] = binding(stale_inventory)
+    write_json(ct, seal_ct({
+        key: value for key, value in ct_record.items() if key != "evidence_digest"
+    }))
+
+    data = publication.discover_data(analysis, [science, ct])
+
+    assert data.science_record is None
+    assert data.ct_audit_record is None
+    assert any(
+        "science.json" in warning and "evidence self-digest differs" in warning
+        for warning in data.ingestion_warnings
+    )
+    assert any(
+        "ct_audit.json" in warning and "inventory is stale" in warning
+        for warning in data.ingestion_warnings
+    )
+
+
+def test_r15_selected_nonfatal_variant_preserves_strict_failure_scope(
+    publication, tmp_path
+):
+    data = empty_data(publication, tmp_path)
+    data.cases["R15"].lineage = {
+        "lineage_variants": ["finite_limiter_hard_bound_diagnostic_nonfatal"],
+        "strict_failure": {
+            "result": "fail",
+            "time": 1.275643,
+            "hard_bound": 2,
+            "job_id": 4771183,
+        },
+    }
+    lineage_path = tmp_path / "cases/R15/lineage.json"
+    write_json(lineage_path, data.cases["R15"].lineage)
+    data.cases["R15"].lineage_path = lineage_path
+    data.cases["R15"].model = {"cgl_lf_strict_admissibility": "false"}
+    data.cases["R15"].diagnostics = {
+        "health": {
+            "result": "warnings",
+            "hard_bound_diagnostic_maximum": 2.0,
+        }
+    }
+    data.science_record = {
+        "_publication_evidence_validated": True,
+        "result": "inconclusive",
+        "case_dispositions": {
+            "R15": {"claim_eligible": True, "acceptance_result": "pass"}
+        },
+        "provenance": {"case_lineages": {"R15": binding(lineage_path)}},
+        "gates": [{
+            "name": "finite_limiter_ordering:R15_gt_R14",
+            "result": "pass",
+            "reason": "diagnostic ordering",
+        }],
+    }
+
+    scope = {row["case_id"]: row for row in publication.scope_rows(data)}["R15"]
+    gate = publication.science_gate_rows(data)[0]
+
+    assert publication.scope_status("R15") == "restricted"
+    assert publication.science_case_status(data, "R15") == "restricted"
+    assert scope["strict_run_disposition"] == (
+        "fail; t=1.275643; hard_bound=2; job=4771183"
+    )
+    assert "never a strict-admissibility success" in scope["claim_scope"]
+    assert "restricted nonfatal-hard-bound diagnostic" in gate["claim_scope"]
+    assert publication.scope_observed_diagnostic(data, "R15") == (
+        "hard-bound=2", "warning"
+    )
+
+
+def test_r15_strict_failure_details_are_never_hardcoded(publication, tmp_path):
+    data = empty_data(publication, tmp_path)
+    data.cases["R15"].lineage = {
+        "lineage_variants": ["finite_limiter_hard_bound_diagnostic_nonfatal"],
+        "strict_failure": {
+            "result": "fail",
+            "time": 1.275643,
+            "hard_bound": 2,
+            "job_id": 4771183,
+        },
+    }
+
+    row = {value["case_id"]: value for value in publication.scope_rows(data)}["R15"]
+
+    assert publication.r15_strict_failure_disposition(data) == "unavailable/inconclusive"
+    assert row["strict_run_disposition"] == "unavailable/inconclusive"
+    assert "1.275643" not in publication.report_markdown(data, [], tmp_path)

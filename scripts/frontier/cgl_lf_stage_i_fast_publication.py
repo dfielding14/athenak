@@ -56,6 +56,14 @@ CASE_DIRECTORY_PATTERN = re.compile(
     r"(?:^|/)cases/(R(?:0[2-9]|1[0-7]))(?:/|$)"
 )
 EVIDENCE_DIGEST_METHOD = "sha256-canonical-json-without-evidence_digest-v1"
+CT_EVIDENCE_DIGEST_METHOD = "sha256-canonical-json-without-evidence-digest"
+SCIENCE_RECORD_TYPE = "cgl-lf-stage-i-direct-fast-reviewed-science-comparisons"
+SCIENCE_PROVENANCE_RECORD_TYPE = (
+    "cgl-lf-stage-i-direct-fast-reviewed-science-provenance"
+)
+SCIENCE_AUTHORITY = "non-authorizing-direct-fast-scientific-assessment"
+CT_AUDIT_RECORD_TYPE = "stage-i-direct-fast-ct-audit"
+EVIDENCE_RESULTS = {"pass", "fail", "inconclusive"}
 RENDERER_PATH = Path(__file__).resolve()
 ACCEPTANCE_RECORD_TYPES = {
     "stage-i-scientific-criteria-validation",
@@ -123,6 +131,8 @@ class PublicationData:
     aggregate: dict[str, Any] | None
     comparisons: dict[str, Any] | None
     campaign_acceptance: dict[str, Any] | None
+    science_record: dict[str, Any] | None
+    ct_audit_record: dict[str, Any] | None
     acceptance_records: list[dict[str, Any]]
     audit_records: list[dict[str, Any]]
     source_paths: set[Path]
@@ -168,6 +178,8 @@ def text_value(value: object) -> str:
         return f"{value:.8g}"
     if isinstance(value, (list, tuple)):
         return "; ".join(text_value(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return str(value)
 
 
@@ -251,13 +263,15 @@ def recursive_file_bindings(value: object) -> list[dict[str, Any]]:
     return bindings
 
 
-def verify_self_digest(record: dict[str, Any], label: str) -> list[str]:
-    """Return validation errors for one scientific-evidence self-digest."""
+def verify_record_digest(
+    record: dict[str, Any], label: str, expected_method: str
+) -> list[str]:
+    """Return validation errors for one canonical self-digest."""
 
     digest = record.get("evidence_digest")
     if not isinstance(digest, dict):
         return [f"{label} lacks a scientific-evidence self-digest"]
-    if digest.get("method") != EVIDENCE_DIGEST_METHOD:
+    if digest.get("method") != expected_method:
         return [f"{label} uses an unsupported evidence-digest method"]
     expected = digest.get("sha256")
     if not isinstance(expected, str) or SHA256_PATTERN.fullmatch(expected) is None:
@@ -267,6 +281,12 @@ def verify_self_digest(record: dict[str, Any], label: str) -> list[str]:
     except (TypeError, ValueError) as error:
         return [f"{label} cannot be canonically digested: {error}"]
     return [] if observed == expected else [f"{label} evidence self-digest differs"]
+
+
+def verify_self_digest(record: dict[str, Any], label: str) -> list[str]:
+    """Return validation errors for one scientific-evidence self-digest."""
+
+    return verify_record_digest(record, label, EVIDENCE_DIGEST_METHOD)
 
 
 def binding_freshness_errors(
@@ -498,6 +518,275 @@ def audit_record_errors(path: Path, record: dict[str, Any]) -> list[str]:
     return errors
 
 
+def validated_result(value: object) -> str:
+    """Return one admitted evidence result without promoting unknown values."""
+
+    return str(value) if value in EVIDENCE_RESULTS else "inconclusive"
+
+
+def science_record_errors(
+    path: Path, record: dict[str, Any], analysis: Path
+) -> list[str]:
+    """Authenticate one reviewed direct-fast science aggregate."""
+
+    label = f"reviewed science aggregate {path}"
+    errors: list[str] = []
+    if record.get("schema_version") != 1:
+        errors.append(f"{label} has unsupported schema_version")
+    if record.get("record_type") != SCIENCE_RECORD_TYPE:
+        errors.append(f"{label} has unexpected record_type")
+    if record.get("authority") != SCIENCE_AUTHORITY:
+        errors.append(f"{label} has unexpected authority")
+    if record.get("release_authorizing") is not False:
+        errors.append(f"{label} must be explicitly non-release-authorizing")
+    if record.get("result") not in EVIDENCE_RESULTS:
+        errors.append(f"{label} has an invalid aggregate result")
+    errors.extend(verify_self_digest(record, label))
+
+    selected = record.get("selected_cases")
+    selected_cases = selected if isinstance(selected, list) else []
+    if (
+        not isinstance(selected, list)
+        or len(selected_cases) != len(set(selected_cases))
+        or any(case_id not in CASE_IDS for case_id in selected_cases)
+    ):
+        errors.append(f"{label} has an invalid selected_cases inventory")
+    if record.get("result") == "pass" and set(selected_cases) != set(CASE_IDS):
+        errors.append(f"{label} partial selected_cases cannot pass")
+    dispositions = record.get("case_dispositions")
+    if not isinstance(dispositions, dict):
+        errors.append(f"{label} lacks case_dispositions")
+    elif set(dispositions) != set(selected_cases):
+        errors.append(f"{label} case_dispositions differ from selected_cases")
+    elif record.get("result") == "pass" and any(
+        not isinstance(disposition, dict)
+        or disposition.get("claim_eligible") is not True
+        for disposition in dispositions.values()
+    ):
+        errors.append(f"{label} passes with ineligible selected cases")
+
+    provenance = record.get("provenance")
+    if not isinstance(provenance, dict):
+        errors.append(f"{label} lacks provenance")
+    else:
+        for name in (
+            "inventory",
+            "acceptance_provenance",
+            "acceptance_campaign_evidence",
+            "criteria",
+            "criteria_review",
+            "reviewed_acceptance_utility",
+            "fast_report_utility",
+            "paper_analyzer",
+            "aggregator",
+        ):
+            if not isinstance(provenance.get(name), dict):
+                errors.append(f"{label} lacks required provenance binding {name}")
+        seen: set[tuple[str, str]] = set()
+        for index, file_binding in enumerate(recursive_file_bindings(provenance)):
+            key = (str(file_binding.get("path")), str(file_binding.get("sha256")))
+            if key in seen:
+                continue
+            seen.add(key)
+            errors.extend(
+                verify_file_binding(file_binding, f"{label} provenance binding {index}")
+            )
+        errors.extend(
+            binding_freshness_errors(
+                provenance.get("inventory"),
+                analysis / "inventory.json",
+                f"{label} inventory",
+            )
+        )
+
+    external_path = path.parent / "provenance.json"
+    if not external_path.is_file():
+        errors.append(f"{label} lacks external provenance: {external_path}")
+    else:
+        try:
+            external = load_json(external_path)
+        except (OSError, json.JSONDecodeError, PublicationError) as error:
+            errors.append(f"{label} external provenance is unreadable: {error}")
+        else:
+            if (
+                external.get("schema_version") != 1
+                or external.get("record_type") != SCIENCE_PROVENANCE_RECORD_TYPE
+            ):
+                errors.append(f"{label} external provenance has unexpected schema")
+            errors.extend(
+                binding_freshness_errors(
+                    nested(external, "outputs.science"),
+                    path,
+                    f"{label} external output binding",
+                )
+            )
+            if isinstance(provenance, dict) and external.get("inputs") != provenance:
+                errors.append(f"{label} external provenance inputs differ")
+
+    families = record.get("families")
+    if not isinstance(families, dict):
+        errors.append(f"{label} lacks comparison families")
+    else:
+        for family, contrasts in families.items():
+            if not isinstance(contrasts, dict):
+                errors.append(f"{label} family {family} is not an object")
+                continue
+            for name, contrast in contrasts.items():
+                if not isinstance(contrast, dict):
+                    errors.append(f"{label} contrast {family}.{name} is not an object")
+                    continue
+                if (
+                    contrast.get("result") == "pass"
+                    and contrast.get("claim_eligible") is not True
+                ):
+                    errors.append(
+                        f"{label} contrast {family}.{name} passes without claim eligibility"
+                    )
+                metrics = contrast.get("metrics")
+                if isinstance(metrics, list):
+                    for metric in metrics:
+                        if (
+                            isinstance(metric, dict)
+                            and metric.get("holm_significant") is True
+                            and metric.get("available") is not True
+                        ):
+                            errors.append(
+                                f"{label} contrast {family}.{name} has a Holm result "
+                                "without an available metric"
+                            )
+    gates = record.get("gates")
+    if not isinstance(gates, list) or not gates:
+        errors.append(f"{label} lacks required science gates")
+    else:
+        gate_results: list[str] = []
+        for index, gate in enumerate(gates):
+            if not isinstance(gate, dict):
+                errors.append(f"{label} gate {index} is not an object")
+                continue
+            result = gate.get("result")
+            if result not in {*EVIDENCE_RESULTS, "blocked_out_of_scope"}:
+                errors.append(f"{label} gate {index} has an invalid result")
+                continue
+            gate_results.append(str(result))
+            observations = gate.get("observations")
+            if result == "pass" and isinstance(observations, list) and any(
+                isinstance(observation, dict)
+                and (
+                    observation.get("available") is False
+                    or observation.get("passed") is False
+                    or observation.get("result") in {
+                        "fail", "inconclusive", "blocked_out_of_scope"
+                    }
+                )
+                for observation in observations
+            ):
+                errors.append(f"{label} gate {index} passes with adverse observations")
+        expected = (
+            "fail" if "fail" in gate_results
+            else "inconclusive" if "inconclusive" in gate_results
+            else "inconclusive" if (
+                not gate_results
+                or all(result == "blocked_out_of_scope" for result in gate_results)
+            )
+            else "pass"
+        )
+        if record.get("result") != expected:
+            errors.append(f"{label} aggregate result differs from required gates")
+    return errors
+
+
+def ct_audit_record_errors(
+    path: Path, record: dict[str, Any], analysis: Path
+) -> list[str]:
+    """Authenticate one non-authorizing direct CT audit aggregate."""
+
+    label = f"direct CT audit {path}"
+    errors: list[str] = []
+    if record.get("schema_version") != 2:
+        errors.append(f"{label} has unsupported schema_version")
+    if record.get("record_type") != CT_AUDIT_RECORD_TYPE:
+        errors.append(f"{label} has unexpected record_type")
+    if record.get("result") not in EVIDENCE_RESULTS:
+        errors.append(f"{label} has an invalid aggregate result")
+    errors.extend(verify_record_digest(record, label, CT_EVIDENCE_DIGEST_METHOD))
+
+    claim_boundary = record.get("claim_boundary")
+    if not isinstance(claim_boundary, dict):
+        errors.append(f"{label} lacks claim_boundary")
+    elif (
+        claim_boundary.get("campaign_authority_eligible") is not False
+        or claim_boundary.get("release_authorizing") is not False
+    ):
+        errors.append(f"{label} must be explicitly non-authorizing")
+    errors.extend(
+        binding_freshness_errors(
+            record.get("inventory"),
+            analysis / "inventory.json",
+            f"{label} inventory",
+        )
+    )
+    source_bindings = record.get("source_bindings")
+    if not isinstance(source_bindings, dict):
+        errors.append(f"{label} lacks source_bindings")
+    else:
+        for index, file_binding in enumerate(recursive_file_bindings(source_bindings)):
+            errors.extend(
+                verify_file_binding(file_binding, f"{label} source binding {index}")
+            )
+
+    selection = record.get("selection")
+    selected = selection.get("cases") if isinstance(selection, dict) else None
+    selected_cases = selected if isinstance(selected, list) else []
+    if (
+        not isinstance(selected, list)
+        or not selected_cases
+        or len(selected_cases) != len(set(selected_cases))
+        or any(case_id not in CASE_IDS for case_id in selected_cases)
+    ):
+        errors.append(f"{label} has an invalid selected-case inventory")
+    cases = record.get("cases")
+    if not isinstance(cases, dict):
+        errors.append(f"{label} lacks cases")
+        cases = {}
+    results: list[str] = []
+    for case_id in selected_cases:
+        case = cases.get(case_id)
+        if not isinstance(case, dict):
+            errors.append(f"{label} lacks selected case {case_id}")
+            results.append("inconclusive")
+            continue
+        result = validated_result(case.get("ct_result"))
+        results.append(result)
+        native = case.get("native_restart_ct")
+        if not isinstance(native, dict):
+            errors.append(f"{label} case {case_id} lacks native_restart_ct")
+            continue
+        if (
+            native.get("campaign_authority_eligible") is not False
+            or native.get("release_authorizing") is not False
+        ):
+            errors.append(f"{label} case {case_id} must remain non-authorizing")
+        if result == "pass" and not (
+            case.get("provenance_authenticated") is True
+            and case.get("ct_evidence_available") is True
+            and case.get("ct_claim_supported") is True
+            and native.get("coverage_complete") is True
+            and native.get("ct_evidence_available") is True
+            and native.get("ct_claim_supported") is True
+        ):
+            errors.append(f"{label} case {case_id} passes without complete CT evidence")
+    expected = (
+        "fail" if "fail" in results
+        else "pass" if results and all(result == "pass" for result in results)
+        else "inconclusive"
+    )
+    if record.get("result") != expected:
+        errors.append(
+            f"{label} aggregate result differs from selected-case CT results"
+        )
+    return errors
+
+
 def atomic_write(path: Path, payload: bytes) -> None:
     """Atomically replace one output file."""
 
@@ -681,6 +970,29 @@ def select_acceptance_record(
     return selected
 
 
+def select_integrated_record(
+    records: list[tuple[Path, dict[str, Any]]], *, kind: str
+) -> dict[str, Any] | None:
+    """Select one deterministic authenticated science or CT aggregate."""
+
+    if not records:
+        return None
+    _, selected = max(
+        records,
+        key=lambda item: (
+            len(item[1].get("selected_cases", []))
+            if kind == "science" and isinstance(item[1].get("selected_cases"), list)
+            else len(nested(item[1], "selection.cases") or [])
+            if kind == "ct" and isinstance(nested(item[1], "selection.cases"), list)
+            else 0,
+            len(item[1].get("gates", []))
+            if isinstance(item[1].get("gates"), list) else 0,
+            str(item[0]),
+        ),
+    )
+    return selected
+
+
 def discover_data(analysis: Path, acceptance_paths: Iterable[Path]) -> PublicationData:
     """Load all available downstream evidence without requiring campaign completion."""
 
@@ -736,6 +1048,8 @@ def discover_data(analysis: Path, acceptance_paths: Iterable[Path]) -> Publicati
 
     loaded_acceptance: list[tuple[Path, dict[str, Any]]] = []
     loaded_audits: list[tuple[Path, dict[str, Any]]] = []
+    loaded_science: list[tuple[Path, dict[str, Any]]] = []
+    loaded_ct_audits: list[tuple[Path, dict[str, Any]]] = []
     for path in discover_acceptance_paths(analysis, acceptance_paths):
         try:
             record = load_json(path)
@@ -746,6 +1060,33 @@ def discover_data(analysis: Path, acceptance_paths: Iterable[Path]) -> Publicati
             )
             continue
         source_paths.add(path.absolute())
+        if record.get("record_type") == SCIENCE_RECORD_TYPE:
+            validation_errors = science_record_errors(path, record, analysis)
+            if validation_errors:
+                warnings.extend(
+                    f"rejected {path}: {error}" for error in validation_errors
+                )
+                continue
+            loaded = dict(record)
+            loaded["_publication_evidence_validated"] = True
+            loaded["_publication_source_path"] = str(path)
+            loaded_science.append((path, loaded))
+            external = path.parent / "provenance.json"
+            if external.is_file():
+                source_paths.add(external.absolute())
+            continue
+        if record.get("record_type") == CT_AUDIT_RECORD_TYPE:
+            validation_errors = ct_audit_record_errors(path, record, analysis)
+            if validation_errors:
+                warnings.extend(
+                    f"rejected {path}: {error}" for error in validation_errors
+                )
+                continue
+            loaded = dict(record)
+            loaded["_publication_evidence_validated"] = True
+            loaded["_publication_source_path"] = str(path)
+            loaded_ct_audits.append((path, loaded))
+            continue
         if record.get("record_type") in ACCEPTANCE_RECORD_TYPES:
             validation_errors = evidence_record_errors(path, record, cases)
             loaded = dict(record)
@@ -847,12 +1188,24 @@ def discover_data(analysis: Path, acceptance_paths: Iterable[Path]) -> Publicati
                 trusted_only=False,
             )
         )
+    if len(loaded_science) > 1:
+        warnings.append(
+            f"found {len(loaded_science)} authenticated reviewed science aggregates; "
+            "selected the most information-rich deterministic record"
+        )
+    if len(loaded_ct_audits) > 1:
+        warnings.append(
+            f"found {len(loaded_ct_audits)} authenticated direct CT audits; "
+            "selected the most information-rich deterministic record"
+        )
     return PublicationData(
         analysis=analysis,
         cases=cases,
         aggregate=aggregate,
         comparisons=comparisons,
         campaign_acceptance=campaign_acceptance,
+        science_record=select_integrated_record(loaded_science, kind="science"),
+        ct_audit_record=select_integrated_record(loaded_ct_audits, kind="ct"),
         acceptance_records=[record for _, record in loaded_acceptance],
         audit_records=[record for _, record in loaded_audits],
         source_paths=source_paths,
@@ -1206,7 +1559,161 @@ def acceptance_status(data: PublicationData, case: CaseRecord) -> str:
 def scope_status(case_id: str) -> str:
     """Return the fixed campaign claim scope."""
 
-    return "restricted" if case_id in {"R10", "R14"} else "configuration"
+    return "restricted" if case_id in {"R10", "R14", "R15"} else "configuration"
+
+
+def science_case_status(data: PublicationData, case_id: str) -> str:
+    """Return reviewed-science eligibility for one selected case."""
+
+    disposition = nested(data.science_record, f"case_dispositions.{case_id}")
+    if not isinstance(disposition, dict):
+        return "unknown"
+    if (
+        case_id == "R15"
+        and selected_nonfatal_hard_bound_variant(data.cases["R15"])
+    ):
+        return "restricted"
+    if (
+        case_id == "R15"
+        and r15_strict_failure_disposition(data) != "unavailable/inconclusive"
+    ):
+        return "fail"
+    if disposition.get("claim_eligible") is True:
+        return "pass"
+    return (
+        "fail"
+        if disposition.get("acceptance_result") == "fail"
+        else "inconclusive"
+    )
+
+
+def ct_case_record(data: PublicationData, case_id: str) -> dict[str, Any] | None:
+    """Return one authenticated direct CT case record."""
+
+    record = nested(data.ct_audit_record, f"cases.{case_id}")
+    return record if isinstance(record, dict) else None
+
+
+def ct_case_status(data: PublicationData, case_id: str) -> str:
+    """Return one authenticated numerical CT result without granting authority."""
+
+    record = ct_case_record(data, case_id)
+    return validated_result(record.get("ct_result")) if record is not None else "unknown"
+
+
+def aggregate_science_status(data: PublicationData) -> str:
+    """Return the authenticated reviewed-science aggregate result."""
+
+    return (
+        validated_result(data.science_record.get("result"))
+        if isinstance(data.science_record, dict) else "unknown"
+    )
+
+
+def aggregate_ct_status(data: PublicationData) -> str:
+    """Return the authenticated direct CT aggregate numerical result."""
+
+    return (
+        validated_result(data.ct_audit_record.get("result"))
+        if isinstance(data.ct_audit_record, dict) else "unknown"
+    )
+
+
+def ct_campaign_coverage_complete(data: PublicationData) -> bool:
+    """Return whether the authenticated CT audit covers every Stage I case."""
+
+    selected = nested(data.ct_audit_record, "selection.cases")
+    return isinstance(selected, list) and set(selected) == set(CASE_IDS)
+
+
+def r15_science_scope(data: PublicationData, *labels: object) -> str:
+    """Return the publication scope for results involving selected diagnostic R15."""
+
+    if (
+        any("R15" in str(label) for label in labels)
+        and selected_nonfatal_hard_bound_variant(data.cases["R15"])
+    ):
+        return "restricted nonfatal-hard-bound diagnostic; not strict R15 success"
+    return "standard reviewed-science scope"
+
+
+def r15_strict_failure_disposition(data: PublicationData) -> str:
+    """Return authenticated strict-R15 failure evidence without inventing details."""
+
+    case = data.cases["R15"]
+    roots: list[dict[str, Any]] = []
+    for record in (case.direct_acceptance, case.acceptance):
+        if (
+            isinstance(record, dict)
+            and record.get("_publication_evidence_validated") is True
+        ):
+            roots.append(record)
+    if (
+        isinstance(data.science_record, dict)
+        and data.science_record.get("_publication_evidence_validated") is True
+    ):
+        disposition = nested(data.science_record, "case_dispositions.R15")
+        if isinstance(disposition, dict):
+            roots.append(disposition)
+        lineage_binding = nested(data.science_record, "provenance.case_lineages.R15")
+        if (
+            isinstance(case.lineage, dict)
+            and not binding_freshness_errors(
+                lineage_binding, case.lineage_path, "R15 science-bound lineage"
+            )
+        ):
+            roots.append(case.lineage)
+    result = first_evidence_value(
+        roots,
+        (
+            "strict_run.result",
+            "strict_run.disposition",
+            "strict_failure.result",
+            "strict_failure.disposition",
+            "strict_admissibility_result",
+        ),
+    )
+    failure = result in {"fail", "failed"} or first_evidence_value(
+        roots,
+        (
+            "strict_run.failed",
+            "strict_failure.failed",
+        ),
+    ) is True
+    if not failure:
+        return "unavailable/inconclusive"
+    time = as_float(first_evidence_value(
+        roots,
+        (
+            "strict_run.failure_time",
+            "strict_failure.time",
+            "strict_failure.failure_time",
+        ),
+    ))
+    hard_bound = as_float(first_evidence_value(
+        roots,
+        (
+            "strict_run.hard_bound",
+            "strict_failure.hard_bound",
+            "strict_failure.hard_bound_count",
+        ),
+    ))
+    job_id = first_evidence_value(
+        roots,
+        (
+            "strict_run.job_id",
+            "strict_failure.job_id",
+            "strict_failure.slurm_job_id",
+        ),
+    )
+    details = ["fail"]
+    if time is not None:
+        details.append(f"t={time:.8g}")
+    if hard_bound is not None:
+        details.append(f"hard_bound={hard_bound:.8g}")
+    if isinstance(job_id, (str, int)):
+        details.append(f"job={job_id}")
+    return "; ".join(details)
 
 
 def publication_evidence_state(data: PublicationData) -> str:
@@ -1214,9 +1721,15 @@ def publication_evidence_state(data: PublicationData) -> str:
 
     if any(completion_status(data.cases[case_id]) != "pass" for case_id in CASE_IDS):
         return "partial/transient"
-    if data.ingestion_warnings or any(
+    if (
+        data.ingestion_warnings
+        or aggregate_science_status(data) in {"unknown", "inconclusive"}
+        or aggregate_ct_status(data) in {"unknown", "inconclusive"}
+        or not ct_campaign_coverage_complete(data)
+        or any(
         acceptance_status(data, data.cases[case_id]) in {"unknown", "inconclusive"}
         for case_id in CASE_IDS
+        )
     ):
         return "complete integration / partial evidence"
     return "complete"
@@ -1450,6 +1963,198 @@ def status_matrix_figure(
     plt.close(fig)
 
 
+def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
+    """Flatten authenticated reviewed-science contrasts, including Holm results."""
+
+    rows: list[dict[str, object]] = []
+    families = (
+        data.science_record.get("families")
+        if isinstance(data.science_record, dict) else None
+    )
+    if not isinstance(families, dict):
+        return rows
+    for family, contrasts in sorted(families.items()):
+        if not isinstance(contrasts, dict):
+            continue
+        for name, contrast in sorted(contrasts.items()):
+            if not isinstance(contrast, dict):
+                continue
+            left = contrast.get("active", contrast.get("left"))
+            right = contrast.get("passive", contrast.get("right"))
+            metrics = contrast.get("metrics")
+            if not isinstance(metrics, list) or not metrics:
+                metrics = [{}]
+            for metric in metrics:
+                if not isinstance(metric, dict):
+                    continue
+                rows.append({
+                    "family": family,
+                    "contrast": name,
+                    "left": left,
+                    "right": right,
+                    "result": validated_result(contrast.get("result")),
+                    "claim_eligible": contrast.get("claim_eligible") is True,
+                    "metric": metric.get("metric"),
+                    "available": metric.get("available") is True,
+                    "left_mean": metric.get("left_mean"),
+                    "right_mean": metric.get("right_mean"),
+                    "difference": metric.get(
+                        "difference", metric.get("difference_left_minus_right")
+                    ),
+                    "combined_standard_error": metric.get("combined_standard_error"),
+                    "z_score": metric.get("z_score"),
+                    "two_sided_p": metric.get("two_sided_p"),
+                    "standardized_effect": metric.get("standardized_effect"),
+                    "holm_threshold": metric.get("holm_threshold"),
+                    "holm_significant": (
+                        metric.get("holm_significant")
+                        if metric.get("available") is True else None
+                    ),
+                    "reason": metric.get("reason", contrast.get("reason")),
+                    "claim_scope": r15_science_scope(data, name, left, right),
+                    "authority": SCIENCE_AUTHORITY,
+                    "release_authorizing": False,
+                })
+    return rows
+
+
+def science_gate_rows(data: PublicationData) -> list[dict[str, object]]:
+    """Flatten authenticated reviewed-science gates."""
+
+    gates = (
+        data.science_record.get("gates")
+        if isinstance(data.science_record, dict) else None
+    )
+    if not isinstance(gates, list):
+        return []
+    return [
+        {
+            "gate": gate.get("name"),
+            "result": validated_result(gate.get("result")),
+            "reason": gate.get("reason"),
+            "claim_scope": r15_science_scope(data, gate.get("name")),
+            "observations": gate.get("observations"),
+            "limits": gate.get("limits"),
+            "authority": SCIENCE_AUTHORITY,
+            "release_authorizing": False,
+        }
+        for gate in gates if isinstance(gate, dict)
+    ]
+
+
+def science_resolution_rows(data: PublicationData) -> list[dict[str, object]]:
+    """Flatten authenticated reviewed common-range resolution criteria."""
+
+    resolution = (
+        data.science_record.get("resolution")
+        if isinstance(data.science_record, dict) else None
+    )
+    observations = (
+        resolution.get("observations") if isinstance(resolution, dict) else None
+    )
+    if not isinstance(observations, list):
+        return []
+    return [
+        {
+            "result": validated_result(resolution.get("result")),
+            "kind": value.get("kind"),
+            "name": value.get("product", value.get("metric")),
+            "available": value.get("available") is True,
+            "passed": value.get("passed") if value.get("available") is True else None,
+            "observations": value,
+            "limits": resolution.get("limits"),
+            "reason": value.get("reason", resolution.get("reason")),
+            "authority": SCIENCE_AUTHORITY,
+            "release_authorizing": False,
+        }
+        for value in observations if isinstance(value, dict)
+    ]
+
+
+def science_mks24_rows(data: PublicationData) -> list[dict[str, object]]:
+    """Flatten authenticated admitted MKS24 residual and drift criteria."""
+
+    mks24 = (
+        data.science_record.get("mks24")
+        if isinstance(data.science_record, dict) else None
+    )
+    panels = mks24.get("panels") if isinstance(mks24, dict) else None
+    if not isinstance(panels, dict):
+        return []
+    rows: list[dict[str, object]] = []
+    for panel_id, panel in sorted(panels.items()):
+        products = panel.get("products") if isinstance(panel, dict) else None
+        if not isinstance(products, list):
+            continue
+        for product in products:
+            if not isinstance(product, dict):
+                continue
+            observations = product.get("observations")
+            rows.append({
+                "panel": panel_id,
+                "panel_result": validated_result(panel.get("result")),
+                "product_id": product.get("product_id"),
+                "case_id": product.get("case_id"),
+                "source": product.get("source"),
+                "result": validated_result(product.get("result")),
+                "normalized_residual_rms": nested(
+                    observations, "normalized_residual_rms"
+                ),
+                "maximum_absolute_normalized_residual": nested(
+                    observations, "maximum_absolute_normalized_residual"
+                ),
+                "early_late_vector_drift_rms": nested(
+                    observations, "early_late_vector_drift_rms"
+                ),
+                "limits": product.get("limits"),
+                "reason": product.get("reason"),
+                "authority": SCIENCE_AUTHORITY,
+                "release_authorizing": False,
+            })
+    return rows
+
+
+def ct_health_rows(data: PublicationData) -> list[dict[str, object]]:
+    """Return authenticated direct CT numerical health without authority promotion."""
+
+    rows: list[dict[str, object]] = []
+    for case_id in CASE_IDS:
+        record = ct_case_record(data, case_id)
+        native = record.get("native_restart_ct") if isinstance(record, dict) else None
+        rows.append({
+            "case_id": case_id,
+            "ct_result": ct_case_status(data, case_id),
+            "ct_evidence_available": (
+                record.get("ct_evidence_available") is True
+                if isinstance(record, dict) else False
+            ),
+            "ct_claim_supported": (
+                record.get("ct_claim_supported") is True
+                if isinstance(record, dict) else False
+            ),
+            "coverage_complete": (
+                native.get("coverage_complete") is True
+                if isinstance(native, dict) else False
+            ),
+            "maximum_normalized_ct_divb": (
+                native.get("maximum_normalized_ct_divb")
+                if isinstance(native, dict) else None
+            ),
+            "normalized_ct_divb_lt": (
+                native.get("normalized_ct_divb_lt")
+                if isinstance(native, dict) else None
+            ),
+            "campaign_authority_eligible": False,
+            "release_authorizing": False,
+            "reason": record.get("reason") if isinstance(record, dict) else (
+                "case not selected by the authenticated direct CT audit"
+                if isinstance(data.ct_audit_record, dict)
+                else "no authenticated direct CT audit selected"
+            ),
+        })
+    return rows
+
+
 def health_rows(data: PublicationData) -> list[dict[str, object]]:
     """Return the complete health/completion table."""
 
@@ -1468,6 +2173,9 @@ def health_rows(data: PublicationData) -> list[dict[str, object]]:
             "fast_health": fast_health_status(case),
             "fatal_lf_counters": fatal_counter_status(case),
             "acceptance": acceptance_status(data, case),
+            "reviewed_science": science_case_status(data, case_id),
+            "direct_ct_numerical": ct_case_status(data, case_id),
+            "direct_ct_release_authorizing": False,
             "claim_scope": (
                 "restricted" if scope_status(case_id) == "restricted" else "standard"
             ),
@@ -1499,19 +2207,26 @@ def render_health(
         health = fast_health_status(case)
         fatal = fatal_counter_status(case)
         acceptance = acceptance_status(data, case)
+        science = science_case_status(data, case_id)
+        ct = ct_case_status(data, case_id)
         scope = scope_status(case_id)
-        statuses.append([completion, health, fatal, acceptance, scope])
+        statuses.append([completion, health, fatal, acceptance, science, ct, scope])
         time = final_time(case)
         labels.append([
             f"{time:.2f}/10" if time is not None else "--",
             display_status(health),
             "zero" if fatal == "pass" else display_status(fatal),
             display_status(acceptance),
+            display_status(science),
+            display_status(ct),
             "restricted" if scope == "restricted" else "standard",
         ])
     status_matrix_figure(
         plt, colors, patches, list(CASE_IDS),
-        ["Completion", "Fast health", "Fatal LF", "Acceptance", "Claim scope"],
+        [
+            "Completion", "Fast health", "Fatal LF", "Acceptance",
+            "Reviewed science", "Direct CT", "Claim scope",
+        ],
         statuses, labels,
         (
             "Stage I completion, numerical health, and claim eligibility "
@@ -1519,10 +2234,13 @@ def render_health(
         ),
         path,
         (
-            "Acceptance is non-authorizing scientific evidence. R10 and R14 remain "
-            "restricted even when completion and numerical-health cells pass. "
+            "Acceptance, reviewed science, and direct CT are non-authorizing "
+            "direct-fast evidence. R10, R14, and R15 remain restricted even when "
+            "completion and numerical-health cells pass. "
             "Claim scope and strict-policy settings are configurations, not passes; "
-            "Fatal LF excludes R14's retained nonfatal hard-bound diagnostic."
+            "Fatal LF excludes selected nonfatal hard-bound diagnostic variants. "
+            "Any R15 strict-run failure details are displayed only when carried by "
+            "authenticated evidence."
         ),
     )
 
@@ -1723,6 +2441,13 @@ def limiter_heat_flux_rows(data: PublicationData) -> list[dict[str, object]]:
                 "case_id": case_id,
                 "completion": completion_status(case),
                 "acceptance": acceptance_status(data, case),
+                "claim_scope": (
+                    "restricted nonfatal-hard-bound diagnostic"
+                    if case_id in {"R14", "R15"}
+                    and selected_nonfatal_hard_bound_variant(case)
+                    else "restricted" if scope_status(case_id) == "restricted"
+                    else "standard"
+                ),
                 "lf_k_parallel": case.model.get("lf_k_parallel"),
                 "limiter_hardwall": case.model.get("limiter_hardwall"),
                 "limiter_nu_coll": case.model.get("limiter_nu_coll"),
@@ -1775,6 +2500,8 @@ def scan_tick_labels(
             "false", "0"
         }:
             qualifiers.append("strict off")
+        if selected_nonfatal_hard_bound_variant(case):
+            qualifiers.append("diagnostic scope")
         labels.append("\n".join([case_id, *qualifiers]))
     return labels
 
@@ -1930,6 +2657,15 @@ def resolution_rows(data: PublicationData) -> list[dict[str, object]]:
                     ),
                     "result": record.get("passed"),
                 })
+    for record in science_resolution_rows(data):
+        rows.append({
+            "record_type": "reviewed_science_convergence",
+            "case_or_product": record.get("name"),
+            "metric": record.get("kind"),
+            "value": record.get("observations"),
+            "result": record.get("passed")
+            if record.get("available") is True else record.get("result"),
+        })
     return rows
 
 
@@ -2029,8 +2765,11 @@ def render_resolution(data: PublicationData, plt: Any, path: Path) -> None:
         axes[1].set_ylabel("log-RMS curve distance")
         axes[1].legend(frameon=False)
     else:
-        gate = find_gate(
-            data.campaign_acceptance, "R16_R02_R17_resolution_convergence"
+        gate = (
+            find_gate(data.science_record, "R16_R02_R17_resolution_convergence")
+            or find_gate(
+                data.campaign_acceptance, "R16_R02_R17_resolution_convergence"
+            )
         )
         gate_result = gate.get("result") if isinstance(gate, dict) else "not available"
         axes[1].text(
@@ -2038,7 +2777,7 @@ def render_resolution(data: PublicationData, plt: Any, path: Path) -> None:
             transform=axes[1].transAxes, ha="center", va="center", color="#666666",
         )
         axes[1].text(
-            0.5, 0.43, f"acceptance convergence gate: {gate_result}",
+            0.5, 0.43, f"reviewed convergence gate: {gate_result}",
             transform=axes[1].transAxes, ha="center", va="center",
         )
     axes[1].set_title("Common-scale convergence evidence")
@@ -2242,7 +2981,7 @@ def scope_observed_diagnostic(
     hard_bound = as_float(nested(case.diagnostics, "health.hard_bound_diagnostic_maximum"))
     if hard_bound is None:
         hard_bound = as_float(nested(case.direct_acceptance, "health.hard_bound_maximum"))
-    if case_id == "R14" and hard_bound is not None:
+    if case_id in {"R14", "R15"} and hard_bound is not None:
         status = "warning" if hard_bound > 0.0 else "pass"
         return f"hard-bound={hard_bound:.3g}", status
     diagnostics = hyperbolicity_diagnostics(data, case_id)
@@ -2259,11 +2998,23 @@ def scope_observed_diagnostic(
     return "--", "unknown"
 
 
+def selected_nonfatal_hard_bound_variant(case: CaseRecord) -> bool:
+    """Return whether the selected lineage declares a nonfatal hard-bound variant."""
+
+    variants = nested(case.lineage, "lineage_variants")
+    return isinstance(variants, list) and any(
+        isinstance(value, str)
+        and "nonfatal" in value.lower()
+        and "hard_bound" in value.lower()
+        for value in variants
+    )
+
+
 def scope_rows(data: PublicationData) -> list[dict[str, object]]:
-    """Return explicit R10/R14 claim-scope disclosures."""
+    """Return explicit R10/R14/R15 claim-scope disclosures."""
 
     rows: list[dict[str, object]] = []
-    for case_id in ("R10", "R14"):
+    for case_id in ("R10", "R14", "R15"):
         case = data.cases[case_id]
         health = nested(case.diagnostics, "health")
         if not isinstance(health, dict):
@@ -2275,10 +3026,16 @@ def scope_rows(data: PublicationData) -> list[dict[str, object]]:
                 "Exploratory stress test only; exclude from strict-hyperbolic CGL "
                 "and beta-trend claims."
             )
-        else:
+        elif case_id == "R14":
             scope = (
                 "Finite-limiter hard-bound diagnostic; strict admissibility is "
                 "nonfatal and the limiter scan also changes local LF transport."
+            )
+        else:
+            scope = (
+                "Any selected nonfatal-hard-bound R15 lineage is a restricted "
+                "diagnostic variant only, never a strict-admissibility success. "
+                "Strict R15 failure details require authenticated evidence."
             )
         variants = nested(case.lineage, "lineage_variants")
         variant = (
@@ -2288,16 +3045,15 @@ def scope_rows(data: PublicationData) -> list[dict[str, object]]:
             )
             else None
         )
-        if (
-            case_id == "R14"
-            and (
-                not isinstance(variants, list)
-                or "finite_limiter_hard_bound_diagnostic_nonfatal" not in variants
-            )
-        ):
+        if case_id == "R14" and not selected_nonfatal_hard_bound_variant(case):
             scope = (
                 "R14 is restricted, but its intended nonfatal-hard-bound variant "
                 "cannot be verified from the selected lineage variant evidence."
+            )
+        if case_id == "R15" and not selected_nonfatal_hard_bound_variant(case):
+            scope += (
+                " The independent nonfatal-hard-bound diagnostic variant is not yet "
+                "verified as the selected lineage."
             )
         hard_bound_maximum = as_float(
             nested(case.diagnostics, "health.hard_bound_diagnostic_maximum")
@@ -2313,6 +3069,9 @@ def scope_rows(data: PublicationData) -> list[dict[str, object]]:
             "fast_health": fast_health_status(case),
             "acceptance": acceptance_status(data, case),
             "strict_admissibility": case.model.get("cgl_lf_strict_admissibility"),
+            "strict_run_disposition": (
+                r15_strict_failure_disposition(data) if case_id == "R15" else None
+            ),
             "retained_state_hyperbolicity": hyper["result"],
             "negative_discriminant_fraction": hyper["negative_discriminant_fraction"],
             "negative_discriminant_count": hyper["negative_discriminant_count"],
@@ -2329,15 +3088,20 @@ def scope_rows(data: PublicationData) -> list[dict[str, object]]:
 def render_scope(
     data: PublicationData, plt: Any, colors: Any, patches: Any, path: Path
 ) -> None:
-    """Render explicit R10/R14 scope restrictions."""
+    """Render explicit R10/R14/R15 scope restrictions."""
 
     statuses: list[list[str]] = []
     labels: list[list[str]] = []
-    for case_id in ("R10", "R14"):
+    for case_id in ("R10", "R14", "R15"):
         case = data.cases[case_id]
         strict = str(case.model.get("cgl_lf_strict_admissibility", "")).lower()
+        r15_strict = r15_strict_failure_disposition(data)
         strict_status = (
+            "fail" if case_id == "R15" and r15_strict != "unavailable/inconclusive"
+            else "inconclusive" if case_id == "R15"
+            else (
             "configuration" if strict in {"true", "1", "false", "0"} else "unknown"
+            )
         )
         hyper = hyperbolicity_status(data, case_id)
         observed, observed_status = scope_observed_diagnostic(data, case_id)
@@ -2352,24 +3116,77 @@ def render_scope(
         labels.append([
             display_status(completion_status(case)),
             display_status(acceptance_status(data, case)),
-            "enabled" if strict in {"true", "1"} else (
+            display_status(strict_status) if case_id == "R15" else (
+                "enabled" if strict in {"true", "1"} else (
                 "disabled" if strict in {"false", "0"} else "--"
+                )
             ),
             display_status(hyper),
             observed,
             "restricted",
         ])
     status_matrix_figure(
-        plt, colors, patches, ["R10", "R14"],
+        plt, colors, patches, ["R10", "R14", "R15"],
         [
             "Completion", "Acceptance", "Strict policy",
             "Retained-state\nhyperbolicity", "Observed\ndiagnostic", "Claim scope",
         ],
-        statuses, labels, "Explicit scope restrictions for R10 and R14", path,
+        statuses, labels, "Explicit scope restrictions for R10, R14, and R15", path,
         (
             "R10: exploratory stress test; exclude from strict-hyperbolic and beta-trend "
             "claims. R14: nonfatal hard-bound diagnostic; disclose coupled limiter/LF "
-            "transport semantics. Strict-policy cells report configuration only."
+            "transport semantics. Any selected R15 nonfatal variant is diagnostic "
+            "only; strict-R15 failure details require authenticated evidence. "
+            "Strict-policy cells report configuration only except the explicit R15 fail."
+        ),
+    )
+
+
+def render_science_ct_summary(
+    data: PublicationData, plt: Any, colors: Any, patches: Any, path: Path
+) -> None:
+    """Render reviewed science gates and direct CT numerical health."""
+
+    rows: list[tuple[str, str]] = [
+        ("reviewed science aggregate", aggregate_science_status(data))
+    ]
+    rows.extend(
+        (
+            str(row["gate"]) + (
+                " [diagnostic scope]"
+                if str(row.get("claim_scope", "")).startswith("restricted")
+                else ""
+            ),
+            str(row["result"]),
+        )
+        for row in science_gate_rows(data)
+    )
+    resolution = nested(data.science_record, "resolution.result")
+    mks24 = nested(data.science_record, "mks24.result")
+    rows.extend([
+        (
+            "resolution aggregate",
+            validated_result(resolution) if resolution is not None else "unknown",
+        ),
+        (
+            "MKS24 residual/drift aggregate",
+            validated_result(mks24) if mks24 is not None else "unknown",
+        ),
+        ("direct CT numerical aggregate", aggregate_ct_status(data)),
+    ])
+    status_matrix_figure(
+        plt, colors, patches,
+        [name for name, _ in rows],
+        ["Result", "Release authority"],
+        [[result, "configuration"] for _, result in rows],
+        [[display_status(result), "non-authorizing"] for _, result in rows],
+        "Authenticated reviewed-science gates and direct CT health",
+        path,
+        (
+            "All displayed results are authenticated direct-fast evidence and remain "
+            "explicitly non-authorizing. Inconclusive or unavailable partial evidence "
+            "is never promoted to pass. A direct CT pass is a sampled numerical result, "
+            "not campaign or release authority."
         ),
     )
 
@@ -2496,6 +3313,8 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
             for metric in ("kinetic", "magnetic", "abs_dp", "unstable")
         )
     ]
+    science_cases = nested(data.science_record, "selected_cases")
+    ct_cases = nested(data.ct_audit_record, "selection.cases")
     lines = [
         "# Stage I Publication Products",
         "",
@@ -2508,6 +3327,15 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         f"- Scientific-acceptance passes: `{', '.join(accepted) or 'none'}`",
         f"- Acceptance records discovered: `{len(data.acceptance_records)}`",
         f"- Audit records discovered: `{len(data.audit_records)}`",
+        f"- Reviewed-science aggregate: **{aggregate_science_status(data)}** "
+        f"(`{SCIENCE_AUTHORITY}`, release_authorizing=false)",
+        f"- Reviewed-science selected cases: "
+        f"`{', '.join(science_cases) if isinstance(science_cases, list) else 'none'}`",
+        f"- Direct CT numerical aggregate: **{aggregate_ct_status(data)}** "
+        "(campaign_authority_eligible=false, release_authorizing=false)",
+        f"- Direct CT selected cases: "
+        f"`{', '.join(ct_cases) if isinstance(ct_cases, list) else 'none'}`; "
+        f"full Stage I coverage={text_value(ct_campaign_coverage_complete(data))}",
         "",
         "## Products",
         "",
@@ -2547,6 +3375,10 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         "beta-trend claims.",
         "- R14 remains a disclosed nonfatal hard-bound diagnostic and not a "
         "uniform strict-admissibility case.",
+        f"- R15 strict-run disposition is `{r15_strict_failure_disposition(data)}`. "
+        "Any selected "
+        "nonfatal-hard-bound R15 variant is a restricted diagnostic and never "
+        "strict-admissibility success.",
         "- Standard claim scope and strict-policy enabled/disabled cells describe "
         "configuration only; they are not scientific passes.",
         "",
@@ -2568,7 +3400,8 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
         "robustness": figures / "fig03_robustness_summary.pdf",
         "limiter_heat_flux": figures / "fig04_limiter_heat_flux_summary.pdf",
         "resolution": figures / "fig05_resolution_summary.pdf",
-        "scope": figures / "fig06_r10_r14_scope.pdf",
+        "scope": figures / "fig06_r10_r14_r15_scope.pdf",
+        "science_ct": figures / "fig07_reviewed_science_ct_summary.pdf",
     }
     render_health(data, plt, colors, patches, figure_paths["health"])
     render_active_passive(data, plt, figure_paths["active_passive"])
@@ -2576,6 +3409,9 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
     render_limiter_heat_flux(data, plt, figure_paths["limiter_heat_flux"])
     render_resolution(data, plt, figure_paths["resolution"])
     render_scope(data, plt, colors, patches, figure_paths["scope"])
+    render_science_ct_summary(
+        data, plt, colors, patches, figure_paths["science_ct"]
+    )
     products.extend(figure_paths.values())
 
     table_specs = (
@@ -2584,7 +3420,9 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
             [
                 "case_id", "assembly_status", "final_time", "target_time",
                 "completion", "fast_health", "fatal_lf_counters", "acceptance",
-                "claim_scope", "strict_admissibility", "hard_bound_maximum",
+                "reviewed_science", "direct_ct_numerical",
+                "direct_ct_release_authorizing", "claim_scope",
+                "strict_admissibility", "hard_bound_maximum",
                 "hard_bound_volume_maximum", "structural_error_count",
                 "structural_warning_count", "numerical_warning_count",
                 "science_warning_count",
@@ -2612,7 +3450,8 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
             "limiter_heat_flux_summary",
             [
                 "family", "case_id", "completion", "acceptance", "lf_k_parallel",
-                "limiter_hardwall", "limiter_nu_coll", "strict_admissibility",
+                "claim_scope", "limiter_hardwall", "limiter_nu_coll",
+                "strict_admissibility",
                 "abs_dp", "unstable_fraction", "nu_eff", "hard_bound_fraction",
                 "applied_heat_flux_work_abs", "applied_pressure_work_abs",
             ],
@@ -2624,10 +3463,11 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
             resolution_rows(data),
         ),
         (
-            "r10_r14_scope",
+            "r10_r14_r15_scope",
             [
                 "case_id", "variant", "completion", "fast_health", "acceptance",
-                "strict_admissibility", "retained_state_hyperbolicity",
+                "strict_admissibility", "strict_run_disposition",
+                "retained_state_hyperbolicity",
                 "negative_discriminant_fraction", "negative_discriminant_count",
                 "cell_direction_evaluations", "minimum_discriminant",
                 "hard_bound_maximum", "hard_bound_volume_maximum",
@@ -2644,6 +3484,55 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
             "acceptance_gates",
             ["record_type", "case_id", "gate", "result", "reason"],
             acceptance_gate_rows(data),
+        ),
+        (
+            "reviewed_science_contrasts",
+            [
+                "family", "contrast", "left", "right", "result",
+                "claim_eligible", "metric", "available", "left_mean",
+                "right_mean", "difference", "combined_standard_error", "z_score",
+                "two_sided_p", "standardized_effect", "holm_threshold",
+                "holm_significant", "reason", "authority", "release_authorizing",
+                "claim_scope",
+            ],
+            science_contrast_rows(data),
+        ),
+        (
+            "reviewed_science_gates",
+            [
+                "gate", "result", "reason", "claim_scope", "observations", "limits",
+                "authority", "release_authorizing",
+            ],
+            science_gate_rows(data),
+        ),
+        (
+            "reviewed_science_resolution",
+            [
+                "result", "kind", "name", "available", "passed", "observations",
+                "limits", "reason", "authority", "release_authorizing",
+            ],
+            science_resolution_rows(data),
+        ),
+        (
+            "reviewed_science_mks24",
+            [
+                "panel", "panel_result", "product_id", "case_id", "source",
+                "result", "normalized_residual_rms",
+                "maximum_absolute_normalized_residual",
+                "early_late_vector_drift_rms", "limits", "reason", "authority",
+                "release_authorizing",
+            ],
+            science_mks24_rows(data),
+        ),
+        (
+            "direct_ct_health",
+            [
+                "case_id", "ct_result", "ct_evidence_available",
+                "ct_claim_supported", "coverage_complete",
+                "maximum_normalized_ct_divb", "normalized_ct_divb_lt",
+                "campaign_authority_eligible", "release_authorizing", "reason",
+            ],
+            ct_health_rows(data),
         ),
     )
     for name, columns, rows in table_specs:
@@ -2672,8 +3561,11 @@ exclude failed, incomplete, and numerically inconclusive cases.
 5. **Resolution.** R16/R02/R17 scalar sensitivity and common-scale convergence
    evidence when available. R02/R02 self-ratios are suppressed.
 6. **Restricted scope.** Claim restrictions and available observed diagnostics for
-   the exploratory R10 stress case and the nonfatal-hard-bound R14 diagnostic.
-   Strict-policy enabled/disabled is configuration, not eligibility.
+   R10, R14, and R15. Any selected nonfatal-hard-bound R15 variant is diagnostic
+   only; strict-R15 failure details appear only from authenticated evidence.
+7. **Reviewed science and direct CT.** Authenticated Holm-corrected comparison
+   gates, common-range convergence, admitted MKS24 residual/drift criteria, and
+   sampled direct CT numerical health. All are explicitly non-authorizing.
 """
     captions_path = output / "captions.md"
     write_text(captions_path, captions)
@@ -2749,6 +3641,21 @@ def main(argv: list[str] | None = None) -> int:
         "audit_record_types": sorted({
             str(record.get("record_type")) for record in data.audit_records
         }),
+        "reviewed_science": {
+            "record_type": data.science_record.get("record_type"),
+            "result": aggregate_science_status(data),
+            "selected_cases": data.science_record.get("selected_cases"),
+            "authority": data.science_record.get("authority"),
+            "release_authorizing": False,
+        } if isinstance(data.science_record, dict) else None,
+        "direct_ct_audit": {
+            "record_type": data.ct_audit_record.get("record_type"),
+            "numerical_result": aggregate_ct_status(data),
+            "selected_cases": nested(data.ct_audit_record, "selection.cases"),
+            "full_stage_i_coverage": ct_campaign_coverage_complete(data),
+            "campaign_authority_eligible": False,
+            "release_authorizing": False,
+        } if isinstance(data.ct_audit_record, dict) else None,
         "sources": [
             source_binding(path) for path in sorted(data.source_paths)
             if path.is_file()
