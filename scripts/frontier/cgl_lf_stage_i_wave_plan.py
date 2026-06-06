@@ -515,6 +515,56 @@ F118_VALIDATION_CLAIMS = {
 F118_PUBLICATION_METHOD = F116_PUBLICATION_METHOD
 F118_REQUIRED_TOOLS = F116_REQUIRED_TOOLS
 F116_CORRUPT_C7_NAME = "athenak-feature-cgl-through-c7e4fa30e.bundle"
+LEGACY_F114_RECOST_NAME = (
+    "mks24_stage_i_E03_forcing_policy_R03_s00_clean_partial_recost_evidence.json"
+)
+LEGACY_F114_RECOST_SHA256 = (
+    "27dd154b8594693afe0308f4de63a7faaed6daf81a396ab31166bb70a8c43b86"
+)
+LEGACY_F114_PUBLICATION_AUDIT_SHA256 = (
+    "3bf50ef1359f7f1798da945185d42b61488cb98779d5a6942839c03e3eb6bc73"
+)
+LEGACY_F114_GENERATED_UTC = "2026-06-05T02:44:51.687220+00:00"
+LEGACY_F114_PUBLISHED_UTC = "2026-06-05T03:03:11+00:00"
+F117_RECOST_ARTIFACT_NAME = (
+    "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json"
+)
+F119_RECOST_ARTIFACT_NAME = (
+    "mks24_stage_i_E03_forcing_policy_F119_recost_evidence.json"
+)
+F119_LEGACY_F114_BOOTSTRAP = (
+    "exact-retained-legacy-F114-after-authenticated-F117-failed-attempt"
+)
+F117_FAILED_ATTEMPT_RELATIVES = {
+    "packet": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_recost_draft_packet.json"
+    ),
+    "request": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_recost_request.json"
+    ),
+    "reconciliation": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_reconciliation_evidence.json"
+    ),
+    "storage": Path(
+        "accounting/mks24_stage_i_E03_forcing_policy_F117_storage_evidence.json"
+    ),
+}
+F117_FAILED_ATTEMPT_SHA256 = {
+    "packet": "8abceb6b2e3031a21b87f95b19053f2bf2b35f30d642c7a86bc4d9c6614071ad",
+    "request": "5dea85b34b4f09cb3a926927ad73b4443e2f8ce4fdd2b2a1b1f84b70294bc632",
+    "reconciliation": "677547889992d700e05559e322d95e7df6078a736bb2fbdff27ada38410c83e6",
+    "storage": "637e43a3cd12f3051e1eae1d3102a2106d0445e26ac500b8946f8fea2064f218",
+}
+F117_FORBIDDEN_PROMOTION_RELATIVES = (
+    Path(f"accounting/{F117_RECOST_ARTIFACT_NAME}"),
+    Path(f"accounting/{F117_RECOST_ARTIFACT_NAME}.staged"),
+    Path(f"accounting/{F117_RECOST_ARTIFACT_NAME}.independent_review.json"),
+    Path(f"accounting/{F117_RECOST_ARTIFACT_NAME}.publication_audit.json"),
+    Path(
+        "accounting/"
+        "mks24_stage_i_E03_forcing_policy_F117_recost_request.json.independent_review.json"
+    ),
+)
 
 R03 = "R03"
 R17 = "R17"
@@ -3282,6 +3332,8 @@ def validate_latest_recost_publication(audit_path: Path) -> None:
     publications: list[tuple[datetime, Path]] = []
     accounting = expected_path("accounting")
     for candidate in sorted(accounting.glob("*_recost_evidence.json.publication_audit.json")):
+        if candidate.name == f"{F117_RECOST_ARTIFACT_NAME}.publication_audit.json":
+            raise ValueError("the retained failed F117 attempt must never be promoted")
         value, evidence = read_json_file(candidate, f"recost publication inventory {candidate.name}")
         if value.get("record_type") != "stage-i-recost-recommendation-publication-audit":
             continue
@@ -3302,6 +3354,97 @@ def validate_latest_recost_publication(audit_path: Path) -> None:
     latest = [path for timestamp, path in publications if timestamp == latest_time]
     if len(latest) != 1 or latest[0] != normalized_path(audit_path):
         raise ValueError("selected recost is not the uniquely latest promoted publication")
+
+
+def expected_f119_predecessor_recost(root: Path) -> dict[str, object]:
+    """Return the exact F119-only failed-F117 supersession identity."""
+
+    root = normalized_path(root)
+    legacy = root / "accounting" / LEGACY_F114_RECOST_NAME
+    failed = {
+        "checkpoint": "F-117",
+        **{
+            key: {
+                "path": relative.as_posix(),
+                "sha256": F117_FAILED_ATTEMPT_SHA256[key],
+            }
+            for key, relative in F117_FAILED_ATTEMPT_RELATIVES.items()
+        },
+        "status": "authenticated-unpromoted-failed-attempt",
+    }
+    return {
+        "path": str(legacy),
+        "artifact_name": LEGACY_F114_RECOST_NAME,
+        "sha256": LEGACY_F114_RECOST_SHA256,
+        "publication_audit_path": str(
+            legacy.with_name(f"{LEGACY_F114_RECOST_NAME}.publication_audit.json")
+        ),
+        "publication_audit_sha256": LEGACY_F114_PUBLICATION_AUDIT_SHA256,
+        "independent_review_path": None,
+        "independent_review_sha256": None,
+        "checkpoint": "F-114",
+        "generated_utc": LEGACY_F114_GENERATED_UTC,
+        "published_utc": LEGACY_F114_PUBLISHED_UTC,
+        "bootstrap": F119_LEGACY_F114_BOOTSTRAP,
+        "superseded_failed_attempt": failed,
+    }
+
+
+def require_f119_recost_supersession(
+    recost_path: Path, recost: dict[str, object]
+) -> None:
+    """Authenticate the exact F119-only recovery from the failed F117 attempt."""
+
+    recost_path = normalized_path(recost_path)
+    predecessor = recost.get("predecessor_recost")
+    path_is_f117 = recost_path.name == F117_RECOST_ARTIFACT_NAME
+    declares_f117 = (
+        recost.get("checkpoint") == "F-117"
+        or recost.get("artifact_name") == F117_RECOST_ARTIFACT_NAME
+    )
+    if path_is_f117 or declares_f117:
+        raise ValueError("the retained failed F117 attempt must never be promoted or consumed")
+
+    path_is_f119 = recost_path.name == F119_RECOST_ARTIFACT_NAME
+    declares_f119 = (
+        recost.get("checkpoint") == "F-119"
+        or recost.get("artifact_name") == F119_RECOST_ARTIFACT_NAME
+    )
+    if path_is_f119 != (
+        recost.get("checkpoint") == "F-119"
+        and recost.get("artifact_name") == F119_RECOST_ARTIFACT_NAME
+    ):
+        raise ValueError("F119 recost path, checkpoint, and artifact identity differ")
+
+    legacy_claim = isinstance(predecessor, dict) and (
+        predecessor.get("checkpoint") == "F-114"
+        or predecessor.get("sha256") == LEGACY_F114_RECOST_SHA256
+        or predecessor.get("publication_audit_sha256")
+        == LEGACY_F114_PUBLICATION_AUDIT_SHA256
+        or predecessor.get("bootstrap") == F119_LEGACY_F114_BOOTSTRAP
+        or "superseded_failed_attempt" in predecessor
+    )
+    if not path_is_f119:
+        if declares_f119 or legacy_claim:
+            raise ValueError("the failed-F117 legacy-F114 supersession is reserved for F119")
+        return
+
+    expected = expected_f119_predecessor_recost(CANONICAL_ROOT)
+    if predecessor != expected:
+        raise ValueError("F119 predecessor recost or failed-F117 quartet differs")
+    for relative in F117_FORBIDDEN_PROMOTION_RELATIVES:
+        if os.path.lexists(expected_path(relative.as_posix())):
+            raise ValueError("F119 requires the retained failed F117 attempt to remain unpromoted")
+    for key, relative in F117_FAILED_ATTEMPT_RELATIVES.items():
+        _, evidence = read_stable_regular_file(
+            expected_path(relative.as_posix()), f"retained failed F117 {key}"
+        )
+        if (
+            evidence["sha256"] != F117_FAILED_ATTEMPT_SHA256[key]
+            or evidence["mode"] != "0644"
+            or evidence["nlink"] != 1
+        ):
+            raise ValueError(f"retained failed F117 {key} bytes or profile differ")
 
 
 def validate_recost_request_review_chain(
@@ -3485,6 +3628,7 @@ def validate_recost_publication_chain(
         raise ValueError("schema-2 recost identity, lifetime, or non-authority boundary differs")
     require_nonempty_string(recost["requested_by"], "schema-2 recost requester")
     require_nonempty_string(recost["scope"], "schema-2 recost scope")
+    require_f119_recost_supersession(recost_path, recost)
 
     require_exact_keys(
         review,

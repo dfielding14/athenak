@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 CONTROLLER_PATH = REPO_ROOT / "scripts/frontier/cgl_lf_stage_i.py"
 QUALIFICATION_TEST_PATH = REPO_ROOT / "tst/test_suite/cgl/test_cgl_lf_stage_i_qualification.py"
 SOURCE_AUTHORITY_PATH = REPO_ROOT / "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+RECOST_PATH = REPO_ROOT / "scripts/frontier/cgl_lf_stage_i_recost.py"
 EPOCH = "E03-forcing-policy"
 EPOCH_SLUG = "E03_forcing_policy"
 LIVE_FROZEN_E03_CLEAN_PARTIALS = (
@@ -70,6 +71,17 @@ def load_source_authority():
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_recost():
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_recost_for_controller_f119_parity", RECOST_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -1587,7 +1599,8 @@ def make_retained_f118_staging(module, paths: dict[str, Path],
 
 def make_published_recost(module, root: Path, *, checkpoint: int = 200,
                           published: datetime | None = None,
-                          generated: datetime | None = None
+                          generated: datetime | None = None,
+                          predecessor_recost: object | None = None,
                           ) -> tuple[dict[str, Path], dict[str, object]]:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     generated = generated or now - timedelta(minutes=10)
@@ -1601,8 +1614,13 @@ def make_published_recost(module, root: Path, *, checkpoint: int = 200,
     write_json(
         artifact,
         {
+            "checkpoint": f"F-{checkpoint}",
+            "artifact_name": artifact.name,
             "generated_utc": generated.isoformat(),
             "expires_utc": (generated + timedelta(hours=12)).isoformat(),
+            "predecessor_recost": (
+                {} if predecessor_recost is None else copy.deepcopy(predecessor_recost)
+            ),
         },
     )
     write_json(
@@ -1636,6 +1654,22 @@ def make_published_recost(module, root: Path, *, checkpoint: int = 200,
     }
     write_json(audit, audit_value)
     return paths, audit_value
+
+
+def install_failed_f117_quartet(module, root: Path, monkeypatch) -> dict[str, object]:
+    """Install and bind one exact local analogue of the retained failed F117 quartet."""
+
+    paths = {}
+    for key, relative in module.F117_FAILED_ATTEMPT_RELATIVES.items():
+        path = root / relative
+        write_json(path, {"fixture_failed_f117_component": key}, mode=0o644)
+        paths[key] = path
+    monkeypatch.setattr(
+        module,
+        "F117_FAILED_ATTEMPT_SHA256",
+        {key: sha256(path) for key, path in paths.items()},
+    )
+    return module.expected_f119_predecessor_recost(root)
 
 
 def make_fixed_readiness(module, paths: dict[str, Path], recost: dict[str, object],
@@ -2861,6 +2895,115 @@ def test_latest_published_r17_recost_rejects_stale_and_ambiguous(tmp_path):
     first["published_utc"] = json_time.isoformat()
     write_json(first_audit, first)
     with pytest.raises(ValueError, match="ambiguous"):
+        module.latest_published_r17_recost(paths, now)
+
+
+def test_latest_published_f119_authenticates_exact_failed_f117_supersession(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    root = tmp_path / "root"
+    predecessor = install_failed_f117_quartet(module, root, monkeypatch)
+    paths, _ = make_published_recost(
+        module, root, checkpoint=119, predecessor_recost=predecessor
+    )
+    selected = module.latest_published_r17_recost(
+        paths, datetime.now(timezone.utc).replace(microsecond=0)
+    )
+    assert selected[0].name == module.F119_RECOST_ARTIFACT_NAME
+
+
+def test_f119_supersession_constants_match_recost_producer():
+    module = load_controller()
+    recost = load_recost()
+    for name in (
+        "LEGACY_F114_RECOST_NAME",
+        "LEGACY_F114_RECOST_SHA256",
+        "LEGACY_F114_PUBLICATION_AUDIT_SHA256",
+        "F117_FAILED_ATTEMPT_RELATIVES",
+        "F117_FAILED_ATTEMPT_SHA256",
+        "F117_FORBIDDEN_PROMOTION_RELATIVES",
+    ):
+        assert getattr(module, name) == getattr(recost, name)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "empty",
+        "legacy_digest",
+        "bootstrap",
+        "failed_status",
+        "failed_packet_digest",
+    ),
+)
+def test_latest_published_f119_rejects_empty_or_mutated_predecessor(
+    tmp_path, monkeypatch, mutation
+):
+    module = load_controller()
+    root = tmp_path / mutation
+    predecessor = install_failed_f117_quartet(module, root, monkeypatch)
+    if mutation == "empty":
+        predecessor = {}
+    elif mutation == "legacy_digest":
+        predecessor["sha256"] = "0" * 64
+    elif mutation == "bootstrap":
+        predecessor["bootstrap"] = "exact-retained-legacy-F114-once"
+    elif mutation == "failed_status":
+        predecessor["superseded_failed_attempt"]["status"] = "promoted"
+    else:
+        predecessor["superseded_failed_attempt"]["packet"]["sha256"] = "0" * 64
+    paths, _ = make_published_recost(
+        module, root, checkpoint=119, predecessor_recost=predecessor
+    )
+    with pytest.raises(ValueError, match="predecessor recost or failed-F117 quartet differs"):
+        module.latest_published_r17_recost(
+            paths, datetime.now(timezone.utc).replace(microsecond=0)
+        )
+
+
+@pytest.mark.parametrize("failed_key", ("packet", "request", "reconciliation", "storage"))
+def test_latest_published_f119_rejects_retained_failed_f117_byte_drift(
+    tmp_path, monkeypatch, failed_key
+):
+    module = load_controller()
+    root = tmp_path / failed_key
+    predecessor = install_failed_f117_quartet(module, root, monkeypatch)
+    paths, _ = make_published_recost(
+        module, root, checkpoint=119, predecessor_recost=predecessor
+    )
+    path = root / module.F117_FAILED_ATTEMPT_RELATIVES[failed_key]
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match=f"retained failed F117 {failed_key} bytes differ"):
+        module.latest_published_r17_recost(
+            paths, datetime.now(timezone.utc).replace(microsecond=0)
+        )
+
+
+def test_latest_published_recost_rejects_f117_and_f119_bootstrap_elsewhere(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    paths, _ = make_published_recost(module, tmp_path / "f117", checkpoint=117)
+    with pytest.raises(ValueError, match="failed F117 attempt must never be promoted"):
+        module.latest_published_r17_recost(paths, now)
+
+    root = tmp_path / "later"
+    predecessor = install_failed_f117_quartet(module, root, monkeypatch)
+    paths, _ = make_published_recost(
+        module, root, checkpoint=200, predecessor_recost=predecessor
+    )
+    with pytest.raises(ValueError, match="reserved for F119"):
+        module.latest_published_r17_recost(paths, now)
+
+    root = tmp_path / "promoted-f117-artifact"
+    predecessor = install_failed_f117_quartet(module, root, monkeypatch)
+    paths, _ = make_published_recost(
+        module, root, checkpoint=119, predecessor_recost=predecessor
+    )
+    write_json(root / module.F117_FORBIDDEN_PROMOTION_RELATIVES[0], {"forbidden": True})
+    with pytest.raises(ValueError, match="remain unpromoted"):
         module.latest_published_r17_recost(paths, now)
 
 
@@ -6484,11 +6627,11 @@ def test_authenticated_git_binary_rejects_replacement_path(tmp_path, monkeypatch
         module.authenticated_git_binary()
 
 
-def test_latest_f117_publication_rejects_symlinked_artifact(tmp_path):
+def test_latest_recost_publication_rejects_symlinked_artifact(tmp_path):
     module = load_controller()
-    paths, _ = make_published_recost(module, tmp_path / "root", checkpoint=117)
+    paths, _ = make_published_recost(module, tmp_path / "root", checkpoint=200)
     artifact = paths["accounting"] / (
-        f"mks24_stage_i_{EPOCH_SLUG}_F117_recost_evidence.json"
+        f"mks24_stage_i_{EPOCH_SLUG}_F200_recost_evidence.json"
     )
     target = tmp_path / "moved-recost.json"
     artifact.rename(target)
@@ -6497,20 +6640,20 @@ def test_latest_f117_publication_rejects_symlinked_artifact(tmp_path):
         module.latest_published_r17_recost(paths, datetime.now(timezone.utc))
 
 
-def test_latest_f117_publication_requires_owner_controlled_path(tmp_path, monkeypatch):
+def test_latest_recost_publication_requires_owner_controlled_path(tmp_path, monkeypatch):
     module = load_controller()
-    paths, _ = make_published_recost(module, tmp_path / "root", checkpoint=117)
+    paths, _ = make_published_recost(module, tmp_path / "root", checkpoint=200)
     current_uid = os.geteuid()
     monkeypatch.setattr(module.os, "geteuid", lambda: current_uid + 1)
     with pytest.raises(ValueError, match="owner-controlled|owner controlled"):
         module.latest_published_r17_recost(paths, datetime.now(timezone.utc))
 
 
-def test_latest_f117_review_rejects_every_waiver_scope(tmp_path):
+def test_latest_recost_review_rejects_every_waiver_scope(tmp_path):
     module = load_controller()
-    paths, _ = make_published_recost(module, tmp_path / "root", checkpoint=117)
+    paths, _ = make_published_recost(module, tmp_path / "root", checkpoint=200)
     artifact = paths["accounting"] / (
-        f"mks24_stage_i_{EPOCH_SLUG}_F117_recost_evidence.json"
+        f"mks24_stage_i_{EPOCH_SLUG}_F200_recost_evidence.json"
     )
     review = artifact.with_name(f"{artifact.name}.independent_review.json")
     audit = artifact.with_name(f"{artifact.name}.publication_audit.json")

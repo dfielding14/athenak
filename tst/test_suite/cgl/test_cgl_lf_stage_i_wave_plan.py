@@ -2906,6 +2906,22 @@ def recost_paths(campaign: Campaign) -> tuple[Path, Path, Path]:
     )
 
 
+def install_failed_f117_quartet(root: Path, monkeypatch) -> dict[str, object]:
+    """Install and bind one exact local analogue of the retained failed F117 quartet."""
+
+    paths = {}
+    for key, relative in planner.F117_FAILED_ATTEMPT_RELATIVES.items():
+        path = root / relative
+        write_json(path, {"fixture_failed_f117_component": key})
+        paths[key] = path
+    monkeypatch.setattr(
+        planner,
+        "F117_FAILED_ATTEMPT_SHA256",
+        {key: sha256(path) for key, path in paths.items()},
+    )
+    return planner.expected_f119_predecessor_recost(root)
+
+
 def add_credible_above_envelope_measurements(campaign: Campaign) -> None:
     """Add the retained R04/R16 measurements that make scoped-v2 exceed 1400."""
 
@@ -3423,6 +3439,137 @@ def test_recost_requires_canonical_latest_checkpoint_publication_chain(campaign,
     )
     competing.chmod(0o444)
     with pytest.raises(ValueError, match="uniquely latest"):
+        campaign.plan()
+
+
+def test_f119_supersession_authenticates_exact_failed_f117_quartet(
+    campaign, monkeypatch
+):
+    predecessor = install_failed_f117_quartet(campaign.root, monkeypatch)
+    recost_path = campaign.root / "accounting" / planner.F119_RECOST_ARTIFACT_NAME
+    planner.require_f119_recost_supersession(
+        recost_path,
+        {
+            "checkpoint": "F-119",
+            "artifact_name": planner.F119_RECOST_ARTIFACT_NAME,
+            "predecessor_recost": predecessor,
+        },
+    )
+
+
+def test_f119_supersession_constants_match_recost_producer():
+    recost = load_utility(RECOST_UTILITY, "cgl_lf_stage_i_recost_f119_parity")
+    for name in (
+        "LEGACY_F114_RECOST_NAME",
+        "LEGACY_F114_RECOST_SHA256",
+        "LEGACY_F114_PUBLICATION_AUDIT_SHA256",
+        "F117_FAILED_ATTEMPT_RELATIVES",
+        "F117_FAILED_ATTEMPT_SHA256",
+        "F117_FORBIDDEN_PROMOTION_RELATIVES",
+    ):
+        assert getattr(planner, name) == getattr(recost, name)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "empty",
+        "legacy_digest",
+        "bootstrap",
+        "failed_status",
+        "failed_packet_digest",
+    ),
+)
+def test_f119_supersession_rejects_empty_or_mutated_predecessor(
+    campaign, monkeypatch, mutation
+):
+    predecessor = install_failed_f117_quartet(campaign.root, monkeypatch)
+    if mutation == "empty":
+        predecessor = {}
+    elif mutation == "legacy_digest":
+        predecessor["sha256"] = "0" * 64
+    elif mutation == "bootstrap":
+        predecessor["bootstrap"] = "exact-retained-legacy-F114-once"
+    elif mutation == "failed_status":
+        predecessor["superseded_failed_attempt"]["status"] = "promoted"
+    else:
+        predecessor["superseded_failed_attempt"]["packet"]["sha256"] = "0" * 64
+    recost_path = campaign.root / "accounting" / planner.F119_RECOST_ARTIFACT_NAME
+    with pytest.raises(ValueError, match="predecessor recost or failed-F117 quartet differs"):
+        planner.require_f119_recost_supersession(
+            recost_path,
+            {
+                "checkpoint": "F-119",
+                "artifact_name": planner.F119_RECOST_ARTIFACT_NAME,
+                "predecessor_recost": predecessor,
+            },
+        )
+
+
+@pytest.mark.parametrize("failed_key", ("packet", "request", "reconciliation", "storage"))
+def test_f119_supersession_rejects_retained_failed_f117_byte_drift(
+    campaign, monkeypatch, failed_key
+):
+    predecessor = install_failed_f117_quartet(campaign.root, monkeypatch)
+    path = campaign.root / planner.F117_FAILED_ATTEMPT_RELATIVES[failed_key]
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match=f"retained failed F117 {failed_key} bytes or profile differ"):
+        planner.require_f119_recost_supersession(
+            campaign.root / "accounting" / planner.F119_RECOST_ARTIFACT_NAME,
+            {
+                "checkpoint": "F-119",
+                "artifact_name": planner.F119_RECOST_ARTIFACT_NAME,
+                "predecessor_recost": predecessor,
+            },
+        )
+
+
+def test_f119_supersession_rejects_f117_promotion_and_other_checkpoint_use(
+    campaign, monkeypatch
+):
+    predecessor = install_failed_f117_quartet(campaign.root, monkeypatch)
+    with pytest.raises(ValueError, match="failed F117 attempt must never be promoted"):
+        planner.require_f119_recost_supersession(
+            campaign.root / "accounting" / planner.F117_RECOST_ARTIFACT_NAME,
+            {
+                "checkpoint": "F-117",
+                "artifact_name": planner.F117_RECOST_ARTIFACT_NAME,
+                "predecessor_recost": predecessor,
+            },
+        )
+    with pytest.raises(ValueError, match="reserved for F119"):
+        planner.require_f119_recost_supersession(
+            campaign.root / "accounting/mks24_stage_i_E03_forcing_policy_F200_recost_evidence.json",
+            {
+                "checkpoint": "F-200",
+                "artifact_name": (
+                    "mks24_stage_i_E03_forcing_policy_F200_recost_evidence.json"
+                ),
+                "predecessor_recost": predecessor,
+            },
+        )
+
+    forbidden = campaign.root / planner.F117_FORBIDDEN_PROMOTION_RELATIVES[0]
+    write_json(forbidden, {"forbidden": True})
+    with pytest.raises(ValueError, match="remain unpromoted"):
+        planner.require_f119_recost_supersession(
+            campaign.root / "accounting" / planner.F119_RECOST_ARTIFACT_NAME,
+            {
+                "checkpoint": "F-119",
+                "artifact_name": planner.F119_RECOST_ARTIFACT_NAME,
+                "predecessor_recost": predecessor,
+            },
+        )
+
+    forbidden.unlink()
+    forbidden_audit = (
+        campaign.root
+        / "accounting"
+        / f"{planner.F117_RECOST_ARTIFACT_NAME}.publication_audit.json"
+    )
+    write_json(forbidden_audit, {"forbidden": True})
+    forbidden_audit.chmod(0o444)
+    with pytest.raises(ValueError, match="failed F117 attempt must never be promoted"):
         campaign.plan()
 
 
