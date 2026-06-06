@@ -302,7 +302,9 @@ F115_CONTRACT_DYNAMIC_PATHS = {
         "implementation.parent_commit",
         "implementation.tree",
         "implementation.subject",
-        "implementation.source_bundle",
+        "implementation.source_bundle.head",
+        "implementation.source_bundle.path",
+        "implementation.source_bundle.sha256",
         "authorization.sole_next_segment_profile.source_bundle",
         "authorization.sole_next_segment_profile.source_bundle_sha256",
         "authorization.supersedes_f114_profile_only_where_explicitly_listed.source_bundle.to",
@@ -317,7 +319,9 @@ F115_CONTRACT_DYNAMIC_PATHS = {
         "reviewed_candidate.sha256",
         "published_f115.path",
         "published_f115.sha256",
-        "verified.source_bundle",
+        "verified.source_bundle.head",
+        "verified.source_bundle.path",
+        "verified.source_bundle.sha256",
     ),
     "publication_audit": (
         "artifact.path",
@@ -335,23 +339,39 @@ F115_CONTRACT_DYNAMIC_PATHS = {
         "source_archive_catalog.readme.sha256",
         "source_archive_catalog.sha256sums.path",
         "source_archive_catalog.sha256sums.sha256",
-        "reproducible_implementation_authority.authoritative_source_bundle",
+        "reproducible_implementation_authority.authoritative_source_bundle.head",
+        "reproducible_implementation_authority.authoritative_source_bundle.path",
+        "reproducible_implementation_authority.authoritative_source_bundle.sha256",
     ),
 }
 F115_CONTRACT_SHA256 = {
-    "evidence": "5b162918f4e9d0e0fec7ad4b25e10a3bef55c721ff7087b5d246b3c11ccbdcc0",
+    "evidence": "e9a9eb5f1e4d4cd6ae1a7d2556e88614338d8b5b5c8b7f82be0cae49f9aff5d7",
     "provenance_review": "445ff05d812e39c619058b1c607913d7a4de477f0b5df3f19b62fd7a92ce9c64",
-    "plasma_review": "2422ab7efbd414fac5d5380dd73602e812427c4dfb983b8acbda660e5d161d7f",
-    "publication_audit": "3ed52b1fc11091db17fc696245ee688776032b8e16e127a1153ddd8d1da6c9ac",
+    "plasma_review": "3c33807d5e7168ade34dd650d7be0049e409952f61f62899ea1298f82f8b7139",
+    "publication_audit": "5b2cbceb03a254fa434a15e51bd69ea23ecdd3d74fd790d416398b4ef52759e1",
 }
 F116_CONTRACT_DYNAMIC_PATHS = {
     "evidence": (
-        "predecessor_authorities",
-        "implementation",
-        "source_archive_catalog.before.readme_sha256",
-        "source_archive_catalog.before.sha256sums_sha256",
-        "source_archive_catalog.after.readme_sha256",
-        "source_archive_catalog.after.sha256sums_sha256",
+        "predecessor_authorities.historical_f115.evidence.sha256",
+        "predecessor_authorities.historical_f115.publication_audit.sha256",
+        "predecessor_authorities.historical_f115.provenance_review.sha256",
+        "predecessor_authorities.historical_f115.plasma_review.sha256",
+        "implementation.publisher.revision",
+        "implementation.publisher.sha256",
+        *tuple(
+            f"implementation.committed_tools.{index}.{field}"
+            for index in range(7)
+            for field in ("revision", "sha256")
+        ),
+        "implementation.intermediate_36140_bundle.path",
+        "implementation.intermediate_36140_bundle.sha256",
+        "implementation.intermediate_36140_bundle.head",
+        "implementation.intermediate_36140_bundle.advertised_tip.revision",
+        "implementation.current_source_bundle.path",
+        "implementation.current_source_bundle.sha256",
+        "implementation.current_source_bundle.head",
+        "implementation.current_source_bundle.advertised_tip.revision",
+        "implementation.current_source_bundle.subject",
         "source_archive_catalog.after.sole_current_source_bundle",
     ),
     "provenance_review": (
@@ -369,17 +389,35 @@ F116_CONTRACT_DYNAMIC_PATHS = {
         "verified.final_head",
     ),
     "publication_audit": (
-        "artifact",
-        "independent_reviews",
-        "historical_f115_authority",
-        "source_archive_catalog",
+        "artifact.path",
+        "artifact.sha256",
+        "independent_reviews.reviews_bind_exact_published_f116_sha256",
+        "independent_reviews.provenance_security.path",
+        "independent_reviews.provenance_security.sha256",
+        "independent_reviews.plasma_scientific_continuation.path",
+        "independent_reviews.plasma_scientific_continuation.sha256",
+        "historical_f115_authority.evidence_sha256",
+        "historical_f115_authority.publication_audit_sha256",
+        "historical_f115_authority.provenance_review_sha256",
+        "historical_f115_authority.plasma_review_sha256",
+        "source_archive_catalog.readme.path",
+        "source_archive_catalog.readme.sha256",
+        "source_archive_catalog.sha256sums.path",
+        "source_archive_catalog.sha256sums.sha256",
+        "source_archive_catalog.bridge_bundle.path",
+        "source_archive_catalog.bridge_bundle.sha256",
+        "source_archive_catalog.bridge_bundle.head",
+        "source_archive_catalog.current_source_bundle.path",
+        "source_archive_catalog.current_source_bundle.sha256",
+        "source_archive_catalog.current_source_bundle.head",
+        "source_archive_catalog.sole_current_source_bundle",
     ),
 }
 F116_CONTRACT_SHA256 = {
-    "evidence": "26d7ced154f7606a6fe079bd764447c4bded265dd2764412562ddbe94c3b451a",
+    "evidence": "dcc552a7ccd400c78327bbde0ca05e825d12b215bc4f0b3f70a1f7f1d105dad5",
     "provenance_review": "429d8c54beed52c72c5948bd99783b4b631353211525135f2307465af0c5fdc5",
     "plasma_review": "a6b144bbd81c721c99474768150a5855471422e90ffc7b6e92388831856f324e",
-    "publication_audit": "9fbe87695b6838180d5443a7f92c3249cc053602872cbb180f13e857712b60a1",
+    "publication_audit": "129eb5174008f31b64afbb85379b0f1d23f69d5211e51c841e46120a9c352fb9",
 }
 F118_RELATIVE = Path(
     "accounting/"
@@ -4589,12 +4627,29 @@ def historical_contract_sha256(
         retained: object = projected
         parts = dotted_path.split(".")
         for part in parts[:-1]:
-            if not isinstance(retained, dict) or part not in retained:
+            if isinstance(retained, dict) and part in retained:
+                retained = retained[part]
+            elif (
+                isinstance(retained, list)
+                and part.isascii()
+                and part.isdigit()
+                and int(part) < len(retained)
+            ):
+                retained = retained[int(part)]
+            else:
                 raise ValueError(f"historical contract lacks dynamic path {dotted_path}")
-            retained = retained[part]
-        if not isinstance(retained, dict) or parts[-1] not in retained:
+        final = parts[-1]
+        if isinstance(retained, dict) and final in retained:
+            retained[final] = "<authenticated-dynamic>"
+        elif (
+            isinstance(retained, list)
+            and final.isascii()
+            and final.isdigit()
+            and int(final) < len(retained)
+        ):
+            retained[int(final)] = "<authenticated-dynamic>"
+        else:
             raise ValueError(f"historical contract lacks dynamic path {dotted_path}")
-        retained[parts[-1]] = "<authenticated-dynamic>"
     return sha256_bytes((json.dumps(projected, indent=2, sort_keys=True) + "\n").encode())
 
 

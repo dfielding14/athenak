@@ -2506,6 +2506,28 @@ def rebind_f118_probe_chain(root: Path, binding: dict[str, object]) -> None:
     binding["publication_audit"]["sha256"] = sha256(audit_path)
 
 
+def rebind_complete_f118_source_authority(
+    module,
+    root: Path,
+    evidence: dict[str, object],
+    binding: dict[str, object],
+) -> None:
+    """Fully self-rebind one hostile nested authority through complete F118."""
+
+    evidence_path = root / module.F118_RELATIVE
+    write_json(evidence_path, evidence)
+    evidence_path.chmod(0o444)
+    audit_path = root / module.F118_PUBLICATION_AUDIT_RELATIVE
+    audit = json.loads(audit_path.read_text())
+    audit["historical_f116_authority"] = {
+        f"{key}_sha256": retained["sha256"]
+        for key, retained in evidence["predecessor_authorities"]["historical_f116"].items()
+    }
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    rebind_f118_probe_chain(root, binding)
+
+
 def rebind_f118_live_catalog(root: Path, binding: dict[str, object]) -> None:
     """Rebind declared F118 after-state digests to adversarial live catalog bytes."""
 
@@ -3633,6 +3655,107 @@ def test_checkpoint_rejects_self_rebound_valid_f116_review_timestamp(
             final_binding,
             root,
         )
+
+
+def test_checkpoint_full_chain_rejects_self_rebound_f116_current_candidate_path(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"]["current_source_bundle"].__setitem__(
+            "candidate_path", str(tmp_path / "hostile-f116-current.bundle.candidate")
+        ),
+    )
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116 evidence differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+@pytest.mark.parametrize(
+    "bundle",
+    ("intermediate_36140_bundle", "current_source_bundle"),
+)
+def test_checkpoint_full_chain_rejects_self_rebound_f116_bundle_revision_inventory(
+    tmp_path, monkeypatch, bundle
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+
+    def rebind(value):
+        revisions = value["implementation"][bundle]["verified_revisions"]
+        assert len(revisions) > 1
+        value["implementation"][bundle]["verified_revisions"] = list(reversed(revisions))
+
+    mutate_historical_f116_record(module, root, evidence, "evidence", rebind)
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116 evidence differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_full_chain_rejects_candidate_path_added_to_f116_bridge(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"]["intermediate_36140_bundle"].__setitem__(
+            "candidate_path", str(tmp_path / "hostile-f116-bridge.bundle.candidate")
+        ),
+    )
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116 bridge bundle"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+@pytest.mark.parametrize("declaration", ("publisher", "committed_tool"))
+def test_checkpoint_full_chain_rejects_self_rebound_f116_tool_declaration(
+    tmp_path, monkeypatch, declaration
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+
+    def rebind(value):
+        implementation = value["implementation"]
+        if declaration == "publisher":
+            implementation["publisher"]["path"] = "scripts/frontier/hostile-publisher.py"
+        else:
+            implementation["committed_tools"][0]["path"] = (
+                "scripts/frontier/hostile-committed-tool.py"
+            )
+
+    mutate_historical_f116_record(module, root, evidence, "evidence", rebind)
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_full_chain_rejects_self_rebound_f115_bundle_revision_inventory(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+
+    def rebind(value):
+        value["implementation"]["source_bundle"]["verified_revisions"].append("f" * 40)
+
+    mutate_historical_f115_record(module, root, evidence, "evidence", rebind)
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F115"):
+        module.validate_f118_source_authority_binding(binding, root, args)
 
 
 def test_checkpoint_rejects_self_rebound_f115_f116_catalog_trust_root(
