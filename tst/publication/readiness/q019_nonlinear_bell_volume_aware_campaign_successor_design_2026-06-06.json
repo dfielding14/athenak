@@ -1,0 +1,512 @@
+{
+  "record_type": "q019_nonlinear_bell_volume_aware_campaign_successor_design",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "gate": "Q-019",
+  "campaign_family_id": "Q019-NONLINEAR-BELL-VOLUME-AWARE-SUCCESSOR",
+  "claim_id": "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001",
+  "status": "source_local_successor_design_complete_execution_and_qualification_prohibited",
+  "qualification_effect": "none_source_local_non_authorizing_design_only",
+  "scope": "A corrected source-local design for nonlinear Bell saturation campaigns using the exact volume-aware deposited J_CR/c normalization. It supersedes the historical volume-blind and artificial-C-multiplied Q019 design for physical execution and qualification while preserving its bytes as chronology. This record does not implement a nonlinear generator, authorize a launch, bind a clean candidate, inspect qualifying output, freeze numeric science tolerances, or close a claim.",
+  "authority": {
+    "launch_authorized": false,
+    "frontier_submission_authorized": false,
+    "physical_pilot_authorized": false,
+    "qualification_eligible": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false,
+    "active_policy_modified": false,
+    "registered_science_bound": false,
+    "clean_candidate_bound": false,
+    "simulation_executed": false
+  },
+  "authoritative_corrected_lineage": {
+    "adversarial_audit_decision": "Q019_must_depend_first_on_the_passed_Q043_raw_cycle_one_oracle_and_then_on_a_separately_corrected_Q023_linear_Bell_predecessor",
+    "first_predecessor": {
+      "oracle_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+      "required_snapshot": "raw_cycle_one",
+      "required_result": "passed",
+      "source_of_truth": "raw_output_level_deposited_current",
+      "q043_is_an_executable_generator": false,
+      "exact_pass_receipt_and_artifact_bindings": "required_by_future_execution_preregistration",
+      "design_binding_boundary": "the_authoritative_audit_supplies_the_pass_disposition_but_this_non_authorizing_design_does_not_fabricate_or_replace_the_exact_pass_receipt"
+    },
+    "second_predecessor": {
+      "campaign_id": "Q023-PAPER-BELL-LINEAR-JOVERC",
+      "generator_name": "q023_paper_bell_linear_joverc",
+      "required_after": "passed_Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE_raw_cycle_one_oracle",
+      "role": "separately_corrected_linear_Bell_growth_phase_polarization_and_convergence_predecessor"
+    },
+    "Q019_pgen_name": "q023_paper_bell_linear_joverc",
+    "Q019_unique_identity_scope": "branch_specific_campaign_ids_decks_source_modes_preregistrations_and_evidence_roots",
+    "Q023_source_local_or_cycle_zero_oracle_as_Q043_substitute": "prohibited",
+    "Q019_binding_rule": "all_Q019_successor_execution_preregistrations_must_bind_the_exact_passed_Q043_raw_cycle_one_oracle_receipt_and_then_the_exact_separately_corrected_Q023_linear_predecessor"
+  },
+  "supersession": {
+    "effect": "supersedes_historical_q019_design_for_all_physical_execution_qualification_and_publication_evidence",
+    "preservation": "historical_artifacts_remain_byte_preserved_chronology_only",
+    "historical_artifacts": [
+      {
+        "path": "tst/publication/readiness/q019_nonlinear_bell_saturation_campaign_design_2026-06-06.json",
+        "sha256": "ad0e06525a535e4b28cdbfaf51063218466d400270262a50544bc8701081417c"
+      },
+      {
+        "path": "tst/publication/readiness/q019_nonlinear_bell_saturation_campaign_design_2026-06-06.md",
+        "sha256": "617eeea8f845ac51cc1fc2a134a595381dfce319a36a0f62dd971afd19d63842"
+      }
+    ],
+    "invalid_inherited_contracts": [
+      "PPC_times_deposit_qscale_equals_2e9",
+      "J_CR_over_2_B0_C_k0",
+      "fixed_deposit_qscale_across_dimension_or_resolution",
+      "legacy_q023_nonlinear_foundation_as_a_physical_predecessor",
+      "legacy_tau_windows_as_science_acceptance_windows",
+      "legacy_resource_estimates_as_authorization_evidence"
+    ],
+    "prohibited_actions": [
+      "launch_or_continue_any_Q019_Bell_run_using_the_volume_blind_or_artificial_C_multiplied_current_relation",
+      "reuse_the_historical_Q019_campaign_id_for_the_corrected_successor",
+      "silently_relabel_historical_Q019_outputs_as_corrected",
+      "use_historical_Q019_outputs_for_physical_qualification_or_publication_claims",
+      "inherit_historical_horizons_windows_tolerances_or_resource_costs_without_new_excluded_pilots",
+      "replace_the_required_passed_Q043_raw_cycle_one_oracle_with_a_Q023_source_local_or_cycle_zero_oracle"
+    ]
+  },
+  "normalization_contract": {
+    "deposited_quantity": "raw_prtcl_j_represents_J_CR_over_c",
+    "exact_general_closure": "PPC*deposit_qscale*species_charge*v_CR/V_root_cell=J_CR/c=2*B0*k0",
+    "general_deposit_qscale_derivation": "deposit_qscale=2*B0*k0*V_root_cell/(PPC*species_charge*v_CR)",
+    "root_cell_volume": "V_root_cell=product_d((xmax_d-xmin_d)/nx_d)_over_all_three_root_mesh_axes_including_invariant_carrier_axes",
+    "ppc_semantics": "macro_particles_per_root_grid_cell",
+    "deposit_qscale_semantics": "extensive_root_grid_macro_charge_and_macro_mass_scale",
+    "species_charge_semantics": "configured_species_charge_coefficient_used_by_the_deposition_contract",
+    "q_over_mc_specialization": {
+      "allowed_only_if": "species_mass_equals_1_is_explicitly_bound",
+      "specialized_closure": "PPC*deposit_qscale*(q/(mc))*v_CR/V_root_cell=J_CR/c=2*B0*k0",
+      "bare_q_over_mc_in_general_closure_allowed": false
+    },
+    "artificial_light_speed_in_target": false,
+    "artificial_light_speed_in_qscale_derivation": false,
+    "fixed_qscale_across_dimension_resolution_or_PPC": false,
+    "required_initial_raw_output_checks": [
+      "cell_volume_weighted_volume_average_of_guide_projected_prtcl_j_equals_2_B0_k0",
+      "cell_volume_weighted_volume_average_of_transverse_prtcl_j_is_zero_within_preregistered_tolerance",
+      "Q043_raw_cycle_one_prtcl_j_pass_receipt_is_bound",
+      "measured_initial_prtcl_j_is_invariant_across_dimension_resolution_PPC_and_decomposition",
+      "configured_and_measured_current_targets_are_independent_of_artificial_C"
+    ],
+    "must_fail_if": [
+      "V_root_cell_is_absent",
+      "artificial_C_multiplies_the_deposited_current_target",
+      "a_fixed_deposit_qscale_is_reused_after_dimension_resolution_or_PPC_changes",
+      "only_deck_arithmetic_or_generator_preflight_is_available",
+      "the_output_level_current_oracle_does_not_pass"
+    ]
+  },
+  "source_local_evidence_bindings": {
+    "authoritative_Q043_raw_cycle_one_oracle_dependency": {
+      "oracle_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+      "required_snapshot": "raw_cycle_one",
+      "required_result": "passed",
+      "audit_disposition": "passed_by_authoritative_adversarial_audit",
+      "exact_pass_receipt_path_SHA256_raw_artifact_inventory_and_recompute_bindings": "required_before_any_Q019_physical_execution",
+      "Q023_source_local_or_cycle_zero_oracle_substitution_allowed": false,
+      "qualification_effect_of_this_design": "none"
+    },
+    "schema7_particle_state_reducer": {
+      "campaign_id": "Q019-HR-VOLUME-AWARE-NOHALL",
+      "readiness_path": "tst/publication/readiness/q019_nonlinear_bell_schema7_particle_state_reducer_2026-06-06.json",
+      "readiness_sha256": "f878bc6b9fa3a0b163e1aa3cf40793bc4b190f754aaee6d6295104a034e22ade",
+      "reducer_path": "tst/publication/q019_nonlinear_bell_particle_state.py",
+      "reducer_sha256": "2218d188d1603c46a95b23d03e4b48036af483788a0974ec22a9a7140e868928",
+      "source_local_status": "raw_schema7_extractor_reducer_ready_retained_artifact_binding_pending",
+      "sufficiency_for_nonlinear_qualification": false
+    }
+  },
+  "mandatory_predecessor_gates": {
+    "Q043_raw_cycle_one_current_oracle": {
+      "required_before": "any_corrected_nonlinear_physical_pilot_or_production_execution",
+      "required_oracle_id": "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+      "required_snapshot": "raw_cycle_one",
+      "required_result": "passed",
+      "current_design_state": "authoritative_audit_pass_disposition_accepted_exact_receipt_binding_still_required_by_execution_preregistration",
+      "required_evidence": [
+        "exact_Q043_pass_receipt_and_raw_cycle_one_artifact_bindings",
+        "exact_corrected_candidate_and_deck_bindings",
+        "complete_1D_2D_3D_by_resolution_by_PPC_by_decomposition_raw_matrix",
+        "raw_prtcl_rho_prtcl_jx_prtcl_jy_prtcl_jz_provenance",
+        "retained_output_level_pass_receipt",
+        "independent_recompute",
+        "external_scientific_review"
+      ]
+    },
+    "corrected_linear_predecessor": {
+      "required_before": "any_corrected_nonlinear_physical_pilot_or_production_execution",
+      "required_after": "passed_Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE_raw_cycle_one_oracle",
+      "required_campaign_id": "Q023-PAPER-BELL-LINEAR-JOVERC",
+      "required_readiness_path": "tst/publication/readiness/q023_paper_bell_linear_joverc_source_local_preparation_2026-06-06.json",
+      "required_generator_name": "q023_paper_bell_linear_joverc",
+      "current_state": "separately_implemented_source_local_preparation_not_bound_or_sufficient_here",
+      "required_exact_binding_state": "future_execution_preregistration_must_bind_exact_SHA256_for_corrected_source_decks_analyzer_candidate_and_retained_evidence",
+      "required_general_closure": "PPC*deposit_qscale*species_charge*v_CR/V_root_cell=J_CR/c=2*B0*k0",
+      "required_physics_evidence": [
+        "signed_complex_growth_rate_and_phase",
+        "right_handed_polarization",
+        "dimension_resolution_and_timestep_convergence",
+        "passed_Q043_raw_cycle_one_deposited_current_oracle_binding",
+        "artificial_C_sensitivity_or_reviewed_reduced_C_validity_boundary",
+        "independent_recompute_and_external_scientific_review"
+      ],
+      "source_local_preparation_alone_is_sufficient": false
+    },
+    "gate_order": [
+      "passed_Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE_raw_cycle_one_oracle",
+      "separately_corrected_Q023_linear_Bell_predecessor",
+      "Q019_source_local_compatibility",
+      "excluded_nonlinear_pilots",
+      "versioned_nonlinear_execution_preregistration",
+      "registered_nonlinear_production",
+      "independent_recompute_and_external_review"
+    ]
+  },
+  "branch_separation": {
+    "shared_requirements": [
+      "volume_aware_J_CR_over_c_closure",
+      "no_Hall_ideal_MHD_carrier_scope",
+      "full_CR_to_MHD_momentum_and_energy_feedback",
+      "raw_current_particle_state_and_MHD_evidence",
+      "separate_exact_candidate_deck_seed_and_artifact_bindings",
+      "separate_versioned_preregistration_and_claim_language"
+    ],
+    "branches_must_not_share_a_campaign_id_or_be_pooled_statistically": true,
+    "high_rigidity_fixed_current_like": {
+      "campaign_id": "Q019-HR-JOVERC-FIXED-CURRENT-LIKE-NOHALL",
+      "scientific_scope": "self_consistent_high_rigidity_periodic_box_approximately_fixed_lab_current_branch",
+      "literature_relation": "Tests the plasma-acceleration and gas-frame-current reduction mechanism associated with the constant-current limit of Riquelme_and_Spitkovsky_2009, but is not an exact locked-current experiment because AthenaK advances the CR particles.",
+      "required_centered_beam_contract": {
+        "distribution": "deterministic_cold_centered_beam",
+        "production_PPC": 1,
+        "rationale": "With one identical centered cold-beam macro-particle per root cell, PPC_greater_than_1 only duplicates colocated identical phase-space samples while qscale decreases inversely with PPC; it adds cost without sampling a distribution and is not a particle-convergence test.",
+        "PPC_greater_than_1_role": "output_level_deposition_oracle_and_debug_only_not_nonlinear_science_convergence",
+        "PPC_convergence_claim_authorized": false
+      },
+      "required_regime_diagnostics": [
+        "k0_r_g0",
+        "r_g_of_B_over_dominant_wavelength",
+        "lab_frame_CR_current",
+        "gas_frame_CR_current",
+        "CR_momentum_and_pressure_tensor_change",
+        "gas_parallel_acceleration",
+        "relative_CR_gas_drift"
+      ],
+      "fixed_current_like_label_gate": "label_allowed_only_if_preregistered_lab_frame_current_and_CR_momentum_invariance_gates_pass_while_gas_frame_current_declines_consistently_with_measured_gas_acceleration",
+      "prohibited_claims": [
+        "exact_locked_current",
+        "finite_rigidity_CR_deflection_saturation",
+        "anisotropic_pressure_saturation_law",
+        "kinetic_background_ion_demagnetization",
+        "driven_boundary_reproduction"
+      ]
+    },
+    "finite_rigidity_self_consistent": {
+      "campaign_id": "Q019-FR-JOVERC-SELF-CONSISTENT-NOHALL",
+      "scientific_scope": "self_consistent_finite_rigidity_periodic_box_CR_deflection_and_momentum_flux_branch",
+      "literature_relation": "Tests an undriven periodic-box analogue of self-consistent current evolution, CR deflection, and anisotropic momentum-flux saturation discussed by Gargate_et_al_2010 and Zacharegkas_et_al_2024; it is not a reproduction of kinetic-background-ion or driven-CR-boundary experiments.",
+      "required_new_source_features": [
+        "separately_named_finite_rigidity_distribution_mode_bound_to_the_q023_paper_bell_linear_joverc_lineage",
+        "reviewed_distribution_function_and_initial_CR_momentum_flux_tensor",
+        "seeded_nonduplicated_particle_sampling",
+        "reviewed_k0_r_g0_and_CR_loading_grid",
+        "branch_specific_binding_to_the_passed_Q043_raw_cycle_one_oracle_and_then_a_reviewed_corrected_linear_or_early_growth_predecessor"
+      ],
+      "PPC_role": "sampling_convergence_is_meaningful_and_requires_a_preregistered_PPC_ladder",
+      "required_regime_diagnostics": [
+        "lab_and_gas_frame_CR_current_evolution",
+        "CR_transverse_momentum_and_pressure_tensor",
+        "CR_anisotropy_and_isotropization",
+        "r_g_of_B_over_dominant_wavelength",
+        "magnetic_power_migration_toward_CR_gyroradius",
+        "saturated_transverse_magnetic_pressure_vs_initial_CR_momentum_flux"
+      ],
+      "prohibited_claims": [
+        "exact_Riquelme_Spitkovsky_locked_current",
+        "kinetic_background_ion_demagnetization",
+        "direct_Zacharegkas_driven_boundary_reproduction",
+        "universal_pressure_saturation_law_without_Q022_mapping_and_review"
+      ]
+    }
+  },
+  "geometry_and_box_contract": {
+    "guide_and_stream_alignment": "B0_parallel_J_CR_parallel_x1_for_all_corrected_nonlinear_decks",
+    "2D3V_role": "primary_ensemble_and_numerical_sensitivity_geometry",
+    "3D_required_pair": {
+      "elongated_axis_aligned_fiducial": {
+        "id": "HR-3D-ELONGATED",
+        "geometry": "periodic_3D_with_L1_greater_than_L2_equal_L3_and_B0_parallel_J_CR_parallel_x1",
+        "exact_extents": "freeze_after_excluded_box_and_resource_pilots_before_qualifying_output",
+        "role": "three_dimensional_nonlinear_morphology_and_saturation"
+      },
+      "box_control": {
+        "id": "HR-3D-BOX-CONTROL",
+        "geometry": "same_axis_alignment_physics_resolution_solver_seed_and_output_contract_as_HR_3D_ELONGATED_with_each_domain_extent_doubled",
+        "exact_extents": "freeze_with_the_fiducial_after_excluded_box_and_resource_pilots",
+        "role": "reject_parallel_or_transverse_box_limited_saturation"
+      },
+      "paired_seed_required": true,
+      "same_cell_size_required": true,
+      "same_terminal_normalized_time_required": true,
+      "fail_closed_conditions": [
+        "dominant_magnetic_scale_reaches_a_fundamental_box_mode",
+        "saturation_observable_or_mechanism_classification_changes_beyond_preregistered_box_tolerance",
+        "transverse_cavity_or_filament_statistics_are_box_truncated",
+        "either_member_of_the_pair_is_missing_or_failed"
+      ]
+    },
+    "3D_claim_without_complete_box_pair_authorized": false
+  },
+  "numerical_sensitivity_contract": {
+    "fiducial": {
+      "integrator": "rk2",
+      "reconstruction": "plm",
+      "riemann_solver": "llf",
+      "particle_pusher_and_deposition": "boris_tsc_and_TSC"
+    },
+    "required_rows": [
+      {
+        "id": "S-RIEMANN",
+        "change": "llf_to_hlld_only",
+        "role": "MHD_Riemann_solver_sensitivity"
+      },
+      {
+        "id": "S-RECON",
+        "change": "plm_to_wenoz_only_with_required_ghost_zone_change",
+        "role": "MHD_reconstruction_sensitivity"
+      },
+      {
+        "id": "S-RESOLUTION",
+        "change": "uniform_cell_size_refinement_at_fixed_physical_box",
+        "role": "spatial_resolution_convergence"
+      },
+      {
+        "id": "S-TIMESTEP",
+        "change": "smaller_CFL_or_particle_step_limit_only",
+        "role": "time_integration_and_particle_substep_sensitivity"
+      }
+    ],
+    "compatibility_gate": "each_solver_and_reconstruction_row_must_pass_source_local_host_runtime_restart_and_output_contract_tests_before_any_physical_pilot",
+    "pairing": "same_branch_seed_geometry_physics_and_terminal_time_as_fiducial",
+    "fail_closed_rule": "no_saturation_or_mechanism_claim_if_a_required_sensitivity_is_missing_or_changes_a_primary_observable_beyond_its_preregistered_tolerance"
+  },
+  "required_diagnostics": {
+    "current_and_particle_state": [
+      "raw_prtcl_rho_prtcl_jx_prtcl_jy_prtcl_jz",
+      "J_CR_lab",
+      "J_CR_gas=J_CR_lab-rho_CR*u_gas",
+      "guide_parallel_and_transverse_lab_and_gas_frame_current",
+      "CR_momentum_vector",
+      "CR_kinetic_energy",
+      "CR_momentum_flux_and_centered_velocity_pressure_tensors",
+      "sampled_field_gyroradius_distribution",
+      "relative_CR_gas_drift"
+    ],
+    "energy_partitions": [
+      "gas_bulk_kinetic_parallel_and_transverse",
+      "gas_thermal",
+      "magnetic_guide_and_transverse",
+      "total_MHD",
+      "CR_kinetic",
+      "cumulative_CR_to_MHD_momentum_and_energy_transfer"
+    ],
+    "conservation_residuals": {
+      "energy": [
+        "absolute_total_gas_plus_CR_energy_residual",
+        "residual_over_initial_total_energy",
+        "residual_over_absolute_cumulative_transferred_energy",
+        "residual_over_absolute_MHD_energy_change",
+        "residual_over_magnetic_energy_gain"
+      ],
+      "momentum": [
+        "componentwise_and_L2_absolute_total_gas_plus_CR_momentum_residual",
+        "residual_over_initial_CR_momentum",
+        "residual_over_absolute_cumulative_transferred_momentum",
+        "residual_over_absolute_gas_momentum_change"
+      ],
+      "single_denominator_only_is_sufficient": false
+    },
+    "saturation_and_morphology": [
+      "sqrt_volume_mean_Bperp2_over_B0",
+      "transverse_magnetic_pressure",
+      "dominant_wavenumber_integral_scale_and_fundamental_shell_fraction",
+      "component_resolved_magnetic_spectrum",
+      "density_and_magnetic_pressure_PDFs_and_correlation",
+      "quantified_filament_and_cavity_statistics",
+      "amplified_Alfven_speed_and_relative_CR_gas_drift",
+      "per_seed_preregistered_snapshots"
+    ],
+    "raw_evidence": [
+      "raw_mhd_w_bcc",
+      "raw_particle_moments",
+      "sparse_particle_state",
+      "schema7_restarts_bracketing_linear_nonlinear_and_candidate_saturation_intervals",
+      "stdout_runtime_identity_and_terminal_proof",
+      "scheduler_accounting_Q017_telemetry_memory_and_output_timers",
+      "artifact_inventories_SHA256_and_retention_proof"
+    ]
+  },
+  "seed_and_ensemble_contract": {
+    "pilot_seed_namespace": "Q019-VOLUME-AWARE-PILOT-only",
+    "qualifying_seed_namespace": "Q019-VOLUME-AWARE-QUALIFYING-only",
+    "pilot_and_qualifying_seeds_must_be_disjoint": true,
+    "same_seed_paired_across_required_sensitivities_and_box_controls": true,
+    "high_rigidity_seed_controls": "field_perturbation_only_because_centered_beam_PPC_is_one",
+    "finite_rigidity_seed_controls": "field_perturbation_and_nonduplicated_distribution_sampling_recorded_separately",
+    "candidate_qualifying_seed_count": 8,
+    "minimum_frozen_qualifying_seed_count": 4,
+    "exact_seed_inventory_and_count": "freeze_after_excluded_pilot_variance_and_resource_analysis_before_any_qualifying_output",
+    "selection_rule": "may_use_only_excluded_pilot_variance_resource_telemetry_and_project_budget_never_qualifying_outcomes",
+    "statistics": [
+      "retain_every_finite_completed_seed",
+      "report_per_seed_values",
+      "report_preregistered_central_estimator_and_interval",
+      "pair_seed_level_differences_for_sensitivities_and_box_controls",
+      "freeze_multiplicity_control_before_qualifying_output"
+    ]
+  },
+  "pilot_and_freeze_gates": {
+    "pilot_outputs_are_never_qualifying_evidence": true,
+    "stages": [
+      {
+        "stage": 0,
+        "name": "passed_Q043_raw_cycle_one_oracle_binding",
+        "requirements": [
+          "Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE_result_equals_passed",
+          "raw_cycle_one_source_of_truth",
+          "exact_pass_receipt_raw_artifact_inventory_independent_recompute_and_review_bindings"
+        ],
+        "physical_execution_authorized_by_this_design": false
+      },
+      {
+        "stage": 1,
+        "name": "separately_corrected_Q023_linear_predecessor",
+        "requirements": [
+          "Q023-PAPER-BELL-LINEAR-JOVERC_after_the_passed_Q043_oracle",
+          "corrected_linear_growth_phase_polarization_and_convergence_closure",
+          "exact_candidate_registered_evidence_independent_recompute_and_review_bindings"
+        ],
+        "physical_execution_authorized_by_this_design": false
+      },
+      {
+        "stage": 2,
+        "name": "Q019_source_local_compatibility",
+        "requirements": [
+          "q023_paper_bell_linear_joverc_generator_host_and_unit_contract",
+          "general_species_charge_volume_aware_deck_validation",
+          "solver_reconstruction_restart_and_output_compatibility"
+        ],
+        "physical_execution_authorized_by_this_design": false
+      },
+      {
+        "stage": 3,
+        "name": "excluded_resource_and_science_window_pilots",
+        "requirements": [
+          "disjoint_pilot_seeds",
+          "strong_scaling_memory_IO_and_retention_measurements",
+          "box_extent_terminal_time_output_cadence_saturation_window_and_numeric_threshold_selection",
+          "no_pilot_result_used_as_qualifying_evidence"
+        ],
+        "physical_execution_authorized_by_this_design": false
+      },
+      {
+        "stage": 4,
+        "name": "versioned_execution_preregistration",
+        "requirements": [
+          "exact_candidate_decks_analyzers_seeds_outputs_windows_tolerances_resources_and_retention",
+          "exact_branch_specific_claim_language",
+          "registered_science_control_plane_and_empty_queue_attestations"
+        ],
+        "physical_execution_authorized_by_this_design": false
+      }
+    ],
+    "qualifying_output_inspection_before_stage_4_freeze": "prohibited"
+  },
+  "resource_contract": {
+    "project_wide_frontier_hard_cap_node_hours": 10000.0,
+    "historical_Q019_cost_estimates_reusable": false,
+    "source_local_design_allocates_node_hours": false,
+    "pilot_cap_rule": "a_future_registered_pilot_preregistration_must_bind_a_hard_cap_no_greater_than_min_500_node_hours_0p10_times_then_unreserved_project_budget",
+    "required_measured_resource_inputs": [
+      "node_hour_scaling_by_dimension_resolution_solver_and_reconstruction",
+      "particle_updates_zone_cycles_and_active_meshblocks",
+      "peak_memory_per_rank_and_per_node",
+      "raw_output_restart_and_retained_artifact_bytes_and_publish_time",
+      "3D_elongated_and_box_control_costs",
+      "failure_and_registered_replacement_cost"
+    ],
+    "production_authorization_equation": "C_consumed+C_reserved+C_Q011_authorized+C_Q019_frozen_complete+C_failure_reserve+R_other_required<=10000",
+    "minimum_failure_reserve": "max(one_complete_required_paired_group_0p15_times_C_Q019_frozen_complete)",
+    "ordering": [
+      "2D_high_rigidity_pilots_and_resource_model",
+      "2D_high_rigidity_frozen_ensemble_and_sensitivities",
+      "paired_3D_elongated_and_box_control_only_if_complete_pair_fits",
+      "finite_rigidity_branch_only_after_its_separate_source_physics_and_resource_gates_close"
+    ],
+    "overrun_rule": "stop_and_issue_a_versioned_reviewed_redesign_never_silently_drop_seeds_sensitivities_or_the_3D_box_control"
+  },
+  "fail_closed_acceptance": [
+    "all_authority_flags_remain_false_until_a_separate_registered_execution_preregistration",
+    "exact_general_species_charge_volume_aware_J_CR_over_c_closure",
+    "passed_Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE_raw_cycle_one_oracle_receipt_and_artifacts_bound",
+    "corrected_linear_predecessor_closed_before_nonlinear_execution",
+    "exact_candidate_deck_analyzer_seed_policy_artifact_and_observed_time_bindings",
+    "no_nonfinite_corrupt_undeclared_safety_terminal_or_retention_failure",
+    "gas_plus_CR_momentum_and_energy_residuals_pass_each_preregistered_normalization",
+    "saturation_detected_only_by_a_preregistered_algorithm_in_a_frozen_window",
+    "no_saturation_claim_if_dominant_scale_reaches_a_fundamental_box_mode",
+    "required_resolution_timestep_solver_and_reconstruction_sensitivities_pass",
+    "3D_claim_requires_the_complete_paired_elongated_box_and_doubled_extent_control",
+    "high_rigidity_fixed_current_like_label_requires_lab_current_and_CR_momentum_invariance_gates",
+    "finite_rigidity_CR_deflection_or_pressure_label_requires_the_separate_branch_and_Q022_mapping",
+    "finite_completed_outliers_and_failed_attempts_are_retained_and_reported",
+    "independent_primary_table_recompute_and_external_scientific_review_pass"
+  ],
+  "literature_scope": [
+    {
+      "reference_id": "bell_2004",
+      "locator": "https://doi.org/10.1111/j.1365-2966.2004.07734.x",
+      "role": "nonresonant_current_driven_linear_and_nonlinear_physical_context"
+    },
+    {
+      "reference_id": "riquelme_spitkovsky_2009",
+      "locator": "https://doi.org/10.1088/0004-637X/694/1/626",
+      "role": "constant_current_limit_plasma_acceleration_and_CR_deflection_mechanism_discriminants",
+      "athenak_boundary": "high_rigidity_branch_is_approximately_fixed_current_like_not_locked_current"
+    },
+    {
+      "reference_id": "gargate_et_al_2010",
+      "locator": "https://doi.org/10.1088/2041-8205/711/2/L127",
+      "role": "self_consistent_current_evolution_gas_energization_and_CR_isotropization_context",
+      "athenak_boundary": "ideal_MHD_background_cannot_test_kinetic_background_ion_demagnetization"
+    },
+    {
+      "reference_id": "sun_bai_2023",
+      "locator": "https://arxiv.org/abs/2304.10568",
+      "role": "AthenaK_MHD_PIC_linear_Bell_predecessor_and_normalization_context",
+      "athenak_boundary": "only_the_corrected_volume_aware_J_CR_over_c_successor_is_admissible"
+    },
+    {
+      "reference_id": "zacharegkas_et_al_2024",
+      "locator": "https://doi.org/10.3847/1538-4357/ad3960",
+      "role": "finite_rigidity_anisotropic_momentum_flux_saturation_context",
+      "athenak_boundary": "periodic_box_branch_is_an_undriven_analogue_not_a_driven_boundary_reproduction"
+    }
+  ],
+  "open_dependencies": [
+    "bind_the_exact_pass_receipt_raw_cycle_one_artifact_inventory_independent_recompute_and_review_for_Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE",
+    "integrate_review_bind_and_close_the_separately_corrected_Q023-PAPER-BELL-LINEAR-JOVERC_predecessor_after_the_Q043_oracle",
+    "implement_a_uniquely_named_seeded_high_rigidity_Q019_source_mode_and_exact_deck_validator_bound_to_pgen_name_q023_paper_bell_linear_joverc_without_a_duplicate_current_generator",
+    "implement_a_separately_named_finite_rigidity_Q019_distribution_mode_within_the_q023_paper_bell_linear_joverc_lineage_before_that_branch",
+    "extend_the_particle_state_reducer_and_nonlinear_analyzer_to_retained_raw_artifacts",
+    "run_only_excluded_pilots_then_freeze_exact_branch_specific_execution_preregistrations",
+    "complete_Q022_reference_specific_equation_normalization_parameter_and_tolerance_maps"
+  ]
+}
