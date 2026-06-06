@@ -12,6 +12,7 @@ import math
 import os
 import fcntl
 from pathlib import Path
+import re
 import stat
 import subprocess
 import sys
@@ -2243,7 +2244,9 @@ def test_generator_emits_deterministic_checkpoint_compatible_sole_artifact(recos
     assert artifact["provenance"]["scheduler_sha256"] == sha256(recost_fixture["scheduler"])
     assert output.stat().st_mode & 0o777 == 0o444
     assert output.stat().st_nlink == 1
-    assert_rejected(run_generator(recost_fixture), "output namespace is not empty")
+    verified = run_generator(recost_fixture)
+    assert verified.returncode == 0, verified.stderr
+    assert output.read_bytes() == first
     output.unlink()
     completed = run_generator(recost_fixture)
     assert completed.returncode == 0, completed.stderr
@@ -2283,6 +2286,11 @@ def test_draft_request_action_generates_authenticated_prerequisites_without_self
     assert all(path.parent == accounting for path in (request, reconciliation, storage))
     assert all(stat.S_IMODE(path.stat().st_mode) == 0o644 for path in (request, reconciliation, storage))
     assert not review.exists()
+    storage_value = json.loads(storage.read_text())
+    assert storage_value["available_bytes"] == (
+        storage_value["required_safety_bytes"]
+        + storage_value["projected_authorized_wave_growth_bytes"]
+    )
 
     value = json.loads(request.read_text())
     assert value["schema_version"] == 2
@@ -2477,6 +2485,26 @@ def test_install_f117_draft_packet_is_managed_no_clobber_or_exact_verify(
     source = packet.parent.parent / "reviewed-f117-draft-packet.json"
     packet.replace(source)
     assert not packet.exists()
+    packet.write_bytes(b"unrelated owner-only target\n")
+    packet.chmod(0o600)
+    unrelated = packet.stat()
+    rejected = run_action(
+        recost_fixture,
+        "install-f117-draft-packet",
+        "--packet",
+        str(source),
+        "--expected-packet-sha256",
+        sha256(source),
+    )
+    assert_rejected(rejected, "mode is 0600, expected 0644")
+    assert packet.read_bytes() == b"unrelated owner-only target\n"
+    assert (packet.stat().st_dev, packet.stat().st_ino) == (
+        unrelated.st_dev,
+        unrelated.st_ino,
+    )
+    assert stat.S_IMODE(packet.stat().st_mode) == 0o600
+    packet.unlink()
+
     created = run_action(
         recost_fixture,
         "install-f117-draft-packet",
@@ -2684,6 +2712,7 @@ def test_f117_managed_workflow_reaches_staged_generation_without_manual_writes(
     workflow_fixture["output"] = accounting / f"{prefix}_recost_evidence.json.staged"
     generated = run_generator(workflow_fixture)
     assert generated.returncode == 0, generated.stderr
+    assert stat.S_IMODE(workflow_fixture["output"].stat().st_mode) == 0o444
     artifact = json.loads(workflow_fixture["output"].read_text())
     assert artifact["checkpoint"] == "F-117"
     assert artifact["predecessor_recost"]["checkpoint"] == "F-115"
@@ -4765,6 +4794,7 @@ def test_generator_rejects_writable_directory_intermediate_symlink_and_output_sy
     other.symlink_to(symlink_target)
     assert_rejected(run_generator(recost_fixture), "output namespace is not empty")
     assert symlink_target.read_text() == "retained\n"
+    assert symlink_target.read_text() == "retained\n"
 
 
 def test_generator_requires_itself_committed(recost_fixture):
@@ -4947,156 +4977,645 @@ def test_mutation_lock_pathname_replacement_blocks_managed_write(tmp_path):
         displaced.rename(lock_path)
 
 
-def test_inode_bound_rollback_rejects_target_and_parent_substitution(tmp_path):
-    module = load_recost_module()
-    parent = tmp_path / "parent"
-    parent.mkdir()
-    target = parent / "managed.json"
-    target.write_text("created\n")
-    target.chmod(0o644)
-    identity = module.retained_entry_identity(target, "managed fixture")
-    displaced_target = parent / "displaced.json"
-    target.rename(displaced_target)
-    target.write_text("replacement\n")
-    target.chmod(0o644)
-    with pytest.raises(ValueError, match="target inode changed"):
-        module.rollback_created_entry(identity, "managed fixture")
-    assert target.read_text() == "replacement\n"
+def publication_private_entries(module, parent: Path) -> list[Path]:
+    """Return exact deterministic recost private-attempt entries."""
 
-    bound_parent = tmp_path / "bound-parent"
-    bound_parent.mkdir()
-    bound_target = bound_parent / "managed.json"
-    bound_target.write_text("created\n")
-    bound_target.chmod(0o644)
-    bound_identity = module.retained_entry_identity(bound_target, "parent-bound fixture")
-    displaced_parent = tmp_path / "displaced-parent"
-    bound_parent.rename(displaced_parent)
-    bound_parent.mkdir()
-    (displaced_parent / bound_target.name).rename(bound_target)
-    with pytest.raises(ValueError, match="parent inode changed"):
-        module.rollback_created_entry(bound_identity, "parent-bound fixture")
-    assert bound_target.read_text() == "created\n"
+    return sorted(
+        path
+        for path in parent.iterdir()
+        if module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(path.name) is not None
+    )
 
 
-def test_atomic_rollback_retains_exact_inode_as_forensics_without_unlink(tmp_path):
-    module = load_recost_module()
-    parent = tmp_path / "parent"
-    parent.mkdir()
-    target = parent / "managed.json"
-    target.write_text("created\n")
-    target.chmod(0o644)
-    identity = module.retained_entry_identity(target, "managed fixture")
-    forensic = module.rollback_created_entry(identity, "managed fixture")
-    assert not target.exists()
-    assert forensic.read_text() == "created\n"
-    assert "recost-rollback-forensic" in forensic.name
-
-
-def test_atomic_rollback_never_unlinks_substituted_inode(tmp_path, monkeypatch):
-    module = load_recost_module()
-    parent = tmp_path / "parent"
-    parent.mkdir()
-    target = parent / "managed.json"
-    target.write_text("created\n")
-    target.chmod(0o644)
-    identity = module.retained_entry_identity(target, "managed fixture")
-    substitute = parent / "substitute"
-    substitute.write_text("substituted\n")
-    substitute.chmod(0o644)
-    escaped = parent / "escaped-created"
-    real_renameat2 = module.renameat2
-    raced = False
-
-    def substitute_between_check_and_atomic_move(
-        directory, source, destination, flags, label,
-    ):
-        nonlocal raced
-        if not raced and "rollback forensic retention" in label:
-            os.rename(source, escaped.name, src_dir_fd=directory, dst_dir_fd=directory)
-            os.rename(
-                substitute.name,
-                source,
-                src_dir_fd=directory,
-                dst_dir_fd=directory,
-            )
-            raced = True
-        return real_renameat2(directory, source, destination, flags, label)
-
-    monkeypatch.setattr(module, "renameat2", substitute_between_check_and_atomic_move)
-    with pytest.raises(ValueError, match="changed during atomic forensic move"):
-        module.rollback_created_entry(identity, "managed fixture")
-    assert raced
-    assert escaped.read_text() == "created\n"
-    retained = list(parent.glob(".managed.json.recost-rollback-forensic.*.retained"))
-    assert len(retained) == 1
-    assert retained[0].read_text() == "substituted\n"
-    assert not target.exists()
-
-
-def test_atomic_publication_no_clobbers_absent_target_race(tmp_path, monkeypatch):
+def test_finalized_private_inode_no_replace_hardlink_publication(tmp_path, monkeypatch):
     module = load_recost_module()
     parent = tmp_path / "parent"
     parent.mkdir()
     target = parent / "managed.json"
     payload = b"managed\n"
-    real_renameat2 = module.renameat2
-    raced = False
+    real_link = module.os.link
+    real_unlink = module.os.unlink
+    events = []
 
-    def create_target_before_atomic_publication(
-        directory, source, destination, flags, label,
-    ):
-        nonlocal raced
-        if not raced and "atomic publication" in label:
-            target.write_bytes(b"raced replacement\n")
-            target.chmod(0o644)
-            raced = True
-        return real_renameat2(directory, source, destination, flags, label)
+    def forbidden_namespace_move(*_args, **_kwargs):
+        raise AssertionError("publication must not rename or exchange namespace entries")
 
-    monkeypatch.setattr(module, "renameat2", create_target_before_atomic_publication)
-    with pytest.raises(ValueError, match="target appeared during atomic no-clobber publication"):
-        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
-    assert raced
-    assert target.read_bytes() == b"raced replacement\n"
-    retained = list(parent.glob(".managed.json.recost-publish-forensic.*.tmp"))
-    assert len(retained) == 1
-    assert retained[0].read_bytes() == payload
+    def tracked_link(source, destination, **kwargs):
+        private = os.stat(source, dir_fd=kwargs["src_dir_fd"], follow_symlinks=False)
+        assert destination == target.name
+        assert kwargs["src_dir_fd"] == kwargs["dst_dir_fd"]
+        assert kwargs["follow_symlinks"] is False
+        assert stat.S_IMODE(private.st_mode) == 0o644
+        assert private.st_nlink == 1
+        result = real_link(source, destination, **kwargs)
+        public = os.stat(destination, dir_fd=kwargs["dst_dir_fd"], follow_symlinks=False)
+        assert (public.st_dev, public.st_ino) == (private.st_dev, private.st_ino)
+        assert public.st_nlink == 2
+        events.append(("link", source))
+        return result
+
+    def tracked_unlink(name, **kwargs):
+        private = os.stat(name, dir_fd=kwargs["dir_fd"], follow_symlinks=False)
+        public = os.stat(target.name, dir_fd=kwargs["dir_fd"], follow_symlinks=False)
+        assert (public.st_dev, public.st_ino) == (private.st_dev, private.st_ino)
+        assert public.st_nlink == 2
+        events.append(("unlink", name))
+        return real_unlink(name, **kwargs)
+
+    monkeypatch.setattr(module.os, "rename", forbidden_namespace_move)
+    monkeypatch.setattr(module.os, "replace", forbidden_namespace_move)
+    monkeypatch.setattr(module.os, "link", tracked_link)
+    monkeypatch.setattr(module.os, "unlink", tracked_unlink)
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
+
+    assert [event for event, _name in events] == ["link", "unlink"]
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert target.stat().st_nlink == 1
+    assert list(parent.iterdir()) == [target]
 
 
-def test_atomic_publication_detects_post_move_inode_substitution(tmp_path, monkeypatch):
+def test_publication_transaction_binds_target_payload_mode_producer_and_revision(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    target = tmp_path / "managed.json"
+    base = module.publication_transaction(target, b"managed\n", 0o644, "managed fixture")
+    assert base.target == str(target)
+    assert base.payload_sha256 == hashlib.sha256(b"managed\n").hexdigest()
+    assert base.payload_size == len(b"managed\n")
+    assert base.final_mode == 0o644
+    assert base.producer == "scripts/frontier/cgl_lf_stage_i_recost.py"
+    assert re.fullmatch(r"[0-9a-f]{64}", base.producer_revision)
+    assert module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(base.private_name(0))
+
+    variants = {
+        module.publication_transaction(
+            tmp_path / "other.json", b"managed\n", 0o644, "managed fixture"
+        ).transaction_id,
+        module.publication_transaction(target, b"different\n", 0o644, "managed fixture").transaction_id,
+        module.publication_transaction(target, b"managed\n", 0o444, "managed fixture").transaction_id,
+        module.publication_transaction(target, b"managed\n", 0o644, "other fixture").transaction_id,
+    }
+    monkeypatch.setattr(module, "publication_producer_revision", lambda: "0" * 64)
+    variants.add(
+        module.publication_transaction(
+            target, b"managed\n", 0o644, "managed fixture"
+        ).transaction_id
+    )
+    assert base.transaction_id not in variants
+    assert len(variants) == 5
+
+
+@pytest.mark.parametrize("mode", [0o400, 0o600, 0o666])
+def test_direct_final_rejects_unmanaged_final_mode_before_creation(tmp_path, mode):
     module = load_recost_module()
     parent = tmp_path / "parent"
     parent.mkdir()
     target = parent / "managed.json"
-    substitute = parent / "substitute"
-    substitute.write_bytes(b"substituted\n")
-    substitute.chmod(0o644)
-    escaped = parent / "escaped-managed"
-    real_renameat2 = module.renameat2
-    raced = False
 
-    def substitute_after_atomic_publication(
-        directory, source, destination, flags, label,
-    ):
-        nonlocal raced
-        real_renameat2(directory, source, destination, flags, label)
-        if not raced and "atomic publication" in label:
-            os.rename(destination, escaped.name, src_dir_fd=directory, dst_dir_fd=directory)
-            os.rename(
-                substitute.name,
-                destination,
-                src_dir_fd=directory,
-                dst_dir_fd=directory,
-            )
-            raced = True
+    with pytest.raises(ValueError, match="not a managed publication mode"):
+        module.write_exact_or_verify(
+            target, b"managed\n", mode=mode, label="managed fixture"
+        )
+    assert not target.exists()
 
-    monkeypatch.setattr(module, "renameat2", substitute_after_atomic_publication)
-    with pytest.raises(ValueError, match="rollback target inode changed"):
+
+def test_direct_final_exact_existing_copy_is_verification_only(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    target.write_bytes(b"managed\n")
+    target.chmod(0o644)
+    retained = target.stat()
+
+    def forbidden_mutation(*_args, **_kwargs):
+        raise AssertionError("exact occupied target verification must not mutate")
+
+    monkeypatch.setattr(module.os, "write", forbidden_mutation)
+    monkeypatch.setattr(module.os, "fchmod", forbidden_mutation)
+    monkeypatch.setattr(module.os, "rename", forbidden_mutation)
+    monkeypatch.setattr(module.os, "replace", forbidden_mutation)
+    monkeypatch.setattr(module.os, "link", forbidden_mutation)
+    monkeypatch.setattr(module.os, "unlink", forbidden_mutation)
+    assert not module.write_exact_or_verify(
+        target, b"managed\n", mode=0o644, label="managed fixture"
+    )
+    assert target.read_bytes() == b"managed\n"
+    assert (target.stat().st_dev, target.stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+
+
+@pytest.mark.parametrize(
+    ("occupied_state", "mode", "payload"),
+    [
+        ("unrelated-owner-only", 0o600, b"unrelated owner-only target\n"),
+        ("unrelated-owner-only-hardlink", 0o600, b"unrelated owner-only target\n"),
+        ("different-final-bytes", 0o644, b"different\n"),
+        ("unbound-final-hardlink", 0o644, b"managed\n"),
+    ],
+)
+def test_occupied_public_target_is_never_mutated(
+    tmp_path, monkeypatch, occupied_state, mode, payload,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    target.write_bytes(payload)
+    target.chmod(mode)
+    extra = parent / "extra-link"
+    if "hardlink" in occupied_state:
+        os.link(target, extra)
+    retained = target.stat()
+
+    def forbidden_mutation(*_args, **_kwargs):
+        raise AssertionError("occupied public target must never authorize mutation")
+
+    monkeypatch.setattr(module.os, "write", forbidden_mutation)
+    monkeypatch.setattr(module.os, "fchmod", forbidden_mutation)
+    monkeypatch.setattr(module.os, "link", forbidden_mutation)
+    monkeypatch.setattr(module.os, "unlink", forbidden_mutation)
+    with pytest.raises(ValueError):
         module.write_exact_or_verify(
             target, b"managed\n", mode=0o644, label="managed fixture"
         )
+    assert target.read_bytes() == payload
+    assert (target.stat().st_dev, target.stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+    assert stat.S_IMODE(target.stat().st_mode) == mode
+    assert target.stat().st_nlink == retained.st_nlink
+
+
+def test_occupied_transaction_private_name_is_preserved_and_skipped(tmp_path):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    transaction = module.publication_transaction(target, payload, 0o644, "managed fixture")
+    collision = parent / transaction.private_name(0)
+    collision.write_bytes(b"unrelated private collision\n")
+    collision.chmod(0o600)
+    retained = collision.stat()
+
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
+    assert collision.read_bytes() == b"unrelated private collision\n"
+    assert (collision.stat().st_dev, collision.stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+    assert target.read_bytes() == payload
+    assert publication_private_entries(module, parent) == [collision]
+
+
+def test_linked_recovery_rejects_transaction_named_different_inode_without_unlink(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    target.write_bytes(payload)
+    target.chmod(0o644)
+    unrelated_link = parent / "unrelated-public-link"
+    os.link(target, unrelated_link)
+    transaction = module.publication_transaction(target, payload, 0o644, "managed fixture")
+    decoy = parent / transaction.private_name(0)
+    decoy.write_bytes(payload)
+    decoy.chmod(0o644)
+    target_profile = target.stat()
+    decoy_profile = decoy.stat()
+
+    def forbidden_unlink(*_args, **_kwargs):
+        raise AssertionError("different-inode transaction decoy must never be unlinked")
+
+    monkeypatch.setattr(module.os, "unlink", forbidden_unlink)
+    with pytest.raises(ValueError, match="deterministic public target is occupied"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert (target.stat().st_dev, target.stat().st_ino) == (
+        target_profile.st_dev,
+        target_profile.st_ino,
+    )
+    assert (decoy.stat().st_dev, decoy.stat().st_ino) == (
+        decoy_profile.st_dev,
+        decoy_profile.st_ino,
+    )
+    assert target.stat().st_nlink == 2
+    assert decoy.stat().st_nlink == 1
+
+
+def test_public_target_race_fails_closed_and_preserves_finalized_private_inode(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    real_link = module.os.link
+    raced = False
+
+    def create_target_before_link(source, destination, **kwargs):
+        nonlocal raced
+        if not raced and destination == target.name:
+            target.write_bytes(b"raced replacement\n")
+            target.chmod(0o644)
+            raced = True
+        return real_link(source, destination, **kwargs)
+
+    monkeypatch.setattr(module.os, "link", create_target_before_link)
+    with pytest.raises(ValueError, match="deterministic public target is occupied.*no rollback"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
     assert raced
-    assert target.read_bytes() == b"substituted\n"
-    assert escaped.read_bytes() == b"managed\n"
+    assert target.read_bytes() == b"raced replacement\n"
+    retained_private = publication_private_entries(module, parent)
+    assert len(retained_private) == 1
+    assert retained_private[0].read_bytes() == payload
+    assert stat.S_IMODE(retained_private[0].stat().st_mode) == 0o644
+    with pytest.raises(ValueError, match="different bytes"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert target.read_bytes() == b"raced replacement\n"
+
+
+def test_post_private_create_exception_preserves_unknown_attempt_and_retry_recovers(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    real_open = module.os.open
+    injected = False
+
+    def create_then_raise(name, flags, mode=0o777, *, dir_fd=None):
+        nonlocal injected
+        if (
+            not injected
+            and module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name) is not None
+            and flags & os.O_EXCL
+        ):
+            injected = True
+            descriptor = real_open(name, flags, mode, dir_fd=dir_fd)
+            os.close(descriptor)
+            raise RuntimeError("reported open failure after private creation")
+        return real_open(name, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(module.os, "open", create_then_raise)
+    retained_umask = os.umask(0o777)
+    try:
+        with pytest.raises(ValueError, match="deterministic public target is absent"):
+            module.write_exact_or_verify(
+                target, b"managed\n", mode=0o644, label="managed fixture"
+            )
+    finally:
+        os.umask(retained_umask)
+    assert injected
+    assert not target.exists()
+    retained_private = publication_private_entries(module, parent)
+    assert len(retained_private) == 1
+    assert retained_private[0].read_bytes() == b""
+    assert stat.S_IMODE(retained_private[0].stat().st_mode) == 0o600
+    retained = retained_private[0].stat()
+    monkeypatch.setattr(module.os, "open", real_open)
+    assert module.write_exact_or_verify(
+        target, b"managed\n", mode=0o644, label="managed fixture"
+    )
+    assert target.read_bytes() == b"managed\n"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+
+
+def test_direct_final_partial_write_failure_is_forward_recoverable(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed payload\n"
+    real_write = module.os.write
+    injected = False
+
+    def write_partial_then_raise(descriptor, retained):
+        nonlocal injected
+        if not injected:
+            injected = True
+            real_write(descriptor, retained[:4])
+            raise RuntimeError("reported write failure after partial direct-final write")
+        return real_write(descriptor, retained)
+
+    monkeypatch.setattr(module.os, "write", write_partial_then_raise)
+    with pytest.raises(ValueError, match="deterministic public target is absent.*no rollback"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert injected
+    assert not target.exists()
+    retained_private = publication_private_entries(module, parent)
+    assert len(retained_private) == 1
+    assert stat.S_IMODE(retained_private[0].stat().st_mode) == 0o600
+    assert retained_private[0].read_bytes() == payload[:4]
+    retained = retained_private[0].stat()
+    monkeypatch.setattr(module.os, "write", real_write)
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+
+
+@pytest.mark.parametrize("operation", ["private-fsync", "private-fchmod"])
+def test_private_finalize_crash_points_leave_public_absent_and_retry(
+    tmp_path, monkeypatch, operation,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed payload\n"
+    real_fsync = module.os.fsync
+    real_fchmod = module.os.fchmod
+    injected = False
+
+    def fsync_then_raise(descriptor):
+        nonlocal injected
+        result = real_fsync(descriptor)
+        if operation == "private-fsync" and not injected and stat.S_ISREG(os.fstat(descriptor).st_mode):
+            injected = True
+            raise RuntimeError("reported private fsync failure after success")
+        return result
+
+    def fchmod_then_raise(descriptor, mode):
+        nonlocal injected
+        result = real_fchmod(descriptor, mode)
+        if operation == "private-fchmod" and not injected:
+            injected = True
+            raise RuntimeError("reported private fchmod failure after success")
+        return result
+
+    monkeypatch.setattr(module.os, "fsync", fsync_then_raise)
+    monkeypatch.setattr(module.os, "fchmod", fchmod_then_raise)
+    with pytest.raises(ValueError, match="deterministic public target is absent"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert injected
+    assert not target.exists()
+    retained_private = publication_private_entries(module, parent)
+    assert len(retained_private) == 1
+    retained_bytes = retained_private[0].read_bytes()
+    retained = retained_private[0].stat()
+
+    monkeypatch.setattr(module.os, "fsync", real_fsync)
+    monkeypatch.setattr(module.os, "fchmod", real_fchmod)
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
+    assert target.read_bytes() == payload
+    assert retained_private[0].read_bytes() == retained_bytes
+    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+
+
+def test_direct_final_lock_loss_before_commit_is_forward_recoverable(tmp_path, monkeypatch):
+    module = load_recost_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock_path = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    lock_path.write_bytes(b"")
+    lock_path.chmod(0o644)
+    displaced = root / "displaced.lock"
+    target = root / "managed.json"
+    payload = b"managed\n"
+    real_write = module.os.write
+    real_fsync = module.os.fsync
+    replaced = False
+    fsyncs_after_authority_loss = 0
+
+    def write_then_replace_lock(descriptor, retained):
+        nonlocal replaced
+        result = real_write(descriptor, retained)
+        if not replaced:
+            replaced = True
+            lock_path.rename(displaced)
+            lock_path.write_bytes(b"")
+            lock_path.chmod(0o644)
+        return result
+
+    def count_fsync_after_authority_loss(descriptor):
+        nonlocal fsyncs_after_authority_loss
+        if replaced and displaced.exists():
+            fsyncs_after_authority_loss += 1
+        return real_fsync(descriptor)
+
+    monkeypatch.setattr(module.os, "write", write_then_replace_lock)
+    monkeypatch.setattr(module.os, "fsync", count_fsync_after_authority_loss)
+    with module.stage_i_lock(root) as mutation_lock:
+        try:
+            with pytest.raises(
+                ValueError, match="authority revalidation failed and no rollback"
+            ):
+                module.write_exact_or_verify(
+                    target,
+                    payload,
+                    mode=0o644,
+                    label="managed fixture",
+                    mutation_lock=mutation_lock,
+                )
+            assert not target.exists()
+            retained_private = publication_private_entries(module, root)
+            assert len(retained_private) == 1
+            retained = retained_private[0].stat()
+            assert fsyncs_after_authority_loss == 0
+        finally:
+            lock_path.unlink()
+            displaced.rename(lock_path)
+        assert module.write_exact_or_verify(
+            target,
+            payload,
+            mode=0o644,
+            label="managed fixture",
+            mutation_lock=mutation_lock,
+        )
+    assert replaced
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert (retained_private[0].stat().st_dev, retained_private[0].stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+    assert fsyncs_after_authority_loss == 0
+
+
+def test_linked_transaction_inode_recovers_after_pre_unlink_crash(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    real_unlink = module.os.unlink
+    injected = False
+
+    def fail_before_private_unlink(name, **kwargs):
+        nonlocal injected
+        if not injected and module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name):
+            injected = True
+            raise RuntimeError("crash before transaction-private unlink")
+        return real_unlink(name, **kwargs)
+
+    monkeypatch.setattr(module.os, "unlink", fail_before_private_unlink)
+    with pytest.raises(ValueError, match="deterministic public target is occupied.*links 2"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert injected
+    retained_private = publication_private_entries(module, parent)
+    assert len(retained_private) == 1
+    assert target.stat().st_nlink == 2
+    assert (target.stat().st_dev, target.stat().st_ino) == (
+        retained_private[0].stat().st_dev,
+        retained_private[0].stat().st_ino,
+    )
+
+    monkeypatch.setattr(module.os, "unlink", real_unlink)
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
+    assert target.stat().st_nlink == 1
+    assert publication_private_entries(module, parent) == []
+
+
+def test_ambiguous_successful_hardlink_is_classified_and_completed(tmp_path, monkeypatch):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    real_link = module.os.link
+    injected = False
+
+    def link_then_raise(source, destination, **kwargs):
+        nonlocal injected
+        result = real_link(source, destination, **kwargs)
+        if not injected:
+            injected = True
+            raise RuntimeError("reported link failure after success")
+        return result
+
+    monkeypatch.setattr(module.os, "link", link_then_raise)
+    assert module.write_exact_or_verify(
+        target, b"managed\n", mode=0o644, label="managed fixture"
+    )
+    assert injected
+    assert target.read_bytes() == b"managed\n"
+    assert target.stat().st_nlink == 1
+    assert publication_private_entries(module, parent) == []
+
+
+def test_post_unlink_failure_leaves_exact_final_commit_marker_retryable(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    real_unlink = module.os.unlink
+    injected = False
+
+    def unlink_then_raise(name, **kwargs):
+        nonlocal injected
+        result = real_unlink(name, **kwargs)
+        if not injected and module.PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(name):
+            injected = True
+            raise RuntimeError("reported unlink failure after success")
+        return result
+
+    monkeypatch.setattr(module.os, "unlink", unlink_then_raise)
+    assert module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
+    assert injected
+    assert target.read_bytes() == payload
+    assert target.stat().st_nlink == 1
+    monkeypatch.setattr(module.os, "unlink", real_unlink)
+    assert not module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
+
+
+def test_staged_output_rejects_unknown_0600_and_accepts_exact_final_commit_marker(tmp_path):
+    module = load_recost_module()
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    output = parent / "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json.staged"
+    output.write_bytes(b"unrelated owner-only staged target\n")
+    output.chmod(0o600)
+    retained = output.stat()
+
+    with pytest.raises(ValueError, match="output namespace is not empty"):
+        module.require_output_namespace_empty(output)
+    with pytest.raises(ValueError, match="mode is 0600, expected 0444"):
+        module.write_staged_output(output, b'{"checkpoint":"F-117"}\n')
+    assert output.read_bytes() == b"unrelated owner-only staged target\n"
+    assert (output.stat().st_dev, output.stat().st_ino) == (
+        retained.st_dev,
+        retained.st_ino,
+    )
+
+    output.unlink()
+    payload = b'{"checkpoint":"F-117"}\n'
+    module.write_staged_output(output, payload)
+    module.require_output_namespace_empty(output)
+    module.write_staged_output(output, payload)
+    assert output.read_bytes() == payload
+    assert stat.S_IMODE(output.stat().st_mode) == 0o444
+
+def test_direct_final_post_publication_fsync_failure_is_forward_recoverable(
+    tmp_path, monkeypatch,
+):
+    module = load_recost_module()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    target = parent / "managed.json"
+    payload = b"managed\n"
+    real_fsync = module.os.fsync
+    injected = False
+
+    def fsync_then_raise_once(descriptor):
+        nonlocal injected
+        result = real_fsync(descriptor)
+        if (
+            not injected
+            and stat.S_ISDIR(os.fstat(descriptor).st_mode)
+            and target.exists()
+            and stat.S_IMODE(target.stat().st_mode) == 0o644
+        ):
+            injected = True
+            raise RuntimeError("reported directory fsync failure after publication")
+        return result
+
+    monkeypatch.setattr(module.os, "fsync", fsync_then_raise_once)
+    with pytest.raises(ValueError, match="deterministic public target is occupied.*no rollback"):
+        module.write_exact_or_verify(target, payload, mode=0o644, label="managed fixture")
+    assert injected
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    monkeypatch.setattr(module.os, "fsync", real_fsync)
+    assert not module.write_exact_or_verify(
+        target, payload, mode=0o644, label="managed fixture"
+    )
 
 
 def test_exact_existing_copy_verification_rejects_parent_path_substitution(

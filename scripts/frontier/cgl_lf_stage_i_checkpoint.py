@@ -93,6 +93,14 @@ RENAME_NOREPLACE = 1
 RENAME_EXCHANGE = 2
 AT_FDCWD = -100
 AT_SYMLINK_FOLLOW = 0x400
+RENAMEAT2_UNSUPPORTED_ERRNOS = frozenset(
+    {
+        errno.EINVAL,
+        errno.ENOSYS,
+        getattr(errno, "ENOTSUP", errno.EINVAL),
+        getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+    }
+)
 _ACTIVE_MUTATION_LOCK = None
 _ACTIVE_PUBLIC_ROOT = None
 _BOUND_MUTATION_PARENTS: dict[int, "BoundParentGuard"] = {}
@@ -1178,6 +1186,330 @@ def fsync_descriptors(*descriptors: int) -> BaseException | None:
     return failure
 
 
+def renameat2_is_unsupported(error: BaseException | None) -> bool:
+    """Return whether one renameat2 failure permits the reviewed Lustre fallback."""
+
+    return isinstance(error, OSError) and error.errno in RENAMEAT2_UNSUPPORTED_ERRNOS
+
+
+def profile_security_binding_without_links(profile: os.stat_result) -> tuple[int, ...]:
+    """Return the stable regular-file profile while a hard-link commit is active."""
+
+    return (
+        profile.st_dev,
+        profile.st_ino,
+        stat.S_IFMT(profile.st_mode),
+        stat.S_IMODE(profile.st_mode),
+        profile.st_uid,
+        profile.st_gid,
+        profile.st_size,
+    )
+
+
+def authenticate_descriptor_with_links(
+    descriptor: int,
+    expected: os.stat_result,
+    expected_links: int,
+    label: str,
+    *,
+    expected_sha256: str | None = None,
+) -> tuple[os.stat_result, str]:
+    """Authenticate exact readable bytes while permitting one selected link count."""
+
+    before = os.fstat(descriptor)
+    require_regular_profile(before, Path(f"/proc/self/fd/{descriptor}"), label)
+    if (
+        profile_security_binding_without_links(before)
+        != profile_security_binding_without_links(expected)
+        or before.st_nlink != expected_links
+    ):
+        raise ValueError(f"{label} security profile changed during hard-link commit")
+    if stat.S_IMODE(before.st_mode) == 0:
+        raise ValueError(f"{label} mode-0000 content cannot be exactly authenticated")
+    digest = sha256_descriptor(descriptor)
+    after = os.fstat(descriptor)
+    if (
+        profile_security_binding_without_links(after)
+        != profile_security_binding_without_links(expected)
+        or after.st_nlink != expected_links
+    ):
+        raise ValueError(f"{label} descriptor changed during hard-link authentication")
+    if expected_sha256 is not None and digest != require_sha256(
+        expected_sha256, f"{label} SHA-256"
+    ):
+        raise ValueError(f"{label} content digest changed during hard-link commit")
+    return after, digest
+
+
+def open_bound_entry_with_links(
+    parent: int,
+    name: str,
+    expected: os.stat_result,
+    expected_links: int,
+    label: str,
+    *,
+    expected_sha256: str | None = None,
+) -> tuple[int, os.stat_result, str]:
+    """Open and authenticate one exact direct child during a hard-link commit."""
+
+    name = require_entry_name(name, label)
+    named = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    if (
+        profile_security_binding_without_links(named)
+        != profile_security_binding_without_links(expected)
+        or named.st_nlink != expected_links
+    ):
+        raise ValueError(f"{label} name changed during hard-link commit")
+    descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+    try:
+        opened, digest = authenticate_descriptor_with_links(
+            descriptor,
+            expected,
+            expected_links,
+            label,
+            expected_sha256=expected_sha256,
+        )
+        current = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if (
+            profile_security_binding_without_links(current)
+            != profile_security_binding_without_links(opened)
+            or current.st_nlink != expected_links
+        ):
+            raise ValueError(f"{label} name changed during hard-link authentication")
+        return descriptor, opened, digest
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def classify_bound_hard_link_move(
+    source_parent: int,
+    source: str,
+    target_parent: int,
+    target: str,
+    expected: os.stat_result,
+    label: str,
+    *,
+    expected_sha256: str | None = None,
+) -> tuple[str, str, int]:
+    """Authenticate and classify every durable state of one hard-link move."""
+
+    source = require_entry_name(source, label)
+    target = require_entry_name(target, f"{label} target")
+    try:
+        source_profile = os.stat(source, dir_fd=source_parent, follow_symlinks=False)
+    except FileNotFoundError:
+        source_profile = None
+    try:
+        target_profile = os.stat(target, dir_fd=target_parent, follow_symlinks=False)
+    except FileNotFoundError:
+        target_profile = None
+    for profile, selected_label in (
+        (source_profile, label),
+        (target_profile, f"{label} target"),
+    ):
+        if profile is not None and profile_security_binding_without_links(
+            profile
+        ) != profile_security_binding_without_links(expected):
+            raise ValueError(f"{selected_label} differs during hard-link commit")
+    if source_profile is not None and target_profile is None:
+        state = "source-only"
+        links = source_profile.st_nlink
+        if expected.st_nlink != links:
+            raise ValueError(f"{label} link count changed during hard-link commit")
+    elif source_profile is not None and target_profile is not None:
+        if profile_identity(source_profile) != profile_identity(target_profile):
+            raise ValueError(f"{label} names select different inodes during hard-link commit")
+        state = "linked"
+        links = source_profile.st_nlink
+        if (
+            target_profile.st_nlink != links
+            or links < 2
+            or expected.st_nlink not in {links - 1, links}
+        ):
+            raise ValueError(f"{label} link count changed during hard-link commit")
+    elif source_profile is None and target_profile is not None:
+        state = "target-only"
+        links = target_profile.st_nlink
+        if expected.st_nlink not in {links, links + 1}:
+            raise ValueError(f"{label} link count changed during hard-link commit")
+    else:
+        raise ValueError(f"{label} hard-link commit lost both selected names")
+    digest = expected_sha256
+    for parent, name, profile, selected_label in (
+        (source_parent, source, source_profile, label),
+        (target_parent, target, target_profile, f"{label} target"),
+    ):
+        if profile is None:
+            continue
+        descriptor, _, observed_digest = open_bound_entry_with_links(
+            parent,
+            name,
+            expected,
+            links,
+            selected_label,
+            expected_sha256=digest,
+        )
+        os.close(descriptor)
+        if digest is None:
+            digest = observed_digest
+    assert digest is not None
+    return state, digest, links
+
+
+def linkat_descriptor_noreplace(
+    source: int, target_parent: int, target: str, label: str
+) -> None:
+    """Create one descriptor-backed hard link without replacing a direct child."""
+
+    target = require_entry_name(target, label)
+    try:
+        operation = ctypes.CDLL(None, use_errno=True).linkat
+    except AttributeError as error:
+        raise ValueError("descriptor-bound publication requires linkat") from error
+    operation.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+    )
+    operation.restype = ctypes.c_int
+    if operation(
+        AT_FDCWD,
+        os.fsencode(f"/proc/self/fd/{source}"),
+        target_parent,
+        os.fsencode(target),
+        AT_SYMLINK_FOLLOW,
+    ) != 0:
+        retained_errno = ctypes.get_errno()
+        raise OSError(retained_errno, os.strerror(retained_errno), target)
+
+
+def complete_bound_hard_link_move(
+    source_parent: int,
+    source: str,
+    target_parent: int,
+    target: str,
+    expected: os.stat_result,
+    label: str,
+    *,
+    expected_sha256: str | None,
+) -> None:
+    """Resume or complete one exact no-clobber hard-link move."""
+
+    require_mutation_authority_bound(source_parent)
+    require_mutation_authority_bound(target_parent)
+    source = require_entry_name(source, label)
+    target = require_entry_name(target, f"{label} target")
+    state, digest, links = classify_bound_hard_link_move(
+        source_parent,
+        source,
+        target_parent,
+        target,
+        expected,
+        label,
+        expected_sha256=expected_sha256,
+    )
+    if state == "target-only":
+        require_mutation_authority_bound(source_parent)
+        require_mutation_authority_bound(target_parent)
+        return
+    if state == "source-only":
+        descriptor, _, retained_digest = open_bound_entry_with_links(
+            source_parent,
+            source,
+            expected,
+            links,
+            label,
+            expected_sha256=digest,
+        )
+        operation_error: BaseException | None = None
+        try:
+            require_mutation_authority_bound(source_parent)
+            require_mutation_authority_bound(target_parent)
+            linkat_descriptor_noreplace(descriptor, target_parent, target, label)
+        except BaseException as error:
+            operation_error = error
+        finally:
+            os.close(descriptor)
+        durability_error = fsync_descriptors(source_parent, target_parent)
+        try:
+            state, digest, _ = classify_bound_hard_link_move(
+                source_parent,
+                source,
+                target_parent,
+                target,
+                expected,
+                label,
+                expected_sha256=retained_digest,
+            )
+        except BaseException:
+            require_mutation_authority_bound(source_parent)
+            require_mutation_authority_bound(target_parent)
+            if durability_error is not None:
+                raise durability_error
+            if isinstance(operation_error, FileExistsError):
+                raise operation_error
+            raise
+        require_mutation_authority_bound(source_parent)
+        require_mutation_authority_bound(target_parent)
+        if durability_error is not None:
+            raise durability_error
+        if state == "source-only" and operation_error is not None:
+            raise operation_error
+        if state == "source-only":
+            raise ValueError(f"{label} hard-link no-replace did not publish the target")
+        if state == "target-only":
+            return
+    if state != "linked":
+        raise ValueError(f"{label} hard-link commit entered an invalid state")
+    require_mutation_authority_bound(source_parent)
+    require_mutation_authority_bound(target_parent)
+    operation_error: BaseException | None = None
+    try:
+        os.unlink(source, dir_fd=source_parent)
+    except BaseException as error:
+        operation_error = error
+    durability_error = fsync_descriptors(source_parent, target_parent)
+    state, _, _ = classify_bound_hard_link_move(
+        source_parent,
+        source,
+        target_parent,
+        target,
+        expected,
+        label,
+        expected_sha256=digest,
+    )
+    require_mutation_authority_bound(source_parent)
+    require_mutation_authority_bound(target_parent)
+    if durability_error is not None:
+        raise durability_error
+    if state == "target-only":
+        return
+    if state == "linked" and operation_error is not None:
+        raise operation_error
+    if state != "linked":
+        raise ValueError(f"{label} hard-link source unlink changed the selected names")
+    raise ValueError(f"{label} hard-link source unlink did not complete")
+
+
+def deterministic_retirement_name(
+    parent: int, name: str, expected: os.stat_result
+) -> str:
+    """Return the discoverable forensic name for one exact retirement."""
+
+    name = require_entry_name(name, "retirement source")
+    parent_identity = profile_identity(os.fstat(parent))
+    token = sha256_bytes(
+        (
+            f"{parent_identity[0]}:{parent_identity[1]}\0{name}\0"
+            f"{expected.st_dev}:{expected.st_ino}"
+        ).encode()
+    )
+    return f".cgl-checkpoint-retired-{token}.forensic"
+
+
 def link_descriptor_noreplace(source: int, parent: int, target: str,
                               expected_identity: tuple[int, int], label: str) -> None:
     """Create one hard link and durably classify the raw linkat outcome."""
@@ -1267,25 +1599,11 @@ def link_descriptor_noreplace(source: int, parent: int, target: str,
 
 def unlink_bound_entry(parent: int, name: str, expected: os.stat_result,
                        label: str, *, expected_sha256: str | None = None) -> None:
-    """Atomically retire one exact direct child to a forensic sibling.
-
-    Moving the selected name to a unique retirement entry closes the
-    check/use window at the public name.  If the source name is substituted
-    before the atomic move, the unexpected inode is retained under the
-    retirement name and the operation fails closed.
-    """
+    """Retire one exact direct child without leaving an undiscoverable state."""
 
     require_mutation_authority_bound(parent)
     name = require_entry_name(name, label)
-    expected_digest = require_bound_entry_security(
-        parent,
-        name,
-        expected,
-        label,
-        expected_sha256=expected_sha256,
-        allow_mode_zero=True,
-    )
-    retired = f".cgl-checkpoint-retired-{uuid.uuid4().hex}.forensic"
+    retired = deterministic_retirement_name(parent, name, expected)
     forensic_parent = os.open("..", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
     require_trusted_directory_profile(
         os.fstat(forensic_parent), Path(f"/proc/self/fd/{forensic_parent}"),
@@ -1293,6 +1611,47 @@ def unlink_bound_entry(parent: int, name: str, expected: os.stat_result,
     )
 
     try:
+        readable = stat.S_IMODE(expected.st_mode) != 0
+        if readable:
+            try:
+                state, expected_digest, _ = classify_bound_hard_link_move(
+                    parent,
+                    name,
+                    forensic_parent,
+                    retired,
+                    expected,
+                    f"{label} retirement",
+                    expected_sha256=expected_sha256,
+                )
+            except ValueError as error:
+                raise ValueError(
+                    f"{label} changed during retirement; deterministic forensic "
+                    f"name is {retired}"
+                ) from error
+            if state != "source-only":
+                complete_bound_hard_link_move(
+                    parent,
+                    name,
+                    forensic_parent,
+                    retired,
+                    expected,
+                    f"{label} retirement",
+                    expected_sha256=expected_digest,
+                )
+                return
+        else:
+            expected_digest = require_bound_entry_security(
+                parent,
+                name,
+                expected,
+                label,
+                expected_sha256=expected_sha256,
+                allow_mode_zero=True,
+            )
+            if not entry_absent(forensic_parent, retired):
+                raise ValueError(
+                    f"{label} deterministic forensic target already exists: {retired}"
+                )
         operation_error: BaseException | None = None
         try:
             require_mutation_authority_bound(parent)
@@ -1312,6 +1671,48 @@ def unlink_bound_entry(parent: int, name: str, expected: os.stat_result,
         except BaseException as error:
             operation_error = error
         durability_error = fsync_descriptors(parent, forensic_parent)
+        if readable:
+            source_matches = entry_security_matches(
+                parent, name, expected, label, expected_digest
+            )
+            retired_matches = entry_security_matches(
+                forensic_parent,
+                retired,
+                expected,
+                f"{label} retirement",
+                expected_digest,
+            )
+            if retired_matches and entry_absent(parent, name):
+                state = "retired"
+            elif retired_matches:
+                raise ValueError(f"{label} public name reappeared during retirement")
+            elif source_matches and entry_absent(forensic_parent, retired):
+                state = "unchanged"
+            else:
+                raise ValueError(
+                    f"{label} changed during atomic retirement; retained as {retired}"
+                )
+            if state == "unchanged" and renameat2_is_unsupported(operation_error):
+                if durability_error is not None:
+                    raise durability_error
+                complete_bound_hard_link_move(
+                    parent,
+                    name,
+                    forensic_parent,
+                    retired,
+                    expected,
+                    f"{label} retirement",
+                    expected_sha256=expected_digest,
+                )
+                return
+            require_mutation_authority_bound(parent)
+            if durability_error is not None:
+                raise durability_error
+            if operation_error is not None:
+                raise operation_error
+            if state != "retired":
+                raise ValueError(f"{label} retirement did not remove the public name")
+            return
         source_matches = entry_security_matches(
             parent,
             name,
@@ -1338,6 +1739,13 @@ def unlink_bound_entry(parent: int, name: str, expected: os.stat_result,
             raise ValueError(
                 f"{label} changed during atomic retirement; retained as {retired}"
             )
+        if state == "unchanged" and renameat2_is_unsupported(operation_error):
+            if durability_error is not None:
+                raise durability_error
+            raise ValueError(
+                f"{label} Lustre retirement requires exact readable-byte "
+                "authentication; mode-0000 source left unchanged"
+            ) from operation_error
         require_mutation_authority_bound(parent)
         if durability_error is not None:
             raise durability_error
@@ -1352,43 +1760,73 @@ def unlink_bound_entry(parent: int, name: str, expected: os.stat_result,
 def rename_bound_noreplace(parent: int, source: str, target: str,
                            expected: os.stat_result, label: str, *,
                            expected_sha256: str | None = None) -> None:
-    """Move one authenticated entry without replacing a raced target."""
+    """Move one authenticated entry through a retryable no-clobber protocol."""
 
     require_mutation_authority_bound(parent)
-    digest = require_bound_entry_security(
-        parent,
-        source,
-        expected,
-        label,
-        expected_sha256=expected_sha256,
-    )
-    assert digest is not None
+    try:
+        state, digest, _ = classify_bound_hard_link_move(
+            parent,
+            source,
+            parent,
+            target,
+            expected,
+            label,
+            expected_sha256=expected_sha256,
+        )
+    except ValueError as error:
+        if not entry_absent(parent, target):
+            raise ValueError(f"{label} target already exists") from error
+        raise
+    if state != "source-only":
+        complete_bound_hard_link_move(
+            parent,
+            source,
+            parent,
+            target,
+            expected,
+            label,
+            expected_sha256=digest,
+        )
+        return
     operation_error: BaseException | None = None
     try:
         renameat2(parent, source, target, RENAME_NOREPLACE, label)
     except BaseException as error:
         operation_error = error
-    published = entry_absent(parent, source) and entry_identity_matches(
-        parent, target, expected
-    )
-    unchanged = entry_identity_matches(parent, source, expected) and entry_absent(
-        parent, target
-    )
-    if not published and not unchanged:
+    try:
+        state, _, _ = classify_bound_hard_link_move(
+            parent,
+            source,
+            parent,
+            target,
+            expected,
+            label,
+            expected_sha256=digest,
+        )
+    except ValueError as error:
         if isinstance(operation_error, FileExistsError):
             raise ValueError(f"{label} target already exists") from operation_error
-        raise ValueError(f"{label} names changed during atomic no-replace")
-    require_bound_entry_security(
-        parent,
-        target if published else source,
-        expected,
-        label,
-        expected_sha256=digest,
-    )
+        if "content digest changed" in str(error):
+            raise ValueError(f"{label} content digest changed during mutation") from error
+        raise ValueError(f"{label} names changed during atomic no-replace") from error
+    if state in {"source-only", "linked"} and renameat2_is_unsupported(operation_error):
+        try:
+            complete_bound_hard_link_move(
+                parent,
+                source,
+                parent,
+                target,
+                expected,
+                label,
+                expected_sha256=digest,
+            )
+        except FileExistsError as error:
+            raise ValueError(f"{label} target already exists") from error
+        return
     require_mutation_authority_bound(parent)
     if operation_error is not None:
         raise operation_error
-    if not published:
+    if state != "target-only":
         raise ValueError(f"{label} no-replace did not publish the target")
 
 
@@ -1434,6 +1872,12 @@ def exchange_bound_entries(parent: int, source: str, target: str,
             parent, target, target_expected, f"{label} target", target_digest
         )
     )
+    if unchanged and renameat2_is_unsupported(operation_error):
+        require_mutation_authority_bound(parent)
+        raise ValueError(
+            f"{label} occupied-target exchange requires RENAME_EXCHANGE support; "
+            "both authenticated names were left unchanged"
+        ) from operation_error
     if not exchanged and not unchanged:
         raise ValueError(f"{label} names changed after atomic exchange")
     require_mutation_authority_bound(parent)
@@ -1441,6 +1885,62 @@ def exchange_bound_entries(parent: int, source: str, target: str,
         raise operation_error
     if not exchanged:
         raise ValueError(f"{label} exchange did not change the selected names")
+
+
+def replace_bound_entry_forward(
+    parent: int,
+    source: str,
+    target: str,
+    source_expected: os.stat_result,
+    target_expected: os.stat_result,
+    label: str,
+    *,
+    source_sha256: str,
+    target_sha256: str,
+) -> None:
+    """Forward-replace one target through a durable authenticated commit marker."""
+
+    source_sha256 = require_sha256(source_sha256, f"{label} source SHA-256")
+    target_sha256 = require_sha256(target_sha256, f"{label} predecessor SHA-256")
+    require_bound_entry_security(
+        parent,
+        source,
+        source_expected,
+        label,
+        expected_sha256=source_sha256,
+    )
+    require_bound_entry_security(
+        parent,
+        target,
+        target_expected,
+        f"{label} predecessor",
+        expected_sha256=target_sha256,
+    )
+    unlink_bound_entry(
+        parent,
+        target,
+        target_expected,
+        f"{label} predecessor",
+        expected_sha256=target_sha256,
+    )
+    require_mutation_authority_bound(parent)
+    rename_bound_noreplace(
+        parent,
+        source,
+        target,
+        source_expected,
+        label,
+        expected_sha256=source_sha256,
+    )
+    require_bound_entry_security(
+        parent,
+        target,
+        source_expected,
+        label,
+        expected_sha256=source_sha256,
+    )
+    os.fsync(parent)
+    require_mutation_authority_bound(parent)
 
 
 @contextmanager
@@ -1568,7 +2068,7 @@ def write_bound_exclusive(parent: int, name: str, payload: bytes, mode: int,
             descriptor = os.open(
                 name,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                0o000,
+                0o600,
                 dir_fd=parent,
             )
         except BaseException as error:
@@ -1585,7 +2085,7 @@ def write_bound_exclusive(parent: int, name: str, payload: bytes, mode: int,
             name,
             descriptor,
             label,
-            expected_mode=0o000,
+            expected_mode=0o600,
             operation_error=operation_error,
         )
     except BaseException:
@@ -1636,6 +2136,172 @@ def create_exclusive(path: Path, flags: int, mode: int) -> int:
         os.umask(previous)
 
 
+def json_temporary_target_name(name: str) -> str | None:
+    """Return the exact public target encoded by one JSON atomic temporary."""
+
+    name = require_entry_name(name, "JSON atomic temporary")
+    match = re.fullmatch(
+        r"\.(?P<target>.+)\.[0-9]+\.[0-9a-f]{32}\.tmp",
+        name,
+    )
+    if match is None:
+        return None
+    return require_entry_name(match.group("target"), "JSON atomic temporary target")
+
+
+def json_temporary_names_in_directory(parent: int, target: str) -> list[str]:
+    """Return every narrowly named atomic temporary for one public target."""
+
+    target = require_entry_name(target, "JSON atomic target")
+    return [
+        name
+        for name in directory_entry_names(parent)
+        if json_temporary_target_name(name) == target
+    ]
+
+
+def recover_linked_json_publication_in_directory(
+    parent: int,
+    directory: Path,
+    target: str,
+    label: str,
+    *,
+    expected_mode: int | None = None,
+    expected_sha256: str | None = None,
+) -> bool:
+    """Complete only one exact post-link/pre-unlink JSON publication state."""
+
+    require_mutation_authority_bound(parent)
+    target = require_entry_name(target, label)
+    temporaries = json_temporary_names_in_directory(parent, target)
+    temporary_profiles: dict[str, os.stat_result] = {}
+    for temporary in temporaries:
+        try:
+            temporary_profiles[temporary] = os.stat(
+                temporary, dir_fd=parent, follow_symlinks=False
+            )
+        except FileNotFoundError as error:
+            raise ValueError(f"{label} temporary namespace changed during recovery") from error
+    try:
+        public_profile = os.stat(target, dir_fd=parent, follow_symlinks=False)
+    except FileNotFoundError:
+        public_profile = None
+
+    linked_temporaries = [
+        name for name, profile in temporary_profiles.items() if profile.st_nlink != 1
+    ]
+    if public_profile is None:
+        if linked_temporaries:
+            raise ValueError(
+                f"{label} has a linked temporary without its exact public name"
+            )
+        return False
+    if public_profile.st_nlink == 1:
+        if linked_temporaries:
+            raise ValueError(
+                f"{label} temporary link state differs from its public name"
+            )
+        return False
+    if public_profile.st_nlink != 2:
+        raise ValueError(
+            f"{label} public name has {public_profile.st_nlink} links, expected 1 or "
+            "one exact recoverable pair"
+        )
+    if len(temporaries) != 1:
+        raise ValueError(
+            f"{label} two-link public name requires exactly one correctly named temporary"
+        )
+
+    temporary = temporaries[0]
+    temporary_profile = temporary_profiles[temporary]
+    if (
+        temporary_profile.st_nlink != 2
+        or profile_identity(temporary_profile) != profile_identity(public_profile)
+    ):
+        raise ValueError(
+            f"{label} correctly named temporary and public name do not select the "
+            "same exact two-link inode"
+        )
+    require_regular_profile(
+        temporary_profile,
+        directory / temporary,
+        f"{label} temporary",
+        expected_mode=expected_mode,
+        expected_links=2,
+        expected_uid=os.geteuid(),
+    )
+    require_regular_profile(
+        public_profile,
+        directory / target,
+        f"{label} public name",
+        expected_mode=expected_mode,
+        expected_links=2,
+        expected_uid=os.geteuid(),
+    )
+    state, digest, links = classify_bound_hard_link_move(
+        parent,
+        temporary,
+        parent,
+        target,
+        temporary_profile,
+        label,
+        expected_sha256=expected_sha256,
+    )
+    if state != "linked" or links != 2:
+        raise ValueError(f"{label} is not the exact recoverable two-link state")
+    complete_bound_hard_link_move(
+        parent,
+        temporary,
+        parent,
+        target,
+        temporary_profile,
+        label,
+        expected_sha256=digest,
+    )
+    if not entry_absent(parent, temporary):
+        raise ValueError(f"{label} temporary remains after recovery")
+    current = os.stat(target, dir_fd=parent, follow_symlinks=False)
+    if profile_identity(current) != profile_identity(public_profile):
+        raise ValueError(f"{label} public inode changed during recovery")
+    require_regular_profile(
+        current,
+        directory / target,
+        f"{label} public name",
+        expected_mode=expected_mode,
+        expected_links=1,
+        expected_uid=os.geteuid(),
+    )
+    require_bound_entry_security(
+        parent,
+        target,
+        current,
+        f"{label} public name",
+        expected_sha256=digest,
+    )
+    require_mutation_authority_bound(parent)
+    return True
+
+
+def recover_linked_json_publication(
+    path: Path,
+    label: str,
+    *,
+    expected_mode: int | None = None,
+    expected_sha256: str | None = None,
+) -> bool:
+    """Recover one exact JSON post-link/pre-unlink state through its bound parent."""
+
+    with bound_parent_descriptor(path, label) as parent:
+        return recover_linked_json_publication_in_directory(
+            parent,
+            path.parent,
+            path.name,
+            label,
+            expected_mode=expected_mode,
+            expected_sha256=expected_sha256,
+        )
+
+
 def write_json(path: Path, value: object, mode: int = 0o644, *,
                simulate_interruption_before_directory_fsync: bool = False) -> None:
     """Atomically replace one exact JSON entry through its stable parent."""
@@ -1644,6 +2310,15 @@ def write_json(path: Path, value: object, mode: int = 0o644, *,
     payload_digest = sha256_bytes(payload)
     temporary = f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
     with bound_parent_descriptor(path, str(path)) as parent:
+        if recover_linked_json_publication_in_directory(
+            parent,
+            path.parent,
+            path.name,
+            "JSON atomic write retry",
+            expected_mode=mode,
+            expected_sha256=payload_digest,
+        ):
+            return
         try:
             target_profile = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
         except FileNotFoundError:
@@ -1678,7 +2353,7 @@ def write_json(path: Path, value: object, mode: int = 0o644, *,
                 )
             else:
                 assert target_digest is not None
-                exchange_bound_entries(
+                replace_bound_entry_forward(
                     parent,
                     temporary,
                     path.name,
@@ -1688,31 +2363,8 @@ def write_json(path: Path, value: object, mode: int = 0o644, *,
                     source_sha256=payload_digest,
                     target_sha256=target_digest,
                 )
-                require_bound_entry_security(
-                    parent,
-                    path.name,
-                    temporary_profile,
-                    "JSON atomic write",
-                    expected_sha256=payload_digest,
-                )
-                os.fsync(parent)
-                require_bound_entry_security(
-                    parent,
-                    path.name,
-                    temporary_profile,
-                    "JSON atomic write",
-                    expected_sha256=payload_digest,
-                )
-                require_mutation_authority_bound(parent)
                 if simulate_interruption_before_directory_fsync:
                     raise ValueError("simulated interruption before JSON directory fsync")
-                unlink_bound_entry(
-                    parent,
-                    temporary,
-                    target_profile,
-                    "JSON replaced predecessor",
-                    expected_sha256=target_digest,
-                )
             if target_profile is None and simulate_interruption_before_directory_fsync:
                 raise ValueError("simulated interruption before JSON directory fsync")
             require_bound_entry_security(
@@ -1738,12 +2390,9 @@ def write_json(path: Path, value: object, mode: int = 0o644, *,
 def json_temporary_entries(path: Path) -> list[Path]:
     """Return narrowly matched atomic-write temporaries for one JSON path."""
 
-    pattern = re.compile(
-        rf"\.{re.escape(path.name)}\.[0-9]+\.[0-9a-f]{{32}}\.tmp"
-    )
     return [
         entry for entry in directory_entries(path.parent)
-        if pattern.fullmatch(entry.name) is not None
+        if json_temporary_target_name(entry.name) == path.name
     ]
 
 
@@ -5512,7 +6161,7 @@ def copy_forensic(source: Path, destination: Path, expected: str, *,
                     destination_descriptor = os.open(
                         temporary,
                         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                        0o000,
+                        0o600,
                         dir_fd=parent,
                     )
                 except BaseException as error:
@@ -5529,7 +6178,7 @@ def copy_forensic(source: Path, destination: Path, expected: str, *,
                     temporary,
                     destination_descriptor,
                     "recost forensic copy temporary",
-                    expected_mode=0o000,
+                    expected_mode=0o600,
                     operation_error=operation_error,
                 )
             except BaseException:
@@ -5540,13 +6189,13 @@ def copy_forensic(source: Path, destination: Path, expected: str, *,
             digest = hashlib.sha256()
             destination_profile = os.fstat(destination_descriptor)
             try:
-                os.fchmod(destination_descriptor, 0o444)
                 while True:
                     block = os.read(source_descriptor, 1024 * 1024)
                     if not block:
                         break
                     digest.update(block)
                     write_descriptor_bytes(destination_descriptor, block)
+                os.fchmod(destination_descriptor, 0o444)
                 os.fsync(destination_descriptor)
                 destination_profile = os.fstat(destination_descriptor)
                 require_regular_profile(
@@ -5643,9 +6292,9 @@ def remove_forensic_temporaries(directory: Path, label: str) -> None:
                 expected_uid=os.geteuid(),
             )
             mode = stat.S_IMODE(profile.st_mode)
-            if mode not in {0o000, 0o444}:
+            if mode not in {0o000, 0o444, 0o600}:
                 raise ValueError(
-                    f"{label} mode is {mode:04o}, expected 0000 or 0444: {entry}"
+                    f"{label} mode is {mode:04o}, expected 0000, 0444, or 0600: {entry}"
                 )
             unlink_bound_entry(parent, entry.name, profile, label)
 
@@ -5899,62 +6548,166 @@ def validate_single_link_transition(
     *,
     allow_expired_v2: bool = False,
 ) -> str:
-    """Authenticate one pre- or post-exchange single-link publication state."""
+    """Authenticate every durable state of the journaled no-exchange transition."""
 
     replacement = require_entry_name(replacement, "canonical recost single-link copy")
-    canonical_profile = os.stat(
-        paths["canonical"].name,
-        dir_fd=directory_descriptor,
-        follow_symlinks=False,
-    )
-    canonical_observed = profile_identity(canonical_profile)
-    staged_exists = paths["staged"].name in os.listdir(directory_descriptor)
-    replacement_exists = replacement in os.listdir(directory_descriptor)
-    if canonical_observed == staged_identity:
-        require_linked_pair_in_directory(
-            directory_descriptor,
-            paths,
-            args,
-            expected_identity=staged_identity,
-            allow_expired_v2=allow_expired_v2,
-        )
-        require_named_artifact_identity_in_directory(
-            directory_descriptor,
-            replacement,
-            paths["accounting"] / replacement,
-            args,
-            expected_links=1,
-            expected_identity=canonical_identity,
-            allow_expired_v2=allow_expired_v2,
-        )
-        return "copy-prepared"
-    if canonical_observed != canonical_identity:
-        raise ValueError("canonical recost inode differs from both journaled identities")
-    require_named_artifact_identity_in_directory(
-        directory_descriptor,
-        paths["canonical"].name,
-        paths["canonical"],
-        args,
-        expected_links=1,
-        expected_identity=canonical_identity,
-        allow_expired_v2=allow_expired_v2,
-    )
-    for exists, name, label in (
-        (staged_exists, paths["staged"].name, "staged recost publication link"),
-        (replacement_exists, replacement, "replaced canonical recost publication link"),
-    ):
-        if not exists:
-            continue
+
+    def selected(name: str) -> os.stat_result | None:
+        try:
+            return os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+
+    staged = selected(paths["staged"].name)
+    canonical = selected(paths["canonical"].name)
+    copy = selected(replacement)
+
+    def require_selected(
+        profile: os.stat_result | None,
+        name: str,
+        path: Path,
+        identity: tuple[int, int],
+        links: set[int],
+        label: str,
+    ) -> None:
+        if profile is None or profile_identity(profile) != identity:
+            raise ValueError(f"{label} does not select its journaled inode")
+        if profile.st_nlink not in links:
+            raise ValueError(
+                f"{label} has {profile.st_nlink} links, expected one of "
+                + ", ".join(str(value) for value in sorted(links))
+            )
         require_named_artifact_identity_in_directory(
             directory_descriptor,
             name,
-            paths["accounting"] / name,
+            path,
             args,
-            expected_links=2,
-            expected_identity=staged_identity,
+            expected_links=profile.st_nlink,
+            expected_identity=identity,
             allow_expired_v2=allow_expired_v2,
         )
-    return "copy-exchanged"
+
+    visible = (
+        None if staged is None else profile_identity(staged),
+        None if canonical is None else profile_identity(canonical),
+        None if copy is None else profile_identity(copy),
+    )
+    if staged is not None and visible[0] != staged_identity:
+        raise ValueError(
+            "staged recost publication link does not select its journaled inode"
+        )
+    if canonical is not None and visible[1] not in {
+        staged_identity,
+        canonical_identity,
+    }:
+        raise ValueError(
+            "canonical recost publication does not select a journaled inode"
+        )
+    if copy is not None and visible[2] != canonical_identity:
+        raise ValueError(
+            "canonical recost single-link copy does not select its journaled inode"
+        )
+    if visible == (staged_identity, staged_identity, canonical_identity):
+        require_selected(
+            staged,
+            paths["staged"].name,
+            paths["staged"],
+            staged_identity,
+            {2, 3},
+            "staged recost publication link",
+        )
+        require_selected(
+            canonical,
+            paths["canonical"].name,
+            paths["canonical"],
+            staged_identity,
+            {2, 3},
+            "canonical recost predecessor",
+        )
+        if staged is None or canonical is None or staged.st_nlink != canonical.st_nlink:
+            raise ValueError("canonical predecessor links changed during retirement")
+        require_selected(
+            copy,
+            replacement,
+            paths["accounting"] / replacement,
+            canonical_identity,
+            {1},
+            "canonical recost single-link copy",
+        )
+        return "copy-prepared"
+    if visible == (staged_identity, None, canonical_identity):
+        require_selected(
+            staged,
+            paths["staged"].name,
+            paths["staged"],
+            staged_identity,
+            {2},
+            "staged recost publication link",
+        )
+        require_selected(
+            copy,
+            replacement,
+            paths["accounting"] / replacement,
+            canonical_identity,
+            {1},
+            "canonical recost single-link copy",
+        )
+        return "canonical-retired"
+    if visible == (staged_identity, canonical_identity, canonical_identity):
+        require_selected(
+            staged,
+            paths["staged"].name,
+            paths["staged"],
+            staged_identity,
+            {2},
+            "staged recost publication link",
+        )
+        require_selected(
+            canonical,
+            paths["canonical"].name,
+            paths["canonical"],
+            canonical_identity,
+            {2},
+            "canonical recost publication",
+        )
+        require_selected(
+            copy,
+            replacement,
+            paths["accounting"] / replacement,
+            canonical_identity,
+            {2},
+            "canonical recost single-link copy",
+        )
+        return "canonical-linked"
+    if visible == (staged_identity, canonical_identity, None):
+        require_selected(
+            staged,
+            paths["staged"].name,
+            paths["staged"],
+            staged_identity,
+            {2, 3},
+            "staged recost publication link",
+        )
+        require_selected(
+            canonical,
+            paths["canonical"].name,
+            paths["canonical"],
+            canonical_identity,
+            {1},
+            "canonical recost publication",
+        )
+        return "canonical-published"
+    if visible == (None, canonical_identity, None):
+        require_selected(
+            canonical,
+            paths["canonical"].name,
+            paths["canonical"],
+            canonical_identity,
+            {1},
+            "canonical recost publication",
+        )
+        return "complete"
+    raise ValueError("canonical recost no-exchange transition state is invalid")
 
 
 def complete_single_link_transition(
@@ -5968,7 +6721,7 @@ def complete_single_link_transition(
     allow_expired_v2: bool = False,
     simulate_post_exchange_failure: bool = False,
 ) -> None:
-    """Complete one journaled copy/exchange/forensic-retirement transition."""
+    """Complete one journaled forward-only canonical publication transition."""
 
     state = validate_single_link_transition(
         directory_descriptor,
@@ -5980,53 +6733,64 @@ def complete_single_link_transition(
         allow_expired_v2=allow_expired_v2,
     )
     if state == "copy-prepared":
+        predecessor = os.stat(
+            paths["canonical"].name,
+            dir_fd=directory_descriptor,
+            follow_symlinks=False,
+        )
+        unlink_bound_entry(
+            directory_descriptor,
+            paths["canonical"].name,
+            predecessor,
+            "canonical recost predecessor",
+            expected_sha256=args.expected_artifact_sha256,
+        )
+        state = validate_single_link_transition(
+            directory_descriptor,
+            paths,
+            args,
+            replacement,
+            staged_identity,
+            canonical_identity,
+            allow_expired_v2=allow_expired_v2,
+        )
+    if state in {"canonical-retired", "canonical-linked"}:
+        replacement_profile = os.stat(
+            replacement, dir_fd=directory_descriptor, follow_symlinks=False
+        )
+        rename_bound_noreplace(
+            directory_descriptor,
+            replacement,
+            paths["canonical"].name,
+            replacement_profile,
+            "canonical recost single-link publication",
+            expected_sha256=args.expected_artifact_sha256,
+        )
+        state = validate_single_link_transition(
+            directory_descriptor,
+            paths,
+            args,
+            replacement,
+            staged_identity,
+            canonical_identity,
+            allow_expired_v2=allow_expired_v2,
+        )
+    if state == "canonical-published" and simulate_post_exchange_failure:
+        raise ValueError("simulated interruption after canonical copy publication")
+    if state == "canonical-published":
         staged_profile = os.stat(
             paths["staged"].name,
             dir_fd=directory_descriptor,
             follow_symlinks=False,
         )
-        replacement_profile = os.stat(
-            replacement, dir_fd=directory_descriptor, follow_symlinks=False
-        )
-        exchange_bound_entries(
-            directory_descriptor,
-            replacement,
-            paths["canonical"].name,
-            replacement_profile,
-            staged_profile,
-            "canonical recost single-link publication",
-            source_sha256=args.expected_artifact_sha256,
-            target_sha256=args.expected_artifact_sha256,
-        )
-        if simulate_post_exchange_failure:
-            raise ValueError("simulated interruption after canonical copy exchange")
-    validate_single_link_transition(
-        directory_descriptor,
-        paths,
-        args,
-        replacement,
-        staged_identity,
-        canonical_identity,
-        allow_expired_v2=allow_expired_v2,
-    )
-    for name, label in (
-        (paths["staged"].name, "staged recost publication link"),
-        (replacement, "replaced canonical recost publication link"),
-    ):
-        try:
-            profile = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
-        except FileNotFoundError:
-            continue
-        if profile_identity(profile) != staged_identity:
-            raise ValueError(f"{label} inode changed before forensic retirement")
         unlink_bound_entry(
             directory_descriptor,
-            name,
-            profile,
-            label,
+            paths["staged"].name,
+            staged_profile,
+            "staged recost publication link",
             expected_sha256=args.expected_artifact_sha256,
         )
-    validate_single_link_transition(
+    state = validate_single_link_transition(
         directory_descriptor,
         paths,
         args,
@@ -6035,6 +6799,8 @@ def complete_single_link_transition(
         canonical_identity,
         allow_expired_v2=allow_expired_v2,
     )
+    if state != "complete":
+        raise ValueError("canonical recost no-exchange transition did not complete")
     os.fsync(directory_descriptor)
     validate_single_link_transition(
         directory_descriptor,
@@ -6466,6 +7232,17 @@ def remove_bound_recost_journal(parent: int, journal: Path,
                                 label: str) -> None:
     """Retire one exact journal through its continuously bound transaction store."""
 
+    for temporary in json_temporary_names_in_directory(parent, journal.name):
+        temporary_profile = os.stat(temporary, dir_fd=parent, follow_symlinks=False)
+        if temporary_profile.st_nlink != 1:
+            recover_linked_json_publication_in_directory(
+                parent,
+                journal.parent,
+                journal.name,
+                f"{label} publication recovery",
+                expected_mode=0o644,
+            )
+            break
     names = directory_entry_names(parent)
     if journal.name not in names:
         if names:
@@ -6513,6 +7290,23 @@ def recost_journal(paths: dict[str, Path], transaction_descriptor: int | None = 
     temporary_pattern = re.compile(
         r"\.(?P<target>.+\.json)\.[0-9]+\.[0-9a-f]{32}\.tmp"
     )
+    names = directory_entry_names(parent)
+    public_names = [name for name in names if name.endswith(".json")]
+    temporary_names = [
+        name for name in names if temporary_pattern.fullmatch(name) is not None
+    ]
+    for name in temporary_names:
+        target_name = json_temporary_target_name(name)
+        assert target_name is not None
+        temporary_profile = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if temporary_profile.st_nlink != 1:
+            recover_linked_json_publication_in_directory(
+                parent,
+                directory,
+                target_name,
+                "recost transaction journal publication recovery",
+                expected_mode=0o644,
+            )
     names = directory_entry_names(parent)
     public_names = [name for name in names if name.endswith(".json")]
     temporary_names = [
@@ -6579,18 +7373,37 @@ def recost_journal(paths: dict[str, Path], transaction_descriptor: int | None = 
         public_profile, public_digest, public_retained, record = public_candidate
         if valid_temporaries:
             temporary = valid_temporaries[0]
-            if temporary[1] != public_name or temporary[4] != public_retained:
+            if temporary[1] != public_name:
                 raise ValueError(
-                    "valid recost transaction recovery temporary differs from "
-                    "the authenticated public journal"
+                    "valid recost transaction recovery temporary targets a "
+                    "different authenticated public journal"
                 )
-            unlink_bound_entry(
-                parent,
-                temporary[0],
-                temporary[2],
-                "duplicate recost transaction recovery temporary",
-                expected_sha256=temporary[3],
-            )
+            if temporary[4] == public_retained:
+                unlink_bound_entry(
+                    parent,
+                    temporary[0],
+                    temporary[2],
+                    "duplicate recost transaction recovery temporary",
+                    expected_sha256=temporary[3],
+                )
+            else:
+                replace_bound_entry_forward(
+                    parent,
+                    temporary[0],
+                    public_name,
+                    temporary[2],
+                    public_profile,
+                    "recost transaction journal recovery",
+                    source_sha256=temporary[3],
+                    target_sha256=public_digest,
+                )
+                public_candidate = parse_candidate(
+                    public_name,
+                    public_name,
+                    "recost transaction journal",
+                    expected_mode=0o644,
+                )
+                public_profile, public_digest, public_retained, record = public_candidate
         remove_json_temporaries_in_directory(
             parent,
             directory,
@@ -6644,7 +7457,7 @@ def recost_journal(paths: dict[str, Path], transaction_descriptor: int | None = 
             directory / public_name,
             "forged recost transaction journal",
             maximum_mode=0o644,
-            expected_links=1,
+            expected_links=public_profile.st_nlink,
             expected_uid=os.geteuid(),
         )
         public_digest = require_bound_entry_security(
@@ -6654,7 +7467,7 @@ def recost_journal(paths: dict[str, Path], transaction_descriptor: int | None = 
             "forged recost transaction journal",
         )
         assert public_digest is not None
-        exchange_bound_entries(
+        replace_bound_entry_forward(
             parent,
             temporary_name,
             public_name,
@@ -6679,13 +7492,6 @@ def recost_journal(paths: dict[str, Path], transaction_descriptor: int | None = 
             expected_sha256=recovered[1],
         )
         require_mutation_authority_bound(parent)
-        unlink_bound_entry(
-            parent,
-            temporary_name,
-            public_profile,
-            "forged recost transaction journal predecessor",
-            expected_sha256=public_digest,
-        )
     remove_json_temporaries_in_directory(
         parent,
         directory,
@@ -7245,7 +8051,7 @@ def remove_created_artifact_review(directory_descriptor: int, target: Path,
 
 
 def remove_mode_zero_artifact_review_temporaries(directory_descriptor: int) -> None:
-    """Durably discard only authenticated empty review-create crash remnants."""
+    """Durably discard authenticated legacy and owner-readable review remnants."""
 
     pattern = re.compile(r"\.cgl-checkpoint-review-[0-9a-f]{32}")
     names = [
@@ -7259,25 +8065,41 @@ def remove_mode_zero_artifact_review_temporaries(directory_descriptor: int) -> N
             )
         except FileNotFoundError:
             continue
-        require_regular_profile(
+        require_regular_mode_subset(
             profile,
             Path(name),
-            "artifact-review mode-0000 temporary",
-            expected_mode=0o000,
+            "artifact-review temporary",
+            maximum_mode=0o644,
             expected_links=1,
             expected_uid=os.geteuid(),
         )
-        if profile.st_size != 0:
+        mode = stat.S_IMODE(profile.st_mode)
+        if mode not in {0o000, 0o444, 0o600}:
             raise ValueError(
-                f"artifact-review mode-0000 temporary is not empty: {name}"
+                f"artifact-review temporary mode is {mode:04o}, "
+                f"expected 0000, 0444, or 0600: {name}"
             )
-        require_bound_entry_security(
-            directory_descriptor,
-            name,
-            profile,
-            "artifact-review mode-0000 temporary",
-            allow_mode_zero=True,
-        )
+        if mode == 0o000:
+            if profile.st_size != 0:
+                raise ValueError(
+                    f"artifact-review mode-0000 temporary is not empty: {name}"
+                )
+            digest = None
+            require_bound_entry_security(
+                directory_descriptor,
+                name,
+                profile,
+                "artifact-review mode-0000 temporary",
+                allow_mode_zero=True,
+            )
+        else:
+            digest = require_bound_entry_security(
+                directory_descriptor,
+                name,
+                profile,
+                "artifact-review temporary",
+            )
+            assert digest is not None
         require_mutation_authority_bound(directory_descriptor)
         operation_error = None
         try:
@@ -7290,13 +8112,13 @@ def remove_mode_zero_artifact_review_temporaries(directory_descriptor: int) -> N
             directory_descriptor,
             name,
             profile,
-            "artifact-review mode-0000 temporary",
-            None,
-            allow_mode_zero=True,
+            "artifact-review temporary",
+            digest,
+            allow_mode_zero=digest is None,
         )
         if not removed and not unchanged:
             raise ValueError(
-                f"artifact-review mode-0000 temporary changed during removal: {name}"
+                f"artifact-review temporary changed during removal: {name}"
             )
         require_mutation_authority_bound(directory_descriptor)
         if durability_error is not None:
@@ -7305,7 +8127,7 @@ def remove_mode_zero_artifact_review_temporaries(directory_descriptor: int) -> N
             raise operation_error
         if not removed:
             raise ValueError(
-                f"artifact-review mode-0000 temporary removal did not complete: {name}"
+                f"artifact-review temporary removal did not complete: {name}"
             )
     remaining = [
         name for name in directory_entry_names(directory_descriptor)
@@ -7729,6 +8551,11 @@ def finalize_linked_pair_bound_transactions(
         args,
         record,
         allow_expired_v2=True,
+    )
+    recover_linked_json_publication(
+        paths["audit"],
+        "recost publication audit recovery",
+        expected_mode=publication_audit_mode(args),
     )
     remove_json_temporaries(
         json_temporary_entries(paths["audit"]),
@@ -8237,6 +9064,11 @@ def adopt_legacy_bound_transactions(
     temporary_pattern = re.compile(r"\..+\.json\.[0-9]+\.[0-9a-f]{32}\.tmp")
     recovering_prejournal_temporary = bool(initial_names) and all(
         temporary_pattern.fullmatch(name) is not None for name in initial_names
+    )
+    recover_linked_json_publication(
+        paths["audit"],
+        "legacy adoption publication audit recovery",
+        expected_mode=publication_audit_mode(args),
     )
     remove_forensic_temporaries(
         paths["recost_forensics"],

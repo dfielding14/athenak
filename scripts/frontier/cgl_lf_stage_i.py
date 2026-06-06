@@ -87,6 +87,29 @@ F116_PLASMA_REVIEW_RELATIVE = Path(
 F116_PUBLICATION_AUDIT_RELATIVE = Path(
     f"{F116_CURRENT_SOURCE_AUTHORITY_RELATIVE}.publication_audit.json"
 )
+F116_SOURCE_AUTHORITY_TRANSACTION_ID_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{6}\+0000-[0-9a-f]{32}"
+)
+F116_SOURCE_AUTHORITY_STAGING_SUFFIX = ".staging"
+F116_SOURCE_AUTHORITY_RETIRED_SUFFIX = ".retired"
+F116_SOURCE_AUTHORITY_FORENSIC_ENTRY_PATTERN = re.compile(
+    r"\.cgl-source-authority-retired-(?:directory-)?[0-9a-f]{32}\.forensic"
+)
+F116_SOURCE_AUTHORITY_TRANSACTION_PAYLOADS = {
+    "bundle": ("final.bundle", "0644"),
+    "evidence": ("evidence.json", "0444"),
+    "provenance_review": ("provenance_review.json", "0444"),
+    "plasma_review": ("plasma_review.json", "0444"),
+    "audit": ("audit.json", "0444"),
+    "readme_before": ("README.before", "0644"),
+    "sha256sums_before": ("SHA256SUMS.before", "0644"),
+    "readme_after": ("README.after", "0644"),
+    "sha256sums_after": ("SHA256SUMS.after", "0644"),
+}
+F116_SOURCE_AUTHORITY_JOURNAL_RECOVERY_NAMES = frozenset({
+    ".journal.json.recovery.tmp",
+    ".journal.json.recovery.alternate.tmp",
+})
 R03_F115_SOURCE_AUTHORITY_RELATIVE = Path(
     "accounting/"
     "mks24_stage_i_E03_forcing_policy_F115_source_bundle_recovery_supersession_evidence.json"
@@ -445,6 +468,12 @@ SELF_SOURCE_ENV = "_CGL_LF_STAGE_I_CONTROLLER_SOURCE"
 REPOSITORY_ROOT_ENV = "_CGL_LF_STAGE_I_CONTROLLER_REPOSITORY_ROOT"
 RENAME_NOREPLACE = 1
 RENAME_EXCHANGE = 2
+RENAMEAT2_UNSUPPORTED_ERRNOS = frozenset({
+    errno.EINVAL,
+    errno.ENOSYS,
+    getattr(errno, "ENOTSUP", errno.EINVAL),
+    getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+})
 R17_PROFILE_KEYS = frozenset({
     "acceptance_criterion",
     "acceptance_policy",
@@ -831,6 +860,18 @@ def regular_file_rename_identity(profile: os.stat_result) -> tuple[object, ...]:
     )
 
 
+def regular_file_hardlink_identity(profile: os.stat_result) -> tuple[object, ...]:
+    """Return inode metadata stable while a retained hard-link alias exists."""
+
+    return tuple(
+        getattr(profile, field)
+        for field in (
+            "st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_size",
+            "st_mtime_ns",
+        )
+    )
+
+
 def descriptor_bytes(descriptor: int) -> bytes:
     """Read exact bytes without changing one retained descriptor offset."""
 
@@ -992,6 +1033,69 @@ class RegularFileBinding:
             != regular_file_rename_identity(self.profile)
             or regular_file_rename_identity(opened)
             != regular_file_rename_identity(self.profile)
+            or (
+                self.payload is not None
+                and descriptor_bytes(self.descriptor) != self.payload
+            )
+            or (
+                self.digest is not None
+                and descriptor_sha256(self.descriptor) != self.digest
+            )
+        ):
+            raise ValueError(f"{retained_label} exact bytes or inode metadata changed")
+        self.profile = opened
+        self.assert_bound(directory_fd, name, retained_label)
+
+    def assert_bound_hardlink(self, directory_fd: int, name: str,
+                              expected_links: int,
+                              label: str | None = None) -> None:
+        """Require one exact retained inode while a hard-link move is staged."""
+
+        retained_label = label or self.label
+        try:
+            named = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            opened = os.fstat(self.descriptor)
+        except OSError as error:
+            raise ValueError(f"{retained_label} target changed") from error
+        if (
+            not stat.S_ISREG(named.st_mode)
+            or not stat.S_ISREG(opened.st_mode)
+            or named.st_nlink != expected_links
+            or opened.st_nlink != expected_links
+            or regular_file_hardlink_identity(named)
+            != regular_file_hardlink_identity(self.profile)
+            or regular_file_hardlink_identity(opened)
+            != regular_file_hardlink_identity(self.profile)
+            or (
+                self.payload is not None
+                and descriptor_bytes(self.descriptor) != self.payload
+            )
+            or (
+                self.digest is not None
+                and descriptor_sha256(self.descriptor) != self.digest
+            )
+        ):
+            raise ValueError(f"{retained_label} exact bytes or inode metadata changed")
+
+    def accept_bound_hardlink_unlink(self, directory_fd: int, name: str,
+                                     label: str | None = None) -> None:
+        """Accept only ctime/link-count drift after exact alias removal."""
+
+        retained_label = label or self.label
+        try:
+            named = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            opened = os.fstat(self.descriptor)
+        except OSError as error:
+            raise ValueError(f"{retained_label} target changed") from error
+        if (
+            not stat.S_ISREG(named.st_mode)
+            or not stat.S_ISREG(opened.st_mode)
+            or named.st_nlink != 1
+            or opened.st_nlink != 1
+            or regular_file_hardlink_identity(named)
+            != regular_file_hardlink_identity(self.profile)
+            or regular_file_hardlink_identity(opened)
+            != regular_file_hardlink_identity(self.profile)
             or (
                 self.payload is not None
                 and descriptor_bytes(self.descriptor) != self.payload
@@ -1243,15 +1347,51 @@ def fsync_and_reauthenticate_entries(directory_fd: int, names: tuple[str, ...],
             raise ValueError(f"{label} entry {name} changed during directory fsync")
 
 
+class Renameat2Unsupported(OSError):
+    """Report an explicit filesystem/kernel rejection of nonzero rename flags."""
+
+
+class LustrePosixRenameUnsupported(ValueError):
+    """Report that the reviewed descriptor-relative POSIX fallback is unavailable."""
+
+
+def require_direct_child_name(name: str, label: str) -> None:
+    """Require one normalized descriptor-relative direct-child name."""
+
+    if not name or name in {".", ".."} or "/" in name:
+        raise ValueError(f"{label} contains an invalid direct-child name")
+
+
+def fsync_directory_descriptors(*descriptors: int) -> None:
+    """Persist each distinct retained directory descriptor exactly once."""
+
+    retained = set()
+    for descriptor in descriptors:
+        profile = os.fstat(descriptor)
+        identity = profile.st_dev, profile.st_ino
+        if identity not in retained:
+            os.fsync(descriptor)
+            retained.add(identity)
+
+
 def renameat2_between(source_directory_fd: int, source: str,
                       target_directory_fd: int, target: str,
                       flags: int, label: str) -> None:
-    """Perform one descriptor-relative Linux renameat2 operation."""
+    """Perform one raw descriptor-relative Linux renameat2 operation."""
+
+    require_direct_child_name(source, label)
+    require_direct_child_name(target, label)
+    if flags not in {RENAME_NOREPLACE, RENAME_EXCHANGE}:
+        raise ValueError(f"{label} requested unsupported renameat2 flags: {flags}")
 
     try:
         operation = ctypes.CDLL(None, use_errno=True).renameat2
     except AttributeError as error:
-        raise ValueError("atomic metadata publication requires renameat2") from error
+        raise Renameat2Unsupported(
+            errno.ENOSYS,
+            "descriptor-relative renameat2 is unsupported",
+            f"{source} -> {target}",
+        ) from error
     operation.argtypes = (
         ctypes.c_int,
         ctypes.c_char_p,
@@ -1268,6 +1408,12 @@ def renameat2_between(source_directory_fd: int, source: str,
         flags,
     ) != 0:
         retained_errno = ctypes.get_errno()
+        if retained_errno in RENAMEAT2_UNSUPPORTED_ERRNOS:
+            raise Renameat2Unsupported(
+                retained_errno,
+                os.strerror(retained_errno),
+                f"{source} -> {target}",
+            )
         raise OSError(
             retained_errno, os.strerror(retained_errno), f"{source} -> {target}"
         )
@@ -1280,6 +1426,152 @@ def renameat2(directory_fd: int, source: str, target: str,
     renameat2_between(directory_fd, source, directory_fd, target, flags, label)
 
 
+def link_bound_noreplace_between(source_directory_fd: int, source: str,
+                                 target_directory_fd: int, target: str,
+                                 expected: RegularFileBinding, label: str,
+                                 mutation_guard) -> None:
+    """Lustre-compatible no-replace move using a durable hard-link commit."""
+
+    mutation_guard()
+    source_is_expected = expected.inode_is_bound(source_directory_fd, source)
+    target_is_expected = expected.inode_is_bound(target_directory_fd, target)
+    if not source_is_expected:
+        raise ValueError(f"{label} Lustre hard-link publication source changed")
+    if expected.profile.st_nlink not in {1, 2}:
+        raise ValueError(
+            f"{label} Lustre hard-link publication requires one recoverable source"
+        )
+    link_error = None
+    if target_is_expected:
+        expected.assert_bound_hardlink(
+            source_directory_fd, source, 2, f"{label} retained linked source"
+        )
+        expected.assert_bound_hardlink(
+            target_directory_fd, target, 2, f"{label} retained linked target"
+        )
+    else:
+        if expected.profile.st_nlink != 1:
+            raise ValueError(
+                f"{label} Lustre hard-link publication lost its recovery alias"
+            )
+        require_regular_entry_absent(target_directory_fd, target, label)
+        try:
+            os.link(
+                source,
+                target,
+                src_dir_fd=source_directory_fd,
+                dst_dir_fd=target_directory_fd,
+                follow_symlinks=False,
+            )
+        except BaseException as error:
+            link_error = error
+        source_is_expected = expected.inode_is_bound(source_directory_fd, source)
+        target_is_expected = expected.inode_is_bound(target_directory_fd, target)
+    if not target_is_expected:
+        if source_is_expected:
+            try:
+                expected.assert_bound(source_directory_fd, source, label)
+            except BaseException as state_error:
+                raise ValueError(
+                    f"{label} Lustre hard-link publication has an unsupported "
+                    f"namespace state"
+                ) from state_error
+            try:
+                require_regular_entry_absent(target_directory_fd, target, label)
+            except ValueError as collision:
+                raise FileExistsError(
+                    errno.EEXIST, os.strerror(errno.EEXIST), target
+                ) from collision
+            if link_error is not None:
+                raise ValueError(
+                    f"{label} Lustre hard-link publication failed before mutation"
+                ) from link_error
+        raise ValueError(
+            f"{label} Lustre hard-link publication state is ambiguous"
+        ) from link_error
+
+    if source_is_expected:
+        expected.assert_bound_hardlink(
+            source_directory_fd, source, 2, f"{label} linked source"
+        )
+        expected.assert_bound_hardlink(
+            target_directory_fd, target, 2, f"{label} linked target"
+        )
+        fsync_directory_descriptors(source_directory_fd, target_directory_fd)
+        expected.assert_bound_hardlink(
+            source_directory_fd, source, 2, f"{label} linked source"
+        )
+        expected.assert_bound_hardlink(
+            target_directory_fd, target, 2, f"{label} linked target"
+        )
+        unlink_error = None
+        try:
+            os.unlink(source, dir_fd=source_directory_fd)
+        except BaseException as error:
+            unlink_error = error
+        fsync_directory_descriptors(source_directory_fd, target_directory_fd)
+        source_is_expected = expected.inode_is_bound(source_directory_fd, source)
+        target_is_expected = expected.inode_is_bound(target_directory_fd, target)
+        if source_is_expected and target_is_expected:
+            expected.assert_bound_hardlink(
+                source_directory_fd, source, 2, f"{label} retained linked source"
+            )
+            expected.assert_bound_hardlink(
+                target_directory_fd, target, 2, f"{label} retained linked target"
+            )
+            expected.profile = os.fstat(expected.descriptor)
+            raise ValueError(
+                f"{label} Lustre two-link recovery state was durably preserved"
+            ) from unlink_error
+        if source_is_expected or not target_is_expected:
+            raise ValueError(
+                f"{label} Lustre hard-link publication has an unsupported "
+                f"post-unlink namespace state"
+            ) from unlink_error
+
+    require_regular_entry_absent(
+        source_directory_fd, source, f"{label} retired linked source"
+    )
+    expected.accept_bound_hardlink_unlink(target_directory_fd, target, label)
+    fsync_directory_descriptors(source_directory_fd, target_directory_fd)
+    mutation_guard()
+    require_regular_entry_absent(
+        source_directory_fd, source, f"{label} retired linked source"
+    )
+    expected.assert_bound(target_directory_fd, target, label)
+
+
+def unlink_bound_hardlink_alias(directory_fd: int, alias: str, retained: str,
+                                expected: RegularFileBinding, label: str,
+                                mutation_guard) -> None:
+    """Remove one exact recovery alias, accepting a classified post-unlink error."""
+
+    mutation_guard()
+    expected.assert_bound_hardlink(directory_fd, alias, 2, f"{label} alias")
+    expected.assert_bound_hardlink(directory_fd, retained, 2, label)
+    unlink_error = None
+    try:
+        os.unlink(alias, dir_fd=directory_fd)
+    except BaseException as error:
+        unlink_error = error
+    os.fsync(directory_fd)
+    mutation_guard()
+    alias_is_expected = expected.inode_is_bound(directory_fd, alias)
+    retained_is_expected = expected.inode_is_bound(directory_fd, retained)
+    if alias_is_expected and retained_is_expected:
+        expected.assert_bound_hardlink(directory_fd, alias, 2, f"{label} alias")
+        expected.assert_bound_hardlink(directory_fd, retained, 2, label)
+        raise ValueError(
+            f"{label} recovery alias remains in a durable two-link state"
+        ) from unlink_error
+    if alias_is_expected or not retained_is_expected:
+        raise ValueError(
+            f"{label} recovery alias has an unsupported post-unlink state"
+        ) from unlink_error
+    require_regular_entry_absent(directory_fd, alias, f"{label} removed alias")
+    expected.accept_bound_hardlink_unlink(directory_fd, retained, label)
+
+
 def rename_bound_noreplace(directory_fd: int, source: str, target: str,
                            expected: RegularFileBinding, label: str,
                            mutation_guard) -> None:
@@ -1290,7 +1582,18 @@ def rename_bound_noreplace(directory_fd: int, source: str, target: str,
     require_regular_entry_absent(directory_fd, target, label)
     operation_error = None
     try:
-        renameat2(directory_fd, source, target, RENAME_NOREPLACE, label)
+        try:
+            renameat2(directory_fd, source, target, RENAME_NOREPLACE, label)
+        except Renameat2Unsupported:
+            link_bound_noreplace_between(
+                directory_fd,
+                source,
+                directory_fd,
+                target,
+                expected,
+                label,
+                mutation_guard,
+            )
     except BaseException as error:
         try:
             fsync_and_reauthenticate_entries(
@@ -1364,7 +1667,13 @@ def exchange_bound_entries(directory_fd: int, source: str, target: str,
     target_expected.assert_bound(directory_fd, target, f"{label} predecessor")
     operation_error = None
     try:
-        renameat2(directory_fd, source, target, RENAME_EXCHANGE, label)
+        try:
+            renameat2(directory_fd, source, target, RENAME_EXCHANGE, label)
+        except Renameat2Unsupported as error:
+            raise LustrePosixRenameUnsupported(
+                f"{label} occupied-target exchange is unsupported after "
+                "renameat2 rejection"
+            ) from error
     except BaseException as error:
         try:
             fsync_and_reauthenticate_entries(
@@ -1387,6 +1696,8 @@ def exchange_bound_entries(directory_fd: int, source: str, target: str,
             target_expected.assert_bound(
                 directory_fd, target, f"{label} predecessor"
             )
+            if isinstance(error, LustrePosixRenameUnsupported):
+                raise error
             raise ValueError(f"{label} exchange failed before mutation") from error
         if posttransition:
             try:
@@ -1449,8 +1760,14 @@ def quarantine_bound_predecessor(source_directory_fd: int, source: str,
     """Forensically retire exact bytes and preserve ambiguous forward state."""
 
     forensic_parent = source_directory.parent
+    forensic_identity = hashlib.sha256(
+        (
+            f"{source_directory.absolute()}\0{source}\0"
+            f"{expected.digest or hashlib.sha256(expected.payload or b'').hexdigest()}"
+        ).encode("utf-8")
+    ).hexdigest()
     forensic_name = (
-        f".cgl_lf_stage_i_replaced_{uuid.uuid4().hex}.forensic"
+        f".cgl_lf_stage_i_replaced_{forensic_identity}.forensic"
     )
     forensic_fd = os.open(
         forensic_parent,
@@ -1508,14 +1825,32 @@ def quarantine_bound_predecessor(source_directory_fd: int, source: str,
             binding.assert_bound(source_directory_fd, name, retained_label)
         operation_error = None
         try:
-            renameat2_between(
-                source_directory_fd,
-                source,
-                forensic_fd,
-                forensic_name,
-                RENAME_NOREPLACE,
-                label,
-            )
+            try:
+                renameat2_between(
+                    source_directory_fd,
+                    source,
+                    forensic_fd,
+                    forensic_name,
+                    RENAME_NOREPLACE,
+                    label,
+                )
+            except Renameat2Unsupported as error:
+                def linked_retirement_guard() -> None:
+                    mutation_guard()
+                    for name, binding, retained_label in retained:
+                        binding.assert_bound(
+                            source_directory_fd, name, retained_label
+                        )
+
+                link_bound_noreplace_between(
+                    source_directory_fd,
+                    source,
+                    forensic_fd,
+                    forensic_name,
+                    expected,
+                    label,
+                    linked_retirement_guard,
+                )
         except BaseException as error:
             try:
                 persist_retirement_state(f"{label} ambiguous retirement")
@@ -1524,6 +1859,23 @@ def quarantine_bound_predecessor(source_directory_fd: int, source: str,
                     f"{label} ambiguous retirement state is not durably authenticated"
                 ) from durable_error
             if expected.inode_is_bound(source_directory_fd, source):
+                if expected.inode_is_bound(forensic_fd, forensic_name):
+                    expected.assert_bound_hardlink(
+                        source_directory_fd,
+                        source,
+                        2,
+                        f"{label} linked source",
+                    )
+                    expected.assert_bound_hardlink(
+                        forensic_fd,
+                        forensic_name,
+                        2,
+                        f"{label} linked forensic recovery",
+                    )
+                    raise ValueError(
+                        f"{label} durable two-link recovery state "
+                        "was preserved"
+                    ) from error
                 expected.assert_bound(source_directory_fd, source, label)
                 for name, binding, retained_label in retained:
                     binding.assert_bound(source_directory_fd, name, retained_label)
@@ -1595,6 +1947,7 @@ def quarantine_bound_predecessor(source_directory_fd: int, source: str,
 
 
 METADATA_TEMPORARY_SUFFIX = ".cgl-lf-stage-i.tmp"
+METADATA_PREDECESSOR_RECOVERY_SUFFIX = ".predecessor-recovery"
 TRANSACTION_METADATA_TEMPORARY_PATTERN = re.compile(
     rf"\.(?P<target>[^/]+\.json){re.escape(METADATA_TEMPORARY_SUFFIX)}"
 )
@@ -1609,6 +1962,288 @@ def metadata_temporary_name(target: str) -> str:
     if Path(target).name != target or target in {"", ".", ".."}:
         raise ValueError(f"metadata target name is invalid: {target!r}")
     return f".{target}{METADATA_TEMPORARY_SUFFIX}"
+
+
+def metadata_predecessor_recovery_name(temporary_name: str) -> str:
+    """Return the deterministic predecessor recovery for one metadata target."""
+
+    require_direct_child_name(temporary_name, "metadata temporary")
+    return f"{temporary_name}{METADATA_PREDECESSOR_RECOVERY_SUFFIX}"
+
+
+def metadata_temporary_public_target(temporary_name: str) -> str | None:
+    """Return the public target encoded by one deterministic controller temporary."""
+
+    if (
+        not temporary_name.startswith(".")
+        or not temporary_name.endswith(METADATA_TEMPORARY_SUFFIX)
+    ):
+        return None
+    target = temporary_name[1:-len(METADATA_TEMPORARY_SUFFIX)]
+    try:
+        require_direct_child_name(target, "metadata temporary target")
+    except ValueError:
+        return None
+    return target
+
+
+def require_owner_controlled_metadata_recovery(
+    directory_fd: int,
+    name: str,
+    binding: RegularFileBinding,
+    label: str,
+    *,
+    mode: int | None = None,
+    expected_payload: bytes | None = None,
+) -> None:
+    """Require one exact single-link deterministic metadata recovery file."""
+
+    binding.assert_bound(directory_fd, name, label)
+    profile = os.fstat(binding.descriptor)
+    if (
+        profile.st_uid != os.geteuid()
+        or profile.st_nlink != 1
+        or stat.S_IMODE(profile.st_mode) & 0o022
+        or (mode is not None and stat.S_IMODE(profile.st_mode) != mode)
+        or binding.payload is None
+        or (
+            expected_payload is not None
+            and binding.payload != expected_payload
+        )
+    ):
+        raise ValueError(f"{label} is not an exact owner-controlled recovery file")
+
+
+def unlink_bound_deterministic_recovery(
+    directory_fd: int,
+    name: str,
+    expected: RegularFileBinding,
+    label: str,
+    mutation_guard,
+) -> None:
+    """Durably remove one exact deterministic recovery file."""
+
+    mutation_guard()
+    require_owner_controlled_metadata_recovery(
+        directory_fd, name, expected, label
+    )
+    unlink_error = None
+    try:
+        os.unlink(name, dir_fd=directory_fd)
+    except BaseException as error:
+        unlink_error = error
+    os.fsync(directory_fd)
+    mutation_guard()
+    if expected.inode_is_bound(directory_fd, name):
+        expected.assert_bound(directory_fd, name, label)
+        raise ValueError(f"{label} remains after durable unlink") from unlink_error
+    require_regular_entry_absent(directory_fd, name, f"{label} removed recovery")
+
+
+def write_bound_metadata_recovery(
+    directory_fd: int,
+    name: str,
+    payload: bytes,
+    mode: int,
+    label: str,
+    mutation_guard,
+) -> RegularFileBinding:
+    """Create one exact deterministic recovery file without namespace replacement."""
+
+    mutation_guard()
+    require_regular_entry_absent(directory_fd, name, label)
+    descriptor = None
+    try:
+        descriptor = os.open(
+            name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=directory_fd,
+        )
+        offset = 0
+        while offset < len(payload):
+            written = os.write(descriptor, payload[offset:])
+            if written <= 0:
+                raise ValueError(f"{label} write made no progress")
+            offset += written
+        os.fsync(descriptor)
+        os.fchmod(descriptor, mode)
+        os.fsync(descriptor)
+    except BaseException as error:
+        if descriptor is not None:
+            try:
+                os.fsync(descriptor)
+            except BaseException:
+                pass
+        try:
+            os.fsync(directory_fd)
+        except BaseException:
+            pass
+        raise error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    os.fsync(directory_fd)
+    mutation_guard()
+    retained = open_regular_file_binding(
+        directory_fd,
+        name,
+        label,
+        expected_payload=payload,
+    )
+    if retained is None:
+        raise ValueError(f"{label} is unavailable after creation")
+    try:
+        require_owner_controlled_metadata_recovery(
+            directory_fd,
+            name,
+            retained,
+            label,
+            mode=mode,
+            expected_payload=payload,
+        )
+    except BaseException:
+        retained.close()
+        raise
+    return retained
+
+
+def rewrite_bound_metadata_in_place(
+    directory_fd: int,
+    target: str,
+    current: RegularFileBinding,
+    successor_name: str,
+    successor: RegularFileBinding,
+    predecessor_name: str,
+    predecessor: RegularFileBinding,
+    mode: int,
+    label: str,
+    mutation_guard,
+) -> None:
+    """Complete one journaled metadata successor on the bound public inode."""
+
+    mutation_guard()
+    require_owner_controlled_metadata_recovery(
+        directory_fd,
+        successor_name,
+        successor,
+        f"{label} successor",
+        mode=mode,
+    )
+    require_owner_controlled_metadata_recovery(
+        directory_fd,
+        predecessor_name,
+        predecessor,
+        f"{label} predecessor recovery",
+        mode=0o400,
+    )
+    current.assert_bound(directory_fd, target, label)
+    current_profile = os.fstat(current.descriptor)
+    current_mode = stat.S_IMODE(current_profile.st_mode)
+    if (
+        current_profile.st_uid != os.geteuid()
+        or current_profile.st_nlink != 1
+        or current_mode & 0o022
+        or current.payload is None
+        or (
+            current_mode != 0o600
+            and current.payload != predecessor.payload
+        )
+    ):
+        raise ValueError(f"{label} public inode is not a recoverable transition state")
+
+    descriptor = None
+    try:
+        if current_mode != 0o600:
+            os.fchmod(current.descriptor, 0o600)
+            os.fsync(current.descriptor)
+            os.fsync(directory_fd)
+            mutation_guard()
+        descriptor = os.open(
+            target,
+            os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=directory_fd,
+        )
+        opened = os.fstat(descriptor)
+        if (
+            (opened.st_dev, opened.st_ino)
+            != (current_profile.st_dev, current_profile.st_ino)
+            or opened.st_uid != os.geteuid()
+            or opened.st_nlink != 1
+            or stat.S_IMODE(opened.st_mode) != 0o600
+        ):
+            raise ValueError(f"{label} public inode changed before in-place rewrite")
+        successor.assert_bound(
+            directory_fd, successor_name, f"{label} successor"
+        )
+        predecessor.assert_bound(
+            directory_fd, predecessor_name, f"{label} predecessor recovery"
+        )
+        mutation_guard()
+        os.ftruncate(descriptor, 0)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        payload = successor.payload
+        if payload is None:
+            raise ValueError(f"{label} successor bytes are unavailable")
+        offset = 0
+        while offset < len(payload):
+            written = os.write(descriptor, payload[offset:])
+            if written <= 0:
+                raise ValueError(f"{label} in-place rewrite made no progress")
+            offset += written
+        os.fsync(descriptor)
+        os.fchmod(descriptor, mode)
+        os.fsync(descriptor)
+        os.fsync(directory_fd)
+        mutation_guard()
+        successor.assert_bound(
+            directory_fd, successor_name, f"{label} successor"
+        )
+        predecessor.assert_bound(
+            directory_fd, predecessor_name, f"{label} predecessor recovery"
+        )
+    except BaseException as error:
+        if descriptor is not None:
+            try:
+                os.fsync(descriptor)
+            except BaseException:
+                pass
+        try:
+            os.fsync(directory_fd)
+            successor.assert_bound(
+                directory_fd, successor_name, f"{label} successor"
+            )
+            predecessor.assert_bound(
+                directory_fd, predecessor_name, f"{label} predecessor recovery"
+            )
+        except BaseException as durable_error:
+            raise ValueError(
+                f"{label} in-place recovery state is not durably authenticated"
+            ) from durable_error
+        raise ValueError(
+            f"{error}; {label} durable in-place forward recovery state was preserved"
+        ) from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+    completed = open_regular_file_binding(
+        directory_fd,
+        target,
+        f"{label} completed successor",
+        expected_payload=successor.payload,
+    )
+    if completed is None:
+        raise ValueError(f"{label} completed successor is unavailable")
+    try:
+        require_requested_regular_file_profile(
+            completed, mode, f"{label} completed successor"
+        )
+        durably_authenticate_bound_file(
+            directory_fd, target, completed, f"{label} completed successor"
+        )
+    finally:
+        completed.close()
 
 
 def transaction_metadata_temporary_target(name: str) -> str | None:
@@ -1632,6 +2267,14 @@ def retire_metadata_temporary(parent: Path, parent_fd: int, temporary_name: str,
     require_directory_descriptor_binding(
         parent, parent_fd, f"{label} parent", parent_profile
     )
+    predecessor_name = metadata_predecessor_recovery_name(temporary_name)
+    predecessor = open_regular_file_binding(
+        parent_fd,
+        predecessor_name,
+        f"{label} predecessor recovery",
+        allow_absent=True,
+        allow_unreadable=True,
+    )
     temporary = open_regular_file_binding(
         parent_fd,
         temporary_name,
@@ -1640,14 +2283,190 @@ def retire_metadata_temporary(parent: Path, parent_fd: int, temporary_name: str,
         allow_unreadable=True,
     )
     if temporary is None:
+        if predecessor is not None:
+            predecessor.close()
+            raise ValueError(f"{label} predecessor recovery lacks its successor")
         return None
     try:
+        public_target = metadata_temporary_public_target(temporary_name)
+        if predecessor is not None:
+            target = None
+            try:
+                if public_target is None:
+                    raise ValueError(
+                        f"{label} in-place recovery lacks its public target identity"
+                    )
+                require_owner_controlled_metadata_recovery(
+                    parent_fd,
+                    temporary_name,
+                    temporary,
+                    f"{label} successor",
+                )
+                require_owner_controlled_metadata_recovery(
+                    parent_fd,
+                    predecessor_name,
+                    predecessor,
+                    f"{label} predecessor recovery",
+                    mode=0o400,
+                )
+                target = open_regular_file_binding(
+                    parent_fd,
+                    public_target,
+                    f"{label} public target",
+                    allow_unreadable=True,
+                )
+                if target is None:
+                    raise ValueError(
+                        f"{label} in-place recovery public target is unavailable"
+                    )
+
+                def in_place_guard() -> None:
+                    for name, retained_label in (
+                        (temporary_name, label),
+                        (predecessor_name, f"{label} predecessor recovery"),
+                        (public_target, f"{label} public target"),
+                    ):
+                        require_metadata_mutation_boundary(
+                            parent / name,
+                            parent,
+                            parent_fd,
+                            parent_profile,
+                            retained_label,
+                        )
+
+                final_mode = stat.S_IMODE(temporary.profile.st_mode)
+                rewrite_bound_metadata_in_place(
+                    parent_fd,
+                    public_target,
+                    target,
+                    temporary_name,
+                    temporary,
+                    predecessor_name,
+                    predecessor,
+                    final_mode,
+                    label,
+                    in_place_guard,
+                )
+                unlink_bound_deterministic_recovery(
+                    parent_fd,
+                    predecessor_name,
+                    predecessor,
+                    f"{label} predecessor recovery",
+                    in_place_guard,
+                )
+                predecessor.close()
+                predecessor = None
+                unlink_bound_deterministic_recovery(
+                    parent_fd,
+                    temporary_name,
+                    temporary,
+                    label,
+                    in_place_guard,
+                )
+                return None
+            finally:
+                if target is not None:
+                    target.close()
+
         if (
             temporary.profile.st_uid != os.geteuid()
-            or temporary.profile.st_nlink != 1
+            or temporary.profile.st_nlink not in {1, 2}
             or stat.S_IMODE(temporary.profile.st_mode) & 0o022
         ):
             raise ValueError(f"{label} is not an authenticated controller temporary")
+        if temporary.profile.st_nlink == 2:
+            public_target = metadata_temporary_public_target(temporary_name)
+            if (
+                public_target is None
+                or not temporary.inode_is_bound(parent_fd, public_target)
+            ):
+                raise ValueError(
+                    f"{label} two-link publication lacks its deterministic "
+                    "authenticated public target"
+                )
+
+            def recovery_guard() -> None:
+                require_metadata_mutation_boundary(
+                    parent / temporary_name,
+                    parent,
+                    parent_fd,
+                    parent_profile,
+                    label,
+                )
+                require_metadata_mutation_boundary(
+                    parent / public_target,
+                    parent,
+                    parent_fd,
+                    parent_profile,
+                    f"{label} public target",
+                )
+
+            unlink_bound_hardlink_alias(
+                parent_fd,
+                temporary_name,
+                public_target,
+                temporary,
+                f"{label} completed hard-link publication",
+                recovery_guard,
+            )
+            return None
+        if public_target is not None:
+            completed = open_regular_file_binding(
+                parent_fd,
+                public_target,
+                f"{label} completed public target",
+                allow_absent=True,
+                allow_unreadable=True,
+            )
+            if completed is not None:
+                try:
+                    if (
+                        temporary.payload is not None
+                        and completed.payload == temporary.payload
+                    ):
+                        final_mode = stat.S_IMODE(temporary.profile.st_mode)
+                        require_owner_controlled_metadata_recovery(
+                            parent_fd,
+                            temporary_name,
+                            temporary,
+                            label,
+                            mode=final_mode,
+                        )
+                        require_requested_regular_file_profile(
+                            completed,
+                            final_mode,
+                            f"{label} completed public target",
+                        )
+
+                        def completed_guard() -> None:
+                            for name, retained_label in (
+                                (temporary_name, label),
+                                (public_target, f"{label} completed public target"),
+                            ):
+                                require_metadata_mutation_boundary(
+                                    parent / name,
+                                    parent,
+                                    parent_fd,
+                                    parent_profile,
+                                    retained_label,
+                                )
+
+                        unlink_bound_deterministic_recovery(
+                            parent_fd,
+                            temporary_name,
+                            temporary,
+                            label,
+                            completed_guard,
+                        )
+                        durably_authenticate_bound_file(
+                            parent_fd,
+                            public_target,
+                            completed,
+                            f"{label} completed public target",
+                        )
+                        return None
+                finally:
+                    completed.close()
         return quarantine_bound_predecessor(
             parent_fd,
             temporary_name,
@@ -1658,6 +2477,8 @@ def retire_metadata_temporary(parent: Path, parent_fd: int, temporary_name: str,
             label,
         )
     finally:
+        if predecessor is not None:
+            predecessor.close()
         temporary.close()
 
 
@@ -2046,10 +2867,11 @@ def mkdir_durable(path: Path) -> None:
 
 def write_text(path: Path, value: str, mode: int | None = None, *,
                expected_predecessor: bytes | None = None) -> None:
-    """Atomically publish text without clobbering a raced target inode."""
+    """Durably publish text with recoverable existing-target transitions."""
 
     if mode is not None and mode != stat.S_IMODE(mode):
         raise ValueError(f"metadata publication mode is invalid: {mode!r}")
+    payload = value.encode("utf-8")
     path = path.expanduser().absolute()
     require_canonical_mutation_lock(path)
     parent = path.parent
@@ -2060,138 +2882,413 @@ def write_text(path: Path, value: str, mode: int | None = None, *,
     except OSError as error:
         raise ValueError(f"metadata parent directory is unavailable: {parent}") from error
     temporary_name = metadata_temporary_name(path.name)
+    predecessor_name = metadata_predecessor_recovery_name(temporary_name)
     initial = None
     replacement = None
+    predecessor = None
     try:
         parent_profile = require_directory_descriptor_binding(
             parent, parent_fd, "metadata parent"
         )
-        require_metadata_mutation_boundary(
-            path, parent, parent_fd, parent_profile, "metadata"
-        )
-        retire_metadata_temporary(
-            parent,
-            parent_fd,
-            temporary_name,
-            parent_profile,
-            f"metadata temporary {path}",
-        )
-        require_metadata_mutation_boundary(
-            path, parent, parent_fd, parent_profile, "metadata"
-        )
+
+        def mutation_guard() -> None:
+            require_metadata_mutation_boundary(
+                path, parent, parent_fd, parent_profile, "metadata"
+            )
+
+        def authenticate_completed_target(final_mode: int | None) -> None:
+            completed = open_regular_file_binding(
+                parent_fd,
+                path.name,
+                f"metadata completed successor {path}",
+                expected_payload=payload,
+            )
+            if completed is None:
+                raise ValueError(f"metadata completed successor is unavailable: {path}")
+            try:
+                if final_mode is None:
+                    require_owner_controlled_metadata_recovery(
+                        parent_fd,
+                        path.name,
+                        completed,
+                        f"metadata completed successor {path}",
+                    )
+                else:
+                    require_requested_regular_file_profile(
+                        completed,
+                        final_mode,
+                        f"metadata completed successor {path}",
+                    )
+                durably_authenticate_bound_file(
+                    parent_fd,
+                    path.name,
+                    completed,
+                    f"metadata completed successor {path}",
+                )
+            finally:
+                completed.close()
+
+        mutation_guard()
         initial = open_regular_file_binding(
             parent_fd,
             path.name,
             "metadata predecessor",
             allow_absent=True,
             allow_unreadable=True,
-            expected_payload=expected_predecessor,
         )
-        if expected_predecessor is not None and initial is None:
-            raise ValueError(f"metadata predecessor is unavailable: {path}")
-        require_metadata_mutation_boundary(
-            path, parent, parent_fd, parent_profile, "metadata"
-        )
-        descriptor = os.open(
-            temporary_name,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-            dir_fd=parent_fd,
-        )
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            if mode is not None:
-                os.fchmod(stream.fileno(), mode)
-            elif initial is not None:
-                os.fchmod(stream.fileno(), stat.S_IMODE(initial.profile.st_mode))
-            stream.write(value)
-            stream.flush()
-            os.fsync(stream.fileno())
         replacement = open_regular_file_binding(
             parent_fd,
             temporary_name,
             f"metadata replacement {path}",
-            expected_payload=value.encode("utf-8"),
+            allow_absent=True,
+            allow_unreadable=True,
         )
-        if replacement is None:
-            raise ValueError(f"metadata replacement is unavailable: {path}")
-        try:
-            def mutation_guard() -> None:
-                require_metadata_mutation_boundary(
-                    path, parent, parent_fd, parent_profile, "metadata"
-                )
-                if mode is not None:
-                    require_requested_regular_file_profile(
-                        replacement, mode, f"metadata replacement {path}"
-                    )
+        predecessor = open_regular_file_binding(
+            parent_fd,
+            predecessor_name,
+            f"metadata predecessor recovery {path}",
+            allow_absent=True,
+            allow_unreadable=True,
+        )
 
-            mutation_guard()
-            if initial is None:
-                rename_bound_noreplace(
+        if (
+            replacement is not None
+            and replacement.profile.st_nlink == 2
+            and initial is not None
+            and replacement.inode_is_bound(parent_fd, path.name)
+        ):
+            if predecessor is not None:
+                raise ValueError(
+                    f"metadata hard-link publication has an unexpected "
+                    f"predecessor recovery: {path}"
+                )
+            replacement.close()
+            replacement = None
+            initial.close()
+            initial = None
+            retire_metadata_temporary(
+                parent,
+                parent_fd,
+                temporary_name,
+                parent_profile,
+                f"metadata temporary {path}",
+            )
+            initial = open_regular_file_binding(
+                parent_fd,
+                path.name,
+                "metadata predecessor",
+                allow_absent=True,
+                allow_unreadable=True,
+            )
+
+        if initial is not None and initial.payload == payload and (
+            mode is None or stat.S_IMODE(initial.profile.st_mode) == mode
+        ):
+            authenticate_completed_target(mode)
+            if predecessor is not None:
+                require_owner_controlled_metadata_recovery(
                     parent_fd,
-                    temporary_name,
-                    path.name,
-                    replacement,
-                    f"metadata publication {path}",
+                    predecessor_name,
+                    predecessor,
+                    f"metadata predecessor recovery {path}",
+                    mode=0o400,
+                    expected_payload=expected_predecessor,
+                )
+                unlink_bound_deterministic_recovery(
+                    parent_fd,
+                    predecessor_name,
+                    predecessor,
+                    f"metadata predecessor recovery {path}",
                     mutation_guard,
                 )
-            else:
-                exchange_bound_entries(
-                    parent_fd,
-                    temporary_name,
-                    path.name,
-                    replacement,
-                    initial,
-                    f"metadata replacement {path}",
-                    mutation_guard,
-                )
-                try:
+                predecessor.close()
+                predecessor = None
+                authenticate_completed_target(mode)
+            if replacement is not None:
+                if replacement.payload == payload:
+                    require_owner_controlled_metadata_recovery(
+                        parent_fd,
+                        temporary_name,
+                        replacement,
+                        f"metadata replacement {path}",
+                        mode=mode or stat.S_IMODE(initial.profile.st_mode),
+                        expected_payload=payload,
+                    )
+                    unlink_bound_deterministic_recovery(
+                        parent_fd,
+                        temporary_name,
+                        replacement,
+                        f"metadata replacement {path}",
+                        mutation_guard,
+                    )
+                else:
                     quarantine_bound_predecessor(
                         parent_fd,
                         temporary_name,
-                        initial,
+                        replacement,
                         parent,
                         parent_profile,
                         path,
                         f"metadata predecessor {path}",
                         retained=((
                             path.name,
-                            replacement,
+                            initial,
                             f"metadata replacement {path}",
                         ),),
                     )
-                except BaseException as error:
-                    try:
-                        fsync_and_reauthenticate_entries(
-                            parent_fd,
-                            (temporary_name, path.name),
-                            f"metadata replacement {path} failed predecessor retirement",
-                        )
-                    except BaseException as durable_error:
-                        raise ValueError(
-                            f"metadata replacement recovery state is not "
-                            f"durably authenticated: {path}"
-                        ) from durable_error
-                    if isinstance(error, MutationAuthorityError):
-                        raise
-                    try:
-                        mutation_guard()
-                    except MutationAuthorityError as authority_error:
-                        raise authority_error from error
-                    raise ValueError(
-                        f"{error}; metadata replacement durable forward recovery "
-                        f"state was preserved: {path}"
-                    ) from error
-            mutation_guard()
-            replacement.assert_bound(
-                parent_fd, path.name, f"metadata replacement {path}"
+                replacement.close()
+                replacement = None
+                authenticate_completed_target(mode)
+            return
+
+        if predecessor is not None:
+            predecessor_valid = True
+            try:
+                require_owner_controlled_metadata_recovery(
+                    parent_fd,
+                    predecessor_name,
+                    predecessor,
+                    f"metadata predecessor recovery {path}",
+                    mode=0o400,
+                    expected_payload=expected_predecessor,
+                )
+            except ValueError:
+                predecessor_valid = False
+            target_is_complete_predecessor = (
+                initial is not None
+                and initial.payload is not None
+                and (
+                    expected_predecessor is None
+                    or initial.payload == expected_predecessor
+                )
             )
-        finally:
+            if not predecessor_valid and target_is_complete_predecessor:
+                unlink_bound_deterministic_recovery(
+                    parent_fd,
+                    predecessor_name,
+                    predecessor,
+                    f"metadata incomplete predecessor recovery {path}",
+                    mutation_guard,
+                )
+                predecessor.close()
+                predecessor = None
+            elif not predecessor_valid:
+                raise ValueError(
+                    f"metadata predecessor recovery is not exact: {path}"
+                )
+
+        if predecessor is not None:
+            if initial is None or replacement is None:
+                raise ValueError(
+                    f"metadata in-place recovery state is incomplete: {path}"
+                )
+            final_mode = mode or stat.S_IMODE(replacement.profile.st_mode)
+            require_owner_controlled_metadata_recovery(
+                parent_fd,
+                temporary_name,
+                replacement,
+                f"metadata replacement {path}",
+                mode=final_mode,
+                expected_payload=payload,
+            )
+            rewrite_bound_metadata_in_place(
+                parent_fd,
+                path.name,
+                initial,
+                temporary_name,
+                replacement,
+                predecessor_name,
+                predecessor,
+                final_mode,
+                f"metadata replacement {path}",
+                mutation_guard,
+            )
+            authenticate_completed_target(final_mode)
+            unlink_bound_deterministic_recovery(
+                parent_fd,
+                predecessor_name,
+                predecessor,
+                f"metadata predecessor recovery {path}",
+                mutation_guard,
+            )
+            predecessor.close()
+            predecessor = None
+            authenticate_completed_target(final_mode)
+            unlink_bound_deterministic_recovery(
+                parent_fd,
+                temporary_name,
+                replacement,
+                f"metadata replacement {path}",
+                mutation_guard,
+            )
             replacement.close()
             replacement = None
-            if initial is not None:
-                initial.close()
-                initial = None
+            authenticate_completed_target(final_mode)
+            return
+
+        if initial is not None:
+            require_owner_controlled_metadata_recovery(
+                parent_fd,
+                path.name,
+                initial,
+                f"metadata predecessor {path}",
+                expected_payload=expected_predecessor,
+            )
+            final_mode = mode or stat.S_IMODE(initial.profile.st_mode)
+        else:
+            if expected_predecessor is not None:
+                raise ValueError(f"metadata predecessor is unavailable: {path}")
+            final_mode = mode or 0o600
+
+        if replacement is not None:
+            replacement_is_exact = True
+            try:
+                require_owner_controlled_metadata_recovery(
+                    parent_fd,
+                    temporary_name,
+                    replacement,
+                    f"metadata replacement {path}",
+                    mode=final_mode,
+                    expected_payload=payload,
+                )
+            except ValueError:
+                replacement_is_exact = False
+            if not replacement_is_exact:
+                unlink_bound_deterministic_recovery(
+                    parent_fd,
+                    temporary_name,
+                    replacement,
+                    f"metadata incomplete replacement {path}",
+                    mutation_guard,
+                )
+                replacement.close()
+                replacement = None
+
+        if replacement is None:
+            replacement = write_bound_metadata_recovery(
+                parent_fd,
+                temporary_name,
+                payload,
+                final_mode,
+                f"metadata replacement {path}",
+                mutation_guard,
+            )
+
+        mutation_guard()
+        if initial is None:
+            rename_bound_noreplace(
+                parent_fd,
+                temporary_name,
+                path.name,
+                replacement,
+                f"metadata publication {path}",
+                mutation_guard,
+            )
+            authenticate_completed_target(final_mode)
+            return
+
+        try:
+            exchange_bound_entries(
+                parent_fd,
+                temporary_name,
+                path.name,
+                replacement,
+                initial,
+                f"metadata replacement {path}",
+                mutation_guard,
+            )
+        except LustrePosixRenameUnsupported:
+            if initial.payload is None:
+                raise ValueError(
+                    f"metadata predecessor bytes are unavailable: {path}"
+                ) from None
+            predecessor = write_bound_metadata_recovery(
+                parent_fd,
+                predecessor_name,
+                initial.payload,
+                0o400,
+                f"metadata predecessor recovery {path}",
+                mutation_guard,
+            )
+            rewrite_bound_metadata_in_place(
+                parent_fd,
+                path.name,
+                initial,
+                temporary_name,
+                replacement,
+                predecessor_name,
+                predecessor,
+                final_mode,
+                f"metadata replacement {path}",
+                mutation_guard,
+            )
+            authenticate_completed_target(final_mode)
+            unlink_bound_deterministic_recovery(
+                parent_fd,
+                predecessor_name,
+                predecessor,
+                f"metadata predecessor recovery {path}",
+                mutation_guard,
+            )
+            predecessor.close()
+            predecessor = None
+            authenticate_completed_target(final_mode)
+            unlink_bound_deterministic_recovery(
+                parent_fd,
+                temporary_name,
+                replacement,
+                f"metadata replacement {path}",
+                mutation_guard,
+            )
+            replacement.close()
+            replacement = None
+            authenticate_completed_target(final_mode)
+            return
+
+        try:
+            quarantine_bound_predecessor(
+                parent_fd,
+                temporary_name,
+                initial,
+                parent,
+                parent_profile,
+                path,
+                f"metadata predecessor {path}",
+                retained=((
+                    path.name,
+                    replacement,
+                    f"metadata replacement {path}",
+                ),),
+            )
+        except BaseException as error:
+            try:
+                fsync_and_reauthenticate_entries(
+                    parent_fd,
+                    (temporary_name, path.name),
+                    f"metadata replacement {path} failed predecessor retirement",
+                )
+            except BaseException as durable_error:
+                raise ValueError(
+                    f"metadata replacement recovery state is not "
+                    f"durably authenticated: {path}"
+                ) from durable_error
+            if isinstance(error, MutationAuthorityError):
+                raise
+            try:
+                mutation_guard()
+            except MutationAuthorityError as authority_error:
+                raise authority_error from error
+            raise ValueError(
+                f"{error}; metadata replacement durable forward recovery "
+                f"state was preserved: {path}"
+            ) from error
+        mutation_guard()
+        replacement.assert_bound(
+            parent_fd, path.name, f"metadata replacement {path}"
+        )
     finally:
+        if predecessor is not None:
+            predecessor.close()
         if replacement is not None:
             replacement.close()
         if initial is not None:
@@ -3948,6 +5045,189 @@ def validate_f116_source_archive_checksum_ledger(
     return ledger
 
 
+def require_authenticated_f116_source_authority_staging(
+    source_transactions: Path,
+) -> None:
+    """Classify post-commit source-authority containers as non-authoritative debris.
+
+    The immutable public F116 authority is authenticated before this function
+    runs.  Retained transaction contents therefore have no authority and are
+    never opened or interpreted here; only the transaction-root and its
+    direct-child container profiles remain security boundaries.
+    """
+
+    source_transactions = source_transactions.absolute()
+    label = "F116 source-authority recovery-debris root"
+    require_owner_symlink_free_path(source_transactions.parent, label)
+    try:
+        source_transactions.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise ValueError(f"{label} is unavailable: {source_transactions}") from error
+    require_owner_symlink_free_path(source_transactions, label)
+    try:
+        descriptor = os.open(
+            source_transactions,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+        )
+    except OSError as error:
+        raise ValueError(f"{label} is unavailable: {source_transactions}") from error
+    retained_transactions: list[tuple[str, int, os.stat_result]] = []
+    retained_forensics: list[tuple[str, os.stat_result]] = []
+    regular_forensics: list[tuple[str, os.stat_result]] = []
+    try:
+        root_profile = require_directory_descriptor_binding(
+            source_transactions, descriptor, label
+        )
+        if (
+            root_profile.st_uid != os.geteuid()
+            or stat.S_IMODE(root_profile.st_mode) & 0o022
+        ):
+            raise ValueError(f"{label} is not an owner-controlled directory")
+        transaction_names, _ = stable_bound_directory_entries(
+            source_transactions, descriptor, root_profile, label
+        )
+        for transaction_name in transaction_names:
+            if F116_SOURCE_AUTHORITY_FORENSIC_ENTRY_PATTERN.fullmatch(
+                transaction_name
+            ) is not None:
+                forensic_label = f"{label} forensic entry {transaction_name}"
+                try:
+                    forensic_profile = os.stat(
+                        transaction_name,
+                        dir_fd=descriptor,
+                        follow_symlinks=False,
+                    )
+                except OSError as error:
+                    raise ValueError(f"{forensic_label} is unavailable") from error
+                forensic_mode = stat.S_IMODE(forensic_profile.st_mode)
+                if stat.S_ISREG(forensic_profile.st_mode):
+                    if (
+                        forensic_profile.st_uid != os.geteuid()
+                        or forensic_profile.st_nlink not in {1, 2}
+                        or forensic_mode & 0o022
+                    ):
+                        raise ValueError(f"{forensic_label} profile differs")
+                    regular_forensics.append(
+                        (transaction_name, forensic_profile)
+                    )
+                elif stat.S_ISDIR(forensic_profile.st_mode):
+                    if (
+                        forensic_profile.st_uid != os.geteuid()
+                        or forensic_mode & 0o022
+                    ):
+                        raise ValueError(f"{forensic_label} profile differs")
+                else:
+                    raise ValueError(f"{forensic_label} has an invalid type")
+                retained_forensics.append((transaction_name, forensic_profile))
+                continue
+            transaction_id = transaction_name
+            if transaction_name.endswith(F116_SOURCE_AUTHORITY_STAGING_SUFFIX):
+                transaction_id = transaction_name.removesuffix(
+                    F116_SOURCE_AUTHORITY_STAGING_SUFFIX
+                )
+            elif transaction_name.endswith(F116_SOURCE_AUTHORITY_RETIRED_SUFFIX):
+                transaction_id = transaction_name.removesuffix(
+                    F116_SOURCE_AUTHORITY_RETIRED_SUFFIX
+                )
+            if (
+                F116_SOURCE_AUTHORITY_TRANSACTION_ID_PATTERN.fullmatch(transaction_id)
+                is None
+            ):
+                raise ValueError(f"{label} contains a malformed transaction")
+            transaction_label = "non-authoritative F116 source-authority transaction debris"
+            try:
+                transaction_descriptor = os.open(
+                    transaction_name,
+                    os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=descriptor,
+                )
+            except OSError as error:
+                raise ValueError(f"{transaction_label} is unavailable") from error
+            try:
+                transaction_profile = os.fstat(transaction_descriptor)
+                retained_mode = stat.S_IMODE(transaction_profile.st_mode)
+                if (
+                    not stat.S_ISDIR(transaction_profile.st_mode)
+                    or transaction_profile.st_uid != os.geteuid()
+                    or retained_mode not in {0o700, 0o700 | stat.S_ISGID}
+                ):
+                    raise ValueError(f"{transaction_label} profile differs")
+                require_bound_directory_entry(
+                    descriptor,
+                    transaction_name,
+                    transaction_descriptor,
+                    transaction_profile,
+                    transaction_label,
+                )
+                retained_transactions.append(
+                    (transaction_name, transaction_descriptor, transaction_profile)
+                )
+                transaction_descriptor = None
+            finally:
+                if transaction_descriptor is not None:
+                    os.close(transaction_descriptor)
+        for forensic_name, forensic_profile in regular_forensics:
+            if forensic_profile.st_nlink == 2 and sum(
+                profile_identity(other_profile) == profile_identity(forensic_profile)
+                for _other_name, other_profile in regular_forensics
+            ) != 2:
+                raise ValueError(
+                    f"{label} forensic entry {forensic_name} has an external "
+                    "retained hardlink"
+                )
+        retained_names, _ = stable_bound_directory_entries(
+            source_transactions, descriptor, root_profile, label
+        )
+        if retained_names != transaction_names:
+            raise ValueError(f"{label} changed during authentication")
+        for transaction_name, transaction_descriptor, transaction_profile in (
+            retained_transactions
+        ):
+            require_bound_directory_entry(
+                descriptor,
+                transaction_name,
+                transaction_descriptor,
+                transaction_profile,
+                "non-authoritative F116 source-authority transaction debris",
+            )
+        for forensic_name, forensic_profile in retained_forensics:
+            try:
+                retained_profile = os.stat(
+                    forensic_name,
+                    dir_fd=descriptor,
+                    follow_symlinks=False,
+                )
+            except OSError as error:
+                raise ValueError(
+                    f"{label} forensic entry {forensic_name} changed"
+                ) from error
+            if stat.S_ISREG(forensic_profile.st_mode):
+                if (
+                    not stat.S_ISREG(retained_profile.st_mode)
+                    or regular_file_stable_identity(retained_profile)
+                    != regular_file_stable_identity(forensic_profile)
+                ):
+                    raise ValueError(
+                        f"{label} forensic entry {forensic_name} changed"
+                    )
+            elif (
+                not stat.S_ISDIR(retained_profile.st_mode)
+                or profile_identity(retained_profile) != profile_identity(forensic_profile)
+                or directory_security_identity(retained_profile)
+                != directory_security_identity(forensic_profile)
+            ):
+                raise ValueError(f"{label} forensic entry {forensic_name} changed")
+    finally:
+        for _name, transaction_descriptor, _profile in retained_transactions:
+            try:
+                os.close(transaction_descriptor)
+            except OSError:
+                pass
+        os.close(descriptor)
+
+
 def require_current_source_authority_for_prepare(
     paths: dict[str, Path],
     *,
@@ -3990,13 +5270,6 @@ def require_current_source_authority_for_prepare(
             "sha256": R03_F115_PLASMA_REVIEW_SHA256,
         },
     }
-    source_transactions = (
-        root / "accounting"
-        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_source_authority_transactions"
-    )
-    require_empty_transaction_directory(
-        source_transactions, "F116 source-authority transaction store"
-    )
     fixed_paths = {
         "evidence": root / F116_CURRENT_SOURCE_AUTHORITY_RELATIVE,
         "provenance_review": root / F116_PROVENANCE_REVIEW_RELATIVE,
@@ -4490,6 +5763,10 @@ def require_current_source_authority_for_prepare(
         or F116_CORRUPT_C7_NAME in ledger
     ):
         raise ValueError("F116 source-archive checksum ledger authority differs")
+    require_authenticated_f116_source_authority_staging(
+        root / "accounting"
+        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_source_authority_transactions",
+    )
     return {
         "checkpoint": "F-116",
         "evidence": {
@@ -4633,18 +5910,22 @@ def require_clean_r17_predecessor_state(
     reservations: list[dict[str, object]],
     *,
     excluded_manifest_path: Path | None = None,
+    source_authority_transactions_authenticated: bool = False,
 ) -> tuple[str, list[dict[str, str]]]:
     """Require a drained exact-t10 R02-R16 barrier and return its bindings."""
 
     if active_reservations(reservations):
         raise ValueError("R17 preparation requires zero active Stage I reservations")
-    transaction_roots = (
+    transaction_roots = [
         paths["transactions"],
         paths["accounting"]
         / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_recost_transactions",
-        paths["accounting"]
-        / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_source_authority_transactions",
-    )
+    ]
+    if not source_authority_transactions_authenticated:
+        transaction_roots.append(
+            paths["accounting"]
+            / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_source_authority_transactions"
+        )
     for path in transaction_roots:
         require_empty_transaction_directory(path, "R17 preparation transaction store")
     lineages = current_r17_lineages(paths)
@@ -6786,11 +8067,20 @@ def require_r17_readiness_for_prepare(
     now = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
     if excluded_manifest_path is None:
         lineage_sha, manifest_bindings = require_clean_r17_predecessor_state(
-            paths, reservations
+            paths,
+            reservations,
+            source_authority_transactions_authenticated=(
+                current_source_authority is not None
+            ),
         )
     else:
         lineage_sha, manifest_bindings = require_clean_r17_predecessor_state(
-            paths, reservations, excluded_manifest_path=excluded_manifest_path
+            paths,
+            reservations,
+            excluded_manifest_path=excluded_manifest_path,
+            source_authority_transactions_authenticated=(
+                current_source_authority is not None
+            ),
         )
     if reservation_snapshot_sha256 is None:
         reservation_snapshot_sha256 = sha256(paths["reservations"])
@@ -7454,13 +8744,13 @@ def transaction_store_entries(paths: dict[str, Path]) -> list[str]:
         entries, _scan_profile = stable_bound_directory_entries(
             directory, directory_fd, directory_profile, label
         )
-        temporaries = [
+        temporaries = {
             name for name in entries
             if transaction_metadata_temporary_target(name) is not None
-        ]
+        }
         if temporaries:
             require_canonical_mutation_lock(directory)
-        for name in temporaries:
+        for name in sorted(temporaries):
             target = transaction_metadata_temporary_target(name)
             if target is None:
                 raise ValueError(f"{label} temporary identity changed")

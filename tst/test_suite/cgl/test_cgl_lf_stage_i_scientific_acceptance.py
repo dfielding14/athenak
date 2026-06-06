@@ -174,10 +174,27 @@ def build_case_bundle(
     return bundle_path
 
 
-def test_preregistered_criteria_bind_final_utility_but_remain_pending(policy):
-    assert policy["review_status"] == "changes_required"
-    assert policy["approved"] is False
-    assert policy["review"]["reviews"] == []
+def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy):
+    assert policy["review_status"] == "approved"
+    assert policy["approved"] is True
+    assert policy["review"]["reviews"] == [
+        {
+            "role": "plasma_physics",
+            "reviewer_id": "019e9a8d-253b-7010-b156-676866801f3c",
+            "decision": "approved",
+            "independent_of_implementation": True,
+        },
+        {
+            "role": "statistical_methodology",
+            "reviewer_id": "019e9ae1-d8c6-7861-9bbb-69e2cc97ba6f",
+            "decision": "approved",
+            "independent_of_implementation": True,
+        },
+    ]
+    assert policy["review"]["method_revision"]["candidate_status"] == (
+        "approved_by_independent_plasma_and_statistical_review"
+    )
+    assert policy["review"]["remaining_review_requirements"] == []
     utility_sha = acceptance.regular_file_binding(UTILITY, "utility")["sha256"]
     assert policy["criteria"]["source_bindings"]["acceptance_utility"]["sha256"] == utility_sha
     assert policy["review"]["acceptance_utility"]["sha256"] == utility_sha
@@ -187,13 +204,51 @@ def test_preregistered_criteria_bind_final_utility_but_remain_pending(policy):
     ]
     assert policy["criteria"]["statistics_policy"]["minimum_independent_time_blocks"] == {
         "full": 3.0,
-        "half": 1.5,
+        "comparison": 2.0,
     }
     assert policy["criteria"]["analysis_windows"] == {
         "full": [4.0, 10.0],
-        "early": [4.0, 7.0],
-        "late": [7.0, 10.0],
+        "early": [4.0, 8.0],
+        "late": [6.0, 10.0],
     }
+    change = policy["criteria"]["criteria_change_record"]
+    assert change["change_id"] == "physical-time-stationarity-r03-r17-v3"
+    assert change["previous_policy"]["minimum_independent_time_blocks"] == {
+        "full": 3.0,
+        "half": 1.5,
+    }
+    assert change["review_disposition"] == (
+        "approved_by_independent_plasma_and_statistical_review"
+    )
+    assert policy["criteria"]["extension_policy"]["forbidden_after_results"] == [
+        "relax thresholds",
+        "move the analysis windows",
+        "move the convergence interval",
+        "drop failed admitted products",
+        "reclassify failed or inconclusive gates as passed",
+        "use any family, panel, convergence, CT, or product gate as an extension trigger",
+        "use a passed or failed stationarity gate as an extension trigger",
+    ]
+    assert policy["criteria"]["extension_policy"]["current_policy_authorizes_extension"] is False
+    assert policy["criteria"]["extension_policy"]["prospective_extension_rule"][
+        "analysis_windows"
+    ] == {
+        "full": [6.0, 12.0],
+        "early": [6.0, 10.0],
+        "late": [8.0, 12.0],
+    }
+    assert policy["criteria"]["extension_policy"]["prospective_extension_rule"][
+        "maximum_extensions"
+    ] == 1
+    assert policy["criteria"]["extension_policy"]["prospective_extension_rule"][
+        "fixed_combination_rule"
+    ]["eligible_t10_gate_result"] == "inconclusive"
+    assert policy["criteria"]["statistics_policy"]["stationarity_contrast"] == (
+        "paired-physical-time-early-minus-late-effect-size-with-descriptive-bootstrap"
+    )
+    assert "median_cadence_upper_relative_tolerance" not in policy["criteria"][
+        "statistics_policy"
+    ]["gap_policy"]
     assert policy["criteria"]["scientific_products_policy"]["reviewed_generator_binding"][
         "status"
     ] == "unavailable_pending_companion_generator"
@@ -207,28 +262,69 @@ def test_preregistered_criteria_bind_final_utility_but_remain_pending(policy):
     evidence = acceptance.validate_criteria_evidence(policy)
     acceptance.verify_evidence_digest(evidence, "criteria validation")
     assert evidence["valid"] is True
-    assert evidence["independent_review_complete"] is False
+    assert evidence["independent_review_complete"] is True
 
 
-def test_approved_review_schema_requires_declared_independence(policy):
+def test_approved_review_schema_requires_exact_completed_reviews(policy):
     review = deepcopy(policy["review"])
-    review["review_status"] = "approved"
-    review["reviews"] = [
-        {
-            "role": "plasma_physics",
-            "reviewer_id": "reviewer-a",
-            "decision": "approved",
-        },
-        {
-            "role": "statistical_methodology",
-            "reviewer_id": "reviewer-b",
-            "decision": "approved",
-        },
-    ]
-    with pytest.raises(acceptance.AcceptanceError, match="reviewer is malformed"):
+    review["reviews"][0]["independent_of_implementation"] = False
+    with pytest.raises(acceptance.AcceptanceError, match="reviewer records are incoherent"):
         acceptance.validate_criteria_review(
             review,
             policy["review_binding"],
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
+def test_approved_review_schema_rejects_nonminimal_reviewer_record(policy):
+    review = deepcopy(policy["review"])
+    review["reviews"][0]["review_note"] = "not part of the approved minimal record"
+    with pytest.raises(acceptance.AcceptanceError, match="reviewer records are incoherent"):
+        acceptance.validate_criteria_review(
+            review,
+            policy["review_binding"],
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("review_status", "changes_required", "criteria disposition are incoherent"),
+        (
+            "candidate_status",
+            "ready_for_independent_plasma_and_statistical_review",
+            "method revision differs",
+        ),
+        (
+            "remaining_review_requirements",
+            ["review still required"],
+            "remaining requirements are incoherent",
+        ),
+        (
+            "required_review_roles",
+            ["plasma_physics"],
+            "required roles differ",
+        ),
+    ],
+)
+def test_approved_review_rejects_incoherent_status_dependent_state(
+    policy, field, value, match
+):
+    review = deepcopy(policy["review"])
+    if field == "candidate_status":
+        review["method_revision"][field] = value
+    else:
+        review[field] = value
+    with pytest.raises(acceptance.AcceptanceError, match=match):
+        acceptance.validate_criteria_review(
+            review,
+            policy["review_binding"],
+            policy["criteria"],
             policy["criteria_binding"],
             policy["verified_sources"]["acceptance_utility"],
         )
@@ -301,17 +397,164 @@ def test_gap_aware_sampling_rejects_sparse_physical_time_and_caps_independence()
     assert sparse["maximum_gap"] > sparse["maximum_allowed_gap"]
 
 
-def test_effective_sample_estimator_detects_correlation():
+def test_gap_adequacy_is_invariant_to_redundant_clustered_samples():
+    policy = {
+        "replicates": 40,
+        "minimum_block_duration": 2.0,
+        "expected_cadence": 0.4,
+    }
+    accepted_times = [float(index) for index in range(7)]
+    accepted_values = [math.sin(time) for time in accepted_times]
+    accepted_clustered_times = sorted({
+        *accepted_times,
+        *(2.0 + 0.001 * index for index in range(1, 500)),
+    })
+    accepted_clustered_values = [
+        acceptance.interpolate_at(accepted_times, accepted_values, time)
+        for time in accepted_clustered_times
+    ]
+    accepted = acceptance.window_statistics(
+        accepted_times,
+        accepted_values,
+        0.0,
+        6.0,
+        seed_text="accepted-gap-base",
+        **policy,
+    )
+    accepted_clustered = acceptance.window_statistics(
+        accepted_clustered_times,
+        accepted_clustered_values,
+        0.0,
+        6.0,
+        seed_text="accepted-gap-clustered",
+        **policy,
+    )
+    assert accepted["gap_adequacy"] == accepted_clustered["gap_adequacy"] == "pass"
+    assert accepted["maximum_gap"] == accepted_clustered["maximum_gap"]
+    assert accepted["physical_time_coverage_fraction"] == pytest.approx(
+        accepted_clustered["physical_time_coverage_fraction"]
+    )
+    assert accepted["descriptive_median_cadence"] != accepted_clustered[
+        "descriptive_median_cadence"
+    ]
+
+    sparse_times = [0.0, 0.5, 3.0, 3.5, 6.0]
+    sparse_values = [math.cos(time) for time in sparse_times]
+    sparse_clustered_times = sorted({
+        *sparse_times,
+        *(0.001 * index for index in range(1, 500)),
+    })
+    sparse_clustered_values = [
+        acceptance.interpolate_at(sparse_times, sparse_values, time)
+        for time in sparse_clustered_times
+    ]
+    sparse = acceptance.window_statistics(
+        sparse_times,
+        sparse_values,
+        0.0,
+        6.0,
+        seed_text="sparse-gap-base",
+        **policy,
+    )
+    sparse_clustered = acceptance.window_statistics(
+        sparse_clustered_times,
+        sparse_clustered_values,
+        0.0,
+        6.0,
+        seed_text="sparse-gap-clustered",
+        **policy,
+    )
+    assert sparse["gap_adequacy"] == sparse_clustered["gap_adequacy"] == "inconclusive"
+    assert sparse["maximum_gap"] == sparse_clustered["maximum_gap"]
+    assert sparse["physical_time_coverage_fraction"] == pytest.approx(
+        sparse_clustered["physical_time_coverage_fraction"]
+    )
+
+
+def test_physical_time_effective_sample_estimator_detects_correlation():
+    times = [0.25 * index for index in range(20)]
     independent = [(-1.0) ** index for index in range(20)]
     correlated = [0.0] * 10 + [1.0] * 10
-    independent_neff, _ = acceptance.effective_sample_size(independent)
-    correlated_neff, _ = acceptance.effective_sample_size(correlated)
+    independent_neff, _ = acceptance.effective_sample_size(times, independent, 0.25)
+    correlated_neff, _ = acceptance.effective_sample_size(times, correlated, 0.25)
     assert independent_neff > correlated_neff
+
+
+def test_physical_time_ess_treats_roundoff_scale_constant_series_as_constant():
+    times = [0.25 * index for index in range(25)]
+    values = [0.2] * len(times)
+    neff, duration = acceptance.effective_sample_size(times, values, 0.25)
+    assert duration == pytest.approx(0.25)
+    assert neff == pytest.approx(24.0)
+
+
+def test_physical_time_ess_is_invariant_to_adversarial_clustered_sampling():
+    base_times = [float(index) for index in range(7)]
+    base_values = [0.0, 1.0, 0.5, -0.5, -1.0, 0.0, 0.5]
+    clustered_times = sorted({
+        *base_times,
+        *(0.001 * index for index in range(1, 500)),
+        *(4.0 + 0.001 * index for index in range(1, 500)),
+    })
+    clustered_values = [
+        acceptance.interpolate_at(base_times, base_values, time)
+        for time in clustered_times
+    ]
+
+    base_neff, base_duration = acceptance.effective_sample_size(
+        base_times, base_values, 0.25
+    )
+    clustered_neff, clustered_duration = acceptance.effective_sample_size(
+        clustered_times, clustered_values, 0.25
+    )
+
+    assert clustered_neff == pytest.approx(base_neff, rel=1.0e-11, abs=1.0e-11)
+    assert clustered_duration == pytest.approx(
+        base_duration, rel=1.0e-11, abs=1.0e-11
+    )
+
+
+def test_paired_physical_time_contrast_is_invariant_to_clustered_sampling():
+    base_times = [float(index) for index in range(11)]
+    base_values = [math.sin(0.7 * time) for time in base_times]
+    clustered_times = sorted({
+        *base_times,
+        *(4.0 + 0.002 * index for index in range(1, 500)),
+        *(6.0 + 0.002 * index for index in range(1, 500)),
+    })
+    clustered_values = [
+        acceptance.interpolate_at(base_times, base_values, time)
+        for time in clustered_times
+    ]
+    arguments = {
+        "early_start": 4.0,
+        "early_end": 8.0,
+        "late_start": 6.0,
+        "late_end": 10.0,
+        "replicates": 120,
+        "seed_text": "paired-cluster-invariance",
+        "block_duration": 2.0,
+    }
+
+    base = acceptance.paired_window_contrast(base_times, base_values, **arguments)
+    clustered = acceptance.paired_window_contrast(
+        clustered_times, clustered_values, **arguments
+    )
+
+    assert clustered["signed_early_minus_late"] == pytest.approx(
+        base["signed_early_minus_late"], rel=1.0e-12, abs=1.0e-12
+    )
+    assert clustered["standard_error"] == pytest.approx(
+        base["standard_error"], rel=1.0e-11, abs=1.0e-11
+    )
 
 
 def test_stationarity_fails_large_resolved_half_window_drift():
     policy = {
-        "z_lte": 3.0,
+        "decision_authority": (
+            "paired physical-time early-minus-late effect size only; moving-block "
+            "bootstrap uncertainty is descriptive and never pass/fail authority"
+        ),
         "scalar_relative_change_lte": 0.25,
         "occupancy_absolute_change_lte": 0.002,
         "forcing_power_relative_change_lte": 0.1,
@@ -320,11 +563,243 @@ def test_stationarity_fails_large_resolved_half_window_drift():
         {"mean": 1.0},
         {"mean": 0.5, "standard_error": 0.01},
         {"mean": 1.5, "standard_error": 0.01},
+        {
+            "signed_early_minus_late": -1.0,
+            "standard_error": 0.01,
+            "confidence_interval_95": [-1.02, -0.98],
+            "method": {"contrast": "fixture-paired"},
+        },
         "scalar",
         policy,
     )
     assert result["result"] == "fail"
-    assert result["z_score"] > 3.0
+    assert result["descriptive_bootstrap"]["z_score"] > 3.0
+    assert result["descriptive_bootstrap"]["inferential_authority"] is False
+
+
+def test_forcing_power_stationarity_ignores_descriptive_bootstrap_significance():
+    policy = {
+        "decision_authority": (
+            "paired physical-time early-minus-late effect size only; moving-block "
+            "bootstrap uncertainty is descriptive and never pass/fail authority"
+        ),
+        "scalar_relative_change_lte": 0.25,
+        "occupancy_absolute_change_lte": 0.002,
+        "forcing_power_relative_change_lte": 0.1,
+    }
+    result = acceptance.stationarity_result(
+        {"mean": 1.0},
+        {"mean": 1.0},
+        {"mean": 1.05},
+        {
+            "signed_early_minus_late": -0.05,
+            "standard_error": 0.001,
+            "confidence_interval_95": [-0.052, -0.048],
+            "method": {"contrast": "fixture-paired"},
+        },
+        "forcing_power",
+        policy,
+    )
+    assert result["relative_change"] < 0.1
+    assert result["descriptive_bootstrap"]["z_score"] > 3.0
+    assert result["result"] == "pass"
+
+    failed = acceptance.stationarity_result(
+        {"mean": 1.0},
+        {"mean": 1.0},
+        {"mean": 1.2},
+        {
+            "signed_early_minus_late": -0.2,
+            "standard_error": 10.0,
+            "confidence_interval_95": [-20.0, 20.0],
+            "method": {"contrast": "fixture-paired"},
+        },
+        "forcing_power",
+        policy,
+    )
+    assert failed["descriptive_bootstrap"]["z_score"] < 3.0
+    assert failed["result"] == "fail"
+
+
+def test_extension_nomination_uses_only_frozen_stationarity_triggers(policy):
+    passing = acceptance.gate(
+        "stationarity:kinetic",
+        "pass",
+        reason="fixture",
+        observations={
+            "sampling_adequacy": "pass",
+            "stationarity": {"result": "pass"},
+        },
+    )
+    failing = acceptance.gate(
+        "stationarity:force_power",
+        "fail",
+        reason="fixture",
+        observations={
+            "sampling_adequacy": "pass",
+            "stationarity": {"result": "fail"},
+        },
+    )
+    inconclusive = acceptance.gate(
+        "stationarity:magnetic",
+        "inconclusive",
+        reason="fixture",
+        observations={
+            "sampling_adequacy": "inconclusive",
+            "stationarity": {"result": "pass"},
+        },
+    )
+    assessment = acceptance.extension_assessment(
+        policy["criteria"], [passing, failing, inconclusive], "inconclusive"
+    )
+    assert assessment["triggered"] is True
+    assert assessment["triggered_by"] == [
+        {
+            "gate": "stationarity:magnetic",
+            "trigger": "sampling_adequacy=inconclusive",
+        }
+    ]
+    assert assessment["current_policy_authorizes_extension"] is False
+    assert assessment["preserved_t10_result"] == "inconclusive"
+    assert assessment["prospective_extension_rule"]["nominated_endpoint"] == 12.0
+    terminal = acceptance.extension_assessment(
+        policy["criteria"], [inconclusive], "fail"
+    )
+    assert terminal["triggered"] is False
+    assert terminal["preserved_t10_result"] == "fail"
+
+
+def test_prospective_extension_artifact_binds_replayed_preserved_t10_evidence(
+    fast_policy, tmp_path
+):
+    mhd, user = histories(tmp_path / "history")
+    retained_times = {3.5, 4.0, 4.25, 4.5, 6.0, 6.25, 6.5, 8.0, 8.25, 8.5, 10.0}
+    for path, label in ((mhd, "MHD"), (user, "user")):
+        history, _ = acceptance.load_history(path, f"fixture {label} history")
+        indices = [
+            index for index, time in enumerate(history["time"])
+            if time in retained_times
+        ]
+        write_history(path, {
+            name: [values[index] for index in indices]
+            for name, values in history.items()
+        })
+    bundle = build_case_bundle(fast_policy, tmp_path, "R14", mhd, user)
+    preserved = acceptance.evaluate_case(
+        fast_policy, "R14", mhd, user, None, None, bundle
+    )
+    assert preserved["extension_assessment"]["triggered"] is True
+    prospective = fast_policy["criteria"]["extension_policy"][
+        "prospective_extension_rule"
+    ]
+    artifact = acceptance.seal_evidence({
+        "schema_version": 1,
+        "record_type": prospective["required_prospective_artifact"]["record_type"],
+        "authority": "non-authorizing-prospective-scientific-extension-policy",
+        "non_authorizing_statement": acceptance.NON_AUTHORIZING_STATEMENT,
+        "release_authorizing": False,
+        "approval": {
+            "status": "approved",
+            "approved_before_extension_execution": True,
+            "independent_of_t10_assessment": True,
+            "reviewer_id": "independent-statistical-reviewer",
+        },
+        "bindings": {
+            "preserved_t10_case_evidence_sha256": preserved["evidence_digest"]["sha256"],
+            "criteria_sha256": fast_policy["criteria_binding"]["sha256"],
+            "acceptance_utility_sha256": fast_policy["verified_sources"][
+                "acceptance_utility"
+            ]["sha256"],
+        },
+        "nominated_stationarity_gates": [
+            item["gate"] for item in preserved["extension_assessment"]["triggered_by"]
+        ],
+        "prospective_extension_rule": prospective,
+    })
+    assert acceptance.validate_prospective_extension_artifact(
+        fast_policy, preserved, artifact
+    ) == artifact
+
+    forged = deepcopy(artifact)
+    forged["bindings"]["preserved_t10_case_evidence_sha256"] = "0" * 64
+    forged = acceptance.seal_evidence({key: value for key, value in forged.items()
+                                       if key != "evidence_digest"})
+    with pytest.raises(acceptance.AcceptanceError, match="exact preserved t<=10 evidence"):
+        acceptance.validate_prospective_extension_artifact(
+            fast_policy, preserved, forged
+        )
+
+    changed_rule = deepcopy(artifact)
+    changed_rule["prospective_extension_rule"]["fixed_combination_rule"][
+        "extension_pass"
+    ] = "replace every t<=10 result"
+    changed_rule = acceptance.seal_evidence({
+        key: value for key, value in changed_rule.items() if key != "evidence_digest"
+    })
+    with pytest.raises(acceptance.AcceptanceError, match="contract differs"):
+        acceptance.validate_prospective_extension_artifact(
+            fast_policy, preserved, changed_rule
+        )
+
+    terminal = deepcopy(preserved)
+    terminal["result"] = "fail"
+    terminal["extension_assessment"]["preserved_t10_result"] = "fail"
+    terminal = acceptance.seal_evidence({
+        key: value for key, value in terminal.items() if key != "evidence_digest"
+    })
+    with pytest.raises(acceptance.AcceptanceError, match="semantic contents differ"):
+        acceptance.validate_prospective_extension_artifact(
+            fast_policy, terminal, artifact
+        )
+
+
+def test_prospective_extension_rejects_self_digested_minimal_case(policy):
+    prospective = policy["criteria"]["extension_policy"]["prospective_extension_rule"]
+    fabricated = acceptance.seal_evidence({
+        "schema_version": 1,
+        "record_type": "stage-i-scientific-case-evidence",
+        "result": "inconclusive",
+        "extension_assessment": {
+            "decision_time": 10.0,
+            "preserved_t10_result": "inconclusive",
+            "triggered": True,
+            "triggered_by": [{
+                "gate": "stationarity:magnetic",
+                "trigger": "sampling_adequacy=inconclusive",
+            }],
+            "current_policy_authorizes_extension": False,
+            "prospective_extension_rule": prospective,
+        },
+    })
+    artifact = acceptance.seal_evidence({
+        "schema_version": 1,
+        "record_type": prospective["required_prospective_artifact"]["record_type"],
+        "authority": "non-authorizing-prospective-scientific-extension-policy",
+        "non_authorizing_statement": acceptance.NON_AUTHORIZING_STATEMENT,
+        "release_authorizing": False,
+        "approval": {
+            "status": "approved",
+            "approved_before_extension_execution": True,
+            "independent_of_t10_assessment": True,
+            "reviewer_id": "fabricated-reviewer",
+        },
+        "bindings": {
+            "preserved_t10_case_evidence_sha256": fabricated["evidence_digest"]["sha256"],
+            "criteria_sha256": policy["criteria_binding"]["sha256"],
+            "acceptance_utility_sha256": policy["verified_sources"][
+                "acceptance_utility"
+            ]["sha256"],
+        },
+        "nominated_stationarity_gates": ["stationarity:magnetic"],
+        "prospective_extension_rule": prospective,
+    })
+    with pytest.raises(
+        acceptance.AcceptanceError,
+        match="provenance|evaluation_inputs",
+    ):
+        acceptance.validate_prospective_extension_artifact(
+            policy, fabricated, artifact
+        )
 
 
 def test_case_authenticates_bundle_and_uses_forcing_tcorr_but_missing_products_never_pass(
@@ -346,7 +821,13 @@ def test_case_authenticates_bundle_and_uses_forcing_tcorr_but_missing_products_n
     assert gates["stationarity:kinetic"]["result"] == "pass"
     assert evidence["metrics"]["kinetic"]["full"]["method"]["minimum_block_duration"] == 2.0
     assert evidence["metrics"]["kinetic"]["full"]["independent_time_block_count"] == 3.0
-    assert evidence["metrics"]["kinetic"]["early"]["independent_time_block_count"] == 1.5
+    assert evidence["metrics"]["kinetic"]["early"]["independent_time_block_count"] == 2.0
+    assert evidence["metrics"]["kinetic"]["late"]["independent_time_block_count"] == 2.0
+    assert evidence["metrics"]["force_power"]["stationarity"][
+        "paired_contrast_method"
+    ]["contrast"] == "paired-piecewise-linear-early-minus-late"
+    assert evidence["extension_assessment"]["triggered"] is False
+    assert evidence["extension_assessment"]["current_policy_authorizes_extension"] is False
     assert evidence["campaign_authority_eligible"] is False
     assert evidence["result"] == "inconclusive"
 
@@ -404,6 +885,28 @@ def test_source_archive_catalog_parser_rejects_malformed_or_duplicate_rows(
     )
     with pytest.raises(acceptance.AcceptanceError, match="catalog is malformed"):
         acceptance.source_archive_catalog(forged)
+
+
+def test_source_archive_catalog_reauthenticates_verified_bytes(policy, tmp_path):
+    catalog = tmp_path / "SHA256SUMS"
+    catalog.write_text(f"{'a' * 64}  first.bundle\n")
+    forged = deepcopy(policy)
+    forged["verified_sources"]["source_archive_catalog"] = (
+        acceptance.regular_file_binding(catalog, "source catalog")
+    )
+    catalog.write_text(f"{'b' * 64}  second.bundle\n")
+    with pytest.raises(acceptance.AcceptanceError, match="differs from the verified binding"):
+        acceptance.source_archive_catalog(forged)
+
+
+def test_sampling_feasibility_change_record_is_preregistered(policy):
+    forged = deepcopy(policy["criteria"])
+    forged["criteria_change_record"]["current_policy"]["analysis_windows"]["full"] = [
+        5.0,
+        10.0,
+    ]
+    with pytest.raises(acceptance.AcceptanceError, match="change record differs"):
+        acceptance.validate_criteria_payload(forged, policy["criteria_binding"])
 
 
 def diagnostics_contract(
@@ -596,6 +1099,7 @@ def test_analyzer_scalar_metrics_are_recomputed_from_raw_samples(fast_policy):
         replicates=80,
         seed_text=f"analyzer:peak_alignment:full:{fast_policy['criteria_binding']['sha256']}",
         minimum_block_duration=2.0,
+        expected_cadence=0.25,
     )
     metric = {
         "sample_times": times,
@@ -736,7 +1240,7 @@ def complete_case(case_id: str) -> dict[str, object]:
     }
 
 
-def test_campaign_pending_review_cannot_pass_even_with_all_apparent_case_passes(
+def test_campaign_approved_review_passes_but_other_authorities_still_block(
     fast_policy, tmp_path, monkeypatch
 ):
     paths: list[Path] = []
@@ -762,7 +1266,7 @@ def test_campaign_pending_review_cannot_pass_even_with_all_apparent_case_passes(
         gate for gate in campaign["gates"]
         if gate["name"] == "lf_strength_resolved_response"
     )
-    assert review_gate["result"] == "inconclusive"
+    assert review_gate["result"] == "pass"
     assert ["R06", "R02"] in [record["pair"] for record in lf_gate["observations"]]
     assert all(
         "missing_dependency" in record

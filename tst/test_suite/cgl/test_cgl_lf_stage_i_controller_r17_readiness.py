@@ -20,6 +20,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONTROLLER_PATH = REPO_ROOT / "scripts/frontier/cgl_lf_stage_i.py"
 QUALIFICATION_TEST_PATH = REPO_ROOT / "tst/test_suite/cgl/test_cgl_lf_stage_i_qualification.py"
+SOURCE_AUTHORITY_PATH = REPO_ROOT / "scripts/frontier/cgl_lf_stage_i_source_authority.py"
 EPOCH = "E03-forcing-policy"
 EPOCH_SLUG = "E03_forcing_policy"
 LIVE_FROZEN_E03_CLEAN_PARTIALS = (
@@ -55,6 +56,17 @@ R12_RETAINED_USER_PREFIX = """# Athena++ history data
 def load_controller():
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_controller_r17_readiness", CONTROLLER_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_source_authority():
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_source_authority_for_controller_parity",
+        SOURCE_AUTHORITY_PATH,
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -613,9 +625,14 @@ def make_f116_source_authority(module, paths: dict[str, Path], tmp_path: Path,
         }
         for relative, mode in sorted(module.F116_REQUIRED_TOOLS.items())
     ]
+    readme_before_payload = b"# Source archives\n"
+    sums_before_payload = (
+        f"{module.R03_F115_SOURCE_BUNDLE_SHA256}  "
+        f"{module.R03_F115_SOURCE_BUNDLE_RELATIVE.name}\n"
+    ).encode()
     before_catalog = {
-        "readme_sha256": "1" * 64,
-        "sha256sums_sha256": "2" * 64,
+        "readme_sha256": hashlib.sha256(readme_before_payload).hexdigest(),
+        "sha256sums_sha256": hashlib.sha256(sums_before_payload).hexdigest(),
         "bridge_listed": False,
         "final_bundle_listed": False,
         "corrupt_c7_listed": False,
@@ -871,7 +888,95 @@ def make_f116_source_authority(module, paths: dict[str, Path], tmp_path: Path,
             "sha256": helper_sha,
             "committed": True,
         },
+        "readme_before_payload": readme_before_payload,
+        "sums_before_payload": sums_before_payload,
     }
+
+
+def make_retained_f116_staging(module, paths: dict[str, Path],
+                               fixture: dict[str, object]) -> Path:
+    """Create one complete retained publisher staging bound to public F116."""
+
+    root = paths["root"]
+    evidence = json.loads(fixture["evidence"].read_text())
+    audit = json.loads(fixture["audit"].read_text())
+    transaction_id = "2026-06-05T120000+0000-" + "a" * 32
+    staging = (
+        paths["accounting"]
+        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+        / f"{transaction_id}.staging"
+    )
+    staging.mkdir(parents=True)
+    staging.chmod(0o700)
+    public_payloads = {
+        "bundle": fixture["bundle"].read_bytes(),
+        "evidence": fixture["evidence"].read_bytes(),
+        "provenance_review": (
+            root / module.F116_PROVENANCE_REVIEW_RELATIVE
+        ).read_bytes(),
+        "plasma_review": (
+            root / module.F116_PLASMA_REVIEW_RELATIVE
+        ).read_bytes(),
+        "audit": fixture["audit"].read_bytes(),
+        "readme_before": fixture["readme_before_payload"],
+        "sha256sums_before": fixture["sums_before_payload"],
+        "readme_after": (root / "source-archives/README.md").read_bytes(),
+        "sha256sums_after": fixture["sums"].read_bytes(),
+    }
+    bindings = {}
+    for key, (name, mode_text) in (
+        module.F116_SOURCE_AUTHORITY_TRANSACTION_PAYLOADS.items()
+    ):
+        path = staging / name
+        path.write_bytes(public_payloads[key])
+        path.chmod(int(mode_text, 8))
+        bindings[key] = {
+            "name": name,
+            "sha256": hashlib.sha256(public_payloads[key]).hexdigest(),
+            "mode": mode_text,
+        }
+    implementation = evidence["implementation"]
+    publisher = implementation["publisher"]
+    final = implementation["current_source_bundle"]
+    journal = {
+        "schema_version": 1,
+        "record_type": "stage-i-current-source-authority-publication-transaction",
+        "transaction_id": transaction_id,
+        "execution_epoch": EPOCH,
+        "checkpoint": "F-116",
+        "state": "staged",
+        "created_utc": evidence["generated_utc"],
+        "publisher": {
+            "revision": publisher["revision"],
+            "sha256": publisher["sha256"],
+        },
+        "candidate_paths": {
+            key: str((root / "candidates" / key).absolute())
+            for key in ("bundle", "evidence", "provenance_review", "plasma_review", "audit")
+        },
+        "expected": {
+            key: bindings[key]["sha256"]
+            for key in ("bundle", "evidence", "provenance_review", "plasma_review", "audit")
+        },
+        "payloads": bindings,
+        "targets": {
+            "bundle": final["path"],
+            "evidence": module.F116_CURRENT_SOURCE_AUTHORITY_RELATIVE.as_posix(),
+            "provenance_review": module.F116_PROVENANCE_REVIEW_RELATIVE.as_posix(),
+            "plasma_review": module.F116_PLASMA_REVIEW_RELATIVE.as_posix(),
+            "publication_audit": module.F116_PUBLICATION_AUDIT_RELATIVE.as_posix(),
+            "readme": "source-archives/README.md",
+            "sha256sums": "source-archives/SHA256SUMS",
+        },
+        "catalog_before": evidence["source_archive_catalog"]["before"],
+        "catalog_after": evidence["source_archive_catalog"]["after"],
+    }
+    write_json(staging / "journal.json", journal, mode=0o600)
+    recovery = staging / ".journal.json.recovery.tmp"
+    recovery.write_bytes((staging / "journal.json").read_bytes())
+    recovery.chmod(0o600)
+    assert audit["published_utc"] >= journal["created_utc"]
+    return staging
 
 
 def make_published_recost(module, root: Path, *, checkpoint: int = 200,
@@ -1232,7 +1337,7 @@ def gate_fixture(module, tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         module,
         "require_clean_r17_predecessor_state",
-        lambda _paths, _reservations: (lineage_sha, manifest_bindings),
+        lambda _paths, _reservations, **_kwargs: (lineage_sha, manifest_bindings),
     )
     monkeypatch.setattr(
         module,
@@ -1336,6 +1441,277 @@ def test_f116_current_tooling_authority_accepts_frozen_scientific_source(
         f"{fixture['revision'][:9]}.bundle"
     )
     assert fixture["revision"] != module.QUALIFIED_SOURCE_REVISION
+
+
+def test_f116_current_authority_accepts_canonical_retained_staging_after_public_auth(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
+    staging = make_retained_f116_staging(module, paths, fixture)
+    staging.parent.chmod(0o2755)
+    staging.chmod(0o2700)
+
+    retained = module.require_current_source_authority_for_prepare(
+        paths,
+        bundle_provenance=fixture["bundle_record"],
+        utility_provenance=fixture["utility"],
+        matrix_path=fixture["matrix"],
+        input_revision=module.QUALIFIED_SOURCE_REVISION,
+        offline_local_root=False,
+    )
+
+    assert retained == fixture["binding"]
+    assert staging.is_dir()
+
+
+def test_f116_current_authority_accepts_stale_complete_old_staging_debris(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
+    staging = make_retained_f116_staging(module, paths, fixture)
+    staging.parent.chmod(0o2755)
+    staging.chmod(0o2700)
+    stale = staging / "evidence.json"
+    stale.chmod(0o644)
+    stale.write_text('{"stale": "old F116 candidate"}\n')
+    stale.chmod(0o444)
+    write_json(staging / "journal.json", {"stale": "old transaction"}, mode=0o600)
+    (staging / ".journal.json.recovery.tmp").unlink()
+
+    retained = module.require_current_source_authority_for_prepare(
+        paths,
+        bundle_provenance=fixture["bundle_record"],
+        utility_provenance=fixture["utility"],
+        matrix_path=fixture["matrix"],
+        input_revision=module.QUALIFIED_SOURCE_REVISION,
+        offline_local_root=False,
+    )
+
+    assert retained == fixture["binding"]
+    assert not (staging / ".journal.json.recovery.tmp").exists()
+
+
+def test_f116_current_authority_accepts_incomplete_staging_debris(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
+    transactions = (
+        paths["accounting"]
+        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+    )
+    staging = transactions / f"2026-06-05T120000+0000-{'b' * 32}.staging"
+    staging.mkdir(parents=True)
+    transactions.chmod(0o2755)
+    staging.chmod(0o2700)
+    partial = staging / "journal.json"
+    partial.write_bytes(b'{"partial":')
+    partial.chmod(0o000)
+    (staging / "untrusted-content-link").symlink_to(tmp_path / "outside")
+
+    retained = module.require_current_source_authority_for_prepare(
+        paths,
+        bundle_provenance=fixture["bundle_record"],
+        utility_provenance=fixture["utility"],
+        matrix_path=fixture["matrix"],
+        input_revision=module.QUALIFIED_SOURCE_REVISION,
+        offline_local_root=False,
+    )
+
+    assert retained == fixture["binding"]
+    assert partial.is_file()
+    assert stat.S_IMODE(partial.stat().st_mode) == 0o000
+    assert (staging / "untrusted-content-link").is_symlink()
+
+
+def test_f116_source_authority_debris_classifier_acceptance_is_cross_tool_exact(
+    tmp_path,
+):
+    controller = load_controller()
+    source_authority = load_source_authority()
+    transactions = tmp_path / "source-authority-transactions"
+    transactions.mkdir()
+    transactions.chmod(0o2755)
+    transaction_id = "2026-06-05T120000+0000-"
+    for suffix, digit in (("", "a"), (".staging", "b"), (".retired", "c")):
+        transaction = transactions / f"{transaction_id}{digit * 32}{suffix}"
+        transaction.mkdir()
+        transaction.chmod(0o2700)
+        unreadable = transaction / "untrusted-content"
+        unreadable.write_bytes(b"not authoritative\n")
+        unreadable.chmod(0o000)
+        (transaction / "untrusted-link").symlink_to(tmp_path / "outside")
+
+    single = transactions / f".cgl-source-authority-retired-{'d' * 32}.forensic"
+    single.write_bytes(b"non-authoritative forensic bytes\n")
+    single.chmod(0o000)
+    paired_first = (
+        transactions / f".cgl-source-authority-retired-{'e' * 32}.forensic"
+    )
+    paired_second = (
+        transactions / f".cgl-source-authority-retired-{'f' * 32}.forensic"
+    )
+    paired_first.write_bytes(b"paired forensic bytes\n")
+    paired_first.chmod(0o400)
+    os.link(paired_first, paired_second)
+    directory = (
+        transactions
+        / f".cgl-source-authority-retired-directory-{'1' * 32}.forensic"
+    )
+    directory.mkdir()
+    directory.chmod(0o2755)
+    (directory / "untrusted-link").symlink_to(tmp_path / "outside")
+
+    source_authority.classify_non_authoritative_recovery_debris(
+        {"transactions": transactions}
+    )
+    controller.require_authenticated_f116_source_authority_staging(transactions)
+
+    assert single.stat().st_mode & 0o777 == 0o000
+    assert paired_first.stat().st_nlink == paired_second.stat().st_nlink == 2
+    assert (directory / "untrusted-link").is_symlink()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "malformed-directory",
+        "active-regular",
+        "active-symlink",
+        "unsafe-active-mode",
+        "forensic-symlink",
+        "unsafe-forensic-file",
+        "unsafe-forensic-directory",
+        "external-forensic-hardlink",
+    ),
+)
+def test_f116_source_authority_debris_classifier_rejection_is_cross_tool_exact(
+    tmp_path, mutation
+):
+    controller = load_controller()
+    source_authority = load_source_authority()
+    transactions = tmp_path / "source-authority-transactions"
+    transactions.mkdir()
+    transactions.chmod(0o2755)
+    transaction_id = f"2026-06-05T120000+0000-{'a' * 32}"
+    forensic = transactions / f".cgl-source-authority-retired-{'b' * 32}.forensic"
+    if mutation == "malformed-directory":
+        (transactions / "malformed.staging").mkdir()
+    elif mutation == "active-regular":
+        (transactions / transaction_id).write_text("not a directory\n")
+    elif mutation == "active-symlink":
+        outside = tmp_path / "outside-active"
+        outside.mkdir()
+        (transactions / f"{transaction_id}.staging").symlink_to(
+            outside, target_is_directory=True
+        )
+    elif mutation == "unsafe-active-mode":
+        active = transactions / f"{transaction_id}.retired"
+        active.mkdir()
+        active.chmod(0o770)
+    elif mutation == "forensic-symlink":
+        outside = tmp_path / "outside-forensic"
+        outside.write_text("outside\n")
+        forensic.symlink_to(outside)
+    elif mutation == "unsafe-forensic-file":
+        forensic.write_text("unsafe\n")
+        forensic.chmod(0o620)
+    elif mutation == "unsafe-forensic-directory":
+        forensic.mkdir()
+        forensic.chmod(0o720)
+    elif mutation == "external-forensic-hardlink":
+        outside = tmp_path / "external-forensic-hardlink"
+        outside.write_text("external link\n")
+        outside.chmod(0o600)
+        os.link(outside, forensic)
+
+    with pytest.raises(ValueError):
+        source_authority.classify_non_authoritative_recovery_debris(
+            {"transactions": transactions}
+        )
+    with pytest.raises(ValueError):
+        controller.require_authenticated_f116_source_authority_staging(transactions)
+
+
+def test_live_canonical_f116_source_authority_debris_classification_is_cross_tool_exact():
+    controller = load_controller()
+    source_authority = load_source_authority()
+    transactions = (
+        controller.DEFAULT_ROOT
+        / "accounting"
+        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+    )
+    if not transactions.is_dir():
+        pytest.skip(f"live canonical F116 transaction root is unavailable: {transactions}")
+
+    source_authority.classify_non_authoritative_recovery_debris(
+        {"transactions": transactions}
+    )
+    controller.require_authenticated_f116_source_authority_staging(transactions)
+
+
+@pytest.mark.parametrize("hostile_kind", ("regular-file", "symlink"))
+def test_f116_current_authority_rejects_hostile_staging_container_entry(
+    tmp_path, monkeypatch, hostile_kind
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
+    transactions = (
+        paths["accounting"]
+        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+    )
+    transactions.mkdir(parents=True)
+    transactions.chmod(0o2755)
+    entry = transactions / f"2026-06-05T120000+0000-{'c' * 32}.staging"
+    if hostile_kind == "regular-file":
+        entry.write_text("not a staging directory\n")
+    else:
+        outside = tmp_path / "hostile-staging-target"
+        outside.mkdir()
+        entry.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError):
+        module.require_current_source_authority_for_prepare(
+            paths,
+            bundle_provenance=fixture["bundle_record"],
+            utility_provenance=fixture["utility"],
+            matrix_path=fixture["matrix"],
+            input_revision=module.QUALIFIED_SOURCE_REVISION,
+            offline_local_root=False,
+        )
+
+
+def test_f116_retained_staging_is_not_consulted_before_public_auth(
+    tmp_path, monkeypatch
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    fixture = make_f116_source_authority(module, paths, tmp_path, monkeypatch)
+    make_retained_f116_staging(module, paths, fixture)
+    (paths["root"] / module.F116_PUBLICATION_AUDIT_RELATIVE).unlink()
+    monkeypatch.setattr(
+        module,
+        "require_authenticated_f116_source_authority_staging",
+        lambda *_args, **_kwargs: pytest.fail(
+            "retained staging was consulted before public F116 authenticated"
+        ),
+    )
+
+    with pytest.raises(ValueError):
+        module.require_current_source_authority_for_prepare(
+            paths,
+            bundle_provenance=fixture["bundle_record"],
+            utility_provenance=fixture["utility"],
+            matrix_path=fixture["matrix"],
+            input_revision=module.QUALIFIED_SOURCE_REVISION,
+            offline_local_root=False,
+        )
 
 
 def test_current_source_authority_offline_local_bypass(tmp_path):
@@ -2621,19 +2997,29 @@ def test_clean_r17_predecessor_state_requires_zero_active_and_transactions(
         module.require_clean_r17_predecessor_state(paths, [])
 
 
-@pytest.mark.parametrize(
-    "name",
-    (
-        f"mks24_stage_i_{EPOCH_SLUG}_recost_transactions",
-        f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions",
-    ),
-)
-def test_clean_r17_predecessor_state_rejects_every_transaction_store(
-    tmp_path, name
+def test_clean_r17_predecessor_state_rejects_recost_transaction_store(tmp_path):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    transaction = (
+        paths["accounting"]
+        / f"mks24_stage_i_{EPOCH_SLUG}_recost_transactions"
+        / "retained"
+    )
+    transaction.mkdir(parents=True)
+    with pytest.raises(ValueError, match="requires recovery"):
+        module.require_clean_r17_predecessor_state(paths, [])
+
+
+def test_clean_r17_predecessor_state_rejects_unauthenticated_source_transaction_store(
+    tmp_path,
 ):
     module = load_controller()
     paths = paths_for(module, tmp_path / "root")
-    transaction = paths["accounting"] / name / "retained"
+    transaction = (
+        paths["accounting"]
+        / f"mks24_stage_i_{EPOCH_SLUG}_source_authority_transactions"
+        / "retained.staging"
+    )
     transaction.mkdir(parents=True)
     with pytest.raises(ValueError, match="requires recovery"):
         module.require_clean_r17_predecessor_state(paths, [])
@@ -3839,7 +4225,7 @@ def test_mode_requested_publication_rejects_public_profile_race(
         return result
 
     monkeypatch.setattr(module, "renameat2", alter_profile_after_publication)
-    with pytest.raises(ValueError, match="owner-controlled regular 0644 single-link"):
+    with pytest.raises(ValueError, match="durable forward recovery state"):
         module.write_text(target, "good\n", mode=0o644)
     assert raced
     assert target.read_text() == "good\n"
@@ -4240,6 +4626,462 @@ def test_successful_existing_target_replacement_quarantines_predecessor(
     assert json.loads(forensics[0].read_text()) == {"state": "old"}
 
 
+def test_lustre_unsupported_noreplace_uses_hard_link_commit(tmp_path, monkeypatch):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    target = parent / "state.json"
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    module.write_text(target, "published\n", mode=0o644)
+
+    assert target.read_text() == "published\n"
+    assert target.stat().st_nlink == 1
+    assert not (parent / module.metadata_temporary_name(target.name)).exists()
+
+
+@pytest.mark.parametrize("flags", (1, 2))
+def test_renameat2_einval_is_an_explicit_unsupported_response(
+    monkeypatch, flags,
+):
+    module = load_controller()
+
+    class UnsupportedOperation:
+        argtypes = None
+        restype = None
+
+        def __call__(self, *_args):
+            return -1
+
+    libc = SimpleNamespace(renameat2=UnsupportedOperation())
+    monkeypatch.setattr(module.ctypes, "CDLL", lambda *_args, **_kwargs: libc)
+    monkeypatch.setattr(module.ctypes, "get_errno", lambda: module.errno.EINVAL)
+
+    with pytest.raises(module.Renameat2Unsupported) as unsupported:
+        module.renameat2_between(10, "source", 11, "target", flags, "fixture")
+    assert unsupported.value.errno == module.errno.EINVAL
+
+
+def test_lustre_hard_link_publication_never_clobbers_target_race(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    target = parent / "state.json"
+    real_link = module.os.link
+    raced = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    def race_before_link(source, destination, **kwargs):
+        nonlocal raced
+        if not raced and destination == target.name:
+            target.write_text("raced-target\n")
+            target.chmod(0o644)
+            raced = True
+        return real_link(source, destination, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "link", race_before_link)
+    with pytest.raises(ValueError, match="target already exists"):
+        module.write_text(target, "controller-payload\n", mode=0o644)
+
+    assert raced
+    assert target.read_text() == "raced-target\n"
+    temporary = parent / module.metadata_temporary_name(target.name)
+    assert temporary.read_text() == "controller-payload\n"
+    assert temporary.stat().st_nlink == 1
+
+
+def test_lustre_unsupported_exchange_uses_recoverable_in_place_replacement(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    target = parent / "state.json"
+    target.write_text("predecessor\n")
+    target.chmod(0o644)
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(
+        module.os,
+        "rename",
+        lambda *_args, **_kwargs: pytest.fail("flags-zero rename must not run"),
+    )
+    prior_inode = target.stat().st_ino
+    module.write_text(target, "replacement\n", mode=0o644)
+
+    assert target.read_text() == "replacement\n"
+    assert target.stat().st_ino == prior_inode
+    assert target.stat().st_nlink == 1
+    temporary_name = module.metadata_temporary_name(target.name)
+    assert not (parent / temporary_name).exists()
+    assert not (
+        parent / module.metadata_predecessor_recovery_name(temporary_name)
+    ).exists()
+    assert not list(tmp_path.glob(".cgl_lf_stage_i_replaced_*.forensic"))
+
+
+def test_lustre_in_place_replacement_recovers_after_public_inode_truncation(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    target = parent / "state.json"
+    target.write_text("predecessor\n")
+    target.chmod(0o644)
+    real_ftruncate = module.os.ftruncate
+    injected = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    def truncate_then_raise(descriptor, length):
+        nonlocal injected
+        result = real_ftruncate(descriptor, length)
+        if not injected:
+            injected = True
+            raise RuntimeError("simulated crash after public inode truncation")
+        return result
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "ftruncate", truncate_then_raise)
+    with pytest.raises(ValueError, match="durable in-place forward recovery state"):
+        module.write_text(
+            target,
+            "replacement\n",
+            mode=0o644,
+            expected_predecessor=b"predecessor\n",
+        )
+
+    temporary_name = module.metadata_temporary_name(target.name)
+    predecessor_name = module.metadata_predecessor_recovery_name(temporary_name)
+    assert injected
+    assert target.read_bytes() == b""
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert (parent / temporary_name).read_text() == "replacement\n"
+    assert (parent / predecessor_name).read_text() == "predecessor\n"
+    assert stat.S_IMODE((parent / predecessor_name).stat().st_mode) == 0o400
+
+    module.write_text(
+        target,
+        "replacement\n",
+        mode=0o644,
+        expected_predecessor=b"predecessor\n",
+    )
+
+    assert target.read_text() == "replacement\n"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert not (parent / temporary_name).exists()
+    assert not (parent / predecessor_name).exists()
+
+
+def test_lustre_lifecycle_metadata_paths_replace_under_renameat2_einval(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    paths["ledger"].write_text(module.ledger_csv_text([]))
+    paths["ledger"].chmod(0o644)
+    paths["reservations"].chmod(0o644)
+    manifest = paths["runs"] / "R16/s00/manifest/prepared_run.json"
+    manifest.parent.mkdir(parents=True)
+    write_json(manifest, {"state": "prepared"}, mode=0o644)
+    transaction = paths["transactions"] / "lifecycle.json"
+    write_json(transaction, {"kind": "submit_pending"}, mode=0o644)
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(
+        module.os,
+        "rename",
+        lambda *_args, **_kwargs: pytest.fail("flags-zero rename must not run"),
+    )
+    module.write_json(paths["reservations"], [{"state": "prepared"}])
+    module.write_json(manifest, {"state": "submitted"})
+    module.append_ledger_row(paths["ledger"], valid_ledger_row(module), [])
+    module.write_json(transaction, {"kind": "recorded"}, mode=0o644)
+
+    assert json.loads(paths["reservations"].read_text()) == [{"state": "prepared"}]
+    assert json.loads(manifest.read_text()) == {"state": "submitted"}
+    assert module.read_ledger(paths) == [valid_ledger_row(module)]
+    assert json.loads(transaction.read_text()) == {"kind": "recorded"}
+    module.unlink_trusted_transaction(
+        {"transactions": paths["transactions"]},
+        transaction,
+        {"kind": "recorded"},
+    )
+    assert not transaction.exists()
+    assert any(
+        json.loads(path.read_text()) == {"kind": "recorded"}
+        for path in paths["accounting"].glob(".cgl_lf_stage_i_replaced_*.forensic")
+    )
+    for target in (paths["reservations"], paths["ledger"], manifest):
+        temporary_name = module.metadata_temporary_name(target.name)
+        assert not (target.parent / temporary_name).exists()
+        assert not (
+            target.parent / module.metadata_predecessor_recovery_name(temporary_name)
+        ).exists()
+
+
+def test_lustre_unsupported_forensic_retirement_uses_deterministic_hardlink_move(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    source = parent / "state.json"
+    source.write_text("retained\n")
+    source.chmod(0o644)
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    binding = module.open_regular_file_binding(parent_fd, source.name, "retained source")
+    try:
+        profile = module.require_directory_descriptor_binding(
+            parent, parent_fd, "retirement parent"
+        )
+        retained = module.quarantine_bound_predecessor(
+            parent_fd,
+            source.name,
+            binding,
+            parent,
+            profile,
+            source,
+            "retained source",
+        )
+    finally:
+        binding.close()
+        os.close(parent_fd)
+
+    assert not source.exists()
+    assert retained.read_text() == "retained\n"
+    assert retained.stat().st_nlink == 1
+    assert retained.name == (
+        ".cgl_lf_stage_i_replaced_"
+        + hashlib.sha256(
+            f"{parent.absolute()}\0{source.name}\0{sha256(retained)}".encode()
+        ).hexdigest()
+        + ".forensic"
+    )
+
+
+def test_lustre_deterministic_forensic_hardlink_state_retries_to_completion(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    source = parent / "state.json"
+    source.write_text("retained\n")
+    source.chmod(0o644)
+    real_unlink = module.os.unlink
+    injected = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    def preserve_first_two_link_state(name, **kwargs):
+        nonlocal injected
+        if not injected and name == source.name:
+            injected = True
+            raise RuntimeError("simulated crash before source unlink")
+        return real_unlink(name, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "unlink", preserve_first_two_link_state)
+
+    parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        profile = module.require_directory_descriptor_binding(
+            parent, parent_fd, "retirement parent"
+        )
+        binding = module.open_regular_file_binding(
+            parent_fd, source.name, "retained source"
+        )
+        try:
+            with pytest.raises(ValueError, match="two-link recovery state"):
+                module.quarantine_bound_predecessor(
+                    parent_fd,
+                    source.name,
+                    binding,
+                    parent,
+                    profile,
+                    source,
+                    "retained source",
+                )
+        finally:
+            binding.close()
+        forensic = next(tmp_path.glob(".cgl_lf_stage_i_replaced_*.forensic"))
+        assert source.stat().st_ino == forensic.stat().st_ino
+        assert source.stat().st_nlink == 2
+
+        binding = module.open_regular_file_binding(
+            parent_fd, source.name, "retained source retry"
+        )
+        try:
+            retained = module.quarantine_bound_predecessor(
+                parent_fd,
+                source.name,
+                binding,
+                parent,
+                profile,
+                source,
+                "retained source retry",
+            )
+        finally:
+            binding.close()
+    finally:
+        os.close(parent_fd)
+
+    assert injected
+    assert not source.exists()
+    assert retained == forensic
+    assert forensic.read_text() == "retained\n"
+    assert forensic.stat().st_nlink == 1
+
+
+def test_lustre_two_link_publication_is_deterministically_recovered_on_retry(
+    tmp_path,
+):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    target = parent / "state.json"
+    temporary = parent / module.metadata_temporary_name(target.name)
+    temporary.write_text("published\n")
+    temporary.chmod(0o644)
+    os.link(temporary, target)
+    assert temporary.stat().st_nlink == 2
+
+    parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        profile = module.require_directory_descriptor_binding(
+            parent, parent_fd, "publication parent"
+        )
+        assert module.retire_metadata_temporary(
+            parent,
+            parent_fd,
+            temporary.name,
+            profile,
+            "retained publication temporary",
+        ) is None
+    finally:
+        os.close(parent_fd)
+
+    assert not temporary.exists()
+    assert target.read_text() == "published\n"
+    assert target.stat().st_nlink == 1
+
+
+def test_lustre_two_link_publication_rejects_undiscoverable_alias(tmp_path):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    target = parent / "state.json"
+    temporary = parent / module.metadata_temporary_name(target.name)
+    temporary.write_text("published\n")
+    temporary.chmod(0o644)
+    random_alias = parent / "random-recovery-alias"
+    os.link(temporary, random_alias)
+
+    parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        profile = module.require_directory_descriptor_binding(
+            parent, parent_fd, "publication parent"
+        )
+        with pytest.raises(ValueError, match="deterministic authenticated public target"):
+            module.retire_metadata_temporary(
+                parent,
+                parent_fd,
+                temporary.name,
+                profile,
+                "retained publication temporary",
+            )
+    finally:
+        os.close(parent_fd)
+
+    assert temporary.read_text() == "published\n"
+    assert random_alias.read_text() == "published\n"
+    assert temporary.stat().st_nlink == 2
+    assert not target.exists()
+
+
+def test_lustre_hard_link_commit_classifies_post_syscall_errors(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    parent = tmp_path / "metadata"
+    parent.mkdir()
+    target = parent / "state.json"
+    temporary_name = module.metadata_temporary_name(target.name)
+    real_link = module.os.link
+    real_unlink = module.os.unlink
+    link_injected = False
+    unlink_injected = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    def link_then_raise(source, destination, **kwargs):
+        nonlocal link_injected
+        result = real_link(source, destination, **kwargs)
+        if not link_injected and source == temporary_name and destination == target.name:
+            link_injected = True
+            raise RuntimeError("reported link failure after commit")
+        return result
+
+    def unlink_then_raise(name, **kwargs):
+        nonlocal unlink_injected
+        result = real_unlink(name, **kwargs)
+        if not unlink_injected and name == temporary_name:
+            unlink_injected = True
+            raise RuntimeError("reported unlink failure after commit")
+        return result
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "link", link_then_raise)
+    monkeypatch.setattr(module.os, "unlink", unlink_then_raise)
+    module.write_text(target, "classified\n", mode=0o644)
+
+    assert link_injected
+    assert unlink_injected
+    assert target.read_text() == "classified\n"
+    assert target.stat().st_nlink == 1
+    assert not (parent / temporary_name).exists()
+
+
 def test_transaction_discovery_forensically_retires_atomic_write_remnants(
     tmp_path,
 ):
@@ -4263,6 +5105,73 @@ def test_transaction_discovery_forensically_retires_atomic_write_remnants(
         "deterministic-remnant\n",
         "legacy-remnant\n",
     }
+
+
+def test_transaction_discovery_recovers_two_link_hardlink_publication(
+    tmp_path,
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    transactions = paths["transactions"]
+    journal = transactions / "pending.json"
+    temporary = transactions / module.metadata_temporary_name(journal.name)
+    temporary.write_text('{"state": "pending"}\n')
+    temporary.chmod(0o644)
+    os.link(temporary, journal)
+    assert journal.stat().st_nlink == 2
+
+    assert module.pending_transaction_paths(paths) == [journal]
+    assert journal.read_text() == '{"state": "pending"}\n'
+    assert journal.stat().st_nlink == 1
+    assert not temporary.exists()
+    assert not list(paths["accounting"].glob(".cgl_lf_stage_i_replaced_*.forensic"))
+
+
+def test_transaction_discovery_recovers_post_sbatch_submitted_journal_under_einval(
+    tmp_path, monkeypatch,
+):
+    module = load_controller()
+    paths = paths_for(module, tmp_path / "root")
+    transactions = paths["transactions"]
+    journal = transactions / "submission.json"
+    pending = {"kind": "submit_pending", "scheduler_boundary": "sbatch returned"}
+    submitted = {"kind": "submitted", "job_id": "12345"}
+    write_json(journal, pending, mode=0o644)
+    real_ftruncate = module.os.ftruncate
+    injected = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise module.Renameat2Unsupported(
+            module.errno.EINVAL, os.strerror(module.errno.EINVAL)
+        )
+
+    def truncate_then_raise(descriptor, length):
+        nonlocal injected
+        result = real_ftruncate(descriptor, length)
+        if not injected:
+            injected = True
+            raise RuntimeError("simulated crash during post-sbatch journal update")
+        return result
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "ftruncate", truncate_then_raise)
+    with pytest.raises(ValueError, match="durable in-place forward recovery state"):
+        module.write_json(journal, submitted, mode=0o644)
+
+    temporary_name = module.metadata_temporary_name(journal.name)
+    predecessor_name = module.metadata_predecessor_recovery_name(temporary_name)
+    assert injected
+    assert journal.read_bytes() == b""
+    assert stat.S_IMODE(journal.stat().st_mode) == 0o600
+    assert json.loads((transactions / temporary_name).read_text()) == submitted
+    assert json.loads((transactions / predecessor_name).read_text()) == pending
+
+    monkeypatch.setattr(module.os, "ftruncate", real_ftruncate)
+    assert module.pending_transaction_paths(paths) == [journal]
+    assert json.loads(journal.read_text()) == submitted
+    assert stat.S_IMODE(journal.stat().st_mode) == 0o644
+    assert not (transactions / temporary_name).exists()
+    assert not (transactions / predecessor_name).exists()
 
 
 def test_transaction_discovery_forensically_retires_mode_zero_remnant(

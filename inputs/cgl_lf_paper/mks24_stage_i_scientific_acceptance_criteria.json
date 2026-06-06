@@ -19,14 +19,14 @@
   "analysis_windows": {
     "early": [
       4.0,
-      7.0
+      8.0
     ],
     "full": [
       4.0,
       10.0
     ],
     "late": [
-      7.0,
+      6.0,
       10.0
     ]
   },
@@ -155,6 +155,63 @@
       "normalized_residual_rms_lte": 2.0
     }
   ],
+  "criteria_change_record": {
+    "change_id": "physical-time-stationarity-r03-r17-v3",
+    "current_policy": {
+      "analysis_windows": {
+        "early": [
+          4.0,
+          8.0
+        ],
+        "full": [
+          4.0,
+          10.0
+        ],
+        "late": [
+          6.0,
+          10.0
+        ]
+      },
+      "minimum_effective_samples": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "minimum_independent_time_blocks": {
+        "comparison": 2.0,
+        "full": 3.0
+      }
+    },
+    "execution_effect": "No production authorization change or extension is required before applying this fixed policy to retained t<=10 outputs.",
+    "extension_rule": "Only a stationarity gate that is inconclusive solely from sampling adequacy at t=10 may nominate one separately authorized extension to t=12; the prospective artifact must bind the exact preserved t<=10 evidence digest and fixed combination rule.",
+    "outcome_blinding_statement": "Windows, minima, physical-time ESS, and paired-contrast rules were fixed from forcing_tcorr and retained t<=10 support without using R03-R17 acceptance outcomes.",
+    "physics_rationale": "For the fifteen forcing_tcorr=2 cases, t=4 starts after two forcing correlation times; t=4..10 spans three forcing-time blocks and the fixed overlapping t=4..8 and t=6..10 comparison windows each span two, with their centers separated by one forcing correlation time. R11 forcing_tcorr=0.2 is more strongly sampled.",
+    "previous_policy": {
+      "analysis_windows": {
+        "early": [
+          4.0,
+          7.0
+        ],
+        "full": [
+          4.0,
+          10.0
+        ],
+        "late": [
+          7.0,
+          10.0
+        ]
+      },
+      "minimum_effective_samples": {
+        "full": 3.0,
+        "half": 1.5
+      },
+      "minimum_independent_time_blocks": {
+        "full": 3.0,
+        "half": 1.5
+      }
+    },
+    "review_disposition": "approved_by_independent_plasma_and_statistical_review",
+    "statistical_rationale": "Physical-time integrated autocorrelation, max-gap coverage, and ESS prevent clustered output sampling from inflating evidence. At the exact two-block comparison minimum, paired physical effect-size thresholds are pass/fail authority and moving-block bootstrap uncertainty is descriptive only."
+  },
   "ct_divb_policy": {
     "claim_scope": "sampled retained-state normalized CT-divB below the preregistered threshold",
     "historical_limitation": "The frozen E03 executable did not retain a full-time-history max_ndiv diagnostic. This audit cannot establish the maximum between retained restart states.",
@@ -166,13 +223,77 @@
     "restart_format": "AthenaK native little-endian binary64 rank-local CGL restart, uniform non-AMR three-dimensional mesh, exact accepted-inspection multi-state inventory-bound siblings"
   },
   "extension_policy": {
-    "decision": "Extend only cases classified inconclusive because of nonstationarity, insufficient effective samples, incomplete retained-state CT coverage, or missing required analysis products.",
+    "current_policy_authorizes_extension": false,
+    "decision": "Evaluate and preserve the fixed t<=10 result first. Only a stationarity gate that is inconclusive solely from sampling adequacy may nominate the exact prospective fallback.",
+    "decision_time": 10.0,
+    "extension_triggers": [
+      "any required stationarity gate has result=inconclusive solely because sampling_adequacy=inconclusive at t=10"
+    ],
     "forbidden_after_results": [
       "relax thresholds",
+      "move the analysis windows",
       "move the convergence interval",
       "drop failed admitted products",
-      "reclassify failed or inconclusive gates as passed"
-    ]
+      "reclassify failed or inconclusive gates as passed",
+      "use any family, panel, convergence, CT, or product gate as an extension trigger",
+      "use a passed or failed stationarity gate as an extension trigger"
+    ],
+    "non_triggers": [
+      "passed or failed stationarity gate",
+      "missing or unavailable required analysis products",
+      "incomplete retained-state CT coverage",
+      "failed family, panel, convergence, or other plasma-physics gate",
+      "passed or blocked_out_of_scope gate"
+    ],
+    "prospective_extension_rule": {
+      "analysis_windows": {
+        "early": [
+          6.0,
+          10.0
+        ],
+        "full": [
+          6.0,
+          12.0
+        ],
+        "late": [
+          8.0,
+          12.0
+        ]
+      },
+      "authorization": "requires a separately approved non-retrospective criteria artifact and unchanged production authorization",
+      "maximum_extensions": 1,
+      "minimum_effective_samples": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "minimum_independent_time_blocks": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "nominated_endpoint": 12.0,
+      "fixed_combination_rule": {
+        "all_other_t10_results": "unchanged",
+        "eligible_t10_case_result": "inconclusive",
+        "eligible_t10_gate_result": "inconclusive",
+        "eligible_t10_trigger": "sampling_adequacy=inconclusive",
+        "extension_fail": "nominated gate becomes fail",
+        "extension_inconclusive": "nominated gate remains inconclusive",
+        "extension_pass": "nominated gate becomes pass",
+        "preserved_t10_evidence": "exact digest remains immutable and separately reportable",
+        "replaceable_result": "only nominated sampling-inconclusive stationarity gates"
+      },
+      "required_prospective_artifact": {
+        "approval_timing": "independently approved before extension execution and before t>10 outcomes exist",
+        "record_type": "stage-i-scientific-stationarity-extension-prospective-artifact",
+        "required_exact_bindings": [
+          "preserved_t10_case_evidence_sha256",
+          "criteria_sha256",
+          "acceptance_utility_sha256"
+        ]
+      },
+      "threshold_policy": "unchanged from the fixed t<=10 assessment"
+    },
+    "rule": "At t=10, only a sampling-inconclusive stationarity gate may nominate exactly one t=12 extension. Before execution, a separate prospective artifact must bind the exact preserved t<=10 evidence digest and fixed combination rule; no t<=10 pass or fail may be rescued, use no other windows, and permit no further extension."
   },
   "family_gates": {
     "active_passive": {
@@ -352,7 +473,7 @@
   "source_bindings": {
     "acceptance_utility": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-      "sha256": "f27e317711cb917439b4d03c0216fccd117cd061f16e01121e331d55fb63b63e"
+      "sha256": "692d9aeb35b871b8da666732afbe2e60f62f44152c8cc8620bd522684584b8b8"
     },
     "current_source_authority_evidence": {
       "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F115_source_bundle_recovery_supersession_evidence.json",
@@ -393,28 +514,28 @@
   },
   "statistics_policy": {
     "bootstrap_replicates": 2000,
-    "effective_samples": "initial-positive-sequence",
+    "effective_samples": "physical-time-initial-positive-sequence",
     "gap_policy": {
       "expected_history_cadence": 0.02,
       "maximum_gap_expected_cadence_multiplier": 2.5,
       "maximum_gap_forcing_tcorr_fraction": 0.25,
-      "median_cadence_upper_relative_tolerance": 0.25,
-      "rule": "median cadence <= expected cadence * (1 + tolerance) and maximum gap <= max(expected cadence * multiplier, authenticated forcing_tcorr * fraction)"
+      "rule": "exact endpoint-clipped physical-time coverage with maximum gap <= max(expected cadence * multiplier, authenticated forcing_tcorr * fraction); sample-count and median-cadence density are not acceptance authority"
     },
     "minimum_effective_samples": {
-      "full": 3.0,
-      "half": 1.5
+      "comparison": 2.0,
+      "full": 3.0
     },
     "minimum_independent_time_blocks": {
-      "full": 3.0,
-      "half": 1.5
+      "comparison": 2.0,
+      "full": 3.0
     },
     "stationarity": {
+      "decision_authority": "paired physical-time early-minus-late effect size only; moving-block bootstrap uncertainty is descriptive and never pass/fail authority",
       "forcing_power_relative_change_lte": 0.1,
       "occupancy_absolute_change_lte": 0.002,
-      "scalar_relative_change_lte": 0.25,
-      "z_lte": 3.0
+      "scalar_relative_change_lte": 0.25
     },
+    "stationarity_contrast": "paired-physical-time-early-minus-late-effect-size-with-descriptive-bootstrap",
     "time_average": "endpoint-clipped-trapezoidal",
     "uncertainty": "deterministic-time-moving-block-bootstrap",
     "uncertainty_block_duration": "maximum of estimated integrated autocorrelation duration, retained cadence, and authenticated forcing_tcorr"

@@ -1,13 +1,33 @@
 {
   "acceptance_utility": {
     "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-    "sha256": "f27e317711cb917439b4d03c0216fccd117cd061f16e01121e331d55fb63b63e"
+    "sha256": "692d9aeb35b871b8da666732afbe2e60f62f44152c8cc8620bd522684584b8b8"
   },
   "criteria": {
     "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
-    "sha256": "2e83d61bad785fd378dbdd9feb9518e82810ef539fcdefeb6fbe5d5ab12be195"
+    "sha256": "a26c5d54dca11c1ac13989b68c6ff9309e3b10b887fc07ffd7ef66e44fe335a9"
   },
   "identity_limitation": "Reviewer identity and process independence are declared evidence, not cryptographically proven.",
+  "method_revision": {
+    "candidate_status": "approved_by_independent_plasma_and_statistical_review",
+    "extension_policy": "No extension is authorized by the current criteria; only a sampling-inconclusive stationarity gate may nominate the exact single t=12 fallback, which requires a separate prospective artifact binding the preserved t<=10 evidence digest and fixed combination rule.",
+    "fixed_analysis_windows": {
+      "early": [
+        4.0,
+        8.0
+      ],
+      "full": [
+        4.0,
+        10.0
+      ],
+      "late": [
+        6.0,
+        10.0
+      ]
+    },
+    "paired_stationarity": "One paired physical-time early-minus-late effect-size decision for every stationarity metric, including forcing power; moving-block bootstrap is descriptive only.",
+    "physical_time_ess": "Exact piecewise-linear physical-time autocovariance on the preregistered history-cadence lag grid with initial-positive-sequence ESS and max-gap physical-time coverage independent of clustered sample density."
+  },
   "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
   "record_type": "stage-i-scientific-acceptance-criteria-review",
   "retained_ct_observation": {
@@ -25,7 +45,21 @@
     "plasma_physics",
     "statistical_methodology"
   ],
-  "review_status": "changes_required",
-  "reviews": [],
+  "remaining_review_requirements": [],
+  "review_status": "approved",
+  "reviews": [
+    {
+      "decision": "approved",
+      "independent_of_implementation": true,
+      "reviewer_id": "019e9a8d-253b-7010-b156-676866801f3c",
+      "role": "plasma_physics"
+    },
+    {
+      "decision": "approved",
+      "independent_of_implementation": true,
+      "reviewer_id": "019e9ae1-d8c6-7861-9bbb-69e2cc97ba6f",
+      "role": "statistical_methodology"
+    }
+  ],
   "schema_version": 1
 }

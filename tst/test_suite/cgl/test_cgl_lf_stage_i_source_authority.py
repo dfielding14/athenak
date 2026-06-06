@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import fcntl
@@ -27,6 +28,55 @@ SPEC.loader.exec_module(authority)
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_cli_reachable_graph_excludes_legacy_namespace_replacement() -> None:
+    tree = ast.parse(PUBLISHER.read_text())
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    calls = {name: set() for name in functions}
+    for name, node in functions.items():
+        for child in ast.walk(node):
+            if (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Name)
+                and child.func.id in functions
+            ):
+                calls[name].add(child.func.id)
+
+    reachable = set()
+    pending = ["main"]
+    while pending:
+        name = pending.pop()
+        if name in reachable:
+            continue
+        reachable.add(name)
+        pending.extend(calls.get(name, ()))
+
+    assert reachable.isdisjoint({
+        "atomic_write",
+        "cleanup_transaction",
+        "ensure_catalog",
+        "ensure_installed",
+        "exchange_bound_entries",
+        "publish_bound_file_noreplace",
+        "purge_abandoned_staging_transaction",
+        "purge_forensic_only_prepublication_transaction_root",
+        "purge_retired_transaction",
+        "recover_atomic_journal",
+        "rename_bound_entry",
+        "rename_bound_noreplace",
+        "renameat2",
+        "renameat2_between",
+        "retire_bound_recovery_file",
+        "rmdir_bound_entry",
+        "rmdir_bound_path",
+        "unlink_bound_entry",
+        "update_journal",
+    })
 
 
 def canonical_json(value: object) -> bytes:
@@ -735,16 +785,21 @@ def test_promotes_and_verifies_source_selection_only(campaign: Campaign) -> None
         "after-readme",
         "after-catalogs",
         "after-audit",
-        "after-retire",
     ],
 )
 def test_every_publication_interruption_recovers(campaign: Campaign, point: str) -> None:
     assert_failed(campaign.promote(point), f"simulated interruption {point}")
     audit = campaign.root / authority.F116_PATHS["publication_audit"]
-    assert audit.exists() is (point in {"after-audit", "after-retire"})
-    assert_failed(campaign.verify(), "recovery is required")
+    assert audit.exists() is (point == "after-audit")
+    if point == "after-audit":
+        assert campaign.verify().returncode == 0
+    else:
+        assert campaign.verify().returncode != 0
     assert campaign.recover().returncode == 0
     assert campaign.verify().returncode == 0
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    retained = list(transactions.iterdir())
+    assert any(path.name.endswith(authority.STAGING_TRANSACTION_SUFFIX) for path in retained)
 
 
 @pytest.mark.parametrize(
@@ -753,10 +808,9 @@ def test_every_publication_interruption_recovers(campaign: Campaign, point: str)
         "during-staging-after-directory",
         "during-staging-after-first-payload",
         "during-staging-before-journal",
-        "during-staging-after-journal",
     ],
 )
-def test_prejournal_staging_interruption_is_cleanly_retryable(
+def test_incomplete_staging_interruption_fails_closed_and_remains_bounded(
     campaign: Campaign, point: str
 ) -> None:
     assert_failed(campaign.promote(point), f"simulated interruption {point}")
@@ -766,8 +820,91 @@ def test_prejournal_staging_interruption_is_cleanly_retryable(
     assert retained[0].name.endswith(authority.STAGING_TRANSACTION_SUFFIX)
     assert not campaign.final_target.exists()
     assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert_failed(campaign.promote(), "requires operator disposition")
+    assert list(transactions.iterdir()) == retained
+
+
+def test_complete_staging_journal_is_cleanly_retryable(campaign: Campaign) -> None:
+    assert_failed(
+        campaign.promote("during-staging-after-journal"),
+        "simulated interruption during-staging-after-journal",
+    )
     assert campaign.promote().returncode == 0
     assert campaign.verify().returncode == 0
+
+
+def test_repeated_crash_promotion_cleans_all_private_slots_before_audit_commit(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-staging"), "simulated interruption after-staging")
+    targets = (
+        (campaign.final_target, "F116 final source bundle"),
+        (campaign.root / authority.F116_PATHS["evidence"], "F116 evidence"),
+        (
+            campaign.root / authority.F116_PATHS["provenance_review"],
+            "F116 provenance review",
+        ),
+        (
+            campaign.root / authority.F116_PATHS["plasma_review"],
+            "F116 plasma review",
+        ),
+        (campaign.root / "source-archives/README.md", "source-archive README"),
+        (campaign.root / "source-archives/SHA256SUMS", "source-archive SHA256SUMS"),
+        (
+            campaign.root / authority.F116_PATHS["publication_audit"],
+            "F116 publication audit",
+        ),
+    )
+    private_paths = []
+    for target, label in targets:
+        names = authority.private_publication_names(target.name, label)
+        for name, mode in zip(names, (0o000, 0o600), strict=True):
+            private = target.parent / name
+            write_bytes(private, b"repeated private writer interruption\n", mode)
+            private_paths.append(private)
+
+    assert_failed(campaign.promote("after-catalogs"), "simulated interruption after-catalogs")
+    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert any(os.path.lexists(path) for path in private_paths)
+
+    assert campaign.promote().returncode == 0
+    assert campaign.verify().returncode == 0
+    assert not any(os.path.lexists(path) for path in private_paths)
+
+
+def test_exact_audit_commit_never_cleans_late_private_slot(campaign: Campaign) -> None:
+    assert campaign.promote().returncode == 0
+    target = campaign.root / authority.F116_PATHS["evidence"]
+    private = target.parent / authority.private_publication_names(
+        target.name, "F116 evidence"
+    )[0]
+    write_bytes(private, b"late non-authoritative debris\n", 0o600)
+    before = private.stat()
+
+    assert campaign.promote().returncode == 0
+    assert campaign.recover().returncode == 0
+    after = private.stat()
+    assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+    assert authority.file_profile_binding(after) == authority.file_profile_binding(before)
+    assert private.read_bytes() == b"late non-authoritative debris\n"
+
+
+def test_precommit_private_cleanup_rejects_hardlinked_incomplete_slot(
+    campaign: Campaign,
+) -> None:
+    assert_failed(campaign.promote("after-catalogs"), "simulated interruption after-catalogs")
+    target = campaign.root / authority.F116_PATHS["evidence"]
+    private = target.parent / authority.private_publication_names(
+        target.name, "F116 evidence"
+    )[0]
+    alias = target.parent / "injected-private-alias"
+    write_bytes(private, b"hardlinked private debris\n", 0o600)
+    os.link(private, alias)
+
+    assert_failed(campaign.promote(), "has 2 links, expected 1")
+    assert not (campaign.root / authority.F116_PATHS["publication_audit"]).exists()
+    assert private.stat().st_nlink == 2
+    assert alias.stat().st_nlink == 2
 
 
 def test_abandoned_staging_cleanup_fails_closed_on_unexpected_entry(
@@ -794,12 +931,14 @@ def test_abandoned_staging_cleanup_rejects_visible_f116_target(
     )
     visible = campaign.root / authority.F116_PATHS["evidence"]
     write_bytes(visible, b"uncommitted authority\n", 0o444)
-    assert_failed(campaign.promote(), "beneath visible F116 targets")
+    assert_failed(campaign.promote(), "requires operator disposition")
     assert visible.read_bytes() == b"uncommitted authority\n"
     assert not campaign.final_target.exists()
 
 
-def test_partial_prejournal_payload_is_cleanly_retryable(campaign: Campaign) -> None:
+def test_partial_prejournal_payload_fails_closed_and_remains_bounded(
+    campaign: Campaign,
+) -> None:
     assert_failed(
         campaign.promote("during-staging-after-first-payload"),
         "simulated interruption during-staging-after-first-payload",
@@ -809,11 +948,11 @@ def test_partial_prejournal_payload_is_cleanly_retryable(campaign: Campaign) -> 
     payload = staging / authority.TRANSACTION_PAYLOADS["bundle"][0]
     payload.chmod(0o600)
     payload.write_bytes(payload.read_bytes()[:128])
-    assert campaign.promote().returncode == 0
-    assert campaign.verify().returncode == 0
+    assert_failed(campaign.promote(), "requires operator disposition")
+    assert list(transactions.iterdir()) == [staging]
 
 
-def test_mode_zero_prejournal_payload_is_forensically_retired_and_retryable(
+def test_mode_zero_prejournal_payload_fails_closed_and_remains_bounded(
     campaign: Campaign,
 ) -> None:
     assert_failed(
@@ -827,39 +966,39 @@ def test_mode_zero_prejournal_payload_is_forensically_retired_and_retryable(
     payload.write_bytes(payload.read_bytes()[:128])
     payload.chmod(0o000)
 
-    assert campaign.promote().returncode == 0
-    assert campaign.verify().returncode == 0
+    assert_failed(campaign.promote(), "requires operator disposition")
+    assert list(transactions.iterdir()) == [staging]
 
 
-@pytest.mark.parametrize("cleanup_action", ["promote", "recover"])
-def test_forensic_only_prepublication_root_recovers_after_staging_retirement(
-    campaign: Campaign, cleanup_action: str
+def test_incomplete_prepublication_staging_blocks_unbounded_retry(
+    campaign: Campaign,
 ) -> None:
     assert_failed(
         campaign.promote("during-staging-after-first-payload"),
         "simulated interruption during-staging-after-first-payload",
     )
-    cleanup = campaign.promote if cleanup_action == "promote" else campaign.recover
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    incomplete = next(transactions.iterdir())
+    assert_failed(campaign.recover(), "requires operator disposition")
+    assert_failed(campaign.promote(), "refusing to create unbounded recovery debris")
+    assert incomplete.is_dir()
+    assert list(transactions.iterdir()) == [incomplete]
+
+
+def test_mode_zero_partial_journal_staging_fails_closed(
+    campaign: Campaign,
+) -> None:
     assert_failed(
-        cleanup("during-staging-cleanup-after-staging-retired"),
-        "simulated interruption during-staging-cleanup-after-staging-retired",
+        campaign.promote("during-staging-before-journal"),
+        "simulated interruption during-staging-before-journal",
     )
     transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
-    assert transactions.is_dir()
-    assert list(transactions.iterdir())
-    assert all(
-        authority.FORENSIC_ENTRY_RE.fullmatch(path.name) is not None
-        for path in transactions.iterdir()
-    )
-    assert not any(
-        (campaign.root / relative).exists() for relative in authority.F116_PATHS.values()
-    )
+    incomplete = next(transactions.iterdir())
+    write_bytes(incomplete / "journal.json", b'{"partial":', 0o000)
 
-    if cleanup_action == "recover":
-        assert campaign.recover().returncode == 0
-        assert not transactions.exists()
-    assert campaign.promote().returncode == 0
-    assert campaign.verify().returncode == 0
+    assert_failed(campaign.promote(), "journal requires operator disposition")
+    assert stat.S_IMODE((incomplete / "journal.json").stat().st_mode) == 0o000
+    assert list(transactions.iterdir()) == [incomplete]
 
 
 def test_forensic_only_root_retirement_restores_concurrently_inserted_active_entry(
@@ -1055,6 +1194,21 @@ def test_draft_evidence_is_deterministic_and_never_publishes(campaign: Campaign)
     assert sha256(campaign.root / "source-archives/SHA256SUMS") == sums_before
 
 
+def test_draft_evidence_fails_closed_while_staging_requires_disposition(
+    campaign: Campaign,
+) -> None:
+    assert_failed(
+        campaign.promote("during-staging-after-directory"),
+        "simulated interruption during-staging-after-directory",
+    )
+    output = campaign.candidates / "blocked-draft.json"
+    assert_failed(
+        campaign.run(campaign.draft_evidence_command(output, now())),
+        "requires recovery or operator disposition before candidate drafting",
+    )
+    assert not output.exists()
+
+
 def test_drafted_evidence_reviews_and_audit_are_operable_end_to_end(
     campaign: Campaign,
 ) -> None:
@@ -1188,9 +1342,14 @@ def test_rejects_existing_final_target(campaign: Campaign) -> None:
     assert_failed(campaign.promote(), "F116 target already exists")
 
 
-def test_rejects_new_promotion_while_recovery_is_required(campaign: Campaign) -> None:
+def test_repeated_promotion_resumes_exact_retained_transaction(campaign: Campaign) -> None:
     assert_failed(campaign.promote("after-staging"), "simulated interruption")
-    assert_failed(campaign.promote(), "recovery is required before new promotion")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    retained = next(transactions.iterdir())
+    retained_identity = retained.stat().st_dev, retained.stat().st_ino
+    assert campaign.promote().returncode == 0
+    assert campaign.verify().returncode == 0
+    assert (retained.stat().st_dev, retained.stat().st_ino) == retained_identity
 
 
 def test_recovery_rejects_transaction_payload_tampering(campaign: Campaign) -> None:
@@ -1215,18 +1374,21 @@ def test_recovery_rejects_journal_catalog_rebinding(campaign: Campaign) -> None:
     assert_failed(campaign.recover(), "journal catalog bindings differ from payloads")
 
 
-def test_recovery_completes_interrupted_atomic_journal_replace(campaign: Campaign) -> None:
+def test_recovery_rejects_interrupted_legacy_atomic_journal_replace(
+    campaign: Campaign,
+) -> None:
     assert_failed(campaign.promote("after-staging"), "simulated interruption")
     transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
     transaction = next(transactions.iterdir())
     journal = transaction / "journal.json"
     temporary = transaction / f".journal.json.{os.getpid()}.{'a' * 32}.tmp"
     journal.rename(temporary)
-    assert campaign.recover().returncode == 0
-    assert campaign.verify().returncode == 0
+    assert_failed(campaign.recover(), "incomplete source-authority staging")
+    assert temporary.exists()
+    assert not journal.exists()
 
 
-def test_recovery_retires_mode_zero_orphan_atomic_journal_temporary(
+def test_recovery_rejects_legacy_mode_zero_orphan_atomic_journal_temporary(
     campaign: Campaign,
 ) -> None:
     assert_failed(campaign.promote("after-staging"), "simulated interruption")
@@ -1235,8 +1397,7 @@ def test_recovery_retires_mode_zero_orphan_atomic_journal_temporary(
     temporary = transaction / f".journal.json.{os.getpid()}.{'a' * 32}.tmp"
     write_bytes(temporary, b"partial journal\n", 0o000)
 
-    assert campaign.recover().returncode == 0
-    assert campaign.verify().returncode == 0
+    assert_failed(campaign.recover(), "mode is 0000, expected 0600")
 
 
 def test_atomic_journal_exchange_mutation_recovers_exact_predecessor(
@@ -1452,6 +1613,101 @@ def test_recovery_never_repairs_state_beneath_visible_audit_marker(
     assert not campaign.final_target.exists()
 
 
+@pytest.mark.parametrize("resume", ["promote", "recover"])
+@pytest.mark.parametrize(
+    "state",
+    ["mode-zero-partial", "owner-only-partial", "owner-only-exact", "linked-private"],
+)
+def test_high_level_resume_completes_partial_audit_marker(
+    campaign: Campaign, resume: str, state: str
+) -> None:
+    assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    transaction = next(transactions.iterdir())
+    audit_target = campaign.root / authority.F116_PATHS["publication_audit"]
+    if state == "mode-zero-partial":
+        write_bytes(audit_target, b'{"partial":', 0o000)
+    elif state == "owner-only-partial":
+        write_bytes(audit_target, b'{"partial":', 0o600)
+    elif state == "owner-only-exact":
+        write_bytes(
+            audit_target,
+            (transaction / authority.TRANSACTION_PAYLOADS["audit"][0]).read_bytes(),
+            0o600,
+        )
+    else:
+        private = audit_target.parent / authority.private_publication_names(
+            audit_target.name, "F116 publication audit"
+        )[0]
+        write_bytes(
+            private,
+            (transaction / authority.TRANSACTION_PAYLOADS["audit"][0]).read_bytes(),
+            0o444,
+        )
+        os.link(private, audit_target)
+        assert audit_target.stat().st_nlink == 2
+
+    assert campaign.verify().returncode != 0
+    assert getattr(campaign, resume)().returncode == 0
+    assert campaign.verify().returncode == 0
+    assert sha256(audit_target) == campaign.expected["audit"]
+    assert stat.S_IMODE(audit_target.stat().st_mode) == 0o444
+    assert audit_target.stat().st_nlink == 1
+
+
+@pytest.mark.parametrize(
+    ("target_name", "payload_key", "interruption", "resume", "partial_mode"),
+    [
+        ("README.md", "readme_after", "after-artifacts", "recover", 0o000),
+        ("SHA256SUMS", "sha256sums_after", "after-readme", "promote", 0o600),
+    ],
+)
+def test_high_level_resume_completes_owner_only_partial_catalog(
+    campaign: Campaign,
+    target_name: str,
+    payload_key: str,
+    interruption: str,
+    resume: str,
+    partial_mode: int,
+) -> None:
+    assert_failed(campaign.promote(interruption), "simulated interruption")
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    transaction = next(transactions.iterdir())
+    target = campaign.root / "source-archives" / target_name
+    expected = (
+        transaction / authority.TRANSACTION_PAYLOADS[payload_key][0]
+    ).read_bytes()
+    write_bytes(target, expected[:31], partial_mode)
+
+    assert getattr(campaign, resume)().returncode == 0
+    assert campaign.verify().returncode == 0
+    assert target.read_bytes() == expected
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+
+
+def test_post_commit_retained_staging_is_non_authoritative_recovery_debris(
+    campaign: Campaign,
+) -> None:
+    assert campaign.promote().returncode == 0
+    transactions = campaign.root / "accounting" / authority.TRANSACTION_ROOT_NAME
+    retained = next(transactions.iterdir())
+    (retained / "journal.json").chmod(0o000)
+    (retained / "untrusted-link").symlink_to(campaign.evidence_candidate)
+
+    assert campaign.verify().returncode == 0
+    assert campaign.promote().returncode == 0
+    assert campaign.recover().returncode == 0
+
+
+def test_recovery_rejects_forged_final_mode_audit_marker(campaign: Campaign) -> None:
+    assert_failed(campaign.promote("after-catalogs"), "simulated interruption")
+    audit_target = campaign.root / authority.F116_PATHS["publication_audit"]
+    write_bytes(audit_target, b'{"forged": true}\n', 0o444)
+
+    assert_failed(campaign.recover(), "checksum differs")
+    assert audit_target.read_bytes() == b'{"forged": true}\n'
+
+
 def test_rejects_symbolic_link_candidate(campaign: Campaign) -> None:
     retained = campaign.evidence_candidate.with_suffix(".retained")
     campaign.evidence_candidate.rename(retained)
@@ -1477,6 +1733,422 @@ def test_rejects_stage_i_lock_contention(campaign: Campaign) -> None:
     with lock.open("r+") as stream:
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert_failed(campaign.promote(), "another Stage I mutation holds")
+
+
+@pytest.mark.parametrize("initial", ["absent", "owner-only-partial"])
+def test_direct_final_file_publication_never_renames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str
+) -> None:
+    target = tmp_path / "artifact"
+    payload = b"immutable reviewed bytes\n"
+    digest = hashlib.sha256(payload).hexdigest()
+    if initial == "owner-only-partial":
+        write_bytes(target, b"partial", 0o600)
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("direct-final publication must not rename")
+
+    monkeypatch.setattr(authority, "renameat2", forbidden)
+    monkeypatch.setattr(authority, "renameat2_between", forbidden)
+    monkeypatch.setattr(authority.os, "rename", forbidden)
+    authority.ensure_direct_final_file(payload, target, digest, 0o444, "fixture artifact")
+
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o444
+    assert target.stat().st_nlink == 1
+
+
+def test_direct_final_hardlink_injection_never_mutates_public_inode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "artifact"
+    alias = tmp_path / "injected-alias"
+    payload = b"immutable reviewed bytes\n"
+    digest = hashlib.sha256(payload).hexdigest()
+    real_link = authority.os.link
+    real_write = authority.os.write
+    real_fchmod = authority.os.fchmod
+    published = False
+
+    def inject_alias(source: str, destination: str, *args: object, **kwargs: object) -> None:
+        nonlocal published
+        real_link(source, destination, *args, **kwargs)
+        if destination == target.name:
+            parent = kwargs["dst_dir_fd"]
+            real_link(
+                destination,
+                alias.name,
+                src_dir_fd=parent,
+                dst_dir_fd=parent,
+                follow_symlinks=False,
+            )
+            published = True
+
+    def reject_public_write(descriptor: int, retained: bytes) -> int:
+        if published:
+            raise AssertionError("public inode was written after publication")
+        return real_write(descriptor, retained)
+
+    def reject_public_fchmod(descriptor: int, mode: int) -> None:
+        if published:
+            raise AssertionError("public inode was chmodded after publication")
+        real_fchmod(descriptor, mode)
+
+    monkeypatch.setattr(authority.os, "link", inject_alias)
+    monkeypatch.setattr(authority.os, "write", reject_public_write)
+    monkeypatch.setattr(authority.os, "fchmod", reject_public_fchmod)
+    with pytest.raises(ValueError, match="unsafe link profile"):
+        authority.ensure_direct_final_file(payload, target, digest, 0o444, "fixture artifact")
+
+    assert published
+    assert target.read_bytes() == payload
+    assert alias.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o444
+    assert target.stat().st_nlink == 3
+
+
+def test_direct_final_file_rejects_forged_final_mode_target(tmp_path: Path) -> None:
+    target = tmp_path / "artifact"
+    payload = b"immutable reviewed bytes\n"
+    write_bytes(target, b"forged bytes\n", 0o444)
+
+    with pytest.raises(ValueError, match="cannot recover from mode 0444"):
+        authority.ensure_direct_final_file(
+            payload,
+            target,
+            hashlib.sha256(payload).hexdigest(),
+            0o444,
+            "fixture artifact",
+        )
+    assert target.read_bytes() == b"forged bytes\n"
+
+
+def test_direct_final_file_partial_write_is_forward_recoverable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "artifact"
+    payload = b"immutable reviewed bytes\n"
+    digest = hashlib.sha256(payload).hexdigest()
+    real_write = authority.os.write
+    interrupted = False
+
+    def partial_then_raise(descriptor: int, retained: bytes) -> int:
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            assert real_write(descriptor, retained[:5]) == 5
+            raise RuntimeError("injected direct-final partial write")
+        return real_write(descriptor, retained)
+
+    monkeypatch.setattr(authority.os, "write", partial_then_raise)
+    with pytest.raises(ValueError, match="retained authenticated recovery entry"):
+        authority.ensure_direct_final_file(payload, target, digest, 0o444, "fixture artifact")
+
+    assert interrupted
+    private = [
+        tmp_path / name
+        for name in authority.private_publication_names(target.name, "fixture artifact")
+    ]
+    assert not target.exists()
+    assert stat.S_IMODE(private[0].stat().st_mode) == 0o000
+    assert private[0].stat().st_size == 5
+
+    monkeypatch.setattr(authority.os, "write", real_write)
+    authority.ensure_direct_final_file(payload, target, digest, 0o444, "fixture artifact")
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o444
+    assert [path for path in private if path.exists()] == [private[0]]
+
+
+def test_direct_final_repeated_private_write_crashes_remain_recoverable_and_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "artifact"
+    payload = b"immutable reviewed bytes\n"
+    digest = hashlib.sha256(payload).hexdigest()
+    real_write = authority.os.write
+    private = [
+        tmp_path / name
+        for name in authority.private_publication_names(target.name, "fixture artifact")
+    ]
+
+    for retained_size in (3, 5, 7):
+        interrupted = False
+
+        def partial_then_raise(descriptor: int, retained: bytes) -> int:
+            nonlocal interrupted
+            if not interrupted:
+                interrupted = True
+                written = min(retained_size, len(retained))
+                assert real_write(descriptor, retained[:written]) == written
+                raise RuntimeError("injected repeated private write interruption")
+            return real_write(descriptor, retained)
+
+        monkeypatch.setattr(authority.os, "write", partial_then_raise)
+        with pytest.raises(ValueError, match="retained authenticated recovery entry"):
+            authority.ensure_direct_final_file(
+                payload, target, digest, 0o444, "fixture artifact"
+            )
+        assert interrupted
+        assert not target.exists()
+        assert 1 <= len([path for path in private if path.exists()]) <= 2
+        assert all(
+            stat.S_IMODE(path.stat().st_mode) == 0o000
+            for path in private
+            if path.exists()
+        )
+
+    monkeypatch.setattr(authority.os, "write", real_write)
+    authority.ensure_direct_final_file(payload, target, digest, 0o444, "fixture artifact")
+    assert target.read_bytes() == payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o444
+    assert target.stat().st_nlink == 1
+    assert len([path for path in private if path.exists()]) == 1
+
+
+def test_direct_final_rejects_hardlinked_incomplete_private_slot(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "artifact"
+    alias = tmp_path / "injected-alias"
+    payload = b"immutable reviewed bytes\n"
+    private = tmp_path / authority.private_publication_names(
+        target.name, "fixture artifact"
+    )[0]
+    write_bytes(private, b"partial", 0o000)
+    os.link(private, alias)
+
+    with pytest.raises(ValueError, match="external hardlink"):
+        authority.ensure_direct_final_file(
+            payload,
+            target,
+            hashlib.sha256(payload).hexdigest(),
+            0o444,
+            "fixture artifact",
+        )
+
+    assert not target.exists()
+    assert private.stat().st_nlink == 2
+    assert alias.stat().st_nlink == 2
+
+
+def test_direct_final_recycles_bounded_owner_only_private_slots(tmp_path: Path) -> None:
+    target = tmp_path / "artifact"
+    payload = b"immutable reviewed bytes\n"
+    private = [
+        tmp_path / name
+        for name in authority.private_publication_names(target.name, "fixture artifact")
+    ]
+    for path in private:
+        write_bytes(path, b"partial", 0o600)
+
+    authority.ensure_direct_final_file(
+        payload,
+        target,
+        hashlib.sha256(payload).hexdigest(),
+        0o444,
+        "fixture artifact",
+    )
+
+    assert target.read_bytes() == payload
+    assert target.stat().st_nlink == 1
+    assert private[0].exists() is False
+    assert private[1].read_bytes() == b"partial"
+
+
+@pytest.mark.parametrize("initial", ["predecessor", "owner-only-partial"])
+def test_direct_catalog_completion_never_renames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str
+) -> None:
+    target = tmp_path / "README.md"
+    old_payload = b"reviewed predecessor\n"
+    new_payload = b"reviewed F116 catalog\n"
+    write_bytes(
+        target,
+        old_payload if initial == "predecessor" else b"partial",
+        0o644 if initial == "predecessor" else 0o600,
+    )
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("direct catalog completion must not rename")
+
+    monkeypatch.setattr(authority, "renameat2", forbidden)
+    monkeypatch.setattr(authority, "renameat2_between", forbidden)
+    monkeypatch.setattr(authority.os, "rename", forbidden)
+    authority.ensure_direct_catalog(
+        target,
+        new_payload,
+        hashlib.sha256(old_payload).hexdigest(),
+        hashlib.sha256(new_payload).hexdigest(),
+        "fixture catalog",
+    )
+
+    assert target.read_bytes() == new_payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert target.stat().st_nlink == 1
+
+
+def test_direct_catalog_hardlink_injection_never_mutates_public_inode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "README.md"
+    alias = tmp_path / "injected-alias"
+    old_payload = b"reviewed predecessor\n"
+    new_payload = b"reviewed F116 catalog\n"
+    write_bytes(target, old_payload, 0o644)
+    real_link = authority.os.link
+    real_write = authority.os.write
+    real_fchmod = authority.os.fchmod
+    published = False
+
+    def inject_alias(source: str, destination: str, *args: object, **kwargs: object) -> None:
+        nonlocal published
+        real_link(source, destination, *args, **kwargs)
+        if destination == target.name:
+            parent = kwargs["dst_dir_fd"]
+            real_link(
+                destination,
+                alias.name,
+                src_dir_fd=parent,
+                dst_dir_fd=parent,
+                follow_symlinks=False,
+            )
+            published = True
+
+    def reject_public_write(descriptor: int, retained: bytes) -> int:
+        if published:
+            raise AssertionError("public inode was written after publication")
+        return real_write(descriptor, retained)
+
+    def reject_public_fchmod(descriptor: int, mode: int) -> None:
+        if published:
+            raise AssertionError("public inode was chmodded after publication")
+        real_fchmod(descriptor, mode)
+
+    monkeypatch.setattr(authority.os, "link", inject_alias)
+    monkeypatch.setattr(authority.os, "write", reject_public_write)
+    monkeypatch.setattr(authority.os, "fchmod", reject_public_fchmod)
+    with pytest.raises(ValueError, match="unsafe link profile"):
+        authority.ensure_direct_catalog(
+            target,
+            new_payload,
+            hashlib.sha256(old_payload).hexdigest(),
+            hashlib.sha256(new_payload).hexdigest(),
+            "fixture catalog",
+        )
+
+    assert published
+    assert target.read_bytes() == new_payload
+    assert alias.read_bytes() == new_payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert target.stat().st_nlink == 3
+
+
+def test_direct_catalog_partial_write_is_forward_recoverable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "README.md"
+    old_payload = b"reviewed predecessor\n"
+    new_payload = b"reviewed F116 catalog\n"
+    write_bytes(target, old_payload, 0o644)
+    real_write = authority.os.write
+    interrupted = False
+
+    def partial_then_raise(descriptor: int, retained: bytes) -> int:
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            assert real_write(descriptor, retained[:6]) == 6
+            raise RuntimeError("injected direct-catalog partial write")
+        return real_write(descriptor, retained)
+
+    monkeypatch.setattr(authority.os, "write", partial_then_raise)
+    with pytest.raises(ValueError, match="retained authenticated recovery entry"):
+        authority.ensure_direct_catalog(
+            target,
+            new_payload,
+            hashlib.sha256(old_payload).hexdigest(),
+            hashlib.sha256(new_payload).hexdigest(),
+            "fixture catalog",
+        )
+
+    assert interrupted
+    private = [
+        tmp_path / name
+        for name in authority.private_publication_names(target.name, "fixture catalog")
+    ]
+    assert target.read_bytes() == old_payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert stat.S_IMODE(private[0].stat().st_mode) == 0o000
+    assert private[0].stat().st_size == 6
+
+    monkeypatch.setattr(authority.os, "write", real_write)
+    authority.ensure_direct_catalog(
+        target,
+        new_payload,
+        hashlib.sha256(old_payload).hexdigest(),
+        hashlib.sha256(new_payload).hexdigest(),
+        "fixture catalog",
+    )
+    assert target.read_bytes() == new_payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert [path for path in private if path.exists()] == [private[0]]
+
+
+def test_direct_catalog_recovers_after_predecessor_unlink_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "README.md"
+    old_payload = b"reviewed predecessor\n"
+    new_payload = b"reviewed F116 catalog\n"
+    write_bytes(target, old_payload, 0o644)
+    real_unlink = authority.unlink_bound_name_lustre
+    interrupted = False
+
+    def unlink_then_raise(
+        parent: int, name: str, expected: os.stat_result, label: str
+    ) -> None:
+        nonlocal interrupted
+        real_unlink(parent, name, expected, label)
+        if not interrupted and "reviewed predecessor" in label:
+            interrupted = True
+            raise RuntimeError("injected crash after predecessor unlink")
+
+    monkeypatch.setattr(authority, "unlink_bound_name_lustre", unlink_then_raise)
+    with pytest.raises(RuntimeError, match="injected crash after predecessor unlink"):
+        authority.ensure_direct_catalog(
+            target,
+            new_payload,
+            hashlib.sha256(old_payload).hexdigest(),
+            hashlib.sha256(new_payload).hexdigest(),
+            "fixture catalog",
+        )
+
+    private = [
+        tmp_path / name
+        for name in authority.private_publication_names(target.name, "fixture catalog")
+    ]
+    assert interrupted
+    assert not target.exists()
+    assert [path.read_bytes() for path in private if path.exists()] == [new_payload]
+    assert all(
+        stat.S_IMODE(path.stat().st_mode) == 0o644
+        for path in private
+        if path.exists()
+    )
+
+    monkeypatch.setattr(authority, "unlink_bound_name_lustre", real_unlink)
+    authority.ensure_direct_catalog(
+        target,
+        new_payload,
+        hashlib.sha256(old_payload).hexdigest(),
+        hashlib.sha256(new_payload).hexdigest(),
+        "fixture catalog",
+    )
+    assert target.read_bytes() == new_payload
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert target.stat().st_nlink == 1
+    assert not any(path.exists() for path in private)
 
 
 def test_hardlink_install_crash_window_is_forward_recoverable(tmp_path: Path) -> None:

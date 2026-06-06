@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 from array import array
+from bisect import bisect_right
 from contextlib import contextmanager
 import csv
 import hashlib
@@ -495,31 +496,89 @@ def validate_criteria_payload(
     windows = require_dict(criteria.get("analysis_windows"), "analysis_windows")
     expected_windows = {
         "full": [4.0, 10.0],
-        "early": [4.0, 7.0],
-        "late": [7.0, 10.0],
+        "early": [4.0, 8.0],
+        "late": [6.0, 10.0],
     }
     if windows != expected_windows:
         raise AcceptanceError("criteria analysis windows differ from the preregistration")
 
+    criteria_change = require_dict(
+        criteria.get("criteria_change_record"), "criteria_change_record"
+    )
+    if criteria_change != {
+        "change_id": "physical-time-stationarity-r03-r17-v3",
+        "current_policy": {
+            "analysis_windows": expected_windows,
+            "minimum_effective_samples": {"full": 3.0, "comparison": 2.0},
+            "minimum_independent_time_blocks": {"full": 3.0, "comparison": 2.0},
+        },
+        "execution_effect": (
+            "No production authorization change or extension is required before applying "
+            "this fixed policy to retained t<=10 outputs."
+        ),
+        "extension_rule": (
+            "Only a stationarity gate that is inconclusive solely from sampling adequacy "
+            "at t=10 may nominate one separately authorized extension to t=12; the "
+            "prospective artifact must bind the exact preserved t<=10 evidence digest and "
+            "fixed combination rule."
+        ),
+        "outcome_blinding_statement": (
+            "Windows, minima, physical-time ESS, and paired-contrast rules were fixed from "
+            "forcing_tcorr and retained t<=10 support without using R03-R17 acceptance "
+            "outcomes."
+        ),
+        "physics_rationale": (
+            "For the fifteen forcing_tcorr=2 cases, t=4 starts after two forcing "
+            "correlation times; t=4..10 spans three forcing-time blocks and the fixed "
+            "overlapping t=4..8 and t=6..10 comparison windows each span two, with their "
+            "centers separated by one forcing correlation time. R11 forcing_tcorr=0.2 is "
+            "more strongly sampled."
+        ),
+        "previous_policy": {
+            "analysis_windows": {
+                "early": [4.0, 7.0],
+                "full": [4.0, 10.0],
+                "late": [7.0, 10.0],
+            },
+            "minimum_effective_samples": {"full": 3.0, "half": 1.5},
+            "minimum_independent_time_blocks": {"full": 3.0, "half": 1.5},
+        },
+        "review_disposition": (
+            "approved_by_independent_plasma_and_statistical_review"
+        ),
+        "statistical_rationale": (
+            "Physical-time integrated autocorrelation, max-gap coverage, and ESS prevent "
+            "clustered output sampling from inflating evidence. At the exact two-block "
+            "comparison minimum, paired physical effect-size thresholds are pass/fail "
+            "authority and moving-block bootstrap uncertainty is descriptive only."
+        ),
+    }:
+        raise AcceptanceError("criteria physical-time stationarity change record differs")
+
     statistics = require_dict(criteria.get("statistics_policy"), "statistics_policy")
     if statistics.get("time_average") != "endpoint-clipped-trapezoidal":
         raise AcceptanceError("criteria time_average policy is invalid")
-    if statistics.get("effective_samples") != "initial-positive-sequence":
+    if statistics.get("effective_samples") != "physical-time-initial-positive-sequence":
         raise AcceptanceError("criteria effective-sample policy is invalid")
     if statistics.get("uncertainty") != "deterministic-time-moving-block-bootstrap":
         raise AcceptanceError("criteria uncertainty policy is invalid")
+    if (
+        statistics.get("stationarity_contrast")
+        != "paired-physical-time-early-minus-late-effect-size-with-descriptive-bootstrap"
+    ):
+        raise AcceptanceError("criteria stationarity-contrast policy is invalid")
     if require_int(statistics.get("bootstrap_replicates"), "bootstrap_replicates", minimum=1) != 2000:
         raise AcceptanceError("criteria bootstrap_replicates must be 2000")
     if statistics.get("minimum_independent_time_blocks") != {
         "full": 3.0,
-        "half": 1.5,
+        "comparison": 2.0,
     }:
         raise AcceptanceError(
             "criteria minimum independent time-block counts differ from the preregistration"
         )
     if statistics.get("minimum_effective_samples") != {
         "full": 3.0,
-        "half": 1.5,
+        "comparison": 2.0,
     }:
         raise AcceptanceError(
             "criteria minimum effective-sample counts differ from the preregistration"
@@ -529,13 +588,112 @@ def validate_criteria_payload(
         "expected_history_cadence": 0.02,
         "maximum_gap_expected_cadence_multiplier": 2.5,
         "maximum_gap_forcing_tcorr_fraction": 0.25,
-        "median_cadence_upper_relative_tolerance": 0.25,
         "rule": (
-            "median cadence <= expected cadence * (1 + tolerance) and maximum gap "
-            "<= max(expected cadence * multiplier, authenticated forcing_tcorr * fraction)"
+            "exact endpoint-clipped physical-time coverage with maximum gap <= "
+            "max(expected cadence * multiplier, authenticated forcing_tcorr * fraction); "
+            "sample-count and median-cadence density are not acceptance authority"
         ),
     }:
         raise AcceptanceError("criteria gap policy differs from the preregistration")
+    stationarity = require_dict(
+        statistics.get("stationarity"), "statistics stationarity policy"
+    )
+    if stationarity != {
+        "decision_authority": (
+            "paired physical-time early-minus-late effect size only; moving-block "
+            "bootstrap uncertainty is descriptive and never pass/fail authority"
+        ),
+        "forcing_power_relative_change_lte": 0.1,
+        "occupancy_absolute_change_lte": 0.002,
+        "scalar_relative_change_lte": 0.25,
+    }:
+        raise AcceptanceError("criteria stationarity policy differs from the preregistration")
+
+    extension = require_dict(criteria.get("extension_policy"), "extension_policy")
+    if extension != {
+        "decision": (
+            "Evaluate and preserve the fixed t<=10 result first. Only a stationarity gate "
+            "that is inconclusive solely from sampling adequacy may nominate the exact "
+            "prospective fallback."
+        ),
+        "decision_time": 10.0,
+        "current_policy_authorizes_extension": False,
+        "extension_triggers": [
+            (
+                "any required stationarity gate has result=inconclusive solely because "
+                "sampling_adequacy=inconclusive at t=10"
+            ),
+        ],
+        "non_triggers": [
+            "passed or failed stationarity gate",
+            "missing or unavailable required analysis products",
+            "incomplete retained-state CT coverage",
+            "failed family, panel, convergence, or other plasma-physics gate",
+            "passed or blocked_out_of_scope gate",
+        ],
+        "prospective_extension_rule": {
+            "maximum_extensions": 1,
+            "nominated_endpoint": 12.0,
+            "analysis_windows": {
+                "full": [6.0, 12.0],
+                "early": [6.0, 10.0],
+                "late": [8.0, 12.0],
+            },
+            "minimum_effective_samples": {"full": 3.0, "comparison": 2.0},
+            "minimum_independent_time_blocks": {"full": 3.0, "comparison": 2.0},
+            "threshold_policy": "unchanged from the fixed t<=10 assessment",
+            "authorization": (
+                "requires a separately approved non-retrospective criteria artifact and "
+                "unchanged production authorization"
+            ),
+            "required_prospective_artifact": {
+                "record_type": (
+                    "stage-i-scientific-stationarity-extension-prospective-artifact"
+                ),
+                "approval_timing": (
+                    "independently approved before extension execution and before t>10 "
+                    "outcomes exist"
+                ),
+                "required_exact_bindings": [
+                    "preserved_t10_case_evidence_sha256",
+                    "criteria_sha256",
+                    "acceptance_utility_sha256",
+                ],
+            },
+            "fixed_combination_rule": {
+                "eligible_t10_case_result": "inconclusive",
+                "eligible_t10_gate_result": "inconclusive",
+                "eligible_t10_trigger": "sampling_adequacy=inconclusive",
+                "preserved_t10_evidence": (
+                    "exact digest remains immutable and separately reportable"
+                ),
+                "replaceable_result": (
+                    "only nominated sampling-inconclusive stationarity gates"
+                ),
+                "extension_pass": "nominated gate becomes pass",
+                "extension_fail": "nominated gate becomes fail",
+                "extension_inconclusive": "nominated gate remains inconclusive",
+                "all_other_t10_results": "unchanged",
+            },
+        },
+        "rule": (
+            "At t=10, only a sampling-inconclusive stationarity gate may nominate exactly "
+            "one t=12 extension. Before execution, a separate prospective artifact must "
+            "bind the exact preserved t<=10 evidence digest and fixed combination rule; "
+            "no t<=10 pass or fail may be rescued, use no other windows, and permit no "
+            "further extension."
+        ),
+        "forbidden_after_results": [
+            "relax thresholds",
+            "move the analysis windows",
+            "move the convergence interval",
+            "drop failed admitted products",
+            "reclassify failed or inconclusive gates as passed",
+            "use any family, panel, convergence, CT, or product gate as an extension trigger",
+            "use a passed or failed stationarity gate as an extension trigger",
+        ],
+    }:
+        raise AcceptanceError("criteria extension policy differs from the preregistration")
 
     canonical = require_dict(
         criteria.get("canonical_campaign_policy"), "canonical_campaign_policy"
@@ -672,6 +830,7 @@ def validate_criteria_payload(
 def validate_criteria_review(
     review: dict[str, object],
     review_binding: dict[str, object],
+    criteria: dict[str, object],
     criteria_binding: dict[str, object],
     utility_binding: dict[str, object],
 ) -> dict[str, object]:
@@ -708,8 +867,63 @@ def validate_criteria_review(
         != utility_binding["sha256"]
     ):
         raise AcceptanceError("criteria review does not bind the final acceptance utility")
+    if review.get("required_review_roles") != [
+        "plasma_physics",
+        "statistical_methodology",
+    ]:
+        raise AcceptanceError("criteria review required roles differ")
     status_value = review.get("review_status")
     reviewers = require_list(review.get("reviews"), "criteria review reviews")
+    criteria_change = require_dict(
+        criteria.get("criteria_change_record"), "criteria change record"
+    )
+    pending_requirements = [
+        (
+            "Independent plasma-physics approval of the fixed t<=10 windows, forcing-time "
+            "support, and unchanged physical thresholds."
+        ),
+        (
+            "Independent statistical-methodology approval of physical-time max-gap "
+            "coverage and ESS, effect-size-only paired stationarity, descriptive bootstrap, "
+            "and digest-bound frozen extension handling."
+        ),
+    ]
+    approved_reviewers = [
+        {
+            "role": "plasma_physics",
+            "reviewer_id": "019e9a8d-253b-7010-b156-676866801f3c",
+            "decision": "approved",
+            "independent_of_implementation": True,
+        },
+        {
+            "role": "statistical_methodology",
+            "reviewer_id": "019e9ae1-d8c6-7861-9bbb-69e2cc97ba6f",
+            "decision": "approved",
+            "independent_of_implementation": True,
+        },
+    ]
+    if status_value in ("pending_independent_review", "changes_required"):
+        expected_candidate_status = "ready_for_independent_plasma_and_statistical_review"
+        expected_disposition = (
+            "changes_required_pending_independent_plasma_and_statistical_review"
+        )
+        expected_requirements = pending_requirements
+        expected_reviewers: list[dict[str, object]] = []
+        approved = False
+    elif status_value == "approved":
+        expected_candidate_status = (
+            "approved_by_independent_plasma_and_statistical_review"
+        )
+        expected_disposition = "approved_by_independent_plasma_and_statistical_review"
+        expected_requirements = []
+        expected_reviewers = approved_reviewers
+        approved = True
+    else:
+        raise AcceptanceError("criteria review status is invalid")
+    if criteria_change.get("review_disposition") != expected_disposition:
+        raise AcceptanceError("criteria review status and criteria disposition are incoherent")
+    if reviewers != expected_reviewers:
+        raise AcceptanceError("criteria review status and reviewer records are incoherent")
     retained_ct = require_dict(
         review.get("retained_ct_observation"), "criteria review retained CT observation"
     )
@@ -725,33 +939,38 @@ def validate_criteria_review(
         "status": "retained_observation_not_criteria_approval",
     }:
         raise AcceptanceError("criteria review retained CT observation differs")
-    if status_value in ("pending_independent_review", "changes_required"):
-        if reviewers:
-            raise AcceptanceError("unapproved criteria review must not claim reviewers")
-        approved = False
-    elif status_value == "approved":
-        roles: set[str] = set()
-        identities: set[str] = set()
-        for item in reviewers:
-            record = require_dict(item, "criteria reviewer")
-            role = record.get("role")
-            identity = record.get("reviewer_id")
-            decision = record.get("decision")
-            if (
-                role not in ("plasma_physics", "statistical_methodology")
-                or not isinstance(identity, str)
-                or not identity
-                or decision != "approved"
-                or record.get("independent_of_implementation") is not True
-            ):
-                raise AcceptanceError("approved criteria reviewer is malformed")
-            roles.add(str(role))
-            identities.add(identity)
-        if roles != {"plasma_physics", "statistical_methodology"} or len(identities) != 2:
-            raise AcceptanceError("criteria approval lacks two distinct required reviewers")
-        approved = True
-    else:
-        raise AcceptanceError("criteria review status is invalid")
+    method_revision = require_dict(
+        review.get("method_revision"), "criteria review method revision"
+    )
+    if method_revision != {
+        "candidate_status": expected_candidate_status,
+        "fixed_analysis_windows": {
+            "full": [4.0, 10.0],
+            "early": [4.0, 8.0],
+            "late": [6.0, 10.0],
+        },
+        "physical_time_ess": (
+            "Exact piecewise-linear physical-time autocovariance on the preregistered "
+            "history-cadence lag grid with initial-positive-sequence ESS and max-gap "
+            "physical-time coverage independent of clustered sample density."
+        ),
+        "paired_stationarity": (
+            "One paired physical-time early-minus-late effect-size decision for every "
+            "stationarity metric, including forcing power; moving-block bootstrap is "
+            "descriptive only."
+        ),
+        "extension_policy": (
+            "No extension is authorized by the current criteria; only a sampling-"
+            "inconclusive stationarity gate may nominate the exact single t=12 fallback, "
+            "which requires a separate prospective artifact binding the preserved t<=10 "
+            "evidence digest and fixed combination rule."
+        ),
+    }:
+        raise AcceptanceError("criteria review method revision differs")
+    if review.get("remaining_review_requirements") != expected_requirements:
+        raise AcceptanceError(
+            "criteria review status and remaining requirements are incoherent"
+        )
     return {
         "review": review,
         "review_binding": review_binding,
@@ -769,6 +988,7 @@ def load_validated_policy(criteria_path: Path, review_path: Path) -> dict[str, o
     policy.update(validate_criteria_review(
         review,
         review_binding,
+        criteria,
         criteria_binding,
         require_dict(policy["verified_sources"]["acceptance_utility"], "utility binding"),
     ))
@@ -840,14 +1060,14 @@ def interpolate_at(times: list[float], values: list[float], target: float) -> fl
 
     if target < times[0] or target > times[-1]:
         raise AcceptanceError("analysis window is outside retained time coverage")
-    for index, time in enumerate(times):
-        if time == target:
-            return values[index]
-        if time > target:
-            left_time = times[index - 1]
-            fraction = (target - left_time) / (time - left_time)
-            return values[index - 1] + fraction * (values[index] - values[index - 1])
-    return values[-1]
+    right = bisect_right(times, target)
+    if right and times[right - 1] == target:
+        return values[right - 1]
+    if right == len(times):
+        return values[-1]
+    left = right - 1
+    fraction = (target - times[left]) / (times[right] - times[left])
+    return values[left] + fraction * (values[right] - values[left])
 
 
 def clipped_series(
@@ -897,37 +1117,82 @@ def weighted_mean(values: list[float], weights: list[float]) -> float:
     return result
 
 
-def effective_sample_size(values: list[float]) -> tuple[float, float]:
-    """Estimate N_eff with Geyer's initial-positive-sequence autocorrelation rule."""
+def physical_time_autocovariance(
+    times: list[float], centered: list[float], lag: float
+) -> float:
+    """Integrate biased autocovariance of one irregular piecewise-linear series."""
 
-    count = len(values)
-    if count < 2:
-        return 1.0, 1.0
-    mean = sum(values) / count
+    duration = times[-1] - times[0]
+    lag = require_nonnegative(lag, "physical-time autocovariance lag")
+    if lag >= duration:
+        return 0.0
+    start = times[0]
+    end = times[-1] - lag
+    breakpoints = {start, end}
+    for time in times:
+        if start < time < end:
+            breakpoints.add(time)
+        shifted = time - lag
+        if start < shifted < end:
+            breakpoints.add(shifted)
+    ordered = sorted(breakpoints)
+    integral = 0.0
+    for left, right in zip(ordered, ordered[1:]):
+        middle = 0.5 * (left + right)
+
+        def product(time: float) -> float:
+            return interpolate_at(times, centered, time) * interpolate_at(
+                times, centered, time + lag
+            )
+
+        integral += (right - left) * (
+            product(left) + 4.0 * product(middle) + product(right)
+        ) / 6.0
+    return integral / duration
+
+
+def effective_sample_size(
+    times: list[float], values: list[float], lag_step: float
+) -> tuple[float, float]:
+    """Estimate physical-time N_eff with a fixed-lag initial-positive sequence."""
+
+    if len(times) != len(values) or len(times) < 2:
+        raise AcceptanceError("physical-time effective-sample inputs are invalid")
+    if any(right <= left for left, right in zip(times, times[1:])):
+        raise AcceptanceError("physical-time effective-sample grid is not increasing")
+    if any(not math.isfinite(value) for value in values):
+        raise AcceptanceError("physical-time effective-sample values are non-finite")
+    duration = times[-1] - times[0]
+    reviewed_step = min(duration, require_positive(lag_step, "autocorrelation lag step"))
+    scale = max(1.0, *(abs(value) for value in values))
+    if max(values) - min(values) <= 64.0 * sys.float_info.epsilon * scale:
+        return max(1.0, duration / reviewed_step), reviewed_step
+    weights = trapezoidal_weights(times)
+    mean = weighted_mean(values, weights)
     centered = [value - mean for value in values]
-    variance = sum(value * value for value in centered) / count
-    if variance == 0.0:
-        return float(count), 1.0
+    variance = physical_time_autocovariance(times, centered, 0.0)
+    if variance <= 0.0:
+        return max(1.0, duration / reviewed_step), reviewed_step
 
     correlations = [1.0]
-    for lag in range(1, count):
-        covariance = sum(
-            centered[index] * centered[index + lag]
-            for index in range(count - lag)
-        ) / count
-        correlations.append(covariance / variance)
+    lag = reviewed_step
+    while lag < duration:
+        correlations.append(physical_time_autocovariance(times, centered, lag) / variance)
+        lag += reviewed_step
     positive_sum = 0.0
-    lag = 1
-    while lag < count:
-        pair = correlations[lag]
-        if lag + 1 < count:
-            pair += correlations[lag + 1]
+    index = 1
+    while index < len(correlations):
+        pair = correlations[index]
+        if index + 1 < len(correlations):
+            pair += correlations[index + 1]
         if pair <= 0.0:
             break
         positive_sum += pair
-        lag += 2
-    tau = max(1.0, 1.0 + 2.0 * positive_sum)
-    return max(1.0, min(float(count), count / tau)), tau
+        index += 2
+    autocorrelation_duration = min(
+        duration, reviewed_step * max(1.0, 1.0 + 2.0 * positive_sum)
+    )
+    return max(1.0, duration / autocorrelation_duration), autocorrelation_duration
 
 
 def quantile(values: list[float], probability: float) -> float:
@@ -955,6 +1220,47 @@ def median(values: list[float]) -> float:
     if len(ordered) % 2:
         return ordered[middle]
     return 0.5 * (ordered[middle - 1] + ordered[middle])
+
+
+def physical_time_coverage(
+    times: list[float], start: float, end: float, maximum_gap: float
+) -> dict[str, float]:
+    """Measure max-gap physical-time coverage without sample-density authority."""
+
+    if (
+        len(times) < 2
+        or start >= end
+        or times[0] != start
+        or times[-1] != end
+        or any(right <= left for left, right in zip(times, times[1:]))
+    ):
+        raise AcceptanceError("physical-time coverage inputs are invalid")
+    reviewed_gap = require_positive(maximum_gap, "maximum allowed physical-time gap")
+    radius = 0.5 * reviewed_gap
+    intervals = [
+        (max(start, time - radius), min(end, time + radius)) for time in times
+    ]
+    covered = 0.0
+    merged_left, merged_right = intervals[0]
+    for left, right in intervals[1:]:
+        if left <= merged_right:
+            merged_right = max(merged_right, right)
+            continue
+        covered += merged_right - merged_left
+        merged_left, merged_right = left, right
+    covered += merged_right - merged_left
+    duration = end - start
+    covered = min(duration, max(0.0, covered))
+    observed_maximum_gap = max(right - left for left, right in zip(times, times[1:]))
+    return {
+        "window_duration": duration,
+        "coverage_radius": radius,
+        "covered_duration": covered,
+        "uncovered_duration": max(0.0, duration - covered),
+        "coverage_fraction": covered / duration,
+        "maximum_gap": observed_maximum_gap,
+        "maximum_allowed_gap": reviewed_gap,
+    }
 
 
 def bootstrap_means(
@@ -1035,6 +1341,81 @@ def bootstrap_means(
     return samples
 
 
+def paired_window_contrast(
+    times: list[float],
+    values: list[float],
+    early_start: float,
+    early_end: float,
+    late_start: float,
+    late_end: float,
+    *,
+    replicates: int,
+    seed_text: str,
+    block_duration: float,
+) -> dict[str, object]:
+    """Bootstrap one paired physical-time early-minus-late mean contrast."""
+
+    early_duration = early_end - early_start
+    late_duration = late_end - late_start
+    if early_duration <= 0.0 or not math.isclose(
+        early_duration, late_duration, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        raise AcceptanceError("paired stationarity windows must have equal positive duration")
+    interpolate_at(times, values, early_start)
+    interpolate_at(times, values, early_end)
+    interpolate_at(times, values, late_start)
+    interpolate_at(times, values, late_end)
+    offsets = {0.0, early_duration}
+    for time in times:
+        early_offset = time - early_start
+        late_offset = time - late_start
+        if 0.0 < early_offset < early_duration:
+            offsets.add(early_offset)
+        if 0.0 < late_offset < late_duration:
+            offsets.add(late_offset)
+    paired_times = sorted(offsets)
+    contrasts = [
+        interpolate_at(times, values, early_start + offset)
+        - interpolate_at(times, values, late_start + offset)
+        for offset in paired_times
+    ]
+    observed = weighted_mean(contrasts, trapezoidal_weights(paired_times))
+    bootstrap_block_duration = min(
+        early_duration, require_positive(block_duration, "paired bootstrap block duration")
+    )
+    bootstraps = bootstrap_means(
+        paired_times,
+        contrasts,
+        replicates,
+        seed_text,
+        bootstrap_block_duration,
+    )
+    bootstrap_mean = sum(bootstraps) / len(bootstraps)
+    variance = sum(
+        (value - bootstrap_mean) ** 2 for value in bootstraps
+    ) / max(1, len(bootstraps) - 1)
+    return {
+        "window_alignment": {
+            "early": {"start": early_start, "end": early_end},
+            "late": {"start": late_start, "end": late_end},
+            "relative_time_duration": early_duration,
+        },
+        "signed_early_minus_late": observed,
+        "absolute_change": abs(observed),
+        "standard_error": math.sqrt(max(0.0, variance)),
+        "confidence_interval_95": [
+            quantile(bootstraps, 0.025),
+            quantile(bootstraps, 0.975),
+        ],
+        "method": {
+            "contrast": "paired-piecewise-linear-early-minus-late",
+            "uncertainty": "deterministic-circular-physical-time-moving-block-bootstrap",
+            "bootstrap_replicates": replicates,
+            "bootstrap_block_duration": bootstrap_block_duration,
+        },
+    }
+
+
 def window_statistics(
     times: list[float],
     values: list[float],
@@ -1047,7 +1428,6 @@ def window_statistics(
     expected_cadence: float | None = None,
     maximum_gap_expected_cadence_multiplier: float = 2.5,
     maximum_gap_minimum_block_duration_fraction: float = 0.25,
-    median_cadence_upper_relative_tolerance: float = 0.25,
 ) -> dict[str, object]:
     """Compute time-weighted mean, N_eff, and deterministic bootstrap uncertainty."""
 
@@ -1055,29 +1435,29 @@ def window_statistics(
     weights = trapezoidal_weights(clipped_times)
     mean = weighted_mean(clipped_values, weights)
     variance = weighted_mean([(value - mean) ** 2 for value in clipped_values], weights)
-    raw_neff, tau = effective_sample_size(clipped_values)
     gaps = [
         right - left for left, right in zip(clipped_times, clipped_times[1:])
     ]
-    cadence = median(gaps)
-    maximum_gap = max(gaps)
-    estimated_autocorrelation_duration = tau * cadence
+    descriptive_median_cadence = median(gaps)
     minimum_duration = require_nonnegative(
         minimum_block_duration, "minimum block duration"
     )
-    required_block_duration = max(
-        cadence,
-        estimated_autocorrelation_duration,
-        minimum_duration,
-    )
     window_duration = clipped_times[-1] - clipped_times[0]
-    physical_independence_cap = window_duration / required_block_duration
-    neff = min(raw_neff, physical_independence_cap)
     reviewed_expected_cadence = (
-        cadence
+        (minimum_duration if minimum_duration > 0.0 else window_duration)
         if expected_cadence is None
         else require_positive(expected_cadence, "expected cadence")
     )
+    raw_neff, estimated_autocorrelation_duration = effective_sample_size(
+        clipped_times, clipped_values, reviewed_expected_cadence
+    )
+    required_block_duration = max(
+        reviewed_expected_cadence,
+        estimated_autocorrelation_duration,
+        minimum_duration,
+    )
+    physical_independence_cap = window_duration / required_block_duration
+    neff = min(raw_neff, physical_independence_cap)
     multiplier = require_positive(
         maximum_gap_expected_cadence_multiplier,
         "maximum gap expected-cadence multiplier",
@@ -1086,18 +1466,20 @@ def window_statistics(
         maximum_gap_minimum_block_duration_fraction,
         "maximum gap minimum-block-duration fraction",
     )
-    cadence_tolerance = require_nonnegative(
-        median_cadence_upper_relative_tolerance,
-        "median cadence upper relative tolerance",
-    )
     maximum_allowed_gap = max(
         multiplier * reviewed_expected_cadence,
         tcorr_fraction * minimum_duration,
     )
-    cadence_upper_limit = reviewed_expected_cadence * (1.0 + cadence_tolerance)
+    coverage = physical_time_coverage(
+        clipped_times, clipped_times[0], clipped_times[-1], maximum_allowed_gap
+    )
+    tolerance = 64.0 * sys.float_info.epsilon * max(1.0, window_duration)
     gap_adequacy = (
         "pass"
-        if cadence <= cadence_upper_limit and maximum_gap <= maximum_allowed_gap
+        if (
+            float(coverage["maximum_gap"]) <= maximum_allowed_gap + tolerance
+            and float(coverage["uncovered_duration"]) <= tolerance
+        )
         else "inconclusive"
     )
     bootstrap_block_duration = min(window_duration, required_block_duration)
@@ -1122,10 +1504,13 @@ def window_statistics(
         "physical_independence_cap": physical_independence_cap,
         "independent_time_block_count": physical_independence_cap,
         "gap_adequacy": gap_adequacy,
-        "median_cadence": cadence,
-        "maximum_gap": maximum_gap,
+        "physical_time_coverage_fraction": coverage["coverage_fraction"],
+        "physical_time_covered_duration": coverage["covered_duration"],
+        "physical_time_uncovered_duration": coverage["uncovered_duration"],
+        "descriptive_median_cadence": descriptive_median_cadence,
+        "maximum_gap": coverage["maximum_gap"],
         "maximum_allowed_gap": maximum_allowed_gap,
-        "integrated_autocorrelation_time": tau,
+        "integrated_autocorrelation_duration": estimated_autocorrelation_duration,
         "standard_error": math.sqrt(max(0.0, bootstrap_variance)),
         "confidence_interval_95": [
             quantile(bootstraps, 0.025),
@@ -1133,18 +1518,22 @@ def window_statistics(
         ],
         "method": {
             "time_average": "endpoint-clipped-trapezoidal",
-            "effective_samples": "initial-positive-sequence",
+            "effective_samples": "physical-time-initial-positive-sequence",
             "uncertainty": "deterministic-circular-time-moving-block-bootstrap",
             "bootstrap_replicates": replicates,
+            "autocorrelation_lag_step": reviewed_expected_cadence,
             "estimated_autocorrelation_duration": estimated_autocorrelation_duration,
             "minimum_block_duration": minimum_block_duration,
             "required_block_duration": required_block_duration,
             "bootstrap_block_duration": bootstrap_block_duration,
             "expected_cadence": reviewed_expected_cadence,
-            "median_cadence_upper_limit": cadence_upper_limit,
             "maximum_gap_rule": (
                 "max(expected cadence * multiplier, minimum block duration * fraction)"
             ),
+            "gap_adequacy_authority": (
+                "exact endpoint-clipped physical-time coverage and maximum gap only"
+            ),
+            "sample_density_statistics": "descriptive-only",
             "maximum_gap_expected_cadence_multiplier": multiplier,
             "maximum_gap_minimum_block_duration_fraction": tcorr_fraction,
         },
@@ -1166,28 +1555,40 @@ def stationarity_result(
     full: dict[str, object],
     early: dict[str, object],
     late: dict[str, object],
+    paired_contrast: dict[str, object],
     kind: str,
     policy: dict[str, object],
 ) -> dict[str, object]:
-    """Evaluate preregistered early/late stationarity."""
+    """Evaluate preregistered stationarity from one paired physical-time contrast."""
 
-    difference = abs(float(early["mean"]) - float(late["mean"]))
-    combined_se = math.hypot(
-        float(early["standard_error"]), float(late["standard_error"])
+    signed_difference = require_finite(
+        paired_contrast.get("signed_early_minus_late"),
+        "paired stationarity signed difference",
     )
-    z_score = finite_ratio(difference, combined_se)
+    expected_difference = float(early["mean"]) - float(late["mean"])
+    if not math.isclose(
+        signed_difference, expected_difference, rel_tol=1.0e-10, abs_tol=1.0e-12
+    ):
+        raise AcceptanceError("paired stationarity contrast differs from window means")
+    difference = abs(signed_difference)
+    paired_se = require_nonnegative(
+        paired_contrast.get("standard_error"), "paired stationarity standard error"
+    )
+    z_score = finite_ratio(difference, paired_se)
     relative = finite_ratio(difference, abs(float(full["mean"])))
-    z_limit = require_nonnegative(policy.get("z_lte"), "stationarity z_lte")
+    decision_authority = policy.get("decision_authority")
+    if decision_authority != (
+        "paired physical-time early-minus-late effect size only; moving-block "
+        "bootstrap uncertainty is descriptive and never pass/fail authority"
+    ):
+        raise AcceptanceError("stationarity decision authority differs")
     if kind == "occupancy":
         absolute_limit = require_nonnegative(
             policy.get("occupancy_absolute_change_lte"),
             "occupancy stationarity absolute limit",
         )
-        passed = difference <= absolute_limit and z_score <= z_limit
-        limits = {
-            "absolute_change_lte": absolute_limit,
-            "z_lte": z_limit,
-        }
+        passed = difference <= absolute_limit
+        limits = {"absolute_change_lte": absolute_limit}
     elif kind == "forcing_power":
         relative_limit = require_nonnegative(
             policy.get("forcing_power_relative_change_lte"),
@@ -1200,13 +1601,21 @@ def stationarity_result(
             policy.get("scalar_relative_change_lte"),
             "scalar stationarity relative limit",
         )
-        passed = relative <= relative_limit and z_score <= z_limit
-        limits = {"relative_change_lte": relative_limit, "z_lte": z_limit}
+        passed = relative <= relative_limit
+        limits = {"relative_change_lte": relative_limit}
     return {
         "result": "pass" if passed else "fail",
         "absolute_change": difference,
+        "signed_early_minus_late": signed_difference,
         "relative_change": relative,
-        "z_score": z_score,
+        "decision_authority": "preregistered-paired-physical-effect-size-threshold-only",
+        "descriptive_bootstrap": {
+            "z_score": z_score,
+            "standard_error": paired_se,
+            "confidence_interval_95": paired_contrast["confidence_interval_95"],
+            "inferential_authority": False,
+        },
+        "paired_contrast_method": paired_contrast["method"],
         "limits": limits,
     }
 
@@ -1220,7 +1629,7 @@ def metric_statistics(
     kind: str,
     minimum_block_duration: float = 0.0,
 ) -> dict[str, object]:
-    """Compute full/half statistics and one stationarity result."""
+    """Compute full/comparison statistics and one paired stationarity result."""
 
     times = history["time"]
     windows = require_dict(policy["criteria"].get("analysis_windows"), "analysis_windows")
@@ -1251,10 +1660,6 @@ def metric_statistics(
                 gap_policy.get("maximum_gap_forcing_tcorr_fraction"),
                 "maximum gap forcing-tcorr fraction",
             ),
-            median_cadence_upper_relative_tolerance=require_nonnegative(
-                gap_policy.get("median_cadence_upper_relative_tolerance"),
-                "median cadence upper relative tolerance",
-            ),
         )
     minimum = require_dict(statistics.get("minimum_effective_samples"), "minimum_effective_samples")
     minimum_blocks = require_dict(
@@ -1262,12 +1667,14 @@ def metric_statistics(
         "minimum_independent_time_blocks",
     )
     full_minimum = require_positive(minimum.get("full"), "minimum full effective samples")
-    half_minimum = require_positive(minimum.get("half"), "minimum half effective samples")
+    comparison_minimum = require_positive(
+        minimum.get("comparison"), "minimum comparison effective samples"
+    )
     full_block_minimum = require_positive(
         minimum_blocks.get("full"), "minimum full independent time blocks"
     )
-    half_block_minimum = require_positive(
-        minimum_blocks.get("half"), "minimum half independent time blocks"
+    comparison_block_minimum = require_positive(
+        minimum_blocks.get("comparison"), "minimum comparison independent time blocks"
     )
     adequacy = all(
         float(require_dict(result[name], f"{name} stats")["effective_sample_count"])
@@ -1279,15 +1686,43 @@ def metric_statistics(
         >= block_required
         for name, sample_required, block_required in (
             ("full", full_minimum, full_block_minimum),
-            ("early", half_minimum, half_block_minimum),
-            ("late", half_minimum, half_block_minimum),
+            ("early", comparison_minimum, comparison_block_minimum),
+            ("late", comparison_minimum, comparison_block_minimum),
         )
     )
     result["sampling_adequacy"] = "pass" if adequacy else "inconclusive"
+    early_window = require_list(windows["early"], "early window")
+    late_window = require_list(windows["late"], "late window")
+    paired_contrast = paired_window_contrast(
+        times,
+        values,
+        require_finite(early_window[0], "early start"),
+        require_finite(early_window[1], "early end"),
+        require_finite(late_window[0], "late start"),
+        require_finite(late_window[1], "late end"),
+        replicates=replicates,
+        seed_text=f"{metric}:paired-stationarity:{policy['criteria_binding']['sha256']}",
+        block_duration=max(
+            require_positive(
+                require_dict(result["early"], "early stats")["method"][
+                    "required_block_duration"
+                ],
+                "early required block duration",
+            ),
+            require_positive(
+                require_dict(result["late"], "late stats")["method"][
+                    "required_block_duration"
+                ],
+                "late required block duration",
+            ),
+        ),
+    )
+    result["paired_stationarity_contrast"] = paired_contrast
     result["stationarity"] = stationarity_result(
         require_dict(result["full"], "full stats"),
         require_dict(result["early"], "early stats"),
         require_dict(result["late"], "late stats"),
+        paired_contrast,
         kind,
         require_dict(statistics.get("stationarity"), "stationarity policy"),
     )
@@ -1313,6 +1748,178 @@ def gate(
         "observations": observations,
         "limits": limits,
     }
+
+
+def extension_assessment(
+    criteria: dict[str, object],
+    stationarity_gates: list[dict[str, object]],
+    preserved_t10_result: str,
+) -> dict[str, object]:
+    """Apply the frozen non-authorizing t=10 extension-nomination rule."""
+
+    policy = require_dict(criteria.get("extension_policy"), "extension policy")
+    if preserved_t10_result not in VALID_RESULTS:
+        raise AcceptanceError("preserved t<=10 result is invalid")
+    eligible_case = preserved_t10_result == "inconclusive"
+    triggered_by: list[dict[str, str]] = []
+    for item in stationarity_gates:
+        record = require_dict(item, "stationarity gate")
+        name = record.get("name")
+        if not isinstance(name, str) or not name.startswith("stationarity:"):
+            raise AcceptanceError("extension assessment received a non-stationarity gate")
+        observations = require_dict(
+            record.get("observations"), f"{name} extension observations"
+        )
+        sampling = observations.get("sampling_adequacy")
+        gate_result = record.get("result")
+        if sampling == "inconclusive":
+            if gate_result != "inconclusive":
+                raise AcceptanceError(
+                    "sampling-inconclusive stationarity gate must remain inconclusive"
+                )
+            if eligible_case:
+                triggered_by.append(
+                    {"gate": name, "trigger": "sampling_adequacy=inconclusive"}
+                )
+        elif sampling == "pass":
+            if gate_result not in {"pass", "fail"}:
+                raise AcceptanceError(
+                    "sampling-adequate stationarity gate must be pass or fail"
+                )
+        else:
+            raise AcceptanceError("stationarity sampling adequacy is invalid")
+    return {
+        "decision_time": policy["decision_time"],
+        "preserved_t10_result": preserved_t10_result,
+        "triggered": bool(triggered_by),
+        "triggered_by": triggered_by,
+        "current_policy_authorizes_extension": policy[
+            "current_policy_authorizes_extension"
+        ],
+        "prospective_extension_rule": policy["prospective_extension_rule"],
+    }
+
+
+def validate_prospective_extension_artifact(
+    policy: dict[str, object],
+    preserved_t10_evidence: dict[str, object],
+    artifact: dict[str, object],
+) -> dict[str, object]:
+    """Authenticate the separate prospective artifact required before extension."""
+
+    if preserved_t10_evidence.get("record_type") != "stage-i-scientific-case-evidence":
+        raise AcceptanceError("preserved t<=10 evidence is not case evidence")
+    verify_evidence_policy_binding(
+        policy, preserved_t10_evidence, "preserved t<=10 case evidence"
+    )
+    authenticated_t10 = independently_recompute_case(
+        policy, preserved_t10_evidence, "preserved t<=10 case evidence"
+    )
+    assessment = require_dict(
+        authenticated_t10.get("extension_assessment"),
+        "preserved t<=10 extension assessment",
+    )
+    if (
+        authenticated_t10.get("result") != "inconclusive"
+        or assessment.get("preserved_t10_result") != "inconclusive"
+    ):
+        raise AcceptanceError("prospective extension attempts to rescue t<=10 pass or fail")
+    if assessment.get("triggered") is not True:
+        raise AcceptanceError("preserved t<=10 evidence does not nominate extension")
+    triggered = require_list(
+        assessment.get("triggered_by"), "preserved t<=10 extension triggers"
+    )
+    nominated = []
+    for item in triggered:
+        record = require_dict(item, "preserved t<=10 extension trigger")
+        if record.get("trigger") != "sampling_adequacy=inconclusive":
+            raise AcceptanceError("prospective extension attempts to rescue pass or fail")
+        name = record.get("gate")
+        if not isinstance(name, str) or not name.startswith("stationarity:"):
+            raise AcceptanceError("prospective extension trigger is not stationarity")
+        nominated.append(name)
+
+    verify_evidence_digest(artifact, "prospective extension artifact")
+    expected_keys = {
+        "schema_version",
+        "record_type",
+        "authority",
+        "non_authorizing_statement",
+        "release_authorizing",
+        "approval",
+        "bindings",
+        "nominated_stationarity_gates",
+        "prospective_extension_rule",
+        "evidence_digest",
+    }
+    if set(artifact) != expected_keys:
+        raise AcceptanceError("prospective extension artifact fields differ")
+    prospective = require_dict(
+        require_dict(
+            policy["criteria"].get("extension_policy"), "extension policy"
+        ).get("prospective_extension_rule"),
+        "prospective extension rule",
+    )
+    if (
+        assessment.get("decision_time")
+        != require_dict(
+            policy["criteria"].get("extension_policy"), "extension policy"
+        )["decision_time"]
+        or assessment.get("current_policy_authorizes_extension") is not False
+        or assessment.get("prospective_extension_rule") != prospective
+    ):
+        raise AcceptanceError("preserved t<=10 extension assessment contract differs")
+    required_artifact = require_dict(
+        prospective.get("required_prospective_artifact"),
+        "required prospective artifact",
+    )
+    if (
+        artifact.get("schema_version") != 1
+        or artifact.get("record_type") != required_artifact["record_type"]
+        or artifact.get("authority")
+        != "non-authorizing-prospective-scientific-extension-policy"
+        or artifact.get("non_authorizing_statement") != NON_AUTHORIZING_STATEMENT
+        or artifact.get("release_authorizing") is not False
+        or artifact.get("prospective_extension_rule") != prospective
+        or artifact.get("nominated_stationarity_gates") != nominated
+    ):
+        raise AcceptanceError("prospective extension artifact contract differs")
+    approval = require_dict(artifact.get("approval"), "prospective extension approval")
+    if (
+        set(approval)
+        != {
+            "status",
+            "approved_before_extension_execution",
+            "independent_of_t10_assessment",
+            "reviewer_id",
+        }
+        or approval.get("status") != "approved"
+        or approval.get("approved_before_extension_execution") is not True
+        or approval.get("independent_of_t10_assessment") is not True
+        or not isinstance(approval.get("reviewer_id"), str)
+        or not approval["reviewer_id"]
+    ):
+        raise AcceptanceError("prospective extension approval is invalid")
+    bindings = require_dict(artifact.get("bindings"), "prospective extension bindings")
+    expected_bindings = {
+        "preserved_t10_case_evidence_sha256": require_sha256(
+            require_dict(
+                preserved_t10_evidence.get("evidence_digest"),
+                "preserved t<=10 evidence digest",
+            ).get("sha256"),
+            "preserved t<=10 case evidence sha256",
+        ),
+        "criteria_sha256": policy["criteria_binding"]["sha256"],
+        "acceptance_utility_sha256": require_dict(
+            policy["verified_sources"]["acceptance_utility"],
+            "policy acceptance utility",
+        )["sha256"],
+    }
+    if bindings != expected_bindings:
+        raise AcceptanceError(
+            "prospective extension artifact does not bind exact preserved t<=10 evidence"
+        )
+    return artifact
 
 
 def history_delta(
@@ -1425,6 +2032,10 @@ def source_archive_catalog(policy: dict[str, object]) -> dict[str, str]:
         "source archive catalog binding",
     )
     payload = read_stable_bytes(Path(str(binding["path"])), "source archive catalog")
+    if sha256_bytes(payload) != binding["sha256"]:
+        raise AcceptanceError(
+            "source archive checksum catalog differs from the verified binding"
+        )
     records: dict[str, str] = {}
     try:
         lines = payload.decode("utf-8").splitlines()
@@ -2472,10 +3083,6 @@ def analyzer_metrics(
                 gap_policy.get("maximum_gap_forcing_tcorr_fraction"),
                 "maximum gap forcing-tcorr fraction",
             ),
-            median_cadence_upper_relative_tolerance=require_nonnegative(
-                gap_policy.get("median_cadence_upper_relative_tolerance"),
-                "median cadence upper relative tolerance",
-            ),
         )
         normalized = {
             "mean": float(recomputed["mean"]),
@@ -2720,7 +3327,7 @@ def evaluate_case(
             kind="occupancy",
             minimum_block_duration=minimum_block_duration,
         )
-        both_halves = (
+        both_comparisons = (
             float(require_dict(occupancy_stats["early"], "occupancy early")["mean"])
             > float(finite["minimum_occupancy"])
             and float(require_dict(occupancy_stats["late"], "occupancy late")["mean"])
@@ -2729,7 +3336,7 @@ def evaluate_case(
         passed = (
             hw_zero
             and float(nu_late["confidence_interval_95"][0]) > 0.0
-            and both_halves
+            and both_comparisons
         )
         family_gates.append(gate(
             "finite_limiter_semantics",
@@ -2739,7 +3346,7 @@ def evaluate_case(
                 "hardwall_projection_exact_zero": hw_zero,
                 "late_nu_eff_lower_95": nu_late["confidence_interval_95"][0],
                 "occupancy": occupancy_stats,
-                "occupancy_active_both_halves": both_halves,
+                "occupancy_active_both_comparison_windows": both_comparisons,
             },
             limits={"minimum_occupancy": finite["minimum_occupancy"]},
         ))
@@ -2929,6 +3536,7 @@ def evaluate_case(
         ct_gate,
     ]
     result = aggregate_gate_result(required_gates)
+    extension = extension_assessment(criteria, stationarity_gates, result)
     inputs = [
         policy["criteria_binding"],
         policy["review_binding"],
@@ -2954,6 +3562,7 @@ def evaluate_case(
             and bundle.get("canonical_campaign_authority_eligible") is True
         ),
         "analysis_windows": windows,
+        "extension_assessment": extension,
         "evaluation_inputs": {
             "mhd_history": mhd_binding,
             "user_history": user_binding,

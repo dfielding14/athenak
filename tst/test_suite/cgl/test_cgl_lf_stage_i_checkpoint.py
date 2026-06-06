@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+import errno
 import fcntl
 import hashlib
 import importlib.util
@@ -54,6 +55,69 @@ def load_checkpoint_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def force_checkpoint_renameat2_einval(path: Path) -> None:
+    """Make one fixture checkpoint model Orion renameat2 flag rejection."""
+
+    retained = path.read_text()
+    marker = (
+        '    """Perform one descriptor-relative Linux renameat2 operation."""\n\n'
+        "    source = require_entry_name(source, label)\n"
+    )
+    replacement = (
+        '    """Perform one descriptor-relative Linux renameat2 operation."""\n\n'
+        "    raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))\n"
+    )
+    assert retained.count(marker) == 1
+    path.write_text(retained.replace(marker, replacement))
+    path.chmod(0o755)
+
+
+def leave_lustre_json_post_link_state(module, target: Path, value: object,
+                                      monkeypatch, *, mode: int = 0o644) -> Path:
+    """Interrupt one forced-EINVAL JSON publication after link and before unlink."""
+
+    real_unlink = module.os.unlink
+    interrupted = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def interrupt_temporary_unlink(name, *args, **kwargs):
+        nonlocal interrupted
+        directory_descriptor = kwargs.get("dir_fd")
+        if (
+            not interrupted
+            and isinstance(name, str)
+            and directory_descriptor is not None
+            and module.json_temporary_target_name(name) == target.name
+        ):
+            temporary_profile = os.stat(
+                name, dir_fd=directory_descriptor, follow_symlinks=False
+            )
+            public_profile = os.stat(
+                target.name, dir_fd=directory_descriptor, follow_symlinks=False
+            )
+            if (
+                module.profile_identity(temporary_profile)
+                == module.profile_identity(public_profile)
+                and temporary_profile.st_nlink == public_profile.st_nlink == 2
+            ):
+                interrupted = True
+                raise OSError(errno.EIO, os.strerror(errno.EIO))
+        return real_unlink(name, *args, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "unlink", interrupt_temporary_unlink)
+    with pytest.raises(OSError, match=os.strerror(errno.EIO)):
+        module.write_json(target, value, mode=mode)
+    monkeypatch.setattr(module.os, "unlink", real_unlink)
+    assert interrupted
+    temporaries = module.json_temporary_entries(target)
+    assert len(temporaries) == 1
+    return temporaries[0]
 
 
 def load_current_recost_test_module():
@@ -1383,7 +1447,7 @@ def test_checkpoint_cleans_only_exact_failed_artifact_review_create(
             module.create_artifact_review(descriptor, target, retained, expected)
     finally:
         os.close(descriptor)
-    assert observed == [(False, [0o000])]
+    assert observed == [(False, [0o600])]
     assert not target.exists()
     assert list(accounting.iterdir()) == []
 
@@ -1788,86 +1852,64 @@ def test_checkpoint_json_temporary_cleanup_fails_closed_on_substitution(
     assert next(iter(retired)).stat().st_mode & 0o777 == 0o000
 
 
-def test_checkpoint_json_exchange_race_retains_every_inode(tmp_path, monkeypatch):
+def test_checkpoint_json_forward_replacement_does_not_clobber_reappeared_target(
+    tmp_path, monkeypatch,
+):
     module = load_checkpoint_module()
     target = tmp_path / "target.json"
     substitute = tmp_path / "substitute"
-    escaped = tmp_path / "escaped"
     target.write_bytes(b"authenticated predecessor\n")
     substitute.write_bytes(b"raced substitute\n")
-    real_renameat2 = module.renameat2
+    predecessor = target.read_bytes()
+    real_rename_bound_noreplace = module.rename_bound_noreplace
     raced = False
 
-    def racing_renameat2(parent, source, selected_target, flags, label):
+    def race_before_publication(parent, source, selected_target, expected, label, **kwargs):
         nonlocal raced
-        real_renameat2(parent, source, selected_target, flags, label)
-        if (
-            not raced
-            and selected_target == target.name
-            and flags == module.RENAME_EXCHANGE
-            and label == "JSON atomic write"
-        ):
+        if not raced and selected_target == target.name and label == "JSON atomic write":
             raced = True
-            os.rename(
-                target.name,
-                escaped.name,
-                src_dir_fd=parent,
-                dst_dir_fd=parent,
-            )
             os.rename(
                 substitute.name,
                 target.name,
                 src_dir_fd=parent,
                 dst_dir_fd=parent,
             )
+        return real_rename_bound_noreplace(
+            parent, source, selected_target, expected, label, **kwargs
+        )
 
-    monkeypatch.setattr(module, "renameat2", racing_renameat2)
-    with pytest.raises(ValueError, match="names changed after atomic exchange"):
+    monkeypatch.setattr(module, "rename_bound_noreplace", race_before_publication)
+    with pytest.raises(ValueError, match="target already exists"):
         module.write_json(target, {"new": "payload"})
 
     assert raced
     assert target.read_bytes() == b"raced substitute\n"
-    assert json.loads(escaped.read_text()) == {"new": "payload"}
     temporaries = list(tmp_path.glob(f".{target.name}.*.tmp"))
     assert len(temporaries) == 1
-    assert temporaries[0].read_bytes() == b"authenticated predecessor\n"
+    assert json.loads(temporaries[0].read_text()) == {"new": "payload"}
+    retired = list(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+    assert any(path.read_bytes() == predecessor for path in retired)
 
 
-def test_checkpoint_json_post_fsync_exchange_race_fails_closed(tmp_path, monkeypatch):
+def test_checkpoint_json_forward_replacement_operates_when_renameat2_is_unsupported(
+    tmp_path, monkeypatch,
+):
     module = load_checkpoint_module()
     target = tmp_path / "target.json"
-    substitute = tmp_path / "substitute"
-    escaped = tmp_path / "escaped"
     target.write_bytes(b"authenticated predecessor\n")
-    substitute.write_bytes(b"raced substitute\n")
-    real_renameat2 = module.renameat2
-    real_fsync = module.os.fsync
-    exchanged = False
-    raced = False
+    predecessor = target.read_bytes()
 
-    def observe_exchange(parent, source, selected_target, flags, label):
-        nonlocal exchanged
-        result = real_renameat2(parent, source, selected_target, flags, label)
-        if flags == module.RENAME_EXCHANGE and label == "JSON atomic write":
-            exchanged = True
-        return result
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
 
-    def race_after_exchange_verification(descriptor):
-        nonlocal raced
-        real_fsync(descriptor)
-        if exchanged and not raced:
-            raced = True
-            os.rename(target, escaped)
-            substitute.rename(target)
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    module.write_json(target, {"new": "payload"})
 
-    monkeypatch.setattr(module, "renameat2", observe_exchange)
-    monkeypatch.setattr(module.os, "fsync", race_after_exchange_verification)
-    with pytest.raises(ValueError, match="inode identity changed"):
-        module.write_json(target, {"new": "payload"})
-
-    assert raced
-    assert target.read_bytes() == b"raced substitute\n"
-    assert json.loads(escaped.read_text()) == {"new": "payload"}
+    assert json.loads(target.read_text()) == {"new": "payload"}
+    assert not list(tmp_path.glob(f".{target.name}.*.tmp"))
+    retired = list(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+    assert any(path.read_bytes() == predecessor for path in retired)
 
 
 def test_checkpoint_forensic_publication_does_not_clobber_raced_target(
@@ -1945,7 +1987,7 @@ def test_checkpoint_forensic_publication_rejects_forged_same_inode_bytes(
     assert target.read_bytes() == forged
 
 
-def test_checkpoint_forensic_copy_recovers_deterministic_mode_zero_temporary(
+def test_checkpoint_forensic_copy_recovers_deterministic_owner_only_temporary(
     tmp_path, monkeypatch,
 ):
     module = load_checkpoint_module()
@@ -1958,7 +2000,7 @@ def test_checkpoint_forensic_copy_recovers_deterministic_mode_zero_temporary(
 
     def interrupt_before_forensic_mode_publication(descriptor, mode):
         if mode == 0o444:
-            raise OSError("simulated forensic interruption at mode 0000")
+            raise OSError("simulated forensic interruption at mode 0600")
         return real_fchmod(descriptor, mode)
 
     with monkeypatch.context() as patch:
@@ -1968,7 +2010,7 @@ def test_checkpoint_forensic_copy_recovers_deterministic_mode_zero_temporary(
 
     temporary = tmp_path / module.forensic_temporary_name(target)
     assert temporary.exists()
-    assert temporary.stat().st_mode & 0o777 == 0o000
+    assert temporary.stat().st_mode & 0o777 == 0o600
 
     module.copy_forensic(source, target, expected, expected_mode=0o444)
 
@@ -2413,6 +2455,56 @@ def test_checkpoint_resumes_interrupted_legacy_canonical_adoption(recost_fixture
     )
 
 
+@pytest.mark.parametrize(
+    ("hook", "pattern", "linked_record"),
+    [
+        (
+            "--simulate-adoption-interruption-after-journal",
+            "simulated interruption after legacy adoption journal",
+            "journal",
+        ),
+        (
+            "--simulate-adoption-interruption-after-forensic",
+            "simulated interruption after legacy adoption forensic copy",
+            "journal",
+        ),
+        (
+            "--simulate-adoption-interruption-before-audit-directory-fsync",
+            "simulated interruption before JSON directory fsync",
+            "audit",
+        ),
+    ],
+)
+def test_checkpoint_lustre_recovers_exact_linked_json_lifecycle_state(
+    recost_fixture, hook, pattern, linked_record,
+):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    force_checkpoint_renameat2_einval(fixture["checkpoint"])
+    interrupted = run_checkpoint(fixture, "adopt-legacy-canonical", hook)
+    assert_rejected(interrupted, pattern)
+
+    if linked_record == "audit":
+        public = fixture["audit"]
+    else:
+        public = next(
+            path
+            for path in fixture["recost_transactions"].iterdir()
+            if path.name.endswith(".json")
+        )
+    temporary = public.parent / f".{public.name}.123.{'0' * 32}.tmp"
+    os.link(public, temporary)
+    assert temporary.stat().st_ino == public.stat().st_ino
+    assert temporary.stat().st_nlink == public.stat().st_nlink == 2
+
+    resumed = run_checkpoint(fixture, "adopt-legacy-canonical")
+
+    assert resumed.returncode == 0, resumed.stderr
+    assert not temporary.exists()
+    assert fixture["audit"].stat().st_nlink == 1
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
 def test_checkpoint_recovers_mode_zero_prejournal_legacy_adoption_temporary(
     recost_fixture,
 ):
@@ -2775,6 +2867,421 @@ def test_checkpoint_lock_replacement_blocks_next_write(tmp_path):
             module.write_json(target, {"forbidden": True})
 
     assert not target.exists()
+
+
+def test_checkpoint_lustre_noreplace_fallback_uses_hard_link(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"published through hard link\n")
+    source_identity = module.profile_identity(source.stat())
+    real_linkat = module.linkat_descriptor_noreplace
+    linked = []
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def observe_linkat(descriptor, target_parent, target_name, label):
+        linked.append((target_name, label))
+        return real_linkat(descriptor, target_parent, target_name, label)
+
+    def forbidden_posix_rename(*_args, **_kwargs):
+        raise AssertionError("file no-replace fallback must not use POSIX rename")
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", observe_linkat)
+    monkeypatch.setattr(module.os, "rename", forbidden_posix_rename)
+    with module.bound_parent_descriptor(source, "Lustre no-replace") as parent:
+        module.rename_bound_noreplace(
+            parent,
+            source.name,
+            target.name,
+            source.stat(),
+            "Lustre no-replace",
+        )
+
+    assert linked == [(target.name, "Lustre no-replace")]
+    assert not source.exists()
+    assert module.profile_identity(target.stat()) == source_identity
+    assert target.stat().st_nlink == 1
+    assert target.read_bytes() == b"published through hard link\n"
+
+
+def test_checkpoint_lustre_noreplace_fallback_rejects_target_race(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"authenticated source\n")
+    real_linkat = module.linkat_descriptor_noreplace
+    raced = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def race_target(descriptor, target_parent, target_name, label):
+        nonlocal raced
+        if not raced:
+            raced = True
+            injected = os.open(
+                target_name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o644,
+                dir_fd=target_parent,
+            )
+            os.write(injected, b"raced target\n")
+            os.close(injected)
+        return real_linkat(descriptor, target_parent, target_name, label)
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", race_target)
+    with module.bound_parent_descriptor(source, "Lustre no-replace race") as parent:
+        with pytest.raises(ValueError, match="target already exists"):
+            module.rename_bound_noreplace(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                "Lustre no-replace race",
+            )
+
+    assert raced
+    assert source.read_bytes() == b"authenticated source\n"
+    assert target.read_bytes() == b"raced target\n"
+
+
+def test_checkpoint_lustre_noreplace_reconciles_post_unlink_exception(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"durably published\n")
+    source_identity = module.profile_identity(source.stat())
+    real_unlink = module.os.unlink
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def unlink_then_raise(name, *args, **kwargs):
+        real_unlink(name, *args, **kwargs)
+        if name == source.name:
+            raise OSError(errno.EIO, os.strerror(errno.EIO))
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "unlink", unlink_then_raise)
+    with module.bound_parent_descriptor(source, "Lustre unlink reconcile") as parent:
+        module.rename_bound_noreplace(
+            parent,
+            source.name,
+            target.name,
+            source.stat(),
+            "Lustre unlink reconcile",
+        )
+
+    assert not source.exists()
+    assert module.profile_identity(target.stat()) == source_identity
+    assert target.stat().st_nlink == 1
+
+
+def test_checkpoint_lustre_noreplace_retries_exact_two_link_state(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"retryable publication\n")
+    real_unlink = module.os.unlink
+    reject_unlink = True
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def interrupt_source_unlink(name, *args, **kwargs):
+        if name == source.name and reject_unlink:
+            raise OSError(errno.EIO, os.strerror(errno.EIO))
+        return real_unlink(name, *args, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "unlink", interrupt_source_unlink)
+    with module.bound_parent_descriptor(source, "retryable no-replace") as parent:
+        with pytest.raises(OSError, match=os.strerror(errno.EIO)):
+            module.rename_bound_noreplace(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                "retryable no-replace",
+            )
+        assert source.stat().st_nlink == target.stat().st_nlink == 2
+        assert source.stat().st_ino == target.stat().st_ino
+        reject_unlink = False
+        module.rename_bound_noreplace(
+            parent,
+            source.name,
+            target.name,
+            source.stat(),
+            "retryable no-replace",
+        )
+
+    assert not source.exists()
+    assert target.stat().st_nlink == 1
+    assert target.read_bytes() == b"retryable publication\n"
+
+
+def test_checkpoint_lustre_noreplace_rejects_same_inode_byte_drift(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"authenticated bytes\n")
+    real_linkat = module.linkat_descriptor_noreplace
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def mutate_after_link(descriptor, target_parent, target_name, label):
+        result = real_linkat(descriptor, target_parent, target_name, label)
+        opened = os.open(source.name, os.O_WRONLY | os.O_NOFOLLOW, dir_fd=target_parent)
+        try:
+            os.pwrite(opened, b"x" * source.stat().st_size, 0)
+        finally:
+            os.close(opened)
+        return result
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", mutate_after_link)
+    with module.bound_parent_descriptor(source, "drifted no-replace") as parent:
+        with pytest.raises(ValueError, match="content digest changed"):
+            module.rename_bound_noreplace(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                "drifted no-replace",
+            )
+
+    assert source.stat().st_ino == target.stat().st_ino
+    assert source.stat().st_nlink == target.stat().st_nlink == 2
+
+
+@pytest.mark.parametrize(
+    ("name", "mode"),
+    [
+        ("state.json", 0o644),
+        ("artifact.publication_audit.json", 0o444),
+    ],
+)
+def test_checkpoint_write_json_retries_exact_lustre_post_link_state(
+    tmp_path, monkeypatch, name, mode,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / name
+    value = {"state": "durable-publication"}
+
+    temporary = leave_lustre_json_post_link_state(
+        module, target, value, monkeypatch, mode=mode
+    )
+
+    assert temporary.stat().st_ino == target.stat().st_ino
+    assert temporary.stat().st_nlink == target.stat().st_nlink == 2
+    module.write_json(target, value, mode=mode)
+
+    assert not temporary.exists()
+    assert target.stat().st_nlink == 1
+    assert target.stat().st_mode & 0o777 == mode
+    assert json.loads(target.read_text()) == value
+
+
+@pytest.mark.parametrize(
+    ("state", "pattern"),
+    [
+        (
+            "wrong-name",
+            "requires exactly one correctly named temporary",
+        ),
+        (
+            "different-inode",
+            "do not select the same exact two-link inode",
+        ),
+        (
+            "public-absent",
+            "linked temporary without its exact public name",
+        ),
+        (
+            "extra-link",
+            "public name has 3 links",
+        ),
+    ],
+)
+def test_checkpoint_write_json_recovery_rejects_nonexact_two_link_states(
+    tmp_path, state, pattern,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "state.json"
+    value = {"state": "authenticated"}
+    payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+    temporary = tmp_path / f".{target.name}.123.{'0' * 32}.tmp"
+    extra = tmp_path / "extra-link"
+
+    if state == "wrong-name":
+        target.write_bytes(payload)
+        os.link(target, tmp_path / "wrong-temporary")
+    elif state == "different-inode":
+        target.write_bytes(payload)
+        os.link(target, extra)
+        temporary.write_bytes(payload)
+    elif state == "public-absent":
+        temporary.write_bytes(payload)
+        os.link(temporary, extra)
+    else:
+        target.write_bytes(payload)
+        os.link(target, temporary)
+        os.link(target, extra)
+
+    with pytest.raises(ValueError, match=pattern):
+        module.write_json(target, value)
+
+    if target.exists():
+        assert target.read_bytes() == payload
+    if temporary.exists():
+        assert temporary.read_bytes() == payload
+
+
+def test_checkpoint_lustre_retirement_is_deterministic_and_retryable(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"retryable retirement\n")
+    real_unlink = module.os.unlink
+    reject_unlink = True
+
+    def unsupported_renameat2_between(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def interrupt_source_unlink(name, *args, **kwargs):
+        if name == victim.name and reject_unlink:
+            raise OSError(errno.EIO, os.strerror(errno.EIO))
+        return real_unlink(name, *args, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2_between)
+    monkeypatch.setattr(module.os, "unlink", interrupt_source_unlink)
+    with module.bound_parent_descriptor(victim, "retryable retirement") as parent:
+        expected = victim.stat()
+        retired_name = module.deterministic_retirement_name(
+            parent, victim.name, expected
+        )
+        retired = tmp_path.parent / retired_name
+        with pytest.raises(OSError, match=os.strerror(errno.EIO)):
+            module.unlink_bound_entry(
+                parent, victim.name, expected, "retryable retirement"
+            )
+        assert victim.stat().st_ino == retired.stat().st_ino
+        assert victim.stat().st_nlink == retired.stat().st_nlink == 2
+        reject_unlink = False
+        module.unlink_bound_entry(
+            parent, victim.name, victim.stat(), "retryable retirement"
+        )
+
+    assert not victim.exists()
+    assert retired.stat().st_nlink == 1
+    assert retired.read_bytes() == b"retryable retirement\n"
+
+
+def test_checkpoint_lustre_retirement_rejects_deterministic_target_collision(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"authenticated retirement\n")
+
+    def unsupported_renameat2_between(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2_between)
+    with module.bound_parent_descriptor(victim, "retirement collision") as parent:
+        expected = victim.stat()
+        retired = tmp_path.parent / module.deterministic_retirement_name(
+            parent, victim.name, expected
+        )
+        retired.write_bytes(b"collision\n")
+        with pytest.raises(ValueError, match="deterministic forensic name"):
+            module.unlink_bound_entry(
+                parent, victim.name, expected, "retirement collision"
+            )
+
+    assert victim.read_bytes() == b"authenticated retirement\n"
+    assert retired.read_bytes() == b"collision\n"
+
+
+def test_checkpoint_lustre_retirement_mode_zero_fails_closed(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"mode-zero forensic bytes\n")
+    victim.chmod(0o000)
+
+    def unsupported_renameat2_between(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2_between)
+    with module.bound_parent_descriptor(victim, "mode-zero retirement") as parent:
+        expected = victim.stat()
+        retired = tmp_path.parent / module.deterministic_retirement_name(
+            parent, victim.name, expected
+        )
+        with pytest.raises(ValueError, match="exact readable-byte authentication"):
+            module.unlink_bound_entry(
+                parent, victim.name, expected, "mode-zero retirement"
+            )
+
+    assert victim.exists()
+    assert victim.stat().st_mode & 0o777 == 0o000
+    assert not retired.exists()
+
+
+def test_checkpoint_lustre_exchange_fails_closed_without_fallback_mutation(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"new\n")
+    target.write_bytes(b"old\n")
+    source_identity = module.profile_identity(source.stat())
+    target_identity = module.profile_identity(target.stat())
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def forbidden_mutation(*_args, **_kwargs):
+        raise AssertionError("unsupported exchange must not issue a fallback mutation")
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", forbidden_mutation)
+    monkeypatch.setattr(module.os, "rename", forbidden_mutation)
+    with module.bound_parent_descriptor(source, "Lustre exchange") as parent:
+        with pytest.raises(ValueError, match="requires RENAME_EXCHANGE support"):
+            module.exchange_bound_entries(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                target.stat(),
+                "Lustre exchange",
+            )
+
+    assert module.profile_identity(source.stat()) == source_identity
+    assert module.profile_identity(target.stat()) == target_identity
+    assert source.read_bytes() == b"new\n"
+    assert target.read_bytes() == b"old\n"
+    assert not list(tmp_path.glob(".cgl-checkpoint-replaced-*"))
 
 
 def test_checkpoint_exchange_race_does_not_clobber_substitute(tmp_path, monkeypatch):
@@ -3363,20 +3870,39 @@ def test_checkpoint_recovers_interruption_after_single_link_exchange(recost_fixt
         "promote-recost",
         "--simulate-single-link-post-exchange-failure",
     )
-    assert_rejected(failed, "simulated interruption after canonical copy exchange")
+    assert_rejected(failed, "simulated interruption after canonical copy publication")
     journal = next(fixture["recost_transactions"].iterdir())
     record = json.loads(journal.read_text())
     assert record["state"] == "single-link-copy-prepared"
     assert fixture["canonical"].stat().st_nlink == 1
     replacement = fixture["accounting"] / record["single_link_replacement_name"]
-    assert fixture["staged"].stat().st_nlink == 2
-    assert replacement.stat().st_nlink == 2
+    assert fixture["staged"].stat().st_nlink in {2, 3}
+    assert not replacement.exists()
 
     finalized = run_checkpoint(fixture, "finalize-linked-pair")
     assert finalized.returncode == 0, finalized.stderr
     assert fixture["canonical"].stat().st_nlink == 1
     assert not fixture["staged"].exists()
     assert not replacement.exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_lustre_recovers_interrupted_canonical_publication(recost_fixture):
+    fixture = recost_fixture
+    force_checkpoint_renameat2_einval(fixture["checkpoint"])
+    failed = run_checkpoint(
+        fixture,
+        "promote-recost",
+        "--simulate-single-link-post-exchange-failure",
+    )
+    assert_rejected(failed, "simulated interruption after canonical copy publication")
+
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+    verified = run_checkpoint(fixture, "verify-promoted-recost")
+    assert verified.returncode == 0, verified.stderr
+    assert fixture["canonical"].stat().st_nlink == 1
+    assert not fixture["staged"].exists()
     assert list(fixture["recost_transactions"].iterdir()) == []
 
 
@@ -3428,19 +3954,19 @@ def test_checkpoint_json_write_rejects_detached_parent(tmp_path, monkeypatch):
     target = parent / "state.json"
     target.write_text('{"old": true}\n')
     detached = tmp_path / "accounting-detached"
-    original_exchange = module.exchange_bound_entries
+    original_replacement = module.replace_bound_entry_forward
     raced = False
 
     def detach_parent(*args, **kwargs):
         nonlocal raced
-        result = original_exchange(*args, **kwargs)
+        result = original_replacement(*args, **kwargs)
         if not raced:
             raced = True
             parent.rename(detached)
             parent.mkdir()
         return result
 
-    monkeypatch.setattr(module, "exchange_bound_entries", detach_parent)
+    monkeypatch.setattr(module, "replace_bound_entry_forward", detach_parent)
     with pytest.raises(ValueError, match="parent path changed during mutation"):
         module.write_json(target, {"new": True})
     assert not target.exists()
@@ -3699,7 +4225,10 @@ def test_checkpoint_recovery_revalidates_staged_name_before_unlink(recost_fixtur
             expected_staged_identity=staged_identity,
         )
         replace_staged_name()
-        with pytest.raises(ValueError, match="links, expected 2"):
+        with pytest.raises(
+            ValueError,
+            match="staged recost publication link does not select its journaled inode",
+        ):
             module.complete_single_link_transition(
                 directory_descriptor,
                 paths,
@@ -3770,14 +4299,14 @@ def test_checkpoint_single_link_transition_rejects_accounting_mode_drift(
         fixture["staged"].stat().st_ino,
     )
     replacement = module.single_link_replacement_name("fixture-mode-drift")
-    original_exchange = module.exchange_bound_entries
+    original_publish = module.rename_bound_noreplace
 
-    def weaken_after_exchange(*exchange_args, **exchange_kwargs):
-        result = original_exchange(*exchange_args, **exchange_kwargs)
+    def weaken_after_publication(*publish_args, **publish_kwargs):
+        result = original_publish(*publish_args, **publish_kwargs)
         fixture["accounting"].chmod(0o777)
         return result
 
-    monkeypatch.setattr(module, "exchange_bound_entries", weaken_after_exchange)
+    monkeypatch.setattr(module, "rename_bound_noreplace", weaken_after_publication)
     with pytest.raises(ValueError, match="parent path changed during mutation"):
         with module.bound_parent_descriptor(
             paths["canonical"], "fixture accounting mode drift"
@@ -4898,6 +5427,7 @@ def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
     checkpoint = repository / "scripts/frontier/cgl_lf_stage_i_checkpoint.py"
     checkpoint.write_bytes(CHECKPOINT.read_bytes())
     checkpoint.chmod(0o755)
+    force_checkpoint_renameat2_einval(checkpoint)
     retained_generator = accounting / "utilities/cgl_lf_stage_i_recost.py"
     retained_generator.parent.mkdir()
     retained_generator.write_bytes(RECOST.read_bytes())
@@ -5632,13 +6162,14 @@ def test_checkpoint_json_predecessor_survives_failed_public_authentication(
         module.write_json(target, {"transaction_id": "new"})
 
     assert failed
-    temporaries = list(tmp_path.glob(f".{target.name}.*.tmp"))
-    assert len(temporaries) == 1
-    assert temporaries[0].read_bytes() == old
+    assert json.loads(target.read_text()) == {"transaction_id": "new"}
+    assert not list(tmp_path.glob(f".{target.name}.*.tmp"))
+    retired = list(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+    assert any(path.read_bytes() == old for path in retired)
 
 
 def test_checkpoint_recost_journal_exactly_recovers_valid_temp_after_forged_public(
-    tmp_path,
+    tmp_path, monkeypatch,
 ):
     module = load_checkpoint_module()
     transactions = tmp_path / "transactions"
@@ -5650,6 +6181,11 @@ def test_checkpoint_recost_journal_exactly_recovers_valid_temp_after_forged_publ
     write_json(temporary, expected_record)
     paths = {"recost_transactions": transactions}
 
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
     with module.bound_directory_descriptor(
         transactions, "recost transaction directory"
     ) as descriptor:
@@ -5662,6 +6198,85 @@ def test_checkpoint_recost_journal_exactly_recovers_valid_temp_after_forged_publ
     retired = list(tmp_path.glob(".cgl-checkpoint-retired-*.forensic"))
     assert len(retired) == 1
     assert retired[0].read_bytes() == b"forged public bytes\n"
+
+
+@pytest.mark.parametrize("phase", ["initial-create", "replacement"])
+def test_checkpoint_lustre_recost_journal_recovers_post_link_pre_unlink_state(
+    tmp_path, monkeypatch, phase,
+):
+    module = load_checkpoint_module()
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    public = transactions / "txn.json"
+    if phase == "replacement":
+        write_json(public, {"transaction_id": "txn", "state": "old"})
+    record = {"transaction_id": "txn", "state": phase}
+    temporary = leave_lustre_json_post_link_state(
+        module, public, record, monkeypatch
+    )
+    paths = {"recost_transactions": transactions}
+
+    assert temporary.stat().st_ino == public.stat().st_ino
+    assert temporary.stat().st_nlink == public.stat().st_nlink == 2
+    with module.bound_directory_descriptor(
+        transactions, "recost transaction directory"
+    ) as descriptor:
+        journal, recovered = module.recost_journal(paths, descriptor)
+
+    assert journal == public
+    assert recovered == record
+    assert not temporary.exists()
+    assert public.stat().st_nlink == 1
+    assert list(transactions.iterdir()) == [public]
+
+
+@pytest.mark.parametrize("state", ["public", "retirement-linked", "public-absent"])
+def test_checkpoint_lustre_recost_journal_recovers_every_forward_state(
+    tmp_path, monkeypatch, state,
+):
+    module = load_checkpoint_module()
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    public = transactions / "txn.json"
+    old_record = {"transaction_id": "txn", "state": "old"}
+    new_record = {"transaction_id": "txn", "state": "new"}
+    write_json(public, old_record)
+    old = public.read_bytes()
+    temporary = transactions / f".{public.name}.123.{'0' * 32}.tmp"
+    write_json(temporary, new_record)
+    paths = {"recost_transactions": transactions}
+
+    with module.bound_directory_descriptor(
+        transactions, "fixture recost transaction directory"
+    ) as descriptor:
+        retired = tmp_path / module.deterministic_retirement_name(
+            descriptor, public.name, public.stat()
+        )
+    if state in {"retirement-linked", "public-absent"}:
+        os.link(public, retired)
+    if state == "public-absent":
+        public.unlink()
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    with module.bound_directory_descriptor(
+        transactions, "recost transaction directory"
+    ) as descriptor:
+        journal, record = module.recost_journal(paths, descriptor)
+
+    assert journal == public
+    assert record == new_record
+    assert json.loads(public.read_text()) == new_record
+    assert list(transactions.iterdir()) == [public]
+    retained = [
+        path
+        for path in tmp_path.glob(".cgl-checkpoint-retired-*.forensic")
+        if path.read_bytes() == old
+    ]
+    assert len(retained) == 1
 
 
 @pytest.mark.parametrize("ambiguous", [False, True])
@@ -5777,7 +6392,7 @@ def test_checkpoint_artifact_review_authenticates_existing_public_name_before_te
     )
 
 
-def test_checkpoint_artifact_review_retry_removes_mode_zero_create_remnant_without_forensic(
+def test_checkpoint_artifact_review_retry_removes_owner_only_create_remnant_without_forensic(
     tmp_path, monkeypatch,
 ):
     module = load_checkpoint_module()
@@ -5811,7 +6426,7 @@ def test_checkpoint_artifact_review_retry_removes_mode_zero_create_remnant_witho
         temporaries = list(accounting.glob(".cgl-checkpoint-review-*"))
         assert len(temporaries) == 1
         assert temporaries[0].stat().st_size == 0
-        assert stat.S_IMODE(temporaries[0].stat().st_mode) == 0o000
+        assert stat.S_IMODE(temporaries[0].stat().st_mode) == 0o600
 
         identity, created = module.create_artifact_review(
             descriptor, target, retained, expected
@@ -5866,7 +6481,7 @@ def test_checkpoint_write_bound_exclusive_durably_retains_ambiguous_create(
 
     assert injected
     assert target.stat().st_size == 0
-    assert stat.S_IMODE(target.stat().st_mode) == 0o000
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
     assert parent_identity in fsynced
 
 
@@ -5993,7 +6608,7 @@ def test_checkpoint_forensic_copy_durably_retains_ambiguous_create(
 
     assert injected
     assert temporary.stat().st_size == 0
-    assert stat.S_IMODE(temporary.stat().st_mode) == 0o000
+    assert stat.S_IMODE(temporary.stat().st_mode) == 0o600
     assert module.profile_identity(tmp_path.stat()) in fsynced
     module.copy_forensic(source, target, expected, expected_mode=0o444)
     assert target.read_bytes() == source.read_bytes()

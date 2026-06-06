@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-import ctypes
 import csv
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -32,8 +31,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from typing import Iterator
-import uuid
+from typing import Callable, Iterator
 
 
 DEFAULT_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/CGL")
@@ -503,7 +501,6 @@ PYTHON_DESCRIPTOR_ENV = "_CGL_LF_STAGE_I_RECOST_PYTHON_DESCRIPTOR"
 SELF_SOURCE_ENV = "_CGL_LF_STAGE_I_RECOST_SOURCE"
 REPOSITORY_ROOT_ENV = "_CGL_LF_STAGE_I_RECOST_REPOSITORY_ROOT"
 CGL_JOB_NAME_PREFIX = "cgl_"
-RENAME_NOREPLACE = 1
 SQUEUE = Path("/usr/bin/squeue")
 SACCT = Path("/usr/bin/sacct")
 GIT = Path("/usr/lib/git/git")
@@ -2430,7 +2427,7 @@ def validate_root_and_output(args: argparse.Namespace) -> tuple[Path, Path]:
 
 
 def require_output_namespace_empty(output: Path) -> None:
-    """Require an unambiguous, nonexistent artifact namespace."""
+    """Require an empty artifact namespace or one exact final commit marker."""
 
     accounting = output.parent
     canonical_name = output.name.removesuffix(".staged")
@@ -2447,6 +2444,18 @@ def require_output_namespace_empty(output: Path) -> None:
                 or entry.name.startswith(f".{canonical_name}.")
             )
         )
+        if retained == [output.name]:
+            recovery = os.stat(output.name, dir_fd=descriptor, follow_symlinks=False)
+            try:
+                require_regular_profile(
+                    recovery,
+                    "staged recost output final commit marker",
+                    expected_mode=0o444,
+                )
+            except ValueError:
+                pass
+            else:
+                return
     if retained:
         raise ValueError(
             "staged recost output namespace is not empty: " + ", ".join(retained)
@@ -8483,133 +8492,689 @@ def fsync_directory(path: Path) -> None:
         os.fsync(descriptor)
 
 
-@dataclass(frozen=True)
-class EntryIdentity:
-    """Retain one newly created entry and its parent for inode-bound rollback."""
+def file_security_content_binding(profile: os.stat_result) -> tuple[int, ...]:
+    """Return the complete mutation-relevant profile of one retained file."""
 
-    path: Path
-    device: int
-    inode: int
-    parent_device: int
-    parent_inode: int
+    return (
+        stat.S_IFMT(profile.st_mode),
+        stat.S_IMODE(profile.st_mode),
+        profile.st_uid,
+        profile.st_gid,
+        profile.st_nlink,
+        profile.st_size,
+        profile.st_mtime_ns,
+        profile.st_ctime_ns,
+    )
 
 
-def retained_entry_identity(path: Path, label: str) -> EntryIdentity:
-    """Capture one exact retained entry without following a substituted symlink."""
+def directory_security_binding(profile: os.stat_result) -> tuple[int, int, int, int]:
+    """Return the exact authority profile of one retained directory."""
 
+    return (
+        stat.S_IFMT(profile.st_mode),
+        stat.S_IMODE(profile.st_mode),
+        profile.st_uid,
+        profile.st_gid,
+    )
+
+
+def require_parent_path_bound(
+    path: Path,
+    directory: int,
+    expected: os.stat_result,
+    label: str,
+) -> None:
+    """Require an open mutation parent and its public pathname to remain exact."""
+
+    opened = os.fstat(directory)
+    require_directory_profile(opened, f"{label} parent")
+    if (
+        not same_inode(opened, expected)
+        or directory_security_binding(opened) != directory_security_binding(expected)
+    ):
+        raise ValueError(f"{label} parent descriptor authority changed")
     with absolute_descriptor(
-        path.parent,
+        path,
         f"{label} parent",
         flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
-    ) as directory:
-        parent = os.fstat(directory)
-        descriptor = os.open(
-            path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
-        )
-        try:
-            profile = os.fstat(descriptor)
-            require_regular_profile(profile, label)
-            return EntryIdentity(
-                path, profile.st_dev, profile.st_ino, parent.st_dev, parent.st_ino
-            )
-        finally:
-            os.close(descriptor)
+    ) as named:
+        named_profile = os.fstat(named)
+        require_directory_profile(named_profile, f"{label} parent")
+        if (
+            not same_inode(named_profile, expected)
+            or directory_security_binding(named_profile)
+            != directory_security_binding(expected)
+        ):
+            raise ValueError(f"{label} parent pathname changed during publication")
 
 
-def renameat2(parent: int, source: str, target: str, flags: int, label: str) -> None:
-    """Perform one descriptor-relative Linux renameat2 operation."""
-
-    if (
-        not source
-        or source in {".", ".."}
-        or "/" in source
-        or not target
-        or target in {".", ".."}
-        or "/" in target
-    ):
-        raise ValueError(f"{label} contains an invalid direct-child name")
-    try:
-        operation = ctypes.CDLL(None, use_errno=True).renameat2
-    except AttributeError as error:
-        raise ValueError("descriptor-bound publication requires renameat2") from error
-    operation.argtypes = (
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_int,
-        ctypes.c_char_p,
-        ctypes.c_uint,
-    )
-    operation.restype = ctypes.c_int
-    if operation(
-        parent,
-        os.fsencode(source),
-        parent,
-        os.fsencode(target),
-        flags,
-    ) != 0:
-        retained_errno = ctypes.get_errno()
-        raise OSError(
-            retained_errno, os.strerror(retained_errno), f"{source} -> {target}"
-        )
-
-
-def rollback_created_entry(
-    identity: EntryIdentity,
+def read_bound_exact_file(
+    directory: int,
+    name: str,
+    payload: bytes,
+    mode: int,
     label: str,
     *,
-    mutation_lock: MutationLock | None = None,
-) -> Path:
-    """Atomically move an exact created inode to retained rollback forensics."""
+    expected_identity: os.stat_result | None = None,
+    expected_links: int = 1,
+) -> os.stat_result:
+    """Read and bind one exact direct-child file without accepting profile drift."""
 
-    authenticate_mutation_lock(mutation_lock)
-    with absolute_descriptor(
-        identity.path.parent,
-        f"{label} rollback parent",
-        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
-    ) as directory:
-        parent = os.fstat(directory)
-        if (parent.st_dev, parent.st_ino) != (
-            identity.parent_device,
-            identity.parent_inode,
-        ):
-            raise ValueError(f"{label} rollback parent inode changed; refusing cleanup")
-        named = os.stat(identity.path.name, dir_fd=directory, follow_symlinks=False)
-        if (named.st_dev, named.st_ino) != (identity.device, identity.inode):
-            raise ValueError(f"{label} rollback target inode changed; refusing cleanup")
-        forensic_name = (
-            f".{identity.path.name}.recost-rollback-forensic."
-            f"{os.getpid()}.{uuid.uuid4().hex}.retained"
+    observed = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    require_publication_link_profile(
+        observed, label, expected_mode=mode, expected_links=expected_links
+    )
+    if expected_identity is not None and not same_inode(observed, expected_identity):
+        raise ValueError(f"{label} inode identity differs")
+    descriptor = os.open(
+        name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
+    )
+    try:
+        before = os.fstat(descriptor)
+        require_publication_link_profile(
+            before, label, expected_mode=mode, expected_links=expected_links
         )
-        try:
-            renameat2(
-                directory,
-                identity.path.name,
-                forensic_name,
-                RENAME_NOREPLACE,
-                f"{label} rollback forensic retention",
-            )
-        except FileExistsError as error:
-            raise ValueError(
-                f"{label} rollback forensic target raced; refusing cleanup"
-            ) from error
-        retained = os.stat(forensic_name, dir_fd=directory, follow_symlinks=False)
-        os.fsync(directory)
-        if (retained.st_dev, retained.st_ino) != (identity.device, identity.inode):
-            raise ValueError(
-                f"{label} rollback target inode changed during atomic forensic move; "
-                f"retained substituted entry as {forensic_name}"
-            )
-        try:
-            os.stat(identity.path.name, dir_fd=directory, follow_symlinks=False)
-        except FileNotFoundError:
-            pass
-        else:
-            raise ValueError(
-                f"{label} rollback target was recreated after atomic forensic move; "
-                f"retained exact created entry as {forensic_name}"
-            )
+        if (
+            not same_inode(before, observed)
+            or file_security_content_binding(before)
+            != file_security_content_binding(observed)
+        ):
+            raise ValueError(f"{label} pathname changed before exact verification")
+        if sha256_descriptor(descriptor) != sha256_bytes(payload):
+            raise ValueError(f"{label} exists with different bytes; refusing to clobber")
+        after = os.fstat(descriptor)
+        require_publication_link_profile(
+            after, label, expected_mode=mode, expected_links=expected_links
+        )
+        if (
+            not same_inode(after, before)
+            or file_security_content_binding(after) != file_security_content_binding(before)
+        ):
+            raise ValueError(f"{label} file profile changed during exact verification")
+    finally:
+        os.close(descriptor)
+    named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    require_publication_link_profile(
+        named, label, expected_mode=mode, expected_links=expected_links
+    )
+    if (
+        not same_inode(named, after)
+        or file_security_content_binding(named) != file_security_content_binding(after)
+    ):
+        raise ValueError(f"{label} pathname changed during exact verification")
+    return named
+
+
+def durably_verify_direct_final(
+    directory: int,
+    name: str,
+    payload: bytes,
+    mode: int,
+    label: str,
+    *,
+    expected_identity: os.stat_result | None = None,
+    mutation_guard: Callable[[], None] | None = None,
+) -> os.stat_result:
+    """Bind exact final bytes and profile on both sides of a directory fsync."""
+
+    first = read_bound_exact_file(
+        directory,
+        name,
+        payload,
+        mode,
+        label,
+        expected_identity=expected_identity,
+    )
+    if mutation_guard is not None:
+        mutation_guard()
+    os.fsync(directory)
+    if mutation_guard is not None:
+        mutation_guard()
+    second = read_bound_exact_file(
+        directory,
+        name,
+        payload,
+        mode,
+        label,
+        expected_identity=first,
+    )
+    if file_security_content_binding(second) != file_security_content_binding(first):
+        raise ValueError(f"{label} file profile changed across durable verification")
+    return second
+
+
+DIRECT_FINAL_ALLOWED_MODES = frozenset({0o444, 0o644, 0o755})
+PUBLICATION_PRIVATE_MODE = 0o600
+PUBLICATION_PRIVATE_ATTEMPT_LIMIT = 4096
+PUBLICATION_PRIVATE_NAME_PATTERN = re.compile(
+    r"\.cgl-lf-recost-publication-([0-9a-f]{64})-([0-9]{8})\.private"
+)
+
+
+@dataclass(frozen=True)
+class PublicationTransaction:
+    """Bind one no-replace publication to exact intent and producer identity."""
+
+    transaction_id: str
+    target: str
+    payload_sha256: str
+    payload_size: int
+    final_mode: int
+    label: str
+    producer: str
+    producer_revision: str
+
+    @property
+    def private_prefix(self) -> str:
+        """Return the deterministic private-attempt namespace for this transaction."""
+
+        return f".cgl-lf-recost-publication-{self.transaction_id}-"
+
+    def private_name(self, attempt: int) -> str:
+        """Return one exact deterministic private-attempt name."""
+
+        if not 0 <= attempt < PUBLICATION_PRIVATE_ATTEMPT_LIMIT:
+            raise ValueError("publication private attempt is outside the managed range")
+        return f"{self.private_prefix}{attempt:08d}.private"
+
+
+def publication_producer_revision() -> str:
+    """Return the exact content revision of the running recost producer."""
+
+    inherited = os.environ.get(SELF_DESCRIPTOR_ENV)
+    if inherited is not None and re.fullmatch(r"[0-9]+", inherited) is not None:
+        return sha256_descriptor(int(inherited))
+    return sha256_bytes(Path(__file__).read_bytes())
+
+
+def publication_transaction(
+    path: Path,
+    payload: bytes,
+    mode: int,
+    label: str,
+) -> PublicationTransaction:
+    """Construct one content-addressed publication transaction binding."""
+
+    target = str(path.absolute())
+    payload_sha256 = sha256_bytes(payload)
+    producer_revision = publication_producer_revision()
+    binding = {
+        "schema_version": 1,
+        "record_type": "stage-i-recost-private-publication-transaction",
+        "execution_epoch": EXECUTION_EPOCH,
+        "target": target,
+        "payload_sha256": payload_sha256,
+        "payload_size": len(payload),
+        "final_mode": f"{mode:04o}",
+        "label": label,
+        "producer": RECOST_RELATIVE.as_posix(),
+        "producer_revision": producer_revision,
+    }
+    return PublicationTransaction(
+        transaction_id=sha256_bytes(stable_json_bytes(binding)),
+        target=target,
+        payload_sha256=payload_sha256,
+        payload_size=len(payload),
+        final_mode=mode,
+        label=label,
+        producer=RECOST_RELATIVE.as_posix(),
+        producer_revision=producer_revision,
+    )
+
+
+def require_publication_link_profile(
+    profile: os.stat_result,
+    label: str,
+    *,
+    expected_mode: int,
+    expected_links: int,
+) -> None:
+    """Require one owned, exact-mode regular publication inode and link count."""
+
+    if not stat.S_ISREG(profile.st_mode):
+        raise ValueError(f"{label} must be a regular file")
+    if profile.st_uid != os.geteuid():
+        raise ValueError(f"{label} must be owned by the effective user")
+    if profile.st_nlink != expected_links:
+        raise ValueError(f"{label} must have exactly {expected_links} links")
+    retained_mode = stat.S_IMODE(profile.st_mode)
+    if retained_mode != expected_mode:
+        raise ValueError(
+            f"{label} mode is {retained_mode:04o}, expected {expected_mode:04o}"
+        )
+    if retained_mode & 0o022:
+        raise ValueError(f"{label} must not be group- or world-writable")
+
+
+def require_bound_private_attempt(
+    directory: int,
+    name: str,
+    descriptor: int,
+    expected_identity: os.stat_result,
+    label: str,
+    *,
+    expected_profile: os.stat_result | None = None,
+    expected_mode: int = PUBLICATION_PRIVATE_MODE,
+    expected_links: int = 1,
+) -> os.stat_result:
+    """Bind one private publication attempt to its exact descriptor and name."""
+
+    opened = os.fstat(descriptor)
+    require_publication_link_profile(
+        opened,
+        label,
+        expected_mode=expected_mode,
+        expected_links=expected_links,
+    )
+    if not same_inode(opened, expected_identity):
+        raise ValueError(f"{label} private-attempt descriptor identity changed")
+    if (
+        expected_profile is not None
+        and file_security_content_binding(opened)
+        != file_security_content_binding(expected_profile)
+    ):
+        raise ValueError(f"{label} private-attempt profile changed between mutations")
+    named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    require_publication_link_profile(
+        named,
+        label,
+        expected_mode=expected_mode,
+        expected_links=expected_links,
+    )
+    if (
+        not same_inode(named, opened)
+        or file_security_content_binding(named) != file_security_content_binding(opened)
+    ):
+        raise ValueError(f"{label} private-attempt pathname changed during publication")
+    return opened
+
+
+def authenticate_private_attempt(
+    path: Path,
+    directory: int,
+    parent_profile: os.stat_result,
+    private_name: str,
+    descriptor: int,
+    expected_identity: os.stat_result,
+    label: str,
+    mutation_lock: MutationLock | None,
+    *,
+    expected_profile: os.stat_result | None = None,
+    expected_mode: int = PUBLICATION_PRIVATE_MODE,
+    expected_links: int = 1,
+) -> os.stat_result:
+    """Revalidate all authority and one private attempt before mutation."""
+
+    require_parent_path_bound(path.parent, directory, parent_profile, label)
     authenticate_mutation_lock(mutation_lock)
-    return identity.path.with_name(forensic_name)
+    retained = require_bound_private_attempt(
+        directory,
+        private_name,
+        descriptor,
+        expected_identity,
+        label,
+        expected_profile=expected_profile,
+        expected_mode=expected_mode,
+        expected_links=expected_links,
+    )
+    require_parent_path_bound(path.parent, directory, parent_profile, label)
+    authenticate_mutation_lock(mutation_lock)
+    return retained
+
+
+def create_private_attempt(
+    directory: int,
+    transaction: PublicationTransaction,
+    label: str,
+    mutation_guard: Callable[[], None],
+) -> tuple[str, int, os.stat_result]:
+    """Create one fresh transaction-bound private attempt without reuse."""
+
+    retained_umask = os.umask(0)
+    try:
+        for attempt in range(PUBLICATION_PRIVATE_ATTEMPT_LIMIT):
+            name = transaction.private_name(attempt)
+            try:
+                mutation_guard()
+                descriptor = os.open(
+                    name,
+                    os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                    PUBLICATION_PRIVATE_MODE,
+                    dir_fd=directory,
+                )
+            except FileExistsError:
+                continue
+            break
+        else:
+            raise ValueError(f"{label} exhausted the managed private-attempt namespace")
+    finally:
+        os.umask(retained_umask)
+    try:
+        created = os.fstat(descriptor)
+        require_publication_link_profile(
+            created,
+            label,
+            expected_mode=PUBLICATION_PRIVATE_MODE,
+            expected_links=1,
+        )
+        retained = require_bound_private_attempt(
+            directory,
+            name,
+            descriptor,
+            created,
+            label,
+            expected_profile=created,
+        )
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return name, descriptor, retained
+
+
+def finalize_private_attempt(
+    directory: int,
+    path: Path,
+    parent_profile: os.stat_result,
+    private_name: str,
+    descriptor: int,
+    private_profile: os.stat_result,
+    payload: bytes,
+    mode: int,
+    label: str,
+    mutation_lock: MutationLock | None,
+) -> os.stat_result:
+    """Write, fsync, and finalize one freshly created private inode."""
+
+    identity = private_profile
+    retained = authenticate_private_attempt(
+        path,
+        directory,
+        parent_profile,
+        private_name,
+        descriptor,
+        identity,
+        label,
+        mutation_lock,
+        expected_profile=private_profile,
+    )
+    offset = 0
+    while offset < len(payload):
+        authenticate_private_attempt(
+            path,
+            directory,
+            parent_profile,
+            private_name,
+            descriptor,
+            identity,
+            label,
+            mutation_lock,
+            expected_profile=retained,
+        )
+        written = os.write(descriptor, payload[offset:])
+        if written <= 0:
+            raise ValueError(f"{label} write made no progress")
+        offset += written
+        retained = authenticate_private_attempt(
+            path,
+            directory,
+            parent_profile,
+            private_name,
+            descriptor,
+            identity,
+            label,
+            mutation_lock,
+        )
+    authenticate_private_attempt(
+        path,
+        directory,
+        parent_profile,
+        private_name,
+        descriptor,
+        identity,
+        label,
+        mutation_lock,
+        expected_profile=retained,
+    )
+    os.fsync(descriptor)
+    retained = authenticate_private_attempt(
+        path,
+        directory,
+        parent_profile,
+        private_name,
+        descriptor,
+        identity,
+        label,
+        mutation_lock,
+    )
+    if (
+        retained.st_size != len(payload)
+        or sha256_descriptor(descriptor) != sha256_bytes(payload)
+    ):
+        raise ValueError(f"{label} private-attempt bytes differ")
+    retained = authenticate_private_attempt(
+        path,
+        directory,
+        parent_profile,
+        private_name,
+        descriptor,
+        identity,
+        label,
+        mutation_lock,
+        expected_profile=retained,
+    )
+    os.fchmod(descriptor, mode)
+    finalized = authenticate_private_attempt(
+        path,
+        directory,
+        parent_profile,
+        private_name,
+        descriptor,
+        identity,
+        label,
+        mutation_lock,
+        expected_mode=mode,
+    )
+    os.fsync(descriptor)
+    finalized = authenticate_private_attempt(
+        path,
+        directory,
+        parent_profile,
+        private_name,
+        descriptor,
+        identity,
+        label,
+        mutation_lock,
+        expected_profile=finalized,
+        expected_mode=mode,
+    )
+    if (
+        finalized.st_size != len(payload)
+        or sha256_descriptor(descriptor) != sha256_bytes(payload)
+    ):
+        raise ValueError(f"{label} finalized private-attempt bytes differ")
+    return finalized
+
+
+def transaction_private_names(
+    directory: int,
+    transaction: PublicationTransaction,
+) -> list[str]:
+    """Return exact private-attempt names for one transaction."""
+
+    retained = []
+    for entry in os.scandir(directory):
+        match = PUBLICATION_PRIVATE_NAME_PATTERN.fullmatch(entry.name)
+        if (
+            match is not None
+            and match.group(1) == transaction.transaction_id
+            and int(match.group(2)) < PUBLICATION_PRIVATE_ATTEMPT_LIMIT
+        ):
+            retained.append(entry.name)
+    return sorted(retained)
+
+
+def recover_linked_publication(
+    directory: int,
+    path: Path,
+    parent_profile: os.stat_result,
+    transaction: PublicationTransaction,
+    payload: bytes,
+    mode: int,
+    label: str,
+    mutation_lock: MutationLock | None,
+    *,
+    expected_identity: os.stat_result | None = None,
+) -> os.stat_result | None:
+    """Finish exact same-inode private-link cleanup after publication."""
+
+    try:
+        target = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    require_publication_link_profile(
+        target, label, expected_mode=mode, expected_links=2
+    )
+    if expected_identity is not None and not same_inode(target, expected_identity):
+        raise ValueError(f"{label} public target inode differs from the linked private inode")
+    matches = []
+    for private_name in transaction_private_names(directory, transaction):
+        private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
+        if same_inode(private, target):
+            require_publication_link_profile(
+                private,
+                f"{label} transaction-private link",
+                expected_mode=mode,
+                expected_links=2,
+            )
+            matches.append((private_name, private))
+    if len(matches) != 1:
+        raise ValueError(
+            f"{label} linked public target lacks one exact transaction-private inode binding"
+        )
+    private_name, private = matches[0]
+    bound_target = read_bound_exact_file(
+        directory,
+        path.name,
+        payload,
+        mode,
+        label,
+        expected_identity=target,
+        expected_links=2,
+    )
+    bound_private = read_bound_exact_file(
+        directory,
+        private_name,
+        payload,
+        mode,
+        f"{label} transaction-private link",
+        expected_identity=private,
+        expected_links=2,
+    )
+    require_parent_path_bound(path.parent, directory, parent_profile, label)
+    authenticate_mutation_lock(mutation_lock)
+    target = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+    private = os.stat(private_name, dir_fd=directory, follow_symlinks=False)
+    require_publication_link_profile(
+        target, label, expected_mode=mode, expected_links=2
+    )
+    require_publication_link_profile(
+        private,
+        f"{label} transaction-private link",
+        expected_mode=mode,
+        expected_links=2,
+    )
+    if (
+        not same_inode(target, bound_target)
+        or not same_inode(private, bound_private)
+        or file_security_content_binding(target)
+        != file_security_content_binding(bound_target)
+        or file_security_content_binding(private)
+        != file_security_content_binding(bound_private)
+        or not same_inode(target, private)
+    ):
+        raise ValueError(f"{label} transaction-private inode binding changed before unlink")
+    try:
+        os.unlink(private_name, dir_fd=directory)
+    except BaseException as unlink_error:
+        try:
+            return durably_verify_direct_final(
+                directory,
+                path.name,
+                payload,
+                mode,
+                label,
+                expected_identity=target,
+                mutation_guard=lambda: (
+                    require_parent_path_bound(
+                        path.parent, directory, parent_profile, label
+                    ),
+                    authenticate_mutation_lock(mutation_lock),
+                ),
+            )
+        except BaseException:
+            raise unlink_error
+    require_parent_path_bound(path.parent, directory, parent_profile, label)
+    authenticate_mutation_lock(mutation_lock)
+    return durably_verify_direct_final(
+        directory,
+        path.name,
+        payload,
+        mode,
+        label,
+        expected_identity=target,
+        mutation_guard=lambda: (
+            require_parent_path_bound(path.parent, directory, parent_profile, label),
+            authenticate_mutation_lock(mutation_lock),
+        ),
+    )
+
+
+def raise_direct_final_failure(
+    directory: int,
+    path: Path,
+    parent_profile: os.stat_result,
+    label: str,
+    error: BaseException,
+    mutation_lock: MutationLock | None,
+) -> None:
+    """Durably classify a failed direct-final publication without another mutation."""
+
+    failures: list[BaseException] = []
+    try:
+        require_parent_path_bound(path.parent, directory, parent_profile, label)
+        authenticate_mutation_lock(mutation_lock)
+    except BaseException as failure:
+        failures.append(failure)
+    if not failures:
+        try:
+            os.fsync(directory)
+        except BaseException as failure:
+            failures.append(failure)
+        try:
+            require_parent_path_bound(path.parent, directory, parent_profile, label)
+            authenticate_mutation_lock(mutation_lock)
+        except BaseException as failure:
+            failures.append(failure)
+    try:
+        retained = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        state = "absent"
+    except BaseException:
+        state = "unreadable"
+    else:
+        state = (
+            f"occupied inode {retained.st_dev}:{retained.st_ino} "
+            f"mode {stat.S_IMODE(retained.st_mode):04o} links {retained.st_nlink}"
+        )
+    if failures:
+        raise ValueError(
+            f"{label} direct-final publication failed; deterministic public target is "
+            f"{state}; durability or authority revalidation failed and no rollback was attempted"
+        ) from failures[0]
+    raise ValueError(
+        f"{label} direct-final publication failed; deterministic public target is "
+        f"{state}; no rollback was attempted"
+    ) from error
 
 
 def write_exact_or_verify(
@@ -8619,130 +9184,154 @@ def write_exact_or_verify(
     mode: int,
     label: str,
     mutation_lock: MutationLock | None = None,
-    identity_sink: list[EntryIdentity] | None = None,
 ) -> bool:
-    """Atomically publish exact bytes without overwrite, or verify an exact copy."""
+    """Publish one finalized private inode no-replace, or exact-verify the target."""
 
+    if mode not in DIRECT_FINAL_ALLOWED_MODES:
+        raise ValueError(f"{label} final mode {mode:04o} is not a managed publication mode")
+    transaction = publication_transaction(path, payload, mode, label)
     authenticate_mutation_lock(mutation_lock)
     require_no_symlink_components(path, label, include_leaf=False)
-    identity = None
-    parent_profile = None
-    try:
-        with absolute_descriptor(
-            path.parent,
-            f"{label} parent",
-            flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
-        ) as directory:
-            parent_profile = os.fstat(directory)
-            try:
-                descriptor = os.open(
-                    path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
-                )
-            except FileNotFoundError:
-                descriptor = None
-            if descriptor is not None:
+    with absolute_descriptor(
+        path.parent,
+        f"{label} parent",
+        flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+    ) as directory:
+        parent_profile = os.fstat(directory)
+        require_directory_profile(parent_profile, f"{label} parent")
+        require_parent_path_bound(path.parent, directory, parent_profile, label)
+
+        def mutation_guard() -> None:
+            require_parent_path_bound(path.parent, directory, parent_profile, label)
+            authenticate_mutation_lock(mutation_lock)
+
+        try:
+            observed = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            observed = None
+        if observed is not None:
+            if (
+                stat.S_IMODE(observed.st_mode) == mode
+                and observed.st_nlink == 2
+            ):
                 try:
-                    profile = os.fstat(descriptor)
-                    require_regular_profile(profile, label, expected_mode=mode)
-                    if sha256_descriptor(descriptor) != sha256_bytes(payload):
-                        raise ValueError(f"{label} exists with different bytes; refusing to clobber")
-                    if not same_inode(
-                        profile, os.stat(path.name, dir_fd=directory, follow_symlinks=False)
-                    ):
-                        raise ValueError(f"{label} pathname changed during exact verification")
-                finally:
-                    os.close(descriptor)
-                authenticate_mutation_lock(mutation_lock)
-                created = False
-            else:
-                temporary = (
-                    f".{path.name}.recost-publish-forensic."
-                    f"{os.getpid()}.{uuid.uuid4().hex}.tmp"
-                )
-                descriptor = os.open(
-                    temporary,
-                    os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
-                    mode,
-                    dir_fd=directory,
-                )
-                try:
-                    temporary_profile = os.fstat(descriptor)
-                    os.fchmod(descriptor, mode)
-                    offset = 0
-                    while offset < len(payload):
-                        written = os.write(descriptor, payload[offset:])
-                        if written <= 0:
-                            raise ValueError(f"{label} write made no progress")
-                        offset += written
-                    os.fsync(descriptor)
-                    require_regular_profile(
-                        os.fstat(descriptor), label, expected_mode=mode
-                    )
-                    if sha256_descriptor(descriptor) != sha256_bytes(payload):
-                        raise ValueError(f"{label} temporary checksum differs before publication")
-                finally:
-                    os.close(descriptor)
-                authenticate_mutation_lock(mutation_lock)
-                try:
-                    renameat2(
+                    recover_linked_publication(
                         directory,
-                        temporary,
-                        path.name,
-                        RENAME_NOREPLACE,
-                        f"{label} atomic publication",
+                        path,
+                        parent_profile,
+                        transaction,
+                        payload,
+                        mode,
+                        label,
+                        mutation_lock,
+                        expected_identity=observed,
                     )
-                except FileExistsError as error:
-                    raise ValueError(
-                        f"{label} target appeared during atomic no-clobber publication; "
-                        f"retained forensic temporary {temporary}"
-                    ) from error
-                identity = EntryIdentity(
-                    path,
-                    temporary_profile.st_dev,
-                    temporary_profile.st_ino,
-                    parent_profile.st_dev,
-                    parent_profile.st_ino,
+                except BaseException as error:
+                    raise_direct_final_failure(
+                        directory, path, parent_profile, label, error, mutation_lock
+                    )
+                return True
+            durably_verify_direct_final(
+                directory,
+                path.name,
+                payload,
+                mode,
+                label,
+                mutation_guard=mutation_guard,
+            )
+            mutation_guard()
+            return False
+
+        mutation_guard()
+        try:
+            private_name, descriptor, private_profile = create_private_attempt(
+                directory, transaction, label, mutation_guard
+            )
+        except BaseException as error:
+            raise_direct_final_failure(
+                directory, path, parent_profile, label, error, mutation_lock
+            )
+
+        try:
+            finalized_profile = finalize_private_attempt(
+                directory,
+                path,
+                parent_profile,
+                private_name,
+                descriptor,
+                private_profile,
+                payload,
+                mode,
+                label,
+                mutation_lock,
+            )
+            mutation_guard()
+            finalized_profile = authenticate_private_attempt(
+                path,
+                directory,
+                parent_profile,
+                private_name,
+                descriptor,
+                private_profile,
+                label,
+                mutation_lock,
+                expected_profile=finalized_profile,
+                expected_mode=mode,
+            )
+            try:
+                os.link(
+                    private_name,
+                    path.name,
+                    src_dir_fd=directory,
+                    dst_dir_fd=directory,
+                    follow_symlinks=False,
                 )
-                os.fsync(directory)
-                target_profile = os.stat(
-                    path.name, dir_fd=directory, follow_symlinks=False
-                )
-                if not same_inode(temporary_profile, target_profile):
-                    raise ValueError(f"{label} pathname changed after atomic publication")
-                descriptor = os.open(
-                    path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
-                )
+            except BaseException as link_error:
                 try:
-                    profile = os.fstat(descriptor)
-                    require_regular_profile(profile, label, expected_mode=mode)
-                    if (
-                        not same_inode(profile, temporary_profile)
-                        or sha256_descriptor(descriptor) != sha256_bytes(payload)
-                    ):
-                        raise ValueError(
-                            f"{label} identity or checksum differs after atomic publication"
-                        )
-                finally:
-                    os.close(descriptor)
-                authenticate_mutation_lock(mutation_lock)
-                created = True
-        assert parent_profile is not None
-        with absolute_descriptor(
-            path.parent,
-            f"{label} parent",
-            flags=os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
-        ) as named_parent:
-            if not same_inode(parent_profile, os.fstat(named_parent)):
-                raise ValueError(f"{label} parent pathname changed during publication")
-        authenticate_mutation_lock(mutation_lock)
-    except BaseException:
-        if identity is not None:
-            rollback_created_entry(identity, label, mutation_lock=mutation_lock)
-        raise
-    if identity_sink is not None and created:
-        assert identity is not None
-        identity_sink.append(identity)
-    return created
+                    recovered = recover_linked_publication(
+                        directory,
+                        path,
+                        parent_profile,
+                        transaction,
+                        payload,
+                        mode,
+                        label,
+                        mutation_lock,
+                        expected_identity=finalized_profile,
+                    )
+                except BaseException:
+                    raise link_error
+                if recovered is None:
+                    raise link_error
+            else:
+                recover_linked_publication(
+                    directory,
+                    path,
+                    parent_profile,
+                    transaction,
+                    payload,
+                    mode,
+                    label,
+                    mutation_lock,
+                    expected_identity=finalized_profile,
+                )
+        except BaseException as error:
+            try:
+                os.close(descriptor)
+            except BaseException:
+                pass
+            raise_direct_final_failure(
+                directory, path, parent_profile, label, error, mutation_lock
+            )
+        try:
+            os.close(descriptor)
+        except BaseException as error:
+            raise_direct_final_failure(
+                directory, path, parent_profile, label, error, mutation_lock
+            )
+
+        mutation_guard()
+    return True
 
 
 def parse_draft_packet(payload: bytes) -> dict[str, object]:
@@ -8890,29 +9479,17 @@ def locked_install_f117_draft_packet(
         / "accounting"
         / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_F117_recost_draft_packet.json"
     )
-    identities: list[EntryIdentity] = []
     created = write_exact_or_verify(
         target,
         packet_payload,
         mode=0o644,
         label="managed initial F117 recost request draft packet",
         mutation_lock=mutation_lock,
-        identity_sink=identities,
     )
-    identity = identities[0] if created else None
-    try:
-        require_empty_transaction_stores(root)
-        require_drained_queue(args, root)
-        tracker.reauthenticate_all()
-        authenticate_mutation_lock(mutation_lock)
-    except BaseException:
-        if identity is not None:
-            rollback_created_entry(
-                identity,
-                "managed initial F117 recost request draft packet",
-                mutation_lock=mutation_lock,
-            )
-        raise
+    require_empty_transaction_stores(root)
+    require_drained_queue(args, root)
+    tracker.reauthenticate_all()
+    authenticate_mutation_lock(mutation_lock)
     next_action = [
         str(source_path),
         "--root",
@@ -9123,8 +9700,14 @@ def locked_draft_request(
     ) as descriptor:
         storage_profile = os.fstatvfs(descriptor)
     live_available = storage_profile.f_bavail * storage_profile.f_frsize
-    gibibyte = 1024 ** 3
-    reviewed_available = (live_available // gibibyte) * gibibyte or live_available
+    required_safety = require_integer(
+        packet["draft_policy"]["required_storage_safety_bytes"],
+        "recost request draft storage safety bytes",
+        minimum=1,
+    )
+    reviewed_available = required_safety + projected_storage
+    if live_available < reviewed_available:
+        raise ValueError("live storage headroom is exhausted during request drafting")
     retained_bytes = directory_tree_regular_bytes(
         root / "runs/mks24-stage-i" / EXECUTION_EPOCH,
         "retained Stage I storage",
@@ -9137,7 +9720,7 @@ def locked_draft_request(
         "measured_utc": packet["generated_utc"],
         "available_bytes": reviewed_available,
         "retained_stage_i_bytes": retained_bytes,
-        "required_safety_bytes": packet["draft_policy"]["required_storage_safety_bytes"],
+        "required_safety_bytes": required_safety,
         "projected_authorized_wave_growth_bytes": projected_storage,
         "projection_method": STORAGE_PROJECTION_METHOD,
         "profile_projections_sha256": storage_projection_sha256,
@@ -9163,56 +9746,47 @@ def locked_draft_request(
     request_payload = stable_json_bytes(request)
     parse_request(request_payload)
 
-    created: list[tuple[EntryIdentity, str]] = []
-    try:
-        for path, payload, label in (
-            (paths["reconciliation"], reconcile_payload, "draft reconciliation evidence"),
-            (paths["storage"], storage_payload, "draft storage evidence"),
-            (paths["request"], request_payload, "schema-2 recost request draft"),
-        ):
-            identities: list[EntryIdentity] = []
-            if write_exact_or_verify(
-                path,
-                payload,
-                mode=0o644,
-                label=label,
-                mutation_lock=mutation_lock,
-                identity_sink=identities,
-            ):
-                created.append((identities[0], label))
-        build_args = argparse.Namespace(**vars(args))
-        build_args.request = paths["request"]
-        build_args.expected_request_sha256 = sha256_bytes(request_payload)
-        build_args.output = paths["artifact"].with_name(f"{paths['artifact'].name}.staged")
-        build = build_payload(
-            build_args,
-            root,
-            source_path,
-            repository,
-            generator_sha256,
-            stage_i_lock_held=True,
-            require_independent_request_review=False,
+    for path, payload, label in (
+        (paths["reconciliation"], reconcile_payload, "draft reconciliation evidence"),
+        (paths["storage"], storage_payload, "draft storage evidence"),
+        (paths["request"], request_payload, "schema-2 recost request draft"),
+    ):
+        write_exact_or_verify(
+            path,
+            payload,
+            mode=0o644,
+            label=label,
+            mutation_lock=mutation_lock,
         )
-        require_empty_transaction_stores(root)
-        require_drained_queue(args, root)
-        tracker.reauthenticate_all()
-        build.tracker.reauthenticate_all()
-        live_reconcile = run_authenticated_reconcile(
-            helper_path, helper_sha256, root, stage_i_lock_held=True
-        )
-        if live_reconcile != reconcile:
-            raise ValueError("live reconciliation changed during request drafting")
-        require_live_storage_boundary(
-            root,
-            build.storage_available_bytes,
-            build.storage_retained_stage_i_bytes,
-            build.storage_required_safety_bytes,
-            build.projected_storage_bytes,
-        )
-    except BaseException:
-        for identity, label in reversed(created):
-            rollback_created_entry(identity, label, mutation_lock=mutation_lock)
-        raise
+    build_args = argparse.Namespace(**vars(args))
+    build_args.request = paths["request"]
+    build_args.expected_request_sha256 = sha256_bytes(request_payload)
+    build_args.output = paths["artifact"].with_name(f"{paths['artifact'].name}.staged")
+    build = build_payload(
+        build_args,
+        root,
+        source_path,
+        repository,
+        generator_sha256,
+        stage_i_lock_held=True,
+        require_independent_request_review=False,
+    )
+    require_empty_transaction_stores(root)
+    require_drained_queue(args, root)
+    tracker.reauthenticate_all()
+    build.tracker.reauthenticate_all()
+    live_reconcile = run_authenticated_reconcile(
+        helper_path, helper_sha256, root, stage_i_lock_held=True
+    )
+    if live_reconcile != reconcile:
+        raise ValueError("live reconciliation changed during request drafting")
+    require_live_storage_boundary(
+        root,
+        build.storage_available_bytes,
+        build.storage_retained_stage_i_bytes,
+        build.storage_required_safety_bytes,
+        build.projected_storage_bytes,
+    )
     generation_command = [
         sys.executable,
         str(source_path),
@@ -9373,44 +9947,29 @@ def locked_install_request_review(
         request_timestamp,
         require_nonempty_string(request["requested_by"], "recost request author"),
     )
-    created = False
-    identity = None
-    try:
-        identities: list[EntryIdentity] = []
-        created = write_exact_or_verify(
-            review_target,
-            review_payload,
-            mode=0o444,
-            label="managed recost request independent review",
-            mutation_lock=mutation_lock,
-            identity_sink=identities,
-        )
-        if created:
-            identity = identities[0]
-        tracker.authenticate(
-            review_target,
-            args.expected_review_sha256,
-            "installed recost request independent review",
-            expected_mode=0o444,
-        )
-        require_empty_transaction_stores(root)
-        require_drained_queue(args, root)
-        tracker.reauthenticate_all()
-        require_committed_file(
-            repository,
-            source_path,
-            generator_sha256,
-            "Stage I recost generator",
-            expected_mode=0o755,
-        )
-    except BaseException:
-        if identity is not None:
-            rollback_created_entry(
-                identity,
-                "managed recost request independent review",
-                mutation_lock=mutation_lock,
-            )
-        raise
+    created = write_exact_or_verify(
+        review_target,
+        review_payload,
+        mode=0o444,
+        label="managed recost request independent review",
+        mutation_lock=mutation_lock,
+    )
+    tracker.authenticate(
+        review_target,
+        args.expected_review_sha256,
+        "installed recost request independent review",
+        expected_mode=0o444,
+    )
+    require_empty_transaction_stores(root)
+    require_drained_queue(args, root)
+    tracker.reauthenticate_all()
+    require_committed_file(
+        repository,
+        source_path,
+        generator_sha256,
+        "Stage I recost generator",
+        expected_mode=0o755,
+    )
     output = paths["artifact"].with_name(f"{paths['artifact'].name}.staged")
     generation_command = [
         sys.executable,
@@ -9514,26 +10073,16 @@ def locked_retain_generator(
     if sha256_bytes(payload) != generator_sha256:
         raise ValueError("Stage I recost generator bytes changed before retention")
     target = ensure_utilities_directory(root, mutation_lock) / "cgl_lf_stage_i_recost.py"
-    identities: list[EntryIdentity] = []
     created = write_exact_or_verify(
         target,
         payload,
         mode=0o755,
         label="retained Stage I recost generator",
         mutation_lock=mutation_lock,
-        identity_sink=identities,
     )
-    identity = identities[0] if created else None
-    try:
-        require_empty_transaction_stores(root)
-        require_drained_queue(args, root)
-        authenticate_mutation_lock(mutation_lock)
-    except BaseException:
-        if identity is not None:
-            rollback_created_entry(
-                identity, "retained Stage I recost generator", mutation_lock=mutation_lock
-            )
-        raise
+    require_empty_transaction_stores(root)
+    require_drained_queue(args, root)
+    authenticate_mutation_lock(mutation_lock)
     print(
         json.dumps(
             {
@@ -9559,16 +10108,15 @@ def write_staged_output(
     payload: bytes,
     mutation_lock: MutationLock | None = None,
 ) -> None:
-    """Atomically create exactly one explicit staged artifact without overwrite."""
+    """Publish or exact-verify one explicit staged artifact without overwrite."""
 
-    if not write_exact_or_verify(
+    write_exact_or_verify(
         output,
         payload,
         mode=0o444,
         label="staged recost output",
         mutation_lock=mutation_lock,
-    ):
-        raise ValueError("staged recost output already exists; refusing exact-copy reuse")
+    )
 
 
 def locked_main(
