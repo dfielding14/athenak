@@ -173,6 +173,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       }
       if (efloor_used) {
         cons(m,IEN,k,j,i) = u.e;
+        cons(m,IAN,k,j,i) = u.mu;
         sume++;
       }
       if (bfloor_used) {

@@ -320,6 +320,7 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
   Real e_m = 0.5*bsqr;
   Real eint = (u.e - e_k - e_m);
+  bool pressure_floor_used = false;
   if (bmag>bfloor) {
     // Standard CGL EOS
     CGLRecoverPressuresFromInternalEnergyAndAnisotropy(w.d, eint, u.mu, bmag,
@@ -338,21 +339,26 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
     w.pp = pfloor;
     u.e = 1.5*pfloor+ e_k + e_m;
     efloor_used = true;
+    pressure_floor_used = true;
   }
   if (w.e < pfloor) {
     w.e = pfloor;
     u.e = 0.5*pfloor + w.pp + e_k + e_m;
     efloor_used = true;
+    pressure_floor_used = true;
   }
   if (w.pp < pfloor) {
     w.pp = pfloor;
-    u.e = w.e + pfloor + e_k + e_m;
+    u.e = 0.5*w.e + pfloor + e_k + e_m;
     efloor_used = true;
+    pressure_floor_used = true;
   }
 
-  // The IAN/legacy IMU slot stores A. If bfloor is active, reset A assuming pprl=pprp.
-  if (bfloor_used) {
-    u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bfloor);
+  // The IAN/legacy IMU slot stores A. Keep it consistent with any pressure or field-floor
+  // correction so a subsequent C2P conversion recovers the same primitive state.
+  if (pressure_floor_used || bfloor_used) {
+    const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
+    u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag_inv);
   }
 
   return;
