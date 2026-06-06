@@ -1,0 +1,174 @@
+{
+  "record_type": "q023_prod_bell_nonlinear_source_local_foundation",
+  "schema_version": 1,
+  "date": "2026-06-06",
+  "campaign_id": "Q023-PROD-BELL-NONLINEAR",
+  "claim_id": "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001",
+  "status": "source_local_foundation_ready_for_review_not_launch",
+  "qualification_effect": "none_source_local_foundation_does_not_authorize_launch_or_science_claims",
+  "authority": {
+    "launch_authorized": false,
+    "scientific_claim_authorized": false,
+    "publication_authorized": false,
+    "shared_registry_modified": false,
+    "clean_candidate_frozen": false,
+    "frontier_executable_bound": false,
+    "authorized_orion_artifact_root_bound": false,
+    "independent_recompute_complete": false,
+    "external_review_complete": false
+  },
+  "foundation_scope": {
+    "physical_mode": "paper_mhd_pic_vl2_tsc",
+    "hall_mode": "off",
+    "wave_damping_mode": "off",
+    "dimension": "periodic_2d3v",
+    "carrier": "existing_q023_paper_bell_linear_right_polarized_eigenmode",
+    "carrier_wavelengths_by_periodic_axis": [
+      8,
+      8
+    ],
+    "output_contract": "mhd_w_bcc",
+    "supported_diagnostics": [
+      "delta_b_rms_over_bg_magnetic_amplification",
+      "fixed_window_linear_growth_rate",
+      "fixed_window_saturation_amplitude_and_log_slope",
+      "source_local_nonlinear_onset_indicator",
+      "mhd_fluctuation_magnetic_to_kinetic_energy_partition",
+      "mhd_spatial_magnetic_spectrum",
+      "dominant_k_over_k0_evolution",
+      "dominant_wavelength_over_seed_wavelength_evolution",
+      "low_k_magnetic_power_fraction_evolution",
+      "density_weighted_mean_gas_velocity_parallel",
+      "configured_fixed_cr_stream_parallel_speed",
+      "configured_fixed_cr_minus_gas_relative_drift",
+      "mean_density",
+      "amplified_total_field_alfven_speed",
+      "v_a_amplified_over_abs_configured_fixed_cr_minus_gas_relative_drift"
+    ],
+    "unsupported_diagnostics": [
+      "particle_energy_or_momentum_spectrum",
+      "total_cr_to_mhd_energy_partition",
+      "three_dimensional_filament_or_cavity_morphology",
+      "evolving_cr_current_or_cr_parallel_speed",
+      "cr_pressure_tensor_or_anisotropic_pressure_saturation_relation"
+    ]
+  },
+  "scientific_assumptions": {
+    "normalization": "rho0_equals_B0_equals_UA_equals_1",
+    "pressure": {
+      "p0": 1.0,
+      "scope": "Bai_et_al_baseline_convention_retained",
+      "limitation": "does_not_establish_pressure_independence_for_the_moderate_drift_nonlinear_regime"
+    },
+    "streaming": {
+      "epsilon_ua_over_vcr": 0.4,
+      "vcr_over_ua": 2.5,
+      "current_relation": "j_CR_equals_2_B0_c_k0",
+      "linear_reference_growth_rate_over_k0_ua": 0.916515138991168,
+      "low_omega_interpretation": "approximately_constant_CR_current_over_the_bounded_run",
+      "configured_stream_boundary": "mhd_w_bcc_does_not_measure_evolving_CR_current_or_speed"
+    },
+    "initial_condition": {
+      "kind": "single_deterministic_right_polarized_eigenmode",
+      "delta_b_over_bg": 0.0001,
+      "limitation": "controlled_single_mode_saturation_foundation_not_a_broadband_or_stochastic_seed_ensemble"
+    },
+    "numerics": {
+      "integrator_contract": "rk2_with_paper_mhd_pic_vl2_tsc_stage_semantics",
+      "interpolation_and_deposition": "TSC",
+      "particle_loading": "centered_quiet_macro_particles",
+      "particle_loading_limitation": "suppresses_shot_noise_and_transverse_mode_seeding",
+      "ppc": 16,
+      "baseline_mesh": [
+        512,
+        256,
+        1
+      ],
+      "baseline_cells_per_carrier_period_by_axis": [
+        64,
+        32
+      ]
+    }
+  },
+  "preregistration": {
+    "normalized_time_definition": "tau_equals_k0_UA_t",
+    "linear_growth_window_tau": [
+      2.0,
+      6.0
+    ],
+    "saturation_diagnostic_window_tau": [
+      14.0,
+      22.0
+    ],
+    "minimum_snapshots_per_window": 8,
+    "maximum_snapshots_per_analysis": 128,
+    "nonlinear_onset_indicator_delta_b_rms_over_bg": 0.1,
+    "source_local_flatness_heuristic_abs_dlog_delta_b_dtau": 0.05,
+    "window_and_heuristic_status": "source_local_engineering_choices_not_Q022_reference_derived_tolerances_or_science_acceptance",
+    "linear_theory_comparison_status": "report_residual_without_science_acceptance_threshold",
+    "constant_current_mechanism_diagnostic_status": "report_configured_stream_minus_density_weighted_mean_gas_velocity_and_amplified_alfven_ratio_without_acceptance_threshold",
+    "amplified_alfven_speed_estimator": "sqrt_volume_mean_total_B_squared_over_volume_mean_density",
+    "constant_current_ratio_formula": "sqrt_volume_mean_total_B_squared_over_volume_mean_density_divided_by_abs_configured_CR_stream_minus_density_weighted_mean_gas_velocity_parallel",
+    "spectrum_bin_width_k_over_k0": 0.125,
+    "low_k_boundary_k_over_k0": 0.75
+  },
+  "literature_relationship": {
+    "linear_carrier": "Sun_and_Bai_Section_5p2_exact_no_Hall_right_polarized_mode_at_k_equals_k0",
+    "pressure_choice": "p0_equals_1_retains_the_Bai_et_al_2015_baseline_convention_requested_for_the_campaign",
+    "nonlinear_context": [
+      "Bell_2004_nonresonant_current_driven_instability_mechanism_context",
+      "Riquelme_and_Spitkovsky_2009_nonlinear_Bell_context",
+      "Riquelme_and_Spitkovsky_2009_constant_current_background_plasma_acceleration_context",
+      "Gargate_et_al_2010_nonlinear_Bell_context"
+    ],
+    "constant_current_mechanism_boundary": "configured_fixed_CR_stream_reference_only_not_a_measurement_of_evolving_CR_current_or_speed",
+    "anisotropic_pressure_saturation_relation": "not_mapped_not_claimed_because_deck_normalization_and_CR_pressure_tensor_are_not_bound",
+    "comparison_boundary": "no_external_numeric_agreement_or_saturation_law_is_claimed_until_Q022_mapping_and_tolerances_are_frozen"
+  },
+  "claim_exclusions": [
+    "pressure_independence",
+    "Hall_dominated_regimes",
+    "three_dimensional_morphology_generality",
+    "broadband_or_stochastic_nonlinear_turbulence",
+    "particle_spectrum_or_CR_acceleration",
+    "total_CR_MHD_energy_partition",
+    "external_literature_numeric_agreement",
+    "Zacharegkas_et_al_anisotropic_pressure_saturation_relation",
+    "qualifying_saturation_amplitude_or_time",
+    "publication_or_launch_authority"
+  ],
+  "artifact_bindings": [
+    {
+      "path": "inputs/tests/pic_q023_prod_bell_nonlinear_foundation_vl2_tsc.athinput",
+      "sha256": "8715918dd0aef26aa14b44f5ee8a294434f0ea95b149ebfc12b0d143d50d80dc",
+      "role": "source_local_production_scale_foundation_deck"
+    },
+    {
+      "path": "tst/publication/analyze_q023_prod_bell_nonlinear_foundation.py",
+      "sha256": "f237e63540cf3f3f26e8fd94f887afd8f0d534561f17e13ede0140bbcec43cda",
+      "role": "source_local_raw_mhd_w_bcc_nonlinear_diagnostics"
+    },
+    {
+      "path": "tst/publication/test_analyze_q023_prod_bell_nonlinear_foundation.py",
+      "sha256": "c41afedb90ec939d43fa7a18c54f4c6fdf812251735c501fc7263ab9b45f3948",
+      "role": "focused_source_local_contract_tests"
+    }
+  ],
+  "shared_records_consulted_not_modified": [
+    "tst/publication/readiness/q023_campaign_drafts_2026-05-30.json",
+    "tst/publication/readiness/q023_local_preregistration_profiles_2026-05-30.json",
+    "tst/publication/readiness/q022_xcmp_bell_nonlinear_independent_equation_map_2026-05-30.json",
+    "tst/publication/readiness/q022_xcmp_bell_nonlinear_independent_tolerance_table_2026-05-30.json",
+    "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_v2_2026-05-31.json"
+  ],
+  "open_dependencies": [
+    "Q019 fiducial nonlinear Bell physical regime and exact grid freeze",
+    "Q022 reference-specific nonlinear Bell mapping and numeric tolerances",
+    "human review of the source-local pressure, window, box-size, PPC, and seed assumptions",
+    "shared-control-plane registration by an authorized later change",
+    "exact clean-candidate and Frontier executable binding",
+    "authorized Orion artifact-root binding and registered execution",
+    "independent recompute and external scientific review"
+  ],
+  "exact_next_stage": "human_review_then_separate_authorized_control_plane_registration_and_clean_candidate_freeze_before_any_launch"
+}
