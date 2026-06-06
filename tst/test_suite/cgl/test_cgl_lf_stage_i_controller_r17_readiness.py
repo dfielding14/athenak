@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import sys
@@ -190,7 +191,101 @@ def immutable_publication_binding(path: Path) -> dict[str, object]:
     }
 
 
-def managed_clearance_fixture(module, tmp_path, monkeypatch, checkpoint=120):
+def retain_managed_clearance_transaction(module, fixture) -> None:
+    checkpoint = fixture["checkpoint"]
+    accounting = fixture["paths"]["root"] / "accounting"
+    transaction = module.managed_shared_root_clearance_transaction_path(
+        accounting, checkpoint
+    )
+    staging = module.managed_shared_root_clearance_staging_path(accounting, checkpoint)
+    for path in (transaction, staging):
+        if not os.path.lexists(path):
+            continue
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    staging.mkdir()
+    canonical = (
+        fixture["artifact_path"],
+        fixture["review_path"],
+        fixture["audit_path"],
+        fixture["audit_review_path"],
+    )
+    expected = {}
+    for key, source in zip(module.SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS, canonical):
+        destination = (
+            staging / module.SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS[key]
+        )
+        destination.write_bytes(source.read_bytes())
+        destination.chmod(0o444)
+        expected[key] = sha256(destination)
+    write_stable_json(
+        staging / module.SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL,
+        module.managed_shared_root_clearance_transaction_journal(
+            accounting, checkpoint, expected
+        ),
+    )
+    write_stable_json(
+        transaction,
+        module.managed_shared_root_clearance_transaction_installation(
+            fixture["paths"], checkpoint, expected
+        ),
+    )
+    fixture.update({
+        "canonical": canonical,
+        "expected": expected,
+        "transaction_path": transaction,
+        "staging_path": staging,
+    })
+
+
+def hostile_deterministic_alias(module, target: Path, alias_kind: str, form: str) -> Path:
+    temporary = target.parent / module.metadata_temporary_name(target.name)
+    alias = (
+        temporary
+        if alias_kind == "temporary"
+        else temporary.parent
+        / module.metadata_predecessor_recovery_name(temporary.name)
+    )
+    if form == "regular":
+        write_stable_json(alias, {"hostile_alias": alias_kind})
+    else:
+        outside = target.parent / f"outside-{target.name}-{alias_kind}"
+        write_stable_json(outside, {"outside": alias_kind})
+        alias.symlink_to(outside)
+    return alias
+
+
+def mutate_installed_clearance_transaction(module, fixture, target_kind, mutation):
+    if target_kind == "marker":
+        target = fixture["transaction_path"]
+    elif target_kind == "journal":
+        target = (
+            fixture["staging_path"]
+            / module.SHARED_ROOT_CLEARANCE_TRANSACTION_JOURNAL
+        )
+    else:
+        target = (
+            fixture["staging_path"]
+            / module.SHARED_ROOT_CLEARANCE_TRANSACTION_PAYLOADS["artifact"]
+        )
+    retained = target.read_bytes()
+    if mutation == "deleted":
+        target.unlink()
+    elif mutation == "replaced":
+        target.unlink()
+        target.write_bytes(retained)
+        target.chmod(0o444)
+    else:
+        target.chmod(0o644)
+        write_stable_json(target, {"mutation": target_kind})
+    return target
+
+
+def managed_clearance_fixture(
+    module, tmp_path, monkeypatch, checkpoint=120, *, install_transaction=True,
+):
     root = tmp_path / "root"
     accounting = root / "accounting"
     accounting.mkdir(parents=True)
@@ -258,7 +353,7 @@ def managed_clearance_fixture(module, tmp_path, monkeypatch, checkpoint=120):
     artifact_path, review_path, audit_path, audit_review_path = (
         module.managed_shared_root_clearance_chain_paths(accounting, checkpoint)
     )
-    generated = datetime(2026, 6, 6, 12, 0, tzinfo=timezone.utc)
+    generated = datetime.now(timezone.utc) - timedelta(minutes=5)
     artifact = module.build_managed_shared_root_clearance_refresh(
         paths, checkpoint, now=generated
     )
@@ -315,8 +410,11 @@ def managed_clearance_fixture(module, tmp_path, monkeypatch, checkpoint=120):
         "rows": [],
         "rows_sha256": module.stable_json_sha256([]),
     }
-    return {
+    fixture = {
+        "module": module,
         "paths": paths,
+        "checkpoint": checkpoint,
+        "retain_transaction": install_transaction,
         "controller": controller,
         "source_paths": source_paths,
         "legacy_paths": legacy_paths,
@@ -327,6 +425,9 @@ def managed_clearance_fixture(module, tmp_path, monkeypatch, checkpoint=120):
         "queue_evidence": queue_evidence,
         "now": generated + timedelta(minutes=4),
     }
+    if install_transaction:
+        retain_managed_clearance_transaction(module, fixture)
+    return fixture
 
 
 def authenticate_managed_clearance(module, fixture, **overrides):
@@ -379,6 +480,8 @@ def rewrite_managed_clearance_chain(
         mutate_audit_review(audit_review)
     fixture["audit_review_path"].chmod(0o644)
     write_stable_json(fixture["audit_review_path"], audit_review)
+    if fixture.get("retain_transaction") is True:
+        retain_managed_clearance_transaction(fixture["module"], fixture)
 
 
 def managed_clearance_lifecycle_fixture(
@@ -391,7 +494,9 @@ def managed_clearance_lifecycle_fixture(
     mutate_audit=None,
     mutate_audit_review=None,
 ):
-    fixture = managed_clearance_fixture(module, tmp_path, monkeypatch)
+    fixture = managed_clearance_fixture(
+        module, tmp_path, monkeypatch, install_transaction=False
+    )
     current = datetime.now(timezone.utc)
     rewrite_managed_clearance_chain(
         fixture,
@@ -588,6 +693,7 @@ def test_managed_shared_root_clearance_rejects_changed_exact_binding(
         value["reviewer"]["reviewer_id"] = "reviewer-1"
         audit_review.chmod(0o644)
         write_stable_json(audit_review, value)
+        retain_managed_clearance_transaction(module, fixture)
         match = "review chain"
     with pytest.raises(ValueError, match=match):
         authenticate_managed_clearance(module, fixture)
@@ -886,6 +992,39 @@ def test_managed_clearance_read_transaction_rejects_unauthenticated_queue_row(
         module.read_transaction(fixture["paths"], fixture["transaction_path"])
 
 
+@pytest.mark.parametrize("consumer", ("checkpoint", "production", "replay"))
+@pytest.mark.parametrize("publication_index", range(4))
+@pytest.mark.parametrize("alias_kind", ("temporary", "predecessor"))
+def test_managed_clearance_authority_rejects_hostile_public_deterministic_alias(
+    tmp_path, monkeypatch, consumer, publication_index, alias_kind
+):
+    module = load_controller()
+    fixture = (
+        managed_clearance_replay_fixture(module, tmp_path, monkeypatch)
+        if consumer == "replay"
+        else managed_clearance_fixture(module, tmp_path, monkeypatch)
+    )
+    canonical = (
+        fixture["artifact_path"],
+        fixture["review_path"],
+        fixture["audit_path"],
+        fixture["audit_review_path"],
+    )
+    alias = hostile_deterministic_alias(
+        module, canonical[publication_index], alias_kind, "regular"
+    )
+    with pytest.raises(ValueError, match="unsafe deterministic"):
+        if consumer == "checkpoint":
+            module.managed_shared_root_clearance_checkpoints(
+                fixture["paths"]["root"] / "accounting"
+            )
+        elif consumer == "production":
+            authenticate_managed_clearance(module, fixture)
+        else:
+            module.read_transaction(fixture["paths"], fixture["transaction_path"])
+    assert alias.exists()
+
+
 @pytest.mark.parametrize(
     ("overrides", "match"),
     (
@@ -1059,6 +1198,33 @@ def test_managed_shared_root_clearance_lifecycle_recovers_installation_marker(
     assert not temporary.exists()
     assert fixture["transaction_path"].stat().st_nlink == 1
     assert module.verify_managed_shared_root_clearance(fixture["lifecycle_args"]) == 0
+
+
+@pytest.mark.parametrize("action", ("promote", "recover", "verify"))
+@pytest.mark.parametrize("alias_kind", ("temporary", "predecessor"))
+@pytest.mark.parametrize("form", ("regular", "symlink"))
+def test_managed_shared_root_clearance_lifecycle_rejects_hostile_marker_alias(
+    tmp_path, monkeypatch, action, alias_kind, form
+):
+    module = load_controller()
+    fixture = managed_clearance_lifecycle_fixture(module, tmp_path, monkeypatch)
+    if action == "verify":
+        assert module.promote_managed_shared_root_clearance(fixture["promote_args"]) == 0
+    else:
+        module.stage_managed_shared_root_clearance_transaction(
+            fixture["paths"], 120, fixture["candidates"], fixture["expected"]
+        )
+    alias = hostile_deterministic_alias(
+        module, fixture["transaction_path"], alias_kind, form
+    )
+    with pytest.raises(ValueError, match="unsafe|differs"):
+        if action == "promote":
+            module.promote_managed_shared_root_clearance(fixture["promote_args"])
+        elif action == "recover":
+            module.recover_managed_shared_root_clearance(fixture["lifecycle_args"])
+        else:
+            module.verify_managed_shared_root_clearance(fixture["lifecycle_args"])
+    assert os.path.lexists(alias)
 
 
 @pytest.mark.parametrize("hostile_state", ("unexpected", "foreign-payload"))
@@ -1350,6 +1516,55 @@ def test_managed_shared_root_clearance_lifecycle_postcommit_recovery_is_read_onl
 
     monkeypatch.setattr(module, "copy_file", unexpected_mutation)
     assert module.recover_managed_shared_root_clearance(fixture["lifecycle_args"]) == 0
+
+
+@pytest.mark.parametrize("action", ("recover", "verify"))
+@pytest.mark.parametrize("target_kind", ("marker", "journal", "payload"))
+@pytest.mark.parametrize("mutation", ("deleted", "replaced", "mutated"))
+def test_managed_shared_root_clearance_lifecycle_closing_transaction_reauthentication(
+    tmp_path, monkeypatch, action, target_kind, mutation
+):
+    module = load_controller()
+    fixture = managed_clearance_lifecycle_fixture(module, tmp_path, monkeypatch)
+    if action == "recover":
+        module.stage_managed_shared_root_clearance_transaction(
+            fixture["paths"], 120, fixture["candidates"], fixture["expected"]
+        )
+    else:
+        assert module.promote_managed_shared_root_clearance(fixture["promote_args"]) == 0
+
+    authenticate_chain = module.authenticate_managed_shared_root_clearance_chain
+    changed = False
+
+    def mutate_after_public_chain(paths, checkpoint, read_paths, **kwargs):
+        nonlocal changed
+        result = authenticate_chain(paths, checkpoint, read_paths, **kwargs)
+        if tuple(read_paths) == fixture["canonical"] and not changed:
+            changed = True
+            mutate_installed_clearance_transaction(
+                module, fixture, target_kind, mutation
+            )
+        return result
+
+    monkeypatch.setattr(
+        module,
+        "authenticate_managed_shared_root_clearance_chain",
+        mutate_after_public_chain,
+    )
+    with pytest.raises(ValueError):
+        if action == "recover":
+            module.recover_managed_shared_root_clearance(fixture["lifecycle_args"])
+        else:
+            module.verify_managed_shared_root_clearance(fixture["lifecycle_args"])
+    assert changed
+    assert fixture["audit_review_path"].exists()
+    # Exact marker bytes are valid again after the closing binding detects the
+    # in-flight inode replacement; every other loss leaves authority invalid.
+    if not (target_kind == "marker" and mutation == "replaced"):
+        with pytest.raises(ValueError):
+            module.managed_shared_root_clearance_checkpoints(
+                fixture["paths"]["root"] / "accounting"
+            )
 
 
 def test_managed_shared_root_clearance_lifecycle_recovery_rejects_nonprefix_state(
