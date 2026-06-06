@@ -643,30 +643,40 @@ def fast_candidate_state(item: dict[str, object]) -> str:
     manifest = item["manifest"]
     assert isinstance(manifest, dict)
     final = float(item["observed_final_time"])
-    if math.isfinite(final) and final >= (
+    exit_code = segment_exit_code(Path(item["segment"]))
+    if exit_code is not None and exit_code != 0:
+        return "failed"
+    if exit_code == 0 and math.isfinite(final) and final >= (
         float(manifest.get("target_time", TARGET_TIME)) - TIME_TOLERANCE
     ):
         return "complete"
-    exit_code = segment_exit_code(Path(item["segment"]))
     if exit_code == 0:
         return "exited_success_partial"
-    if exit_code is not None:
-        return "failed"
     mhd, user = history_paths(Path(item["output"]))
     if mhd is not None or user is not None:
         return "active_or_unmarked"
     return "prepared_or_pending"
 
 
+def exact_command_line_overrides(manifest: dict[str, object]) -> tuple[str, ...]:
+    """Return exact effective override order, preserving repeated assignments."""
+
+    overrides = manifest.get("command_line_overrides")
+    if overrides is None:
+        return ()
+    if not isinstance(overrides, list) or not all(
+        isinstance(value, str) for value in overrides
+    ):
+        raise ReportError("command_line_overrides must be a list of strings")
+    return tuple(overrides)
+
+
 def fast_candidate_configuration(item: dict[str, object]) -> tuple[str, tuple[str, ...]]:
     manifest = item["manifest"]
     assert isinstance(manifest, dict)
-    overrides = manifest.get("command_line_overrides", [])
     return (
         str(manifest.get("variant") or "standard"),
-        tuple(sorted(str(value) for value in overrides if isinstance(value, str)))
-        if isinstance(overrides, list)
-        else (),
+        exact_command_line_overrides(manifest),
     )
 
 
@@ -691,7 +701,8 @@ def fast_candidate_summary(item: dict[str, object]) -> dict[str, object]:
 
 
 def fast_candidates(
-    root: Path, case_id: str, rejections: list[dict[str, object]] | None = None
+    root: Path, case_id: str, case_name: str,
+    rejections: list[dict[str, object]] | None = None,
 ) -> list[dict[str, object]]:
     candidates: list[dict[str, object]] = []
     seen: set[Path] = set()
@@ -723,14 +734,22 @@ def fast_candidates(
                     "error": str(error),
                 })
                 continue
-            try:
-                sequence = int(manifest.get("sequence", int(match.group(1))))
-            except (TypeError, ValueError) as error:
+            sequence_value = manifest.get("sequence")
+            if not isinstance(sequence_value, int) or isinstance(sequence_value, bool):
                 rejected.append({
                     "reason": "manifest_sequence_is_not_an_integer",
                     "manifest": str(manifest_path),
-                    "observed_sequence": manifest.get("sequence"),
-                    "error": str(error),
+                    "observed_sequence": sequence_value,
+                })
+                continue
+            sequence = sequence_value
+            path_sequence = int(match.group(1))
+            if sequence != path_sequence:
+                rejected.append({
+                    "reason": "manifest_sequence_mismatch",
+                    "manifest": str(manifest_path),
+                    "observed_sequence": sequence,
+                    "expected_sequence": path_sequence,
                 })
                 continue
             if str(manifest.get("case_id")) != case_id:
@@ -739,6 +758,37 @@ def fast_candidates(
                     "manifest": str(manifest_path),
                     "observed_case_id": manifest.get("case_id"),
                     "expected_case_id": case_id,
+                })
+                continue
+            if str(manifest.get("case_name")) != case_name:
+                rejected.append({
+                    "reason": "manifest_case_name_mismatch",
+                    "manifest": str(manifest_path),
+                    "observed_case_name": manifest.get("case_name"),
+                    "expected_case_name": case_name,
+                })
+                continue
+            try:
+                exact_command_line_overrides(manifest)
+            except ReportError as error:
+                rejected.append({
+                    "reason": "manifest_command_line_overrides_invalid",
+                    "manifest": str(manifest_path),
+                    "error": str(error),
+                })
+                continue
+            missing_identities = [
+                name for name in (
+                    "input_sha256", "matrix_sha256", "executable_sha256"
+                )
+                if not isinstance(manifest.get(name), str)
+                or re.fullmatch(r"[0-9a-f]{64}", str(manifest.get(name))) is None
+            ]
+            if missing_identities:
+                rejected.append({
+                    "reason": "manifest_execution_identity_missing_or_invalid",
+                    "manifest": str(manifest_path),
+                    "fields": missing_identities,
                 })
                 continue
             declared_run = Path(str(manifest.get("run_dir", segment))).absolute()
@@ -865,10 +915,10 @@ def validate_fast_seed_restart(child: dict[str, object], restart: Path) -> str |
 
 
 def select_fast_lineage(
-    root: Path, case_id: str
+    root: Path, case_id: str, case_name: str
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[str]]:
     rejections: list[dict[str, object]] = []
-    candidates = fast_candidates(root, case_id, rejections)
+    candidates = fast_candidates(root, case_id, case_name, rejections)
     if not candidates:
         return [], rejections, []
     warnings: list[str] = []
@@ -970,16 +1020,24 @@ def select_fast_lineage(
             str(terminal["segment"]),
         )
 
-    selected = max(lineages, key=lineage_score)
+    eligible = [
+        lineage for lineage in lineages
+        if all(bool(item.get("restart_link_valid")) for item in lineage)
+    ]
+    selected = max(eligible, key=lineage_score) if eligible else []
     selected_paths = {Path(item["segment"]) for item in selected}
     unselected = [
         {"reason": "rejected_manifest_candidate", **item} for item in rejections
     ]
     for lineage in lineages:
-        if lineage is selected:
+        if selected and lineage is selected:
             continue
         unselected.append({
-            "reason": "lower_ranked_restart_linked_lineage",
+            "reason": (
+                "lower_ranked_restart_linked_lineage"
+                if all(bool(item.get("restart_link_valid")) for item in lineage)
+                else "invalid_restart_linked_lineage"
+            ),
             "selection_score": list(lineage_score(lineage)),
             "terminal": fast_candidate_summary(lineage[-1]),
             "segments": [fast_candidate_summary(item) for item in lineage],
@@ -1001,6 +1059,8 @@ def select_fast_lineage(
         warnings.append(
             f"{case_id} has {len(unselected)} unselected fast lineage(s)"
         )
+    if not selected:
+        warnings.append(f"{case_id} has no provenance-valid fast lineage")
     return selected, unselected, warnings
 
 
@@ -1206,13 +1266,17 @@ def model_choices_for_input(
 
 
 def case_status(lineage: list[dict[str, object]], final_time: float | None) -> str:
-    if final_time is not None and final_time >= TARGET_TIME - TIME_TOLERANCE:
-        return "complete"
     if not lineage:
         return "not_started"
     terminal = lineage[-1]
     if terminal.get("state") == "failed":
         return "failed_partial"
+    if (
+        final_time is not None
+        and final_time >= TARGET_TIME - TIME_TOLERANCE
+        and terminal.get("state") in ("accepted", "complete")
+    ):
+        return "complete"
     if terminal.get("state") in (
         "in_progress", "active_or_unmarked", "prepared_or_pending"
     ):
@@ -1290,13 +1354,16 @@ def assemble_r02(
         if isinstance(bundle_case.get("model_choices"), dict)
         else model_choices_for_input(input_path)
     )
+    status = case_status([{"state": "accepted"}], final_time)
+    if errors:
+        status = "assembly_error"
     record = {
         "schema_version": 1,
         "assembled_utc": utc_now(),
         "case_id": case_id,
         "case_name": case["name"],
         "matrix_case": case,
-        "status": case_status([{"state": "accepted"}], final_time),
+        "status": status,
         "target_time": TARGET_TIME,
         "final_time": final_time,
         "model_choices": model,
@@ -1333,7 +1400,9 @@ def assemble_fast_case(
     case: dict[str, object],
 ) -> dict[str, object]:
     case_dir = output / "cases" / case_id
-    selected, unselected, warnings = select_fast_lineage(root, case_id)
+    selected, unselected, warnings = select_fast_lineage(
+        root, case_id, str(case["name"])
+    )
     errors: list[str] = []
     historical_manifests: list[Path] = []
     if selected:
@@ -1359,15 +1428,11 @@ def assemble_fast_case(
     claim_scopes = sorted({
         str(item["claim_scope"]) for item in lineage if item.get("claim_scope")
     })
-    command_line_overrides = sorted({
-        str(value)
-        for item in lineage
-        for value in (
-            item.get("command_line_overrides")
-            if isinstance(item.get("command_line_overrides"), list)
-            else []
-        )
-    })
+    command_line_overrides = (
+        list(exact_command_line_overrides(selected[-1]["manifest"]))
+        if selected and isinstance(selected[-1].get("manifest"), dict)
+        else []
+    )
     expected_input = frozen_source / str(case["input"])
     try:
         model = model_choices_for_input(expected_input, command_line_overrides)
@@ -1389,8 +1454,10 @@ def assemble_fast_case(
         }),
     }
     for name, values in identities.items():
-        if len(values) > 1:
-            errors.append(f"{case_id} lineage has multiple {name} values: {values}")
+        if len(values) != 1:
+            errors.append(
+                f"{case_id} lineage must have exactly one {name} value: {values}"
+            )
     expected_input_sha = input_binding.get("sha256")
     selected_input_shas = identities["input_sha256"]
     if expected_input_sha and selected_input_shas and selected_input_shas != [expected_input_sha]:
@@ -1424,13 +1491,16 @@ def assemble_fast_case(
     snapshots = index_snapshots(snapshot_sources, case_dir / "snapshots.json")
     warnings.extend(snapshots["warnings"])
     final_time = float(mhd["time_final"]) if mhd.get("available") else None
+    status = case_status(lineage, final_time)
+    if errors:
+        status = "assembly_error"
     record = {
         "schema_version": 1,
         "assembled_utc": utc_now(),
         "case_id": case_id,
         "case_name": case["name"],
         "matrix_case": case,
-        "status": case_status(lineage, final_time),
+        "status": status,
         "target_time": TARGET_TIME,
         "final_time": final_time,
         "model_choices": model,
@@ -2754,6 +2824,46 @@ def command_verify(args: argparse.Namespace) -> int:
             errors.extend(f"{case_id}: {value}" for value in case_errors)
             continue
         lineage = load_json(lineage_path)
+        retained_lineage_errors = lineage.get("errors")
+        if isinstance(retained_lineage_errors, list):
+            case_errors.extend(
+                f"lineage error: {value}" for value in retained_lineage_errors
+            )
+        elif retained_lineage_errors is not None:
+            case_errors.append("lineage errors field is malformed")
+        retained_segments = lineage.get("lineage")
+        if not isinstance(retained_segments, list) or not retained_segments:
+            case_errors.append("selected lineage is missing or malformed")
+        else:
+            for index, segment in enumerate(retained_segments):
+                if not isinstance(segment, dict):
+                    case_errors.append(
+                        f"selected lineage segment {index} is malformed"
+                    )
+                    continue
+                exit_code = segment.get("run_exit_code")
+                if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+                    if exit_code != 0:
+                        case_errors.append(
+                            f"selected lineage segment {index} has nonzero "
+                            f"run exit code: {exit_code}"
+                        )
+                elif exit_code is not None:
+                    case_errors.append(
+                        f"selected lineage segment {index} run exit code is malformed"
+                    )
+                if segment.get("kind") in {"fast", "historical_seed_prefix"}:
+                    for identity in (
+                        "input_sha256", "matrix_sha256", "executable_sha256"
+                    ):
+                        value = segment.get(identity)
+                        if not isinstance(value, str) or re.fullmatch(
+                            r"[0-9a-f]{64}", value
+                        ) is None:
+                            case_errors.append(
+                                f"selected lineage segment {index} lacks valid "
+                                f"{identity}"
+                            )
         if args.require_complete and lineage.get("status") != "complete":
             case_errors.append(f"case is not complete: {lineage.get('status')}")
         elif lineage.get("status") != "complete":
@@ -2787,6 +2897,22 @@ def command_verify(args: argparse.Namespace) -> int:
         diagnostics_path = args.output / "cases" / case_id / "diagnostics.json"
         if diagnostics_path.is_file():
             diagnostics = load_json(diagnostics_path)
+            for field in ("errors", "analysis_errors"):
+                diagnostic_errors = diagnostics.get(field)
+                if isinstance(diagnostic_errors, list):
+                    case_errors.extend(
+                        f"diagnostic error: {value}" for value in diagnostic_errors
+                    )
+                elif diagnostic_errors is not None:
+                    case_errors.append(f"diagnostics {field} field is malformed")
+            structural_errors = nested_value(diagnostics, "health.structural_errors")
+            if isinstance(structural_errors, list):
+                case_errors.extend(
+                    f"diagnostic structural error: {value}"
+                    for value in structural_errors
+                )
+            elif structural_errors is not None:
+                case_errors.append("diagnostic structural errors field is malformed")
             case_warnings.extend(diagnostics.get("analysis_warnings", []))
             case_warnings.extend(nested_value(diagnostics, "health.numerical_warnings") or [])
             case_warnings.extend(nested_value(diagnostics, "health.science_warnings") or [])
