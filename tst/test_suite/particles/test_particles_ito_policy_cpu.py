@@ -47,6 +47,28 @@ def test_mass_conserving_builtin_source_is_allowed():
         shutil.rmtree(RUN_DIR, ignore_errors=True)
 
 
+def test_invalid_covariance_model_is_rejected():
+    """The covariance model is explicit and rejects misspelled modes."""
+    shutil.rmtree(RUN_DIR, ignore_errors=True)
+    try:
+        result = _run("particles/ito_covariance_model=diagonal")
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert (
+            "ito_covariance_model must be published_diagonal or full_finite_step"
+            in output
+        )
+        reserved = _run("particles/ito_covariance_model=__infer_from_restart__")
+        output = reserved.stdout + reserved.stderr
+        assert reserved.returncode != 0
+        assert (
+            "ito_covariance_model must be published_diagonal or full_finite_step"
+            in output
+        )
+    finally:
+        shutil.rmtree(RUN_DIR, ignore_errors=True)
+
+
 def test_mass_injecting_fluid_floors_fail_closed():
     """Configured floors are allowed until they actually inject gas mass."""
     cases = [

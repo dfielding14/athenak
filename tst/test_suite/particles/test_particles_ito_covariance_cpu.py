@@ -39,6 +39,10 @@ CASES = [
         id="near-outgoing-one-3d",
     ),
     pytest.param(
+        "third_axis_pivot_3d", (0.1, 0.1, 1.0), 3, 0.95, 0.01, 0.99,
+        id="third-axis-pivot-3d",
+    ),
+    pytest.param(
         "rank_two_3d", (1.0, 4.0, -4.0), 3, 0.95, 0.0, 1.0,
         id="correlated-rank-deficient-3d",
     ),
@@ -62,6 +66,8 @@ def _run_case(
     probability_target,
     npart=NPART,
     suffix="",
+    covariance_model="full_finite_step",
+    input_file=INPUT,
 ):
     run_dir = RUN_ROOT / f"{name}{suffix}"
     shutil.rmtree(run_dir, ignore_errors=True)
@@ -81,9 +87,11 @@ def _run_case(
         "output2/dt=-1.0",
         "output3/dt=-1.0",
     ]
+    if covariance_model is not None:
+        flags.append(f"particles/ito_covariance_model={covariance_model}")
     if ndim == 3:
         flags.extend(["mesh/nx3=8", "meshblock/nx3=8"])
-    assert testutils.run(INPUT, flags)
+    assert testutils.run(input_file, flags)
     history = read_history(
         run_dir / "prtcl_thermo_history" / f"{basename}.prtcl_thermo_history.thp"
     )
@@ -177,7 +185,7 @@ def test_anisotropic_factor_tolerance_uses_local_scales():
     source = (ROOT / "src/particles/particles_lagrangian_ito.cpp").read_text(
         encoding="utf-8"
     )
-    factor_start = source.index("bool ItoFactorCovariance")
+    factor_start = source.index("bool ItoResidualWithinTolerance")
     factor_end = source.index("void FatalIto", factor_start)
     factor = source[factor_start:factor_end]
     assert "pivot_scale = fmax(fabs(a[pivot][pivot]), pivot_correction)" in factor
@@ -264,6 +272,52 @@ def test_ito2_matches_full_finite_step_covariance_cpu(
             assert np.max(np.abs(dx[:, 2])) == 0.0
         if velocities[1] == 0.0:
             assert np.max(np.abs(dx[:, 1])) == 0.0
+    finally:
+        shutil.rmtree(RUN_ROOT, ignore_errors=True)
+
+
+def test_default_published_diagonal_matches_marginal_variances_cpu(tmp_path):
+    """The default reproduces the published independent-coordinate Ito-2 law."""
+    try:
+        velocities = (1.0, -0.1, 0.0)
+        default_input = tmp_path / "ito_tracers_default_covariance.athinput"
+        input_text = Path(INPUT).read_text(encoding="utf-8")
+        input_text = "\n".join(
+            line for line in input_text.splitlines()
+            if not line.startswith("ito_covariance_model")
+        )
+        default_input.write_text(input_text + "\n", encoding="utf-8")
+        dx, dt = _run_case(
+            "published_diagonal_default",
+            velocities,
+            2,
+            0.95,
+            0.01,
+            0.99,
+            covariance_model=None,
+            input_file=str(default_input),
+        )
+        mean, full_covariance, _ = _expected_moments(velocities, dt, 2)
+        expected_covariance = np.diag(np.diag(full_covariance))
+
+        for axis in range(2):
+            _assert_sample_mean(
+                dx[:, axis],
+                mean[axis],
+                expected_covariance[axis, axis],
+                f"published diagonal mean[{axis}]",
+            )
+        for row in range(2):
+            for column in range(row, 2):
+                _assert_sample_covariance(
+                    dx,
+                    mean,
+                    expected_covariance[row, column],
+                    row,
+                    column,
+                    f"published diagonal cov[{row},{column}]",
+                )
+        assert full_covariance[0, 1] != 0.0
     finally:
         shutil.rmtree(RUN_ROOT, ignore_errors=True)
 

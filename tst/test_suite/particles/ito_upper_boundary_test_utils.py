@@ -45,11 +45,14 @@ def _particle_section(path):
     values = RESTART_HEADER.unpack_from(data, offset)
     magic, version, enabled, nrdata, nidata, nlocal, nschedules, _ = values
     assert magic.rstrip(b"\0") == b"ATHKPRTCLMC"
-    assert version == 3
+    assert version == 4
     assert enabled == 2
+    covariance_model = struct.unpack_from("@i", data, offset + RESTART_HEADER.size)[0]
+    assert covariance_model == 0
 
     fixed_bytes = (
         RESTART_HEADER.size
+        + struct.calcsize("@i")
         + 3 * nschedules * struct.calcsize("@i")
         + nidata * nlocal * struct.calcsize("@i")
         + nlocal * struct.calcsize("@Q")
@@ -63,6 +66,7 @@ def _particle_section(path):
     real_base = (
         offset
         + RESTART_HEADER.size
+        + struct.calcsize("@i")
         + nschedules * real_size
         + 3 * nschedules * struct.calcsize("@i")
     )

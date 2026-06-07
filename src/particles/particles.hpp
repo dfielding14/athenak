@@ -34,9 +34,10 @@ enum ItoCoefficientIndex {
   ITO_M1=0, ITO_M2=1, ITO_M3=2,
   ITO_Q11=3, ITO_Q22=4, ITO_Q33=5,
   ITO_Q12=6, ITO_Q13=7, ITO_Q23=8,
-  ITO_NCOEFF=9
+  ITO_NDIAG_COEFF=6, ITO_NFULL_COEFF=9
 };
 
+enum class ItoCovarianceModel {published_diagonal, full_finite_step};
 enum class TracerSeedWeight {mass, volume};
 enum class TracerSeedRegion {all, box, sphere, slab};
 
@@ -100,7 +101,8 @@ namespace particles {
 class Particles {
   friend class ParticlesBoundaryValues;
  public:
-  Particles(MeshBlockPack *ppack, ParameterInput *pin);
+  Particles(MeshBlockPack *ppack, ParameterInput *pin,
+            bool infer_covariance_model_from_restart);
   ~Particles();
 
   // data
@@ -115,6 +117,9 @@ class Particles {
   DvceArray1D<std::uint64_t> prtcl_tag;  // globally unique particle tags
   Real dtnew;
   Real ito_probability_target = 0.99;
+  ItoCovarianceModel ito_covariance_model = ItoCovarianceModel::published_diagonal;
+  bool infer_ito_covariance_model_from_restart = false;
+  int ito_ncoeff = ITO_NDIAG_COEFF;
   std::int64_t random_seed = 0;
   std::uint64_t next_tracer_tag = 0;
   DvceArray5D<Real> ito_coeff;
@@ -156,7 +161,8 @@ class Particles {
   void SeedInitialTracers();
   void RemapAfterMeshRefinement();
   void WriteRestartData(IOWrapper &resfile, bool single_file_per_rank);
-  void ReadRestartData(IOWrapper &resfile, bool single_file_per_rank);
+  void ReadRestartData(IOWrapper &resfile, ParameterInput *pin,
+                       bool single_file_per_rank);
   int GetLagrangianMCScalarCount() const;
   bool IsLagrangianMC() const {return particle_type == ParticleType::lagrangian_mc;}
   bool IsIto2() const {return particle_type == ParticleType::lagrangian_ito;}

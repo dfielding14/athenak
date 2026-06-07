@@ -7,6 +7,7 @@ import sys
 import numpy as np
 
 import test_suite.testutils as testutils
+from test_suite.particles.ito_restart_test_utils import make_legacy_restart
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -21,6 +22,10 @@ RUN_UNIFORM_FOUR = Path("run_particles_ito_mpi_four")
 RUN_UNIFORM_SERIAL = Path("run_particles_ito_mpi_serial_reference")
 RUN_AMR = Path("run_particles_ito_amr_mpi")
 RUN_AMR_UNINTERRUPTED = Path("run_particles_ito_amr_mpi_uninterrupted")
+RUN_LEGACY_V2 = Path("run_particles_ito_legacy_v2_mpi")
+RUN_LEGACY_V2_UNINTERRUPTED = Path(
+    "run_particles_ito_legacy_v2_mpi_uninterrupted"
+)
 HIGH_TAG = 2**63 + 12345
 
 
@@ -49,6 +54,7 @@ def test_ito2_mpi_and_amr():
         flags = [
             "meshblock/nx1=8",
             "particles/next_tracer_tag=" + str(HIGH_TAG),
+            "particles/ito_covariance_model=full_finite_step",
         ]
         assert testutils.run(
             UNIFORM_INPUT, ["-d", str(RUN_UNIFORM_SERIAL), *flags]
@@ -151,3 +157,67 @@ def test_ito2_mpi_and_amr():
         shutil.rmtree(RUN_UNIFORM_SERIAL, ignore_errors=True)
         shutil.rmtree(RUN_AMR, ignore_errors=True)
         shutil.rmtree(RUN_AMR_UNINTERRUPTED, ignore_errors=True)
+
+
+def test_bare_legacy_v2_restart_keeps_mpi_message_extents_consistent():
+    """A v2 restart infers diagonal mode without changing allocated MPI extents."""
+    shutil.rmtree(RUN_LEGACY_V2, ignore_errors=True)
+    shutil.rmtree(RUN_LEGACY_V2_UNINTERRUPTED, ignore_errors=True)
+    try:
+        source = RUN_LEGACY_V2 / "source"
+        resumed = RUN_LEGACY_V2 / "resumed"
+        source.mkdir(parents=True)
+        flags = [
+            "meshblock/nx1=8",
+            "particles/ito_covariance_model=published_diagonal",
+        ]
+        assert testutils.mpi_run(
+            UNIFORM_INPUT,
+            ["-d", str(source), *flags, "time/nlim=1"],
+            threads=2,
+        )
+        latest_rank0 = sorted(
+            (source / "rst/rank_00000000").glob("*.rst")
+        )[-1]
+        rank_files = sorted(
+            (source / "rst").glob(f"rank_*/{latest_rank0.name}")
+        )
+        assert len(rank_files) == 2
+        for restart in rank_files:
+            make_legacy_restart(restart, restart, 2)
+
+        assert testutils.run_command(
+            [
+                "mpirun",
+                "-np",
+                "2",
+                "./athena",
+                "-r",
+                str(latest_rank0),
+                "-d",
+                str(resumed),
+                "time/nlim=2",
+            ]
+        )
+        assert testutils.mpi_run(
+            UNIFORM_INPUT,
+            [
+                "-d",
+                str(RUN_LEGACY_V2_UNINTERRUPTED),
+                *flags,
+                "time/nlim=2",
+            ],
+            threads=2,
+        )
+        resumed_tags, resumed_state = _final_state(
+            resumed / "prtcl_thermo_history/ito_tracers.prtcl_thermo_history.thp"
+        )
+        continuous_tags, continuous_state = _final_state(
+            RUN_LEGACY_V2_UNINTERRUPTED
+            / "prtcl_thermo_history/ito_tracers.prtcl_thermo_history.thp"
+        )
+        np.testing.assert_array_equal(resumed_tags, continuous_tags)
+        np.testing.assert_array_equal(resumed_state, continuous_state)
+    finally:
+        shutil.rmtree(RUN_LEGACY_V2, ignore_errors=True)
+        shutil.rmtree(RUN_LEGACY_V2_UNINTERRUPTED, ignore_errors=True)

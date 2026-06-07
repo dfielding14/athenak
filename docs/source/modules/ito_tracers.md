@@ -6,12 +6,16 @@
 method described by Moseley, Teyssier, and Abel in
 [arXiv:2604.23041v2](https://arxiv.org/abs/2604.23041). It builds on the
 Lagrangian Monte-Carlo tracer infrastructure, but replaces discrete cell-center
-jumps with continuous Euler-Maruyama trajectories whose first two displacement
-moments match the MC jump kernel.
+jumps with continuous Euler-Maruyama trajectories. Both modes match the
+per-coordinate mean and variance of the MC jump kernel; the full mode also
+matches its multidimensional finite-step covariance.
 
-This implementation intentionally does not implement Itô-3, the piecewise-skew-
-uniform sampler, or any third-moment matching. Inputs requesting `pusher = ito3`
-or `ito_order` other than `2` fail explicitly.
+Two covariance models are available. `published_diagonal` is the default and
+reproduces the independent-coordinate implementation in the published code.
+`full_finite_step` restores the off-diagonal finite-step covariance of the
+categorical MC jump. This implementation intentionally does not implement
+Itô-3, the piecewise-skew-uniform sampler, or any third-moment matching. Inputs
+requesting `pusher = ito3` or `ito_order` other than `2` fail explicitly.
 
 ## Algorithm
 
@@ -33,7 +37,7 @@ R_ii = h_i^2 C+_i
 R_ij = 0, i != j
 ```
 
-The full finite-step central covariance is
+The full finite-step central covariance of the MC jump is
 
 ```{math}
 Q_{ij}=R_{ij}-m_i m_j
@@ -41,11 +45,26 @@ Q_{ij}=R_{ij}-m_i m_j
 ```
 
 This includes negative off-diagonal covariance whenever the mean transport has
-more than one nonzero component. AthenaK stores {math}`\mathbf m` and all six
-independent components of {math}`\mathbf Q`. The mean and central covariance are
-communicated across MeshBlocks, restricted linearly, and prolonged
-piecewise-constantly at coarse/fine interfaces. They are CIC-interpolated
-directly to the particle position.
+more than one nonzero component. The runtime choice is:
+
+```ini
+ito_covariance_model = published_diagonal  # default, six coefficient fields
+ito_covariance_model = full_finite_step    # nine coefficient fields
+```
+
+The published mode keeps only the diagonal,
+
+```{math}
+Q^{\rm pub}_{ij}=\delta_{ij}
+\left(h_i^2 C_{+,i}-m_i^2\right),
+```
+
+and draws independent coordinate kicks. The full mode stores all six
+independent components of {math}`\mathbf Q` and factors the tensor. Both modes
+store the same finite-step mean and diagonal variance quantities internally.
+The coefficient fields are communicated across MeshBlocks, restricted
+linearly, prolonged piecewise-constantly at coarse/fine interfaces, and
+CIC-interpolated directly to the particle position.
 
 This defines the authoritative spatial model: {math}`\mathbf m(\mathbf x)` and
 {math}`\mathbf Q(\mathbf x)` are interpolated stochastic-coefficient fields. It is
@@ -57,8 +76,10 @@ preserving every moment of the unresolved mixture. A static coarse/fine
 uniform-flow regression measures the conditional moments on both levels;
 nonuniform AMR convergence remains a separate validation requirement.
 
-AthenaK then computes a pivoted positive-semidefinite factor {math}`\mathbf L`
-satisfying {math}`\mathbf Q=\mathbf L\mathbf L^{\mathsf T}`.
+In `full_finite_step`, AthenaK computes a pivoted positive-semidefinite factor
+{math}`\mathbf L` satisfying
+{math}`\mathbf Q=\mathbf L\mathbf L^{\mathsf T}`. In
+`published_diagonal`, {math}`\mathbf L` is diagonal.
 
 Each particle is advanced once per fluid timestep:
 
@@ -69,6 +90,14 @@ Each particle is advanced once per fluid timestep:
 where the components of {math}`\boldsymbol{\xi}` are independent bounded uniform
 draws on `[-sqrt(3), +sqrt(3)]`. The random vector is deterministic for a fixed
 64-bit tracer tag, cycle, and seed.
+
+Because this base distribution is not Gaussian, replacing a diagonal factor
+with a full factor changes fourth and higher moments as well as the cross
+covariance. `full_finite_step` exactly targets the MC mean and covariance; it
+does not reproduce the complete categorical jump distribution. Comparisons
+between the two modes should therefore be described as comparisons between two
+complete bounded-uniform kick laws, not as a pure off-diagonal-covariance
+ablation.
 
 The sum of all outgoing MC probabilities must not exceed one. Invalid current
 steps fail closed. From the first cycle, the fluid timestep is guarded by
@@ -255,6 +284,7 @@ particle_type   = lagrangian_ito
 pusher          = ito2
 ito_order       = 2
 tracer_kick_pdf = uniform
+ito_covariance_model = published_diagonal
 random_seed     = 12345
 ito_probability_target = 0.99
 track_variables = density, pressure, temperature, v1
@@ -285,6 +315,7 @@ Run the uniform-flow example:
 | Dimensions | 2D and 3D particle configurations |
 | Time integrators | Dynamic `rk1`, `rk2`, and `rk3` |
 | Mesh | Uniform and AMR |
+| Covariance model | Published diagonal by default; full finite-step tensor by explicit opt-in |
 | Parallelism | Serial and MPI tested on CPU; CUDA/HIP runtime unverified |
 | Boundaries | Periodic in every active dimension |
 | Persistence | Restart, particle VTK, and thermodynamic history output; tracked-particle output unsupported |
@@ -295,6 +326,11 @@ The tracer uses one particle step per fluid timestep. To remain compatible with
 the existing particle migration path, a realized displacement that spans more
 than one MeshBlock in any direction is rejected.
 
+Ito restart format version 4 stores the covariance model. Legacy version 2 Ito
+files use `published_diagonal`. Legacy version 3 Ito files were written by the
+full-covariance implementation and automatically resume with
+`full_finite_step`.
+
 ## Validation and Fail-Closed Checks
 
 AthenaK exits with a fatal error when:
@@ -302,6 +338,7 @@ AthenaK exits with a fatal error when:
 - the final mass-flux probabilities are non-finite, have negative variance, or
   have total outward probability greater than one;
 - interpolated mean/covariance, covariance factorization, or displacement is invalid;
+- an Ito restart was written with a different covariance model;
 - a particle would move farther than the existing one-neighbor MeshBlock
   migration path can represent;
 - a configured fluid or user source declares that it changes mass density;
@@ -312,7 +349,8 @@ AthenaK exits with a fatal error when:
 
 The regression suite checks:
 
-- 2D and 3D means and the full finite-step covariance against the analytical MC
+- default published-diagonal means and marginal variances;
+- opt-in 2D and 3D full finite-step covariance against the analytical MC
   kernel, including mixed-sign and rank-deficient cases;
 - both RK2 and RK3 final-stage flux weighting;
 - isothermal Hydro and ideal-gas MHD;
@@ -334,11 +372,20 @@ square-pulse tests; two-rank MPI migration and AMR tests; and the cooling CPU
 and MPI suites. CUDA/HIP runtime validation and publication to the live
 `gh-pages` branch remain separate release tasks.
 
+The production-like `64^3`, 4,194,304-particle turbulence comparison at CFL
+`0.324` found negligible changes in the headline correlation and PDF metrics,
+but small reproducible spectral changes. On the same optimized executable,
+`full_finite_step` averaged 37.21 s and `published_diagonal` averaged 25.24 s
+over two runs each on eight local MPI ranks, a 1.47x ratio. Use the full mode
+when the joint finite-step covariance or scale-dependent tracer power is part
+of the scientific claim; otherwise the default published mode is the practical
+production choice.
+
 ## Source Location
 
 | Path | Role |
 | --- | --- |
-| `src/particles/particles_lagrangian_ito.cpp` | Mean and full finite-step covariance, AMR communication, CIC interpolation, and particle push. |
+| `src/particles/particles_lagrangian_ito.cpp` | Published-diagonal and full finite-step covariance modes, AMR communication, CIC interpolation, and particle push. |
 | `src/particles/particles_lagrangian_mc.cpp` | Shared seeding, restart, and post-AMR remapping. |
 | `src/hydro/hydro_fluxes.cpp`, `src/mhd/mhd_fluxes.cpp` | Final-RK-weighted mass-flux accumulation. |
 | `inputs/particles/ito_tracers*.athinput` | Uniform-flow, AMR, and 2D thermal-instability inputs. |

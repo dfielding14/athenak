@@ -153,7 +153,8 @@ class Mesh {
   void PrintMeshDiagnostics();
   void WriteMeshStructure();
   void NewTimeStep(const Real tlim);
-  void AddCoordinatesAndPhysics(ParameterInput *pinput);
+  void AddCoordinatesAndPhysics(ParameterInput *pinput,
+                                bool infer_ito_covariance_model_from_restart);
   void UpdateParticleCounts();
   BoundaryFlag GetBoundaryFlag(const std::string& input_string);
   std::string GetBoundaryString(BoundaryFlag input_flag);

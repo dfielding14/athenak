@@ -82,7 +82,8 @@ class MeshBlockPack {
   std::map<std::string, std::shared_ptr<TaskList>> tl_map;
 
   // functions
-  void AddPhysics(ParameterInput *pin);
+  void AddPhysics(ParameterInput *pin,
+                  bool infer_ito_covariance_model_from_restart);
   void AddMeshBlocks(ParameterInput *pin);
   void AddCoordinates(ParameterInput *pin);
 

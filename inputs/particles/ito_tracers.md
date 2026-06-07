@@ -15,12 +15,18 @@ Enable the method with:
 <particles>
 particle_type = lagrangian_ito
 pusher        = ito2
+ito_covariance_model = published_diagonal
 ```
 
 Only Itô-2 is implemented. `pusher = ito3`, `ito_order` other than `2`, and
 non-uniform kick distributions are rejected explicitly. See
 `docs/source/modules/ito_tracers.md` for the equations, supported configuration,
 and implementation details.
+
+`published_diagonal` is the default and matches the independent-coordinate
+published code. Set `ito_covariance_model = full_finite_step` to include the
+off-diagonal finite-step covariance. Restart files record this choice and
+reject a restart under a different model.
 
 ## Behavior Figures
 

@@ -2,11 +2,13 @@
 
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 
 import numpy as np
 
 import test_suite.testutils as testutils
+from test_suite.particles.ito_restart_test_utils import make_legacy_restart
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -59,6 +61,17 @@ def _assert_uniform_flow_moments(
         assert abs(np.var(displacement) - expected_variance) < 0.08 * expected_variance
 
 
+def _final_state(run_dir):
+    history = read_history(
+        run_dir / "prtcl_thermo_history/ito_tracers.prtcl_thermo_history.thp"
+    )
+    final = history["cycle"] == np.max(history["cycle"])
+    order = np.argsort(history["tag"][final])
+    return history["tag"][final][order], np.column_stack(
+        [history[name][final][order] for name in ("x1", "x2", "x3")]
+    )
+
+
 def test_ito2_uniform_flow_moments_restart_and_validation():
     """Ito-2 matches MC moments, restarts, and explicitly rejects Ito-3."""
     shutil.rmtree(RUN_DIR, ignore_errors=True)
@@ -70,6 +83,25 @@ def test_ito2_uniform_flow_moments_restart_and_validation():
         assert testutils.run_command(
             ["./athena", "-r", str(restart), "-d", str(RUN_DIR / "restart"),
              "time/nlim=2"]
+        )
+        mismatch = subprocess.run(
+            [
+                "./athena",
+                "-r",
+                str(restart),
+                "-d",
+                str(RUN_DIR / "restart_wrong_covariance"),
+                "particles/ito_covariance_model=full_finite_step",
+                "time/nlim=2",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        assert mismatch.returncode != 0
+        assert "particle restart covariance model does not match" in (
+            mismatch.stdout + mismatch.stderr
         )
         assert not testutils.run_command(
             ["./athena", "-i", INPUT, "-d", str(RUN_DIR / "ito3"),
@@ -85,6 +117,89 @@ def test_ito2_uniform_flow_moments_restart_and_validation():
         )
     finally:
         shutil.rmtree(RUN_DIR, ignore_errors=True)
+
+
+def test_legacy_v2_and_v3_ito_restarts_infer_covariance_model():
+    """Legacy restarts resume without a supplemental input file."""
+    root = Path("run_particles_ito_legacy_restart")
+    shutil.rmtree(root, ignore_errors=True)
+    try:
+        root.mkdir(parents=True)
+        for version, model in (
+            (2, "published_diagonal"),
+            (3, "full_finite_step"),
+        ):
+            source = root / f"v{version}_source"
+            resumed = root / f"v{version}_resumed"
+            uninterrupted = root / f"v{version}_uninterrupted"
+            assert testutils.run(
+                INPUT,
+                [
+                    "-d",
+                    str(source),
+                    "time/nlim=1",
+                    f"particles/ito_covariance_model={model}",
+                ],
+            )
+            restart = sorted(
+                (source / "rst/rank_00000000").glob("ito_tracers.*.rst")
+            )[-1]
+            legacy_restart = root / f"ito_tracers_v{version}.rst"
+            make_legacy_restart(restart, legacy_restart, version)
+
+            dry_run = subprocess.run(
+                ["./athena", "-r", str(legacy_restart), "-n"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            assert dry_run.returncode == 0
+            assert (
+                "ito_covariance_model"
+                in dry_run.stdout
+                and "inferred_from_restart_payload" in dry_run.stdout
+            )
+            incompatible_model = (
+                "full_finite_step"
+                if model == "published_diagonal"
+                else "published_diagonal"
+            )
+            assert not testutils.run_command(
+                [
+                    "./athena",
+                    "-r",
+                    str(legacy_restart),
+                    "-d",
+                    str(root / f"v{version}_incompatible"),
+                    f"particles/ito_covariance_model={incompatible_model}",
+                    "time/nlim=2",
+                ]
+            )
+            assert testutils.run_command(
+                [
+                    "./athena",
+                    "-r",
+                    str(legacy_restart),
+                    "-d",
+                    str(resumed),
+                    "time/nlim=2",
+                ]
+            )
+            assert testutils.run(
+                INPUT,
+                [
+                    "-d",
+                    str(uninterrupted),
+                    "time/nlim=2",
+                    f"particles/ito_covariance_model={model}",
+                ],
+            )
+            resumed_tags, resumed_state = _final_state(resumed)
+            uninterrupted_tags, uninterrupted_state = _final_state(uninterrupted)
+            np.testing.assert_array_equal(resumed_tags, uninterrupted_tags)
+            np.testing.assert_array_equal(resumed_state, uninterrupted_state)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_ito2_rk3_flux_weights_and_mhd():

@@ -625,7 +625,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::exit(EXIT_FAILURE);
     }
 #endif
-    pm->pmb_pack->ppart->ReadRestartData(resfile, single_file_per_rank);
+    pm->pmb_pack->ppart->ReadRestartData(resfile, pin, single_file_per_rank);
   }
 
   // call problem generator again to re-initialize data, fn ptrs, as needed

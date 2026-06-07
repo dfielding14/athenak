@@ -273,7 +273,24 @@ int main(int argc, char *argv[]) {
     infile.Close();
     pinput->CheckBlockNames();
   }
+  bool infer_ito_covariance_model_from_restart = false;
+  if (res_flag && pinput->DoesBlockExist("particles") &&
+      pinput->GetString("particles", "particle_type") == "lagrangian_ito" &&
+      !pinput->DoesParameterExist("particles", "ito_covariance_model")) {
+    pinput->SetString("particles", "ito_covariance_model", "published_diagonal");
+    infer_ito_covariance_model_from_restart = true;
+    for (int i=1; i<argc; ++i) {
+      std::string argument(argv[i]);
+      if (argument.rfind("particles/ito_covariance_model=", 0) == 0) {
+        infer_ito_covariance_model_from_restart = false;
+      }
+    }
+  }
   pinput->ModifyFromCmdline(argc, argv);
+  if (narg_flag && infer_ito_covariance_model_from_restart) {
+    pinput->SetString("particles", "ito_covariance_model",
+                      "inferred_from_restart_payload");
+  }
 
   // Dump input parameters and quit if code was run with -n option.
   if (narg_flag) {
@@ -317,7 +334,8 @@ int main(int argc, char *argv[]) {
   // Note these steps must occur after Mesh (including MeshBlocks and MeshBlockPack)
   // is fully constructed.
 
-  pmesh->AddCoordinatesAndPhysics(pinput);
+  pmesh->AddCoordinatesAndPhysics(
+      pinput, infer_ito_covariance_model_from_restart);
   if (!res_flag) {
     // set ICs using ProblemGenerator constructor for new runs
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput, pmesh);

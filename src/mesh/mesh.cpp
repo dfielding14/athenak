@@ -650,11 +650,12 @@ void Mesh::NewTimeStep(const Real tlim) {
 //----------------------------------------------------------------------------------------
 // \fn Mesh::AddCoordinatesAndPhysics
 
-void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
+void Mesh::AddCoordinatesAndPhysics(
+    ParameterInput *pinput, bool infer_ito_covariance_model_from_restart) {
   // cycle over MeshBlockPacks on this rank and add Coordinates and Physics
   for (int n=0; n<nmb_packs_thisrank; ++n) {
     pmb_pack->AddCoordinates(pinput);
-    pmb_pack->AddPhysics(pinput);
+    pmb_pack->AddPhysics(pinput, infer_ito_covariance_model_from_restart);
   }
 
   // Determine total number of particles across all ranks

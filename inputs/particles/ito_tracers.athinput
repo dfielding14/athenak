@@ -50,6 +50,7 @@ particle_type   = lagrangian_ito
 pusher          = ito2
 ito_order       = 2
 tracer_kick_pdf = uniform
+ito_covariance_model = published_diagonal
 random_seed     = 12345
 next_tracer_tag = 0
 ito_probability_target = 0.99

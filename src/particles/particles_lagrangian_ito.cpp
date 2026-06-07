@@ -42,8 +42,18 @@ Real ItoHashReal(std::uint64_t x) {
                            (1.0/9007199254740992.0));
 }
 
-// Factor a symmetric positive-semidefinite 3x3 matrix Q = L L^T.  Symmetric
-// pivoting avoids dividing by a tiny leading diagonal in semidefinite cases.
+KOKKOS_INLINE_FUNCTION
+bool ItoResidualWithinTolerance(const Real residual, const Real diagonal_product,
+                                const Real residual_correction,
+                                const Real rel_tol) {
+  Real diagonal_scale = sqrt(fabs(diagonal_product));
+  Real residual_scale = fmax(diagonal_scale, residual_correction);
+  return fabs(residual) <= rel_tol*residual_scale;
+}
+
+// Factor a symmetric positive-semidefinite 3x3 matrix Q = L L^T. This is the
+// fixed-size form of pivoted Cholesky; keeping it unrolled matters in the
+// per-particle hot path.
 KOKKOS_INLINE_FUNCTION
 bool ItoFactorCovariance(const Real q[6], Real l[3][3], const Real rel_tol) {
   Real a[3][3] = {
@@ -51,74 +61,120 @@ bool ItoFactorCovariance(const Real q[6], Real l[3][3], const Real rel_tol) {
     {q[3], q[1], q[5]},
     {q[4], q[5], q[2]}
   };
-  int permutation[3] = {0, 1, 2};
-  for (int i=0; i<3; ++i) {
-    for (int j=0; j<3; ++j) {
-      l[i][j] = 0.0;
-      if (!Kokkos::isfinite(a[i][j])) return false;
+  if (!Kokkos::isfinite(q[0]) || !Kokkos::isfinite(q[1]) ||
+      !Kokkos::isfinite(q[2]) || !Kokkos::isfinite(q[3]) ||
+      !Kokkos::isfinite(q[4]) || !Kokkos::isfinite(q[5])) {
+    return false;
+  }
+  l[0][0] = 0.0;
+  l[0][1] = 0.0;
+  l[0][2] = 0.0;
+  l[1][0] = 0.0;
+  l[1][1] = 0.0;
+  l[1][2] = 0.0;
+  l[2][0] = 0.0;
+  l[2][1] = 0.0;
+  l[2][2] = 0.0;
+
+  int pivot = 0;
+  Real best_diagonal = a[0][0];
+  if (a[1][1] > best_diagonal) {
+    pivot = 1;
+    best_diagonal = a[1][1];
+  }
+  if (a[2][2] > best_diagonal) {
+    pivot = 2;
+    best_diagonal = a[2][2];
+  }
+  int remaining1 = (pivot == 0) ? 1 : ((pivot == 1) ? 0 : 1);
+  int remaining2 = (pivot == 2) ? 0 : 2;
+
+  Real pivot_correction = 0.0;
+  Real diagonal = a[pivot][pivot];
+  Real pivot_scale = fmax(fabs(a[pivot][pivot]), pivot_correction);
+  Real pivot_tol = rel_tol*pivot_scale;
+  if (diagonal < -pivot_tol) return false;
+  if (diagonal <= pivot_tol) {
+    if (!ItoResidualWithinTolerance(a[0][0], a[0][0]*a[0][0], 0.0, rel_tol) ||
+        !ItoResidualWithinTolerance(a[0][1], a[0][0]*a[1][1], 0.0, rel_tol) ||
+        !ItoResidualWithinTolerance(a[0][2], a[0][0]*a[2][2], 0.0, rel_tol) ||
+        !ItoResidualWithinTolerance(a[1][1], a[1][1]*a[1][1], 0.0, rel_tol) ||
+        !ItoResidualWithinTolerance(a[1][2], a[1][1]*a[2][2], 0.0, rel_tol) ||
+        !ItoResidualWithinTolerance(a[2][2], a[2][2]*a[2][2], 0.0, rel_tol)) {
+      return false;
     }
+    return true;
   }
 
-  for (int column=0; column<3; ++column) {
-    int best = column;
-    int first_row = permutation[column];
-    Real best_diagonal = a[first_row][first_row];
-    for (int n=0; n<column; ++n) {
-      best_diagonal -= l[first_row][n]*l[first_row][n];
-    }
-    for (int candidate=column+1; candidate<3; ++candidate) {
-      int row = permutation[candidate];
-      Real diagonal = a[row][row];
-      for (int n=0; n<column; ++n) diagonal -= l[row][n]*l[row][n];
-      if (diagonal > best_diagonal) {
-        best = candidate;
-        best_diagonal = diagonal;
-      }
-    }
-    int swap = permutation[column];
-    permutation[column] = permutation[best];
-    permutation[best] = swap;
-
-    int pivot = permutation[column];
-    Real diagonal = a[pivot][pivot];
-    Real pivot_correction = 0.0;
-    for (int n=0; n<column; ++n) {
-      pivot_correction += l[pivot][n]*l[pivot][n];
-    }
-    diagonal -= pivot_correction;
-    Real pivot_scale = fmax(fabs(a[pivot][pivot]), pivot_correction);
-    Real pivot_tol = rel_tol*pivot_scale;
-    if (diagonal < -pivot_tol) return false;
-    if (diagonal <= pivot_tol) {
-      for (int p=column; p<3; ++p) {
-        int row = permutation[p];
-        for (int qindex=column; qindex<3; ++qindex) {
-          int col = permutation[qindex];
-          Real residual = a[row][col];
-          Real residual_correction = 0.0;
-          for (int n=0; n<column; ++n) {
-            residual -= l[row][n]*l[col][n];
-            residual_correction += fabs(l[row][n]*l[col][n]);
-          }
-          Real diagonal_scale = sqrt(fabs(a[row][row]*a[col][col]));
-          Real residual_scale = fmax(diagonal_scale, residual_correction);
-          if (fabs(residual) > rel_tol*residual_scale) return false;
-        }
-      }
-      break;
-    }
-
-    l[pivot][column] = sqrt(diagonal);
-    for (int p=column+1; p<3; ++p) {
-      int row = permutation[p];
-      Real residual = a[row][pivot];
-      for (int n=0; n<column; ++n) {
-        residual -= l[row][n]*l[pivot][n];
-      }
-      l[row][column] = residual/l[pivot][column];
-      if (!Kokkos::isfinite(l[row][column])) return false;
-    }
+  l[pivot][0] = sqrt(diagonal);
+  l[remaining1][0] = a[remaining1][pivot]/l[pivot][0];
+  l[remaining2][0] = a[remaining2][pivot]/l[pivot][0];
+  if (!Kokkos::isfinite(l[remaining1][0]) ||
+      !Kokkos::isfinite(l[remaining2][0])) {
+    return false;
   }
+
+  Real diagonal1 =
+      a[remaining1][remaining1] - l[remaining1][0]*l[remaining1][0];
+  Real diagonal2 =
+      a[remaining2][remaining2] - l[remaining2][0]*l[remaining2][0];
+  if (diagonal2 > diagonal1) {
+    int swap = remaining1;
+    remaining1 = remaining2;
+    remaining2 = swap;
+    Real swap_diagonal = diagonal1;
+    diagonal1 = diagonal2;
+    diagonal2 = swap_diagonal;
+  }
+
+  pivot = remaining1;
+  pivot_correction = l[pivot][0]*l[pivot][0];
+  diagonal = diagonal1;
+  pivot_scale = fmax(fabs(a[pivot][pivot]), pivot_correction);
+  pivot_tol = rel_tol*pivot_scale;
+  if (diagonal < -pivot_tol) return false;
+  if (diagonal <= pivot_tol) {
+    Real cross_correction = l[remaining1][0]*l[remaining2][0];
+    Real residual1 = diagonal1;
+    Real residual12 = a[remaining1][remaining2] - cross_correction;
+    Real residual2 = diagonal2;
+    if (!ItoResidualWithinTolerance(
+            residual1, a[remaining1][remaining1]*a[remaining1][remaining1],
+            fabs(pivot_correction), rel_tol) ||
+        !ItoResidualWithinTolerance(
+            residual12, a[remaining1][remaining1]*a[remaining2][remaining2],
+            fabs(cross_correction), rel_tol) ||
+        !ItoResidualWithinTolerance(
+            residual2, a[remaining2][remaining2]*a[remaining2][remaining2],
+            fabs(l[remaining2][0]*l[remaining2][0]), rel_tol)) {
+      return false;
+    }
+    return true;
+  }
+
+  l[pivot][1] = sqrt(diagonal);
+  Real residual =
+      a[remaining2][pivot] - l[remaining2][0]*l[pivot][0];
+  l[remaining2][1] = residual/l[pivot][1];
+  if (!Kokkos::isfinite(l[remaining2][1])) return false;
+
+  pivot = remaining2;
+  pivot_correction =
+      l[pivot][0]*l[pivot][0] + l[pivot][1]*l[pivot][1];
+  diagonal = a[pivot][pivot] - pivot_correction;
+  pivot_scale = fmax(fabs(a[pivot][pivot]), pivot_correction);
+  pivot_tol = rel_tol*pivot_scale;
+  if (diagonal < -pivot_tol) return false;
+  if (diagonal <= pivot_tol) {
+    if (!ItoResidualWithinTolerance(
+            diagonal, a[pivot][pivot]*a[pivot][pivot],
+            fabs(l[pivot][0]*l[pivot][0]) + fabs(l[pivot][1]*l[pivot][1]),
+            rel_tol)) {
+      return false;
+    }
+    return true;
+  }
+  l[pivot][2] = sqrt(diagonal);
   return true;
 }
 
@@ -146,6 +202,8 @@ TaskStatus Particles::BuildItoCoefficients(Driver *pdriver, int stage) {
   int nmb = pmy_pack->nmb_thispack;
   bool multi_d = pmy_pack->pmesh->multi_d;
   bool three_d = pmy_pack->pmesh->three_d;
+  bool full_finite_step =
+      (ito_covariance_model == ItoCovarianceModel::full_finite_step);
   Real dt = pmy_pack->pmesh->dt;
   if (dt <= 0.0) FatalIto("Ito-2 requires a positive fluid timestep");
 
@@ -215,9 +273,11 @@ TaskStatus Particles::BuildItoCoefficients(Driver *pdriver, int stage) {
     coeff(m,ITO_Q11,k,j,i) = dx1*dx1*fmax(var1, 0.0);
     coeff(m,ITO_Q22,k,j,i) = multi_d ? dx2*dx2*fmax(var2, 0.0) : 0.0;
     coeff(m,ITO_Q33,k,j,i) = three_d ? dx3*dx3*fmax(var3, 0.0) : 0.0;
-    coeff(m,ITO_Q12,k,j,i) = multi_d ? -mean1*mean2 : 0.0;
-    coeff(m,ITO_Q13,k,j,i) = three_d ? -mean1*mean3 : 0.0;
-    coeff(m,ITO_Q23,k,j,i) = three_d ? -mean2*mean3 : 0.0;
+    if (full_finite_step) {
+      coeff(m,ITO_Q12,k,j,i) = multi_d ? -mean1*mean2 : 0.0;
+      coeff(m,ITO_Q13,k,j,i) = three_d ? -mean1*mean3 : 0.0;
+      coeff(m,ITO_Q23,k,j,i) = three_d ? -mean2*mean3 : 0.0;
+    }
   });
 
   HostArray1D<int> h_invalid("ito_invalid_host", 1);
@@ -278,7 +338,7 @@ TaskStatus Particles::RestrictItoCoefficients(Driver *pdriver, int stage) {
 }
 
 TaskStatus Particles::InitRecvItoCoefficients(Driver *pdriver, int stage) {
-  return pbval_ito->InitRecv(ITO_NCOEFF);
+  return pbval_ito->InitRecv(ito_ncoeff);
 }
 
 TaskStatus Particles::SendItoCoefficients(Driver *pdriver, int stage) {
@@ -309,6 +369,7 @@ TaskStatus Particles::ProlongateItoCoefficients(Driver *pdriver, int stage) {
     auto &indcs = pmy_pack->pmesh->mb_indcs;
     bool multi_d = pmy_pack->pmesh->multi_d;
     bool three_d = pmy_pack->pmesh->three_d;
+    int ncoeff = ito_ncoeff;
     auto &coeff = ito_coeff;
     auto &coarse_coeff = coarse_ito_coeff;
 
@@ -344,7 +405,7 @@ TaskStatus Particles::ProlongateItoCoefficients(Driver *pdriver, int stage) {
           for (int dk=0; dk<nchild3; ++dk) {
             for (int dj=0; dj<nchild2; ++dj) {
               for (int di=0; di<2; ++di) {
-                for (int v=0; v<ITO_NCOEFF; ++v) {
+                for (int v=0; v<ncoeff; ++v) {
                   coeff(m,v,fk+dk,fj+dj,fi+di) = coarse_coeff(m,v,k,j,i);
                 }
               }
@@ -368,6 +429,8 @@ TaskStatus Particles::PushIto2(Driver *pdriver, int stage) {
   int ks = indcs.ks, ke = indcs.ke;
   bool multi_d = pmy_pack->pmesh->multi_d;
   bool three_d = pmy_pack->pmesh->three_d;
+  bool full_finite_step =
+      (ito_covariance_model == ItoCovarianceModel::full_finite_step);
   int nmb = pmy_pack->nmb_thispack;
   int gids = pmy_pack->gids;
   int ncycle = pmy_pack->pmesh->ncycle;
@@ -417,6 +480,7 @@ TaskStatus Particles::PushIto2(Driver *pdriver, int stage) {
     Real q[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     int nk = three_d ? 2 : 1;
     int nj = multi_d ? 2 : 1;
+    int nq = full_finite_step ? 6 : 3;
     for (int dk=0; dk<nk; ++dk) {
       Real wk = three_d ? (dk == 0 ? 1.0 - wz : wz) : 1.0;
       for (int dj=0; dj<nj; ++dj) {
@@ -427,7 +491,7 @@ TaskStatus Particles::PushIto2(Driver *pdriver, int stage) {
           for (int n=0; n<3; ++n) {
             mean[n] += weight*coeff(m,ITO_M1+n,k0+dk,j0+dj,i0+di);
           }
-          for (int n=0; n<6; ++n) {
+          for (int n=0; n<nq; ++n) {
             q[n] += weight*coeff(m,ITO_Q11+n,k0+dk,j0+dj,i0+di);
           }
         }
@@ -450,17 +514,27 @@ TaskStatus Particles::PushIto2(Driver *pdriver, int stage) {
       Kokkos::atomic_fetch_add(&invalid(0), 1);
       return;
     }
-    Real l[3][3];
-    if (!ItoFactorCovariance(q, l, coeff_tol)) {
-      Kokkos::atomic_fetch_add(&invalid(0), 1);
-      return;
-    }
-    Real xi[3] = {xi1, xi2, xi3};
     Real stochastic[3] = {0.0, 0.0, 0.0};
-    for (int row=0; row<3; ++row) {
-      for (int column=0; column<3; ++column) {
-        stochastic[row] += l[row][column]*xi[column];
+    if (full_finite_step) {
+      Real l[3][3];
+      if (!ItoFactorCovariance(q, l, coeff_tol)) {
+        Kokkos::atomic_fetch_add(&invalid(0), 1);
+        return;
       }
+      Real xi[3] = {xi1, xi2, xi3};
+      for (int row=0; row<3; ++row) {
+        for (int column=0; column<3; ++column) {
+          stochastic[row] += l[row][column]*xi[column];
+        }
+      }
+    } else {
+      if (q[0] < -coeff_tol || q[1] < -coeff_tol || q[2] < -coeff_tol) {
+        Kokkos::atomic_fetch_add(&invalid(0), 1);
+        return;
+      }
+      stochastic[0] = sqrt(fmax(q[0], 0.0))*xi1;
+      stochastic[1] = sqrt(fmax(q[1], 0.0))*xi2;
+      stochastic[2] = sqrt(fmax(q[2], 0.0))*xi3;
     }
     Real dx1 = mean[0] + stochastic[0];
     Real dx2 = multi_d ? mean[1] + stochastic[1] : 0.0;

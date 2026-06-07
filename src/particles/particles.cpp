@@ -59,7 +59,8 @@ std::uint64_t GetOrAddUInt64(ParameterInput *pin, const std::string &block,
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
-Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
+Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin,
+                     bool infer_covariance_model_from_restart) :
     pmy_pack(ppack) {
   // check this is at least a 2D problem
   if (pmy_pack->pmesh->one_d) {
@@ -189,6 +190,24 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                       << "Ito-2 kick distribution" << std::endl;
             std::exit(EXIT_FAILURE);
           }
+          std::string covariance_model = pin->GetOrAddString(
+              "particles", "ito_covariance_model", "published_diagonal");
+          if (infer_covariance_model_from_restart) {
+            infer_ito_covariance_model_from_restart = true;
+            ito_ncoeff = ITO_NFULL_COEFF;
+          } else if (covariance_model == "published_diagonal") {
+            ito_covariance_model = ItoCovarianceModel::published_diagonal;
+            ito_ncoeff = ITO_NDIAG_COEFF;
+          } else if (covariance_model == "full_finite_step") {
+            ito_covariance_model = ItoCovarianceModel::full_finite_step;
+            ito_ncoeff = ITO_NFULL_COEFF;
+          } else {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                      << __LINE__ << std::endl
+                      << "particles/ito_covariance_model must be "
+                      << "published_diagonal or full_finite_step" << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
           std::string evolution = pin->GetString("time", "evolution");
           std::string integrator = pin->GetOrAddString("time", "integrator", "rk2");
           if (evolution != "dynamic" ||
@@ -240,12 +259,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
           int ncells1 = indcs.nx1 + 2*indcs.ng;
           int ncells2 = (indcs.nx2 > 1) ? indcs.nx2 + 2*indcs.ng : 1;
           int ncells3 = (indcs.nx3 > 1) ? indcs.nx3 + 2*indcs.ng : 1;
-          Kokkos::realloc(ito_coeff, nmb, ITO_NCOEFF, ncells3, ncells2, ncells1);
+          Kokkos::realloc(ito_coeff, nmb, ito_ncoeff, ncells3, ncells2, ncells1);
           if (pmy_pack->pmesh->multilevel) {
             int nccells1 = indcs.cnx1 + 2*indcs.ng;
             int nccells2 = (indcs.cnx2 > 1) ? indcs.cnx2 + 2*indcs.ng : 1;
             int nccells3 = (indcs.cnx3 > 1) ? indcs.cnx3 + 2*indcs.ng : 1;
-            Kokkos::realloc(coarse_ito_coeff, nmb, ITO_NCOEFF,
+            Kokkos::realloc(coarse_ito_coeff, nmb, ito_ncoeff,
                             nccells3, nccells2, nccells1);
           }
           Kokkos::realloc(ito_invalid, 1);
@@ -263,7 +282,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   pbval_part = new ParticlesBoundaryValues(this, pin);
   if (IsIto2()) {
     pbval_ito = new MeshBoundaryValuesCC(ppack, pin, false);
-    pbval_ito->InitializeBuffers(ITO_NCOEFF);
+    pbval_ito->InitializeBuffers(ito_ncoeff);
   }
 }
 

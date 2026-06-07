@@ -44,16 +44,18 @@
 The goal was to add the second-order \Ito{} tracer method to \AthenaK{} as a
 continuous-path alternative to the existing Monte Carlo mass-flux tracers,
 while explicitly excluding the third-order method. The implementation derives
-cell-centered mean displacements and central covariance tensors from the same
-final Runge--Kutta-weighted mass fluxes used by the Monte Carlo tracer,
-communicates those quantities across MeshBlocks and refinement boundaries,
-interpolates them to each particle, and advances particles with a correlated
-stochastic step.
+cell-centered mean displacements and variances from the same final
+Runge--Kutta-weighted mass fluxes used by the Monte Carlo tracer. A runtime
+option selects either the independent-coordinate covariance used by the
+published code or the full finite-step covariance tensor. The coefficient
+fields are communicated across MeshBlocks and refinement boundaries,
+interpolated to each particle, and used for the stochastic step.
 
-The evidence supports a precise conclusion: the implemented \Ito{}-2 particles
-match the full first and central second displacement moments of the finite-step
-Monte Carlo kernel in controlled two- and three-dimensional tests, preserve
-continuous subcell positions through AMR motion, and provide useful
+The evidence supports a precise conclusion: the opt-in full-covariance
+\Ito{}-2 particles match the vector mean and central covariance of the
+finite-step Monte Carlo kernel in controlled two- and three-dimensional tests.
+The default published mode matches the same means and marginal variances.
+Both preserve continuous subcell positions through AMR motion and provide useful
 mass-weighted temperature histories in a two-phase thermal-instability
 calculation. The evidence does not establish a third-order method, the full
 Monte Carlo probability distribution, a converged thermal-fragmentation
@@ -78,8 +80,8 @@ The requested feature was therefore narrow:
   \item implement only the second-order \Ito{} method from the method described
         by Moseley, Teyssier, and Abel
         (\href{https://arxiv.org/abs/2604.23041}{arXiv:2604.23041v2});
-  \item preserve the Monte Carlo process's vector mean and full finite-step
-        covariance while producing continuous particle paths; and
+  \item preserve the published independent-coordinate method for compatibility,
+        while making full finite-step covariance available when needed; and
   \item verify that the particles can record meaningful thermodynamic
         histories in a coupled cooling problem.
 \end{enumerate}
@@ -88,7 +90,8 @@ The requested feature was therefore narrow:
 
 For one cell, the Monte Carlo tracer chooses one face jump or stays put. The
 \Ito{}-2 tracer replaces that discrete draw with a continuous random
-displacement chosen to have the same vector mean and covariance.
+displacement. Both runtime modes match the vector mean and marginal
+variances. The full mode also matches the cross covariance.
 
 If \(p_R\) and \(p_L\) are the outward Monte Carlo jump probabilities, define
 \begin{equation}
@@ -108,14 +111,25 @@ The central covariance is
   =h_i^2C_{+,i}\delta_{ij}-h_i h_jC_{-,i}C_{-,j}.
 \end{equation}
 Thus the off-diagonal covariance is generally nonzero even though the raw MC
-cross moment vanishes. AthenaK factors
-\(\mathbf Q=\mathbf L\mathbf L^{\mathsf T}\) and advances
+cross moment vanishes. With
+\artifact{ito_covariance_model=full_finite_step}, AthenaK factors
+\(\mathbf Q=\mathbf L\mathbf L^{\mathsf T}\). With the default
+\artifact{published_diagonal}, it keeps only
+\(Q^{\rm pub}_{ij}=\delta_{ij}Q_{ii}\). In either case it advances
 \begin{equation}
   \mathbf X^{n+1}=\mathbf X^n+\mathbf m+\mathbf L\boldsymbol{\xi},
 \end{equation}
 where the components of \(\boldsymbol{\xi}\) are independent bounded uniform
-variables with zero mean and unit variance. The resulting physical coordinate
-kicks are correlated by \(\mathbf L\).
+variables with zero mean and unit variance. The full model correlates the
+physical coordinate kicks through \(\mathbf L\); the published model uses a
+diagonal factor.
+
+The bounded-uniform base law is not rotationally invariant. Changing
+\(\mathbf L\) therefore changes fourth and higher moments too, not just the
+cross covariance. The full mode matches the Monte Carlo mean and covariance,
+but not its complete categorical jump distribution. A two-mode comparison is
+thus a comparison of the complete kick laws, not a clean ablation of one tensor
+entry.
 
 This is the part that matters: the particles still take their transport
 statistics from the finite-volume mass flux, but they no longer have to sit on
@@ -143,8 +157,8 @@ Use ordinary velocity-following passive particles
 & Rejected. \\
 \addlinespace
 Build \Ito{}-2 on the Monte Carlo infrastructure
-& Continuous paths with the same vector mean and finite-step covariance as the
-  mass-flux jump kernel; reuses established particle infrastructure.
+& Continuous paths tied to the mass-flux jump kernel; selectable published
+  marginal-moment or full finite-step covariance behavior.
 & Requires new coefficient fields, MeshBlock/AMR communication, and
   inherits limits of the existing migration path.
 & Implemented. \\
@@ -177,16 +191,16 @@ system rather than implemented as a separate particle subsystem.
         to the final RK1, RK2, or RK3 state. A simple arithmetic average of
         stage fluxes would not represent the final finite-volume update.
   \item After the fluid integrator, each cell converts its outward mass-flux
-        probabilities into the finite-step mean \(\mathbf m\) and central
-        covariance \(\mathbf Q\). Invalid probabilities, non-positive-
-        semidefinite covariance beyond tolerance, and non-finite values
-        terminate the run.
+        probabilities into the finite-step mean \(\mathbf m\), diagonal
+        variances, and, in full mode, the three cross covariances. Invalid
+        probabilities, non-positive-semidefinite covariance beyond tolerance,
+        and non-finite values terminate the run.
   \item The mean and central-covariance fields are restricted, communicated,
         and prolonged across MeshBlocks and AMR boundaries.
   \item Cloud-in-cell interpolation evaluates \(\mathbf m\) and \(\mathbf Q\)
         directly at each particle position.
-  \item A pivoted semidefinite factorization computes
-        \(\mathbf Q=\mathbf L\mathbf L^{\mathsf T}\).
+  \item Full mode uses a fixed-size pivoted semidefinite factorization;
+        published mode takes three scalar square roots.
   \item A deterministic hash of tracer tag, cycle, random seed, and coordinate
         produces the bounded uniform vector used in
         \(\Delta\mathbf X=\mathbf m+\mathbf L\boldsymbol{\xi}\).
@@ -200,6 +214,14 @@ distribution other than the bounded uniform \Ito{}-2 draw fail immediately.
 The current path requires non-relativistic Cartesian Hydro or MHD, dynamic
 RK1--RK3 evolution, periodic boundaries in every active direction, and a
 two- or three-dimensional mesh.
+
+The covariance parameter is
+\artifact{particles/ito_covariance_model}. Allowed values are
+\artifact{published_diagonal} and \artifact{full_finite_step}; the former is
+the default. Ito restart format version 4 stores this choice and rejects a
+restart under a different model. Legacy version 2 and 3 Ito files automatically
+select \artifact{published_diagonal} and \artifact{full_finite_step},
+respectively.
 
 \section{Evidence from Controlled Transport Tests}
 
@@ -334,8 +356,13 @@ Restart and invalid requests
 & \status{Passed} \\
 \addlinespace
 Full covariance and precision
-& Two- and three-dimensional covariance tests include mixed signs,
+& Opt-in two- and three-dimensional covariance tests include mixed signs,
   rank-deficient tensors, near-limit probabilities, and single precision.
+& \status{Passed} \\
+\addlinespace
+Published default and restart model
+& A missing parameter selects the published diagonal law; restart round trips
+  preserve the mode and a mismatched mode is rejected.
 & \status{Passed} \\
 \addlinespace
 Merged cooling and perturbation integration
@@ -358,6 +385,12 @@ Old-versus-corrected turbulence
   empirically qualified CFL \(0.324\). Gas density is bit-identical.
 & \status{Passed; modest scale-dependent changes} \\
 \addlinespace
+Same-executable runtime
+& At \(64^3\) and CFL \(0.324\), two runs per mode averaged
+  \(25.24\,\mathrm{s}\) for published diagonal and \(37.21\,\mathrm{s}\) for
+  full finite-step after hot-path factorization optimization.
+& \status{Full mode 1.47x} \\
+\addlinespace
 GPU runtime
 & CUDA/HIP execution was not available in this validation environment.
 & \status{Not tested; no support claim} \\
@@ -378,8 +411,9 @@ an active direction.
 \begin{itemize}
   \item \Ito{}-2 is integrated with the existing Monte Carlo mass-tracer
         infrastructure and final finite-volume mass fluxes.
-  \item Controlled tests support full finite-step vector-mean and covariance
-        matching in two and three dimensions, plus continuous-path behavior.
+  \item Controlled tests support published marginal-moment matching by
+        default and full finite-step vector covariance matching by opt-in,
+        plus continuous-path behavior.
   \item The particles can record interpretable mass-weighted thermodynamic
         histories in a coupled two-phase cooling calculation.
 \end{itemize}

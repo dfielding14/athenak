@@ -22,8 +22,9 @@ Moseley, Teyssier, and Abel,
 The most important distinction in this guide is:
 
 > The reviewed implementation matched the Monte Carlo jump mean and variance
-> separately in each coordinate. The corrected implementation now matches the
-> full cell-local finite-step covariance tensor.
+> separately in each coordinate. The implementation now offers that published
+> behavior as `published_diagonal` and the full cell-local finite-step
+> covariance tensor as `full_finite_step`.
 
 No documentation, test name, or scientific claim should blur that distinction.
 
@@ -49,7 +50,7 @@ The remediation is complete only when all of the following are true:
 
 | Priority | Finding | Disposition |
 | --- | --- | --- |
-| P0 | Multidimensional finite-step covariance is omitted | Fixed with a full central covariance tensor and correlated factor |
+| P0 | Multidimensional finite-step covariance is omitted | Fixed with an opt-in full central covariance tensor and correlated factor; published diagonal remains the default |
 | P0 | 64-bit next-tag counter is truncated into 32-bit particle tags | Fixed with dedicated `uint64` storage and versioned I/O |
 | P1 | AMR transfer acts on nonlinear derived coefficients | Fixed under the documented interpolated-coefficient-field contract; conditional level moments tested |
 | P1 | RK-weighted net flux is converted to probabilities after stage summation | Final-update net-flux semantics documented and tested |
@@ -100,8 +101,11 @@ Independent reproductions:
 
 Implemented:
 
-- full cell-local mean vector and six-component central covariance tensor;
-- pivoted positive-semidefinite covariance factorization;
+- runtime-selectable `published_diagonal` and `full_finite_step` covariance
+  models, with the published model as the default;
+- full cell-local mean vector and six-component central covariance tensor in
+  the opt-in full mode;
+- fixed-size pivoted positive-semidefinite covariance factorization;
 - direct CIC interpolation of the chosen stochastic coefficient fields;
 - a documented AMR contract, piecewise-constant coarse-to-fine transfer, and
   measured coarse/fine conditional moments;
@@ -119,6 +123,12 @@ Implemented:
   reductions;
 - single-precision unit-system and narrowing-conversion fixes; and
 - cooling C++/Python style-gate repairs.
+
+Ito restart format version 4 records the covariance model and rejects a
+mismatched restart. Legacy Ito v2 restart files map to the published diagonal
+model. Legacy Ito v3 files map automatically to the full finite-step model.
+Monte Carlo restart files remain at version 3 and keep their existing byte
+layout.
 
 The spatial contract is deliberately specific. AthenaK treats
 `m(x)` and `Q(x)` as interpolated stochastic coefficient fields. Restriction
@@ -140,12 +150,22 @@ The paired `64^3`, 4,194,304-particle result found:
 - Jensen-Shannon divergence `1.70e-4` bits between the old and corrected PDFs;
 - a `-0.00787`, `+0.00878`, and `+0.00919` change in large-, mid-, and
   small-scale spectral relative error, respectively; and
-- a corrected/old wall-time ratio of about `1.94` on eight local MPI ranks.
+- a historical corrected/old wall-time ratio of about `1.94` on eight local
+  MPI ranks;
+- a final repeated same-executable ratio of `1.474` after hot-path
+  factorization optimization (`37.21` s full versus `25.24` s published
+  diagonal; two runs per mode).
 
-The scientific conclusion is that the correction does not materially change
+The scientific conclusion is that the full model does not materially change
 the headline tracer-gas correlation or PDF result in this test. It does make a
 small, reproducible, scale-dependent difference to spectra and a large
-difference to individual stochastic realizations. The full results and
+difference to individual stochastic realizations. Because the kick vector is
+bounded uniform rather than Gaussian, changing its factor also changes fourth
+and higher moments; this is a comparison of the complete two kick laws, not a
+pure off-diagonal-covariance ablation. Requiring the full model for every run is
+therefore not justified by this evidence. The published model is the default;
+the full model is required when the scientific claim depends on joint
+finite-step covariance or scale-dependent tracer power. The full results and
 qualification procedure are in
 `docs/validation/ito_turbulence_results.md` and
 `docs/validation/ito_turbulence_old_vs_corrected_protocol.md`.
@@ -888,7 +908,9 @@ true for the current branch tip.
 ## Final Acceptance Checklist
 
 - [x] The mathematical contract is explicit.
-- [x] Full cell-local covariance is implemented.
+- [x] Full cell-local covariance is implemented as an explicit runtime mode.
+- [x] Published diagonal covariance remains available and is the default.
+- [x] Restart files persist and validate the selected covariance model.
 - [x] Covariance tests pass in 2D and 3D.
 - [x] 64-bit tags pass overflow, migration, restart, and output tests.
 - [x] RK final-update net-flux semantics are documented and tested.
@@ -900,7 +922,7 @@ true for the current branch tip.
 - [x] Single precision builds and passes focused Ito tests.
 - [x] CPU/MPI are tested and GPU runtime is explicitly unverified.
 - [x] Style passes on the final candidate.
-- [x] Old-versus-corrected runtime cost is measured and reported.
+- [x] Old-versus-corrected and same-executable mode costs are measured and reported.
 - [x] Documentation is corrected on the feature branch.
 - [x] The feature pages strictly build, link-check, and render when overlaid on
       the live `origin/gh-pages` tree.

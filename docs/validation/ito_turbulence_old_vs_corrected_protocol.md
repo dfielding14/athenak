@@ -16,6 +16,17 @@ The comparison is deliberately paired:
 Particles do not back-react on the gas. The old and corrected gas fields must therefore
 agree before any tracer comparison is interpreted.
 
+The current executable can perform the same comparison without maintaining two
+binaries by overriding:
+
+```text
+particles/ito_covariance_model=published_diagonal
+particles/ito_covariance_model=full_finite_step
+```
+
+Use this same-executable form for performance measurements. It isolates the
+covariance model from unrelated implementation and compiler changes.
+
 ## Experiment tiers
 
 | Input | Grid | Particles | End time | Purpose |
@@ -207,6 +218,11 @@ python3 scripts/run_ito_turbulence_validation.py run-pair \
 Use the same two overrides for both lanes of each pair. Compare paired metric
 differences across seeds; do not estimate uncertainty by treating grid cells as
 independent samples.
+
+For a same-executable mode comparison, run the production input twice with the
+two covariance overrides above, then pass the published run as `--old-run` and
+the full run as `--corrected-run` to
+`scripts/analyze_ito_turbulence_validation.py`.
 
 ## Diagnostics
 

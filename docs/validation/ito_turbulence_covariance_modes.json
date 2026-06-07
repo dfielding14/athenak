@@ -1,0 +1,56 @@
+{
+  "date": "2026-06-07",
+  "configuration": {
+    "grid": [64, 64, 64],
+    "particles": 4194304,
+    "mpi_ranks": 8,
+    "cfl_number": 0.324,
+    "end_time": 0.2,
+    "executable_sha256": "74289f3b4d7bc77617fab7573d9cc2e5238e792a766ace90a28e04a9c817bcb6",
+    "post_benchmark_verification_executable_sha256": "0f3a0cc342d634597aed5e29272ed2c15aa62cfd9ef758135dea823c0fb051c4",
+    "post_benchmark_change_scope": "legacy restart inference, reserved-value validation, and tests only; production covariance hot paths unchanged",
+    "input_sha256": "4cdeac7ccd99f1fe7e92a286626cb1955ea20f6bec0b7272cb0523e0201cf5a2",
+    "repository_head": "a7be1533dbb9c6b7867a34d420f4c5f4e5aa94ea",
+    "working_tree_dirty": true,
+    "command": "mpirun -np 8 <executable> -i <input> -d <run_dir> particles/ito_covariance_model=<mode> time/cfl_number=0.324",
+    "run_order": [
+      "published_diagonal",
+      "full_finite_step",
+      "full_finite_step",
+      "published_diagonal"
+    ]
+  },
+  "runtime_seconds": {
+    "published_diagonal_samples": [25.18, 25.30],
+    "full_finite_step_samples": [37.35, 37.07],
+    "published_diagonal_mean": 25.24,
+    "full_finite_step_mean": 37.21,
+    "full_over_published_mean": 1.4742472266244058,
+    "paired_ratios": [1.483320095313741, 1.465217391304348]
+  },
+  "user_cpu_seconds": {
+    "published_diagonal_samples": [195.83, 196.85],
+    "full_finite_step_samples": [292.99, 290.91],
+    "published_diagonal_mean": 196.34,
+    "full_finite_step_mean": 291.95,
+    "full_over_published_mean": 1.4869613935010696
+  },
+  "published_executable_one_step_compatibility": {
+    "cfl_number": 0.495,
+    "particles": 65536,
+    "maximum_absolute_position_difference": [0.0, 1.1102230246251565e-16, 0.0]
+  },
+  "full_minus_published": {
+    "gas_relative_l2": 0.0,
+    "density_pearson_r": -0.00024909905862602333,
+    "density_r2_one_to_one": -0.001145995542357503,
+    "log10_density_ratio_std": -0.0026829036802481915,
+    "column_pearson_r": 0.00015101979284193323,
+    "spectrum_relative_l1_large": -0.007871836452420549,
+    "spectrum_relative_l1_mid": 0.008782255382308701,
+    "spectrum_relative_l1_small": 0.009191313658668265,
+    "ratio_pdf_js_divergence_bits": 0.0001699195554029358,
+    "tracer_field_normalized_l1": 0.1389456737466595,
+    "tracer_field_normalized_l2": 0.198308784286691
+  }
+}

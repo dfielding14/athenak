@@ -25,15 +25,32 @@ def _set_first_particle_x1(restart_path, x1):
     particle_offset = payload.index(b"ATHKPRTCLMC")
     fields = PARTICLE_HEADER.unpack_from(payload, particle_offset)
     _, version, enabled, nrdata, _, nlocal, nschedules, _ = fields
-    assert version == 3
+    assert version == 4
     assert enabled == 2
     assert nrdata >= 1
     assert nlocal == 1
+    covariance_model = struct.unpack_from(
+        "@i", payload, particle_offset + PARTICLE_HEADER.size
+    )[0]
+    assert covariance_model == 0
 
-    real_size = 8
+    fixed_bytes = (
+        PARTICLE_HEADER.size
+        + struct.calcsize("@i")
+        + 3 * nschedules * struct.calcsize("@i")
+        + fields[4] * nlocal * struct.calcsize("@i")
+        + nlocal * struct.calcsize("@Q")
+    )
+    real_count = nschedules + nrdata * nlocal
+    real_size, remainder = divmod(
+        len(payload) - particle_offset - fixed_bytes, real_count
+    )
+    assert remainder == 0
+    assert real_size in (4, 8)
     data_offset = (
         particle_offset
         + PARTICLE_HEADER.size
+        + struct.calcsize("@i")
         + nschedules * real_size
         + 3 * nschedules * struct.calcsize("@i")
     )

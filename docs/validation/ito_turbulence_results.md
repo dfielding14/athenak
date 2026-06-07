@@ -1,14 +1,17 @@
-# Ito-2 Old-versus-Corrected Turbulence Results
+# Ito-2 Published-Diagonal versus Full-Covariance Turbulence Results
 
 ## Bottom line
 
-The covariance correction matters mathematically and changes individual tracer
+The full finite-step model matters mathematically and changes individual tracer
 realizations substantially. In this production-like turbulence test it does
 **not** appreciably change the headline tracer-gas correlation or density-ratio
 PDF. It produces a small, reproducible, scale-dependent change in the spectra.
 
-The corrected implementation is also more expensive. On the eight-rank local
-production run it took 1.94 times as long as the old diagonal implementation.
+The full implementation is also more expensive. The historical two-executable
+comparison measured 1.94x. After unrolling the hot-path covariance
+factorization, a repeated same-executable comparison measured 1.47x. The published
+diagonal model is therefore the default; full finite-step covariance is an
+explicit runtime choice.
 
 ## Run identity
 
@@ -28,6 +31,7 @@ production run it took 1.94 times as long as the old diagonal implementation.
 | Integrator / solver | RK2, PLM, HLLE, isothermal Hydro |
 | End time | $0.2L/c_s$ |
 | Selected CFL | `0.324` |
+| Runtime parameter | `particles/ito_covariance_model` |
 
 This is an AthenaK-native deterministic decaying-turbulence experiment. It
 matches the paper's production resolution, particle count, Mach number, and
@@ -118,7 +122,7 @@ than the summary-statistic changes:
 That is expected. Correlating the coordinate kicks changes each deterministic
 tag trajectory, even when ensemble diagnostics remain close.
 
-## Runtime
+## Historical runtime
 
 | Quantity | Old Ito-2 | Corrected Ito-2 | Ratio |
 | --- | ---: | ---: | ---: |
@@ -129,10 +133,46 @@ tag trajectory, even when ensemble diagnostics remain close.
 Peak RSS is not reported because `RUSAGE_CHILDREN` exposes a cumulative peak
 that cannot be attributed safely to one lane of a sequential pair.
 
+## Final same-executable runtime
+
+Both modes were rerun twice from the same optimized executable
+(`SHA-256 74289f3b4d7bc77617fab7573d9cc2e5238e792a766ace90a28e04a9c817bcb6`)
+with the same production input, eight MPI ranks, and CFL `0.324`. The sequence
+was published, full, full, published.
+
+The final verification executable has SHA-256
+`0f3a0cc342d634597aed5e29272ed2c15aa62cfd9ef758135dea823c0fb051c4`.
+The changes between those binaries are confined to legacy-restart inference,
+reserved-value validation, and tests; the coefficient construction,
+factorization, and particle-push hot paths are identical.
+
+| Quantity | `published_diagonal` | `full_finite_step` | Ratio |
+| --- | ---: | ---: | ---: |
+| Wall-time samples | 25.18, 25.30 s | 37.35, 37.07 s | 1.465-1.483 |
+| Mean wall time | 25.24 s | 37.21 s | 1.474 |
+
+The optimized factorization reduced the full-mode cost substantially from the
+pre-optimization same-executable run. Absolute times varied between sessions,
+but the final repeated mode ratio remained close to the earlier 1.48x result.
+The science metrics from the final mode comparison agree with the historical
+old-versus-corrected result to roundoff.
+
+A separate 65,536-particle one-step check at CFL `0.495` compared
+`published_diagonal` against the archived published executable. The timesteps
+were identical; particle coordinates were bit-identical in `x1` and `x3`, with
+a maximum `x2` difference of `1.11e-16`.
+
 ## Interpretation
 
-For the reported turbulence observables, the covariance correction is not a
-headline-changing effect at this resolution and particle count:
+This is not a pure covariance ablation. The kick vector is built from
+independent bounded-uniform variables, not a rotationally invariant Gaussian.
+Replacing the diagonal factor with a full factor therefore changes fourth and
+higher moments of the continuous kick law along with its cross covariance. The
+numbers below measure the complete `published_diagonal` versus
+`full_finite_step` sampler change.
+
+For the reported turbulence observables, that change is not headline-changing
+at this resolution and particle count:
 
 - correlation changes by $2.5\times10^{-4}$;
 - $R^2_{1:1}$ changes by $1.1\times10^{-3}$;
@@ -146,17 +186,19 @@ three pilot seeds show the same sign for these spectral changes.
 
 The practical conclusion is:
 
-1. fix the covariance because the old multidimensional process is
-   mathematically wrong;
-2. do not expect the main turbulence correlation/PDF conclusions to move much
-   in this setup;
-3. rerun any claim that depends on scale-by-scale tracer power; and
-4. budget roughly a factor of two in local CPU runtime for the corrected
-   implementation until the factorization and coefficient path are optimized.
+1. use `published_diagonal` for compatibility with the paper and for production
+   runs where the measured observable is insensitive to the joint kick tensor;
+2. use `full_finite_step` when claiming finite-step vector covariance fidelity
+   or interpreting scale-by-scale tracer power;
+3. do not expect the main turbulence correlation/PDF conclusions to move much
+   in this setup; and
+4. budget about 47 percent more local wall time for the full mode on this
+   benchmark. GPU performance remains unmeasured.
 
 ## Artifacts
 
 - `ito_turbulence_production_summary.json`
+- `ito_turbulence_covariance_modes.json`
 - `ito_turbulence_pilot_ensemble.json`
 - `ito_turbulence_pilot_ensemble.csv`
 - `ito_turbulence_column_density_comparison.png`

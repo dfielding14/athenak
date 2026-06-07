@@ -980,7 +980,7 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
   ParticleRestartHeader header;
   std::memset(&header, 0, sizeof(header));
   std::strncpy(header.magic, "ATHKPRTCLMC", sizeof(header.magic)-1);
-  header.version = 3;
+  header.version = IsIto2() ? 4 : 3;
   header.enabled = IsLagrangianMC() ? 1 : (IsIto2() ? 2 : 0);
   header.nrdata = nrdata;
   header.nidata = nidata;
@@ -990,6 +990,12 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
 
   resfile.Write_any_type(&header, sizeof(header), "byte", single_file_per_rank);
   if (!header.enabled) return;
+
+  if (IsIto2()) {
+    int covariance_model =
+        (ito_covariance_model == ItoCovarianceModel::published_diagonal) ? 0 : 1;
+    resfile.Write_any_type(&covariance_model, 1, "int", single_file_per_rank);
+  }
 
   std::vector<Real> sched_real(1*header.nschedules);
   std::vector<int> sched_int(3*header.nschedules);
@@ -1033,7 +1039,8 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
 //----------------------------------------------------------------------------------------
 //! \fn void Particles::ReadRestartData
 
-void Particles::ReadRestartData(IOWrapper &resfile, bool single_file_per_rank) {
+void Particles::ReadRestartData(IOWrapper &resfile, ParameterInput *pin,
+                                bool single_file_per_rank) {
   struct ParticleRestartHeader {
     char magic[16];
     int version;
@@ -1050,7 +1057,7 @@ void Particles::ReadRestartData(IOWrapper &resfile, bool single_file_per_rank) {
     FatalParticleInput("particle restart section is missing or truncated");
   }
   if (std::strncmp(header.magic, "ATHKPRTCLMC", 11) != 0 ||
-      header.version < 1 || header.version > 3) {
+      header.version < 1 || header.version > 4) {
     FatalParticleInput("particle restart section has an unrecognized format");
   }
   if (!header.enabled) return;
@@ -1058,6 +1065,40 @@ void Particles::ReadRestartData(IOWrapper &resfile, bool single_file_per_rank) {
   int expected_transport = IsLagrangianMC() ? 1 : (IsIto2() ? 2 : 0);
   if (restart_transport != expected_transport) {
     FatalParticleInput("particle restart transport does not match the configured pusher");
+  }
+  int restart_covariance_model = -1;
+  if (header.version >= 4) {
+    if (resfile.Read_bytes(&restart_covariance_model, sizeof(int), 1,
+                           single_file_per_rank) != 1) {
+      FatalParticleInput("particle restart covariance model is truncated");
+    }
+  } else if (restart_transport == 2) {
+    restart_covariance_model = (header.version >= 3) ? 1 : 0;
+  }
+  if (restart_transport == 2) {
+    if (restart_covariance_model < 0 || restart_covariance_model > 1) {
+      FatalParticleInput("particle restart covariance model is invalid");
+    }
+    if (infer_ito_covariance_model_from_restart) {
+      ito_covariance_model = (restart_covariance_model == 0) ?
+          ItoCovarianceModel::published_diagonal :
+          ItoCovarianceModel::full_finite_step;
+      // Inference allocates the full nine-field views before the particle
+      // restart section is read. Keep that extent fixed so MPI send and receive
+      // counts remain identical for a bare legacy v2 restart.
+      pin->SetString("particles", "ito_covariance_model",
+                     (restart_covariance_model == 0) ?
+                     "published_diagonal" : "full_finite_step");
+      infer_ito_covariance_model_from_restart = false;
+    } else {
+      int configured_covariance_model =
+          (ito_covariance_model == ItoCovarianceModel::published_diagonal) ? 0 : 1;
+      if (restart_covariance_model != configured_covariance_model) {
+        FatalParticleInput(
+            "particle restart covariance model does not match "
+            "particles/ito_covariance_model");
+      }
+    }
   }
   if (header.nrdata != nrdata || header.nidata != nidata) {
     FatalParticleInput("particle restart array dimensions do not match this executable");
