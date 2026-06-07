@@ -1,0 +1,356 @@
+% Compile from the repository root:
+% latexmk -pdf -interaction=nonstopmode -halt-on-error \
+%   -outdir=/tmp/ito-covariance-note \
+%   docs/ito_tracers_multidimensional_covariance_note_for_eric_moseley.tex
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{microtype}
+
+\geometry{margin=0.9in}
+\hypersetup{
+  colorlinks=true,
+  urlcolor=blue!55!black,
+  pdftitle={A finite-timestep covariance term in multidimensional Ito-2},
+  pdfauthor={Drummond Fielding}
+}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+
+\newcommand{\ddX}{\Delta\mathbf{X}}
+\newcommand{\mean}[1]{\mathbb{E}\!\left[#1\right]}
+\newcommand{\cov}{\operatorname{Cov}}
+\newcommand{\diag}{\operatorname{diag}}
+
+\title{\textbf{A finite-timestep covariance term\\
+in multidimensional It\^o-2}}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-2.5em}
+
+Eric,
+
+I think there is one small but real finite-\(\Delta t\) issue in the
+multidimensional argument. Nothing changes in 1D. It also disappears in the
+strict \(\Delta t\rightarrow0\) limit. But for the actual one-kick-per-hydro-step
+algorithm, independent coordinate kicks match the marginal variances, not the
+full MC covariance.
+
+\section*{Exact spot in the paper}
+
+I mean Section 2.2 of
+\href{https://arxiv.org/abs/2604.23041v2}{arXiv:2604.23041v2},
+printed page 7.
+
+The 1D result is fine. Equations (28)--(29) give
+\begin{equation}
+  u_i=\frac{h_i}{\Delta t}C_{-,i},
+  \qquad
+  \kappa_{ii}
+  =
+  \frac{h_i^2}{2\Delta t}
+  \left(C_{+,i}-C_{-,i}^2\right).
+\end{equation}
+The \(-C_{-,i}^2\) term is the subtraction of the squared mean.
+
+The issue starts at equations (45)--(46), where the paper calls
+\begin{equation}
+  \kappa_{ij}
+  =
+  \frac{\mean{\Delta X_i\Delta X_j}}{2\Delta t}
+\end{equation}
+the covariance matrix and then uses
+\begin{equation}
+  \mean{\Delta X_i\Delta X_j}
+  =
+  \mean{\Delta X_i^2}\delta_{ij}.
+\end{equation}
+The second equation is right for the \emph{raw} second moment.
+For a finite-step covariance, the matching generalization of equation (29) is
+\begin{equation}
+  \boxed{
+  \kappa_{ij}^{(\mathrm{step})}
+  =
+  \frac{
+  h_i^2 C_{+,i}\delta_{ij}
+  -
+  h_i h_j C_{-,i}C_{-,j}
+  }{2\Delta t}.
+  }
+\end{equation}
+
+So the sentence immediately after equation (46), saying that the matrix is
+diagonal and the dimensions are independent, is only true for the raw second
+moment, or in the strict infinitesimal-rate limit.
+
+Equations (47)--(48) can stay. Equation (49) should be written
+\begin{equation}
+  \boxed{
+  \boldsymbol{\Sigma}\boldsymbol{\Sigma}^{\mathsf T}
+  =
+  2\boldsymbol{\kappa},
+  }
+\end{equation}
+not as an element-by-element square root, unless
+\(\boldsymbol{\kappa}\) is diagonal.
+
+Equation (59) can also stay:
+\begin{equation}
+  \mathbf{X}^{n+1}
+  =
+  \mathbf{X}^{n}
+  +
+  \mathbf{u}\,\delta t
+  +
+  \boldsymbol{\Sigma}\mathbf{W}_{\delta t}.
+\end{equation}
+It just needs the full factor \(\boldsymbol{\Sigma}\).
+Footnote 4 sets \(\delta t=\Delta t\), which is exactly where the finite-step
+cross covariance survives.
+
+\section*{The issue}
+
+One MC step chooses exactly one face, or stays put. So for \(i\neq j\),
+\begin{equation}
+  \mean{\Delta X_i\Delta X_j}=0.
+\end{equation}
+But that is the \emph{raw} cross moment, not the covariance:
+\begin{align}
+  \cov(\Delta X_i,\Delta X_j)
+  &=
+  \mean{\Delta X_i\Delta X_j}
+  -\mean{\Delta X_i}\mean{\Delta X_j}
+  \\
+  &=
+  -\mean{\Delta X_i}\mean{\Delta X_j}.
+\end{align}
+Therefore, whenever the mean transport has two nonzero components,
+\begin{equation}
+  \boxed{
+  \cov(\Delta X_i,\Delta X_j)\neq0
+  \qquad (i\neq j).
+  }
+\end{equation}
+
+The 3D discussion calls
+\(\mean{\Delta X_i\Delta X_j}/(2\Delta t)\) the covariance and then sets the
+off-diagonal entries to zero because a single MC jump cannot move in two
+directions. The second statement is right for the raw moment. The missing term
+is the product of the means.
+
+\section*{Full finite-step result}
+
+For direction \(i\), let
+\begin{align}
+  p_i^+ &= P(\ddX=+h_i\mathbf{e}_i), &
+  p_i^- &= P(\ddX=-h_i\mathbf{e}_i),\\
+  C_{+,i} &= p_i^+ + p_i^-, &
+  C_{-,i} &= p_i^+ - p_i^- .
+\end{align}
+The remaining probability is the no-jump outcome:
+\begin{equation}
+  P(\ddX=0)=1-\sum_i C_{+,i}.
+\end{equation}
+
+First moment:
+\begin{equation}
+  m_i\equiv\mean{\Delta X_i}=h_i C_{-,i}.
+\end{equation}
+
+Raw second moment:
+\begin{equation}
+  R_{ij}\equiv\mean{\Delta X_i\Delta X_j}
+  =h_i^2 C_{+,i}\,\delta_{ij}.
+\end{equation}
+
+Central second moment:
+\begin{align}
+  Q_{ij}
+  &\equiv
+  \mean{(\Delta X_i-m_i)(\Delta X_j-m_j)}
+  \\
+  &=R_{ij}-m_i m_j.
+\end{align}
+So
+\begin{equation}
+  \boxed{
+  Q_{ij}
+  =
+  h_i^2 C_{+,i}\,\delta_{ij}
+  -
+  h_i h_j C_{-,i}C_{-,j}.
+  }
+\end{equation}
+Equivalently,
+\begin{equation}
+  \boxed{
+  \mathbf{Q}
+  =
+  \diag\!\left(h_i^2 C_{+,i}\right)
+  -
+  \mathbf{m}\mathbf{m}^{\mathsf T}.
+  }
+\end{equation}
+
+Diagonal:
+\begin{equation}
+  Q_{ii}=h_i^2\left(C_{+,i}-C_{-,i}^2\right),
+\end{equation}
+which is exactly the current 1D formula.
+
+Off diagonal:
+\begin{equation}
+  \boxed{
+  Q_{ij}=-h_i h_j C_{-,i}C_{-,j},
+  \qquad i\neq j.
+  }
+\end{equation}
+
+\section*{Why the infinitesimal argument looks diagonal}
+
+For finite velocities,
+\begin{equation}
+  m_i=u_i\Delta t=O(\Delta t).
+\end{equation}
+Therefore,
+\begin{equation}
+  m_i m_j=O(\Delta t^2),
+\end{equation}
+and
+\begin{equation}
+  \frac{m_i m_j}{\Delta t}=O(\Delta t)\rightarrow0.
+\end{equation}
+So the off-diagonal Kramers--Moyal \emph{rate} vanishes as
+\(\Delta t\rightarrow0\). No problem there.
+
+The finite-step algorithm is different: it takes one increment with
+\(\delta t=\Delta t\), and the diagonal coefficient already keeps the
+finite-step correction \(-C_{-,i}^2\). The cross terms
+\(-C_{-,i}C_{-,j}\) are the matching finite-step corrections off the diagonal.
+
+\section*{Simple 2D example}
+
+Uniform positive flow, equal cell widths, and
+\begin{equation}
+  C_x=C_y=C.
+\end{equation}
+The MC outcomes are
+\begin{equation}
+  \ddX=
+  \begin{cases}
+    (h,0), & P=C,\\
+    (0,h), & P=C,\\
+    (0,0), & P=1-2C.
+  \end{cases}
+\end{equation}
+Then
+\begin{align}
+  \mean{\Delta X}
+  &=
+  \mean{\Delta Y}
+  =hC,\\
+  \operatorname{Var}(\Delta X)
+  &=
+  \operatorname{Var}(\Delta Y)
+  =h^2C(1-C),\\
+  \cov(\Delta X,\Delta Y)
+  &=-h^2C^2,\\
+  \operatorname{Corr}(\Delta X,\Delta Y)
+  &=-\frac{C}{1-C}.
+\end{align}
+
+At \(C=0.1\),
+\begin{equation}
+  \operatorname{Corr}_{\rm MC}=-0.111111.
+\end{equation}
+
+AthenaK, \(131{,}072\) It\^o-2 particles:
+\begin{center}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+ & measured & finite-step MC \\
+\midrule
+\(\operatorname{Var}(\Delta X)\)
+  & \(8.7997\times10^{-5}\) & \(8.7891\times10^{-5}\)\\
+\(\operatorname{Var}(\Delta Y)\)
+  & \(8.7941\times10^{-5}\) & \(8.7891\times10^{-5}\)\\
+\(\cov(\Delta X,\Delta Y)\)
+  & \(-2.45\times10^{-8}\) & \(-9.77\times10^{-6}\)\\
+\(\operatorname{Corr}(\Delta X,\Delta Y)\)
+  & \(-2.78\times10^{-4}\) & \(-0.111111\)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Exactly what independent coordinate kicks should do: right marginal
+variances, zero cross covariance.
+
+\section*{Proposed fix}
+
+If the claim is only ``same mean and variance in each coordinate,'' the current
+method is fine. I would just say that explicitly.
+
+If the claim is ``same first two finite-step displacement moments,'' use the
+full \(\mathbf{Q}\).
+
+Factor
+\begin{equation}
+  \mathbf{Q}=\mathbf{L}\mathbf{L}^{\mathsf T},
+\end{equation}
+draw
+\begin{equation}
+  \mean{\boldsymbol{\xi}}=0,
+  \qquad
+  \mean{\boldsymbol{\xi}\boldsymbol{\xi}^{\mathsf T}}=\mathbf{I},
+\end{equation}
+and update
+\begin{equation}
+  \boxed{
+  \ddX
+  =
+  \mathbf{m}
+  +
+  \mathbf{L}\boldsymbol{\xi}.
+  }
+\end{equation}
+With the current notation,
+\begin{equation}
+  \mathbf{u}=\frac{\mathbf{m}}{\Delta t},
+  \qquad
+  \boldsymbol{\kappa}=\frac{\mathbf{Q}}{2\Delta t},
+\end{equation}
+so the same update is
+\begin{equation}
+  \ddX
+  =
+  \mathbf{u}\Delta t
+  +
+  \sqrt{2\Delta t}\,
+  \boldsymbol{\kappa}^{1/2}\boldsymbol{\xi}.
+\end{equation}
+
+Bounded, independent, zero-mean, unit-variance components of
+\(\boldsymbol{\xi}\) still work. The factor \(\mathbf{L}\) supplies the
+correlation. This matches the MC mean and the complete finite-step covariance;
+higher moments remain a separate question.
+
+\medskip
+\noindent\fbox{\parbox{0.94\linewidth}{
+Bottom line: independent coordinate kicks get each coordinate's mean and
+variance right, but not the full finite-step covariance. To match that too,
+include \(-h_i h_j C_{-,i}C_{-,j}\) and draw the kick through
+\(\mathbf{Q}=\mathbf{L}\mathbf{L}^{\mathsf T}\).
+
+\textit{Am I reading that right?}\hfill Drummond
+}}
+
+\end{document}
