@@ -60,6 +60,38 @@ void FatalParticleInput(const std::string &msg) {
   std::exit(EXIT_FAILURE);
 }
 
+[[noreturn]] void FatalParticleCountOverflow(const std::string &context) {
+  std::cout << "### FATAL ERROR in particles_lagrangian_mc.cpp" << std::endl
+            << "particle count overflow while " << context << std::endl;
+#if MPI_PARALLEL_ENABLED
+  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+int CheckedParticleIntAdd(int lhs, int rhs, const std::string &context) {
+  if (lhs < 0 || rhs < 0 || lhs > std::numeric_limits<int>::max() - rhs) {
+    FatalParticleCountOverflow(context);
+  }
+  return lhs + rhs;
+}
+
+int CheckedParticleIntProduct(int lhs, int rhs, const std::string &context) {
+  if (lhs < 0 || rhs < 0 ||
+      (rhs != 0 && lhs > std::numeric_limits<int>::max()/rhs)) {
+    FatalParticleCountOverflow(context);
+  }
+  return lhs*rhs;
+}
+
+std::size_t CheckedParticleSizeProduct(std::size_t lhs, std::size_t rhs,
+                                       const std::string &context) {
+  if (rhs != 0 && lhs > std::numeric_limits<std::size_t>::max()/rhs) {
+    FatalParticleCountOverflow(context);
+  }
+  return lhs*rhs;
+}
+
 struct CandidateCell {
   int m, k, j, i;
   Real cumulative_end;
@@ -267,33 +299,43 @@ void Particles::ParseTracerSeedSchedules(ParameterInput *pin) {
 //! \fn void Particles::AppendParticles
 
 void Particles::AppendParticles(const HostArray2D<Real> &new_rdata,
-                                const HostArray2D<int> &new_idata, int nnew) {
+                                const HostArray2D<int> &new_idata,
+                                const HostArray1D<std::uint64_t> &new_tags, int nnew) {
   if (nnew <= 0) return;
 
   int nold = nprtcl_thispack;
+  int merged_count = CheckedParticleIntAdd(
+      nold, nnew, "appending newly seeded tracers");
   HostArray2D<Real> old_r("old_prtcl_rdata", nrdata, nold);
   HostArray2D<int> old_i("old_prtcl_idata", nidata, nold);
+  HostArray1D<std::uint64_t> old_tags("old_prtcl_tags", nold);
   if (nold > 0) {
     Kokkos::deep_copy(old_r, prtcl_rdata);
     Kokkos::deep_copy(old_i, prtcl_idata);
+    Kokkos::deep_copy(old_tags, prtcl_tag);
   }
 
-  HostArray2D<Real> merged_r("merged_prtcl_rdata", nrdata, nold + nnew);
-  HostArray2D<int> merged_i("merged_prtcl_idata", nidata, nold + nnew);
+  HostArray2D<Real> merged_r("merged_prtcl_rdata", nrdata, merged_count);
+  HostArray2D<int> merged_i("merged_prtcl_idata", nidata, merged_count);
+  HostArray1D<std::uint64_t> merged_tags("merged_prtcl_tags", merged_count);
   for (int p=0; p<nold; ++p) {
     for (int n=0; n<nrdata; ++n) merged_r(n,p) = old_r(n,p);
     for (int n=0; n<nidata; ++n) merged_i(n,p) = old_i(n,p);
+    merged_tags(p) = old_tags(p);
   }
   for (int p=0; p<nnew; ++p) {
     for (int n=0; n<nrdata; ++n) merged_r(n,nold+p) = new_rdata(n,p);
     for (int n=0; n<nidata; ++n) merged_i(n,nold+p) = new_idata(n,p);
+    merged_tags(nold+p) = new_tags(p);
   }
 
-  nprtcl_thispack = nold + nnew;
+  nprtcl_thispack = merged_count;
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
+  Kokkos::realloc(prtcl_tag, nprtcl_thispack);
   Kokkos::deep_copy(prtcl_rdata, merged_r);
   Kokkos::deep_copy(prtcl_idata, merged_i);
+  Kokkos::deep_copy(prtcl_tag, merged_tags);
 }
 
 //----------------------------------------------------------------------------------------
@@ -301,6 +343,7 @@ void Particles::AppendParticles(const HostArray2D<Real> &new_rdata,
 
 void Particles::SeedInitialTracers() {
   if (!IsFluxTracer()) return;
+  CheckMassFloorCompatibility();
   SeedTracersAtTime(pmy_pack->pmesh->time, true);
 }
 
@@ -422,7 +465,12 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
       }
 
       std::vector<int> chosen;
-      std::vector<int> chosen_tag;
+      if (static_cast<std::uint64_t>(sched.count_per_event) >
+          std::numeric_limits<std::uint64_t>::max() - next_tracer_tag) {
+        FatalParticleInput("particle tag space exhausted while seeding schedule " +
+                           std::to_string(sched.id));
+      }
+      std::vector<std::uint64_t> chosen_tag;
       for (int q=0; q<sched.count_per_event; ++q) {
         std::uint64_t key = static_cast<std::uint64_t>(sched.seed)
           ^ (static_cast<std::uint64_t>(sched.id) << 32)
@@ -440,12 +488,13 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
           });
         if (it == cells.end()) it = cells.end() - 1;
         chosen.push_back(static_cast<int>(it - cells.begin()));
-        chosen_tag.push_back(static_cast<int>(next_tracer_tag + q));
+        chosen_tag.push_back(next_tracer_tag + static_cast<std::uint64_t>(q));
       }
 
       int nnew = chosen.size();
       HostArray2D<Real> new_r("new_lagrangian_mc_rdata", nrdata, nnew);
       HostArray2D<int> new_i("new_lagrangian_mc_idata", nidata, nnew);
+      HostArray1D<std::uint64_t> new_tags("new_lagrangian_mc_tags", nnew);
       for (int p=0; p<nnew; ++p) {
         CandidateCell cell = cells[chosen[p]];
         int m = cell.m, k = cell.k, j = cell.j, i = cell.i;
@@ -453,7 +502,8 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
         for (int n=0; n<nidata; ++n) new_i(n,p) = 0;
 
         new_i(PGID,p) = pmy_pack->gids + m;
-        new_i(PTAG,p) = chosen_tag[p];
+        new_i(PTAG,p) = 0;  // Reserved for restart compatibility through format v2.
+        new_tags(p) = chosen_tag[p];
         new_i(PLASTMOVE,p) = 0;
         new_i(PLASTLEVEL,p) = h_lev(m);
         new_i(PSEEDID,p) = sched.id;
@@ -463,10 +513,10 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
         new_r(LMCZ,p) = CellCenterX(k-ks, nx3, h_size(m).x3min, h_size(m).x3max);
         new_r(LMC_CREATE_TIME,p) = sched.next_time;
       }
-      AppendParticles(new_r, new_i, nnew);
+      AppendParticles(new_r, new_i, new_tags, nnew);
 
       sched.event_index++;
-      next_tracer_tag += sched.count_per_event;
+      next_tracer_tag += static_cast<std::uint64_t>(sched.count_per_event);
       if (sched.cadence <= 0.0 ||
           sched.next_time + sched.cadence > sched.end_time + eps) {
         sched.complete = true;
@@ -489,6 +539,7 @@ TaskStatus Particles::PushLagrangianMC(Driver *pdriver, int stage) {
   auto &mbsize = pmy_pack->pmb->mb_size;
   auto &mblev = pmy_pack->pmb->mb_lev;
   auto &pi = prtcl_idata;
+  auto &ptag = prtcl_tag;
   auto &pr = prtcl_rdata;
   auto &gids = pmy_pack->gids;
   auto &u1_ = (pmy_pack->phydro != nullptr) ? pmy_pack->phydro->u1 : pmy_pack->pmhd->u1;
@@ -536,7 +587,7 @@ TaskStatus Particles::PushLagrangianMC(Driver *pdriver, int stage) {
     Real flx3_left  = three_d ? fmax(-flx3_(m,kp,jp,ip)/mass, 0.0) : 0.0;
     Real flx3_right = three_d ? fmax( flx3_(m,kp+1,jp,ip)/mass, 0.0) : 0.0;
 
-    std::uint64_t key = static_cast<std::uint64_t>(pi(PTAG,p))*7919ULL
+    std::uint64_t key = ptag(p)*7919ULL
                       + static_cast<std::uint64_t>(ncycle)*104729ULL
                       + static_cast<std::uint64_t>(rseed);
     Real draw = HashReal(key);
@@ -577,6 +628,7 @@ TaskStatus Particles::AdjustMeshRefinement(Driver *pdriver, int stage) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, js = indcs.js, ks = indcs.ks;
   auto &pi = prtcl_idata;
+  auto &ptag = prtcl_tag;
   auto &pr = prtcl_rdata;
   auto &gids = pmy_pack->gids;
   auto &mblev = pmy_pack->pmb->mb_lev;
@@ -674,7 +726,7 @@ TaskStatus Particles::AdjustMeshRefinement(Driver *pdriver, int stage) {
       if (total <= 0.0) total = 1.0;
       for (int n=0; n<4; ++n) flx[n] /= total;
 
-      std::uint64_t key = static_cast<std::uint64_t>(pi(PTAG,p))*7919ULL
+      std::uint64_t key = ptag(p)*7919ULL
                         + static_cast<std::uint64_t>(ncycle)*104729ULL
                         + static_cast<std::uint64_t>(rseed) + 1ULL;
       Real draw = HashReal(key);
@@ -734,9 +786,11 @@ void Particles::RemapAfterMeshRefinement() {
   Kokkos::fence();
   HostArray2D<Real> hr("amr_prtcl_rdata_old", nrdata, nprtcl_thispack);
   HostArray2D<int> hi("amr_prtcl_idata_old", nidata, nprtcl_thispack);
+  HostArray1D<std::uint64_t> htags("amr_prtcl_tags_old", nprtcl_thispack);
   if (nprtcl_thispack > 0) {
     Kokkos::deep_copy(hr, prtcl_rdata);
     Kokkos::deep_copy(hi, prtcl_idata);
+    Kokkos::deep_copy(htags, prtcl_tag);
   }
 
   std::vector<int> dest_rank(nprtcl_thispack, global_variable::my_rank);
@@ -776,36 +830,82 @@ void Particles::RemapAfterMeshRefinement() {
 
   std::vector<int> send_real_count(nranks), recv_real_count(nranks);
   std::vector<int> send_int_count(nranks), recv_int_count(nranks);
+  std::vector<int> send_tag_count(nranks), recv_tag_count(nranks);
   std::vector<int> send_real_disp(nranks, 0), recv_real_disp(nranks, 0);
   std::vector<int> send_int_disp(nranks, 0), recv_int_disp(nranks, 0);
+  std::vector<int> send_tag_disp(nranks, 0), recv_tag_disp(nranks, 0);
   int nrecv = 0;
   for (int r=0; r<nranks; ++r) {
-    send_real_count[r] = send_particles[r]*nrdata;
-    recv_real_count[r] = recv_particles[r]*nrdata;
-    send_int_count[r] = send_particles[r]*nidata;
-    recv_int_count[r] = recv_particles[r]*nidata;
+    send_real_count[r] = CheckedParticleIntProduct(
+        send_particles[r], nrdata, "forming an AMR real-data send count");
+    recv_real_count[r] = CheckedParticleIntProduct(
+        recv_particles[r], nrdata, "forming an AMR real-data receive count");
+    send_int_count[r] = CheckedParticleIntProduct(
+        send_particles[r], nidata, "forming an AMR integer-data send count");
+    recv_int_count[r] = CheckedParticleIntProduct(
+        recv_particles[r], nidata, "forming an AMR integer-data receive count");
+    send_tag_count[r] = send_particles[r];
+    recv_tag_count[r] = recv_particles[r];
     if (r > 0) {
-      send_real_disp[r] = send_real_disp[r-1] + send_real_count[r-1];
-      recv_real_disp[r] = recv_real_disp[r-1] + recv_real_count[r-1];
-      send_int_disp[r] = send_int_disp[r-1] + send_int_count[r-1];
-      recv_int_disp[r] = recv_int_disp[r-1] + recv_int_count[r-1];
+      send_real_disp[r] = CheckedParticleIntAdd(
+          send_real_disp[r-1], send_real_count[r-1],
+          "forming an AMR real-data send displacement");
+      recv_real_disp[r] = CheckedParticleIntAdd(
+          recv_real_disp[r-1], recv_real_count[r-1],
+          "forming an AMR real-data receive displacement");
+      send_int_disp[r] = CheckedParticleIntAdd(
+          send_int_disp[r-1], send_int_count[r-1],
+          "forming an AMR integer-data send displacement");
+      recv_int_disp[r] = CheckedParticleIntAdd(
+          recv_int_disp[r-1], recv_int_count[r-1],
+          "forming an AMR integer-data receive displacement");
+      send_tag_disp[r] = CheckedParticleIntAdd(
+          send_tag_disp[r-1], send_tag_count[r-1],
+          "forming an AMR tag send displacement");
+      recv_tag_disp[r] = CheckedParticleIntAdd(
+          recv_tag_disp[r-1], recv_tag_count[r-1],
+          "forming an AMR tag receive displacement");
     }
-    nrecv += recv_particles[r];
+    nrecv = CheckedParticleIntAdd(
+        nrecv, recv_particles[r], "counting particles received after AMR");
   }
 
-  std::vector<Real> send_reals(send_real_disp[nranks-1] + send_real_count[nranks-1]);
-  std::vector<Real> recv_reals(recv_real_disp[nranks-1] + recv_real_count[nranks-1]);
-  std::vector<int> send_ints(send_int_disp[nranks-1] + send_int_count[nranks-1]);
-  std::vector<int> recv_ints(recv_int_disp[nranks-1] + recv_int_count[nranks-1]);
+  int send_real_total = CheckedParticleIntAdd(
+      send_real_disp[nranks-1], send_real_count[nranks-1],
+      "sizing an AMR real-data send buffer");
+  int recv_real_total = CheckedParticleIntAdd(
+      recv_real_disp[nranks-1], recv_real_count[nranks-1],
+      "sizing an AMR real-data receive buffer");
+  int send_int_total = CheckedParticleIntAdd(
+      send_int_disp[nranks-1], send_int_count[nranks-1],
+      "sizing an AMR integer-data send buffer");
+  int recv_int_total = CheckedParticleIntAdd(
+      recv_int_disp[nranks-1], recv_int_count[nranks-1],
+      "sizing an AMR integer-data receive buffer");
+  int send_tag_total = CheckedParticleIntAdd(
+      send_tag_disp[nranks-1], send_tag_count[nranks-1],
+      "sizing an AMR tag send buffer");
+  int recv_tag_total = CheckedParticleIntAdd(
+      recv_tag_disp[nranks-1], recv_tag_count[nranks-1],
+      "sizing an AMR tag receive buffer");
+  std::vector<Real> send_reals(send_real_total);
+  std::vector<Real> recv_reals(recv_real_total);
+  std::vector<int> send_ints(send_int_total);
+  std::vector<int> recv_ints(recv_int_total);
+  std::vector<std::uint64_t> send_tags(send_tag_total);
+  std::vector<std::uint64_t> recv_tags(recv_tag_total);
 
   std::vector<int> fill(nranks, 0);
   for (int p=0; p<nprtcl_thispack; ++p) {
     int r = dest_rank[p];
     int q = fill[r]++;
-    int rbase = send_real_disp[r] + q*nrdata;
-    int ibase = send_int_disp[r] + q*nidata;
+    std::size_t rbase = static_cast<std::size_t>(send_real_disp[r]) +
+                        static_cast<std::size_t>(q)*nrdata;
+    std::size_t ibase = static_cast<std::size_t>(send_int_disp[r]) +
+                        static_cast<std::size_t>(q)*nidata;
     for (int n=0; n<nrdata; ++n) send_reals[rbase+n] = hr(n,p);
     for (int n=0; n<nidata; ++n) send_ints[ibase+n] = hi(n,p);
+    send_tags[send_tag_disp[r] + q] = htags(p);
   }
 
   MPI_Alltoallv(send_reals.data(), send_real_count.data(), send_real_disp.data(),
@@ -814,15 +914,23 @@ void Particles::RemapAfterMeshRefinement() {
   MPI_Alltoallv(send_ints.data(), send_int_count.data(), send_int_disp.data(), MPI_INT,
                 recv_ints.data(), recv_int_count.data(), recv_int_disp.data(), MPI_INT,
                 MPI_COMM_WORLD);
+  MPI_Alltoallv(send_tags.data(), send_tag_count.data(), send_tag_disp.data(),
+                MPI_UINT64_T, recv_tags.data(), recv_tag_count.data(),
+                recv_tag_disp.data(), MPI_UINT64_T, MPI_COMM_WORLD);
 
   nprtcl_thispack = nrecv;
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
+  Kokkos::realloc(prtcl_tag, nprtcl_thispack);
   HostArray2D<Real> new_r("amr_prtcl_rdata_new", nrdata, nprtcl_thispack);
   HostArray2D<int> new_i("amr_prtcl_idata_new", nidata, nprtcl_thispack);
+  HostArray1D<std::uint64_t> new_tags("amr_prtcl_tags_new", nprtcl_thispack);
   for (int p=0; p<nprtcl_thispack; ++p) {
-    for (int n=0; n<nrdata; ++n) new_r(n,p) = recv_reals[p*nrdata+n];
-    for (int n=0; n<nidata; ++n) new_i(n,p) = recv_ints[p*nidata+n];
+    std::size_t rbase = static_cast<std::size_t>(p)*nrdata;
+    std::size_t ibase = static_cast<std::size_t>(p)*nidata;
+    for (int n=0; n<nrdata; ++n) new_r(n,p) = recv_reals[rbase+n];
+    for (int n=0; n<nidata; ++n) new_i(n,p) = recv_ints[ibase+n];
+    new_tags(p) = recv_tags[p];
   }
 #else
   int nlocal = 0;
@@ -831,21 +939,25 @@ void Particles::RemapAfterMeshRefinement() {
   }
   HostArray2D<Real> new_r("amr_prtcl_rdata_new", nrdata, nlocal);
   HostArray2D<int> new_i("amr_prtcl_idata_new", nidata, nlocal);
+  HostArray1D<std::uint64_t> new_tags("amr_prtcl_tags_new", nlocal);
   int q = 0;
   for (int p=0; p<nprtcl_thispack; ++p) {
     if (dest_rank[p] != global_variable::my_rank) continue;
     for (int n=0; n<nrdata; ++n) new_r(n,q) = hr(n,p);
     for (int n=0; n<nidata; ++n) new_i(n,q) = hi(n,p);
+    new_tags(q) = htags(p);
     q++;
   }
   nprtcl_thispack = nlocal;
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
+  Kokkos::realloc(prtcl_tag, nprtcl_thispack);
 #endif
 
   if (nprtcl_thispack > 0) {
     Kokkos::deep_copy(prtcl_rdata, new_r);
     Kokkos::deep_copy(prtcl_idata, new_i);
+    Kokkos::deep_copy(prtcl_tag, new_tags);
   }
   pm->UpdateParticleCounts();
 }
@@ -862,13 +974,13 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
     int nidata;
     int nlocal;
     int nschedules;
-    std::int64_t next_tag;
+    std::uint64_t next_tag;
   };
 
   ParticleRestartHeader header;
   std::memset(&header, 0, sizeof(header));
   std::strncpy(header.magic, "ATHKPRTCLMC", sizeof(header.magic)-1);
-  header.version = 2;
+  header.version = 3;
   header.enabled = IsLagrangianMC() ? 1 : (IsIto2() ? 2 : 0);
   header.nrdata = nrdata;
   header.nidata = nidata;
@@ -896,13 +1008,25 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
 
   HostArray2D<Real> hr("rst_prtcl_rdata", nrdata, nprtcl_thispack);
   HostArray2D<int> hi("rst_prtcl_idata", nidata, nprtcl_thispack);
+  HostArray1D<std::uint64_t> htags("rst_prtcl_tags", nprtcl_thispack);
   if (nprtcl_thispack > 0) {
+    std::size_t real_count = CheckedParticleSizeProduct(
+        static_cast<std::size_t>(nrdata),
+        static_cast<std::size_t>(nprtcl_thispack),
+        "writing particle restart real data");
+    std::size_t int_count = CheckedParticleSizeProduct(
+        static_cast<std::size_t>(nidata),
+        static_cast<std::size_t>(nprtcl_thispack),
+        "writing particle restart integer data");
+    std::size_t tag_bytes = CheckedParticleSizeProduct(
+        sizeof(std::uint64_t), static_cast<std::size_t>(nprtcl_thispack),
+        "writing particle restart tag data");
     Kokkos::deep_copy(hr, prtcl_rdata);
     Kokkos::deep_copy(hi, prtcl_idata);
-    resfile.Write_any_type(hr.data(), nrdata*nprtcl_thispack, "Real",
-                           single_file_per_rank);
-    resfile.Write_any_type(hi.data(), nidata*nprtcl_thispack, "int",
-                           single_file_per_rank);
+    Kokkos::deep_copy(htags, prtcl_tag);
+    resfile.Write_any_type(hr.data(), real_count, "Real", single_file_per_rank);
+    resfile.Write_any_type(hi.data(), int_count, "int", single_file_per_rank);
+    resfile.Write_any_type(htags.data(), tag_bytes, "byte", single_file_per_rank);
   }
 }
 
@@ -918,7 +1042,7 @@ void Particles::ReadRestartData(IOWrapper &resfile, bool single_file_per_rank) {
     int nidata;
     int nlocal;
     int nschedules;
-    std::int64_t next_tag;
+    std::uint64_t next_tag;
   };
 
   ParticleRestartHeader header;
@@ -926,7 +1050,7 @@ void Particles::ReadRestartData(IOWrapper &resfile, bool single_file_per_rank) {
     FatalParticleInput("particle restart section is missing or truncated");
   }
   if (std::strncmp(header.magic, "ATHKPRTCLMC", 11) != 0 ||
-      header.version < 1 || header.version > 2) {
+      header.version < 1 || header.version > 3) {
     FatalParticleInput("particle restart section has an unrecognized format");
   }
   if (!header.enabled) return;
@@ -965,21 +1089,41 @@ void Particles::ReadRestartData(IOWrapper &resfile, bool single_file_per_rank) {
   nprtcl_thispack = header.nlocal;
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
+  Kokkos::realloc(prtcl_tag, nprtcl_thispack);
 
   HostArray2D<Real> hr("rst_prtcl_rdata_in", nrdata, nprtcl_thispack);
   HostArray2D<int> hi("rst_prtcl_idata_in", nidata, nprtcl_thispack);
+  HostArray1D<std::uint64_t> htags("rst_prtcl_tags_in", nprtcl_thispack);
   if (nprtcl_thispack > 0) {
-    if (resfile.Read_Reals(hr.data(), nrdata*nprtcl_thispack, single_file_per_rank) !=
-        static_cast<std::size_t>(nrdata*nprtcl_thispack)) {
+    std::size_t real_count = CheckedParticleSizeProduct(
+        static_cast<std::size_t>(nrdata),
+        static_cast<std::size_t>(nprtcl_thispack),
+        "reading particle restart real data");
+    std::size_t int_count = CheckedParticleSizeProduct(
+        static_cast<std::size_t>(nidata),
+        static_cast<std::size_t>(nprtcl_thispack),
+        "reading particle restart integer data");
+    if (resfile.Read_Reals(hr.data(), real_count, single_file_per_rank) != real_count) {
       FatalParticleInput("particle restart real data is truncated");
     }
-    if (resfile.Read_bytes(hi.data(), sizeof(int), nidata*nprtcl_thispack,
-                           single_file_per_rank) !=
-        static_cast<std::size_t>(nidata*nprtcl_thispack)) {
+    if (resfile.Read_bytes(hi.data(), sizeof(int), int_count, single_file_per_rank) !=
+        int_count) {
       FatalParticleInput("particle restart integer data is truncated");
+    }
+    if (header.version >= 3) {
+      if (resfile.Read_bytes(htags.data(), sizeof(std::uint64_t), nprtcl_thispack,
+                             single_file_per_rank) !=
+          static_cast<std::size_t>(nprtcl_thispack)) {
+        FatalParticleInput("particle restart tag data is truncated");
+      }
+    } else {
+      for (int p=0; p<nprtcl_thispack; ++p) {
+        htags(p) = static_cast<std::uint32_t>(hi(PTAG,p));
+      }
     }
     Kokkos::deep_copy(prtcl_rdata, hr);
     Kokkos::deep_copy(prtcl_idata, hi);
+    Kokkos::deep_copy(prtcl_tag, htags);
   }
   pmy_pack->pmesh->UpdateParticleCounts();
 }

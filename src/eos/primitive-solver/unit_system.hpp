@@ -17,73 +17,87 @@
 namespace Primitive {
 
 struct UnitSystem {
-  Real c;    //! Speed of light
-  Real G;    //! Gravitational constant
-  Real kb;   //! Boltzmann constant
-  Real Msun; //! Solar mass
-  Real MeV;  // 10^6 electronvolt
+  // Unit scales span more than the dynamic range of a float, even when the fluid
+  // state uses single precision. Keep the metadata and ratios in double precision.
+  using ConversionReal = double;
 
-  Real length;      //! Length unit
-  Real time;        //! Time unit
-  Real density;     //! Number density unit
-  Real mass;        //! Mass unit
-  Real energy;      //! Energy unit
-  Real pressure;    //! Pressure unit
-  Real temperature; //! Temperature unit
-  Real chemicalPotential; //! Chemical potential unit
+  ConversionReal c;    //! Speed of light
+  ConversionReal G;    //! Gravitational constant
+  ConversionReal kb;   //! Boltzmann constant
+  ConversionReal Msun; //! Solar mass
+  ConversionReal MeV;  // 10^6 electronvolt
+
+  ConversionReal length;      //! Length unit
+  ConversionReal time;        //! Time unit
+  ConversionReal density;     //! Number density unit
+  ConversionReal mass;        //! Mass unit
+  ConversionReal energy;      //! Energy unit
+  ConversionReal pressure;    //! Pressure unit
+  ConversionReal temperature; //! Temperature unit
+  ConversionReal chemicalPotential; //! Chemical potential unit
 
   //! \defgroup conversiongroup Conversion Methods
   //  A collection of methods for getting unit
   //  conversions from the original system to the
   //  specified system.
   //  \{
-  KOKKOS_INLINE_FUNCTION constexpr Real LengthConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal LengthConversion(const UnitSystem& b) const {
     return b.length/length;
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real TimeConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal TimeConversion(const UnitSystem& b) const {
     return b.time/time;
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real VelocityConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal VelocityConversion(const UnitSystem& b) const {
     return b.length/length * time/b.time;
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real DensityConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal DensityConversion(const UnitSystem& b) const {
     return b.density/density;
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real MassConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal MassConversion(const UnitSystem& b) const {
     return b.mass/mass;
   }
 
   KOKKOS_INLINE_FUNCTION constexpr
-  Real MassDensityConversion(const UnitSystem & b) const {
+  ConversionReal MassDensityConversion(const UnitSystem & b) const {
     return (b.density/density)*(b.mass/mass);
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real EnergyConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal EnergyConversion(const UnitSystem& b) const {
     return b.energy/energy;
   }
 
   KOKKOS_INLINE_FUNCTION constexpr
-  Real EnergyDensityConversion(const UnitSystem& b) const {
+  ConversionReal EnergyDensityConversion(const UnitSystem& b) const {
     return (b.density/density)*(b.energy/energy);
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real EntropyConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal EntropyConversion(const UnitSystem& b) const {
     return b.kb/kb;
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real PressureConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal PressureConversion(const UnitSystem& b) const {
     return b.pressure/pressure;
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real TemperatureConversion(const UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal TemperatureConversion(const UnitSystem& b) const {
     return b.temperature/temperature;
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr Real ChemicalPotentialConversion(UnitSystem& b) const {
+  KOKKOS_INLINE_FUNCTION constexpr
+  ConversionReal ChemicalPotentialConversion(const UnitSystem& b) const {
     return b.chemicalPotential/chemicalPotential;
   }
   //! \}

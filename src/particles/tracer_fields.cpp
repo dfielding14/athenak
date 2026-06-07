@@ -195,7 +195,8 @@ Real EvaluateTracerFieldHost(const TracerField &field, const HostArray5D<Real> &
   const Real v2 = w0(m,IVY,k,j,i);
   const Real v3 = w0(m,IVZ,k,j,i);
   const Real vsq = SQR(v1) + SQR(v2) + SQR(v3);
-  const Real cs2 = is_ideal ? std::max(gamma*press/rho, 0.0) : iso_cs*iso_cs;
+  const Real cs2 = is_ideal ? std::max(gamma*press/rho, static_cast<Real>(0.0)) :
+                              iso_cs*iso_cs;
   const Real cs = std::sqrt(cs2);
 
   switch (field.kind) {

@@ -252,6 +252,7 @@ class ParticlesBoundaryValues {
 
   int nprtcl_send, nprtcl_recv;
   DualArray1D<ParticleLocationData> sendlist;
+  DvceArray1D<int> send_count;
 
   // Data needed to count number of messages and particles to send between ranks
   int nsends; // number of MPI sends to neighboring ranks on this rank
@@ -264,8 +265,10 @@ class ParticlesBoundaryValues {
 #if MPI_PARALLEL_ENABLED
   DvceArray1D<Real> prtcl_rsendbuf, prtcl_rrecvbuf;
   DvceArray1D<int>  prtcl_isendbuf, prtcl_irecvbuf;
+  DvceArray1D<std::uint64_t> prtcl_tsendbuf, prtcl_trecvbuf;
   std::vector<MPI_Request> rrecv_req, rsend_req;  // vectors of requests for Reals
   std::vector<MPI_Request> irecv_req, isend_req;  // vectors of requests for ints
+  std::vector<MPI_Request> trecv_req, tsend_req;  // vectors of requests for tags
   MPI_Comm mpi_comm_part;                       // unique MPI communicators for particles
 #endif
 

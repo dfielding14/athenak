@@ -9,7 +9,9 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <cstdint>
 #include <limits>
+#include <stdexcept>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -21,8 +23,39 @@
 #include "mhd/mhd.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
+#include "srcterms/srcterms.hpp"
+
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
 
 namespace particles {
+namespace {
+
+std::uint64_t GetOrAddUInt64(ParameterInput *pin, const std::string &block,
+                             const std::string &name, std::uint64_t value) {
+  std::string text = pin->GetOrAddString(block, name, std::to_string(value));
+  if (text.empty() || text.front() == '-') {
+    std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
+              << block << "/" << name << " must be an unsigned 64-bit integer"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  std::size_t consumed = 0;
+  try {
+    std::uint64_t parsed = std::stoull(text, &consumed, 10);
+    if (consumed != text.size()) throw std::invalid_argument("trailing characters");
+    return parsed;
+  } catch (const std::exception &) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
+              << block << "/" << name << "='" << text
+              << "' is not an unsigned 64-bit integer" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
@@ -125,6 +158,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                     << std::endl;
           std::exit(EXIT_FAILURE);
         }
+        std::string fluid_block = (pmy_pack->phydro != nullptr) ? "hydro" : "mhd";
+        std::string source_block = fluid_block + "_srcterms";
+        if (SourceTerms::MassChangeDeclared(source_block, pin)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "flux tracer particles do not support source terms "
+                    << "that change mass density" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
         EquationOfState *peos = (pmy_pack->phydro != nullptr) ?
                                 pmy_pack->phydro->peos : pmy_pack->pmhd->peos;
         if (particle_type == ParticleType::lagrangian_mc && !peos->eos_data.is_ideal) {
@@ -176,7 +217,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         nrdata = LMC_NREAL;
         nidata = PSEEDID + 1;
         random_seed = pin->GetOrAddInteger("particles","random_seed",12345);
-        next_tracer_tag = pin->GetOrAddInteger("particles","next_tracer_tag",0);
+        next_tracer_tag = GetOrAddUInt64(pin, "particles", "next_tracer_tag", 0);
+        ito_probability_target =
+            pin->GetOrAddReal("particles", "ito_probability_target", 0.99);
+        if (!(ito_probability_target > 0.0 && ito_probability_target <= 1.0)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "particles/ito_probability_target must be in (0,1]"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
         ParseTracerSeedSchedules(pin);
         if (pmy_pack->phydro != nullptr) {
           pmy_pack->phydro->SetSaveUFlxIdn();
@@ -208,6 +257,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   }
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
+  Kokkos::realloc(prtcl_tag, nprtcl_thispack);
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
@@ -234,6 +284,24 @@ int Particles::GetLagrangianMCScalarCount() const {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Particles::CheckMassFloorCompatibility
+//! \brief Fail before a flux-tracer update if the EOS injected gas mass through a floor.
+
+void Particles::CheckMassFloorCompatibility() {
+  int floor_count = pmy_pack->pmesh->ecounter.neos_dfloor;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &floor_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+  if (floor_count > 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "an EOS density floor or MHD magnetization ceiling "
+              << "injected gas mass before a flux-tracer update; tracer creation or "
+              << "weight adjustment for that mass is not implemented" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+//----------------------------------------------------------------------------------------
 // CreateParticleTags()
 // Assigns tags to particles (unique integer).  Note that tracked particles are always
 // those with tag numbers less than ntrack.
@@ -245,25 +313,27 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
 
   // tags are assigned sequentially within this rank, starting at 0 with rank=0
   if (assign.compare("index_order") == 0) {
-    int tagstart = 0;
+    std::uint64_t tagstart = 0;
     for (int n=1; n<=global_variable::my_rank; ++n) {
-      tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1];
+      tagstart += static_cast<std::uint64_t>(
+          pmy_pack->pmesh->nprtcl_eachrank[n-1]);
     }
 
-    auto &pi = prtcl_idata;
+    auto &ptag = prtcl_tag;
     par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
     KOKKOS_LAMBDA(const int p) {
-      pi(PTAG,p) = tagstart + p;
+      ptag(p) = tagstart + static_cast<std::uint64_t>(p);
     });
 
   // tags are assigned sequentially across ranks
   } else if (assign.compare("rank_order") == 0) {
     int myrank = global_variable::my_rank;
     int nranks = global_variable::nranks;
-    auto &pi = prtcl_idata;
+    auto &ptag = prtcl_tag;
     par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
     KOKKOS_LAMBDA(const int p) {
-      pi(PTAG,p) = myrank + nranks*p;
+      ptag(p) = static_cast<std::uint64_t>(myrank) +
+                 static_cast<std::uint64_t>(nranks)*static_cast<std::uint64_t>(p);
     });
 
   // tag algorithm not recognized, so quit with error

@@ -34,8 +34,8 @@ thermodynamic-history requests should fail during input validation.
 | `src/particles/tracer_fields.hpp` | Tracer-field registry interface and field metadata. |
 | `src/particles/tracer_fields.cpp` | Field-name parser and host-side field evaluator. |
 | `src/outputs/prtcl_thermo_history.cpp` | Versioned append-only binary history output. |
-| `scripts/read_prtcl_thermo_history.py` | Python reader for v1 and v2 history files. |
-| `scripts/test_prtcl_thermo_history_reader.py` | Synthetic v2 reader regression test. |
+| `scripts/read_prtcl_thermo_history.py` | Python reader for v1, v2, and v3 history files. |
+| `scripts/test_prtcl_thermo_history_reader.py` | Synthetic backward-compatibility reader regression test. |
 | `inputs/particles/lagrangian_mc_thermo*.athinput` | Hydro, AMR, and MHD smoke-test inputs. |
 
 ## Quick Start
@@ -95,7 +95,7 @@ python scripts/read_prtcl_thermo_history.py \
 | `pusher` | string | required | Set to `lagrangian_mc`. |
 | `random_seed` | integer | `12345` | Base seed used by tracer operations. |
 | `track_variables` | string list | `default` | Default tracer-field list for `prtcl_thermo_history` outputs that do not specify their own `variables`. |
-| `next_tracer_tag` | integer | `0` | Restart-managed next global tracer tag. Users normally do not set this manually. |
+| `next_tracer_tag` | unsigned 64-bit integer | `0` | Restart-managed next global tracer tag. Users normally do not set this manually. |
 
 ### `<tracer_seedN>`
 
@@ -135,7 +135,22 @@ Monte-Carlo transport model and avoids subcell interpolation ambiguity.
 | `file_type` | string | required | Set to `prtcl_thermo_history`. |
 | `dt` or `dcycle` | Real or integer | required | Output cadence. |
 | `variables` | string list | `<particles>/track_variables` | Per-output tracer-field list. |
+| `particle_field_sampling` | `cell` or `cic` | `cell` | Sample the containing cell or use multilinear cloud-in-cell interpolation at the particle position. |
 | `id` | string | `prtcl_thermo_history` | Output id used in the `.thp` filename. |
+
+`cell` preserves the original output behavior and is appropriate for exact cell
+membership or discontinuous phase labels. `cic` is intended for smooth path histories
+and is exact for fields that are linear over the local interpolation stencil.
+
+CIC applies one common spatial stencil to all registered Hydro, MHD, passive-scalar,
+and derived diagnostics. Diagnostics are evaluated at cell centers before interpolation:
+for example, the output interpolates cell-centered `bmag`, rather than computing the
+magnitude of an interpolated magnetic vector. Periodic-edge stencils use the fluid
+ghost zones and therefore wrap to the opposite side of the domain. Across a
+discontinuity, CIC deliberately blends the neighboring cell values.
+
+The `.thp` header stores the requested field names but not the sampling mode. Do not
+change `particle_field_sampling` when appending to an existing history file.
 
 ## Tracer Field Registry
 
@@ -146,7 +161,7 @@ The same field names are used by:
 - `<tracer_seedN>/target`
 
 Names are case-insensitive and may be separated by commas or whitespace. Aliases
-are normalized to the canonical names stored in the v2 `.thp` file header.
+are normalized to the canonical names stored in the v3 `.thp` file header.
 
 ### Hydro and MHD Fields
 
@@ -194,7 +209,7 @@ order:
 time, cycle, tag, seed_id, x1, x2, x3, gid, <requested variables...>
 ```
 
-The v2 file header stores:
+The v3 file header stores:
 
 - magic string
 - schema version
@@ -210,7 +225,12 @@ Each appended block stores:
 - integer and real record widths
 - cycle and time
 - integer record payload
+- unsigned 64-bit tag payload
 - real record payload
+
+Version 3 stores tags separately as exact `uint64` values. The Python reader
+also accepts v1 and v2 files, whose signed 32-bit tag words are interpreted by
+their original unsigned bit pattern.
 
 Append behavior is strict. If a restart or rerun attempts to append to an existing
 `.thp` with a different variable list, schema version, or real precision, AthenaK
@@ -249,7 +269,7 @@ Use `scripts/read_prtcl_thermo_history.py` to inspect or convert the binary file
 python scripts/read_prtcl_thermo_history.py path/to/file.thp --npz tracers.npz
 ```
 
-The reader returns arrays keyed by column name. For v2 files, the data keys come
+The reader returns arrays keyed by column name. For v2 and v3 files, the data keys come
 from the stored schema, so a file written with:
 
 ```ini

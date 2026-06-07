@@ -363,9 +363,10 @@ class ParticleVTKOutput : public BaseTypeOutput {
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
  protected:
   int npout_thisrank;
-  int npout_total;
+  std::uint64_t npout_total;
   HostArray2D<Real> outpart_rdata;
   HostArray2D<int>  outpart_idata;
+  HostArray1D<std::uint64_t> outpart_tag;
 };
 
 //----------------------------------------------------------------------------------------
@@ -379,14 +380,16 @@ class ParticleThermoHistoryOutput : public BaseTypeOutput {
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
  protected:
   int npout_thisrank;
-  int npout_total;
+  std::uint64_t npout_total;
   Real tracer_gamma;
   Real tracer_iso_cs;
   bool tracer_is_ideal;
+  bool use_cic_sampling;
   std::vector<particles::TracerField> tracer_fields;
   std::vector<std::string> tracer_field_names;
   HostArray2D<Real> outpart_rdata;
   HostArray2D<int> outpart_idata;
+  HostArray1D<std::uint64_t> outpart_tag;
   HostArray2D<Real> outfield_data;
 };
 

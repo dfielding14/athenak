@@ -1,0 +1,94 @@
+# AthenaK input for exact upper-periodic-boundary Ito tracer tests
+
+<comment>
+problem   = Ito tracers exactly on active upper faces and the upper corner
+
+<job>
+basename  = ito_upper_boundary
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 0
+tlim       = 0.1
+ndiag      = 1
+
+<hydro>
+eos             = isothermal
+iso_sound_speed = 1.0
+reconstruct     = plm
+rsolver         = llf
+
+<particles>
+particle_type   = lagrangian_ito
+pusher          = ito2
+ito_order       = 2
+tracer_kick_pdf = uniform
+random_seed     = 13579
+next_tracer_tag = 0
+track_variables = density
+
+<tracer_seed1>
+id              = 1
+start_time      = 0.0
+end_time        = 0.0
+cadence         = -1.0
+count_per_event = 4
+weight          = volume
+region          = box
+x1min           = 0.5
+x1max           = 1.0
+x2min           = 0.5
+x2max           = 1.0
+x3min           = 0.5
+x3max           = 1.0
+seed            = 97531
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+dens      = 1.0
+pgas      = 1.0
+vx0       = 0.0
+vy0       = 0.0
+vz0       = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type = prtcl_thermo_history
+dt        = 0.001
+variables = density
+
+<output2>
+file_type            = rst
+dt                   = 0.001
+single_file_per_rank = true

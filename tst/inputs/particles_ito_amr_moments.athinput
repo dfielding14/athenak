@@ -1,0 +1,112 @@
+# Static-AMR conditional-moment test for Ito-2 tracers
+
+<job>
+basename = ito_amr_moments
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 32
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+
+<mesh_refinement>
+refinement = static
+
+<refined_region1>
+level = 1
+x1min = 0.0
+x1max = 0.5
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = 1
+tlim = 1.0
+ndiag = 1
+
+<hydro>
+eos = isothermal
+iso_sound_speed = 0.01
+reconstruct = plm
+rsolver = hlle
+
+<particles>
+particle_type = lagrangian_ito
+pusher = ito2
+ito_order = 2
+tracer_kick_pdf = uniform
+random_seed = 987654
+ito_probability_target = 0.99
+track_variables = density
+
+<tracer_seed1>
+id = 1
+start_time = 0.0
+end_time = 0.0
+cadence = -1.0
+count_per_event = 65536
+weight = mass
+region = box
+x1min = -0.25
+x1max = 0.0
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
+seed = 11111
+
+<tracer_seed2>
+id = 2
+start_time = 0.0
+end_time = 0.0
+cadence = -1.0
+count_per_event = 65536
+weight = mass
+region = box
+x1min = 0.0
+x1max = 0.25
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
+seed = 22222
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 0.0
+dens = 1.0
+pgas = 1.0
+vx0 = 0.4
+vy0 = 0.2
+vz0 = 0.0
+along_x1 = true
+along_x2 = false
+along_x3 = false
+
+<output1>
+file_type = prtcl_thermo_history
+dcycle = 1
+variables = density

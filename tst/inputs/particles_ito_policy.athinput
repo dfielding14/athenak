@@ -1,0 +1,73 @@
+# AthenaK input for flux-tracer source-term policy tests
+
+<comment>
+problem = Ito tracer source-term policy
+
+<job>
+basename = particles_ito_policy
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 4
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = 1
+tlim = 1.0
+ndiag = 1
+
+<hydro>
+eos = isothermal
+iso_sound_speed = 1.0
+dfloor = 0.5
+reconstruct = plm
+rsolver = llf
+
+<hydro_srcterms>
+changes_mass = false
+const_accel = false
+const_accel_val = 1.0
+const_accel_dir = 1
+
+<particles>
+particle_type = lagrangian_ito
+pusher = ito2
+ito_order = 2
+tracer_kick_pdf = uniform
+random_seed = 12345
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 0.0
+dens = 1.0
+pgas = 1.0
+vx0 = 0.5
+vy0 = 0.0
+vz0 = 0.0
+along_x1 = true
+along_x2 = false
+along_x3 = false

@@ -31,8 +31,10 @@ enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc, 
 enum class ParticleType {cosmic_ray, lagrangian_mc, lagrangian_ito};
 
 enum ItoCoefficientIndex {
-  ITO_U1=0, ITO_U2=1, ITO_U3=2, ITO_KAPPA1=3, ITO_KAPPA2=4, ITO_KAPPA3=5,
-  ITO_NCOEFF=6
+  ITO_M1=0, ITO_M2=1, ITO_M3=2,
+  ITO_Q11=3, ITO_Q22=4, ITO_Q33=5,
+  ITO_Q12=6, ITO_Q13=7, ITO_Q23=8,
+  ITO_NCOEFF=9
 };
 
 enum class TracerSeedWeight {mass, volume};
@@ -109,10 +111,12 @@ class Particles {
 //  DvceArray2D<Real> prtcl_pos;     // positions
 //  DvceArray2D<Real> prtcl_vel;     // velocities
   DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
-  DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
+  DvceArray2D<int>  prtcl_idata;   // small integer properties (gid, seed id, etc.)
+  DvceArray1D<std::uint64_t> prtcl_tag;  // globally unique particle tags
   Real dtnew;
+  Real ito_probability_target = 0.99;
   std::int64_t random_seed = 0;
-  std::int64_t next_tracer_tag = 0;
+  std::uint64_t next_tracer_tag = 0;
   DvceArray5D<Real> ito_coeff;
   DvceArray5D<Real> coarse_ito_coeff;
   DvceArray1D<int> ito_invalid;
@@ -162,10 +166,12 @@ class Particles {
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Particles
   std::vector<TracerSeedSchedule> seed_schedules_;
 
+  void CheckMassFloorCompatibility();
   void ParseTracerSeedSchedules(ParameterInput *pin);
   void SeedTracersAtTime(Real event_time, bool initial_only);
   void AppendParticles(const HostArray2D<Real> &new_rdata,
-                       const HostArray2D<int> &new_idata, int nnew);
+                       const HostArray2D<int> &new_idata,
+                       const HostArray1D<std::uint64_t> &new_tags, int nnew);
 };
 
 } // namespace particles

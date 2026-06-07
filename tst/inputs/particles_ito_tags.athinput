@@ -1,0 +1,93 @@
+# AthenaK input for 64-bit Ito tracer-tag regression tests
+
+<comment>
+problem   = Exact uint64 Ito tracer tags and restart continuation
+
+<job>
+basename  = ito_tags
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 4
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 2
+tlim       = 1.0
+ndiag      = 1
+
+<hydro>
+eos             = isothermal
+iso_sound_speed = 1.0
+reconstruct     = plm
+rsolver         = llf
+
+<particles>
+particle_type   = lagrangian_ito
+pusher          = ito2
+ito_order       = 2
+tracer_kick_pdf = uniform
+random_seed     = 12345
+next_tracer_tag = 0
+track_variables = density
+
+<tracer_seed1>
+id              = 1
+start_time      = 0.0
+end_time        = 0.0
+cadence         = -1.0
+count_per_event = 64
+weight          = mass
+region          = all
+seed            = 24680
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+dens      = 1.0
+pgas      = 1.0
+vx0       = 0.5
+vy0       = 0.0
+vz0       = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type = prtcl_thermo_history
+dt        = 1.0
+variables = density
+
+<output2>
+file_type            = rst
+dt                   = 1.0
+single_file_per_rank = true
+
+<output3>
+file_type = pvtk
+variable  = prtcl_all
+dt        = 1.0

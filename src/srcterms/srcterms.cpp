@@ -110,6 +110,26 @@ SourceTerms::~SourceTerms() {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn SourceTerms::MassChangeDeclared
+//! \brief Return true when configured fluid source terms may modify mass density.
+
+bool SourceTerms::MassChangeDeclared(const std::string &block, ParameterInput *pin) {
+  bool changes_mass = false;
+  if (pin->DoesBlockExist(block)) {
+    changes_mass = pin->GetOrAddBoolean(block, "changes_mass", false);
+  }
+
+  bool user_srcs = pin->GetOrAddBoolean("problem", "user_srcs", false);
+  if (user_srcs) {
+    // A custom source is unknown to the fluid source-term layer, so require an
+    // explicit mass-conserving declaration before enabling flux tracers.
+    changes_mass = changes_mass ||
+                   pin->GetOrAddBoolean("problem", "user_srcs_changes_mass", true);
+  }
+  return changes_mass;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn SourceTerms::ApplySrcTerms
 //! \brief Applies selected source terms to input arrays. Two different versions are
 //! implemented for fluid and radiation fields, distinguished by their argument lists
@@ -207,7 +227,9 @@ bool SourceTerms::CoolingHistoryEnabled() const {
 
 int SourceTerms::AddCoolingHistoryLabels(std::string *labels, int start,
                                          int max_labels) const {
-  return (pcooling != nullptr) ? pcooling->AddHistoryLabels(labels, start, max_labels) : 0;
+  return (pcooling != nullptr)
+             ? pcooling->AddHistoryLabels(labels, start, max_labels)
+             : 0;
 }
 
 int SourceTerms::AddCoolingHistoryData(Real *hdata, int start, int max_data,

@@ -40,7 +40,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
 
     // Read baryon (neutron) mass
     auto& table_scalars = table.GetScalars();
-    mb = table_scalars.at("mn");
+    mb = static_cast<Real>(table_scalars.at("mn"));
 
     // Get table dimensions
     auto& point_info = table.GetPointInfo();
@@ -65,46 +65,46 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
     // n[i], n[i+1], yq[j], and yq[j+1], where i and j are the indices providing the
     // nearest table values at or below a specified i and yq.
     { // read nb
-      Real * table_nb = table["nb"];
+      const double *table_nb = table["nb"];
 
       for (size_t in=0; in<m_nn; ++in) {
-        host_log_nb(in) = log2_(table_nb[in]);
+        host_log_nb(in) = log2_(static_cast<Real>(table_nb[in]));
       }
 
       m_id_log_nb = 1.0/(host_log_nb(1) - host_log_nb(0));
-      min_n = table_nb[0];
-      max_n = table_nb[m_nn-1];
+      min_n = static_cast<Real>(table_nb[0]);
+      max_n = static_cast<Real>(table_nb[m_nn-1]);
     }
 
     { // read yq
-      Real * table_yq = table["yq"];
+      const double *table_yq = table["yq"];
       for (size_t iy=0; iy<m_ny; ++iy) {
-        host_yq(iy) = table_yq[iy];
+        host_yq(iy) = static_cast<Real>(table_yq[iy]);
       }
       m_id_yq = 1.0/(host_yq(1) - host_yq(0));
-      min_Y[0] = table_yq[0];
-      max_Y[0] = table_yq[m_ny-1];
+      min_Y[0] = static_cast<Real>(table_yq[0]);
+      max_Y[0] = static_cast<Real>(table_yq[m_ny-1]);
     }
 
     { // read T
-      Real * table_t = table["t"];
+      const double *table_t = table["t"];
 
       for (size_t it=0; it<m_nt; ++it) {
-        host_log_t(it) = log2_(table_t[it]);
+        host_log_t(it) = log2_(static_cast<Real>(table_t[it]));
       }
 
       m_id_log_t = 1.0/(host_log_t(1) - host_log_t(0));
-      min_T = table_t[0];
-      max_T = table_t[m_nt-1];
+      min_T = static_cast<Real>(table_t[0]);
+      max_T = static_cast<Real>(table_t[m_nt-1]);
     }
 
     { // Read Q1 -> log(P)
-      Real * table_Q1 = table["Q1"];
+      const double *table_Q1 = table["Q1"];
       for (size_t in=0; in<m_nn; ++in) {
         for (size_t iy=0; iy<m_ny; ++iy) {
           for (size_t it=0; it<m_nt; ++it) {
             size_t iflat = it + m_nt*(iy + m_ny*in);
-            Real p_current = table_Q1[iflat]*exp2_(host_log_nb(in));
+            Real p_current = static_cast<Real>(table_Q1[iflat])*exp2_(host_log_nb(in));
             host_table(ECLOGP,in,iy,it) = log2_(p_current);
           }
         }
@@ -112,60 +112,62 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
     }
 
     { // Read Q2 -> S
-      Real * table_Q2 = table["Q2"];
+      const double *table_Q2 = table["Q2"];
       for (size_t in=0; in<m_nn; ++in) {
         for (size_t iy=0; iy<m_ny; ++iy) {
           for (size_t it=0; it<m_nt; ++it) {
             size_t iflat = it + m_nt*(iy + m_ny*in);
-            host_table(ECENT,in,iy,it) = table_Q2[iflat];
+            host_table(ECENT,in,iy,it) = static_cast<Real>(table_Q2[iflat]);
           }
         }
       }
     }
 
     { // Read Q3-> mu_b
-      Real * table_Q3 = table["Q3"];
+      const double *table_Q3 = table["Q3"];
       for (size_t in=0; in<m_nn; ++in) {
         for (size_t iy=0; iy<m_ny; ++iy) {
           for (size_t it=0; it<m_nt; ++it) {
             size_t iflat = it + m_nt*(iy + m_ny*in);
-            host_table(ECMUB,in,iy,it) = (table_Q3[iflat]+1)*mb;
+            host_table(ECMUB,in,iy,it) =
+                static_cast<Real>(table_Q3[iflat]+1)*mb;
           }
         }
       }
     }
 
     { // Read Q4-> mu_q
-      Real * table_Q4 = table["Q4"];
+      const double *table_Q4 = table["Q4"];
       for (size_t in=0; in<m_nn; ++in) {
         for (size_t iy=0; iy<m_ny; ++iy) {
           for (size_t it=0; it<m_nt; ++it) {
             size_t iflat = it + m_nt*(iy + m_ny*in);
-            host_table(ECMUQ,in,iy,it) = table_Q4[iflat]*mb;
+            host_table(ECMUQ,in,iy,it) = static_cast<Real>(table_Q4[iflat])*mb;
           }
         }
       }
     }
 
     { // Read Q5-> mu_le
-      Real * table_Q5 = table["Q5"];
+      const double *table_Q5 = table["Q5"];
       for (size_t in=0; in<m_nn; ++in) {
         for (size_t iy=0; iy<m_ny; ++iy) {
           for (size_t it=0; it<m_nt; ++it) {
             size_t iflat = it + m_nt*(iy + m_ny*in);
-            host_table(ECMUL,in,iy,it) = table_Q5[iflat]*mb;
+            host_table(ECMUL,in,iy,it) = static_cast<Real>(table_Q5[iflat])*mb;
           }
         }
       }
     }
 
     { // Read Q7-> log(e)
-      Real * table_Q7 = table["Q7"];
+      const double *table_Q7 = table["Q7"];
       for (size_t in=0; in<m_nn; ++in) {
         for (size_t iy=0; iy<m_ny; ++iy) {
           for (size_t it=0; it<m_nt; ++it) {
             size_t iflat = it + m_nt*(iy + m_ny*in);
-            Real e_current = mb*(table_Q7[iflat] + 1)*exp2_(host_log_nb(in));
+            Real e_current =
+                mb*static_cast<Real>(table_Q7[iflat] + 1)*exp2_(host_log_nb(in));
             host_table(ECLOGE,in,iy,it) = log2_(e_current);
           }
         }
@@ -173,12 +175,13 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
     }
 
     { // Read cs2-> cs
-      Real * table_cs2 = table["cs2"];
+      const double *table_cs2 = table["cs2"];
       for (size_t in=0; in<m_nn; ++in) {
         for (size_t iy=0; iy<m_ny; ++iy) {
           for (size_t it=0; it<m_nt; ++it) {
             size_t iflat = it + m_nt*(iy + m_ny*in);
-            host_table(ECCS,in,iy,it) = sqrt(table_cs2[iflat]);
+            host_table(ECCS,in,iy,it) =
+                static_cast<Real>(sqrt(table_cs2[iflat]));
           }
         }
       }

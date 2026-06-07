@@ -1,0 +1,79 @@
+# AthenaK input file for turbulence-driver RK regression tests
+
+<comment>
+problem = turbulence forcing task ordering and RK weighting
+
+<job>
+basename = TurbDriverRK
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 8
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 8
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 1.0e-5
+nlim = 1
+tlim = 1.0
+ndiag = 1
+
+<hydro>
+eos = ideal
+gamma = 1.6666666666666667
+reconstruct = plm
+rsolver = llf
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 0.0
+dens = 1.0
+pgas = 0.6
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+along_x1 = true
+along_x2 = false
+along_x3 = false
+
+<turb_driving>
+tcorr = 0.5
+dedt = 0.1
+nlow = 1
+nhigh = 2
+driving_type = 0
+expo = 1.6666666666666667
+exp_prp = 1.6666666666666667
+exp_prl = 0.0
+
+<output1>
+file_type = vtk
+variable = turb_force
+dcycle = 1
+
+<output2>
+file_type = vtk
+variable = hydro_u
+dcycle = 1

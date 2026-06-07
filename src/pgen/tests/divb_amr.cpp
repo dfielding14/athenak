@@ -193,8 +193,8 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   divb_amr.target_level = std::min(pmy_mesh_->root_level + refine_levels,
                                    pmy_mesh_->max_level);
   const Real default_bnorm = std::max(static_cast<Real>(1.0),
-      std::abs(divb_amr.guide_b1) + std::abs(divb_amr.guide_b2)
-    + std::abs(divb_amr.guide_b3) + 6.0*std::abs(divb_amr.field_amp));
+      static_cast<Real>(std::abs(divb_amr.guide_b1) + std::abs(divb_amr.guide_b2)
+      + std::abs(divb_amr.guide_b3) + 6.0*std::abs(divb_amr.field_amp)));
   divb_amr.divb_bnorm = pin->GetOrAddReal("problem", "divb_bnorm", default_bnorm);
 
   if (restart) return;

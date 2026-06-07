@@ -123,8 +123,8 @@ class Mesh {
   int root_level; // logical level of root (physical) grid (e.g. Fig. 3 of method paper)
   int max_level;  // logical level of maximum refinement grid in Mesh
 
-  int nprtcl_thisrank;     // number of particles this rank
-  int nprtcl_total;        // total number of particles across all ranks
+  int nprtcl_thisrank;           // number of particles this rank
+  std::uint64_t nprtcl_total;    // total number of particles across all ranks
 
   // following 3x arrays allocated with length [nmb_total] in BuildTreeFromXXXX()
   float *cost_eachmb;            // cost of each MeshBlock

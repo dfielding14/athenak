@@ -540,7 +540,8 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
       const int axis_index = ParseIntToken(token.substr(4), context + " axis index");
       if (axis_index < 0 || axis_index >= MAX_TABLE_AXES) {
         FatalCoolingInput(context + " table '" + path +
-                          "' has invalid axis index; supported axis indices are 0, 1, 2.");
+                          "' has invalid axis index; supported axis indices are "
+                          "0, 1, 2.");
       }
       AxisData axis;
       std::string rest;
@@ -682,7 +683,8 @@ bool UsesCgsTemperatureAxis(const TableData &table) {
 
 bool UsesCgsPowerLaw(const PowerLawData &powerlaw) {
   return powerlaw.enabled &&
-         (powerlaw.axis_units == UnitSystem::cgs || powerlaw.value_units == UnitSystem::cgs);
+         (powerlaw.axis_units == UnitSystem::cgs ||
+          powerlaw.value_units == UnitSystem::cgs);
 }
 
 bool UsesCgsTemperaturePowerLaw(const PowerLawData &powerlaw) {
@@ -994,8 +996,8 @@ GeneralCooling::GeneralCooling(MeshBlockPack *pp, ParameterInput *pin) :
   enabled_ = pin->GetOrAddBoolean("cooling", "enabled", false);
   if (!enabled_) return;
 
-  runtime_.default_units = ParseUnitSystem(pin->GetOrAddString("cooling", "units", "code"),
-                                           "units");
+  runtime_.default_units =
+      ParseUnitSystem(pin->GetOrAddString("cooling", "units", "code"), "units");
   cooling_model_ = ParseCoolingModel(pin->GetOrAddString("cooling", "cooling_model",
                                                          "none"),
                                      "cooling_model");
@@ -1184,14 +1186,20 @@ GeneralCooling::GeneralCooling(MeshBlockPack *pp, ParameterInput *pin) :
   }
   UnitSystem cooling_density_units = runtime_.default_units;
   if (cooling_model_ == ModelKind::ism) cooling_density_units = UnitSystem::cgs;
-  if (cooling_model_ == ModelKind::table) cooling_density_units = cooling_table_.value_units;
-  if (cooling_model_ == ModelKind::cgm) cooling_density_units = cgm_pie_table_.value_units;
+  if (cooling_model_ == ModelKind::table) {
+    cooling_density_units = cooling_table_.value_units;
+  }
+  if (cooling_model_ == ModelKind::cgm) {
+    cooling_density_units = cgm_pie_table_.value_units;
+  }
   if (cooling_model_ == ModelKind::powerlaw ||
       cooling_model_ == ModelKind::piecewise_powerlaw) {
     cooling_density_units = cooling_powerlaw_.value_units;
   }
   UnitSystem heating_density_units = runtime_.default_units;
-  if (heating_model_ == ModelKind::table) heating_density_units = heating_table_.value_units;
+  if (heating_model_ == ModelKind::table) {
+    heating_density_units = heating_table_.value_units;
+  }
   if (heating_model_ == ModelKind::powerlaw ||
       heating_model_ == ModelKind::piecewise_powerlaw) {
     heating_density_units = heating_powerlaw_.value_units;
@@ -1529,7 +1537,8 @@ void GeneralCooling::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eo
   }
 }
 
-int GeneralCooling::AddHistoryLabels(std::string *labels, int start, int max_labels) const {
+int GeneralCooling::AddHistoryLabels(std::string *labels, int start,
+                                     int max_labels) const {
   if (!HistoryEnabled()) return 0;
   int n = 0;
   if (history_gross_) {

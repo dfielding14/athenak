@@ -135,10 +135,31 @@ Use `file_type = prtcl_thermo_history` for append-only path histories:
 file_type = prtcl_thermo_history
 dt        = 0.01
 variables = density, temperature, mach, scalar0
+particle_field_sampling = cic
 ```
 
 If `variables` is omitted, the output uses `<particles>/track_variables`. If that is
 also omitted, it uses `default`.
+
+`particle_field_sampling` controls how requested fields are sampled at each particle:
+
+- `cell` is the default and preserves the original behavior. Each field is read from the
+  active cell containing the particle.
+- `cic` uses multilinear cloud-in-cell interpolation from neighboring cell centers.
+  It is intended for smooth path histories and is exact for a field that is linear over
+  the interpolation stencil.
+
+CIC uses the same weights for Hydro primitives, MHD cell-centered magnetic fields,
+passive scalars, and derived tracer diagnostics. Each diagnostic is first evaluated
+with its normal cell-centered definition and is then interpolated. For example, `bmag`
+is the CIC interpolation of cell-centered `bmag`, not the magnitude of a separately
+interpolated magnetic vector.
+
+Periodic boundaries are handled through the fluid ghost zones, so a stencil crossing
+the domain edge wraps to cells on the opposite side. At a discontinuity, CIC blends
+the cell-centered values on the two sides; use `cell` when exact containing-cell phase
+membership is required. Keep the sampling mode fixed when appending to an existing
+`.thp` file because the binary header records field names but not the sampling mode.
 
 Every record contains the fixed metadata fields followed by the requested variables in
 the exact order stored in the file header:

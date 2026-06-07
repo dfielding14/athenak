@@ -1,0 +1,92 @@
+# Tractable square-pulse comparison for MC and Ito-2 mass-flux tracers
+#
+# This is the closest current AthenaK analogue of the sheet test in Moseley,
+# Teyssier, & Abel (2026), Sec. 3.2.1.  The built-in density-advection problem
+# requires an isothermal EOS, while MC thermodynamic tracers currently require
+# an ideal-gas EOS.  We therefore put the square pulse in tracer density and
+# advect it through a uniform ideal-gas state.
+
+<comment>
+problem = One-dimensional square pulse in tracer density
+
+<job>
+basename = ito_square_pulse
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+# Flux tracers currently require a multidimensional mesh.  The fluid state and
+# particle transport are uniform in x2, so this remains a 1D physics test.
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 4
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = -1
+tlim = 0.125
+ndiag = 20
+
+<hydro>
+eos = ideal
+gamma = 1.4
+reconstruct = dc
+rsolver = hllc
+
+<particles>
+particle_type = lagrangian_ito
+pusher = ito2
+ito_order = 2
+tracer_kick_pdf = uniform
+random_seed = 314159
+
+<tracer_seed1>
+id = 1
+start_time = 0.0
+end_time = 0.0
+cadence = -1.0
+count_per_event = 32768
+weight = mass
+region = slab
+slab_axis = 1
+slab_min = 0.389
+slab_max = 0.392
+seed = 271828
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 0.0
+dens = 1.0
+pgas = 0.01
+vx0 = 1.0
+vy0 = 0.0
+vz0 = 0.0
+along_x1 = true
+along_x2 = false
+along_x3 = false
+
+<output1>
+file_type = prtcl_thermo_history
+dt = 0.125
+variables = density, v1

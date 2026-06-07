@@ -1,14 +1,3 @@
-<!--
-GitHub Pages integration checklist:
-1. Copy this file to docs/source/modules/ito_tracers.md on origin/gh-pages.
-2. Add modules/ito_tracers to the Modules toctree in docs/source/index.md.
-3. Add a row for this page under Physics Modules in docs/source/modules/index.md.
-4. Add a short link from docs/source/modules/particles.md and, optionally,
-   docs/source/modules/outputs.md.
-5. Copy docs/source/modules/figures/ito_tracers_*.png with this page.
-6. Rebuild with: cd docs && make html.
--->
-
 # Module: Second-Moment Itô Mass-Flux Tracers
 
 ## Overview
@@ -36,30 +25,115 @@ C+ = pR + pL
 C- = pR - pL
 ```
 
-The Itô-2 drift and diffusion coefficient are:
+For one finite MC step, the mean displacement and raw second moment are:
 
 ```text
-u     = h C- / dt
-kappa = h^2 (C+ - C-^2) / (2 dt)
+m_i = h_i C-_i
+R_ii = h_i^2 C+_i
+R_ij = 0, i != j
 ```
 
-The cell-centered `u` and `kappa` fields are communicated across MeshBlocks and
-coarse/fine interfaces, then independently interpolated to each particle with
-cloud-in-cell interpolation. Each active coordinate is advanced once per fluid
-timestep with Euler-Maruyama:
+The full finite-step central covariance is
 
-```text
-X(n+1) = X(n) + u dt + sqrt(2 kappa dt) xi
+```{math}
+Q_{ij}=R_{ij}-m_i m_j
+=h_i^2 C_{+,i}\delta_{ij}-h_i h_j C_{-,i}C_{-,j}.
 ```
 
-where each `xi` is an independent bounded uniform draw on
-`[-sqrt(3), +sqrt(3)]`, giving zero mean and unit variance. The random draw is
-deterministic for a fixed tracer tag, cycle, seed, and coordinate direction.
+This includes negative off-diagonal covariance whenever the mean transport has
+more than one nonzero component. AthenaK stores {math}`\mathbf m` and all six
+independent components of {math}`\mathbf Q`. The mean and central covariance are
+communicated across MeshBlocks, restricted linearly, and prolonged
+piecewise-constantly at coarse/fine interfaces. They are CIC-interpolated
+directly to the particle position.
 
-The stored mass flux is accumulated with the weights that contribute to the
-final `rk1`, `rk2`, or `rk3` state, after AMR flux correction. This differs from
-a simple arithmetic average of stage fluxes and is required for the Itô moments
-to match the final finite-volume update.
+This defines the authoritative spatial model: {math}`\mathbf m(\mathbf x)` and
+{math}`\mathbf Q(\mathbf x)` are interpolated stochastic-coefficient fields. It is
+not the covariance of a mixture of neighboring cell kernels. In particular,
+restriction averages child covariances without adding variance from differences
+among child means. That choice avoids turning a resolved drift gradient into
+stochastic diffusion, but it also means AMR transfer should not be described as
+preserving every moment of the unresolved mixture. A static coarse/fine
+uniform-flow regression measures the conditional moments on both levels;
+nonuniform AMR convergence remains a separate validation requirement.
+
+AthenaK then computes a pivoted positive-semidefinite factor {math}`\mathbf L`
+satisfying {math}`\mathbf Q=\mathbf L\mathbf L^{\mathsf T}`.
+
+Each particle is advanced once per fluid timestep:
+
+```{math}
+\mathbf X^{n+1}=\mathbf X^n+\mathbf m+\mathbf L\boldsymbol{\xi},
+```
+
+where the components of {math}`\boldsymbol{\xi}` are independent bounded uniform
+draws on `[-sqrt(3), +sqrt(3)]`. The random vector is deterministic for a fixed
+64-bit tracer tag, cycle, and seed.
+
+The sum of all outgoing MC probabilities must not exceed one. Invalid current
+steps fail closed. From the first cycle, the fluid timestep is guarded by
+`ito_probability_target / active_dimensions` times the directional fluid
+stability timestep; the default target is `0.99`. This is an initial guard, not
+a universal multidimensional stability proof, because a divergent cell can
+have outward flux through both faces of a coordinate. The measured outgoing
+probability can tighten the following step further. Production-like flows must
+qualify their CFL through the full intended duration.
+
+### Runge-Kutta flux semantics
+
+The tracer target is the final finite-volume mass transfer over one complete
+fluid timestep. For a face flux {math}`F_f^{(s)}` at RK stage {math}`s`,
+AthenaK stores
+
+```{math}
+A_f = \Delta t \sum_s w_s F_f^{(s)},
+```
+
+where {math}`w_s` is the contribution of that stage to the final `rk1`, `rk2`, or
+`rk3` state. The accumulation happens after AMR flux correction. Jump
+probabilities, drift, and covariance are all derived from the signed net
+transfer {math}`A_f`.
+
+RK stages are not composed as separate physical tracer substeps. In particular,
+if stage fluxes reverse and satisfy {math}`\sum_s w_sF_f^{(s)}=0`, the final gas
+update transfers no mass across that face and the tracer kernel assigns no
+transport or diffusion to it. Summing positive outward probabilities from the
+individual stages would create spurious tracer exchange despite a cancelling
+finite-volume update.
+
+### Mass-changing source terms
+
+Flux tracers currently represent redistribution of existing gas mass by face
+fluxes. They do not implement tracer creation, destruction, or weight changes
+for a source term that changes density. AthenaK therefore rejects MC and Itô
+flux tracers at startup when such a source is declared.
+
+The built-in fluid source terms currently conserve mass and require no input
+change. A future source integrated through `<hydro_srcterms>` or
+`<mhd_srcterms>` must set
+
+```ini
+changes_mass = true
+```
+
+if it modifies `IDN`. A problem-generator source selected with
+`<problem>/user_srcs = true` is treated as mass-changing by default. It may use
+
+```ini
+user_srcs_changes_mass = false
+```
+
+only when the source is known not to modify mass density.
+
+Density floors have the same bookkeeping problem when they are actually
+applied: they raise conserved gas density without creating tracers or adjusting
+tracer weights. Configured `hydro/dfloor`, `mhd/dfloor`, and `mhd/sigma_max`
+values are allowed when they remain inactive. If an EOS density floor or the
+MHD magnetization ceiling enforces
+{math}`\rho \ge B^2/\sigma_{\max}`, AthenaK exits before the next flux-tracer
+update.
+Runs that activate these floors require a tracer-aware mass-injection model,
+which is not implemented.
 
 ## Behavior in 1D and 2D Tests
 
@@ -182,6 +256,7 @@ pusher          = ito2
 ito_order       = 2
 tracer_kick_pdf = uniform
 random_seed     = 12345
+ito_probability_target = 0.99
 track_variables = density, pressure, temperature, v1
 
 <tracer_seed1>
@@ -210,10 +285,11 @@ Run the uniform-flow example:
 | Dimensions | 2D and 3D particle configurations |
 | Time integrators | Dynamic `rk1`, `rk2`, and `rk3` |
 | Mesh | Uniform and AMR |
-| Parallelism | Serial and MPI; Kokkos device kernels |
+| Parallelism | Serial and MPI tested on CPU; CUDA/HIP runtime unverified |
 | Boundaries | Periodic in every active dimension |
-| Persistence | Restart, particle VTK, and thermodynamic history output |
+| Persistence | Restart, particle VTK, and thermodynamic history output; tracked-particle output unsupported |
 | Seeding | Shared MC tracer seed schedules and field masks |
+| MeshBlock packs | Exactly one MeshBlockPack per rank |
 
 The tracer uses one particle step per fluid timestep. To remain compatible with
 the existing particle migration path, a realized displacement that spans more
@@ -225,34 +301,44 @@ AthenaK exits with a fatal error when:
 
 - the final mass-flux probabilities are non-finite, have negative variance, or
   have total outward probability greater than one;
-- interpolated drift, diffusion, or displacement is invalid;
+- interpolated mean/covariance, covariance factorization, or displacement is invalid;
 - a particle would move farther than the existing one-neighbor MeshBlock
   migration path can represent;
+- a configured fluid or user source declares that it changes mass density;
+- a Hydro/MHD density floor or MHD magnetization ceiling has injected untraced
+  mass since the preceding flux-tracer update;
 - an unsupported integrator, boundary condition, relativistic coordinate
   system, kick distribution, or Itô order is requested.
 
 The regression suite checks:
 
-- the drift and variance of uniform advection against the analytical MC moments;
+- 2D and 3D means and the full finite-step covariance against the analytical MC
+  kernel, including mixed-sign and rank-deficient cases;
 - both RK2 and RK3 final-stage flux weighting;
 - isothermal Hydro and ideal-gas MHD;
+- exact 64-bit tag persistence through serial restart and MPI migration;
+- exact upper-periodic-boundary wrapping and restart;
 - serial restart and explicit Itô-3 rejection;
-- MPI migration and restart, AMR coefficient exchange, and preservation of
-  continuous subcell positions.
+- MPI migration and restart, AMR central-moment exchange, and preservation of
+  continuous subcell positions;
+- static-AMR conditional mean and covariance on both coarse and fine levels;
+- single-precision covariance, tag, and square-pulse cases; and
+- the expected Ito-2 versus MC PDF-shape difference in a square-pulse test.
 
 ## Validation
 
-Validation on June 5, 2026 passed serial and MPI release builds, the repository
-style gate, the thermodynamic-history reader test, the two CPU Itô regression
-tests, and the two-rank MPI/AMR regression test. Additional smoke runs passed for
-serial and MPI AMR restart, ideal-gas MHD, 3D RK3 transport, explicit Itô-3
-rejection, and the pre-existing MC tracer Hydro and MPI/AMR inputs.
+Validation on June 7, 2026 passed serial, MPI, and single-precision release
+builds; the repository style gate; 2D and 3D covariance statistics; 64-bit tag,
+restart, exact-boundary, source-policy, CIC-history, AMR-realizability, and
+square-pulse tests; two-rank MPI migration and AMR tests; and the cooling CPU
+and MPI suites. CUDA/HIP runtime validation and publication to the live
+`gh-pages` branch remain separate release tasks.
 
 ## Source Location
 
 | Path | Role |
 | --- | --- |
-| `src/particles/particles_lagrangian_ito.cpp` | Itô-2 coefficients, AMR communication, CIC interpolation, and Euler-Maruyama push. |
+| `src/particles/particles_lagrangian_ito.cpp` | Mean and full finite-step covariance, AMR communication, CIC interpolation, and particle push. |
 | `src/particles/particles_lagrangian_mc.cpp` | Shared seeding, restart, and post-AMR remapping. |
 | `src/hydro/hydro_fluxes.cpp`, `src/mhd/mhd_fluxes.cpp` | Final-RK-weighted mass-flux accumulation. |
 | `inputs/particles/ito_tracers*.athinput` | Uniform-flow, AMR, and 2D thermal-instability inputs. |

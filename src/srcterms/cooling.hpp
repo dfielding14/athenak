@@ -27,7 +27,9 @@ enum class DensityKind { mass_density, number_density, hydrogen_number_density }
 enum class AxisKind { temperature, density, scalar };
 enum class ValueScale { linear, log10 };
 enum class BoundsBehavior { zero, clamp, fatal };
-enum class ModelKind { none, constant, ism, cgm, table, powerlaw, piecewise_powerlaw, user };
+enum class ModelKind {
+  none, constant, ism, cgm, table, powerlaw, piecewise_powerlaw, user
+};
 enum class TableValueKind { lambda, gamma, modifier };
 
 struct CompositionData {

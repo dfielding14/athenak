@@ -1,0 +1,218 @@
+{
+  "comparison": {
+    "delta_column_log10_ratio_std": -0.00035226072336319234,
+    "delta_column_normalized_l1": -0.00047528636970387006,
+    "delta_column_normalized_l2": -0.000616964987580966,
+    "delta_column_pearson_r": 0.0001510197930458812,
+    "delta_fit_intercept": 0.004751407386484989,
+    "delta_fit_slope": -0.004751407386482165,
+    "delta_log10_ratio_mean": 0.0025703044728055875,
+    "delta_log10_ratio_median": 0.0012046006874787871,
+    "delta_log10_ratio_p05": 0.007591607949379825,
+    "delta_log10_ratio_p95": 0.002965130411389516,
+    "delta_log10_ratio_std": -0.002682903680150006,
+    "delta_normalized_l1": -0.0011102763244957847,
+    "delta_normalized_l2": 0.0017479000108460707,
+    "delta_pearson_r": -0.0002490990585810593,
+    "delta_pearson_r2": -0.0004862628298097915,
+    "delta_r2_fit": -0.00048626282979591373,
+    "delta_r2_one_to_one": -0.0011459955422350454,
+    "delta_spectrum_relative_l1_large": -0.007871836452223297,
+    "delta_spectrum_relative_l1_mid": 0.008782255381627913,
+    "delta_spectrum_relative_l1_small": 0.00919131365889736,
+    "delta_zero_tracer_fraction": -3.814697265625e-05,
+    "gas_max_abs": 0.0,
+    "gas_relative_l2": 0.0,
+    "ratio_pdf_js_divergence_bits": 0.0001699195554029358,
+    "tracer_old_corrected_l1": 0.1389456737462894,
+    "tracer_old_corrected_l2": 0.1983087842863908
+  },
+  "corrected": {
+    "metrics": {
+      "column_log10_ratio_std": 0.019191532232526027,
+      "column_normalized_l1": 0.034906589522253034,
+      "column_normalized_l2": 0.04852848617400141,
+      "column_pearson_r": 0.9945333699147698,
+      "fit_intercept": 0.06296874865147126,
+      "fit_slope": 0.9370312513485312,
+      "log10_ratio_mean": 3.845127142543919e-05,
+      "log10_ratio_median": 0.0040313541147644055,
+      "log10_ratio_p05": -0.18357629166014772,
+      "log10_ratio_p95": 0.17802176957040866,
+      "log10_ratio_std": 0.11991858952328742,
+      "normalized_l1": 0.1488170928665108,
+      "normalized_l2": 0.27548864852661975,
+      "pearson_r": 0.975918540676827,
+      "pearson_r2": 0.9524169980367877,
+      "r2_fit": 0.9524169980367988,
+      "r2_one_to_one": 0.9481160013052139,
+      "spectrum_relative_l1_large": 0.028717549902306166,
+      "spectrum_relative_l1_mid": 0.11812736591729323,
+      "spectrum_relative_l1_small": 0.4737168453014629,
+      "zero_tracer_fraction": 1.9073486328125e-05
+    },
+    "runtime": {
+      "child_max_rss": null,
+      "child_max_rss_note": "Not reported: RUSAGE_CHILDREN peak RSS is cumulative across prior children and cannot be attributed to one paired lane.",
+      "child_system_seconds": 3.7834770000000004,
+      "child_user_seconds": 378.57935399999997,
+      "command": [
+        "mpirun",
+        "-np",
+        "8",
+        "/private/tmp/ito-remediation-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/fbfb/athenak-DF/inputs/particles/ito_tracers_turbulence_production.athinput",
+        "-d",
+        "/private/tmp/ito-turbulence-final-production-tip/corrected",
+        "time/cfl_number=0.324"
+      ],
+      "command_shell": "mpirun -np 8 /private/tmp/ito-remediation-mpi/src/athena -i /Users/dbf75/.codex/worktrees/fbfb/athenak-DF/inputs/particles/ito_tracers_turbulence_production.athinput -d /private/tmp/ito-turbulence-final-production-tip/corrected time/cfl_number=0.324",
+      "elapsed_seconds": 48.33250274998136,
+      "end_utc": "2026-06-07T17:36:14.490083+00:00",
+      "environment": {},
+      "executable": {
+        "configuration": "This Athena++ executable is configured with:\n  Problem generator:          built_in_pgens\n  Floating-point precision:   double\n  MPI parallelism:            ON\n  OpenMP parallelism:         OFF\n",
+        "configuration_return_code": 0,
+        "mtime_ns": 1780853623011162523,
+        "path": "/private/tmp/ito-remediation-mpi/src/athena",
+        "sha256": "7554d0a6b4f36a4724122186c97766a9d92204c02da14ed037ae3d9e7c13b2f5",
+        "size_bytes": 8477624
+      },
+      "failure_text": null,
+      "host": {
+        "cpu_count": 16,
+        "hostname": "Tin-Drum",
+        "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+        "python": "3.13.13 (main, Apr  7 2026, 18:19:01) [Clang 21.0.0 (clang-2100.0.123.102)]"
+      },
+      "input": {
+        "path": "/Users/dbf75/.codex/worktrees/fbfb/athenak-DF/inputs/particles/ito_tracers_turbulence_production.athinput",
+        "sha256": "16ed24ef075912d508f226f27898ae180717fa6b195dd8839caae73157924f3a"
+      },
+      "label": "corrected",
+      "launcher": "mpirun -np 8",
+      "log": "/private/tmp/ito-turbulence-final-production-tip/corrected/athena.log",
+      "overrides": [
+        "time/cfl_number=0.324"
+      ],
+      "repo": {
+        "branch": "feature/ito_tracers",
+        "describe": "v1.0-616-ge26bf0ec4-dirty",
+        "head": "e26bf0ec4724a9204bb74e8efcf4d0b8f2dfcd16",
+        "root": "/Users/dbf75/.codex/worktrees/fbfb/athenak-DF"
+      },
+      "return_code": 0,
+      "start_utc": "2026-06-07T17:35:26.157880+00:00",
+      "status": "passed"
+    },
+    "snapshot": {
+      "cycle": 634,
+      "deposition": "cic",
+      "gas_file": "/private/tmp/ito-turbulence-final-production-tip/corrected/bin/ito_turbulence_production.gas.00004.bin",
+      "particle_count": 4194304.0,
+      "particle_vtk_file": "/private/tmp/ito-turbulence-final-production-tip/corrected/pvtk/ito_turbulence_production.particles.00001.part.vtk",
+      "shape": [
+        64,
+        64,
+        64
+      ],
+      "time": 0.2,
+      "tracer_ngp_file": "/private/tmp/ito-turbulence-final-production-tip/corrected/bin/ito_turbulence_production.tracer_ngp.00004.bin"
+    }
+  },
+  "old": {
+    "metrics": {
+      "column_log10_ratio_std": 0.01954379295588922,
+      "column_normalized_l1": 0.035381875891956904,
+      "column_normalized_l2": 0.04914545116158238,
+      "column_pearson_r": 0.9943823501217239,
+      "fit_intercept": 0.05821734126498627,
+      "fit_slope": 0.9417826587350133,
+      "log10_ratio_mean": -0.0025318532013801484,
+      "log10_ratio_median": 0.0028267534272856183,
+      "log10_ratio_p05": -0.19116789960952754,
+      "log10_ratio_p95": 0.17505663915901915,
+      "log10_ratio_std": 0.12260149320343743,
+      "normalized_l1": 0.14992736919100658,
+      "normalized_l2": 0.2737407485157737,
+      "pearson_r": 0.9761676397354081,
+      "pearson_r2": 0.9529032608665975,
+      "r2_fit": 0.9529032608665947,
+      "r2_one_to_one": 0.9492619968474489,
+      "spectrum_relative_l1_large": 0.03658938635452946,
+      "spectrum_relative_l1_mid": 0.10934511053566531,
+      "spectrum_relative_l1_small": 0.46452553164256555,
+      "zero_tracer_fraction": 5.7220458984375e-05
+    },
+    "runtime": {
+      "child_max_rss": null,
+      "child_max_rss_note": "Not reported: RUSAGE_CHILDREN peak RSS is cumulative across prior children and cannot be attributed to one paired lane.",
+      "child_system_seconds": 3.474164,
+      "child_user_seconds": 192.479866,
+      "command": [
+        "mpirun",
+        "-np",
+        "8",
+        "/private/tmp/athenak-ito-old-mpi-build/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/fbfb/athenak-DF/inputs/particles/ito_tracers_turbulence_production.athinput",
+        "-d",
+        "/private/tmp/ito-turbulence-final-production-tip/old",
+        "time/cfl_number=0.324"
+      ],
+      "command_shell": "mpirun -np 8 /private/tmp/athenak-ito-old-mpi-build/src/athena -i /Users/dbf75/.codex/worktrees/fbfb/athenak-DF/inputs/particles/ito_tracers_turbulence_production.athinput -d /private/tmp/ito-turbulence-final-production-tip/old time/cfl_number=0.324",
+      "elapsed_seconds": 24.869150416983757,
+      "end_utc": "2026-06-07T17:35:25.815894+00:00",
+      "environment": {},
+      "executable": {
+        "configuration": "This Athena++ executable is configured with:\n  Problem generator:          built_in_pgens\n  Floating-point precision:   double\n  MPI parallelism:            ON\n  OpenMP parallelism:         OFF\n",
+        "configuration_return_code": 0,
+        "mtime_ns": 1780852403490333221,
+        "path": "/private/tmp/athenak-ito-old-mpi-build/src/athena",
+        "sha256": "f953fc80fc1c70275dd634aeb2e672f1c4bd881caef272426fd5472763cf3416",
+        "size_bytes": 8374040
+      },
+      "failure_text": null,
+      "host": {
+        "cpu_count": 16,
+        "hostname": "Tin-Drum",
+        "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+        "python": "3.13.13 (main, Apr  7 2026, 18:19:01) [Clang 21.0.0 (clang-2100.0.123.102)]"
+      },
+      "input": {
+        "path": "/Users/dbf75/.codex/worktrees/fbfb/athenak-DF/inputs/particles/ito_tracers_turbulence_production.athinput",
+        "sha256": "16ed24ef075912d508f226f27898ae180717fa6b195dd8839caae73157924f3a"
+      },
+      "label": "old",
+      "launcher": "mpirun -np 8",
+      "log": "/private/tmp/ito-turbulence-final-production-tip/old/athena.log",
+      "overrides": [
+        "time/cfl_number=0.324"
+      ],
+      "repo": {
+        "branch": "feature/ito_tracers",
+        "describe": "v1.0-616-ge26bf0ec4-dirty",
+        "head": "e26bf0ec4724a9204bb74e8efcf4d0b8f2dfcd16",
+        "root": "/Users/dbf75/.codex/worktrees/fbfb/athenak-DF"
+      },
+      "return_code": 0,
+      "start_utc": "2026-06-07T17:35:00.946649+00:00",
+      "status": "passed"
+    },
+    "snapshot": {
+      "cycle": 634,
+      "deposition": "cic",
+      "gas_file": "/private/tmp/ito-turbulence-final-production-tip/old/bin/ito_turbulence_production.gas.00004.bin",
+      "particle_count": 4194304.0,
+      "particle_vtk_file": "/private/tmp/ito-turbulence-final-production-tip/old/pvtk/ito_turbulence_production.particles.00001.part.vtk",
+      "shape": [
+        64,
+        64,
+        64
+      ],
+      "time": 0.2,
+      "tracer_ngp_file": "/private/tmp/ito-turbulence-final-production-tip/old/bin/ito_turbulence_production.tracer_ngp.00004.bin"
+    }
+  }
+}

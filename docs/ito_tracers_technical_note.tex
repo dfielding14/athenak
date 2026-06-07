@@ -35,7 +35,7 @@
 \title{\textbf{Second-Moment \Ito{} Mass-Flux Tracers in \AthenaK{}}\\
 \large Implementation Decisions, Validation, and Thermodynamic Tracing}
 \author{Technical note for \texttt{feature/ito\_tracers}}
-\date{Implementation baseline: commit \texttt{ab2c03880}, June 5, 2026}
+\date{Corrected implementation: \texttt{feature/ito\_tracers}, June 7, 2026}
 
 \begin{document}
 \maketitle
@@ -44,19 +44,21 @@
 The goal was to add the second-order \Ito{} tracer method to \AthenaK{} as a
 continuous-path alternative to the existing Monte Carlo mass-flux tracers,
 while explicitly excluding the third-order method. The implementation derives
-cell-centered drift and diffusion coefficients from the same final
-Runge--Kutta-weighted mass fluxes used by the Monte Carlo tracer, communicates
-those coefficients across MeshBlocks and refinement boundaries, interpolates
-them to each particle, and advances particles with an Euler--Maruyama step.
+cell-centered mean displacements and central covariance tensors from the same
+final Runge--Kutta-weighted mass fluxes used by the Monte Carlo tracer,
+communicates those quantities across MeshBlocks and refinement boundaries,
+interpolates them to each particle, and advances particles with a correlated
+stochastic step.
 
 The evidence supports a precise conclusion: the implemented \Ito{}-2 particles
-match the Monte Carlo tracer's per-coordinate displacement mean and variance in
-controlled transport tests, preserve continuous subcell positions through
-two-dimensional and AMR motion, and provide useful mass-weighted temperature
-histories in a two-phase thermal-instability calculation. The evidence does
-not establish a third-order method, a converged thermal-fragmentation solution,
-or support outside the explicitly validated non-relativistic, periodic,
-two- and three-dimensional configurations.
+match the full first and central second displacement moments of the finite-step
+Monte Carlo kernel in controlled two- and three-dimensional tests, preserve
+continuous subcell positions through AMR motion, and provide useful
+mass-weighted temperature histories in a two-phase thermal-instability
+calculation. The evidence does not establish a third-order method, the full
+Monte Carlo probability distribution, a converged thermal-fragmentation
+solution, or support outside the explicitly validated non-relativistic,
+periodic, two- and three-dimensional configurations.
 \end{abstract}
 
 \section{What We Were Trying to Accomplish}
@@ -76,18 +78,17 @@ The requested feature was therefore narrow:
   \item implement only the second-order \Ito{} method from the method described
         by Moseley, Teyssier, and Abel
         (\href{https://arxiv.org/abs/2604.23041}{arXiv:2604.23041v2});
-  \item preserve the Monte Carlo process's first two per-coordinate
-        displacement moments while producing continuous particle paths; and
+  \item preserve the Monte Carlo process's vector mean and full finite-step
+        covariance while producing continuous particle paths; and
   \item verify that the particles can record meaningful thermodynamic
         histories in a coupled cooling problem.
 \end{enumerate}
 
 \section{The Simple Picture}
 
-For one cell and one coordinate direction, the Monte Carlo tracer has three
-possible outcomes over a fluid timestep: jump left, stay, or jump right. The
+For one cell, the Monte Carlo tracer chooses one face jump or stays put. The
 \Ito{}-2 tracer replaces that discrete draw with a continuous random
-displacement chosen to have the same mean and variance.
+displacement chosen to have the same vector mean and covariance.
 
 If \(p_R\) and \(p_L\) are the outward Monte Carlo jump probabilities, define
 \begin{equation}
@@ -95,21 +96,26 @@ If \(p_R\) and \(p_L\) are the outward Monte Carlo jump probabilities, define
   \qquad
   C_- = p_R - p_L .
 \end{equation}
-For cell width \(h\) and timestep \(\Delta t\), the implemented drift and
-diffusion coefficients are
+For cell width \(h_i\), the finite-step mean and raw second moment are
 \begin{equation}
-  u = \frac{h C_-}{\Delta t},
+  m_i=h_iC_{-,i},
   \qquad
-  \kappa = \frac{h^2\left(C_+ - C_-^2\right)}{2\Delta t}.
+  R_{ij}=h_i^2C_{+,i}\delta_{ij}.
 \end{equation}
-The particle then advances as
+The central covariance is
 \begin{equation}
-  X^{n+1} = X^n + u\Delta t
-    + \sqrt{2\kappa\Delta t}\,\xi ,
+  Q_{ij}=R_{ij}-m_i m_j
+  =h_i^2C_{+,i}\delta_{ij}-h_i h_jC_{-,i}C_{-,j}.
 \end{equation}
-where \(\xi\) is a bounded uniform random variable with zero mean and unit
-variance. In the implementation, independent draws are used in each active
-coordinate direction.
+Thus the off-diagonal covariance is generally nonzero even though the raw MC
+cross moment vanishes. AthenaK factors
+\(\mathbf Q=\mathbf L\mathbf L^{\mathsf T}\) and advances
+\begin{equation}
+  \mathbf X^{n+1}=\mathbf X^n+\mathbf m+\mathbf L\boldsymbol{\xi},
+\end{equation}
+where the components of \(\boldsymbol{\xi}\) are independent bounded uniform
+variables with zero mean and unit variance. The resulting physical coordinate
+kicks are correlated by \(\mathbf L\).
 
 This is the part that matters: the particles still take their transport
 statistics from the finite-volume mass flux, but they no longer have to sit on
@@ -137,7 +143,7 @@ Use ordinary velocity-following passive particles
 & Rejected. \\
 \addlinespace
 Build \Ito{}-2 on the Monte Carlo infrastructure
-& Continuous paths with the same per-coordinate mean and variance as the
+& Continuous paths with the same vector mean and finite-step covariance as the
   mass-flux jump kernel; reuses established particle infrastructure.
 & Requires new coefficient fields, MeshBlock/AMR communication, and
   inherits limits of the existing migration path.
@@ -171,15 +177,19 @@ system rather than implemented as a separate particle subsystem.
         to the final RK1, RK2, or RK3 state. A simple arithmetic average of
         stage fluxes would not represent the final finite-volume update.
   \item After the fluid integrator, each cell converts its outward mass-flux
-        probabilities into \(u\) and \(\kappa\). Invalid probabilities,
-        negative variance beyond tolerance, and non-finite values terminate
-        the run.
-  \item The coefficient fields are restricted, communicated, and prolonged
-        across MeshBlocks and AMR boundaries.
-  \item Cloud-in-cell interpolation evaluates \(u\) and \(\kappa\) at each
-        particle position.
+        probabilities into the finite-step mean \(\mathbf m\) and central
+        covariance \(\mathbf Q\). Invalid probabilities, non-positive-
+        semidefinite covariance beyond tolerance, and non-finite values
+        terminate the run.
+  \item The mean and central-covariance fields are restricted, communicated,
+        and prolonged across MeshBlocks and AMR boundaries.
+  \item Cloud-in-cell interpolation evaluates \(\mathbf m\) and \(\mathbf Q\)
+        directly at each particle position.
+  \item A pivoted semidefinite factorization computes
+        \(\mathbf Q=\mathbf L\mathbf L^{\mathsf T}\).
   \item A deterministic hash of tracer tag, cycle, random seed, and coordinate
-        produces the bounded uniform kicks for the Euler--Maruyama update.
+        produces the bounded uniform vector used in
+        \(\Delta\mathbf X=\mathbf m+\mathbf L\boldsymbol{\xi}\).
   \item The existing mass-tracer seeding, migration, restart, VTK output, and
         thermodynamic-history paths handle the resulting particles.
 \end{enumerate}
@@ -323,11 +333,10 @@ Restart and invalid requests
   combinations are explicitly rejected.
 & \status{Passed} \\
 \addlinespace
-MHD, MPI, and AMR
-& Core \Ito{} validation includes MHD thermodynamic fields and a two-rank
-  MPI/AMR migration and restart regression that checks continuous subcell
-  positions.
-& \status{Passed for core implementation} \\
+Full covariance and precision
+& Two- and three-dimensional covariance tests include mixed signs,
+  rank-deficient tensors, near-limit probabilities, and single precision.
+& \status{Passed} \\
 \addlinespace
 Merged cooling and perturbation integration
 & Combined serial build and 43 focused \Ito{}, cooling, and initial-perturbation
@@ -339,14 +348,22 @@ Thermal-instability experiment
   phase temperatures consistent with stable equilibria.
 & \status{Passed} \\
 \addlinespace
-Merged-feature MPI integration
-& No additional MPI run was performed after merging cooling and initial
-  perturbations into the \Ito{} branch.
-& \status{Not tested} \\
+MPI, AMR, restart, and boundaries
+& Two- and four-rank decomposition checks, exact MPI/AMR restart equivalence,
+  conditional coarse/fine moments, and exact upper-face/corner wrapping.
+& \status{Passed} \\
+\addlinespace
+Old-versus-corrected turbulence
+& Three \(32^3\) paired seeds and one \(64^3\), 4,194,304-particle pair at
+  empirically qualified CFL \(0.324\). Gas density is bit-identical.
+& \status{Passed; modest scale-dependent changes} \\
+\addlinespace
+GPU runtime
+& CUDA/HIP execution was not available in this validation environment.
+& \status{Not tested; no support claim} \\
 \bottomrule
 \end{tabularx}
-\caption{Verification status. The distinction between core \Ito{} MPI
-validation and the later merged-feature serial validation is intentional.}
+\caption{Verification status for the corrected implementation.}
 \end{table}
 
 The fail-closed checks are part of the implementation, not just the tests.
@@ -361,8 +378,8 @@ an active direction.
 \begin{itemize}
   \item \Ito{}-2 is integrated with the existing Monte Carlo mass-tracer
         infrastructure and final finite-volume mass fluxes.
-  \item Controlled tests support the intended per-coordinate first- and
-        second-moment matching and continuous-path behavior.
+  \item Controlled tests support full finite-step vector-mean and covariance
+        matching in two and three dimensions, plus continuous-path behavior.
   \item The particles can record interpretable mass-weighted thermodynamic
         histories in a coupled two-phase cooling calculation.
 \end{itemize}
@@ -370,13 +387,22 @@ an active direction.
 \textbf{What remains uncertain or explicitly unsupported.}
 \begin{itemize}
   \item No \Ito{}-3 or third-moment method is implemented or validated.
-  \item Independent coordinate kicks do not claim to reproduce the full joint
-        discrete jump distribution or all higher moments.
+  \item Correlated second-moment kicks do not reproduce the full discrete jump
+        distribution or all higher moments; \Ito{}-3 remains unimplemented.
   \item Current support is limited to non-relativistic Cartesian Hydro/MHD,
         periodic active boundaries, dynamic RK1--RK3 evolution, and 2D/3D
         particle meshes.
   \item The existing particle migration path limits a realized displacement to
         less than one MeshBlock per coordinate per fluid timestep.
+  \item The initial \(p_{\rm target}/d\) timestep guard is not a proof for
+        arbitrary divergent flow. Production-like cases require a
+        full-duration CFL qualification and still fail closed if the realized
+        outgoing probability exceeds one.
+  \item AMR transfers \(\mathbf m\) and \(\mathbf Q\) as interpolated
+        stochastic coefficient fields. It does not add the between-child
+        variance required for the covariance of an unresolved mixture of child
+        kernels.
+  \item CUDA/HIP runtime behavior was not tested.
   \item The thermal-instability experiment omits conduction, so the Field
         length is unresolved. Interface thickness, small condensations, and
         phase fractions are resolution-, seed-, domain-, and runtime-dependent.

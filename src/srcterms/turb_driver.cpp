@@ -275,15 +275,13 @@ void TurbulenceDriver::Initialize() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn  void IncludeModeEvolutionTasks
-//  \brief Includes task in the operator split task list that constructs new modes with
-//  random amplitudes and phases that can be used to evolve the force via an O-U process
+//! \fn  void IncludeInitializeModesTask
+//  \brief Constructs one random O-U innovation field before each full timestep
 //  Called by MeshBlockPack::AddPhysics() function
 
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
-  auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, start);
-  auto id_add = tl->AddTask(&TurbulenceDriver::AddForcing, this, id_init);
+  tl->AddTask(&TurbulenceDriver::InitializeModes, this, start);
   return;
 }
 
@@ -294,19 +292,22 @@ void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
 //  Called by MeshBlockPack::AddPhysics() function
 
 void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start) {
-  // These must be inserted after update task, but before send_u
+  // Insert forcing after the conserved-variable RK update and before other sources.
   if (pmy_pack->pionn == nullptr) {
     if (pmy_pack->phydro != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->phydro->id.flux, pmy_pack->phydro->id.rkupdt);
+      tl->InsertTask(&TurbulenceDriver::AddForcing, this,
+                     pmy_pack->phydro->id.rkupdt,
+                     pmy_pack->phydro->id.srctrms);
     }
     if (pmy_pack->pmhd != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->pmhd->id.flux, pmy_pack->pmhd->id.rkupdt);
+      tl->InsertTask(&TurbulenceDriver::AddForcing, this,
+                     pmy_pack->pmhd->id.rkupdt,
+                     pmy_pack->pmhd->id.srctrms);
     }
   } else {
-    auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                            pmy_pack->pionn->id.n_flux, pmy_pack->pionn->id.n_rkupdt);
+    tl->InsertTask(&TurbulenceDriver::AddForcing, this,
+                   pmy_pack->pionn->id.n_rkupdt,
+                   pmy_pack->pionn->id.n_srctrms);
   }
 
   return;
@@ -314,7 +315,7 @@ void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskI
 
 //----------------------------------------------------------------------------------------
 //! \fn InitializeModes()
-// \brief Initializes driving, and so is only executed once at start of calc.
+// \brief Constructs the random innovation field once per full timestep.
 // Cannot be included in constructor since (it seems) Kokkos::par_for not allowed in cons.
 
 TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
@@ -739,7 +740,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 #if MPI_PARALLEL_ENABLED
   Real m[4], gm[4];
   m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-  MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(m, gm, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
   t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
 #endif
 
@@ -782,12 +783,12 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
 #if MPI_PARALLEL_ENABLED
   m[0] = t0; m[1] = t1;
-  MPI_Allreduce(m, gm, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(m, gm, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
   t0 = gm[0]; t1 = gm[1];
 #endif
 
-  t0 = std::max(t0, 1.0e-20);
-  t1 = std::max(t1, 1.0e-20);
+  t0 = std::max(t0, static_cast<Real>(1.0e-20));
+  t1 = std::max(t1, static_cast<Real>(1.0e-20));
 
   Real m0 = t0, m1 = t1;
   Real dt = pm->dt;
@@ -814,7 +815,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn apply forcing
+//! \fn AddForcing()
+// \brief Evolves the O-U force once and applies the beta-weighted RK source increment.
 
 TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   Mesh *pm = pmy_pack->pmesh;
@@ -827,13 +829,14 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
 
-  Real dt = pm->dt;
+  const Real full_dt = pm->dt;
+  const Real beta_dt = pdrive->beta[stage-1]*full_dt;
   Real fcorr, gcorr;
   if (tcorr <= 1e-6) {  // use whitenoise
     fcorr = 0.0;
     gcorr = 1.0;
   } else {
-    fcorr = std::exp(-dt/tcorr);
+    fcorr = std::exp(-full_dt/tcorr);
     gcorr = std::sqrt(1.0 - fcorr*fcorr);
   }
 
@@ -863,12 +866,18 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   auto force_ = force;
   auto force_tmp_ = force_tmp;
 
-  par_for("force_OU_process",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    force_(m,0,k,j,i) = fcorr*force_(m,0,k,j,i) + gcorr*force_tmp_(m,0,k,j,i);
-    force_(m,1,k,j,i) = fcorr*force_(m,1,k,j,i) + gcorr*force_tmp_(m,1,k,j,i);
-    force_(m,2,k,j,i) = fcorr*force_(m,2,k,j,i) + gcorr*force_tmp_(m,2,k,j,i);
-  });
+  // The O-U process advances once per full timestep. The resulting force is held
+  // fixed while the explicit RK stages apply their source increments.
+  if (stage == 1) {
+    par_for("force_OU_process",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      force_(m,0,k,j,i) = fcorr*force_(m,0,k,j,i) + gcorr*force_tmp_(m,0,k,j,i);
+      force_(m,1,k,j,i) = fcorr*force_(m,1,k,j,i) + gcorr*force_tmp_(m,1,k,j,i);
+      force_(m,2,k,j,i) = fcorr*force_(m,2,k,j,i) + gcorr*force_tmp_(m,2,k,j,i);
+    });
+  }
+
+  if (beta_dt == 0.0) return TaskStatus::complete;
 
   par_for("push",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -889,17 +898,17 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
 
       Real Fv = (v1*ux + v2*uy + v3*uz)/ut;
 
-      u0(m,IEN,k,j,i) += Fv*den*dt;
+      u0(m,IEN,k,j,i) += Fv*den*beta_dt;
     }
-    u0(m,IM1,k,j,i) += den*v1*dt;
-    u0(m,IM2,k,j,i) += den*v2*dt;
-    u0(m,IM3,k,j,i) += den*v3*dt;
+    u0(m,IM1,k,j,i) += den*v1*beta_dt;
+    u0(m,IM2,k,j,i) += den*v2*beta_dt;
+    u0(m,IM3,k,j,i) += den*v3*beta_dt;
 
     if (flag_twofl) {
       den = u0_(m,IDN,k,j,i);
-      u0_(m,IM1,k,j,i) += den*v1*dt;
-      u0_(m,IM2,k,j,i) += den*v2*dt;
-      u0_(m,IM3,k,j,i) += den*v3*dt;
+      u0_(m,IM1,k,j,i) += den*v1*beta_dt;
+      u0_(m,IM2,k,j,i) += den*v2*beta_dt;
+      u0_(m,IM3,k,j,i) += den*v3*beta_dt;
     }
   });
 
@@ -1033,7 +1042,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
 #if MPI_PARALLEL_ENABLED
     Real m[4], gm[4];
     m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-    MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(m, gm, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
     t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
 #endif
 
@@ -1179,7 +1188,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
 #if MPI_PARALLEL_ENABLED
     Real m[4], gm[4];
     m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-    MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(m, gm, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
     t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
 #endif
 

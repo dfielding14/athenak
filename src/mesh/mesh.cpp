@@ -625,6 +625,14 @@ void Mesh::NewTimeStep(const Real tlim) {
   }
   // Particles timestep
   if (pmb_pack->ppart != nullptr) {
+    if (pmb_pack->ppart->IsIto2()) {
+      int active_dimensions = three_d ? 3 : (multi_d ? 2 : 1);
+      Real fluid_dt = std::numeric_limits<Real>::max();
+      if (pmb_pack->phydro != nullptr) fluid_dt = pmb_pack->phydro->dtnew;
+      if (pmb_pack->pmhd != nullptr) fluid_dt = pmb_pack->pmhd->dtnew;
+      dt = std::min(dt, pmb_pack->ppart->ito_probability_target*fluid_dt/
+                         static_cast<Real>(active_dimensions));
+    }
     dt = std::min(dt, (pmb_pack->ppart->dtnew) );
   }
 
@@ -672,11 +680,14 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
 
 void Mesh::UpdateParticleCounts() {
   if (pmb_pack->ppart == nullptr) return;
-
-  nprtcl_thisrank = 0;
-  for (int n=0; n<nmb_packs_thisrank; ++n) {
-    nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
+  if (nmb_packs_thisrank != 1) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
+              << "particle counts currently support exactly one MeshBlockPack per rank"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
   }
+
+  nprtcl_thisrank = pmb_pack->ppart->nprtcl_thispack;
 
   nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
 #if MPI_PARALLEL_ENABLED
@@ -686,6 +697,11 @@ void Mesh::UpdateParticleCounts() {
 
   nprtcl_total = 0;
   for (int n=0; n<global_variable::nranks; ++n) {
-    nprtcl_total += nprtcl_eachrank[n];
+    if (nprtcl_eachrank[n] < 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
+                << "negative particle count received from MPI rank " << n << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    nprtcl_total += static_cast<std::uint64_t>(nprtcl_eachrank[n]);
   }
 }

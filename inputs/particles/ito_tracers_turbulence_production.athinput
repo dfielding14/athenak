@@ -1,0 +1,115 @@
+# Paper-scale old-versus-corrected Ito-2 turbulence validation
+
+<comment>
+problem = Deterministic Mach-15 decaying turbulence with 16 Ito-2 tracers per cell
+
+<job>
+basename = ito_turbulence_production
+
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 64
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 64
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.324
+nlim = -1
+tlim = 0.2
+ndiag = 10
+
+<hydro>
+eos = isothermal
+iso_sound_speed = 1.0
+reconstruct = plm
+rsolver = hlle
+
+<particles>
+particle_type = lagrangian_ito
+pusher = ito2
+ito_order = 2
+tracer_kick_pdf = uniform
+random_seed = 271828
+ito_probability_target = 0.99
+
+<tracer_seed1>
+id = 1
+start_time = 0.0
+end_time = 0.0
+cadence = -1.0
+count_per_event = 4194304
+weight = mass
+region = all
+seed = 161803
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 0.0
+dens = 1.0
+pgas = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+along_x1 = true
+along_x2 = false
+along_x3 = false
+
+<initial_perturbations>
+variables = velocity
+velocity_rms = 15.0
+remove_velocity_mean = true
+spectral_slope = 1.6666666666666667
+nlow = 1
+nhigh = 2
+f_solenoidal = 1.0
+rseed = 8675309
+localization = none
+
+<output1>
+file_type = hst
+dt = 0.01
+
+<output2>
+file_type = bin
+variable = hydro_w
+id = gas
+dt = 0.05
+
+<output3>
+file_type = bin
+variable = prtcl_d
+id = tracer_ngp
+dt = 0.05
+
+<output4>
+file_type = pvtk
+variable = prtcl_all
+id = particles
+dt = 0.2
+
+<output5>
+file_type = rst
+dt = 0.2
+single_file_per_rank = true

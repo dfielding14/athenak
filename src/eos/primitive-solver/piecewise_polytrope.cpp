@@ -25,8 +25,8 @@ bool Primitive::PiecewisePolytrope::ReadParametersFromInput(std::string block,
   Real poly_rmd = mks.MassDensityConversion(eos_units)*pin->GetReal(block,
                                                                     "pwp_poly_rmd");
 
-  double densities[MAX_PIECES+1];
-  double gammas[MAX_PIECES+1];
+  Real densities[MAX_PIECES+1];
+  Real gammas[MAX_PIECES+1];
   char cstr[BUFSIZ]; // NOLINT
   int np;
   for (np = 0; np < MAX_PIECES; ++np) {

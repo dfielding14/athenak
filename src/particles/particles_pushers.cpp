@@ -17,6 +17,8 @@ namespace particles {
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
+  if (IsFluxTracer()) CheckMassFloorCompatibility();
+
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is;
   int js = indcs.js;

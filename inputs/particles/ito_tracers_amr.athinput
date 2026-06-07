@@ -63,6 +63,7 @@ pusher          = ito2
 ito_order       = 2
 tracer_kick_pdf = uniform
 random_seed     = 67890
+next_tracer_tag = 0
 track_variables = density, temperature, mach
 
 <tracer_seed1>

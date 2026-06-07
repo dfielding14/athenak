@@ -70,6 +70,7 @@ class SourceTerms {
   bool CoolingHistoryEnabled() const;
   int AddCoolingHistoryLabels(std::string *labels, int start, int max_labels) const;
   int AddCoolingHistoryData(Real *hdata, int start, int max_data, Real current_time);
+  static bool MassChangeDeclared(const std::string &block, ParameterInput *pin);
 
  private:
   MeshBlockPack *pmy_pack;

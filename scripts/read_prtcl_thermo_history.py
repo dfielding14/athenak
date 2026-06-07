@@ -25,6 +25,7 @@ def _read_exact(handle, size: int, label: str) -> bytes:
 def read_history(path: str | Path) -> dict[str, np.ndarray]:
     path = Path(path)
     rows_i: list[np.ndarray] = []
+    rows_tag: list[np.ndarray] = []
     rows_r: list[np.ndarray] = []
     nscalars = None
     real_dtype = None
@@ -38,7 +39,7 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
         )
         if not magic.rstrip(b"\0").startswith(b"ATHK_PRTCL_THERMO_HISTORY"):
             raise ValueError(f"{path} has an unrecognized magic string")
-        if version not in (1, 2):
+        if version not in (1, 2, 3):
             raise ValueError(f"unsupported thermo-history version {version}")
         if real_size not in (4, 8):
             raise ValueError(f"unsupported real size {real_size}")
@@ -100,20 +101,34 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
             expected_real_per = (
                 12 + (nscalars or 0) if version == 1 else 4 + len(field_names)
             )
-            if int_per != 4 or real_per != expected_real_per:
+            expected_int_per = 3 if version == 3 else 4
+            if int_per != expected_int_per or real_per != expected_real_per:
                 raise ValueError("incompatible block record size")
             ints = np.fromfile(handle, dtype=np.int32, count=nrecords * int_per)
-            reals = np.fromfile(handle, dtype=real_dtype, count=nrecords * real_per)
-            if ints.size != nrecords * int_per or reals.size != nrecords * real_per:
+            if ints.size != nrecords * int_per:
                 raise ValueError("truncated block payload")
-            rows_i.append(ints.reshape(nrecords, int_per))
+            ints = ints.reshape(nrecords, int_per)
+            if version == 3:
+                tags = np.fromfile(handle, dtype=np.uint64, count=nrecords)
+            else:
+                tags = ints[:, 1].astype(np.uint32).astype(np.uint64)
+            reals = np.fromfile(handle, dtype=real_dtype, count=nrecords * real_per)
+            if (
+                tags.size != nrecords
+                or reals.size != nrecords * real_per
+            ):
+                raise ValueError("truncated block payload")
+            rows_i.append(ints)
+            rows_tag.append(tags)
             rows_r.append(reals.reshape(nrecords, real_per))
 
     if rows_i:
         ints = np.vstack(rows_i)
+        tags = np.concatenate(rows_tag)
         reals = np.vstack(rows_r)
     else:
-        ints = np.empty((0, 4), dtype=np.int32)
+        ints = np.empty((0, 3 if version == 3 else 4), dtype=np.int32)
+        tags = np.empty(0, dtype=np.uint64)
         if version == 1:
             real_per = 12 + (nscalars or 0)
         else:
@@ -123,12 +138,12 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
     columns = {
         "time": reals[:, 0],
         "cycle": ints[:, 0],
-        "tag": ints[:, 1],
-        "seed_id": ints[:, 2],
+        "tag": tags,
+        "seed_id": ints[:, 1] if version == 3 else ints[:, 2],
         "x1": reals[:, 1],
         "x2": reals[:, 2],
         "x3": reals[:, 3],
-        "gid": ints[:, 3],
+        "gid": ints[:, 2] if version == 3 else ints[:, 3],
     }
     for n, name in enumerate(field_names):
         columns[name] = reals[:, 4 + n]

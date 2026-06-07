@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
 #include <iomanip>
@@ -46,18 +47,23 @@ void ParticleVTKOutput::LoadOutputData(Mesh *pm) {
   npout_total = pm->nprtcl_total;
   Kokkos::realloc(outpart_rdata, pp->nrdata, npout_thisrank);
   Kokkos::realloc(outpart_idata, pp->nidata, npout_thisrank);
+  Kokkos::realloc(outpart_tag, npout_thisrank);
 
   // Create mirror view on device of host view of output particle real/int data
   auto d_outpart_rdata = Kokkos::create_mirror_view(Kokkos::DefaultHostExecutionSpace(),
                                                     outpart_rdata);
   auto d_outpart_idata = Kokkos::create_mirror_view(Kokkos::DefaultHostExecutionSpace(),
                                                     outpart_idata);
+  auto d_outpart_tag = Kokkos::create_mirror_view(Kokkos::DefaultHostExecutionSpace(),
+                                                  outpart_tag);
   // Copy particle positions into device mirrors
   Kokkos::deep_copy(d_outpart_rdata, pp->prtcl_rdata);
   Kokkos::deep_copy(d_outpart_idata, pp->prtcl_idata);
+  Kokkos::deep_copy(d_outpart_tag, pp->prtcl_tag);
   // Copy particle positions from device mirror to host output array
   Kokkos::deep_copy(outpart_rdata, d_outpart_rdata);
   Kokkos::deep_copy(outpart_idata, d_outpart_idata);
+  Kokkos::deep_copy(outpart_tag, d_outpart_tag);
 }
 
 //----------------------------------------------------------------------------------------
@@ -127,7 +133,9 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     header_offset += msg.str().size();
   }
   // allocate 1D vector of floats used to convert and output particle data
-  float *data = new float[3*npout_thisrank];
+  std::size_t local_particle_count = static_cast<std::size_t>(npout_thisrank);
+  std::size_t local_position_count = 3*local_particle_count;
+  float *data = new float[local_position_count];
   // Loop over particles, load positions into data[]
   for (int p=0; p<npout_thisrank; ++p) {
     data[3*p] = static_cast<float>(outpart_rdata(IPX,p));
@@ -144,20 +152,22 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   // swap data for this variable into big endian order
   if (!big_end) {
-    for (int i=0; i<(3*npout_thisrank); ++i) { Swap4Bytes(&data[i]); }
+    for (std::size_t i=0; i<local_position_count; ++i) { Swap4Bytes(&data[i]); }
   }
   // calculate local data offset
-  std::vector<int> rank_offset(global_variable::nranks, 0);
+  std::vector<std::uint64_t> rank_offset(global_variable::nranks, 0);
   int npout_min = pm->nprtcl_eachrank[0];
   for (int n=1; n<global_variable::nranks; ++n) {
-    rank_offset[n] = rank_offset[n-1] + pm->nprtcl_eachrank[n-1];
+    rank_offset[n] = rank_offset[n-1] +
+                     static_cast<std::uint64_t>(pm->nprtcl_eachrank[n-1]);
     npout_min = std::min(npout_min, pm->nprtcl_eachrank[n]);
   }
 
   // Write particle positions
   {
     std::size_t datasize = sizeof(float);
-    std::size_t myoffset=header_offset + 3*rank_offset[global_variable::my_rank]*datasize;
+    std::size_t myoffset = header_offset +
+      3*rank_offset[global_variable::my_rank]*datasize;
     // collective writes for minimum number of particles across ranks
     if (partfile.Write_any_type_at_all(&(data[0]),3*npout_min,myoffset,"float")
           != 3*npout_min) {
@@ -186,6 +196,9 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // Write integer particle fields.
   for (int n=0; n<(pm->pmb_pack->ppart->nidata); ++n) {
+    if (n == static_cast<int>(PTAG)) {
+      continue;
+    }
     std::stringstream msg;
 
     if (!have_written_pointdata_header) {
@@ -195,9 +208,6 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
     if (n == static_cast<int>(PGID)) {
       msg << std::endl << "SCALARS gid float" << std::endl
-          << "LOOKUP_TABLE default" << std::endl;
-    } else if (n == static_cast<int>(PTAG)) {
-      msg << std::endl << "SCALARS ptag float" << std::endl
           << "LOOKUP_TABLE default" << std::endl;
     } else if (n == static_cast<int>(PLASTMOVE)) {
       msg << std::endl << "SCALARS last_move float" << std::endl
@@ -250,6 +260,55 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             << "vtk file is broken." << std::endl;
         exit(EXIT_FAILURE);
       }
+    }
+    header_offset += pm->nprtcl_total*datasize;
+  }
+
+  // Legacy VTK has no portable fixed-width uint64 scalar. Store each tag as
+  // two exact uint32 words; readers reconstruct (high << 32) | low.
+  std::vector<std::uint32_t> tag_words(npout_thisrank);
+  for (int word=0; word<2; ++word) {
+    std::stringstream msg;
+    msg << std::endl << "SCALARS ptag_" << (word == 0 ? "low32" : "high32")
+        << " unsigned_int" << std::endl
+        << "LOOKUP_TABLE default" << std::endl;
+    if (global_variable::my_rank == 0) {
+      partfile.Write_any_type_at(msg.str().c_str(), msg.str().size(), header_offset,
+                                 "byte");
+    }
+    header_offset += msg.str().size();
+
+    for (int p=0; p<npout_thisrank; ++p) {
+      tag_words[p] = (word == 0) ?
+        static_cast<std::uint32_t>(outpart_tag(p)) :
+        static_cast<std::uint32_t>(outpart_tag(p) >> 32);
+    }
+    if (!big_end) {
+      for (int p=0; p<npout_thisrank; ++p) {
+        Swap4Bytes(&tag_words[p]);
+      }
+    }
+
+    constexpr std::size_t datasize = sizeof(std::uint32_t);
+    std::size_t myoffset = header_offset +
+      rank_offset[global_variable::my_rank]*datasize;
+    if (partfile.Write_any_type_at_all(tag_words.data(), datasize*npout_min,
+                                       myoffset, "byte") != datasize*npout_min) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "particle tags not written correctly to vtk particle "
+                << "file, vtk file is broken." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    myoffset += datasize*npout_min;
+    int nremain = npout_thisrank - npout_min;
+    if (nremain > 0 &&
+        partfile.Write_any_type_at(tag_words.data() + npout_min,
+                                   datasize*nremain, myoffset, "byte") !=
+        datasize*nremain) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "particle tags not written correctly to vtk particle "
+                << "file, vtk file is broken." << std::endl;
+      std::exit(EXIT_FAILURE);
     }
     header_offset += pm->nprtcl_total*datasize;
   }

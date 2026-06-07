@@ -12,16 +12,18 @@ remediation plan. It covers:
 - documentation corrections; and
 - unrelated branch issues found during the review.
 
-The reviewed baseline is commit
-`b25a406c0fdc60a051e53873900e24580c3d688f`. The implementation is based on
+The original reviewed baseline was commit
+`b25a406c0fdc60a051e53873900e24580c3d688f`. The paired old-versus-corrected
+turbulence executable is commit
+`e26bf0ec4724a9204bb74e8efcf4d0b8f2dfcd16`. The implementation is based on
 Moseley, Teyssier, and Abel,
 [arXiv:2604.23041](https://arxiv.org/abs/2604.23041).
 
 The most important distinction in this guide is:
 
-> The current implementation matches the Monte Carlo jump mean and variance
-> separately in each coordinate. It does not match the full multidimensional
-> finite-step covariance tensor.
+> The reviewed implementation matched the Monte Carlo jump mean and variance
+> separately in each coordinate. The corrected implementation now matches the
+> full cell-local finite-step covariance tensor.
 
 No documentation, test name, or scientific claim should blur that distinction.
 
@@ -47,21 +49,21 @@ The remediation is complete only when all of the following are true:
 
 | Priority | Finding | Disposition |
 | --- | --- | --- |
-| P0 | Multidimensional finite-step covariance is omitted | Fix or narrow all claims before scientific use |
-| P0 | 64-bit next-tag counter is truncated into 32-bit particle tags | Convert tag storage and I/O to 64-bit |
-| P1 | AMR transfer acts on nonlinear derived coefficients | Establish and test a level-consistent moment transfer |
-| P1 | RK-weighted net flux is converted to probabilities after stage summation | Define intended stage semantics and add reversing-flux tests |
-| P1 | Existing tests do not establish paper-level fidelity | Add covariance, distribution, restart, AMR, and turbulence tests |
-| P1 | Exact upper periodic boundary is not wrapped | Use half-open periodic bounds and add an exact-boundary test |
-| P1 | Mass-changing source terms are not represented by flux tracers | Reject, document, or implement source coupling |
+| P0 | Multidimensional finite-step covariance is omitted | Fixed with a full central covariance tensor and correlated factor |
+| P0 | 64-bit next-tag counter is truncated into 32-bit particle tags | Fixed with dedicated `uint64` storage and versioned I/O |
+| P1 | AMR transfer acts on nonlinear derived coefficients | Fixed under the documented interpolated-coefficient-field contract; conditional level moments tested |
+| P1 | RK-weighted net flux is converted to probabilities after stage summation | Final-update net-flux semantics documented and tested |
+| P1 | Existing tests do not establish paper-level fidelity | Added covariance, square-pulse, restart, AMR, and turbulence tests |
+| P1 | Exact upper periodic boundary is not wrapped | Fixed with half-open bounds and serial/MPI restart tests |
+| P1 | Mass-changing source terms are not represented by flux tracers | Fail-closed source declaration and actual-floor-use policy |
 | P2 | Coefficient construction and communication have avoidable cost | Optimize only after correctness changes are frozen |
 | P2 | Seeding and history output are host-heavy and root-gathered | Add scalable paths and benchmarks |
-| P2 | Thermodynamic history uses containing-cell sampling | Add optional CIC sampling |
+| P2 | Thermodynamic history uses containing-cell sampling | Optional CIC sampling implemented and tested |
 | P2 | Ito-2 cannot reproduce MC distribution shape in general | Add Ito-3 or retain an explicit limitation |
-| P0 branch gate | C++ and Python style checks fail in cooling code | Repair before merge |
-| P1 branch gate | Single-precision build fails in existing coordinate code | Fix or explicitly exclude single precision |
-| P2 docs | Ito page is not present on live `origin/gh-pages` | Integrate and strictly build the live docs tree |
-| P2 integration | Branch combines Ito with cooling, perturbation, divB, and MC work | Split or validate dependencies deliberately |
+| P0 branch gate | C++ and Python style checks fail in cooling code | Repaired |
+| P1 branch gate | Single-precision build fails in existing coordinate code | Repaired and single-precision Ito tests added |
+| P2 docs | Ito page is not present on live `origin/gh-pages` | Overlay validated with a strict build, link check, and rendered-page review; publication remains separate |
+| P2 integration | Branch combines Ito with cooling, perturbation, divB, and MC work | Combined branch retained; affected cooling and turbulence-driver tests included |
 
 ## Observed Review Baseline
 
@@ -93,6 +95,76 @@ Independent reproductions:
   `-0.111111`;
 - a two-particle seed beginning at `INT_MAX` produced tags
   `[2147483647, -2147483648]`.
+
+## Remediation Outcome, June 7, 2026
+
+Implemented:
+
+- full cell-local mean vector and six-component central covariance tensor;
+- pivoted positive-semidefinite covariance factorization;
+- direct CIC interpolation of the chosen stochastic coefficient fields;
+- a documented AMR contract, piecewise-constant coarse-to-fine transfer, and
+  measured coarse/fine conditional moments;
+- dedicated unsigned 64-bit tags through seeding, migration, AMR, restart,
+  VTK, tracked-particle, and thermodynamic-history paths;
+- exact serial restart equivalence, two- and four-rank decomposition
+  equivalence, and MPI/AMR restart equivalence;
+- half-open periodic wrapping at exact upper faces and corners;
+- fail-closed declared mass-source and actual density-floor policies;
+- optional CIC thermodynamic-history sampling;
+- first-step and measured next-step Ito timestep guards;
+- MPI-safe Ito fatal termination and checked particle count/displacement
+  arithmetic;
+- corrected turbulence-driver RK task ordering and precision-correct MPI
+  reductions;
+- single-precision unit-system and narrowing-conversion fixes; and
+- cooling C++/Python style-gate repairs.
+
+The spatial contract is deliberately specific. AthenaK treats
+`m(x)` and `Q(x)` as interpolated stochastic coefficient fields. Restriction
+averages child central covariances and does not add the between-child variance
+of their means. This avoids converting a resolved drift gradient into
+stochastic diffusion. It is not the same as constructing the covariance of an
+unresolved mixture of child Monte Carlo kernels, and the documentation must
+not claim that stronger property.
+
+The initial `ito_probability_target / active_dimensions` timestep guard is
+also not a universal stability proof. A production-like full-duration sweep
+found that CFL `0.324` completed while `0.3245` failed closed. The old-versus-
+corrected production comparison therefore used `0.324`, not `0.33`.
+
+The paired `64^3`, 4,194,304-particle result found:
+
+- bit-identical gas density;
+- changes of order `10^-3` in tracer-gas correlation and ratio-PDF width;
+- Jensen-Shannon divergence `1.70e-4` bits between the old and corrected PDFs;
+- a `-0.00787`, `+0.00878`, and `+0.00919` change in large-, mid-, and
+  small-scale spectral relative error, respectively; and
+- a corrected/old wall-time ratio of about `1.94` on eight local MPI ranks.
+
+The scientific conclusion is that the correction does not materially change
+the headline tracer-gas correlation or PDF result in this test. It does make a
+small, reproducible, scale-dependent difference to spectra and a large
+difference to individual stochastic realizations. The full results and
+qualification procedure are in
+`docs/validation/ito_turbulence_results.md` and
+`docs/validation/ito_turbulence_old_vs_corrected_protocol.md`.
+
+Explicitly unverified or unsupported:
+
+- CUDA/HIP runtime behavior;
+- Ito-3 or full distribution matching;
+- nonuniform-flow AMR convergence beyond the implemented conditional-moment
+  and adaptive migration/restart tests;
+- high-scale seeding/history-output redesign and 32+ rank scaling; and
+- publication of the page to the live `gh-pages` branch.
+
+The feature pages were overlaid onto a detached worktree at the live
+`origin/gh-pages` tip. `make clean html SPHINXOPTS="-W --keep-going"` and
+`make linkcheck SPHINXOPTS="-W --keep-going"` passed, including the external
+paper link. A headless-Chrome render confirmed the equations, tables, and all
+three figures render without clipping. This validates the publication content;
+it does not itself modify or publish the `gh-pages` branch.
 
 ## Phase 0: Freeze the Baseline
 
@@ -197,7 +269,7 @@ Cov[dX_i,dX_i] = h_i^2 (C_i+ - C_i-^2)
 Cov[dX_i,dX_j] = -h_i h_j C_i- C_j-       for i != j
 ```
 
-The current diagonal diffusion coefficients implement only the first line.
+The reviewed diagonal diffusion coefficients implemented only the first line.
 Independent coordinate kicks force the second line to zero.
 
 ### Recommended implementation
@@ -214,7 +286,7 @@ where `Q = Cov[dX]` for one fluid step, or equivalently
 The coefficient field then contains:
 
 ```text
-U1 U2 U3 Q11 Q22 Q33 Q12 Q13 Q23
+M1 M2 M3 Q11 Q22 Q33 Q12 Q13 Q23
 ```
 
 Recommended code targets:
@@ -401,30 +473,37 @@ The final design must state which reference is authoritative.
 
 ## Phase 4: Establish AMR Moment Fidelity
 
-### Current risk
+### Chosen contract
 
-The code computes nonlinear `u` and `kappa` fields and then applies generic
-cell-centered restriction and prolongation. In general:
+The corrected code transfers the finite-step mean and central covariance as
+stochastic coefficient fields. In general:
 
 ```text
 restrict(f(probabilities)) != f(restrict(probabilities))
 ```
 
-where `f` contains the nonlinear `C_-^2` term.
+where `f` contains the nonlinear mean-product subtraction.
 
-### Recommended design study
+AthenaK intentionally uses the left-hand interpretation: it averages the
+already-centered `Q` field. It does not add the between-child variance of
+different child means. The latter would be appropriate for the covariance of a
+mixture of unresolved child kernels, but it would also turn a resolved drift
+gradient into additional stochastic diffusion when interpolating coefficients
+to a particle.
 
-Compare these approaches:
+### Implemented transfer
 
-1. Transfer derived drift and covariance components.
-2. Transfer raw first and second displacement moments, then construct central
-   covariance on the destination level.
-3. Transfer corrected mass fluxes and density, then reconstruct probabilities
-   and moments on the destination level.
+The implementation uses:
 
-Approach 2 is the most direct way to preserve the intended statistical
-quantities. Approach 3 is preferable if level-local consistency with the
-finite-volume update can be demonstrated.
+1. direct restriction of the mean and central covariance;
+2. ordinary same-level communication;
+3. piecewise-constant coarse-to-fine prolongation; and
+4. direct CIC interpolation of the mean and covariance.
+
+Convex averaging preserves positive semidefiniteness. A static-AMR runtime test
+measures conditional drift and all covariance components on both coarse and
+fine levels. The adaptive MPI test covers refinement, migration, continuous
+subcell positions, and exact restart equivalence.
 
 ### Required AMR tests
 
@@ -446,8 +525,9 @@ Measure:
 - dependence on which side of the interface particles were seeded;
 - convergence when both levels are globally refined.
 
-The existing AMR smoke test should remain, but it is not sufficient evidence
-of moment fidelity.
+The remaining release-level AMR work is nonuniform-flow convergence and
+seed-side dependence at a coarse/fine interface. Those stronger claims are
+explicitly excluded rather than inferred from the current tests.
 
 ## Phase 5: Fix Boundary and Source-Term Semantics
 
@@ -660,7 +740,7 @@ Record:
 
 ### Style failures
 
-The current repository style gate fails in branch-added cooling files:
+The reviewed repository style gate failed in branch-added cooling files:
 
 - C++ line-length failures in `src/srcterms/cooling.cpp`,
   `src/srcterms/cooling.hpp`, and `src/srcterms/srcterms.cpp`;
@@ -676,13 +756,13 @@ cd tst
 python run_test_suite.py --style
 ```
 
-The Ito documentation must not claim that the style gate passes until this
-command passes on the exact branch tip.
+The files were reformatted and the exact-tip style gate must pass before push.
 
 ### Single-precision build
 
-The branch currently fails an AppleClang single-precision build because of
-narrowing conversions in `src/coordinates/cartesian_ks.hpp`.
+The reviewed branch failed an AppleClang single-precision build because of
+narrowing conversions and unit metadata that underflowed when stored as
+`float`. Both issues are corrected.
 
 Run:
 
@@ -693,9 +773,9 @@ cmake -S . -B /tmp/ito-single \
 cmake --build /tmp/ito-single -j 8
 ```
 
-This failure is not introduced by Ito, but single precision cannot be listed
-as tested until the repository builds and the Ito probability/covariance tests
-pass in that configuration.
+Single precision is listed as tested only after the repository build and the
+Ito covariance, AMR, square-pulse, tag, and timestep tests pass in that
+configuration.
 
 ### Latent multiple-pack particle count issue
 
@@ -807,19 +887,21 @@ true for the current branch tip.
 
 ## Final Acceptance Checklist
 
-- [ ] The mathematical contract is approved.
-- [ ] Full covariance is implemented, or all claims say per-coordinate only.
-- [ ] Covariance tests pass in 2D and 3D.
-- [ ] 64-bit tags pass overflow, migration, restart, and output tests.
-- [ ] RK stage semantics are documented and tested.
-- [ ] AMR moment tests pass.
-- [ ] Exact upper-boundary tests pass.
-- [ ] Mass-changing source behavior is explicit.
-- [ ] Restart equivalence passes.
-- [ ] Square-pulse validation records the expected Ito-2 limitation.
-- [ ] Single precision has a documented pass or explicit exclusion.
-- [ ] CPU, MPI, and GPU support claims match actual tests.
-- [ ] Style passes.
-- [ ] Performance regressions are within an approved budget.
-- [ ] Documentation is correct on the feature branch.
-- [ ] The page builds and renders in the live `gh-pages` tree.
+- [x] The mathematical contract is explicit.
+- [x] Full cell-local covariance is implemented.
+- [x] Covariance tests pass in 2D and 3D.
+- [x] 64-bit tags pass overflow, migration, restart, and output tests.
+- [x] RK final-update net-flux semantics are documented and tested.
+- [x] Static coarse/fine conditional moment tests pass.
+- [x] Exact upper-boundary tests pass.
+- [x] Mass-changing source and actual-floor behavior is explicit.
+- [x] Serial and MPI/AMR restart equivalence passes.
+- [x] Square-pulse validation records the expected Ito-2 limitation.
+- [x] Single precision builds and passes focused Ito tests.
+- [x] CPU/MPI are tested and GPU runtime is explicitly unverified.
+- [x] Style passes on the final candidate.
+- [x] Old-versus-corrected runtime cost is measured and reported.
+- [x] Documentation is corrected on the feature branch.
+- [x] The feature pages strictly build, link-check, and render when overlaid on
+      the live `origin/gh-pages` tree.
+- [ ] Live `gh-pages` publication remains a separate release operation.
