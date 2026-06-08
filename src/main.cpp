@@ -529,6 +529,7 @@ int main(int argc, char *argv[]) {
   pdriver->Initialize(pmesh, pinput, pout, res_flag);
   pdriver->Execute(pmesh, pinput, pout);
   pdriver->Finalize(pmesh, pinput, pout);
+  const int exit_code = pdriver->ExitCode(pmesh);
 
   //--- Step 8. -------------------------------------------------------------------------
   // clean up, and terminate
@@ -542,5 +543,5 @@ int main(int argc, char *argv[]) {
 #if MPI_PARALLEL_ENABLED
   MPI_Finalize();
 #endif
-  return(0);
+  return(exit_code);
 }

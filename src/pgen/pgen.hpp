@@ -36,6 +36,10 @@ class ProblemGenerator {
                    bool single_file_per_rank=false);
   ~ProblemGenerator() = default;
 
+  // Request an orderly stop after the current cycle is fully committed and
+  // final outputs are published.  Positive reason codes are problem-defined.
+  void RequestUserStop(int reason_code, bool failure);
+
   // true if user BCs are specified on any face
   bool user_bcs;
 
@@ -47,6 +51,10 @@ class ProblemGenerator {
 
   // true if user work in loop callback is specified
   bool user_work_in_loop;
+
+  bool user_stop_requested;
+  bool user_stop_failure;
+  int user_stop_reason_code;
 
   // vector of SphericalGrid objects for analysis
   std::vector<std::unique_ptr<SphericalGrid>> spherical_grids;

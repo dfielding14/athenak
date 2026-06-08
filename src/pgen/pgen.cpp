@@ -9,6 +9,7 @@
 //! reads data from restart file, as well as re-initializing problem-specific data.
 
 #include <array>
+#include <cstdlib>
 #include <cstdio>
 #include <initializer_list>
 #include <iostream>
@@ -1680,6 +1681,27 @@ void LoadParticleRestartData(Mesh *pm,
 
 }  // namespace
 
+void ProblemGenerator::RequestUserStop(const int reason_code, const bool failure) {
+  if (reason_code <= 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Problem-defined user-stop reason codes must be positive."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (user_stop_requested &&
+      (user_stop_reason_code != reason_code || user_stop_failure != failure)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Conflicting problem-defined user-stop requests were issued."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  user_stop_requested = true;
+  user_stop_failure = failure;
+  user_stop_reason_code = reason_code;
+}
+
 //----------------------------------------------------------------------------------------
 // default constructor, calls pgen function.
 
@@ -1688,6 +1710,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     user_srcs(false),
     user_hist(false),
     user_work_in_loop(false),
+    user_stop_requested(false),
+    user_stop_failure(false),
+    user_stop_reason_code(0),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
   for (int dir=0; dir<6; ++dir) {
@@ -1828,6 +1853,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     user_srcs(false),
     user_hist(false),
     user_work_in_loop(false),
+    user_stop_requested(false),
+    user_stop_failure(false),
+    user_stop_reason_code(0),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
   for (int dir=0; dir<6; ++dir) {

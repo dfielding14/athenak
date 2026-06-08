@@ -469,7 +469,8 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       elapsed_time = UpdateWallClock();
     }
     while ((pmesh->time < tlim) && (pmesh->ncycle < nlim || nlim < 0) &&
-           (elapsed_time < wall_time)) {
+           (elapsed_time < wall_time) &&
+           !pmesh->pgen->user_stop_requested) {
       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
 
       // Problem-specific edits that must be visible to particle push/deposition.
@@ -501,6 +502,52 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
           std::exit(EXIT_FAILURE);
         }
         (pmesh->pgen->user_work_in_loop_func)(pmesh);
+      }
+
+#if MPI_PARALLEL_ENABLED
+      const int local_requested = pmesh->pgen->user_stop_requested ? 1 : 0;
+      int global_requested = 0;
+      MPI_Allreduce(&local_requested, &global_requested, 1, MPI_INT, MPI_MAX,
+                    MPI_COMM_WORLD);
+      if (global_requested != 0) {
+        const int no_request = std::numeric_limits<int>::max();
+        const int local_minimum[2] = {
+          local_requested ? pmesh->pgen->user_stop_reason_code : no_request,
+          local_requested ? (pmesh->pgen->user_stop_failure ? 1 : 0) : no_request
+        };
+        const int local_maximum[2] = {
+          local_requested ? pmesh->pgen->user_stop_reason_code : 0,
+          local_requested ? (pmesh->pgen->user_stop_failure ? 1 : 0) : 0
+        };
+        int global_minimum[2] = {0, 0};
+        int global_maximum[2] = {0, 0};
+        MPI_Allreduce(local_minimum, global_minimum, 2, MPI_INT, MPI_MIN,
+                      MPI_COMM_WORLD);
+        MPI_Allreduce(local_maximum, global_maximum, 2, MPI_INT, MPI_MAX,
+                      MPI_COMM_WORLD);
+        if (global_minimum[0] != global_maximum[0] ||
+            global_minimum[1] != global_maximum[1]) {
+          if (global_variable::my_rank == 0) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                      << __LINE__ << std::endl
+                      << "Problem-defined user-stop requests conflict across MPI ranks."
+                      << std::endl;
+          }
+          std::exit(EXIT_FAILURE);
+        }
+        pmesh->pgen->user_stop_requested = true;
+        pmesh->pgen->user_stop_reason_code = global_maximum[0];
+        pmesh->pgen->user_stop_failure = global_maximum[1] != 0;
+      }
+#endif
+
+      if (pmesh->pgen->user_stop_requested &&
+          pmesh->pgen->user_stop_reason_code <= 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Problem-defined user-stop state has a non-positive reason code."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
       }
 
       // Work outside of TaskLists:
@@ -584,7 +631,14 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     if (global_variable::my_rank == 0) {
       // Print diagnostic messages related to the end of the simulation
       OutputCycleDiagnostics(pmesh);
-      if (pmesh->ncycle == nlim) {
+      if (pmesh->pgen->user_stop_requested) {
+        std::cout << std::endl << "Terminating on user request" << std::endl;
+        std::cout << "user_stop_reason_code="
+                  << pmesh->pgen->user_stop_reason_code
+                  << " user_stop_failure="
+                  << (pmesh->pgen->user_stop_failure ? "true" : "false")
+                  << std::endl;
+      } else if (pmesh->ncycle == nlim) {
         std::cout << std::endl << "Terminating on cycle limit" << std::endl;
       } else if (pmesh->time >= tlim) {
         std::cout << std::endl << "Terminating on time limit" << std::endl;
@@ -620,6 +674,12 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   }
   OutputQ017Telemetry(pmesh, exe_time);
   return;
+}
+
+int Driver::ExitCode(const Mesh *pmesh) const {
+  return (pmesh != nullptr && pmesh->pgen != nullptr &&
+          pmesh->pgen->user_stop_requested &&
+          pmesh->pgen->user_stop_failure) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 //----------------------------------------------------------------------------------------

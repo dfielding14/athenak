@@ -54,6 +54,7 @@ class Driver {
   void Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool rflag);
   void Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout);
   void Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout);
+  int ExitCode(const Mesh *pmesh) const;
   void InitBoundaryValuesAndPrimitives(Mesh *pm);
 
  private:
