@@ -33,7 +33,7 @@ def test_checked_packet_is_exact_and_non_authorizing(tmp_path: Path) -> None:
     assert manifest == controller.build_manifest()
     assert manifest["saturation_evidence_eligible"] is False
     assert manifest["production_promotion_authorized"] is False
-    assert len(manifest["artifacts"]) == 6
+    assert len(manifest["artifacts"]) == 25
     assert all(
         not artifact["saturation_evidence_eligible"]
         and not artifact["production_promotion_authorized"]
@@ -84,6 +84,34 @@ def test_matched_pilot_pairs_change_only_diagnostic_overlay() -> None:
             "diagnostic_failure_stop_armed",
             "resolution_monitor_enabled",
         }
+
+
+def test_physical_pilot_overlays_are_exact_monitor_only_stage_inventory() -> None:
+    physical = [
+        overlay
+        for overlay in controller.expected_overlays()
+        if str(overlay["artifact_id"]).startswith("q019-physical-pilot-")
+    ]
+    assert len(physical) == 19
+    assert [overlay["physical_pilot_stage"] for overlay in physical] == [
+        *([1] * 7),
+        *([2] * 8),
+        *([3] * 4),
+    ]
+    assert all(
+        overlay["monitor_dt"] == q019.BOX_EDGE_MONITOR_DT
+        and overlay["box_edge_monitor_enabled"] is True
+        and overlay["resolution_monitor_enabled"] is True
+        and overlay["diagnostic_failure_stop_armed"] is True
+        and overlay["resolution_stop_armed"] is False
+        and overlay["box_edge_stop_armed"] is False
+        and overlay["pilot_cycle_limit"] == -1
+        and overlay["expected_stop_reason"] is None
+        and overlay["saturation_evidence_eligible"] is False
+        and overlay["production_promotion_authorized"] is False
+        for overlay in controller.build_manifest()["artifacts"]
+        if str(overlay["artifact_id"]).startswith("q019-physical-pilot-")
+    )
 
 
 def test_source_contract_is_fail_closed_and_restart_persistent() -> None:

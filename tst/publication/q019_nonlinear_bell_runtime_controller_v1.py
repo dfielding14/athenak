@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
+from tst.publication import q019_excluded_physical_window_preregistration_v1 as physical
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as q019
 
 
@@ -87,7 +88,7 @@ def _controller_parameters(
 
 
 def expected_overlays() -> tuple[dict[str, object], ...]:
-    definitions = (
+    engineering_definitions = (
         {
             "artifact_id": "q019-controller-regression-box-stop",
             "source_case_id": "q019-fr-runtime-initializer-ppc24-s0",
@@ -179,6 +180,45 @@ def expected_overlays() -> tuple[dict[str, object], ...]:
             "expected_stop_reason": 1903,
         },
     )
+    stage_by_id = {
+        case_id: stage
+        for stage, case_ids in enumerate(
+            (
+                physical.PREDECESSOR_CORE,
+                physical.WINDOW_CORE,
+                physical.WINDOW_REPLICATION,
+            ),
+            1,
+        )
+        for case_id in case_ids
+    }
+    physical_definitions = tuple(
+        {
+            "artifact_id": (
+                f"q019-physical-pilot-s{stage_by_id[case_id]}-"
+                f"{case_id.removeprefix('q019-')}"
+            ),
+            "source_case_id": case_id,
+            "authority": "excluded_pilot_only",
+            "monitor_dt": q019.BOX_EDGE_MONITOR_DT,
+            "box_edge_monitor_enabled": True,
+            "resolution_monitor_enabled": True,
+            "diagnostic_failure_stop_armed": True,
+            "resolution_stop_armed": False,
+            "resolution_stop_b_over_b0": -1.0,
+            "box_edge_stop_armed": False,
+            "box_edge_stop_ppm": -1,
+            "pilot_cycle_limit": -1,
+            "expected_stop_reason": None,
+            "physical_pilot_stage": stage_by_id[case_id],
+        }
+        for case_id in (
+            physical.PREDECESSOR_CORE
+            + physical.WINDOW_CORE
+            + physical.WINDOW_REPLICATION
+        )
+    )
+    definitions = engineering_definitions + physical_definitions
     overlays: list[dict[str, object]] = []
     for definition in definitions:
         parameters = _controller_parameters(

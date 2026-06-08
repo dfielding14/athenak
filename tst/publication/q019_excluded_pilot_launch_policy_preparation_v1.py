@@ -656,15 +656,16 @@ def _pilot_members() -> list[dict[str, object]]:
         if overlay["authority"] != "excluded_pilot_only":
             continue
         artifact_id = str(overlay["artifact_id"])
+        if artifact_id not in {
+            "q019-controller-pilot-2d-baseline",
+            "q019-controller-pilot-2d-instrumented",
+            "q019-controller-pilot-3d-baseline",
+            "q019-controller-pilot-3d-instrumented",
+        }:
+            continue
         source_case_id = str(overlay["source_case_id"])
         _require(
-            artifact_id in {
-                "q019-controller-pilot-2d-baseline",
-                "q019-controller-pilot-2d-instrumented",
-                "q019-controller-pilot-3d-baseline",
-                "q019-controller-pilot-3d-instrumented",
-            }
-            and source_case_id in base_by_id,
+            source_case_id in base_by_id,
             "Q019 excluded-pilot inventory drifted",
         )
         path = controller.CHECKED_IN_ROOT / str(overlay["filename"])

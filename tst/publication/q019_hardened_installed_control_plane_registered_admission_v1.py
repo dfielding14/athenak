@@ -1158,24 +1158,40 @@ def _completion_record(
         )
         final_state = states[-1]
         expected_reason = execution_profile.get("expected_stop_reason")
-        _require(
-            user_stop
-            and final_state.get("runtime_controller_triggered") is True
-            and final_state.get("runtime_controller_trigger_failure") is False
-            and final_state.get("runtime_controller_trigger_reason") == expected_reason
-            and type(expected_reason) is int
-            and type(final_state.get("runtime_controller_trigger_cycle")) is int
-            and final_state["runtime_controller_trigger_cycle"] > 0
-            and type(final_state.get("runtime_controller_trigger_time")) is float
-            and math.isfinite(final_state["runtime_controller_trigger_time"])
-            and type(final_state.get("runtime_controller_trigger_metric")) is float
-            and math.isfinite(final_state["runtime_controller_trigger_metric"]),
-            "Q019 runtime-controller completion reason drifted",
-        )
-        stop_reason = str(expected_reason)
-        trigger_cycle = final_state["runtime_controller_trigger_cycle"]
-        trigger_time = final_state["runtime_controller_trigger_time"]
-        trigger_metric = final_state["runtime_controller_trigger_metric"]
+        if expected_reason is None:
+            _require(
+                stop_reason == "Terminating on time limit"
+                and all(
+                    state.get("runtime_controller_triggered") is False
+                    and state.get("runtime_controller_trigger_failure") is False
+                    and state.get("runtime_controller_trigger_reason") == 0
+                    and state.get("runtime_controller_trigger_cycle") == 0
+                    and state.get("runtime_controller_trigger_time") == 0.0
+                    and state.get("runtime_controller_trigger_metric") == -1.0
+                    for state in states
+                ),
+                "Q019 monitor-only controller completion state drifted",
+            )
+        else:
+            _require(
+                user_stop
+                and final_state.get("runtime_controller_triggered") is True
+                and final_state.get("runtime_controller_trigger_failure") is False
+                and final_state.get("runtime_controller_trigger_reason")
+                == expected_reason
+                and type(expected_reason) is int
+                and type(final_state.get("runtime_controller_trigger_cycle")) is int
+                and final_state["runtime_controller_trigger_cycle"] > 0
+                and type(final_state.get("runtime_controller_trigger_time")) is float
+                and math.isfinite(final_state["runtime_controller_trigger_time"])
+                and type(final_state.get("runtime_controller_trigger_metric")) is float
+                and math.isfinite(final_state["runtime_controller_trigger_metric"]),
+                "Q019 runtime-controller completion reason drifted",
+            )
+            stop_reason = str(expected_reason)
+            trigger_cycle = final_state["runtime_controller_trigger_cycle"]
+            trigger_time = final_state["runtime_controller_trigger_time"]
+            trigger_metric = final_state["runtime_controller_trigger_metric"]
     return {
         "record_type": "q019_runtime_completion_status_v1",
         "run_completion_status": status,
