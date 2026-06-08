@@ -244,8 +244,9 @@ def policy():
     value = acceptance.load_validated_policy(
         acceptance.DEFAULT_CRITERIA, acceptance.DEFAULT_CRITERIA_REVIEW
     )
-    assert value["replay_tools_approved"] is True
-    assert value["replay_tools_review_status"] == "approved"
+    assert value["historical_replay_tool_scope_approved"] is True
+    assert value["historical_replay_tool_review_status"] == "approved"
+    assert value["current_operational_replay_available"] is True
     return value
 
 
@@ -396,7 +397,8 @@ def test_approved_ct_inventory_replay_rejects_nonidentical_inventory(tmp_path):
     approved = acceptance.load_validated_policy(
         acceptance.DEFAULT_CRITERIA, acceptance.DEFAULT_CRITERIA_REVIEW
     )
-    assert approved["replay_tools_approved"] is True
+    assert approved["historical_replay_tool_scope_approved"] is True
+    assert approved["current_operational_replay_available"] is True
     inventory_path, _ = build_inventory(approved, tmp_path, nmb_total=5, rank_count=2)
     _, _, _, _, canonical = acceptance.validate_ct_inventory(
         approved, "R02", inventory_path
