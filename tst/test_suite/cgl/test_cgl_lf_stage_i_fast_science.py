@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -633,6 +634,254 @@ def test_finite_limiter_gate_is_descriptive_and_claim_scoped(
     assert "confidence" not in gate["reason"].lower()
     assert "signific" not in gate["reason"].lower()
     assert "population" not in str(gate).lower()
+
+
+def test_direct_mks24_panel_can_pass_with_authenticated_window_drift(
+    science, reviewed, monkeypatch,
+):
+    product_id = "fixture-product"
+    policy = {
+        "criteria": {
+            "comparison_panels": [{
+                "id": "fixture-panel",
+                "normalized_residual_rms_lte": 2.0,
+                "maximum_absolute_normalized_residual_lte": 5.0,
+                "early_late_vector_drift_rms_lte": 1.5,
+            }],
+        },
+        "manifest": {
+            "cases": [{"id": "R02", "name": "fixture-case"}],
+            "panel_status": {
+                "panels": [{
+                    "id": "fixture-panel",
+                    "disposition": "comparison",
+                    "reference_products": [product_id],
+                }],
+                "reference_product_bindings": {
+                    product_id: {"case": "fixture-case", "kind": "curve"},
+                },
+                "analysis_case_aliases": {},
+            },
+        },
+    }
+    full = {
+        "available": True,
+        "reference_y_uncertainty": [1.0, 2.0],
+        "fixture_rms": 0.5,
+        "fixture_maximum": 0.75,
+        "fixture_values": [2.0, 4.0],
+    }
+    early = {
+        "available": True,
+        "fixture_rms": 0.0,
+        "fixture_maximum": 0.0,
+        "fixture_values": [1.0, 3.0],
+    }
+    late = {
+        "available": True,
+        "fixture_rms": 0.0,
+        "fixture_maximum": 0.0,
+        "fixture_values": [2.0, 4.0],
+    }
+    monkeypatch.setattr(
+        science,
+        "recompute_direct_reference_products",
+        lambda *_args: ({
+            "full": {product_id: full},
+            "early": {product_id: early},
+            "late": {product_id: late},
+        }, None),
+    )
+    monkeypatch.setattr(
+        reviewed,
+        "normalized_reference_metrics",
+        lambda _policy, _product, record, _binding, _name: (
+            record["fixture_rms"],
+            record["fixture_maximum"],
+            record["fixture_values"],
+        ),
+    )
+
+    assessment, gates = science.mks24_assessment(
+        reviewed,
+        policy,
+        {"R02": {"panel_products": []}},
+        {},
+        {},
+        {"R02": True},
+    )
+
+    product = assessment["panels"]["fixture-panel"]["products"][0]
+    assert assessment["result"] == "pass"
+    assert gates[0]["result"] == "pass"
+    assert product["result"] == "pass"
+    assert math.isclose(
+        product["observations"]["early_late_vector_drift_rms"],
+        math.sqrt((1.0 + 0.25) / 2.0),
+    )
+
+
+def test_direct_mks24_recomputation_uses_reviewed_snapshot_windows(
+    science, monkeypatch,
+):
+    class Analyzer:
+        @staticmethod
+        def average_snapshot_records(records):
+            times = sorted(float(record["time"]) for record in records.values())
+            return {
+                "snapshot_count": len(times),
+                "selected_times": times,
+            }
+
+        @staticmethod
+        def stage_i_panels_configuration(_path):
+            return {
+                "analysis_case_aliases": {},
+                "reference_product_bindings": {},
+            }
+
+        @staticmethod
+        def combined_reference_curve_comparisons(result, *_args, **_kwargs):
+            ensemble = result["cases"]["fixture-case"]["snapshot_ensemble"]
+            return {
+                "records": {
+                    "fixture-product": {
+                        "selected_times": ensemble["selected_times"],
+                        "time_start": ensemble["time_start"],
+                        "time_end": ensemble["time_end"],
+                    },
+                },
+            }
+
+    class Report:
+        @staticmethod
+        def load_pure_analyzer():
+            return Analyzer
+
+        @staticmethod
+        def reference_manifest_paths(_manifest):
+            return []
+
+    class Reviewed:
+        @staticmethod
+        def reference_comparison_records(value):
+            return value["reference_curve_comparisons"]["records"]
+
+    monkeypatch.setattr(science, "load_report_module", lambda: Report)
+    monkeypatch.setattr(science, "load_reviewed_module", lambda: Reviewed)
+    policy = {
+        "criteria": {
+            "analysis_windows": {
+                "full": [4.0, 10.0],
+                "early": [4.0, 8.0],
+                "late": [6.0, 10.0],
+            },
+        },
+        "verified_sources": {
+            "stage_i_manifest": {"path": "/fixture/stage-i.json"},
+        },
+        "manifest": {},
+    }
+    diagnostics = {
+        "R02": {
+            "case_name": "fixture-case",
+            "compat": {"snapshot_ensemble": {"snapshot_count": 4}},
+            "snapshots": {
+                f"snapshot-{time:g}": {"time": time}
+                for time in (4.0, 6.0, 8.0, 10.0)
+            },
+        },
+    }
+
+    products, error = science.recompute_direct_reference_products(
+        policy, diagnostics, {"R02": True}
+    )
+
+    assert error is None
+    assert products["full"]["fixture-product"]["selected_times"] == [
+        4.0, 6.0, 8.0, 10.0
+    ]
+    assert products["early"]["fixture-product"]["selected_times"] == [
+        4.0, 6.0, 8.0
+    ]
+    assert products["late"]["fixture-product"]["selected_times"] == [
+        6.0, 8.0, 10.0
+    ]
+    assert products["early"]["fixture-product"]["time_start"] == 4.0
+    assert products["late"]["fixture-product"]["time_end"] == 10.0
+
+
+def test_direct_mks24_panel_fails_when_window_drift_exceeds_limit(
+    science, reviewed, monkeypatch,
+):
+    product_id = "fixture-product"
+    policy = {
+        "criteria": {
+            "comparison_panels": [{
+                "id": "fixture-panel",
+                "normalized_residual_rms_lte": 2.0,
+                "maximum_absolute_normalized_residual_lte": 5.0,
+                "early_late_vector_drift_rms_lte": 0.1,
+            }],
+        },
+        "manifest": {
+            "cases": [{"id": "R02", "name": "fixture-case"}],
+            "panel_status": {
+                "panels": [{
+                    "id": "fixture-panel",
+                    "disposition": "comparison",
+                    "reference_products": [product_id],
+                }],
+                "reference_product_bindings": {
+                    product_id: {"case": "fixture-case", "kind": "curve"},
+                },
+                "analysis_case_aliases": {},
+            },
+        },
+    }
+    records = {
+        "full": {
+            product_id: {
+                "available": True,
+                "reference_y_uncertainty": [1.0],
+                "fixture_values": [1.0],
+            },
+        },
+        "early": {
+            product_id: {"available": True, "fixture_values": [0.0]},
+        },
+        "late": {
+            product_id: {"available": True, "fixture_values": [1.0]},
+        },
+    }
+    monkeypatch.setattr(
+        science,
+        "recompute_direct_reference_products",
+        lambda *_args: (records, None),
+    )
+    monkeypatch.setattr(
+        reviewed,
+        "normalized_reference_metrics",
+        lambda _policy, _product, record, _binding, _name: (
+            0.0,
+            0.0,
+            record["fixture_values"],
+        ),
+    )
+
+    assessment, _ = science.mks24_assessment(
+        reviewed,
+        policy,
+        {"R02": {"panel_products": []}},
+        {},
+        {},
+        {"R02": True},
+    )
+
+    product = assessment["panels"]["fixture-panel"]["products"][0]
+    assert assessment["result"] == "fail"
+    assert product["result"] == "fail"
+    assert product["reason"] == "early/late panel stationarity criterion failed"
 
 
 def test_stale_reviewed_evaluation_input_fails_closed(science, reviewed, tmp_path):

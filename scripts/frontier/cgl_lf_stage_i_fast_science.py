@@ -77,6 +77,7 @@ CONTRAST_FAMILIES = {
     ),
 }
 VALID_RESULTS = {"pass", "fail", "inconclusive"}
+WINDOW_TIME_TOLERANCE = 1.0e-12
 
 
 class ScienceError(RuntimeError):
@@ -1252,35 +1253,89 @@ def recompute_direct_reference_products(
     policy: dict[str, object],
     diagnostics: dict[str, dict[str, object]],
     snapshot_ready: dict[str, bool],
-) -> tuple[dict[str, dict[str, object]], str | None]:
-    """Recompute MKS24 comparisons from authenticated direct-fast diagnostics."""
+) -> tuple[dict[str, dict[str, dict[str, object]]], str | None]:
+    """Recompute full, early, and late MKS24 products from authenticated records."""
 
     report = load_report_module()
     analyzer = report.load_pure_analyzer()
-    compat_cases: dict[str, object] = {}
+    windows = policy["criteria"].get("analysis_windows")
+    if not isinstance(windows, dict):
+        return {}, "reviewed policy lacks analysis windows"
+    compat_by_window: dict[str, dict[str, object]] = {
+        str(window): {} for window in windows
+    }
     for case_id, value in sorted(diagnostics.items()):
         if not snapshot_ready.get(case_id, False):
             continue
         compat = value.get("compat")
         name = value.get("case_name")
-        if isinstance(compat, dict) and isinstance(name, str):
-            compat_cases[name] = compat
-    if not compat_cases:
+        records = value.get("snapshots")
+        if (
+            not isinstance(compat, dict)
+            or not isinstance(name, str)
+            or not isinstance(records, dict)
+        ):
+            continue
+        for window, bounds in sorted(windows.items()):
+            if (
+                not isinstance(bounds, list)
+                or len(bounds) != 2
+                or not all(isinstance(bound, (int, float)) for bound in bounds)
+            ):
+                return {}, f"reviewed analysis window {window} is malformed"
+            start, end = (float(bounds[0]), float(bounds[1]))
+            selected = {
+                str(path): record
+                for path, record in sorted(records.items())
+                if isinstance(record, dict)
+                and isinstance(record.get("time"), (int, float))
+                and start - WINDOW_TIME_TOLERANCE
+                <= float(record["time"])
+                <= end + WINDOW_TIME_TOLERANCE
+            }
+            if not selected:
+                continue
+            ensemble = analyzer.average_snapshot_records(selected)
+            ensemble["time_start"] = start
+            ensemble["time_end"] = end
+            occupancy = ensemble.get("firehose_threshold_occupancy")
+            if isinstance(occupancy, dict):
+                analysis_window = occupancy.get("analysis_window")
+                if isinstance(analysis_window, dict):
+                    analysis_window.update({
+                        "requested_time_start": start,
+                        "requested_time_end": end,
+                    })
+            window_compat = dict(compat)
+            window_compat["analysis_window"] = {
+                "time_start": start,
+                "time_end": end,
+            }
+            window_compat["snapshot_ensemble"] = ensemble
+            compat_by_window[str(window)][name] = window_compat
+    if not any(compat_by_window.values()):
         return {}, "no authenticated complete snapshot analyses are available"
     try:
         manifest_path = Path(str(policy["verified_sources"]["stage_i_manifest"]["path"]))
         configuration = analyzer.stage_i_panels_configuration(manifest_path)
-        reference = analyzer.combined_reference_curve_comparisons(
-            {"cases": compat_cases},
-            report.reference_manifest_paths(policy["manifest"]),
-            allow_missing_cases=True,
-            analysis_case_aliases=configuration["analysis_case_aliases"],
-            stage_i_reference_bindings=configuration["reference_product_bindings"],
-        )
         reviewed = load_reviewed_module()
-        return reviewed.reference_comparison_records(
-            {"reference_curve_comparisons": reference}
-        ), None
+        products: dict[str, dict[str, dict[str, object]]] = {}
+        for window, compat_cases in sorted(compat_by_window.items()):
+            if not compat_cases:
+                continue
+            reference = analyzer.combined_reference_curve_comparisons(
+                {"cases": compat_cases},
+                report.reference_manifest_paths(policy["manifest"]),
+                allow_missing_cases=True,
+                analysis_case_aliases=configuration["analysis_case_aliases"],
+                stage_i_reference_bindings=configuration[
+                    "reference_product_bindings"
+                ],
+            )
+            products[window] = reviewed.reference_comparison_records(
+                {"reference_curve_comparisons": reference}
+            )
+        return products, None
     except Exception as error:
         return {}, f"direct MKS24 recomputation unavailable: {type(error).__name__}: {error}"
 
@@ -1295,9 +1350,12 @@ def mks24_assessment(
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
     """Assess admitted MKS24 products from reviewed or direct authenticated evidence."""
 
-    direct, direct_error = recompute_direct_reference_products(
+    direct_windows, direct_error = recompute_direct_reference_products(
         policy, diagnostics, snapshot_ready
     )
+    direct = direct_windows.get("full", {})
+    direct_early = direct_windows.get("early", {})
+    direct_late = direct_windows.get("late", {})
     panel_criteria = {
         str(item["id"]): item for item in policy["criteria"]["comparison_panels"]
     }
@@ -1394,15 +1452,79 @@ def mks24_assessment(
                 rms <= float(limits["normalized_residual_rms_lte"])
                 and maximum <= float(limits["maximum_absolute_normalized_residual_lte"])
             )
+            drift: float | None = None
+            early_record = direct_early.get(product_id)
+            late_record = direct_late.get(product_id)
+            if (
+                isinstance(early_record, dict)
+                and isinstance(late_record, dict)
+                and early_record.get("available") is True
+                and late_record.get("available") is True
+            ):
+                try:
+                    _, _, early_values = reviewed.normalized_reference_metrics(
+                        policy, product_id, early_record, binding_record, expected_name
+                    )
+                    _, _, late_values = reviewed.normalized_reference_metrics(
+                        policy, product_id, late_record, binding_record, expected_name
+                    )
+                    uncertainty = record.get("reference_y_uncertainty")
+                    if binding_record.get("kind") == "surface":
+                        uncertainty = record.get("reference_z_uncertainty")
+                    if (
+                        not isinstance(uncertainty, list)
+                        or not early_values
+                        or not (
+                            len(early_values)
+                            == len(late_values)
+                            == len(uncertainty)
+                        )
+                    ):
+                        raise ValueError("early/late reference vector lengths differ")
+                    drift = math.sqrt(sum(
+                        (
+                            (float(early) - float(late)) / float(error)
+                        ) ** 2
+                        for early, late, error in zip(
+                            early_values, late_values, uncertainty
+                        )
+                    ) / len(early_values))
+                    if not math.isfinite(drift) or any(
+                        not math.isfinite(float(error)) or float(error) <= 0.0
+                        for error in uncertainty
+                    ):
+                        raise ValueError(
+                            "early/late drift has nonfinite values or uncertainty"
+                        )
+                except Exception as error:
+                    products.append({
+                        "panel_id": panel_id,
+                        "product_id": product_id,
+                        "case_id": case_id,
+                        "source": "authenticated_direct_fast_recomputation",
+                        "result": (
+                            "fail"
+                            if case_id and eligible.get(case_id, False)
+                            else "inconclusive"
+                        ),
+                        "reason": f"early/late reference product validation failed: {error}",
+                    })
+                    continue
             if not case_id or not eligible.get(case_id, False):
                 result = "inconclusive"
                 reason = "contributing case has not passed fast acceptance"
             elif not residual_pass:
                 result = "fail"
                 reason = "available normalized residual criterion failed"
-            else:
+            elif drift is None:
                 result = "inconclusive"
-                reason = "normalized residuals pass but early/late vector drift is unavailable"
+                reason = "early/late panel vectors are unavailable"
+            elif drift > float(limits["early_late_vector_drift_rms_lte"]):
+                result = "fail"
+                reason = "early/late panel stationarity criterion failed"
+            else:
+                result = "pass"
+                reason = "reference residual and panel stationarity gates passed"
             products.append({
                 "panel_id": panel_id,
                 "product_id": product_id,
@@ -1413,7 +1535,7 @@ def mks24_assessment(
                 "observations": {
                     "normalized_residual_rms": rms,
                     "maximum_absolute_normalized_residual": maximum,
-                    "early_late_vector_drift_rms": None,
+                    "early_late_vector_drift_rms": drift,
                 },
                 "limits": limits,
             })
