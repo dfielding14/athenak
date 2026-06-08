@@ -12,6 +12,8 @@ import shlex
 import shutil
 import subprocess
 
+from tst.publication import q011_escape_event_evidence
+
 logger = logging.getLogger("athena" + __name__[7:])
 
 _INPUT_DECK = "tests/pic_parallel_shock_outer_x1_escape_restart.athinput"
@@ -75,6 +77,13 @@ def _remove_outputs(basename):
     for path in glob.glob(os.path.join(_athena_exe_dir(), "rst", basename + ".*")):
         if os.path.isfile(path):
             os.remove(path)
+    for path in glob.glob(
+        os.path.join(
+            _athena_exe_dir(), basename + ".q011_escape_events.*.jsonl"
+        )
+    ):
+        if os.path.isfile(path):
+            os.remove(path)
 
 
 def _latest_restart(basename):
@@ -84,6 +93,19 @@ def _latest_restart(basename):
     if not matches:
         raise RuntimeError("No restart files found for " + basename)
     return matches[-1]
+
+
+def _escape_event_streams(basename):
+    matches = sorted(
+        glob.glob(
+            os.path.join(
+                _athena_exe_dir(), basename + ".q011_escape_events.*.jsonl"
+            )
+        )
+    )
+    if not matches:
+        raise RuntimeError("No raw escape-event streams found for " + basename)
+    return matches
 
 
 def _parse_boolean(value):
@@ -499,6 +521,7 @@ def _summary():
             ),
         },
         "mpi2": _RESULTS["mpi2"],
+        "raw_event_evidence": _RESULTS["raw_event_evidence"],
     }
 
 
@@ -524,6 +547,11 @@ def run(**kwargs):
     _RESULTS["segment_telemetry"] = _escape_telemetry(segment_output)
     _RESULTS["segment_saw_escape_diagnostic"] = (
         "pic_parallel_shock outer_x1_escape_sink:" in segment_output
+    )
+    segment_streams = _escape_event_streams(segment_basename)
+    segment_reduction = q011_escape_event_evidence.reduce_paths(segment_streams)
+    q011_escape_event_evidence.assert_matches_restart_ledger(
+        segment_reduction, _RESULTS["segment"]
     )
 
     numeric_error = "pic_parallel_shock restart CR ledger numeric metadata is invalid"
@@ -659,6 +687,25 @@ def run(**kwargs):
     _RESULTS["continuation_saw_escape_diagnostic"] = (
         "pic_parallel_shock outer_x1_escape_sink:" in continued_output
     )
+    continued_streams = _escape_event_streams(continued_basename)
+    combined_reduction = q011_escape_event_evidence.reduce_paths(
+        [*segment_streams, *continued_streams]
+    )
+    q011_escape_event_evidence.assert_matches_restart_ledger(
+        combined_reduction, _RESULTS["continued"]
+    )
+    _RESULTS["raw_event_evidence"] = {
+        "segment_stream_count": len(segment_streams),
+        "continuation_stream_count": len(continued_streams),
+        "segment_event_count": segment_reduction["unique_particle_tags"],
+        "combined_event_count": combined_reduction["unique_particle_tags"],
+        "segment_matches_restart_ledger": True,
+        "continuation_matches_restart_ledger": True,
+        "continuation_increases_event_count": (
+            combined_reduction["unique_particle_tags"]
+            >= segment_reduction["unique_particle_tags"]
+        ),
+    }
 
     if _MPI_NPROC >= 2:
         mpi_basename = "pic_parallel_shock_escape_mpi2"
@@ -729,6 +776,11 @@ def analyze():
         and summary["telemetry_destruction_audits_match_ledgers"]
         and summary["mpi_collective_payload_is_event_gated"]
         and summary["production_performance_pilot_gate"]["runtime_marks_gate_required"]
+        and all(
+            value
+            for key, value in summary["raw_event_evidence"].items()
+            if key.endswith("_ledger") or key == "continuation_increases_event_count"
+        )
         and (
             not summary["mpi2"]["requested"]
             or summary["mpi2"]["passed"]

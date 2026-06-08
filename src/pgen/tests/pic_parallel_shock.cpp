@@ -17,9 +17,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -37,6 +39,7 @@
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
 #include "outputs/restart_utils.hpp"
+#include "particles/field_interpolation.hpp"
 #include "particles/particles.hpp"
 #include "pgen/pgen.hpp"
 
@@ -77,6 +80,23 @@ struct GasDelta {
   Real dmy;
   Real dmz;
   Real de;
+};
+
+struct RawEscapeEvent {
+  int valid;
+  int tag;
+  int source;
+  int species;
+  int destruction_reason;
+  int physical_boundary_mask;
+  int parent_gid;
+  Real x1, x2, x3;
+  Real state_x1, state_x2, state_x3;
+  Real b1, b2, b3;
+  Real fluid_v1, fluid_v2, fluid_v3;
+  Real q_over_m;
+  Real weight;
+  Real kinetic_energy_per_mass;
 };
 
 // Runtime controls populated by ProblemGenerator::PICParallelShock().
@@ -178,6 +198,12 @@ bool ps_tag_progression_validated = false;
 std::int64_t ps_injection_tag_floor = 0;
 std::int64_t ps_next_tag = 0;
 ParameterInput *ps_pin = nullptr;
+bool ps_escape_raw_events = true;
+std::string ps_escape_event_path;
+std::ofstream ps_escape_event_stream;
+std::uint64_t ps_escape_event_prefix_hash = 14695981039346656037ULL;
+std::int64_t ps_escape_event_rank_count = 0;
+bool ps_escape_event_stream_finalized = false;
 
 void HashParallelShockRestartBytes(std::uint64_t &hash, const void *data,
                                    const std::size_t size) {
@@ -237,6 +263,8 @@ std::string ParallelShockRestartControlFingerprint() {
                                       ps_test_source_transaction_terms_override));
   HashParallelShockRestartControl(hash, "ps_test_source_transaction_terms",
                                   ps_test_source_transaction_terms);
+  HashParallelShockRestartControl(hash, "ps_escape_raw_events",
+                                  static_cast<int>(ps_escape_raw_events));
   HashParallelShockRestartControl(hash, "ps_inject_species", ps_inject_species);
   HashParallelShockRestartControl(hash, "ps_inject_seed", ps_inject_seed);
   HashParallelShockRestartControl(hash, "ps_particle_mass", ps_particle_mass);
@@ -334,6 +362,261 @@ inline Real FrameVelocityOffset(const Real t) {
   if (!FrameModeVelocity()) return 0.0;
   const Real vfollow = ps_frame_vfrac*ps_shock_speed;
   return -vfollow*FrameRampFactor(t);
+}
+
+std::string ParallelShockJsonEscape(const std::string &value) {
+  std::ostringstream escaped;
+  for (const unsigned char next : value) {
+    switch (next) {
+      case '"': escaped << "\\\""; break;
+      case '\\': escaped << "\\\\"; break;
+      case '\b': escaped << "\\b"; break;
+      case '\f': escaped << "\\f"; break;
+      case '\n': escaped << "\\n"; break;
+      case '\r': escaped << "\\r"; break;
+      case '\t': escaped << "\\t"; break;
+      default:
+        if (next < 0x20) {
+          escaped << "\\u00" << std::hex << std::setfill('0') << std::setw(2)
+                  << static_cast<int>(next) << std::dec;
+        } else {
+          escaped << next;
+        }
+    }
+  }
+  return escaped.str();
+}
+
+void AppendParallelShockEscapeEventLine(const std::string &line,
+                                        const bool include_in_prefix = true) {
+  if (!ps_escape_raw_events) return;
+  if (!ps_escape_event_stream.is_open() || ps_escape_event_stream_finalized) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock raw escape-event stream is not writable."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  ps_escape_event_stream << line << '\n';
+  if (!ps_escape_event_stream.good()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock failed to append raw escape-event evidence."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (include_in_prefix) {
+    HashParallelShockRestartBytes(ps_escape_event_prefix_hash, line.data(),
+                                  line.size());
+    constexpr char newline = '\n';
+    HashParallelShockRestartBytes(ps_escape_event_prefix_hash, &newline, 1);
+  }
+}
+
+std::string ParallelShockEscapePrefixHash() {
+  std::ostringstream out;
+  out << std::hex << std::setfill('0') << std::setw(16)
+      << ps_escape_event_prefix_hash;
+  return out.str();
+}
+
+void InitializeParallelShockEscapeEventStream(ParameterInput *pin, Mesh *pm) {
+  ps_escape_event_path.clear();
+  ps_escape_event_prefix_hash = 14695981039346656037ULL;
+  ps_escape_event_rank_count = 0;
+  ps_escape_event_stream_finalized = false;
+  if (ps_escape_event_stream.is_open()) ps_escape_event_stream.close();
+  if (!ps_escape_raw_events) return;
+  if (pin == nullptr || pm == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock cannot initialize raw escape-event evidence."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  const std::string basename = pin->GetString("job", "basename");
+  bool basename_valid = !basename.empty() && basename != "." && basename != "..";
+  for (const unsigned char next : basename) {
+    basename_valid = basename_valid &&
+        (std::isalnum(next) != 0 || next == '_' || next == '-' || next == '.');
+  }
+  if (!basename_valid) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock raw escape-event evidence requires a simple "
+              << "ASCII job basename." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  std::ostringstream path;
+  path << basename << ".q011_escape_events.cycle" << std::setfill('0')
+       << std::setw(8) << pm->ncycle << ".rank" << std::setw(8)
+       << global_variable::my_rank << ".jsonl";
+  ps_escape_event_path = path.str();
+  ps_escape_event_stream.open(ps_escape_event_path,
+                              std::ios::out | std::ios::binary | std::ios::trunc);
+  if (!ps_escape_event_stream.is_open()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock could not create raw escape-event stream '"
+              << ps_escape_event_path << "'." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+
+  std::ostringstream header;
+  header << std::scientific
+         << std::setprecision(std::numeric_limits<Real>::max_digits10)
+         << "{\"record_type\":\"q011_escape_event_stream_header\""
+         << ",\"schema_version\":1"
+         << ",\"control_fingerprint\":\""
+         << ParallelShockJsonEscape(ParallelShockRestartControlFingerprint()) << "\""
+         << ",\"basename\":\"" << ParallelShockJsonEscape(basename) << "\""
+         << ",\"rank\":" << global_variable::my_rank
+         << ",\"nranks\":" << global_variable::nranks
+         << ",\"segment_start_cycle\":" << pm->ncycle
+         << ",\"segment_start_time\":" << pm->time
+         << ",\"state_kind\":\""
+         << (ps_particle_momentum_state ? "momentum_per_mass" : "velocity") << "\""
+         << ",\"light_speed\":" << ps_particle_light_speed
+         << ",\"injected_species\":" << ps_inject_species
+         << ",\"species_mass\":" << ps_particle_mass
+         << ",\"species_charge\":" << ps_particle_charge
+         << ",\"q_over_m\":" << ps_particle_q_over_m
+         << ",\"macro_mass\":" << ps_particle_macro_mass
+         << ",\"field_interpolation\":\"tsc_bcc0_w0\""
+         << ",\"mesh_x1min\":" << pm->mesh_size.x1min
+         << ",\"mesh_x1max\":" << pm->mesh_size.x1max
+         << ",\"mesh_x2min\":" << pm->mesh_size.x2min
+         << ",\"mesh_x2max\":" << pm->mesh_size.x2max
+         << ",\"mesh_x3min\":" << pm->mesh_size.x3min
+         << ",\"mesh_x3max\":" << pm->mesh_size.x3max
+         << ",\"escape_audit_calls_at_start\":" << ps_escape_audit_calls
+         << ",\"escape_last_audit_time_at_start\":" << ps_escape_last_audit_time
+         << ",\"global_escape_count_at_start\":"
+         << ps_escaped_injected_cr_count_global
+         << ",\"global_escape_mass_at_start\":"
+         << ps_escaped_injected_cr_mass_global
+         << ",\"global_escape_momentum_x1_at_start\":"
+         << ps_escaped_injected_cr_momentum_x1_global
+         << ",\"global_escape_momentum_x2_at_start\":"
+         << ps_escaped_injected_cr_momentum_x2_global
+         << ",\"global_escape_momentum_x3_at_start\":"
+         << ps_escaped_injected_cr_momentum_x3_global
+         << ",\"global_escape_energy_at_start\":"
+         << ps_escaped_injected_cr_energy_global
+         << ",\"global_initial_escape_count_at_start\":"
+         << ps_escaped_initial_cr_count_global
+         << ",\"global_escape_term_count_at_start\":"
+         << ps_escaped_injected_cr_term_count_global
+         << ",\"global_escape_abs_mass_at_start\":"
+         << ps_escaped_injected_cr_abs_mass_global
+         << ",\"global_escape_abs_momentum_x1_at_start\":"
+         << ps_escaped_injected_cr_abs_momentum_x1_global
+         << ",\"global_escape_abs_momentum_x2_at_start\":"
+         << ps_escaped_injected_cr_abs_momentum_x2_global
+         << ",\"global_escape_abs_momentum_x3_at_start\":"
+         << ps_escaped_injected_cr_abs_momentum_x3_global
+         << ",\"global_escape_abs_energy_at_start\":"
+         << ps_escaped_injected_cr_abs_energy_global << "}";
+  AppendParallelShockEscapeEventLine(header.str());
+  ps_escape_event_stream.flush();
+  if (!ps_escape_event_stream.good()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock failed to publish raw escape-event header."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+}
+
+void AppendParallelShockEscapeEvent(const RawEscapeEvent &event,
+                                    const int cycle, const int stage,
+                                    const Real audit_time) {
+  if (!ps_escape_raw_events) return;
+  const std::int64_t event_index = ps_escape_event_rank_count;
+  const Real frame_velocity = FrameVelocityOffset(audit_time);
+  std::ostringstream line;
+  line << std::scientific
+       << std::setprecision(std::numeric_limits<Real>::max_digits10)
+       << "{\"record_type\":\"q011_escape_event\""
+       << ",\"schema_version\":1"
+       << ",\"rank\":" << global_variable::my_rank
+       << ",\"rank_event_index\":" << event_index
+       << ",\"cycle\":" << cycle
+       << ",\"stage\":" << stage
+       << ",\"audit_time\":" << audit_time
+       << ",\"tag\":" << event.tag
+       << ",\"source\":" << event.source
+       << ",\"species\":" << event.species
+       << ",\"destruction_reason\":" << event.destruction_reason
+       << ",\"physical_boundary_mask\":" << event.physical_boundary_mask
+       << ",\"parent_gid\":" << event.parent_gid
+       << ",\"x1\":" << event.x1
+       << ",\"x2\":" << event.x2
+       << ",\"x3\":" << event.x3
+       << ",\"state_x1\":" << event.state_x1
+       << ",\"state_x2\":" << event.state_x2
+       << ",\"state_x3\":" << event.state_x3
+       << ",\"state_kind\":\""
+       << (ps_particle_momentum_state ? "momentum_per_mass" : "velocity") << "\""
+       << ",\"light_speed\":" << ps_particle_light_speed
+       << ",\"species_mass\":" << ps_particle_mass
+       << ",\"species_charge\":" << ps_particle_charge
+       << ",\"q_over_m\":" << event.q_over_m
+       << ",\"macro_weight\":" << event.weight
+       << ",\"macro_mass\":" << ps_particle_macro_mass
+       << ",\"kinetic_energy_per_mass\":" << event.kinetic_energy_per_mass
+       << ",\"b1\":" << event.b1
+       << ",\"b2\":" << event.b2
+       << ",\"b3\":" << event.b3
+       << ",\"fluid_v1\":" << event.fluid_v1
+       << ",\"fluid_v2\":" << event.fluid_v2
+       << ",\"fluid_v3\":" << event.fluid_v3
+       << ",\"field_interpolation\":\"tsc_bcc0_w0\""
+       << ",\"frame_velocity_x1\":" << frame_velocity
+       << ",\"shock_speed\":" << ps_shock_speed << "}";
+  AppendParallelShockEscapeEventLine(line.str());
+  ++ps_escape_event_rank_count;
+}
+
+void FlushParallelShockEscapeEventStream() {
+  if (!ps_escape_raw_events || !ps_escape_event_stream.is_open()) return;
+  ps_escape_event_stream.flush();
+  if (!ps_escape_event_stream.good()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock failed to flush raw escape-event evidence."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+}
+
+void FinalizeParallelShockEscapeEventStream() {
+  if (!ps_escape_raw_events || ps_escape_event_stream_finalized) return;
+  if (!ps_escape_event_stream.is_open()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock raw escape-event stream disappeared before "
+              << "finalization." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  std::ostringstream trailer;
+  trailer << "{\"record_type\":\"q011_escape_event_stream_trailer\""
+          << ",\"schema_version\":1"
+          << ",\"rank\":" << global_variable::my_rank
+          << ",\"rank_event_count\":" << ps_escape_event_rank_count
+          << ",\"prefix_fnv1a64\":\"" << ParallelShockEscapePrefixHash()
+          << "\"}";
+  AppendParallelShockEscapeEventLine(trailer.str(), false);
+  ps_escape_event_stream.flush();
+  if (!ps_escape_event_stream.good()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock failed to finalize raw escape-event evidence."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  ps_escape_event_stream.close();
+  ps_escape_event_stream_finalized = true;
 }
 
 inline Real FrameOffsetDisplacement(const Real t) {
@@ -1116,76 +1399,102 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
     auto &pr = ppart->prtcl_rdata;
     auto &pi = ppart->prtcl_idata;
     auto &destroylist_d = ppart->pbval_part->destroylist;
+    auto &size = pm->pmb_pack->pmb->mb_size;
+    auto bcc = pm->pmb_pack->pmhd->bcc0;
+    auto w0 = pm->pmb_pack->pmhd->w0;
+    const RegionIndcs indcs = pm->mb_indcs;
+    const int gids = pm->pmb_pack->gids;
+    const int nmb = pm->pmb_pack->nmb_thispack;
     const int nrdata = ppart->nrdata;
     const int inject_species = ps_inject_species;
     const Real q_over_m = ps_particle_q_over_m;
-    const Real macro_mass = ps_particle_macro_mass;
     const bool momentum_state = ppart->UsesRelativisticCRState();
     const Real light_speed = ppart->pic_cr_light_speed;
-    Kokkos::parallel_reduce(
-        "ps_accumulate_particle_escape_sink",
+    const bool allow_2d3v = ps_use_2d3v;
+    size.template sync<DevExeSpace>();
+    auto size_view = size;
+    Kokkos::View<RawEscapeEvent *, DevMemSpace> raw_events(
+        "ps_raw_particle_escape_events", ndestroy);
+    Kokkos::parallel_for(
+        "ps_capture_particle_escape_events",
         Kokkos::RangePolicy<>(DevExeSpace(), 0, ndestroy),
-        KOKKOS_LAMBDA(const int n, Real &count, Real &mass, Real &momentum_x1,
-                      Real &momentum_x2, Real &momentum_x3, Real &energy_sum,
-                      Real &initial_count, Real &invalid, Real &abs_mass,
-                      Real &abs_momentum_x1, Real &abs_momentum_x2,
-                      Real &abs_momentum_x3, Real &abs_energy, Real &term_count) {
+        KOKKOS_LAMBDA(const int n) {
+          RawEscapeEvent event{};
           const int p = destroylist_d.d_view(n).prtcl_indx;
           bool finite_payload = true;
           for (int q = 0; q < nrdata; ++q) {
             finite_payload = finite_payload && isfinite(pr(q, p));
           }
-          if (!finite_payload) {
-            invalid += 1.0;
-            return;
+          event.tag = pi(PTAG, p);
+          event.source = pi(PCRSOURCE, p);
+          event.species = pi(PSP, p);
+          event.destruction_reason = destroylist_d.d_view(n).destruction_reason;
+          event.physical_boundary_mask =
+              destroylist_d.d_view(n).physical_boundary_mask;
+          event.parent_gid = pi(PGID, p);
+          event.x1 = pr(IPX, p);
+          event.x2 = pr(IPY, p);
+          event.x3 = pr(IPZ, p);
+          event.state_x1 = pr(IPVX, p);
+          event.state_x2 = pr(IPVY, p);
+          event.state_x3 = pr(IPVZ, p);
+          event.q_over_m = pr(IPM, p);
+          event.weight = pr(IPWT, p);
+          event.kinetic_energy_per_mass = particles::CRKineticEnergy(
+              momentum_state, light_speed, event.state_x1, event.state_x2,
+              event.state_x3);
+          const int m = event.parent_gid - gids;
+          event.valid = finite_payload &&
+              event.source == static_cast<int>(CRParticleSource::shock_injected) &&
+              event.species == inject_species && event.tag >= 0 &&
+              event.q_over_m == q_over_m && event.weight == 1.0 &&
+              event.destruction_reason ==
+                  static_cast<int>(ParticleDestructionReason::physical_boundary) &&
+              event.physical_boundary_mask == particle_boundary_outer_x1 &&
+              m >= 0 && m < nmb &&
+              isfinite(event.kinetic_energy_per_mass) &&
+              event.kinetic_energy_per_mass >= 0.0;
+          if (event.valid != 0) {
+            Real bx = 0.0, by = 0.0, bz = 0.0;
+            Real ux = 0.0, uy = 0.0, uz = 0.0;
+            particles::InterpolateTSCFields(
+                indcs, size_view, bcc, w0, true, m, event.x1, event.x2,
+                event.x3, bx, by, bz, ux, uy, uz, allow_2d3v);
+            event.b1 = bx;
+            event.b2 = by;
+            event.b3 = bz;
+            event.fluid_v1 = ux;
+            event.fluid_v2 = uy;
+            event.fluid_v3 = uz;
+            event.valid = isfinite(bx) && isfinite(by) && isfinite(bz) &&
+                isfinite(ux) && isfinite(uy) && isfinite(uz);
           }
-          const int source = pi(PCRSOURCE, p);
-          if (source == static_cast<int>(CRParticleSource::initial)) {
-            invalid += 1.0;
-            return;
-          }
-          if (source != static_cast<int>(CRParticleSource::shock_injected) ||
-              pi(PSP, p) != inject_species || pi(PTAG, p) < 0 ||
-              pr(IPM, p) != q_over_m || pr(IPWT, p) != 1.0) {
-            invalid += 1.0;
-            return;
-          }
-          const Real state_x = pr(IPVX, p);
-          const Real state_y = pr(IPVY, p);
-          const Real state_z = pr(IPVZ, p);
-          const Real energy = particles::CRKineticEnergy(
-              momentum_state, light_speed, state_x, state_y, state_z);
-          if (!isfinite(energy) || energy < 0.0) {
-            invalid += 1.0;
-            return;
-          }
-          count += 1.0;
-          mass += macro_mass;
-          momentum_x1 += macro_mass*state_x;
-          momentum_x2 += macro_mass*state_y;
-          momentum_x3 += macro_mass*state_z;
-          energy_sum += macro_mass*energy;
-          abs_mass += abs(macro_mass);
-          abs_momentum_x1 += abs(macro_mass*state_x);
-          abs_momentum_x2 += abs(macro_mass*state_y);
-          abs_momentum_x3 += abs(macro_mass*state_z);
-          abs_energy += abs(macro_mass*energy);
-          term_count += 1.0;
-        },
-        Kokkos::Sum<Real>(local[0]),
-        Kokkos::Sum<Real>(local[1]),
-        Kokkos::Sum<Real>(local[2]),
-        Kokkos::Sum<Real>(local[3]),
-        Kokkos::Sum<Real>(local[4]),
-        Kokkos::Sum<Real>(local[5]),
-        Kokkos::Sum<Real>(local[6]),
-        Kokkos::Sum<Real>(local[7]),
-        Kokkos::Sum<Real>(local[8]),
-        Kokkos::Sum<Real>(local[9]),
-        Kokkos::Sum<Real>(local[10]),
-        Kokkos::Sum<Real>(local[11]),
-        Kokkos::Sum<Real>(local[12]),
-        Kokkos::Sum<Real>(local[13]));
+          raw_events(n) = event;
+        });
+    auto host_events =
+        Kokkos::create_mirror_view_and_copy(HostMemSpace(), raw_events);
+    for (int n = 0; n < ndestroy; ++n) {
+      const RawEscapeEvent event = host_events(n);
+      if (event.valid != 1) {
+        local[7] += 1.0;
+        continue;
+      }
+      const Real macro_mass = ps_particle_macro_mass;
+      local[0] += 1.0;
+      local[1] += macro_mass;
+      local[2] += macro_mass*event.state_x1;
+      local[3] += macro_mass*event.state_x2;
+      local[4] += macro_mass*event.state_x3;
+      local[5] += macro_mass*event.kinetic_energy_per_mass;
+      local[8] += std::abs(macro_mass);
+      local[9] += std::abs(macro_mass*event.state_x1);
+      local[10] += std::abs(macro_mass*event.state_x2);
+      local[11] += std::abs(macro_mass*event.state_x3);
+      local[12] += std::abs(macro_mass*event.kinetic_energy_per_mass);
+      local[13] += 1.0;
+      AppendParallelShockEscapeEvent(event, pm->ncycle, stage, audit_time);
+    }
+    FlushParallelShockEscapeEventStream();
   }
 
 #if MPI_PARALLEL_ENABLED
@@ -2703,6 +3012,7 @@ void ParallelShockCheckpoint(ParameterInput *pin, Mesh *pm) {
                                             pm->time, "checkpoint");
   ValidateParallelShockParticlePopulation(pm);
   StoreRuntimeStateForRestart(pm->time);
+  FlushParallelShockEscapeEventStream();
 }
 
 void ParallelShockFinalize(ParameterInput *pin, Mesh *pm) {
@@ -2712,6 +3022,7 @@ void ParallelShockFinalize(ParameterInput *pin, Mesh *pm) {
                                             pm->time, "run end");
   ValidateParallelShockParticlePopulation(pm);
   StoreRuntimeStateForRestart(pm->time);
+  FinalizeParallelShockEscapeEventStream();
   if (global_variable::my_rank == 0) {
     std::cout << "pic_parallel_shock escape_accounting_telemetry:"
               << " population_audit_calls=" << ps_particle_population_audit_calls
@@ -2898,6 +3209,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_test_source_transaction_terms_override", false);
   ps_test_source_transaction_terms = pin->GetOrAddReal(
       "problem", "ps_test_source_transaction_terms", 1.0);
+  ps_escape_raw_events = pin->GetOrAddBoolean(
+      "problem", "ps_escape_raw_events", true);
   ps_enable_frame_tracking = pin->GetOrAddBoolean(
       "problem", "ps_enable_frame_tracking", false);
   std::string frame_mode = pin->GetOrAddString("problem", "ps_frame_mode",
@@ -3270,6 +3583,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     ValidateParallelShockParticlePopulation(pmy_mesh_);
   }
   StoreRuntimeStateForRestart(pmy_mesh_->time);
+  InitializeParallelShockEscapeEventStream(pin, pmy_mesh_);
   ConfigureSeedNoisePhases();
 
   if (ps_enable_frame_tracking && ps_frame_require_uniform &&
