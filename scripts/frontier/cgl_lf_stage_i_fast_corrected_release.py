@@ -50,6 +50,7 @@ ACTIVE_CASES = (
 )
 PASSIVE_CASES = ("R06", "R07", "R08", "R09")
 ALL_CASES = tuple(f"R{number:02d}" for number in range(2, 18))
+TERMINAL_FAILURE_CASES = ("R14", "R15")
 ACTIVE_PASSIVE_PAIRS = (
     ("R02", "R06"),
     ("R03", "R07"),
@@ -704,12 +705,12 @@ def validate_corrected_context(
                 terminal, f"{case_id} terminal disposition"
             )
             if (
-                case_id != "R14"
+                case_id not in TERMINAL_FAILURE_CASES
                 or case.get("status") != "failed_partial"
                 or case.get("terminal_disposition") != disposition
                 or disposition.get("record_type")
                 != "cgl_lf_stage_i_terminal_disposition"
-                or disposition.get("case_id") != "R14"
+                or disposition.get("case_id") != case_id
                 or disposition.get("status") != "failed_partial"
                 or disposition.get("disposition")
                 != "reproducible_finite_time_model_runtime_failure"
@@ -719,7 +720,7 @@ def validate_corrected_context(
             ):
                 raise ManuscriptReadyError(
                     f"{case_id} terminal disposition is not the authenticated "
-                    "reproducible R14 failure"
+                    "reproducible finite-time failure"
                 )
         elif case.get("status") != "complete":
             raise ManuscriptReadyError(

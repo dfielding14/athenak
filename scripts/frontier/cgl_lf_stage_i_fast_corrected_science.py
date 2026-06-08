@@ -76,6 +76,7 @@ ACTIVE_CASES = (
 )
 PASSIVE_CASES = ("R06", "R07", "R08", "R09")
 ALL_CASES = tuple(f"R{number:02d}" for number in range(2, 18))
+TERMINAL_FAILURE_CASES = ("R14", "R15")
 VALID_RESULTS = {"pass", "fail", "inconclusive"}
 DEPENDENCY_PINS = (
     ("corrected_downstream_sha256", "corrected downstream", CORRECTED_DOWNSTREAM_TOOL),
@@ -393,7 +394,7 @@ def validate_corrected_context(
 def authenticated_terminal_failure(
     context: dict[str, object], case_id: str
 ) -> dict[str, object] | None:
-    """Return the exact downstream-authenticated R14 failure disposition."""
+    """Return an exact downstream-authenticated failure disposition."""
 
     dispositions = require_dict(
         context.get("terminal_dispositions", {}), "terminal dispositions"
@@ -403,10 +404,10 @@ def authenticated_terminal_failure(
         return None
     disposition = require_dict(value, f"{case_id} terminal disposition")
     if (
-        case_id != "R14"
+        case_id not in TERMINAL_FAILURE_CASES
         or disposition.get("record_type")
         != "cgl_lf_stage_i_terminal_disposition"
-        or disposition.get("case_id") != "R14"
+        or disposition.get("case_id") != case_id
         or disposition.get("status") != "failed_partial"
         or disposition.get("disposition")
         != "reproducible_finite_time_model_runtime_failure"
@@ -415,7 +416,7 @@ def authenticated_terminal_failure(
         or int(disposition["attempt_count"]) < 2
     ):
         raise CorrectedScienceError(
-            f"{case_id} terminal disposition is not an authenticated R14 failure"
+            f"{case_id} terminal disposition is not an authenticated failure"
         )
     return disposition
 
@@ -597,8 +598,8 @@ def validate_products(
                 )
             ):
                 raise CorrectedScienceError(
-                    "R14 terminal failure is not represented as authenticated "
-                    "partial science"
+                    f"{case_id} terminal failure is not represented as "
+                    "authenticated partial science"
                 )
             continue
         if (
@@ -609,11 +610,20 @@ def validate_products(
             raise CorrectedScienceError(
                 f"{case_id} lacks complete authenticated downstream science products"
             )
-    terminal_failure = authenticated_terminal_failure(context, "R14")
-    if terminal_failure is not None:
+    terminal_failures = {
+        case_id: authenticated_terminal_failure(context, case_id)
+        for case_id in TERMINAL_FAILURE_CASES
+    }
+    terminal_failures = {
+        case_id: value
+        for case_id, value in terminal_failures.items()
+        if value is not None
+    }
+    if terminal_failures:
         if science_record.get("result") != "inconclusive":
             raise CorrectedScienceError(
-                "R14 terminal failure must make reviewed science inconclusive"
+                "terminal finite-limiter failures must make reviewed science "
+                "inconclusive"
             )
         gates = require_list(science_record.get("gates"), "reviewed science gates")
         limiter = [
@@ -624,7 +634,8 @@ def validate_products(
         ]
         if len(limiter) != 1 or limiter[0].get("result") != "inconclusive":
             raise CorrectedScienceError(
-                "R14 terminal failure must make the finite-limiter ordering inconclusive"
+                "terminal finite-limiter failures must make the finite-limiter "
+                "ordering inconclusive"
             )
 
     science_provenance = load_json(

@@ -81,7 +81,7 @@ def campaign(adapter, tmp_path: Path) -> dict[str, object]:
             "backup_limiters = false\n"
             "mirror_limiter = true\n"
             "firehose_limiter = true\n"
-            "limiter_nu_coll = 20.0\n"
+            f"limiter_nu_coll = {'200.0' if case_id == 'R15' else '20.0'}\n"
         )
         target_sources = (corrected_source, legacy_source) if passive else (corrected_source,)
         for source in target_sources:
@@ -260,17 +260,21 @@ def history_payload(times: list[float]) -> str:
 
 
 def install_r14_failed_replay_fixture(
-    adapter, campaign: dict[str, object], monkeypatch, mutate=None
+    adapter,
+    campaign: dict[str, object],
+    monkeypatch,
+    mutate=None,
+    case_id: str = "R14",
 ) -> None:
-    """Replace fixture R14 with two failed replays from one checkpoint."""
+    """Replace one terminal-case fixture with two exact failed replays."""
 
     fake_assemble(adapter, campaign, monkeypatch)
     original = adapter.report.assemble_fast_case
     config = campaign["config"]
 
-    def assemble(root, source, output, case_id, case):
-        record = original(root, source, output, case_id, case)
-        if case_id != "R14":
+    def assemble(root, source, output, assembled_case_id, case):
+        record = original(root, source, output, assembled_case_id, case)
+        if assembled_case_id != case_id:
             return record
 
         parent = Path(record["lineage"][0]["segment_dir"])
@@ -278,10 +282,10 @@ def install_r14_failed_replay_fixture(
         parent_manifest = json.loads(parent_manifest_path.read_text(encoding="utf-8"))
         parent_time = 4.0
         failure_time = 4.25
-        overrides = [adapter.R14_STRICT_OVERRIDE]
+        overrides = [adapter.TERMINAL_STRICT_OVERRIDE]
         parent_manifest.update(
             {
-                "variant": adapter.R14_APPROVED_VARIANT,
+                "variant": adapter.TERMINAL_APPROVED_VARIANT,
                 "command_line_overrides": overrides,
                 "strict_admissibility": False,
                 "continuation_policy": "finite_progress_complete_terminal_products",
@@ -312,7 +316,7 @@ def install_r14_failed_replay_fixture(
         for sequence, job_id in ((1, "9001"), (2, "9002")):
             segment = (
                 config.corrected.run_root
-                / "R14"
+                / case_id
                 / f"fast_s{sequence:03d}_t4_to_t10"
             )
             manifest_path = segment / "manifest/fast_run.json"
@@ -324,7 +328,7 @@ def install_r14_failed_replay_fixture(
                     "sequence": sequence,
                     "run_dir": str(segment.resolve()),
                     "output_dir": str(output_dir.resolve()),
-                    "run_basename": f"fixture_R14_s{sequence:03d}",
+                    "run_basename": f"fixture_{case_id}_s{sequence:03d}",
                     "start_time": parent_time,
                     "restart": str(restart.resolve()),
                     "restart_sha256": restart_sha,
@@ -333,8 +337,8 @@ def install_r14_failed_replay_fixture(
             )
             write_json(manifest_path, manifest)
             (segment / "manifest/run_exit_code").write_text("1\n", encoding="utf-8")
-            mhd = output_dir / f"fixture_R14_s{sequence:03d}.mhd.hst"
-            user = output_dir / f"fixture_R14_s{sequence:03d}.user.hst"
+            mhd = output_dir / f"fixture_{case_id}_s{sequence:03d}.mhd.hst"
+            user = output_dir / f"fixture_{case_id}_s{sequence:03d}.user.hst"
             mhd.write_text(
                 history_payload([parent_time, failure_time]), encoding="utf-8"
             )
@@ -344,11 +348,11 @@ def install_r14_failed_replay_fixture(
             log = (
                 config.corrected.root
                 / "logs/slurm-fast"
-                / f"cglc_R14_s{sequence:03d}.{job_id}.log"
+                / f"cglc_{case_id}_s{sequence:03d}.{job_id}.log"
             )
             log.parent.mkdir(parents=True, exist_ok=True)
             log.write_text(
-                f"time={failure_time:.16e}\n{adapter.R14_FATAL_SIGNATURE}\n",
+                f"time={failure_time:.16e}\n{adapter.TERMINAL_FATAL_SIGNATURE}\n",
                 encoding="utf-8",
             )
             attempts.append(
@@ -412,7 +416,7 @@ def install_r14_failed_replay_fixture(
         record["model_choices"] = adapter.report.model_choices_for_input(
             config.corrected.source / case["input"], overrides
         )
-        history_dir = output / "cases/R14/history"
+        history_dir = output / f"cases/{case_id}/history"
         history_dir.mkdir(parents=True, exist_ok=True)
         merged_mhd = history_dir / f"{case['name']}.mhd.hst"
         merged_user = history_dir / f"{case['name']}.user.hst"
@@ -659,6 +663,30 @@ def test_r14_reproducible_failure_is_stamped_and_revalidated(
         ).read_text(encoding="utf-8")
     )
     assert retained["terminal_disposition"] == disposition
+    assert adapter.validate_composite_inventory(
+        campaign["config"], campaign["output"]
+    )["result"] == "pass"
+
+
+def test_r15_reproducible_failure_uses_its_exact_limiter_contract(
+    adapter, campaign, monkeypatch
+):
+    install_r14_failed_replay_fixture(
+        adapter, campaign, monkeypatch, case_id="R15"
+    )
+
+    inventory_path = adapter.assemble_composite(
+        campaign["config"], campaign["output"]
+    )
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    disposition = inventory["cases"]["R15"]["terminal_disposition"]
+
+    assert disposition["case_id"] == "R15"
+    assert disposition["attempt_count"] == 2
+    assert disposition["physics"]["limiter_nu_coll"] == 200.0
+    assert disposition["physics"]["command_line_overrides"] == (
+        adapter.TERMINAL_APPROVED_OVERRIDES
+    )
     assert adapter.validate_composite_inventory(
         campaign["config"], campaign["output"]
     )["result"] == "pass"

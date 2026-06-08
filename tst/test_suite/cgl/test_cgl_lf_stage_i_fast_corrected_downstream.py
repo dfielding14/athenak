@@ -899,7 +899,7 @@ def test_active_only_inventory_cannot_self_authorize_terminal_partial(
         )
 
 
-def test_non_r14_failed_partial_is_rejected(
+def test_r15_authenticated_failed_partial_is_admitted(
     downstream, identity_tool, tmp_path, monkeypatch
 ) -> None:
     install_composite_validator(downstream, monkeypatch)
@@ -919,9 +919,37 @@ def test_non_r14_failed_partial_is_rejected(
     )
     write_json(fixture["inventory"], inventory)
 
+    context = downstream.validate_inventory(
+        fixture["identity"],
+        fixture["inventory"],
+        sha256(fixture["inventory"]),
+    )
+    assert context["terminal_dispositions"]["R15"]["attempt_count"] == 2
+
+
+def test_unsupported_failed_partial_is_rejected(
+    downstream, identity_tool, tmp_path, monkeypatch
+) -> None:
+    install_composite_validator(downstream, monkeypatch)
+    fixture = campaign_fixture(downstream, identity_tool, tmp_path)
+    inventory = json.loads(fixture["inventory"].read_text(encoding="utf-8"))
+    inventory["cases"]["R13"]["status"] = "failed_partial"
+    inventory["cases"]["R13"]["terminal_disposition"] = {
+        "record_type": "cgl_lf_stage_i_terminal_disposition",
+        "case_id": "R13",
+        "status": "failed_partial",
+        "disposition": "reproducible_finite_time_model_runtime_failure",
+        "attempt_count": 2,
+    }
+    write_json(
+        Path(inventory["output"]) / "cases/R13/lineage.json",
+        inventory["cases"]["R13"],
+    )
+    write_json(fixture["inventory"], inventory)
+
     with pytest.raises(
         downstream.CorrectedDownstreamError,
-        match="not an authenticated R14 failure",
+        match="not an authenticated failure",
     ):
         downstream.validate_inventory(
             fixture["identity"],

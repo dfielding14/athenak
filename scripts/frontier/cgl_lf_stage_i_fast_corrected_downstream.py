@@ -72,6 +72,7 @@ ACTIVE_CASES = (
 )
 PASSIVE_CASES = ("R06", "R07", "R08", "R09")
 ALL_CASES = tuple(sorted((*ACTIVE_CASES, *PASSIVE_CASES)))
+TERMINAL_FAILURE_CASES = ("R14", "R15")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 JOB_ID_PATTERN = re.compile(r"[1-9]\d*(?:;[A-Za-z0-9_.-]+)?")
 SUBMITTED_JOB_ID_PATTERN = re.compile(r"[1-9]\d*")
@@ -473,18 +474,18 @@ def active_manifest_bindings(
 def terminal_failure_disposition(
     case_id: str, case: dict[str, object]
 ) -> dict[str, object] | None:
-    """Return the exact report-authenticated R14 terminal disposition."""
+    """Return an exact report-authenticated terminal disposition."""
 
     value = case.get("terminal_disposition")
     if value is None:
         return None
     disposition = require_dict(value, f"{case_id} terminal disposition")
     if (
-        case_id != "R14"
+        case_id not in TERMINAL_FAILURE_CASES
         or case.get("status") != "failed_partial"
         or disposition.get("record_type")
         != "cgl_lf_stage_i_terminal_disposition"
-        or disposition.get("case_id") != "R14"
+        or disposition.get("case_id") != case_id
         or disposition.get("status") != "failed_partial"
         or disposition.get("disposition")
         != "reproducible_finite_time_model_runtime_failure"
@@ -493,7 +494,7 @@ def terminal_failure_disposition(
         or int(disposition["attempt_count"]) < 2
     ):
         raise CorrectedDownstreamError(
-            f"{case_id} terminal disposition is not an authenticated R14 failure"
+            f"{case_id} terminal disposition is not an authenticated failure"
         )
     return disposition
 
@@ -2263,7 +2264,7 @@ def validated_ct_output(
 
         if case_id in terminal_dispositions:
             if (
-                case_id != "R14"
+                case_id not in TERMINAL_FAILURE_CASES
                 or native.get("status") != "partial"
                 or native.get("coverage_complete") is not False
                 or case_result != "inconclusive"

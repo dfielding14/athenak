@@ -277,7 +277,11 @@ def fixture_tree(
     science_result: str = "pass",
     ct_result: str = "pass",
     r14_failure: bool = False,
+    r15_failure: bool = False,
 ) -> dict[str, object]:
+    terminal_failure_case = (
+        "R15" if r15_failure else "R14" if r14_failure else None
+    )
     identity_path = write_json(tmp_path / "identity.json", {"identity": "corrected"})
     analysis = tmp_path / "analysis/composite"
     cases: dict[str, object] = {}
@@ -294,11 +298,11 @@ def fixture_tree(
             "execution_authority": {"evidence_class": evidence_class},
         }
     terminal_dispositions: dict[str, object] = {}
-    if r14_failure:
-        terminal_segment = tmp_path / "runs/R14/replay"
+    if terminal_failure_case is not None:
+        terminal_segment = tmp_path / f"runs/{terminal_failure_case}/replay"
         disposition = {
             "record_type": "cgl_lf_stage_i_terminal_disposition",
-            "case_id": "R14",
+            "case_id": terminal_failure_case,
             "status": "failed_partial",
             "disposition": "reproducible_finite_time_model_runtime_failure",
             "attempt_count": 2,
@@ -308,14 +312,14 @@ def fixture_tree(
                 "run_exit_code": 1,
             }],
         }
-        cases["R14"]["status"] = "failed_partial"
-        cases["R14"]["terminal_disposition"] = disposition
-        cases["R14"]["lineage"] = [{
+        cases[terminal_failure_case]["status"] = "failed_partial"
+        cases[terminal_failure_case]["terminal_disposition"] = disposition
+        cases[terminal_failure_case]["lineage"] = [{
             "state": "failed",
             "segment_dir": str(terminal_segment.resolve()),
             "run_exit_code": 1,
         }]
-        terminal_dispositions["R14"] = disposition
+        terminal_dispositions[terminal_failure_case] = disposition
     inventory = {
         "record_type": "cgl_lf_stage_i_corrected_composite_report",
         "output": str(analysis.resolve()),
@@ -423,12 +427,12 @@ def fixture_tree(
                 "provenance_authenticated": True,
                 "audit_status": (
                     "authenticated_inconclusive"
-                    if r14_failure and case_id == "R14"
+                    if terminal_failure_case == case_id
                     else "authenticated_complete"
                 ),
                 "native_restart_ct": {
                     "coverage_complete": not (
-                        r14_failure and case_id == "R14"
+                        terminal_failure_case == case_id
                     )
                 },
             }
@@ -494,7 +498,9 @@ def fixture_tree(
             "case_results": {case_id: {} for case_id in gate.ALL_CASES},
             "campaign_health": {
                 "partial_or_unavailable_cases": (
-                    ["R14"] if r14_failure else []
+                    [terminal_failure_case]
+                    if terminal_failure_case is not None
+                    else []
                 ),
                 "structural_error_cases": [],
             },
@@ -524,20 +530,20 @@ def fixture_tree(
         "warnings": [],
         "inventory": context["inventory_binding"],
     }
-    if r14_failure:
+    if terminal_failure_case is not None:
         terminal_error = (
             "selected lineage segment 0 has nonzero run exit code: 1"
         )
         incomplete_error = "case is not complete: failed_partial"
         base_record = json.loads(json.dumps(verify_record))
         base_record["result"] = "fail"
-        base_record["cases"]["R14"]["errors"] = [
+        base_record["cases"][terminal_failure_case]["errors"] = [
             terminal_error,
             incomplete_error,
         ]
         base_record["errors"] = [
-            f"R14: {terminal_error}",
-            f"R14: {incomplete_error}",
+            f"{terminal_failure_case}: {terminal_error}",
+            f"{terminal_failure_case}: {incomplete_error}",
         ]
         base_path = write_json(analysis / "verify.base.json", base_record)
         verify_record.update({
@@ -683,7 +689,7 @@ def fixture_tree(
             "record_type": gate.CT_RECORD_TYPE,
             "numerical_result": ct_result,
             "selected_cases": list(gate.ALL_CASES),
-            "full_stage_i_coverage": not r14_failure,
+            "full_stage_i_coverage": terminal_failure_case is None,
             "release_authorizing": False,
         },
         "sources": sources,
@@ -1031,6 +1037,25 @@ def test_authenticated_r14_terminal_failure_is_honestly_manuscript_ready(
     assert record["terminal_dispositions"] == fixture["context"][
         "terminal_dispositions"
     ]
+
+
+def test_authenticated_r15_terminal_failure_is_honestly_manuscript_ready(
+    gate, tmp_path, monkeypatch
+):
+    fixture = fixture_tree(
+        gate,
+        tmp_path,
+        science_result="inconclusive",
+        ct_result="inconclusive",
+        r15_failure=True,
+    )
+    install_dependencies(gate, monkeypatch, fixture)
+
+    record = gate.build_marker(fixture["args"])
+
+    assert record["status"] == "manuscript_ready"
+    assert record["ct_coverage_complete"] is False
+    assert set(record["terminal_dispositions"]) == {"R15"}
 
 
 def test_r14_authenticated_complete_ct_requires_complete_native_coverage(
