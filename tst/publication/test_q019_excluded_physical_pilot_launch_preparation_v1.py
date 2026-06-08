@@ -179,6 +179,130 @@ def _final_bindings() -> dict[str, object]:
     return {"installed_control_plane_version": "a" * 64}
 
 
+def test_engineering_evidence_reopens_file_backed_execution_artifacts() -> None:
+    execution = {"attempts": []}
+    qualification = {
+        "status": engineering_qual.STATUS_PASS,
+        "decision": {
+            "engineering_gate_pass": True,
+            "production_resource_freeze_recommended": True,
+            "production_resource_freeze_authorized": False,
+        },
+        "authorization": dict(engineering_qual.AUTHORIZATION_BOUNDARY),
+        "execution_index": {"path": "/execution-index", "sha256": "a" * 64},
+    }
+
+    def read_binding(_binding: object, *, label: str) -> dict[str, object]:
+        if label == "Q019 engineering qualification":
+            return qualification
+        if label == "Q019 engineering execution index":
+            return execution
+        raise AssertionError(label)
+
+    with patch.object(
+        prep, "_stable_read_only_json", side_effect=read_binding
+    ), patch.object(
+        prep.engineering_qual,
+        "validate_qualification",
+        return_value=qualification,
+    ), patch.object(
+        prep.engineering_campaign,
+        "validate_execution_index_files",
+        return_value=execution,
+    ) as validate_files:
+        assert prep._engineering_evidence({}) == (qualification, execution)
+
+    validate_files.assert_called_once_with(execution)
+
+
+def test_prior_case_evidence_is_rebuilt_from_registered_raw_bundle() -> None:
+    case_id = prereg.PREDECESSOR_CORE[0]
+    report = {"case_id": case_id, "status": "exact"}
+    admission = {"case_id": case_id}
+    bundle = {
+        "snapshots": ["snapshot"],
+        "particle_states": ["particle-state"],
+        "completion_record": {"status": "complete"},
+    }
+    item = {
+        "case_id": case_id,
+        "analysis_report": {"path": "/report", "sha256": "a" * 64},
+        "admission": {"path": "/admission", "sha256": "b" * 64},
+    }
+
+    def read_binding(_binding: object, *, label: str) -> dict[str, object]:
+        if label.startswith("Q019 prior physical analysis report"):
+            return report
+        if label.startswith("Q019 prior physical admission"):
+            return admission
+        raise AssertionError(label)
+
+    with patch.object(
+        prep, "_stable_read_only_json", side_effect=read_binding
+    ), patch.object(
+        prep.registered_admission,
+        "validate_analysis_bundle",
+        return_value=(admission, bundle),
+    ) as validate_bundle, patch.object(
+        prep.physics_analysis,
+        "analyze_snapshots",
+        return_value=report,
+    ) as analyze:
+        assert prep._reopen_prior_case_evidence(
+            item, expected_case_id=case_id
+        ) == report
+
+    validate_bundle.assert_called_once_with(admission)
+    analyze.assert_called_once_with(
+        case_id,
+        bundle["snapshots"],
+        bundle["particle_states"],
+        source_kind="raw_registered_bundle",
+        provenance=admission,
+        completion_record=bundle["completion_record"],
+    )
+
+
+def test_prior_case_evidence_rejects_report_raw_reanalysis_drift() -> None:
+    case_id = prereg.PREDECESSOR_CORE[0]
+    report = {"case_id": case_id, "status": "stored"}
+    admission = {"case_id": case_id}
+    bundle = {
+        "snapshots": [],
+        "particle_states": [],
+        "completion_record": {},
+    }
+    item = {
+        "case_id": case_id,
+        "analysis_report": {"path": "/report", "sha256": "a" * 64},
+        "admission": {"path": "/admission", "sha256": "b" * 64},
+    }
+
+    def read_binding(_binding: object, *, label: str) -> dict[str, object]:
+        if label.startswith("Q019 prior physical analysis report"):
+            return report
+        if label.startswith("Q019 prior physical admission"):
+            return admission
+        raise AssertionError(label)
+
+    with patch.object(
+        prep, "_stable_read_only_json", side_effect=read_binding
+    ), patch.object(
+        prep.registered_admission,
+        "validate_analysis_bundle",
+        return_value=(admission, bundle),
+    ), patch.object(
+        prep.physics_analysis,
+        "analyze_snapshots",
+        return_value={"case_id": case_id, "status": "rebuilt"},
+    ):
+        with pytest.raises(
+            prep.PreparationError,
+            match="differs from exact raw reanalysis",
+        ):
+            prep._reopen_prior_case_evidence(item, expected_case_id=case_id)
+
+
 def _budget(
     now: datetime,
     unreserved: float = 1000.0,
@@ -353,8 +477,18 @@ def test_forged_prior_stage_qualification_is_rederived_and_rejected() -> None:
     }
     bundle = {
         "qualification": {"path": "/qualification", "sha256": "a"},
-        "analysis_reports": [
-            {"path": f"/reports/{case_id}", "sha256": "b"}
+        "case_evidence": [
+            {
+                "case_id": case_id,
+                "analysis_report": {
+                    "path": f"/reports/{case_id}",
+                    "sha256": "b",
+                },
+                "admission": {
+                    "path": f"/admissions/{case_id}",
+                    "sha256": "c",
+                },
+            }
             for case_id in expected_ids
         ],
     }
@@ -363,10 +497,17 @@ def test_forged_prior_stage_qualification_is_rederived_and_rejected() -> None:
         del binding
         if label == "Q019 prior physical qualification":
             return forged
-        case_id = label.removeprefix("Q019 prior physical analysis report ")
-        return reports[expected_ids.index(case_id)]
+        raise AssertionError(label)
 
-    with patch.object(prep, "_stable_read_only_json", side_effect=read_binding):
+    with patch.object(
+        prep, "_stable_read_only_json", side_effect=read_binding
+    ), patch.object(
+        prep,
+        "_reopen_prior_case_evidence",
+        side_effect=lambda _item, *, expected_case_id: reports[
+            expected_ids.index(expected_case_id)
+        ],
+    ):
         with pytest.raises(prep.PreparationError, match="did not rederive"):
             prep._prior_stage_evidence(2, bundle)
 
@@ -711,8 +852,18 @@ def test_later_stage_materialization_accepts_rederived_gate(
     prior = prep.physical_qual.build_qualification(reports, upto_stage=stage - 1)
     bundle = {
         "qualification": {"path": "/prior", "sha256": "a"},
-        "analysis_reports": [
-            {"path": f"/reports/{report['case_id']}", "sha256": "b"}
+        "case_evidence": [
+            {
+                "case_id": report["case_id"],
+                "analysis_report": {
+                    "path": f"/reports/{report['case_id']}",
+                    "sha256": "b",
+                },
+                "admission": {
+                    "path": f"/admissions/{report['case_id']}",
+                    "sha256": "c",
+                },
+            }
             for report in reports
         ],
     }
@@ -728,8 +879,7 @@ def test_later_stage_materialization_accepts_rederived_gate(
                 return budget
             if label == "Q019 prior physical qualification":
                 return prior
-            case_id = label.removeprefix("Q019 prior physical analysis report ")
-            return next(report for report in reports if report["case_id"] == case_id)
+            raise AssertionError(label)
 
         with patch.object(
             prep.engineering_prep,
@@ -739,6 +889,12 @@ def test_later_stage_materialization_accepts_rederived_gate(
             prep, "_engineering_evidence", return_value=(qualification, execution)
         ), patch.object(
             prep, "_stable_read_only_json", side_effect=read_binding
+        ), patch.object(
+            prep,
+            "_reopen_prior_case_evidence",
+            side_effect=lambda _item, *, expected_case_id: next(
+                report for report in reports if report["case_id"] == expected_case_id
+            ),
         ), patch.object(
             prep,
             "_rederive_live_budget_snapshot",

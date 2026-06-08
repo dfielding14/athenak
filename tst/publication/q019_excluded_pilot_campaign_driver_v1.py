@@ -18,6 +18,11 @@ import time
 import uuid
 from typing import Mapping, Sequence
 
+from tst.publication import (
+    q019_hardened_installed_control_plane_registered_admission_v1
+    as registered_admission,
+)
+
 
 PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 PROJECT_HOME_LEDGER_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
@@ -80,6 +85,28 @@ AUTHORIZATION_BOUNDARY = {
     "scientific_claim_authorized": False,
     "publication_authorized": False,
 }
+EXECUTION_PROVENANCE_KEYS = frozenset(
+    {
+        "source_commit",
+        "source_bundle_sha256",
+        "source_archive_sha256",
+        "executable_sha256",
+        "environment_sha256",
+        "deck_sha256",
+        "pre_submit_manifest",
+        "clean_candidate_manifest",
+        "source_archive",
+        "executable_snapshot",
+        "execution_receipt",
+        "terminal_receipt",
+        "installed_producer",
+        "reconciliation_event_sha256",
+        "reconciliation_mirror_ack_sha256",
+        "raw_inventory_sha256",
+        "retained_raw_bindings",
+        "reduction_binding",
+    }
+)
 
 
 class DriverError(RuntimeError):
@@ -340,6 +367,93 @@ def _artifact_payload_bytes(
     return sum(record["size"] for record in records)
 
 
+def _execution_provenance(admission: Mapping[str, object]) -> dict[str, object]:
+    lineage = admission.get("execution_lineage")
+    _require(
+        type(lineage) is dict
+        and set(lineage) == EXECUTION_PROVENANCE_KEYS
+        and type(lineage.get("source_commit")) is str
+        and COMMIT_PATTERN.fullmatch(str(lineage["source_commit"])) is not None
+        and all(
+            type(lineage.get(key)) is str
+            and SHA256_PATTERN.fullmatch(str(lineage[key])) is not None
+            for key in (
+                "source_bundle_sha256",
+                "source_archive_sha256",
+                "executable_sha256",
+                "environment_sha256",
+                "deck_sha256",
+                "reconciliation_event_sha256",
+                "reconciliation_mirror_ack_sha256",
+                "raw_inventory_sha256",
+            )
+        )
+        and all(
+            type(lineage.get(key)) is dict
+            for key in (
+                "pre_submit_manifest",
+                "clean_candidate_manifest",
+                "source_archive",
+                "executable_snapshot",
+                "execution_receipt",
+                "terminal_receipt",
+                "installed_producer",
+                "reduction_binding",
+            )
+        )
+        and type(lineage.get("retained_raw_bindings")) is list,
+        "Q019 pilot admission execution provenance is malformed",
+    )
+    return dict(lineage)
+
+
+def _reopen_attempt_admission(
+    attempt: Mapping[str, object],
+) -> dict[str, object]:
+    binding = attempt.get("admission")
+    _require(type(binding) is dict, "Q019 pilot admission binding is malformed")
+    path = Path(str(binding.get("path", "")))
+    _require(
+        _binding(path) == binding,
+        "Q019 pilot admission binding bytes or filesystem identity drifted",
+    )
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DriverError("Q019 pilot admission is not stable UTF-8 JSON") from error
+    try:
+        return registered_admission.validate_admission(value)
+    except registered_admission.RegisteredAdmissionError as error:
+        raise DriverError("Q019 pilot admission did not fully rederive") from error
+
+
+def _validate_attempt_admission_projection(
+    attempt: Mapping[str, object], admission: Mapping[str, object]
+) -> None:
+    expected_facts = {
+        key: admission[key]
+        for key in (
+            "record_type",
+            "case_id",
+            "artifact_root",
+            "registered_execution_identity",
+            "execution_profile",
+            "runtime_completion",
+            "raw_science_admission_eligible",
+            "problem_reported_saturation_evidence_eligible",
+            "saturation_evidence_eligible",
+            "authorization",
+        )
+    }
+    _require(
+        _strict_equal(attempt.get("admission_facts"), expected_facts)
+        and _strict_equal(
+            attempt.get("execution_provenance"), _execution_provenance(admission)
+        ),
+        "Q019 pilot attempt projection differs from rederived admission",
+    )
+
+
 def build_execution_index(
     attempts: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
@@ -383,6 +497,7 @@ def build_execution_index(
         )
         admission = attempt.get("admission")
         admission_facts = attempt.get("admission_facts")
+        execution_provenance = attempt.get("execution_provenance")
         inventory = attempt.get("artifact_inventory")
         payload_bytes = attempt.get("artifact_payload_bytes")
         event = attempt.get("reconciliation_event")
@@ -394,6 +509,8 @@ def build_execution_index(
             and type(admission["byte_count"]) is int
             and admission["byte_count"] > 0
             and type(admission_facts) is dict
+            and type(execution_provenance) is dict
+            and set(execution_provenance) == EXECUTION_PROVENANCE_KEYS
             and type(inventory) is dict
             and set(inventory) == {"path", "sha256", "byte_count"}
             and type(inventory["sha256"]) is str
@@ -405,6 +522,18 @@ def build_execution_index(
             and type(event) is dict,
             f"{artifact_id}: Q019 pilot admission or storage binding drifted",
         )
+        _require(
+            execution_provenance.get("reconciliation_event_sha256")
+            == admission_facts.get("registered_execution_identity", {}).get(
+                "reconciliation_event_sha256"
+            )
+            and execution_provenance.get("reconciliation_mirror_ack_sha256")
+            == admission_facts.get("registered_execution_identity", {}).get(
+                "reconciliation_mirror_ack_sha256"
+            ),
+            f"{artifact_id}: Q019 pilot provenance identity drifted",
+        )
+        _execution_provenance({"execution_lineage": execution_provenance})
         registered_identity = admission_facts.get("registered_execution_identity")
         execution_profile = admission_facts.get("execution_profile")
         completion = admission_facts.get("runtime_completion")
@@ -564,6 +693,8 @@ def validate_execution_index(value: object) -> dict[str, object]:
 def validate_execution_index_files(value: object) -> dict[str, object]:
     rebuilt = validate_execution_index(value)
     for attempt in rebuilt["attempts"]:
+        admission = _reopen_attempt_admission(attempt)
+        _validate_attempt_admission_projection(attempt, admission)
         _require(
             _artifact_payload_bytes(
                 attempt["artifact_inventory"],
@@ -597,13 +728,8 @@ class Driver:
         from tst.publication import (  # noqa: PLC0415
             q019_excluded_pilot_launch_policy_preparation_v1 as preparation,
         )
-        from tst.publication import (  # noqa: PLC0415
-            q019_hardened_installed_control_plane_registered_admission_v1
-            as admission,
-        )
-
         self.preparation = preparation
-        self.admission = admission
+        self.admission = registered_admission
         self.final = self._read_bound_json(
             self.final_bindings_path,
             expected_sha256=self.final_bindings_sha256,
@@ -1023,12 +1149,38 @@ class Driver:
                     "authorization",
                 )
             },
+            "execution_provenance": _execution_provenance(admission_record),
             "artifact_inventory": artifact_inventory,
             "artifact_payload_bytes": _artifact_payload_bytes(
                 artifact_inventory, artifact_root=artifact_root
             ),
             "reconciliation_event": event,
         }
+
+    @staticmethod
+    def _validate_admitted_resume_state(
+        *,
+        index: int,
+        member: Mapping[str, object],
+        state: Mapping[str, object],
+        admission_path: Path,
+        admission_record: Mapping[str, object],
+    ) -> None:
+        identity = admission_record.get("registered_execution_identity")
+        _require(
+            type(identity) is dict
+            and state.get("status") == "admitted"
+            and state.get("attempt_index") == index
+            and state.get("artifact_id") == member["artifact_id"]
+            and state.get("source_case_id") == member["source_case_id"]
+            and state.get("authorization_id")
+            == identity.get("registered_science_authorization_id")
+            and state.get("submission_id") == identity.get("submission_id")
+            and state.get("job_id") == identity.get("slurm_job_id")
+            and state.get("admission_path") == str(admission_path)
+            and state.get("admission_sha256") == _sha256(admission_path),
+            f"{member['artifact_id']}: admitted pilot resume state drifted",
+        )
 
     def _run_attempt(
         self, index: int, member: Mapping[str, object]
@@ -1039,7 +1191,14 @@ class Driver:
         if admission_path.exists():
             _require(state is not None, f"{artifact_id}: admitted pilot lacks resume state")
             record = json.loads(admission_path.read_text(encoding="utf-8"))
-            self.admission.validate_admission(record)
+            record = self.admission.validate_admission(record)
+            self._validate_admitted_resume_state(
+                index=index,
+                member=member,
+                state=state,
+                admission_path=admission_path,
+                admission_record=record,
+            )
             return self._attempt_record(
                 index=index,
                 member=member,
@@ -1168,7 +1327,7 @@ class Driver:
         execution_index = build_execution_index(attempts)
         if self.index_path.exists():
             existing = json.loads(self.index_path.read_text(encoding="utf-8"))
-            validate_execution_index(existing)
+            validate_execution_index_files(existing)
             _require(
                 existing == execution_index,
                 "existing Q019 pilot execution index differs",

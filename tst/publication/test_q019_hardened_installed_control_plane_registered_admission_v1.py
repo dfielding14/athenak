@@ -528,6 +528,20 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
         "registered_science_authorization_id": "q019-fixture",
         "slurm_job_id": "12345",
         "pre_submit_manifest_sha256": "e" * 64,
+        "clean_candidate_manifest_sha256": "1" * 64,
+        "source_commit": "2" * 40,
+        "source_bundle_sha256": "3" * 64,
+        "source_archive_sha256": "4" * 64,
+        "executable_sha256": "5" * 64,
+        "environment_sha256": "6" * 64,
+        "deck_sha256": "7" * 64,
+        "raw_inventory_sha256": "8" * 64,
+        "producer": {
+            "entrypoint": admission.PRODUCER_ENTRYPOINT,
+            "entrypoint_sha256": "9" * 64,
+            "launch_trampoline_sha256": "a" * 64,
+            "control_plane_version": "d" * 64,
+        },
         "command_evidence": {
             "trusted_wrapper_evidence": {
                 "termination_reason": "Terminating on cycle limit",
@@ -536,11 +550,17 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
             }
         },
     }
+    receipt_payload = b"receipt"
+    terminal_payload = b"terminal"
     paired = {
-        "execution_receipt": {"sha256": "f" * 64},
-        "terminal_receipt": {"sha256": "0" * 64},
-        "_receipt_payload": b"receipt",
-        "_terminal_payload": b"terminal",
+        "execution_receipt": {
+            "sha256": hashlib.sha256(receipt_payload).hexdigest()
+        },
+        "terminal_receipt": {
+            "sha256": hashlib.sha256(terminal_payload).hexdigest()
+        },
+        "_receipt_payload": receipt_payload,
+        "_terminal_payload": terminal_payload,
     }
     reduction = {
         "snapshots": [{"cycle": 0, "time": 0.0}],
@@ -567,13 +587,35 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
     monkeypatch.setattr(
         admission,
         "_installed_rederivation",
-        lambda *args, **kwargs: {"exact_byte_rederivation_passed": True},
+        lambda *args, **kwargs: {
+            "control_plane_version": receipt["control_plane_version"],
+            "entrypoint": admission.PRODUCER_ENTRYPOINT,
+            "entrypoint_sha256": receipt["producer"]["entrypoint_sha256"],
+            "launch_trampoline_sha256": receipt["producer"][
+                "launch_trampoline_sha256"
+            ],
+            "reconciliation_event_sha256": receipt[
+                "reconciliation_event_sha256"
+            ],
+            "reconciliation_mirror_ack_sha256": receipt[
+                "reconciliation_mirror_ack_sha256"
+            ],
+            "exact_byte_rederivation_passed": True,
+        },
     )
     monkeypatch.setattr(
         admission,
         "_manifest_and_candidate",
         lambda *args, **kwargs: {
             "source_bindings": {},
+            "pre_submit_manifest": {
+                "sha256": receipt["pre_submit_manifest_sha256"]
+            },
+            "clean_candidate_manifest": {
+                "sha256": receipt["clean_candidate_manifest_sha256"]
+            },
+            "source_archive": {"sha256": receipt["source_archive_sha256"]},
+            "executable_snapshot": {"sha256": receipt["executable_sha256"]},
             "analysis_closure": {
                 "execution_deck": {
                     "kind": "base_matrix_case",
@@ -588,7 +630,14 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
     monkeypatch.setattr(
         admission,
         "_raw_bundle",
-        lambda *args, **kwargs: (reduction, {"raw_inventory_sha256": "1" * 64}),
+        lambda *args, **kwargs: (
+            reduction,
+            {
+                "raw_inventory_sha256": receipt["raw_inventory_sha256"],
+                "retained_raw_bindings": [],
+                "reduction_binding": {"record_type": "fixture"},
+            },
+        ),
     )
     artifact_root.chmod(0o555)
     try:
@@ -602,6 +651,10 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
             authorized_project_home_root=project_home,
         )
         assert record["q043_dependency"]["sha256"] == q043_sha256
+        assert record["execution_lineage"]["source_commit"] == receipt["source_commit"]
+        assert record["execution_lineage"]["installed_producer"][
+            "launch_trampoline_sha256"
+        ] == receipt["producer"]["launch_trampoline_sha256"]
         assert record["problem_reported_saturation_evidence_eligible"] is True
         assert record["saturation_evidence_eligible"] is False
         assert bundle["snapshots"] == reduction["snapshots"]

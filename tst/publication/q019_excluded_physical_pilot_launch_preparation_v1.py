@@ -27,6 +27,13 @@ from tst.publication import q019_excluded_pilot_launch_policy_preparation_v1 as 
 from tst.publication import q019_nonlinear_bell_runtime_controller_v1 as controller
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as design
 from tst.publication import (
+    analyze_q019_physics_first_nonlinear_bell_successor_v2 as physics_analysis,
+)
+from tst.publication import (
+    q019_hardened_installed_control_plane_registered_admission_v1
+    as registered_admission,
+)
+from tst.publication import (
     q043_registered_execution_raw_oracle_qualification_successor_v1 as q043,
 )
 
@@ -335,7 +342,7 @@ def _engineering_evidence(binding: object) -> tuple[dict[str, object], dict[str,
         label="Q019 engineering execution index",
     )
     try:
-        execution = engineering_campaign.validate_execution_index(execution)
+        execution = engineering_campaign.validate_execution_index_files(execution)
     except engineering_campaign.DriverError as error:
         raise PreparationError("Q019 engineering execution index did not validate") from error
     return qualification, execution
@@ -545,6 +552,51 @@ def validate_resource_model(
     return dict(value)
 
 
+def _reopen_prior_case_evidence(
+    item: object, *, expected_case_id: str
+) -> dict[str, object]:
+    _require(
+        type(item) is dict
+        and set(item) == {"case_id", "analysis_report", "admission"}
+        and item["case_id"] == expected_case_id,
+        f"{expected_case_id}: Q019 prior case-evidence identity drifted",
+    )
+    report = _stable_read_only_json(
+        item["analysis_report"],
+        label=f"Q019 prior physical analysis report {expected_case_id}",
+    )
+    admission_value = _stable_read_only_json(
+        item["admission"],
+        label=f"Q019 prior physical admission {expected_case_id}",
+    )
+    try:
+        admission, bundle = registered_admission.validate_analysis_bundle(
+            admission_value
+        )
+        rebuilt = physics_analysis.analyze_snapshots(
+            expected_case_id,
+            bundle["snapshots"],
+            bundle["particle_states"],
+            source_kind="raw_registered_bundle",
+            provenance=admission,
+            completion_record=bundle["completion_record"],
+        )
+    except (
+        registered_admission.RegisteredAdmissionError,
+        physics_analysis.ContractError,
+    ) as error:
+        raise PreparationError(
+            f"{expected_case_id}: Q019 prior raw analysis did not rederive"
+        ) from error
+    _require(
+        admission.get("case_id") == expected_case_id
+        and report.get("case_id") == expected_case_id
+        and _strict_equal(report, rebuilt),
+        f"{expected_case_id}: Q019 prior report differs from exact raw reanalysis",
+    )
+    return report
+
+
 def _prior_stage_evidence(stage: int, binding: object | None) -> dict[str, object] | None:
     if stage == 1:
         _require(binding is None, "Q019 stage 1 must not carry a prior-stage qualification")
@@ -552,8 +604,8 @@ def _prior_stage_evidence(stage: int, binding: object | None) -> dict[str, objec
     _require(binding is not None, "Q019 prior physical qualification is required")
     _require(
         type(binding) is dict
-        and set(binding) == {"qualification", "analysis_reports"}
-        and type(binding["analysis_reports"]) is list,
+        and set(binding) == {"qualification", "case_evidence"}
+        and type(binding["case_evidence"]) is list,
         "Q019 prior physical qualification bundle is malformed",
     )
     value = _stable_read_only_json(
@@ -565,15 +617,15 @@ def _prior_stage_evidence(stage: int, binding: object | None) -> dict[str, objec
         else list(prereg.PREDECESSOR_CORE + prereg.WINDOW_CORE)
     )
     _require(
-        len(binding["analysis_reports"]) == len(expected_ids),
-        "Q019 prior physical analysis-report count drifted",
+        len(binding["case_evidence"]) == len(expected_ids),
+        "Q019 prior physical case-evidence count drifted",
     )
     reports = [
-        _stable_read_only_json(
-            report_binding,
-            label=f"Q019 prior physical analysis report {case_id}",
+        _reopen_prior_case_evidence(
+            case_evidence,
+            expected_case_id=case_id,
         )
-        for case_id, report_binding in zip(expected_ids, binding["analysis_reports"])
+        for case_id, case_evidence in zip(expected_ids, binding["case_evidence"])
     ]
     _require(
         [report.get("case_id") for report in reports] == expected_ids,
@@ -992,11 +1044,9 @@ def build_materialization(
                 "qualification": dict(
                     prior_stage_qualification_binding["qualification"]
                 ),
-                "analysis_reports": [
+                "case_evidence": [
                     dict(item)
-                    for item in prior_stage_qualification_binding[
-                        "analysis_reports"
-                    ]
+                    for item in prior_stage_qualification_binding["case_evidence"]
                 ],
                 "canonical_sha256": _canonical_sha256(prior),
             }

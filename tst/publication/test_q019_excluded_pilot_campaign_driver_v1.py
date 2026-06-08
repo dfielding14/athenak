@@ -15,6 +15,7 @@ from tst.publication import q019_excluded_pilot_campaign_driver_v1 as driver
 
 
 def _attempt(index: int, artifact_id: str) -> dict[str, object]:
+    digest = lambda offset: f"{(index + offset) % 16:x}" * 64
     case_id = driver.EXPECTED_CASES[artifact_id]
     dimension = 2 if "-2d-" in artifact_id else 3
     role = "baseline" if artifact_id.endswith("-baseline") else "instrumented"
@@ -47,6 +48,27 @@ def _attempt(index: int, artifact_id: str) -> dict[str, object]:
         "consumed_node_hours": nodes * elapsed / 3600.0,
     }
     event["event_sha256"] = driver._ledger_event_sha256(event)
+    mirror_ack_sha256 = digest(8)
+    execution_provenance = {
+        "source_commit": f"{index % 16:x}" * 40,
+        "source_bundle_sha256": digest(1),
+        "source_archive_sha256": digest(2),
+        "executable_sha256": digest(3),
+        "environment_sha256": digest(4),
+        "deck_sha256": digest(5),
+        "pre_submit_manifest": {"sha256": digest(6)},
+        "clean_candidate_manifest": {"sha256": digest(7)},
+        "source_archive": {"sha256": digest(2)},
+        "executable_snapshot": {"sha256": digest(3)},
+        "execution_receipt": {"sha256": digest(9)},
+        "terminal_receipt": {"sha256": digest(10)},
+        "installed_producer": {"entrypoint_sha256": digest(11)},
+        "reconciliation_event_sha256": event["event_sha256"],
+        "reconciliation_mirror_ack_sha256": mirror_ack_sha256,
+        "raw_inventory_sha256": digest(12),
+        "retained_raw_bindings": [],
+        "reduction_binding": {"record_type": "fixture"},
+    }
     return {
         "attempt_index": index,
         "artifact_id": artifact_id,
@@ -71,6 +93,7 @@ def _attempt(index: int, artifact_id: str) -> dict[str, object]:
                 "registered_science_authorization_id": authorization,
                 "slurm_job_id": str(5000000 + index),
                 "reconciliation_event_sha256": event["event_sha256"],
+                "reconciliation_mirror_ack_sha256": mirror_ack_sha256,
             },
             "execution_profile": {
                 "kind": "runtime_controller_overlay",
@@ -94,6 +117,7 @@ def _attempt(index: int, artifact_id: str) -> dict[str, object]:
             "saturation_evidence_eligible": False,
             "authorization": {"scientific_claim_authorized": False},
         },
+        "execution_provenance": execution_provenance,
         "artifact_inventory": {
             "path": f"{artifact_root}/artifact_inventory.json",
             "sha256": f"{index + 4}" * 64,
@@ -140,6 +164,9 @@ def test_duplicate_source_cases_are_allowed_but_execution_ids_are_unique() -> No
     duplicate[1]["admission_facts"]["registered_execution_identity"][
         "reconciliation_event_sha256"
     ] = duplicate[1]["reconciliation_event"]["event_sha256"]
+    duplicate[1]["execution_provenance"]["reconciliation_event_sha256"] = (
+        duplicate[1]["reconciliation_event"]["event_sha256"]
+    )
     with pytest.raises(driver.DriverError, match="identity reused: job_id"):
         driver.build_execution_index(duplicate)
 
@@ -233,12 +260,77 @@ def test_execution_index_file_validation_rederives_payload_bytes() -> None:
         attempt["artifact_root"]: attempt["artifact_payload_bytes"]
         for attempt in attempts
     }
+    admissions = {
+        attempt["artifact_id"]: {
+            **attempt["admission_facts"],
+            "execution_lineage": attempt["execution_provenance"],
+        }
+        for attempt in attempts
+    }
     with patch.object(
         driver,
         "_artifact_payload_bytes",
         side_effect=lambda _binding, *, artifact_root: by_root[str(artifact_root)],
+    ), patch.object(
+        driver,
+        "_reopen_attempt_admission",
+        side_effect=lambda attempt: admissions[attempt["artifact_id"]],
     ):
         assert driver.validate_execution_index_files(index) == index
-    with patch.object(driver, "_artifact_payload_bytes", return_value=1):
+    with patch.object(driver, "_artifact_payload_bytes", return_value=1), patch.object(
+        driver,
+        "_reopen_attempt_admission",
+        side_effect=lambda attempt: admissions[attempt["artifact_id"]],
+    ):
         with pytest.raises(driver.DriverError, match="payload-byte total drifted"):
             driver.validate_execution_index_files(index)
+
+
+def test_execution_index_file_validation_rejects_rederived_admission_drift() -> None:
+    attempts = _attempts()
+    index = driver.build_execution_index(attempts)
+    forged = {
+        **attempts[0]["admission_facts"],
+        "execution_lineage": {
+            **attempts[0]["execution_provenance"],
+            "executable_sha256": "f" * 64,
+        },
+    }
+    with patch.object(driver, "_reopen_attempt_admission", return_value=forged):
+        with pytest.raises(driver.DriverError, match="projection differs"):
+            driver.validate_execution_index_files(index)
+
+
+def test_admitted_resume_state_is_exactly_cross_bound(tmp_path: Path) -> None:
+    attempt = _attempts()[0]
+    admission_path = tmp_path / "admission.json"
+    admission_path.write_text("{}\n", encoding="utf-8")
+    admission_path.chmod(0o444)
+    identity = attempt["admission_facts"]["registered_execution_identity"]
+    state = {
+        "status": "admitted",
+        "attempt_index": 1,
+        "artifact_id": attempt["artifact_id"],
+        "source_case_id": attempt["source_case_id"],
+        "authorization_id": attempt["authorization_id"],
+        "submission_id": attempt["submission_id"],
+        "job_id": attempt["job_id"],
+        "admission_path": str(admission_path),
+        "admission_sha256": driver._sha256(admission_path),
+    }
+    driver.Driver._validate_admitted_resume_state(
+        index=1,
+        member=attempt,
+        state=state,
+        admission_path=admission_path,
+        admission_record={"registered_execution_identity": identity},
+    )
+    state["job_id"] = "999"
+    with pytest.raises(driver.DriverError, match="resume state drifted"):
+        driver.Driver._validate_admitted_resume_state(
+            index=1,
+            member=attempt,
+            state=state,
+            admission_path=admission_path,
+            admission_record={"registered_execution_identity": identity},
+        )

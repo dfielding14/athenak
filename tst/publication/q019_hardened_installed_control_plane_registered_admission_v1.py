@@ -926,6 +926,9 @@ def _installed_rederivation(
         "control_plane_version": version,
         "entrypoint": PRODUCER_ENTRYPOINT,
         "entrypoint_sha256": expected_producer["entrypoint_sha256"],
+        "launch_trampoline_sha256": expected_producer[
+            "launch_trampoline_sha256"
+        ],
         "reconciliation_event_sha256": event["event_sha256"],
         "reconciliation_mirror_ack_sha256": mirror_ack["mirror_ack_sha256"],
         "exact_byte_rederivation_passed": True,
@@ -1124,6 +1127,96 @@ def _raw_bundle(
         "retained_raw_bindings": bindings,
         "checkpoint_bindings": checkpoint_bindings,
         "reduction_binding": _reduction_binding(reduction),
+    }
+
+
+def _execution_lineage(
+    receipt: Mapping[str, object],
+    *,
+    paired: Mapping[str, object],
+    installed_rederivation: Mapping[str, object],
+    candidate: Mapping[str, object],
+    raw_binding: Mapping[str, object],
+) -> dict[str, object]:
+    """Project the immutable execution lineage needed by campaign indexes."""
+    source_archive = candidate.get("source_archive")
+    executable = candidate.get("executable_snapshot")
+    pre_submit = candidate.get("pre_submit_manifest")
+    clean_candidate = candidate.get("clean_candidate_manifest")
+    execution_receipt = paired.get("execution_receipt")
+    terminal_receipt = paired.get("terminal_receipt")
+    producer = receipt.get("producer")
+    _require(
+        all(
+            type(value) is dict
+            for value in (
+                source_archive,
+                executable,
+                pre_submit,
+                clean_candidate,
+                execution_receipt,
+                terminal_receipt,
+                producer,
+            )
+        )
+        and source_archive.get("sha256") == receipt.get("source_archive_sha256")
+        and executable.get("sha256") == receipt.get("executable_sha256")
+        and pre_submit.get("sha256") == receipt.get("pre_submit_manifest_sha256")
+        and clean_candidate.get("sha256")
+        == receipt.get("clean_candidate_manifest_sha256")
+        and execution_receipt.get("sha256")
+        == hashlib.sha256(paired["_receipt_payload"]).hexdigest()
+        and terminal_receipt.get("sha256")
+        == hashlib.sha256(paired["_terminal_payload"]).hexdigest()
+        and installed_rederivation.get("control_plane_version")
+        == receipt.get("control_plane_version")
+        and installed_rederivation.get("entrypoint_sha256")
+        == producer.get("entrypoint_sha256")
+        and installed_rederivation.get("launch_trampoline_sha256")
+        == producer.get("launch_trampoline_sha256")
+        and installed_rederivation.get("reconciliation_event_sha256")
+        == receipt.get("reconciliation_event_sha256")
+        and installed_rederivation.get("reconciliation_mirror_ack_sha256")
+        == receipt.get("reconciliation_mirror_ack_sha256")
+        and raw_binding.get("raw_inventory_sha256")
+        == receipt.get("raw_inventory_sha256")
+        and type(raw_binding.get("retained_raw_bindings")) is list
+        and type(raw_binding.get("reduction_binding")) is dict,
+        "Q019 projected execution lineage differs from rederived evidence",
+    )
+    return {
+        "source_commit": receipt["source_commit"],
+        "source_bundle_sha256": receipt["source_bundle_sha256"],
+        "source_archive_sha256": receipt["source_archive_sha256"],
+        "executable_sha256": receipt["executable_sha256"],
+        "environment_sha256": receipt["environment_sha256"],
+        "deck_sha256": receipt["deck_sha256"],
+        "pre_submit_manifest": dict(pre_submit),
+        "clean_candidate_manifest": dict(clean_candidate),
+        "source_archive": dict(source_archive),
+        "executable_snapshot": dict(executable),
+        "execution_receipt": dict(execution_receipt),
+        "terminal_receipt": dict(terminal_receipt),
+        "installed_producer": {
+            "control_plane_version": installed_rederivation[
+                "control_plane_version"
+            ],
+            "entrypoint": installed_rederivation["entrypoint"],
+            "entrypoint_sha256": installed_rederivation["entrypoint_sha256"],
+            "launch_trampoline_sha256": installed_rederivation[
+                "launch_trampoline_sha256"
+            ],
+            "exact_byte_rederivation_passed": installed_rederivation[
+                "exact_byte_rederivation_passed"
+            ],
+        },
+        "reconciliation_event_sha256": receipt["reconciliation_event_sha256"],
+        "reconciliation_mirror_ack_sha256": receipt[
+            "reconciliation_mirror_ack_sha256"
+        ],
+        "raw_inventory_sha256": raw_binding["raw_inventory_sha256"],
+        "retained_raw_bindings": list(raw_binding["retained_raw_bindings"]),
+        "reduction_binding": dict(raw_binding["reduction_binding"]),
     }
 
 
@@ -1339,6 +1432,13 @@ def derive_case_bundle(
     public_paired = {
         key: value for key, value in paired.items() if not key.startswith("_")
     }
+    execution_lineage = _execution_lineage(
+        receipt,
+        paired=paired,
+        installed_rederivation=installed_rederivation,
+        candidate=candidate,
+        raw_binding=raw_binding,
+    )
     admission = {
         "schema_version": SCHEMA_VERSION,
         "record_type": RECORD_TYPE,
@@ -1371,6 +1471,7 @@ def derive_case_bundle(
         },
         "paired_control_plane_evidence": public_paired,
         "installed_reconciliation_rederivation": installed_rederivation,
+        "execution_lineage": execution_lineage,
         "candidate_binding": candidate,
         "execution_deck": execution_deck,
         "execution_profile": execution_profile,

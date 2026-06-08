@@ -21,14 +21,10 @@ INDEX_PATH = Path(
 
 def _build(attempts: list[dict[str, object]]) -> dict[str, object]:
     index = campaign.build_execution_index(attempts)
-    by_root = {
-        attempt["artifact_root"]: attempt["artifact_payload_bytes"]
-        for attempt in attempts
-    }
     with patch.object(
         campaign,
-        "_artifact_payload_bytes",
-        side_effect=lambda _binding, *, artifact_root: by_root[str(artifact_root)],
+        "validate_execution_index_files",
+        return_value=index,
     ):
         return qual.build_qualification(
             index,
@@ -61,6 +57,9 @@ def test_large_overhead_requires_redesign_even_with_valid_execution() -> None:
     slow[1]["admission_facts"]["registered_execution_identity"][
         "reconciliation_event_sha256"
     ] = event["event_sha256"]
+    slow[1]["execution_provenance"]["reconciliation_event_sha256"] = event[
+        "event_sha256"
+    ]
     record = _build(slow)
     assert record["status"] == qual.STATUS_FAIL
     assert record["decision"]["engineering_gate_pass"] is False
@@ -77,6 +76,9 @@ def test_resource_headroom_is_required_independently_of_overhead() -> None:
         event["consumed_node_hours"] = event["billed_nodes"] * 3000 / 3600.0
         event["event_sha256"] = campaign._ledger_event_sha256(event)
         near_limit[index]["admission_facts"]["registered_execution_identity"][
+            "reconciliation_event_sha256"
+        ] = event["event_sha256"]
+        near_limit[index]["execution_provenance"][
             "reconciliation_event_sha256"
         ] = event["event_sha256"]
     record = _build(near_limit)
