@@ -14647,6 +14647,185 @@ PY
                 storage[key] = None
         self.assertEqual(predecessor_comparable, successor_comparable)
 
+    def test_completed_q023_registered_slice_retirement_is_evidence_bound(
+        self,
+    ) -> None:
+        policy_campaign = control_plane_common.Q023_REGISTERED_POLICY_CAMPAIGN
+        campaign_id = control_plane_common.Q023_REGISTERED_CAMPAIGN_ID
+        manifest = self._write_science_config(
+            authorize=False,
+            campaign=policy_campaign,
+            test_id="q023-case-001",
+            registered_science_authorization_id="q023-linear-001-v1",
+            evidence_class="q023_corrected_linear_bell_registered_qualification",
+            physical_mode="q023_corrected_joverc_linear_bell_vl2_tsc",
+        )
+        candidate = json.loads(manifest.read_text(encoding="utf-8"))
+        executable = Path(str(candidate["build"]["executable_path"]))
+        base_slice = {
+            "status": "authorized",
+            "campaign": policy_campaign,
+            "evidence_class": "q023_corrected_linear_bell_registered_qualification",
+            "physical_mode": "q023_corrected_joverc_linear_bell_vl2_tsc",
+            "runtime_profile": "frontier_minimum_supported",
+            "selected_qos": "normal",
+            "registered_short_nonproduction": False,
+            "maximum_nodes": 1,
+            "maximum_walltime_seconds": 3600,
+            "maximum_attempts": 1,
+            "job_script_sha256": sha256(self.sources / "job.sh"),
+            "input_deck_sha256": sha256(self.sources / "input.athinput"),
+            "environment_profile_sha256": sha256(self.sources / "environment.sh"),
+            "analysis_script_sha256": [sha256(self.sources / "analysis.py")],
+            "executable_sha256": sha256(executable),
+            "launch_contract_sha256": launch_contract_sha256(
+                self._launch_contract()
+            ),
+            "clean_candidate_manifest_sha256": sha256(manifest),
+        }
+        slices = [
+            {
+                **base_slice,
+                "authorization_id": f"q023-linear-{index:03d}-v1",
+                "test_id": f"q023-case-{index:03d}",
+            }
+            for index in range(1, control_plane_common.Q023_REGISTERED_CASE_COUNT + 1)
+        ]
+        authorized_freeze = self._authorized_science_freeze(manifest)
+        self.registered_science_slices = slices
+        self.science_submission_freeze = authorized_freeze
+        self._write_policy(
+            registered_science_slices=slices,
+            science_submission_freeze=authorized_freeze,
+            admission_smoke_overrides={"status": "closed_after_pass"},
+        )
+        self._promote_policy()
+        active_policy_path = self.pic_root / "policy" / "storage_policy.json"
+        active_promotion_path = self.pic_root / "policy" / "active_promotion.json"
+        predecessor_policy = json.loads(
+            active_policy_path.read_text(encoding="utf-8")
+        )
+        expected_policy_sha256 = sha256(active_policy_path)
+        expected_promotion_sha256 = sha256(active_promotion_path)
+
+        matrix_path = (
+            self.pic_root / control_plane_common.Q023_REGISTERED_MATRIX_RELATIVE
+        )
+        matrix_path.parent.mkdir(parents=True)
+        matrix = {
+            "record_type": control_plane_common.Q023_REGISTERED_MATRIX_RECORD_TYPE,
+            "status": control_plane_common.Q023_REGISTERED_MATRIX_STATUS,
+            "campaign_id": campaign_id,
+            "registered_execution_qualification_check_pass": True,
+            "registered_linear_qualification_pass": True,
+            "case_count": control_plane_common.Q023_REGISTERED_CASE_COUNT,
+            "authorization": {
+                "launch_authorized": False,
+                "scientific_claim_authorized": False,
+            },
+            "case_admissions": [
+                {
+                    "member_id": f"q023-case-{index:03d}",
+                    "campaign_id": campaign_id,
+                    "status": control_plane_common.Q023_REGISTERED_CASE_STATUS,
+                    "execution_identity": {
+                        "registered_science_authorization_id": (
+                            f"q023-linear-{index:03d}-v1"
+                        )
+                    },
+                }
+                for index in range(
+                    1, control_plane_common.Q023_REGISTERED_CASE_COUNT + 1
+                )
+            ],
+        }
+        matrix_path.write_text(
+            json.dumps(matrix, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        matrix_path.chmod(0o444)
+
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            registered_science_slices=[],
+            science_submission_freeze=authorized_freeze,
+            admission_smoke_overrides={"status": "closed_after_pass"},
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        self._rewrite_reviewed_storage_preflight_artifact(
+            lambda artifact: artifact.update(
+                started_utc="2026-06-05T00:00:00Z",
+                completed_utc="2026-06-05T00:00:00Z",
+            )
+        )
+        successor_policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        successor_policy["olcf_side_storage"][
+            "last_preflight_utc"
+        ] = "2026-06-05T00:00:00Z"
+        self.policy.write_text(json.dumps(successor_policy), encoding="utf-8")
+        reviewed_successor = json.loads(self.policy.read_text(encoding="utf-8"))
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        with self.assertRaisesRegex(ValueError, "matrix digest changed"):
+            promote(
+                self.policy,
+                retire_completed_q023_registered_slices=True,
+                q023_registered_matrix=matrix_path,
+                q023_registered_matrix_sha256="0" * 64,
+                expected_active_policy_sha256=expected_policy_sha256,
+                expected_active_promotion_sha256=expected_promotion_sha256,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual({path: path.read_bytes() for path in anchors}, before)
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=self._revalidate_clean_candidate_with_test_source,
+        ):
+            promote(
+                self.policy,
+                retire_completed_q023_registered_slices=True,
+                q023_registered_matrix=matrix_path,
+                q023_registered_matrix_sha256=sha256(matrix_path),
+                expected_active_policy_sha256=expected_policy_sha256,
+                expected_active_promotion_sha256=expected_promotion_sha256,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        active, _ = require_storage_policy_unlock_snapshot(
+            control_plane_version=successor.name,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(active, reviewed_successor)
+        self.assertEqual(active["registered_science_slices"], [])
+        self.assertEqual(active["science_submission_freeze"], authorized_freeze)
+        predecessor_comparable = copy.deepcopy(predecessor_policy)
+        successor_comparable = copy.deepcopy(active)
+        predecessor_comparable["registered_science_slices"] = []
+        for policy in [predecessor_comparable, successor_comparable]:
+            storage = policy["olcf_side_storage"]
+            for key in (
+                "installed_control_plane_version",
+                "staged_control_plane_candidate_version",
+                "last_preflight_utc",
+                "storage_preflight_evidence",
+            ):
+                storage[key] = None
+        self.assertEqual(predecessor_comparable, successor_comparable)
+
     def test_nonempty_registered_allowlist_cannot_be_silently_removed(self) -> None:
         manifest = self._write_science_config(authorize=True)
         self._write_policy(

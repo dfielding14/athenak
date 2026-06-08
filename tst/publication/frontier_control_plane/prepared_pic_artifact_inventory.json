@@ -50,7 +50,7 @@
     },
     {
       "path": "tst/publication/analyze_q019_physics_first_nonlinear_bell_successor_v2.py",
-      "sha256": "18aec4cb9dec29d0e0ea40e4826694c3bd4fb114f63150ee21240e56195222a0"
+      "sha256": "54d21c25852d5b55a818d3c6ca3e95e9071e70920aa51b3aba10e2525ceceeb7"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
@@ -625,6 +625,10 @@
     {
       "path": "inputs/tests/pic_parallel_shock_coarse_uniform.athinput",
       "sha256": "29841599178a47e26fb8b165e1b84aba13e874cddc4e98e44b36f1de2d6ae8aa"
+    },
+    {
+      "path": "inputs/tests/pic_parallel_shock_exact_conservation_closure_vl2_tsc.athinput",
+      "sha256": "bc8b4b256220a8f4a2253897f42748bf74e7ebef7b80e9422ac5ac0e2491213b"
     },
     {
       "path": "inputs/tests/pic_parallel_shock_fine_uniform.athinput",

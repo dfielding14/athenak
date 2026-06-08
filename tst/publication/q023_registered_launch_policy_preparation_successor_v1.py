@@ -1501,10 +1501,109 @@ def materialize_q023_promotable_policy(
     return successor
 
 
+def materialize_q023_retired_policy(
+    *,
+    active_policy: Mapping[str, object],
+    registered_matrix: Mapping[str, object],
+    successor_control_plane_version: str,
+    storage_preflight_binding: Path,
+    q043_artifact_root: Path = AUTHORIZED_ORION_ROOT,
+) -> dict[str, object]:
+    """Retire admitted Q023 slices into a fresh installed-controller generation."""
+    from tst.publication import (
+        q023_registered_execution_linear_qualification_successor_v1
+        as qualification,
+    )
+    from tst.publication import q011_section54_pressure_pilot_execution as execution
+
+    try:
+        matrix = qualification.validate_downstream_q019_prerequisite(
+            registered_matrix,
+            q043_artifact_root=q043_artifact_root,
+        )
+    except qualification.QualificationError as error:
+        raise PreparationError(
+            "Q023 policy retirement requires the complete passing registered matrix"
+        ) from error
+    _require(isinstance(active_policy, Mapping), "Q023 active policy must be an object")
+    policy = copy.deepcopy(dict(active_policy))
+    storage = policy.get("olcf_side_storage")
+    _require(
+        type(storage) is dict
+        and type(storage.get("installed_control_plane_version")) is str,
+        "Q023 active policy lacks one installed controller binding",
+    )
+    predecessor_version = str(storage["installed_control_plane_version"])
+    try:
+        validate_storage_policy(
+            copy.deepcopy(policy),
+            control_plane_version=predecessor_version,
+            authorized_pic_root=AUTHORIZED_ORION_ROOT,
+            authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
+        )
+    except ValueError as error:
+        raise PreparationError("Q023 active policy failed validation") from error
+    slices = policy.get("registered_science_slices")
+    _require(
+        type(slices) is list and len(slices) == EXPECTED_CASE_COUNT,
+        "Q023 retirement requires the exact nonempty 55-slice allowlist",
+    )
+    expected_pairs = [
+        (_authorization_id(index), str(member["member_id"]))
+        for index, member in enumerate(_members(), 1)
+    ]
+    observed_pairs = [
+        (item.get("authorization_id"), item.get("test_id"))
+        if type(item) is dict
+        else (None, None)
+        for item in slices
+    ]
+    matrix_pairs = [
+        (
+            item["execution_identity"]["registered_science_authorization_id"],
+            item["member_id"],
+        )
+        for item in matrix["case_admissions"]
+    ]
+    _require(
+        observed_pairs == expected_pairs == matrix_pairs
+        and all(
+            item.get("campaign") == CAMPAIGN and item.get("status") == "authorized"
+            for item in slices
+        ),
+        "Q023 active policy slices differ from the admitted registered matrix",
+    )
+    successor = copy.deepcopy(policy)
+    successor["registered_science_slices"] = []
+    try:
+        successor = execution._advance_control_plane_fields(
+            successor,
+            control_plane_version=successor_control_plane_version,
+            storage_preflight_binding=storage_preflight_binding,
+            require_fresh_preflight=True,
+            require_new_control_plane=True,
+        )
+    except (OSError, ValueError) as error:
+        raise PreparationError(
+            "Q023 retired policy requires a new controller and fresh storage preflight"
+        ) from error
+    try:
+        validate_storage_policy(
+            copy.deepcopy(successor),
+            control_plane_version=successor_control_plane_version,
+            authorized_pic_root=AUTHORIZED_ORION_ROOT,
+            authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
+        )
+    except ValueError as error:
+        raise PreparationError("Q023 retired policy failed validation") from error
+    return successor
+
+
 # Compatibility aliases retained for source-local callers created during preparation.
 materialize_timeout_margin = materialize_q023_timeout_margin
 materialize_pre_submit_config = materialize_q023_pre_submit_config
 materialize_promotable_policy = materialize_q023_promotable_policy
+materialize_retired_policy = materialize_q023_retired_policy
 
 
 def _parser() -> argparse.ArgumentParser:

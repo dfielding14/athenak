@@ -10,12 +10,97 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from tst.publication import q023_registered_launch_policy_preparation_successor_v1 as prep
 
 
 class Q023RegisteredLaunchPreparationTests(unittest.TestCase):
+    def test_retirement_requires_exact_admitted_q023_slice_matrix(self) -> None:
+        members = prep._members()
+        slices = [
+            {
+                "authorization_id": prep._authorization_id(index),
+                "test_id": member["member_id"],
+                "campaign": prep.CAMPAIGN,
+                "status": "authorized",
+            }
+            for index, member in enumerate(members, 1)
+        ]
+        active = {
+            "schema_version": 1,
+            "frontier": {},
+            "science_submission_freeze": {
+                "status": "authorized",
+                "manifest_path": "/registered/candidate/manifest.json",
+                "manifest_sha256": "b" * 64,
+                "build_profile_control_plane_version": "a" * 64,
+            },
+            "registered_science_slices": slices,
+            "frontier_admission_smoke": {"status": "closed_after_pass"},
+            "olcf_side_storage": {
+                "installed_control_plane_version": "a" * 64,
+            },
+            "long_term_storage": {},
+        }
+        matrix = {
+            "case_admissions": [
+                {
+                    "member_id": member["member_id"],
+                    "execution_identity": {
+                        "registered_science_authorization_id": (
+                            prep._authorization_id(index)
+                        )
+                    },
+                }
+                for index, member in enumerate(members, 1)
+            ]
+        }
+        with (
+            patch(
+                "tst.publication."
+                "q023_registered_execution_linear_qualification_successor_v1."
+                "validate_downstream_q019_prerequisite",
+                return_value=matrix,
+            ),
+            patch.object(prep, "validate_storage_policy"),
+            patch(
+                "tst.publication.q011_section54_pressure_pilot_execution."
+                "_advance_control_plane_fields",
+                side_effect=lambda successor, **_kwargs: successor,
+            ) as advance,
+        ):
+            retired = prep.materialize_q023_retired_policy(
+                active_policy=active,
+                registered_matrix=matrix,
+                successor_control_plane_version="c" * 64,
+                storage_preflight_binding=Path("/reviewed/storage-preflight.json"),
+            )
+            self.assertEqual(retired["registered_science_slices"], [])
+            self.assertEqual(
+                {**retired, "registered_science_slices": slices}, active
+            )
+            advance.assert_called_once_with(
+                ANY,
+                control_plane_version="c" * 64,
+                storage_preflight_binding=Path("/reviewed/storage-preflight.json"),
+                require_fresh_preflight=True,
+                require_new_control_plane=True,
+            )
+            drifted = copy.deepcopy(active)
+            drifted["registered_science_slices"][0]["authorization_id"] = "wrong"
+            with self.assertRaisesRegex(
+                prep.PreparationError, "differ from the admitted"
+            ):
+                prep.materialize_q023_retired_policy(
+                    active_policy=drifted,
+                    registered_matrix=matrix,
+                    successor_control_plane_version="c" * 64,
+                    storage_preflight_binding=Path(
+                        "/reviewed/storage-preflight.json"
+                    ),
+                )
+
     def test_pending_materialization_is_exact_and_non_authorizing(self) -> None:
         manifest, files = prep.build_materialization()
         prep.validate_materialization(manifest, files)
