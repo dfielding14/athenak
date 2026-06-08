@@ -1416,10 +1416,11 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             self.assertIn(snippet, driver)
         self.assertLess(driver.index("user_work_in_loop_func)(pmesh)"),
                         driver.index("pmesh->time = pmesh->time + pmesh->dt"))
-        self.assertLess(driver.index("if (!IsRestartOutput(out)"),
-                        driver.index("AdaptiveMeshRefinement(this, pin)"))
-        self.assertLess(driver.index("AdaptiveMeshRefinement(this, pin)"),
-                        driver.index("if (IsRestartOutput(out)"))
+        nonrestart_output = driver.index("if (!IsRestartOutput(out)")
+        amr = driver.index("AdaptiveMeshRefinement(this, pin)")
+        restart_output = driver.index("if (IsRestartOutput(out)", amr)
+        self.assertLess(nonrestart_output, amr)
+        self.assertLess(amr, restart_output)
         self.assertLess(tasks.index("id.rkupdt"), tasks.index("id.srctrms"))
         self.assertIn(
             "u0_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) "
