@@ -120,8 +120,8 @@
     "inputs/tests/pic_q043_bell_current_volume_aware_3d_candidate_vl2_tsc.athinput": "71b080a8a8112108b37856811bfb00e76633dd8da2b95d2b9010e66e472cc2c3",
     "src/CMakeLists.txt": "fce9925cac5943b8e0ae0a2adfa26a47998f7014339b9253f9c140bf03684398",
     "src/pgen/AGENTS.md": "53cfb2c033f7b8ee50eb72af280ab546623a43bb61bf6e3a155b46035608d453",
-    "src/pgen/pgen.cpp": "7d9f9765250705fabc612801ba1a36403817dfd2ec1bafde957a3b7f40c112b9",
-    "src/pgen/pgen.hpp": "975a5ecd43c71d867bea7fc0040f28a2cf04ac326489bb0c3b2a14c3528896b9",
+    "src/pgen/pgen.cpp": "756203fa245abb789b1c1e7d978d336a213c2d9bb83f835c4d4df08dc7cc6fff",
+    "src/pgen/pgen.hpp": "a0e38991ba0f0643389393954cf03b30674d6c6083e708855584bbed88c67091",
     "src/pgen/tests/q043_bell_current_volume_aware.cpp": "dd44fff4fe39bf1640dad6019ded29ce7d434b50a0c9831a8749383c6241f3e3",
     "tst/publication/analyze_q043_bell_current_volume_aware.py": "8a381d4f6075bc3a1b3987a802018a010ed8c34c22af2ec9e5b92f1c36a79d7e",
     "tst/publication/q043_bell_current_volume_aware_host_harness.cpp": "0ad9f2c559cffc5831e3a130af260154cd9c7d76eeb12aa26877c2d137db184a",
@@ -131,7 +131,7 @@
     "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "578245ade8e0d0e94c64c3f8a5ce3ae3b36e11e13c331fa03b5c98602272ed91",
     "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
     "tst/publication/readiness/q043_bell_current_volume_aware_deposited_current_oracle_source_local_2026-06-06.json": "a02a3ee367a8c81e26701640c907e61febcf3e3fb5e0b4b45856fb1cab3a3007",
-    "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json": "2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342",
+    "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json": "b026b960438ae5fcb427627698550ed0a6911491b3739e6d19a6947043d4e4a6",
     "tst/publication/test_q043_bell_current_normalization_supersession.py": "8abcc79548a66ce11984219e52953956eafbfd7b862cdebe458ccf3761ffe883"
   },
   "source_local_verification": {

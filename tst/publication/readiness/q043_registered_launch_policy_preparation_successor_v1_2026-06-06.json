@@ -21,11 +21,11 @@
     },
     "checked_in_launch_contract_schema_source": {
       "path": "tst/publication/frontier_control_plane/control_plane_common.py",
-      "sha256": "db4e06856a964368a0583dc4fbff3b1fc0c473ff7db3bd49b192f826ace5189b"
+      "sha256": "2473a2af1a4ba8a4eae07fd6ea8eed159497b1e27289121617d17d108075d57a"
     },
     "installed_control_plane_inventory": {
       "path": "tst/publication/frontier_control_plane/run_control_plane.py",
-      "sha256": "a066cb0b9e4857dbd95bfdcbd7584c775a1ffccda3e1d21d02fd0932e217a4e1"
+      "sha256": "bab2de7e25d61fd84c1f5a3ee08ef1563b106daa3210517ee717db1ca3e2f5fe"
     },
     "installed_frontier_job_template": {
       "path": "tst/publication/frontier_control_plane/frontier_job.sh",
@@ -37,7 +37,7 @@
     },
     "trusted_launch_trampoline": {
       "path": "tst/publication/frontier_control_plane/launch_trampoline.py",
-      "sha256": "84427c1b5f2359b9152b9c9033d16ecc6b34853922ee7ed00fac71d9bc4772ee"
+      "sha256": "1cd05a9e6db1d6ea39051f66ddd51403283d6bde29a83326044bad50dbe99243"
     },
     "trusted_profile_launcher": {
       "path": "tst/publication/frontier_control_plane/launch_with_frontier_profile.sh",
@@ -61,7 +61,7 @@
     },
     "shared_control_plane_tests": {
       "path": "tst/publication/frontier_control_plane/test_control_plane.py",
-      "sha256": "f1d36b25a8b9bd96191bcf508786f19898dcb045f4c87c2077797dabae93f17c"
+      "sha256": "1601f829cdaef016ec373c176eadb2bfb85d4f09e4fc937b1073d8f8bc3ad3cc"
     }
   },
   "exact_matrix": {

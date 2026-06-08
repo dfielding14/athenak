@@ -275,7 +275,7 @@
         },
         {
           "path": "tst/publication/readiness/q023_paper_bell_linear_source_local_implementation_successor_v3_2026-06-01.json",
-          "sha256": "9524d1da25924aeb2d93254638ac2c13348010405fb08de699aefaaf966d4539"
+          "sha256": "da9fccea0fbd68331f5380555350095af817a8b3cf81bf7b1db1c1a3b0009535"
         },
         {
           "path": "tst/publication/readiness/q023_paper_bell_linear_materialized_variants_local_2026-05-30.json",

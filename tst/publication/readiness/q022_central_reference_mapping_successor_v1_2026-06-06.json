@@ -214,7 +214,7 @@
   "athenak_contract_bindings": [
     {
       "path": "tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json",
-      "sha256": "2f83afc03e83038db168fed7d40bdc85bc7bca1eccbba52d18ede0d319dce342",
+      "sha256": "b026b960438ae5fcb427627698550ed0a6911491b3739e6d19a6947043d4e4a6",
       "role": "authoritative_current_normalization_supersession"
     },
     {
@@ -224,7 +224,7 @@
     },
     {
       "path": "tst/publication/readiness/q011_section54_production_science_diagnostic_successor_v1_2026-06-06.json",
-      "sha256": "ba2c48e07aeb3fa555d8fefb3e181148f7db451f96e6d2ae965760569518cc40",
+      "sha256": "3a52812b1681ab7a6008f135e5b713a8d749630f7cff4fbacd2a4e3e05daeca1",
       "role": "Section_5_4_production_science_diagnostic_contract"
     },
     {

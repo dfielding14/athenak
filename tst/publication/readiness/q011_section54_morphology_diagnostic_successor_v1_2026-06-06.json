@@ -56,7 +56,7 @@
     {
       "path": "tst/publication/readiness/q011_section54_production_science_diagnostic_successor_v1_2026-06-06.json",
       "role": "corrected full-state current particle and shock-physics diagnostic authority",
-      "sha256": "ba2c48e07aeb3fa555d8fefb3e181148f7db451f96e6d2ae965760569518cc40"
+      "sha256": "3a52812b1681ab7a6008f135e5b713a8d749630f7cff4fbacd2a4e3e05daeca1"
     },
     {
       "path": "tst/publication/readiness/q011_section54_qualifying_campaign_preregistration_successor_v3_2026-06-06.json",
