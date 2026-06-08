@@ -568,6 +568,8 @@ def test_commands_are_all_snapshot_literature_correct_and_never_mix_passive_hype
     assert not set(downstream.PASSIVE_CASES) & set(hyper)
     assert set(downstream.ACTIVE_CASES) <= set(hyper)
     assert set(downstream.ALL_CASES) <= set(analysis)
+    assert analysis[analysis.index("--snapshot-time-start") + 1] == "4.0"
+    assert analysis[analysis.index("--snapshot-time-end") + 1] == "10.0"
     assert ct[ct.index("--snapshot-policy") + 1] == "all"
     assert ",".join(sorted(downstream.ALL_CASES)) in ct
     assert "--acceptance" in publication
