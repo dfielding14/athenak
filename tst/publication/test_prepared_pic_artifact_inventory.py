@@ -16,9 +16,23 @@ def test_q019_campaign_is_in_prepared_artifact_inventory() -> None:
     manifest_path = generator.Q019_DECK_ROOT / "deck_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     expected_decks = {record["path"] for record in manifest["decks"]}
+    controller_manifest = json.loads(
+        (
+            generator.Q019_RUNTIME_CONTROLLER_DECK_ROOT / "deck_manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    expected_controller_decks = {
+        (
+            generator.Q019_RUNTIME_CONTROLLER_DECK_ROOT
+            / str(record["filename"])
+        ).relative_to(generator.REPO_ROOT).as_posix()
+        for record in controller_manifest["artifacts"]
+    }
 
     assert len(expected_decks) == 77
     assert expected_decks <= deck_paths
+    assert len(expected_controller_decks) == 6
+    assert expected_controller_decks <= deck_paths
     assert (
         "tst/publication/analyze_q019_physics_first_nonlinear_bell_successor_v2.py"
         in analyzer_paths

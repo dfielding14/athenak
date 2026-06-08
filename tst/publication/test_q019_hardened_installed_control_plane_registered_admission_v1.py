@@ -135,12 +135,50 @@ def test_candidate_analysis_closure_binds_manifest_deck_and_executing_sources() 
     assert set(closure["executing_qualification_source_bindings"]) == (
         admission.EXECUTING_QUALIFICATION_SOURCE_PATHS
     )
+    assert closure["execution_deck"]["kind"] == "base_matrix_case"
 
     substituted = dict(payloads)
     analyzer = "tst/publication/analyze_q019_physics_first_nonlinear_bell_successor_v2.py"
     substituted[analyzer] += b"\n# substituted\n"
     with pytest.raises(admission.RegisteredAdmissionError, match="analysis binding"):
         admission._candidate_analysis_closure(substituted, case=case)
+
+
+def test_candidate_analysis_closure_accepts_only_exact_controller_overlay() -> None:
+    case = admission._case("q019-fr-grid-k8-rho1em05-s0")
+    required = {
+        *admission.REQUIRED_SOURCE_PATHS,
+        *admission.EXECUTING_QUALIFICATION_SOURCE_PATHS,
+        *admission.design.ANALYSIS_BINDING_PATHS,
+        str(case["path"]),
+    }
+    payloads = {
+        relative: (admission.REPO_ROOT / relative).read_bytes()
+        for relative in required
+    }
+    overlay = next(
+        item
+        for item in admission.controller.build_manifest()["artifacts"]
+        if item["artifact_id"] == "q019-controller-pilot-2d-instrumented"
+    )
+    closure = admission._candidate_analysis_closure(
+        payloads,
+        case=case,
+        execution_deck_sha256=str(overlay["rendered_sha256"]),
+    )
+    assert closure["execution_deck"]["artifact_id"] == overlay["artifact_id"]
+    assert closure["execution_deck"]["authority"] == "excluded_pilot_only"
+    assert closure["execution_deck"]["saturation_evidence_eligible"] is False
+
+    with pytest.raises(
+        admission.RegisteredAdmissionError,
+        match="not one exact runtime-controller overlay",
+    ):
+        admission._candidate_analysis_closure(
+            payloads,
+            case=case,
+            execution_deck_sha256="0" * 64,
+        )
 
     substituted = dict(payloads)
     dependency = "tst/publication/q023_registered_execution_linear_qualification_successor_v1.py"
@@ -160,6 +198,14 @@ def test_reduction_binding_hashes_exact_array_bytes() -> None:
         "matched_checkpoint_count": 1,
         "chronology": [{"cycle": 0, "time": 0.0}],
         "reference_budget": {"total_momentum": [0.0, 0.0, 0.0], "total_energy": 1.0},
+        "execution_profile": {
+            "kind": "base_matrix_case",
+            "source_case_id": "q019-fr-runtime-initializer-ppc24-s0",
+            "artifact_id": None,
+            "authority": "matrix_case",
+            "saturation_evidence_eligible": False,
+        },
+        "runtime_controller_states": [None],
         "snapshots": [
             {
                 "cycle": 0,
@@ -201,6 +247,81 @@ def test_completion_status_is_bound_to_trusted_wrapper_evidence() -> None:
     )
     assert record["trusted_execution_binding_present"]
     assert record["problem_saturation_evidence_eligible"]
+    assert record["stop_reason_code"] == "Terminating on time limit"
+    assert record["runtime_controller_trigger_cycle"] is None
+
+    controller_record = admission._completion_record(
+        {
+            "command_evidence": {
+                "trusted_wrapper_evidence": {
+                    "termination_reason": "Terminating on user request",
+                    "problem_final_evidence_status": (
+                        "completed_not_acceptance_eligible"
+                    ),
+                    "problem_saturation_evidence_eligible": "false",
+                }
+            },
+            "slurm_terminal_state": "COMPLETED",
+        },
+        execution_profile={
+            "kind": "runtime_controller_overlay",
+            "expected_stop_reason": 1903,
+        },
+        runtime_controller_states=[
+            {
+                "runtime_controller_triggered": False,
+                "runtime_controller_trigger_failure": False,
+                "runtime_controller_trigger_reason": 0,
+                "runtime_controller_trigger_cycle": 0,
+                "runtime_controller_trigger_time": 0.0,
+                "runtime_controller_trigger_metric": -1.0,
+            },
+            {
+                "runtime_controller_triggered": True,
+                "runtime_controller_trigger_failure": False,
+                "runtime_controller_trigger_reason": 1903,
+                "runtime_controller_trigger_cycle": 20,
+                "runtime_controller_trigger_time": 0.01,
+                "runtime_controller_trigger_metric": 20.0,
+            },
+        ],
+    )
+    assert controller_record["stop_reason_code"] == "1903"
+    assert controller_record["runtime_controller_trigger_cycle"] == 20
+    assert controller_record["runtime_controller_trigger_time"] == 0.01
+
+    with pytest.raises(
+        admission.RegisteredAdmissionError,
+        match="completion reason drifted",
+    ):
+        admission._completion_record(
+            {
+                "command_evidence": {
+                    "trusted_wrapper_evidence": {
+                        "termination_reason": "Terminating on user request",
+                        "problem_final_evidence_status": (
+                            "completed_not_acceptance_eligible"
+                        ),
+                        "problem_saturation_evidence_eligible": "false",
+                    }
+                },
+                "slurm_terminal_state": "COMPLETED",
+            },
+            execution_profile={
+                "kind": "runtime_controller_overlay",
+                "expected_stop_reason": 1903,
+            },
+            runtime_controller_states=[
+                {
+                    "runtime_controller_triggered": True,
+                    "runtime_controller_trigger_failure": False,
+                    "runtime_controller_trigger_reason": 1902,
+                    "runtime_controller_trigger_cycle": 20,
+                    "runtime_controller_trigger_time": 0.01,
+                    "runtime_controller_trigger_metric": 0.5,
+                }
+            ],
+        )
     with pytest.raises(admission.RegisteredAdmissionError, match="status"):
         admission._completion_record(
             {
@@ -329,6 +450,13 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
     reduction = {
         "snapshots": [{"cycle": 0, "time": 0.0}],
         "particle_states": [{"cycle": 0, "time": 0.0}],
+        "execution_profile": {
+            "kind": "base_matrix_case",
+            "source_case_id": receipt["member_id"],
+            "artifact_id": None,
+            "authority": "matrix_case",
+            "saturation_evidence_eligible": False,
+        },
     }
     monkeypatch.setattr(
         admission.q043,
@@ -349,7 +477,18 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
     monkeypatch.setattr(
         admission,
         "_manifest_and_candidate",
-        lambda *args, **kwargs: {"source_bindings": {}},
+        lambda *args, **kwargs: {
+            "source_bindings": {},
+            "analysis_closure": {
+                "execution_deck": {
+                    "kind": "base_matrix_case",
+                    "source_case_id": receipt["member_id"],
+                    "artifact_id": None,
+                    "authority": "matrix_case",
+                    "saturation_evidence_eligible": False,
+                }
+            },
+        },
     )
     monkeypatch.setattr(
         admission,

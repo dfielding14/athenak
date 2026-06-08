@@ -26,6 +26,7 @@ import numpy as np
 
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as design
 from tst.publication import q019_registered_raw_reduction_v1 as raw_reduction
+from tst.publication import q019_nonlinear_bell_runtime_controller_v1 as controller
 from tst.publication import (
     q023_registered_execution_linear_qualification_successor_v1 as q023,
 )
@@ -49,6 +50,11 @@ DECK_MANIFEST_PATH = (
     "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/"
     "deck_manifest.json"
 )
+RUNTIME_CONTROLLER_MANIFEST_PATH = (
+    "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/"
+    "deck_manifest.json"
+)
+RUNTIME_CONTROLLER_ROOT = "inputs/publication/q019_nonlinear_bell_runtime_controller_v1"
 REQUIRED_SOURCE_PATHS = frozenset(
     {
         "src/pgen/tests/q019_physics_first_nonlinear_bell_successor_v2.cpp",
@@ -60,11 +66,19 @@ REQUIRED_SOURCE_PATHS = frozenset(
         "tst/publication/q019_nonlinear_bell_particle_state.py",
         "tst/publication/q019_particle_state_analysis_bridge_v2.py",
         "tst/publication/q019_registered_raw_reduction_v1.py",
+        "tst/publication/q019_nonlinear_bell_runtime_controller_v1.py",
+        "tst/publication/q019_excluded_pilot_launch_policy_preparation_v1.py",
+        "tst/publication/q019_excluded_pilot_campaign_driver_v1.py",
         "tst/publication/q019_hardened_provenance_boundary_v2.py",
         "tst/publication/q019_hardened_installed_control_plane_registered_admission_v1.py",
         "tst/publication/frontier_control_plane/reconcile_q019_registered_execution.py",
         "tst/publication/analyze_q011_section54_outputs.py",
         "tst/publication/q011_section54_restart.py",
+        RUNTIME_CONTROLLER_MANIFEST_PATH,
+        *{
+            f"{RUNTIME_CONTROLLER_ROOT}/{overlay['artifact_id']}.athinput"
+            for overlay in controller.expected_overlays()
+        },
     }
 )
 EXECUTING_QUALIFICATION_SOURCE_PATHS = frozenset(
@@ -72,6 +86,7 @@ EXECUTING_QUALIFICATION_SOURCE_PATHS = frozenset(
         "tst/publication/q019_hardened_installed_control_plane_registered_admission_v1.py",
         "tst/publication/q019_physics_first_nonlinear_bell_successor_v2.py",
         "tst/publication/q019_registered_raw_reduction_v1.py",
+        "tst/publication/q019_nonlinear_bell_runtime_controller_v1.py",
         "tst/publication/q019_nonlinear_bell_particle_state.py",
         "tst/publication/q019_particle_state_analysis_bridge_v2.py",
         "tst/publication/analyze_q011_section54_outputs.py",
@@ -395,6 +410,7 @@ def _candidate_analysis_closure(
     payloads: Mapping[str, bytes],
     *,
     case: Mapping[str, object],
+    execution_deck_sha256: str | None = None,
 ) -> dict[str, object]:
     manifest = _json_object(
         payloads[DECK_MANIFEST_PATH],
@@ -443,6 +459,69 @@ def _candidate_analysis_closure(
         and hashlib.sha256(payloads[deck_path]).hexdigest() == case["sha256"],
         "Q019 archived registered deck binding drifted",
     )
+    selected_deck_sha256 = (
+        str(case["sha256"])
+        if execution_deck_sha256 is None
+        else execution_deck_sha256
+    )
+    _require(
+        _SHA256.fullmatch(selected_deck_sha256) is not None,
+        "Q019 execution deck digest is malformed",
+    )
+    if selected_deck_sha256 == case["sha256"]:
+        execution_deck = {
+            "kind": "base_matrix_case",
+            "artifact_id": None,
+            "authority": "matrix_case",
+            "source_case_id": case["case_id"],
+            "path": deck_path,
+            "sha256": case["sha256"],
+            "byte_count": len(payloads[deck_path]),
+            "saturation_evidence_eligible": False,
+        }
+    else:
+        runtime_manifest = _json_object(
+            payloads[RUNTIME_CONTROLLER_MANIFEST_PATH],
+            label="Q019 archived runtime-controller manifest",
+        )
+        _require(
+            _strict_equal(runtime_manifest, controller.build_manifest()),
+            "Q019 archived runtime-controller packet drifted",
+        )
+        overlay_matches = [
+            item
+            for item in runtime_manifest["artifacts"]
+            if item["source_case_id"] == case["case_id"]
+            and item["rendered_sha256"] == selected_deck_sha256
+        ]
+        _require(
+            len(overlay_matches) == 1,
+            "Q019 execution deck is not one exact runtime-controller overlay",
+        )
+        overlay = overlay_matches[0]
+        overlay_path = f"{RUNTIME_CONTROLLER_ROOT}/{overlay['filename']}"
+        _require(
+            overlay["source_deck"] == deck_path
+            and overlay["source_deck_sha256"] == case["sha256"]
+            and overlay_path in payloads
+            and hashlib.sha256(payloads[overlay_path]).hexdigest()
+            == selected_deck_sha256,
+            "Q019 runtime-controller overlay source binding drifted",
+        )
+        execution_deck = {
+            "kind": "runtime_controller_overlay",
+            "artifact_id": overlay["artifact_id"],
+            "authority": overlay["authority"],
+            "source_case_id": case["case_id"],
+            "path": overlay_path,
+            "sha256": selected_deck_sha256,
+            "byte_count": len(payloads[overlay_path]),
+            "controller_identity_fingerprint": overlay[
+                "controller_parameters"
+            ]["controller_identity_fingerprint"],
+            "expected_stop_reason": overlay["expected_stop_reason"],
+            "saturation_evidence_eligible": False,
+        }
     executing = {}
     for relative in sorted(EXECUTING_QUALIFICATION_SOURCE_PATHS):
         _require(
@@ -477,6 +556,14 @@ def _candidate_analysis_closure(
             "sha256": str(case["sha256"]),
             "byte_count": len(payloads[deck_path]),
         },
+        "runtime_controller_manifest": {
+            "path": RUNTIME_CONTROLLER_MANIFEST_PATH,
+            "sha256": hashlib.sha256(
+                payloads[RUNTIME_CONTROLLER_MANIFEST_PATH]
+            ).hexdigest(),
+            "byte_count": len(payloads[RUNTIME_CONTROLLER_MANIFEST_PATH]),
+        },
+        "execution_deck": execution_deck,
         "executing_qualification_source_bindings": executing,
     }
 
@@ -525,7 +612,8 @@ def _manifest_and_candidate(
     deck_snapshot = by_role["input-deck"]
     _require(
         deck_snapshot.get("sha256") == receipt.get("deck_sha256")
-        == case["sha256"],
+        and type(receipt.get("deck_sha256")) is str
+        and _SHA256.fullmatch(str(receipt["deck_sha256"])) is not None,
         "Q019 exact input deck binding drifted",
     )
     candidate_manifest_path = Path(str(manifest.get("clean_candidate_manifest_path", "")))
@@ -587,6 +675,23 @@ def _manifest_and_candidate(
         archive_payload,
         required_paths=required_source_paths,
     )
+    analysis_closure = _candidate_analysis_closure(
+        source_payloads,
+        case=case,
+        execution_deck_sha256=str(receipt["deck_sha256"]),
+    )
+    deck_snapshot_path = Path(str(deck_snapshot.get("path", "")))
+    _, deck_snapshot_payload, deck_snapshot_identity = _stable_read_only(
+        deck_snapshot_path,
+        root=authorized_orion_root,
+        label="Q019 immutable input-deck snapshot",
+        expected_sha256=str(receipt["deck_sha256"]),
+    )
+    _require(
+        deck_snapshot_payload
+        == source_payloads[analysis_closure["execution_deck"]["path"]],
+        "Q019 input-deck snapshot differs from the archived execution deck",
+    )
     return {
         "pre_submit_manifest": {
             "path": str(manifest_path),
@@ -607,17 +712,18 @@ def _manifest_and_candidate(
             "filesystem_identity": archive_identity,
         },
         "source_bindings": _payload_bindings(source_payloads),
-        "analysis_closure": _candidate_analysis_closure(
-            source_payloads,
-            case=case,
-        ),
+        "analysis_closure": analysis_closure,
         "executable_snapshot": {
             "path": str(executable_snapshot),
             "sha256": hashlib.sha256(executable_payload).hexdigest(),
             "byte_count": len(executable_payload),
             "filesystem_identity": executable_identity,
         },
-        "deck_snapshot": dict(deck_snapshot),
+        "deck_snapshot": {
+            **dict(deck_snapshot),
+            "byte_count": len(deck_snapshot_payload),
+            "filesystem_identity": deck_snapshot_identity,
+        },
     }
 
 
@@ -870,6 +976,10 @@ def _reduction_binding(reduction: Mapping[str, object]) -> dict[str, object]:
         "matched_checkpoint_count": reduction["matched_checkpoint_count"],
         "chronology": reduction["chronology"],
         "reference_budget": reduction["reference_budget"],
+        "execution_profile": reduction["execution_profile"],
+        "runtime_controller_states_sha256": canonical_sha256(
+            reduction["runtime_controller_states"]
+        ),
         "snapshots": snapshots,
         "particle_states_sha256": canonical_sha256(particle_states),
     }
@@ -1015,7 +1125,12 @@ def _raw_bundle(
     }
 
 
-def _completion_record(receipt: Mapping[str, object]) -> dict[str, object]:
+def _completion_record(
+    receipt: Mapping[str, object],
+    *,
+    execution_profile: Mapping[str, object] | None = None,
+    runtime_controller_states: object = None,
+) -> dict[str, object]:
     command = receipt.get("command_evidence")
     _require(type(command) is dict, "Q019 command evidence is malformed")
     wrapper = command.get("trusted_wrapper_evidence")
@@ -1026,12 +1141,48 @@ def _completion_record(receipt: Mapping[str, object]) -> dict[str, object]:
         eligible in {"true", "false"} and type(status) is str and bool(status),
         "Q019 final problem status is malformed",
     )
+    user_stop = wrapper.get("termination_reason") == "Terminating on user request"
+    stop_reason = wrapper.get("termination_reason")
+    trigger_cycle = None
+    trigger_time = None
+    trigger_metric = None
+    if execution_profile is not None:
+        states = runtime_controller_states
+        _require(
+            execution_profile.get("kind") == "runtime_controller_overlay"
+            and type(states) is list
+            and bool(states)
+            and all(type(item) is dict for item in states),
+            "Q019 runtime-controller completion state is absent",
+        )
+        final_state = states[-1]
+        expected_reason = execution_profile.get("expected_stop_reason")
+        _require(
+            user_stop
+            and final_state.get("runtime_controller_triggered") is True
+            and final_state.get("runtime_controller_trigger_failure") is False
+            and final_state.get("runtime_controller_trigger_reason") == expected_reason
+            and type(expected_reason) is int
+            and type(final_state.get("runtime_controller_trigger_cycle")) is int
+            and final_state["runtime_controller_trigger_cycle"] > 0
+            and type(final_state.get("runtime_controller_trigger_time")) is float
+            and math.isfinite(final_state["runtime_controller_trigger_time"])
+            and type(final_state.get("runtime_controller_trigger_metric")) is float
+            and math.isfinite(final_state["runtime_controller_trigger_metric"]),
+            "Q019 runtime-controller completion reason drifted",
+        )
+        stop_reason = str(expected_reason)
+        trigger_cycle = final_state["runtime_controller_trigger_cycle"]
+        trigger_time = final_state["runtime_controller_trigger_time"]
+        trigger_metric = final_state["runtime_controller_trigger_metric"]
     return {
         "record_type": "q019_runtime_completion_status_v1",
         "run_completion_status": status,
-        "problem_stop_requested": wrapper.get("termination_reason")
-        == "Terminating on user request",
-        "stop_reason_code": wrapper.get("termination_reason"),
+        "problem_stop_requested": user_stop,
+        "stop_reason_code": stop_reason,
+        "runtime_controller_trigger_cycle": trigger_cycle,
+        "runtime_controller_trigger_time": trigger_time,
+        "runtime_controller_trigger_metric": trigger_metric,
         "process_exit_code": 0,
         "scheduler_terminal_state": receipt.get("slurm_terminal_state"),
         "trusted_execution_binding_present": True,
@@ -1138,7 +1289,33 @@ def derive_case_bundle(
         artifact_root=artifact_root,
         authorized_orion_root=authorized_orion_root,
     )
-    completion = _completion_record(receipt)
+    execution_deck = candidate["analysis_closure"]["execution_deck"]
+    execution_profile = reduction["execution_profile"]
+    _require(
+        execution_deck["kind"] == execution_profile["kind"]
+        and execution_deck["source_case_id"]
+        == execution_profile["source_case_id"]
+        and execution_deck["artifact_id"] == execution_profile["artifact_id"]
+        and execution_deck["authority"] == execution_profile["authority"],
+        "Q019 archived execution deck and raw runtime profile differ",
+    )
+    if execution_deck["kind"] == "runtime_controller_overlay":
+        _require(
+            execution_deck["controller_identity_fingerprint"]
+            == execution_profile["controller_identity_fingerprint"]
+            and execution_deck["expected_stop_reason"]
+            == execution_profile["expected_stop_reason"],
+            "Q019 runtime-controller identity or stop contract drifted",
+        )
+    completion = _completion_record(
+        receipt,
+        execution_profile=(
+            execution_profile
+            if execution_profile["kind"] == "runtime_controller_overlay"
+            else None
+        ),
+        runtime_controller_states=reduction.get("runtime_controller_states"),
+    )
     public_paired = {
         key: value for key, value in paired.items() if not key.startswith("_")
     }
@@ -1175,6 +1352,8 @@ def derive_case_bundle(
         "paired_control_plane_evidence": public_paired,
         "installed_reconciliation_rederivation": installed_rederivation,
         "candidate_binding": candidate,
+        "execution_deck": execution_deck,
+        "execution_profile": execution_profile,
         "raw_binding": raw_binding,
         "runtime_completion": completion,
         "raw_science_admission_eligible": True,

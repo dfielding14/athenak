@@ -23,6 +23,9 @@ Q043_DECK_ROOT = (
 Q019_DECK_ROOT = (
     REPO_ROOT / "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2"
 )
+Q019_RUNTIME_CONTROLLER_DECK_ROOT = (
+    REPO_ROOT / "inputs/publication/q019_nonlinear_bell_runtime_controller_v1"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -42,6 +45,7 @@ def prepared_artifact_inventory() -> dict[str, object]:
             *(REPO_ROOT / "inputs/tests").glob("pic*.athinput"),
             *Q043_DECK_ROOT.glob("*.athinput"),
             *Q019_DECK_ROOT.glob("*.athinput"),
+            *Q019_RUNTIME_CONTROLLER_DECK_ROOT.glob("*.athinput"),
             *(
                 REPO_ROOT / path
                 for path in PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS

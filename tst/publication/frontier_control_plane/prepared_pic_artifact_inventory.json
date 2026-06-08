@@ -103,6 +103,30 @@
       "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
     },
     {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-2d-baseline.athinput",
+      "sha256": "163885b5f19227ecdf69f91a598368cc2619dbd829f6c2cf66dcf8de52bc3d21"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-2d-instrumented.athinput",
+      "sha256": "a5871c14c68d84532045ea6c9d81aef8ca66126a3adda0078247b5920dbc50e7"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-3d-baseline.athinput",
+      "sha256": "3d4da3332b91f23cd8b38b329d8bb18f4de46c7acb16e81c995ffa2227d0fad4"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-3d-instrumented.athinput",
+      "sha256": "5db30893870a656f30964b03c4d07ff118bb092e0639e4c38c2cb4f0a3c0cdb0"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-regression-box-stop.athinput",
+      "sha256": "61dc86ec2f5b93732fc6d8adecdf604d4d1b07995b4b98efd4ff91f58aa15129"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-regression-cycle-stop.athinput",
+      "sha256": "a2beebb53c0381dc8dec4d0b42a20824f9d20385f918e43d1eaa612a4c4e3b82"
+    },
+    {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-long-mode-sensitivity-s0.athinput",
       "sha256": "f5883fb17a44607d9bfaa5c6617f80a398d4653eb6452a94574db87f28b4a887"
     },

@@ -20,6 +20,7 @@ from tst.publication import analyze_q011_section54_outputs as binary
 from tst.publication import q019_nonlinear_bell_particle_state as particle_reducer
 from tst.publication import q019_particle_state_analysis_bridge_v2 as particle_bridge
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as decks
+from tst.publication import q019_nonlinear_bell_runtime_controller_v1 as controller
 
 
 SCHEMA_VERSION = 1
@@ -47,6 +48,22 @@ MOMENT_FIELDS = (
 )
 REQUIRED_BINARY_PRODUCTS = ("mhd_w_bcc", *MOMENT_FIELDS)
 _MUTABLE_OUTPUT_PARAMETERS = frozenset({"file_number", "last_time"})
+_RUNTIME_CONTROLLER_STATE_PARAMETERS = frozenset(
+    {
+        "runtime_resolution_samples",
+        "runtime_resolution_last_cycle",
+        "runtime_resolution_last_time",
+        "runtime_resolution_last_B_over_B0",
+        "runtime_resolution_max_B_over_B0",
+        "runtime_controller_triggered",
+        "runtime_controller_trigger_failure",
+        "runtime_controller_trigger_reason",
+        "runtime_controller_trigger_cycle",
+        "runtime_controller_trigger_time",
+        "runtime_controller_trigger_metric",
+    }
+)
+_RUNTIME_CONTROLLER_STOP_REASONS = frozenset({1901, 1902, 1903, 1991})
 
 
 class RawReductionError(ValueError):
@@ -111,6 +128,178 @@ def _normalized_runtime_parameters(
     return normalized
 
 
+def _canonical_integer(value: str, *, label: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise RawReductionError(f"{label} is not an integer") from error
+    _require(value == str(parsed), f"{label} is not canonical")
+    return parsed
+
+
+def _finite_real(value: str, *, label: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise RawReductionError(f"{label} is not numeric") from error
+    _require(math.isfinite(parsed), f"{label} is not finite")
+    return parsed
+
+
+def _runtime_controller_state(
+    block: Mapping[str, str],
+) -> dict[str, object]:
+    observed = {
+        name: value for name, value in block.items() if name.startswith("runtime_")
+    }
+    _require(
+        set(observed) == _RUNTIME_CONTROLLER_STATE_PARAMETERS,
+        "Q019 runtime-controller mutable state inventory drifted",
+    )
+    samples = _canonical_integer(
+        observed["runtime_resolution_samples"],
+        label="runtime controller/runtime_resolution_samples",
+    )
+    last_cycle = _canonical_integer(
+        observed["runtime_resolution_last_cycle"],
+        label="runtime controller/runtime_resolution_last_cycle",
+    )
+    trigger_reason = _canonical_integer(
+        observed["runtime_controller_trigger_reason"],
+        label="runtime controller/runtime_controller_trigger_reason",
+    )
+    trigger_cycle = _canonical_integer(
+        observed["runtime_controller_trigger_cycle"],
+        label="runtime controller/runtime_controller_trigger_cycle",
+    )
+    last_time = _finite_real(
+        observed["runtime_resolution_last_time"],
+        label="runtime controller/runtime_resolution_last_time",
+    )
+    last_b = _finite_real(
+        observed["runtime_resolution_last_B_over_B0"],
+        label="runtime controller/runtime_resolution_last_B_over_B0",
+    )
+    maximum_b = _finite_real(
+        observed["runtime_resolution_max_B_over_B0"],
+        label="runtime controller/runtime_resolution_max_B_over_B0",
+    )
+    trigger_time = _finite_real(
+        observed["runtime_controller_trigger_time"],
+        label="runtime controller/runtime_controller_trigger_time",
+    )
+    trigger_metric = _finite_real(
+        observed["runtime_controller_trigger_metric"],
+        label="runtime controller/runtime_controller_trigger_metric",
+    )
+    triggered_text = observed["runtime_controller_triggered"]
+    failure_text = observed["runtime_controller_trigger_failure"]
+    _require(
+        triggered_text in {"true", "false"} and failure_text in {"true", "false"},
+        "Q019 runtime-controller boolean state is malformed",
+    )
+    triggered = triggered_text == "true"
+    failure = failure_text == "true"
+    _require(
+        samples >= 0
+        and last_cycle >= 0
+        and last_time >= 0.0
+        and trigger_cycle >= 0
+        and trigger_time >= 0.0,
+        "Q019 runtime-controller chronology is negative",
+    )
+    if samples == 0:
+        _require(
+            last_cycle == 0
+            and last_time == 0.0
+            and last_b == -1.0
+            and maximum_b == -1.0,
+            "Q019 runtime-controller empty resolution state drifted",
+        )
+    else:
+        _require(
+            last_cycle > 0
+            and last_b > 0.0
+            and maximum_b >= last_b,
+            "Q019 runtime-controller sampled resolution state drifted",
+        )
+    if triggered:
+        _require(
+            trigger_reason in _RUNTIME_CONTROLLER_STOP_REASONS
+            and trigger_cycle > 0
+            and failure == (trigger_reason == 1991),
+            "Q019 runtime-controller trigger state drifted",
+        )
+    else:
+        _require(
+            not failure
+            and trigger_reason == 0
+            and trigger_cycle == 0
+            and trigger_time == 0.0
+            and trigger_metric == -1.0,
+            "Q019 runtime-controller untriggered state drifted",
+        )
+    return {
+        "runtime_resolution_samples": samples,
+        "runtime_resolution_last_cycle": last_cycle,
+        "runtime_resolution_last_time": last_time,
+        "runtime_resolution_last_B_over_B0": last_b,
+        "runtime_resolution_max_B_over_B0": maximum_b,
+        "runtime_controller_triggered": triggered,
+        "runtime_controller_trigger_failure": failure,
+        "runtime_controller_trigger_reason": trigger_reason,
+        "runtime_controller_trigger_cycle": trigger_cycle,
+        "runtime_controller_trigger_time": trigger_time,
+        "runtime_controller_trigger_metric": trigger_metric,
+    }
+
+
+def _execution_profile(
+    parameters: Mapping[str, Mapping[str, str]],
+    *,
+    case: Mapping[str, object],
+) -> tuple[dict[str, dict[str, str]], dict[str, object]]:
+    normalized = _normalized_runtime_parameters(parameters)
+    block = normalized.get(controller.CONTROLLER_BLOCK)
+    if block is None:
+        return normalized, {
+            "kind": "base_matrix_case",
+            "source_case_id": case["case_id"],
+            "artifact_id": None,
+            "authority": "matrix_case",
+            "saturation_evidence_eligible": False,
+        }
+    immutable = {
+        name: value for name, value in block.items() if not name.startswith("runtime_")
+    }
+    state = _runtime_controller_state(block)
+    matches = [
+        overlay
+        for overlay in controller.expected_overlays()
+        if overlay["source_case_id"] == case["case_id"]
+        and overlay["controller_parameters"] == immutable
+    ]
+    _require(
+        len(matches) == 1,
+        "Q019 runtime-controller overlay is not one exact checked-in contract",
+    )
+    overlay = matches[0]
+    base = dict(normalized)
+    del base[controller.CONTROLLER_BLOCK]
+    return base, {
+        "kind": "runtime_controller_overlay",
+        "source_case_id": case["case_id"],
+        "artifact_id": overlay["artifact_id"],
+        "authority": overlay["authority"],
+        "controller_identity_fingerprint": immutable[
+            "controller_identity_fingerprint"
+        ],
+        "expected_stop_reason": overlay["expected_stop_reason"],
+        "saturation_evidence_eligible": False,
+        "runtime_state": state,
+    }
+
+
 def _parse_products(
     products: Mapping[str, bytes],
 ) -> dict[str, binary.AthenaBinaryDataset]:
@@ -137,15 +326,15 @@ def _validate_cross_product_metadata(
     datasets: Mapping[str, binary.AthenaBinaryDataset],
     *,
     case: Mapping[str, object],
-) -> binary.AthenaBinaryDataset:
+) -> tuple[binary.AthenaBinaryDataset, dict[str, object]]:
     reference = datasets["mhd_w_bcc"]
     _require(
         len(reference.variable_names) == len(MHD_FIELDS)
         and set(reference.variable_names) == set(MHD_FIELDS),
         "Q019 mhd_w_bcc field inventory drifted",
     )
-    reference_parameters = _normalized_runtime_parameters(
-        reference.input_parameters
+    reference_parameters, execution_profile = _execution_profile(
+        reference.input_parameters, case=case
     )
     _require(
         decks.deck_semantics_payload(reference_parameters)
@@ -168,10 +357,10 @@ def _validate_cross_product_metadata(
             and dataset.nghost == reference.nghost
             and dataset.domain_bounds == reference.domain_bounds
             and _normalized_runtime_parameters(dataset.input_parameters)
-            == reference_parameters,
+            == _normalized_runtime_parameters(reference.input_parameters),
             f"Q019 {product} metadata differs from mhd_w_bcc",
         )
-    return reference
+    return reference, execution_profile
 
 
 def _composite_fields(
@@ -218,7 +407,9 @@ def compose_snapshot(
     """Compose one exact matched ten-product snapshot."""
     case = _case(case_id)
     datasets = _parse_products(products)
-    reference = _validate_cross_product_metadata(datasets, case=case)
+    reference, execution_profile = _validate_cross_product_metadata(
+        datasets, case=case
+    )
     fields, faces = _composite_fields(datasets)
     _require(np.all(fields["dens"] > 0.0), "Q019 density is not positive")
     _require(np.all(fields["eint"] >= 0.0), "Q019 internal energy is negative")
@@ -228,6 +419,7 @@ def compose_snapshot(
         "x1_faces": faces[0],
         "x2_faces": faces[1],
         "x3_faces": faces[2],
+        "execution_profile": execution_profile,
         "fields": fields,
     }
 
@@ -403,6 +595,19 @@ def reduce_matched_checkpoints(
         snapshots.append(snapshot)
         particle_states.append(particle_state)
         reductions.append(reduction)
+    execution_profiles = [snapshot["execution_profile"] for snapshot in snapshots]
+    profile_identities = [
+        {
+            key: value
+            for key, value in profile.items()
+            if key != "runtime_state"
+        }
+        for profile in execution_profiles
+    ]
+    _require(
+        all(profile == profile_identities[0] for profile in profile_identities),
+        "Q019 execution profile changed across matched checkpoints",
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "record_type": RECORD_TYPE,
@@ -414,6 +619,10 @@ def reduce_matched_checkpoints(
             for cycle, time in zip(cycles, times)
         ],
         "reference_budget": reference,
+        "execution_profile": profile_identities[0],
+        "runtime_controller_states": [
+            profile.get("runtime_state") for profile in execution_profiles
+        ],
         "snapshots": snapshots,
         "particle_states": particle_states,
         "particle_reductions": reductions,

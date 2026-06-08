@@ -1087,6 +1087,22 @@ def prepared_artifact_manifest_from_source_archive(
                     ) :
                 ]
             ),
+            *(
+                path
+                for path in source_files
+                if path.startswith(
+                    "inputs/publication/"
+                    "q019_nonlinear_bell_runtime_controller_v1/"
+                )
+                and path.endswith(".athinput")
+                and "/"
+                not in path[
+                    len(
+                        "inputs/publication/"
+                        "q019_nonlinear_bell_runtime_controller_v1/"
+                    ) :
+                ]
+            ),
             *PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS,
         ]
     )
@@ -1101,7 +1117,7 @@ def prepared_artifact_manifest_from_source_archive(
         raise ValueError(
             "Prepared paper-deck inventory must exactly cover archived "
             "inputs/tests/pic*.athinput, the nested Q043 and Q019 matrices, "
-            "and required publication decks"
+            "the Q019 runtime-controller packet, and required publication decks"
         )
     if [record["path"] for record in analyzers] != expected_analyzers:
         raise ValueError(

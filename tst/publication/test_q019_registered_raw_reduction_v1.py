@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as decks
+from tst.publication import q019_nonlinear_bell_runtime_controller_v1 as controller
 from tst.publication import q019_registered_raw_reduction_v1 as reduction
 from tst.publication import q019_nonlinear_bell_particle_state as particle
 
@@ -261,6 +262,77 @@ def test_embedded_runtime_semantics_drift_fails_closed() -> None:
         reduction.RawReductionError, match="immutable matrix row"
     ):
         reduction.compose_snapshot(CASE_ID, products)
+
+
+def _controller_parameters(artifact_id: str) -> tuple[dict[str, object], dict[str, dict[str, str]]]:
+    overlay = next(
+        item
+        for item in controller.expected_overlays()
+        if item["artifact_id"] == artifact_id
+    )
+    parameters = decks.parse_athinput_text(controller.render_overlay(overlay))
+    parameters[controller.CONTROLLER_BLOCK].update(
+        {
+            "runtime_resolution_samples": "0",
+            "runtime_resolution_last_cycle": "0",
+            "runtime_resolution_last_time": "0",
+            "runtime_resolution_last_B_over_B0": "-1",
+            "runtime_resolution_max_B_over_B0": "-1",
+            "runtime_controller_triggered": "false",
+            "runtime_controller_trigger_failure": "false",
+            "runtime_controller_trigger_reason": "0",
+            "runtime_controller_trigger_cycle": "0",
+            "runtime_controller_trigger_time": "0",
+            "runtime_controller_trigger_metric": "-1",
+        }
+    )
+    return overlay, parameters
+
+
+def test_exact_runtime_controller_overlay_preserves_base_matrix_identity() -> None:
+    overlay, parameters = _controller_parameters(
+        "q019-controller-pilot-2d-instrumented"
+    )
+    case = next(
+        row
+        for row in decks.expected_cases()
+        if row["case_id"] == overlay["source_case_id"]
+    )
+    base, profile = reduction._execution_profile(parameters, case=case)
+    assert decks.deck_semantics_payload(base) == decks.matrix_identity_payload(case)
+    assert profile["artifact_id"] == overlay["artifact_id"]
+    assert profile["authority"] == "excluded_pilot_only"
+    assert profile["runtime_state"]["runtime_resolution_samples"] == 0
+    assert profile["saturation_evidence_eligible"] is False
+
+
+def test_runtime_controller_overlay_and_mutable_state_drift_fail_closed() -> None:
+    overlay, parameters = _controller_parameters(
+        "q019-controller-pilot-2d-instrumented"
+    )
+    case = next(
+        row
+        for row in decks.expected_cases()
+        if row["case_id"] == overlay["source_case_id"]
+    )
+    hostile = copy.deepcopy(parameters)
+    hostile[controller.CONTROLLER_BLOCK]["pilot_cycle_limit"] = "21"
+    with pytest.raises(
+        reduction.RawReductionError, match="exact checked-in contract"
+    ):
+        reduction._execution_profile(hostile, case=case)
+
+    partial = copy.deepcopy(parameters)
+    del partial[controller.CONTROLLER_BLOCK]["runtime_resolution_samples"]
+    with pytest.raises(reduction.RawReductionError, match="inventory drifted"):
+        reduction._execution_profile(partial, case=case)
+
+    inconsistent = copy.deepcopy(parameters)
+    inconsistent[controller.CONTROLLER_BLOCK][
+        "runtime_controller_triggered"
+    ] = "true"
+    with pytest.raises(reduction.RawReductionError, match="trigger state drifted"):
+        reduction._execution_profile(inconsistent, case=case)
 
 
 def test_invalid_mutable_output_state_fails_closed() -> None:
