@@ -4247,7 +4247,7 @@ def reviewed_pair_effect_rows(
 
 
 def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None:
-    """Render matched C_B2 histories, strain PDFs, and reviewed causal effects."""
+    """Render matched C_B2 histories, strain PDFs, and reviewed mechanism effects."""
 
     fig, axes = plt.subplots(4, 3, figsize=(11.2, 10.6))
     for row_index, (active, passive) in enumerate(ACTIVE_PASSIVE_PAIRS):
@@ -4329,7 +4329,7 @@ def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None
     for axis in axes[-1, :2]:
         axis.set_xlabel(r"$t/(L_\perp/v_A)$" if axis is axes[-1, 0] else "strain")
     fig.suptitle(
-        "Matched active/passive causal-mechanism evidence "
+        "Matched active/passive mechanism diagnostics "
         "(authenticated complete-case products only)",
         y=0.997,
     )
@@ -4345,7 +4345,7 @@ def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None
 
 
 def robustness_rows(data: PublicationData) -> list[dict[str, object]]:
-    """Return the fixed robustness-contrast table."""
+    """Return the fixed measured-sensitivity contrast table."""
 
     rows: list[dict[str, object]] = []
     for label, reference, variant in ROBUSTNESS_CONTRASTS:
@@ -4376,7 +4376,7 @@ def robustness_rows(data: PublicationData) -> list[dict[str, object]]:
 
 
 def render_robustness(data: PublicationData, plt: Any, colors: Any, path: Path) -> None:
-    """Render a fixed signed-relative-effect robustness heatmap."""
+    """Render a fixed signed-relative-effect sensitivity heatmap."""
 
     metrics = ("kinetic", "magnetic", "abs_dp", "unstable", "nu_eff")
     rows = robustness_rows(data)
@@ -4420,11 +4420,11 @@ def render_robustness(data: PublicationData, plt: Any, colors: Any, path: Path) 
         )
     axis.set_title(
         (
-            "Developed-window robustness summary "
+            "Developed-window measured-sensitivity summary "
             "(no paired contrasts available yet)"
             if not has_values else
-            "Developed-window robustness summary "
-            "(R10 excluded from strict-CGL trends)"
+            "Developed-window measured-sensitivity summary "
+            "(R10 excluded from primary beta contrasts)"
         ),
         pad=28,
     )
@@ -4611,7 +4611,7 @@ def render_limiter_heat_flux(data: PublicationData, plt: Any, path: Path) -> Non
 
 
 def resolution_rows(data: PublicationData) -> list[dict[str, object]]:
-    """Return resolution-case scalars and available convergence distances."""
+    """Return resolution-case scalars and available common-scale distances."""
 
     rows: list[dict[str, object]] = []
     for case_id in RESOLUTION_CASES:
@@ -4694,7 +4694,7 @@ def find_gate(evidence: dict[str, Any] | None, name: str) -> dict[str, Any] | No
 
 
 def render_resolution(data: PublicationData, plt: Any, path: Path) -> None:
-    """Render scalar resolution ratios and available convergence distances."""
+    """Render scalar resolution ratios and available common-scale distances."""
 
     fig, axes = plt.subplots(1, 2, figsize=(10.0, 4.4))
     metrics = ("kinetic", "magnetic", "abs_dp", "unstable")
@@ -4784,10 +4784,10 @@ def render_resolution(data: PublicationData, plt: Any, path: Path) -> None:
             transform=axes[1].transAxes, ha="center", va="center", color="#666666",
         )
         axes[1].text(
-            0.5, 0.43, f"reviewed convergence gate: {gate_result}",
+            0.5, 0.43, f"reviewed common-scale consistency gate: {gate_result}",
             transform=axes[1].transAxes, ha="center", va="center",
         )
-    axes[1].set_title("Common-scale convergence evidence")
+    axes[1].set_title("Common-scale consistency evidence")
     axes[1].grid(True, axis="y", alpha=0.25)
     fig.suptitle("R16 / R02 / R17 resolution summary", y=0.995)
     fig.tight_layout()
@@ -4956,7 +4956,7 @@ def render_resolution_curves(data: PublicationData, plt: Any, path: Path) -> Non
         resolution.get("observations") if isinstance(resolution, dict) else None
     )
     lines = [
-        f"Reviewed convergence result: {result}",
+        f"Reviewed common-scale consistency result: {result}",
         (
             f"Preregistered common range: {common_range[0]:g} <= k_perp/pi "
             f"<= {common_range[1]:g}"
@@ -7097,7 +7097,7 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         "",
         "## Partial-Product Limitations",
         "",
-        f"- Populated paired developed-window robustness cells: `{paired_contrasts}`.",
+        f"- Populated paired developed-window sensitivity cells: `{paired_contrasts}`.",
         "- Active/passive history curves marked as partial are transient-only and "
         "must not be interpreted as developed-window comparisons.",
         "- The compact numerical-health/provenance table excludes unsupported retained-"
@@ -7428,28 +7428,31 @@ exclude failed, incomplete, and numerically inconclusive cases.
    histories for Alfvenic and random forcing at beta 10 and 100. Failed, incomplete,
    and numerically inconclusive cases are excluded. The shaded interval is the
    developed-turbulence analysis window.
-3. **Robustness.** Signed developed-window response to forcing geometry, beta, and
-   forcing correlation time where both cases have complete-window evidence. Missing
-   cells are not zero response. R10 is excluded from strict-CGL trend inference.
+3. **Measured sensitivities.** Signed developed-window response to forcing
+   policy/realization, beta, and forcing correlation time where both cases have
+   complete-window evidence. Missing cells are not zero response. R10 is excluded
+   from the primary beta contrasts.
 4. **Limiter and heat flux.** Developed-window summaries for the Landau-fluid
    strength scan and the limiter/transport-coupled scan. Configuration is printed
    below each case. Fewer than two populated cases do not establish a scan trend.
-5. **Resolution.** R16/R02/R17 scalar sensitivity and common-scale convergence
-   evidence when available. R02/R02 self-ratios are suppressed.
+5. **Resolution.** R16/R02/R17 scalar sensitivity and common-scale consistency
+   evidence when available. R02/R02 self-ratios are suppressed; this is not a
+   continuum-convergence claim.
 6. **Restricted scope.** Claim restrictions and available observed diagnostics for
    R10, R14, and R15. Any selected nonfatal-hard-bound R15 variant is diagnostic
    only; strict-R15 failure details appear only from authenticated evidence.
-7. **Reviewed science and direct CT.** Authenticated Holm-corrected comparison
-   gates, common-range convergence, admitted MKS24 residual/drift criteria, and
-   sampled direct CT numerical health. All are explicitly non-authorizing.
-8. **Causal mechanism.** Matched active/passive magnetic-intermittency
+7. **Reviewed science and direct CT.** Authenticated descriptive comparison
+   gates, common-range consistency, admitted MKS24 residual/drift criteria, and
+   sampled direct CT numerical health. All are explicitly non-authorizing and
+   make no population-inference claim.
+8. **Mechanism diagnostics.** Matched active/passive magnetic-intermittency
    \\(C_{{B^2}}\\) histories, parallel-strain PDFs, and reviewed standardized effects.
    Curves require
    complete claim-eligible cases; strain PDFs additionally require diagnostics bytes
    bound by authenticated reviewed science. Missing evidence remains inconclusive.
 9. **Resolution curves.** Actual R16/R02/R17 velocity and magnetic-fluctuation
    spectra and peak-alignment curves over the preregistered common range, accompanied
-   by the reviewed convergence decisions and limits. All three authenticated curves
+   by the reviewed common-scale decisions and limits. All three authenticated curves
    are required in each panel.
 10. **All-snapshot coordinate-direction discriminant coverage.** Authenticated
     active-CGL retained cell-centered coverage in the three coordinate-normal
