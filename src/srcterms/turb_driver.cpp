@@ -50,6 +50,23 @@ std::string ForcingNormalizationContext(Real time, int cycle, int update,
   return msg.str();
 }
 
+std::string NonfiniteForcingStateContext(
+    int density, int momentum1, int momentum2, int momentum3, int energy,
+    int anisotropy, int force1, int force2, int force3, int volume) {
+  std::ostringstream msg;
+  msg << " nonfinite_counts={density:" << density
+      << ",momentum1:" << momentum1
+      << ",momentum2:" << momentum2
+      << ",momentum3:" << momentum3
+      << ",energy:" << energy
+      << ",anisotropy:" << anisotropy
+      << ",force1:" << force1
+      << ",force2:" << force2
+      << ",force3:" << force3
+      << ",volume:" << volume << "}";
+  return msg.str();
+}
+
 }  // namespace
 
 //----------------------------------------------------------------------------------------
@@ -1050,12 +1067,86 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
 
     if (!std::isfinite(t0) || !std::isfinite(t1) || !std::isfinite(t2) ||
         !std::isfinite(t3)) {
+      int bad_density = 0;
+      int bad_momentum1 = 0;
+      int bad_momentum2 = 0;
+      int bad_momentum3 = 0;
+      int bad_energy = 0;
+      int bad_anisotropy = 0;
+      int bad_force1 = 0;
+      int bad_force2 = 0;
+      int bad_force3 = 0;
+      int bad_volume = 0;
+      const int nvar = u0.extent_int(1);
+      Kokkos::parallel_reduce(
+          "nonfinite_forcing_state_audit",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+          KOKKOS_LAMBDA(const int& idx, int& density_count,
+                        int& momentum1_count, int& momentum2_count,
+                        int& momentum3_count, int& energy_count,
+                        int& anisotropy_count, int& force1_count,
+                        int& force2_count, int& force3_count,
+                        int& volume_count) {
+            int m = idx / nkji;
+            int k = (idx - m * nkji) / nji;
+            int j = (idx - m * nkji - k * nji) / nx1;
+            int i = (idx - m * nkji - k * nji - j * nx1) + is;
+            k += ks;
+            j += js;
+            if (!Kokkos::isfinite(u0(m, IDN, k, j, i))) ++density_count;
+            if (!Kokkos::isfinite(u0(m, IM1, k, j, i))) ++momentum1_count;
+            if (!Kokkos::isfinite(u0(m, IM2, k, j, i))) ++momentum2_count;
+            if (!Kokkos::isfinite(u0(m, IM3, k, j, i))) ++momentum3_count;
+            if (nvar > IEN && !Kokkos::isfinite(u0(m, IEN, k, j, i))) {
+              ++energy_count;
+            }
+            if (nvar > IAN && !Kokkos::isfinite(u0(m, IAN, k, j, i))) {
+              ++anisotropy_count;
+            }
+            if (!Kokkos::isfinite(force_(m, 0, k, j, i))) ++force1_count;
+            if (!Kokkos::isfinite(force_(m, 1, k, j, i))) ++force2_count;
+            if (!Kokkos::isfinite(force_(m, 2, k, j, i))) ++force3_count;
+            Real vol = mb_size.d_view(m).dx1 * mb_size.d_view(m).dx2 *
+                       mb_size.d_view(m).dx3;
+            if (!Kokkos::isfinite(vol)) ++volume_count;
+          },
+          Kokkos::Sum<int>(bad_density),
+          Kokkos::Sum<int>(bad_momentum1),
+          Kokkos::Sum<int>(bad_momentum2),
+          Kokkos::Sum<int>(bad_momentum3),
+          Kokkos::Sum<int>(bad_energy),
+          Kokkos::Sum<int>(bad_anisotropy),
+          Kokkos::Sum<int>(bad_force1),
+          Kokkos::Sum<int>(bad_force2),
+          Kokkos::Sum<int>(bad_force3),
+          Kokkos::Sum<int>(bad_volume));
+#if MPI_PARALLEL_ENABLED
+      int bad_local[10] = {
+          bad_density, bad_momentum1, bad_momentum2, bad_momentum3, bad_energy,
+          bad_anisotropy, bad_force1, bad_force2, bad_force3, bad_volume};
+      int bad_global[10];
+      MPI_Allreduce(bad_local, bad_global, 10, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+      bad_density = bad_global[0];
+      bad_momentum1 = bad_global[1];
+      bad_momentum2 = bad_global[2];
+      bad_momentum3 = bad_global[3];
+      bad_energy = bad_global[4];
+      bad_anisotropy = bad_global[5];
+      bad_force1 = bad_global[6];
+      bad_force2 = bad_global[7];
+      bad_force3 = bad_global[8];
+      bad_volume = bad_global[9];
+#endif
       FatalTurbulenceError(
           "nonfinite density-weighted forcing moments before net-acceleration "
           "removal: " +
           ForcingNormalizationContext(current_time, pm->ncycle,
                                       n_turb_updates_yet, mode_count, t0, t1,
-                                      0.0, t2, t3));
+                                      0.0, t2, t3) +
+          NonfiniteForcingStateContext(
+              bad_density, bad_momentum1, bad_momentum2, bad_momentum3,
+              bad_energy, bad_anisotropy, bad_force1, bad_force2, bad_force3,
+              bad_volume));
     }
     if (t0 <= 0.0) {
       FatalTurbulenceError(
