@@ -50,7 +50,7 @@
     },
     {
       "path": "tst/publication/analyze_q019_physics_first_nonlinear_bell_successor_v2.py",
-      "sha256": "54d21c25852d5b55a818d3c6ca3e95e9071e70920aa51b3aba10e2525ceceeb7"
+      "sha256": "dc1ba49c178980cfd9ac2793529b16d1af5a54dc0e8cd7fc4a239651957c0ea1"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear.py",
@@ -104,411 +104,411 @@
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-2d-baseline.athinput",
-      "sha256": "163885b5f19227ecdf69f91a598368cc2619dbd829f6c2cf66dcf8de52bc3d21"
+      "sha256": "0e3cde83df032317b82e9f079fcc7ef21664495148feca8e21e38ad4eaf6f80d"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-2d-instrumented.athinput",
-      "sha256": "a5871c14c68d84532045ea6c9d81aef8ca66126a3adda0078247b5920dbc50e7"
+      "sha256": "04ed7bfb40e0c901c8799a2a873ba968e037b08fef01d58e7d5dfc9ca9ca568f"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-3d-baseline.athinput",
-      "sha256": "3d4da3332b91f23cd8b38b329d8bb18f4de46c7acb16e81c995ffa2227d0fad4"
+      "sha256": "338102e4db6ae5922aa661a6d1de1996c7e50fed590188f135d23d7bc6d79669"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-pilot-3d-instrumented.athinput",
-      "sha256": "5db30893870a656f30964b03c4d07ff118bb092e0639e4c38c2cb4f0a3c0cdb0"
+      "sha256": "b09d33fd05b6fd11afb01b412a3fb0ea1cf97d3beae950e2456d34f9683ffc59"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-regression-box-stop.athinput",
-      "sha256": "61dc86ec2f5b93732fc6d8adecdf604d4d1b07995b4b98efd4ff91f58aa15129"
+      "sha256": "4967bb10415fde5f4b468c6bcaca46cb430d37915c8e933e2c948c9c02d71641"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-controller-regression-cycle-stop.athinput",
-      "sha256": "a2beebb53c0381dc8dec4d0b42a20824f9d20385f918e43d1eaa612a4c4e3b82"
+      "sha256": "9aa07752cc13b93ee0e13a58cae7fd92ddc0fff036d638bd376caaaf82b3129c"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-noise-seeded-s0.athinput",
-      "sha256": "9882c08f430c7bf8d535638d9386f4edbfa7e2c4e81ee5304bf62addc3ac86ea"
+      "sha256": "88e86bd124d2e9d9224633540711ffbdd16be96d86b1f2faca07c046152d2255"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-particle-step-small-s0.athinput",
-      "sha256": "5e57f623d434d1b1cf35f5219c4ce6a7fd397feda6059a8c72f5e478ca73afd5"
+      "sha256": "feaa7f980d5fd11fb7b6e26c4d55a9622d2c260b57d1e09910be77771c5c93a2"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-ppc24-s0.athinput",
-      "sha256": "ebad4f89166a61ddca04de63d925a3936aa32bc257d8219e38928d645854f236"
+      "sha256": "3eca102321da4fe747f8c409804ff98cf0da5310ca2ffd0ab5909a4ff1f3210e"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-ppc48-s0.athinput",
-      "sha256": "acccef7f5c5c2eb267a7d2e66a2bb6cb539df136eda8a0b88ec895aa005e1967"
+      "sha256": "7297f837f0827b24abf8c3e97c22ffea411f393ffe7518bd40c09c539b2b7acf"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-resolution-coarse-s0.athinput",
-      "sha256": "5087469730797322ed9ba1c3fbf7aee1b998438911781d04758bdc014b44ae37"
+      "sha256": "0f57c009b09fdf5ecea1d1339c9e4dd83439d9752d48c1bdfe9cb44a22ccfa28"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-resolution-fiducial-s0.athinput",
-      "sha256": "d4f6feb31013ddf8cf0bdbfe28a61f2d311be90f3d63696f4253ff5992235a78"
+      "sha256": "0b9fe6e4f5053df96b0665b6161cbf42e6488e5878ea996c84d603a31b0c3bd8"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-k8-rho3em06-s0.athinput",
-      "sha256": "1693886bb6e2d9aa3672caa579567ebc42491efaad7aa7645e5d4ecba899f353"
+      "sha256": "3ae1016d5da1c6b32e5c086e1a121f822ef5f65bee8cb097751f0b513b532569"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-large-long-mode-sensitivity-s0.athinput",
-      "sha256": "6db30b349571ee9506c3ebb8295a394f6af574c73093fe1d1c66f2ea7e8c1c9d"
+      "sha256": "adde7df98a86775e738e7b11389eca1ecb2e72f3c4ad2e8e9757999196303f49"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-large-s0.athinput",
-      "sha256": "b3563c3694efa30c2c9cee820eb348db3b3583a04c9424a177b81057bb43f725"
+      "sha256": "6fdced03c60ade76b9f89b4f1a3dccbcada46a6b64e813e015c533e938c3fb48"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-particle-step-small-s0.athinput",
-      "sha256": "d9dc6c3687b9f2abb871cee277571ccf625f952e89a1118c1710d47043fddf15"
+      "sha256": "a10d5de33ac346c15082526ad76483048df0ce0408d745d22603c5044c6f746f"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-ppc48-s0.athinput",
-      "sha256": "4d845cf06b83515f65bf850f9857b9053ab81e1d7f168269edfe3b7fba6e6929"
+      "sha256": "c9592a6f989458df34ca00dc3c12d353b27407ea7099be8a62e5d0c44be82a50"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-resolution-fine-s0.athinput",
-      "sha256": "3155707c41246c06e2a2e644d016c94df76c30177b9bf1d526536eecd817c4cb"
+      "sha256": "563693a1b32e6d29e3db6640b78b790c73e69e09dd837bcf30bb24561437ac35"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-s0.athinput",
-      "sha256": "0fadae97e603c0a18adef25a9cf38f4676cdad610d89d3e62fa7584c1b68662c"
+      "sha256": "284da784681435a804ad5551c5b3e5993c0a978aa9d34e0c568ce1202fedae5f"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-grid-k8-rho3em06-s0.athinput",
-      "sha256": "e5871a92cc3aa60995050d3100ef0e770864f61090cd12fbf3d68e20b23a6021"
+      "sha256": "7a02e987265c4931f24fe1f894fce3d5b34a92bd38b0b89980bf25885f43e25e"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-hr-current-retention-s0.athinput",
-      "sha256": "5a04db98a897edf14a361b1183c4c7634a49867bae97e526e2ecaba774c38629"
+      "sha256": "de55b225159c6923de1d80454c8858616d05b5b2b009dcad3cae9c1a7fc7bc9d"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-large-s1.athinput",
-      "sha256": "37498eec32fb6b4868fed8d6a9e4a0fc275c41e1b3cc2a890e0532a0a4c0884d"
+      "sha256": "680634e810a14ade2a70076fa76cf712817ec4425d1e83ed3bc437c7d4dee350"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-large-s2.athinput",
-      "sha256": "2fa9f4a0a31f13d1dc74ee7b05dbde7ab72b8c1e3c2732bbbfec3be3ff676094"
+      "sha256": "87aa405ea3c40780d5a0f3dbdef12347a2554d516f81317eb59f1290120acfcd"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-small-s1.athinput",
-      "sha256": "120fb73aa87e984acdbab4e6d78e0791c5e28bef23382d792cb02d1f1111a9d3"
+      "sha256": "09b865691fd07396cd4c36e2c9c33bb1d5a96ff40973ce9a4b98a20e21e9c3fe"
     },
     {
       "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-small-s2.athinput",
-      "sha256": "a1d244077648663664030dee767fa000d9fe26ce9efc2fa255f12f3caced8d2d"
+      "sha256": "3d12bc0ee4883d1b3dd2f4c3b3bc7d1d60fdfe1ba2ff0856e4eaa88e30657845"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-long-mode-sensitivity-s0.athinput",
-      "sha256": "f5883fb17a44607d9bfaa5c6617f80a398d4653eb6452a94574db87f28b4a887"
+      "sha256": "a22e279153c8177cb95a8d3c2e9c85e4b93dc3fbf27d4e5f152e555500c59827"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-s0.athinput",
-      "sha256": "bcbde21cfacf88405dae8d22ebeceaa716ea6d4bafddd30cbcd206565a2889da"
+      "sha256": "03ff4a3692692cd32b8640a32408bb2ef55f8118aa13e95f54bebb22641b8776"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-s1.athinput",
-      "sha256": "e8595eae389538d0153f86a3ff24c76b6ac977448dc43b163eeea507e936c34c"
+      "sha256": "aa26cc9c0b773d9e1e6cef5cc4ac8f402f63a3ba19b7c5e0d9eac3f4dee6cabe"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-s2.athinput",
-      "sha256": "99580406aa878f73dd4067de54fdcfe78ad1507aa5ab4c76ff8f4a41671b4187"
+      "sha256": "d3f3d53b47b94ad5a4a7aae2ccd4b25932c3f86b944584cc0ad649a41a3cbb22"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-particle-step-small-s0.athinput",
-      "sha256": "20bbe8fe1dfa9bee7df92995bf6391f9bf6eaa68373022cfea6c29612db288ae"
+      "sha256": "34a2d59645838bfeac13b2217b8df11b90a9dcc5fb92129e7bb470114dc70fc2"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-ppc48-s0.athinput",
-      "sha256": "317fa18fb09b054ded19f7d40a99cc81f05b0a8bf4652f4f3bb13cfe03805e23"
+      "sha256": "42d94dda4ca7195ed020310ff9b777c99abf7a4bffd860a1e63dd7156cc3ce3f"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-resolution-coarse-s0.athinput",
-      "sha256": "974c957a0a03fda0c89c90916237e65c1470261a4c4958e2e82ab4cae2656b85"
+      "sha256": "ca09387daa9e55cfd10d35cfa2c4d75507ce3e4a35fa41381839d7533f5a9628"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-resolution-fine-s0.athinput",
-      "sha256": "7d953213eda04c76a7a9176c55278a77f224ebbaeaf5d3580ddb95aa6c130402"
+      "sha256": "04958020ae4fa358eba73c3bd7a94b7d47bcd7675e497b6f8b1d51ae05c9dd6b"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s0.athinput",
-      "sha256": "512527cb36fe4cf56e8bd05dd30a5eed1080c788572f0aa2a7172215942ae90f"
+      "sha256": "5309b4a9b370c4a01f2c2e707e29606f540a469ad275562c9e2f195affacf83f"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s1.athinput",
-      "sha256": "9c9bcc4ff22b8392f468cb78798c75546fa1aaafedf57c71a01ef3600a9698b7"
+      "sha256": "ec899021b4752339e77422f8ed3fffcf16e38bee5cc1e993e61406d9d4df56fc"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s2.athinput",
-      "sha256": "2d68c125223bdc2687e337c9f7243349ae2a2cc08f43767d634e5b2ab6ca58b1"
+      "sha256": "767f61cb5730a38fa8873d812be4a4e4f55efeb6953326c7b705b464c7277664"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-noise-seeded-s0.athinput",
-      "sha256": "a515df1f2d586b24c9d7102380d988234012dc0e8949a2b1e296236ef1daaf69"
+      "sha256": "6e7d8dd5fbef814ddb5242ae1c14a1f91713d3a1655520d181165a9b4c731832"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-particle-step-small-s0.athinput",
-      "sha256": "4045ed9c29c11d09598b89cfbbde307e60f68bd09299a02eee08d6439ae32fbd"
+      "sha256": "4e9392d251b6f6c4e5d1d2b8ca4f313715c2969f5592ba40de97208a02441ced"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-ppc24-s0.athinput",
-      "sha256": "28cbb540e084ef1cab5f1531ec0f34656022ea8ac07fbb622271439f9106960e"
+      "sha256": "c418a61284376d75fa6b81b7a75431b19d7e446beb927b0ddec064aacfc32983"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-ppc96-s0.athinput",
-      "sha256": "25674aac69e5f22f3b27995d05d0a0b6079e8bbd168dff6e5b8d145d98aebfd4"
+      "sha256": "a59dc49a3c477079b7d5265ddaa331d474d9fb9993327e6c6c0bdcbc6a46e98c"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-reconstruct-wenoz-s0.athinput",
-      "sha256": "12f168330130b613b860db9b2975840d93d7b9bb52c982b8d3afb9e6f9224c73"
+      "sha256": "1f1f74b00060dc905e06e9935a8f6acaf3db31377e5f02415047b48e1dd6175a"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-resolution-coarse-s0.athinput",
-      "sha256": "f01a83228528e4c7829b423f299e654dcd2d9e8d0c2a2100d69f818b636d29fe"
+      "sha256": "51b6dad89525e6143e8c70ae72752208417822cb5459bc4959634790d33e630d"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-resolution-fine-s0.athinput",
-      "sha256": "07fbad0a0915b1c0c7addd77b04223daebece71e1eda79dbd8f8cab521322269"
+      "sha256": "98c7b3d9b3dac694b516acd96170029e29e1ffbe3f623abfb5a69bb93b026c5c"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-fiducial-riemann-hlld-s0.athinput",
-      "sha256": "c9ca3cad4ce1a3a0ebdd1437fcb824efd7000f849383148065616245d3078c9c"
+      "sha256": "e66e8626cb0676c148459d65b24e348101254f0f85194dc399a101d9e6450573"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho1em05-s0.athinput",
-      "sha256": "2d005f77bcc79e341bca256eb2933aa04a40477f0251c7375133c153c14f4d25"
+      "sha256": "3b28a4f3f9600df3c07faa6b681b0350ecb470a807aae4005760af4ff02f19de"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho1em05-s1.athinput",
-      "sha256": "e0273bc07933845c527c3c23beec9c644bf3a086bfd92d787cba1f9ac2f85a21"
+      "sha256": "a321cb9f8d3f326d3fb47cf383020f336b7b32b7422556a5cff489cd35dfb317"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho1em05-s2.athinput",
-      "sha256": "7ad6ae7ffb4088eca56458537b93ddc73394e6d724714fc7b9f00635489f3b58"
+      "sha256": "149e342f140f9c1c3ae3493c8bea9adc292c23f8145447304f27e515b519a62a"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho1em06-s0.athinput",
-      "sha256": "42569fb1a38245b7a9851fb3bd326aada96991fc7857683503f722e33b716cb6"
+      "sha256": "2abd4b7a65542d47c83bed9c973e79deae15622115a5e4f99389dd579c6143cc"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho1em06-s1.athinput",
-      "sha256": "67053c9a6a8aab75ed08edfc34f4b87be2b3c265c8f20abaa6d45208020dcbbd"
+      "sha256": "9508835e56301c65bab83582ee0c0dadc767b68974c66bcc6c4fed25535add95"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho1em06-s2.athinput",
-      "sha256": "eed36be9264e1f9061f91a09a08455b8a7871d226bd3ee5806fb8987f9bb395d"
+      "sha256": "26c053eac37f5caa4075b363af70bef3a651b18bd62cfd11abee4a543f58b275"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho3em06-s0.athinput",
-      "sha256": "58b29f9e867ca5897e4f181b4f6075f868db138a1fb7a723dd4fa88d09c39ad9"
+      "sha256": "9fe36edeaa23de6bd195c12eea528c0088b1162a4b3a5af7f857114366ec1686"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho3em06-s1.athinput",
-      "sha256": "9cabbf802a209f03a5ff50d5be1b881d68e78f293338e0b622a90a30de3aaaab"
+      "sha256": "35f799f825a065fe891d4ed2caccf9bae8262f6ea8b1ec4fdb5f21cfa1751fc8"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k16-rho3em06-s2.athinput",
-      "sha256": "b116c9a780992684a7e671257a8870972fb453116464c33dfd3aa454ca469d11"
+      "sha256": "1c66eed8c50994183e1aaf8eab82226caaac09e238c4529f266ad1cd7b9937c3"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho1em05-s0.athinput",
-      "sha256": "59e0113b366caefcaa9a0a82e110754691cdb23ea250e6f15a1f19e8c4ee638b"
+      "sha256": "86503a963cb7d498cb0b9ec583b7bb07d02d37da3913f461cb6592eba45b7312"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho1em05-s1.athinput",
-      "sha256": "77e61b1adab505fde9ee15928f494315d080ec44ffad2da40574d5ddbc758b35"
+      "sha256": "6927167ed1585454056a2ee017f98c473f9cf8998ed44b348568866efd06e0c1"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho1em05-s2.athinput",
-      "sha256": "b1fe67f74daf40483dfac421ae9c5e11a55aa460d8ff83a02080d82f0da6bee1"
+      "sha256": "a6718b5b4a07609a5d376161dc52bfe35864c4ebe1d5479edae7afd5f895b071"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho1em06-s0.athinput",
-      "sha256": "5d9c13cb36cbe27a56d79380c6d89e702d63cf72132d7784476da2e2023c62d6"
+      "sha256": "8ad81aac01a177561b93ddb1f18011a0bb523583e6d9c25ef3fdeba71d2ef12d"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho1em06-s1.athinput",
-      "sha256": "1ca6516d1053e0378614dc29e213fe43973e61ad4e82f1d0a3f7122b1799a222"
+      "sha256": "dd98d5481cb640c8e26359fe9da6a9733a17bd57a69bca0ab2075b864721ba67"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho1em06-s2.athinput",
-      "sha256": "1e303145d6443d2ee5c811866f7a87e3056698ccf270e2838546443d41744a31"
+      "sha256": "09c79e9e3521e3f4fb4fb9071f8c0ffc55c85b44bfe515989608ad19258e7026"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho3em06-s0.athinput",
-      "sha256": "44997acc4dc6613e6e2376ca5ac8165f591b995021313a85ebaa90f7b29fc15a"
+      "sha256": "793a7d1d2b196657a93b05d1fc9a48f5389076e26142eed0bdf5ab0e7ec2c48a"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho3em06-s1.athinput",
-      "sha256": "22c093dd00b19e36569a05bef587c1bb3376482ee71c46058c71b24ffca06973"
+      "sha256": "32a8c490b1858c5b191e0a3607da5325e50cd4116c80424b098fccf91dbd0b77"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k4-rho3em06-s2.athinput",
-      "sha256": "db9af7b5fba42b44dd20f60dca79c7334ce1c126a8b772b387154facc2b4420d"
+      "sha256": "27d6d230989fef52875ef4814053adb1215c08b21583ae1d48314fbbf2ac8ad4"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em05-s0.athinput",
-      "sha256": "9ecffeffd6b56fafb1c484e57e3ef227d4d4b3c6e2094983d341797f74d7731a"
+      "sha256": "43b04b615dfd62d20aa850cf068a1106c7a3accebf34cb55223862882419b212"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em05-s1.athinput",
-      "sha256": "2571f97e59f2103ed0b3adc20dfc7eb0b72b507e5bf4cacfefeda2deae9e6eb5"
+      "sha256": "6d2b74fddd74e307be470f1276926ed74c1a5b05bd087f879ae06c64c91b00ce"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em05-s2.athinput",
-      "sha256": "cbe5da4928a6e2b71eb54d7a655af167dbe26f8812a5a690303e96fc3dac1916"
+      "sha256": "c6f3595e77bcbf33f1d27990f8db98a302a70a322a567a2d99f64c05fdccf74c"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em06-s0.athinput",
-      "sha256": "e499a20f96a2ad5111dfe60b096afa15ab70a9f75502a6abef188e2355f237f4"
+      "sha256": "1da022946db97535648541f246fa347fbdd9d29f0a7981f74bc322dc15655614"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em06-s1.athinput",
-      "sha256": "8cb9be5db29b66013045bb577729e35255c0629cd34dd4785c1c49c49abd09a8"
+      "sha256": "41436fb0cd8f2fec7b2e3397d1d675238e2175bdd55d26c0b8417a939ce36770"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em06-s2.athinput",
-      "sha256": "bc3f6803f5ef02aca9d8582942117b3bc8dc9e1c26a079ec1758dae891434ccb"
+      "sha256": "abc4f28bb21dc1c79d765d499f49b3e96b6b1c8ef2391cda784329d773eeb79d"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho3em06-s0.athinput",
-      "sha256": "ab8b8fd6ec8b8991bb02b7411942e7c5d21a0f29f2b74216c8f8cfda89d44348"
+      "sha256": "45ccddf4ffc5a46bb8ee10af633750deaa82ec11e7b28257f82c29474d2722b5"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho3em06-s1.athinput",
-      "sha256": "3b83f18f1890f73a4321462906b8292eaa53d6197aa39f27a992ff1f5bb94ecb"
+      "sha256": "327077b5435d55b9bc61e63cbdc8edcea3baaa28a2fd6bd435aa09a84442df7b"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho3em06-s2.athinput",
-      "sha256": "0c9144adb735ddf051d9d10f5926d9b7803636d085933d88d04a207c983f9648"
+      "sha256": "42e90bdc7a03e919cfbce1c3f5947636acff4398437c40232cf530cf5bdd38e3"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-noise-seeded-s0.athinput",
-      "sha256": "c1701630d138694dc7513d8ad176dcfd1e636014e0ac1916f7fb84bb93508ec8"
+      "sha256": "332f427468b7ab8caf0b1743d103636fe378cc3d59951ad61dfe69bba78c4427"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-particle-step-small-s0.athinput",
-      "sha256": "93849b34822a745b02e0eb312e5a4bfe48fdeeef349345682cb8d67b51c2a066"
+      "sha256": "ac9eb358775200746bbf34dea212122b9d997d10af5356d6a66762656cba7b78"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-ppc24-s0.athinput",
-      "sha256": "b0877ffebcb677058dd74b3da946f43db9f520ba8508226e42727d616698d503"
+      "sha256": "7baad882dd0dc5c2432b11ae657728a0d280cd02dd2f0e726e16fce2b0564979"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-ppc48-s0.athinput",
-      "sha256": "5dcd138892f71004af7132d8759fe67308be67f59b3b832959cceff210856775"
+      "sha256": "73d5cbd0dbaa06d476fb92115e71f42e1bcdb4446716e20259c0fe1c3399cc3e"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-resolution-coarse-s0.athinput",
-      "sha256": "f5c55561fe8a397d4cff1b4ee83882eaac0c3c282b2f0218172b4a3cb68abae3"
+      "sha256": "9e197832ae03cf94ddec65a2f30ddbdeee19c3cd13fbaa8fc3ec6cf774d3a577"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-resolution-fiducial-s0.athinput",
-      "sha256": "73ce1ed5e9480a0a317f69ede0f646b8b293fa0a85d79f44b2038e749a7e1dd1"
+      "sha256": "1e30335bfbfc2a969700d871525f297d911ac3db5153846377d745ffeb48f9d4"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k16-rho1em05-s0.athinput",
-      "sha256": "f3bd65689a821035055b4da7e793bfd4824e99206854c99eea31c124dc1eb070"
+      "sha256": "9c7d7dee870c720f6788319d8ec54fe3f506005126cad57509aed158ba53f610"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k16-rho1em06-s0.athinput",
-      "sha256": "cb5e47dd6c09760ed03d91d6a487d827a2a6a5cf2d0a07507d28e39dd4ab9adf"
+      "sha256": "6ae5fc945b8df73b30272726efe7e55d21bf752f70cd9570b2c0404f40231119"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k16-rho3em06-s0.athinput",
-      "sha256": "32aaea7ebb9dcaaebc8aa98c64d36bf2d87d3157d9d09b23132672615552e48d"
+      "sha256": "cc91cf3350ee53f964185df5ac896195a0757e1464045f149e3a105604e46a2e"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k4-rho1em05-s0.athinput",
-      "sha256": "76324da4c7e3a730c7e5c0fe1940cb39bd10c7315eed4b3943b6d4b43982b3b8"
+      "sha256": "b83d55f40450ea99e54b632c1326a86d79fe1f10a283aa3b77f4d43c8b116044"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k4-rho1em06-s0.athinput",
-      "sha256": "1bbcc56014944ea2210650245cbf4b6b905aacf33e820803c75dc2e76e4706e7"
+      "sha256": "e09f88c570042693a35884b07f7dd13d42b980b48845e7e0a96a86cf8b225c96"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k4-rho3em06-s0.athinput",
-      "sha256": "f2a18de7bc7d8e4efaf64fb7f0a6536f49dac95a710a8153e76c4bcbdded991a"
+      "sha256": "1dc53512dbc4794a9a89335c518fd93a52b1856d301fae763aa875d713af30d8"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k8-rho1em05-s0.athinput",
-      "sha256": "3d99dc0571e44bbb411bed8fedbda9fb82e80559284ad0e90003d2752db0b579"
+      "sha256": "a1614b37021dca61458f43268164e77c61701d21dcc47992f35de9327475cb59"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k8-rho1em06-s0.athinput",
-      "sha256": "d3ee2b7fa92e3df34e2baeb50d0fb7dab52cb056ff5bbfcf1ec10b0e05e11e91"
+      "sha256": "6a0171c183ff42cc89eb7fc1319ee572873ef6a1d0b75952d412606151e705ce"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k8-rho3em06-s0.athinput",
-      "sha256": "b393c103e21a7b365e2f5515791b2ebdec4296edfbf511cf19ec9494302a18de"
+      "sha256": "891bffeaf5b10b83059264accbe3886d5ae035bea03b719f7a3ccf01053b5385"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-rigidity-isolation-k16-s0.athinput",
-      "sha256": "da6307624f75a5c04e050f80f18cd815aa1b596f6a8961acb02c0c1b3fa55880"
+      "sha256": "2ff0840829abbcefa835e62ca056d531bd23f5ef3c34780cc10dc8e3881aaddd"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-rigidity-isolation-k4-s0.athinput",
-      "sha256": "7476dd1867de760672ff3b9b20427e131de136c5788b44a9d69827e56246143a"
+      "sha256": "8ae6edce6e9927540c77b0893f720795ef0811f657e12f5ee53d5743b3cfd5e1"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-rigidity-isolation-k8-s0.athinput",
-      "sha256": "98ec4cfdfae84ba6c0595156d1005cb2d7574034c6a4c4a1f022f14806093c32"
+      "sha256": "c20edcc80c551be2ab77595bb25caaf378449f4353b11650c5e023a60e3b0139"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-runtime-initializer-ppc24-s0.athinput",
-      "sha256": "d0e33e7917621ada0ce300962244df759f73be5a195c77478832a3ac6200db51"
+      "sha256": "156a296c3b5e3dd13d49357a7c52b6e62c7cd0f23711ba681ff003bd50b75115"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-runtime-initializer-ppc96-s0.athinput",
-      "sha256": "52e45ee3d4afa68d8bbb7cbaca9a10827546967f605d5cf63ffb999ee34bae29"
+      "sha256": "cb1d1e0672f36ff72df8ee08fe2563b9d56bf036d95ec754814769dc28123b01"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-current-retention-s0.athinput",
-      "sha256": "893b09ef6a59c940801d6a09da2072cfdb4eba1d6ef2561be09e1e148a550aa5"
+      "sha256": "91387072dd4fb03b30601f07955bea986eeff49aa1f76ff6949aec91b1474947"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-current-retention-s1.athinput",
-      "sha256": "5b7ff78fb11a4786072f07bf200ea1740d9ae8627313bf50c0350ab84c2e00ff"
+      "sha256": "c3f4c44641055ef55c6dd41aacb2b913b01fba7bba0d6802f56224956ab1e9b4"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-current-retention-s2.athinput",
-      "sha256": "ac51f574889062221440bd77d11a97afdfc2f07b7e35c31c5fd3a7546a43d441"
+      "sha256": "63753cdd34249bf71f2a6d356aa039d4689b5535a716551e9701fe52a56baf77"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-particle-step-small-s0.athinput",
-      "sha256": "4fafaa5057ce2ffb1757268b319fae6308aadb97bb6817048038f4152d92e32a"
+      "sha256": "d2aea1d065ebcfaa9517faeb4051ee23bd14a61de04034938b628aa20ee16dc6"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-ppc32-centered-s0.athinput",
-      "sha256": "b77ae1ebf1cd69a345ce820300dc36e6223e1e289b967c17d1e16c2e726a78ea"
+      "sha256": "cc84e5e58111a8b0624fecda42906f3414d165393bfd0bdd5f57d752bd99f835"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-ppc8-centered-s0.athinput",
-      "sha256": "8b858cbdc82b2cc1ae2275effd08e180cb92a2178efe91f27f217e0e0e794486"
+      "sha256": "0b41031196aab5857f0321d4cb60e5f03012132951679aa908a0db9593767171"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-resolution-coarse-s0.athinput",
-      "sha256": "6ad53cafe3b1a545ce8cc6bf397ea89de768f06568a608ffd2df6c56c24d1272"
+      "sha256": "e90617385e6fdb06c6f6897af190c8f0cb6a7a8ad40b5e9d973cb6f08cf5c06f"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-resolution-fine-s0.athinput",
-      "sha256": "be8ea7f290415740510234020810e6142f9237d4661d0cdba5cb5f84a422048d"
+      "sha256": "032a3d1fed99b2be01b6d9002ab3eeeaaf905bf5dcbcc93e5371710c68315a21"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-stochastic-position-s0.athinput",
-      "sha256": "4943d5fed579884d0aa4f78043ef7e4f0293dbeec67783946e6a81e72025e19e"
+      "sha256": "536cb7fc0ab344073da82ed576e529fd338725a552265057414fb74742ad7bc9"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-stochastic-position-s1.athinput",
-      "sha256": "30fb3952a89dbcc42d3014700fd805313655f6cfe5af096a7eb4676afbde8777"
+      "sha256": "0f6905abb373825879674d0769427bd004470aa4a2f9f7874e99d727f105ea12"
     },
     {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-fiducial-stochastic-position-s2.athinput",
-      "sha256": "4f6f495d0ad751d97d4be52e2716a2a8a38462672365432124a68b2dee7ee97b"
+      "sha256": "09ded4215b43bfd70b871d2d0527cf25e5bc133577f5a9126b09993f577027df"
     },
     {
       "path": "inputs/tests/pic_adaptive_deltaf_smoke.athinput",
