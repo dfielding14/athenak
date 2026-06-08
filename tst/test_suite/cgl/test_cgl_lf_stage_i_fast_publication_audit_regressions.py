@@ -31,6 +31,28 @@ def publication():
     return load_module("cgl_lf_stage_i_fast_publication_regressions", RENDERER)
 
 
+def test_publication_facing_language_is_descriptive():
+    source = RENDERER.read_text(encoding="utf-8")
+    for prohibited in (
+        "Authenticated Holm-corrected comparison",
+        "Developed-window robustness summary",
+        "Matched active/passive causal-mechanism evidence",
+        "Common-scale convergence evidence",
+        "Reviewed convergence result:",
+        "Populated paired developed-window robustness cells",
+    ):
+        assert prohibited not in source
+    for required in (
+        "Authenticated descriptive comparison",
+        "Developed-window measured-sensitivity summary",
+        "Matched active/passive mechanism diagnostics",
+        "Common-scale consistency evidence",
+        "Reviewed common-scale consistency result:",
+        "Populated paired developed-window sensitivity cells",
+    ):
+        assert required in source
+
+
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
