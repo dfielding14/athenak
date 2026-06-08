@@ -127,6 +127,68 @@ Q023_REGISTERED_POLICY_CAMPAIGN = (
     "q023_paper_bell_linear_joverc_registered_successor_v1"
 )
 Q023_REGISTERED_CASE_COUNT = 55
+Q019_CARRIER_CALIBRATION_CAMPAIGN = (
+    "q019_q023_carrier_resource_calibration_v1"
+)
+Q019_CARRIER_CALIBRATION_QUALIFICATION_RELATIVE = Path(
+    "analysis/q019_q023_carrier_resource_calibration_v1/"
+    "q019_q023_carrier_calibration_engineering_qualification_v1.json"
+)
+Q019_CARRIER_CALIBRATION_QUALIFICATION_RECORD_TYPE = (
+    "q019_q023_carrier_calibration_engineering_qualification_v1"
+)
+Q019_CARRIER_CALIBRATION_QUALIFICATION_STATUS = (
+    "passed_carrier_calibration_engineering_gate_non_authorizing"
+)
+Q019_CARRIER_CALIBRATION_INDEX_RELATIVE = Path(
+    "analysis/q019_q023_carrier_resource_calibration_v1/"
+    "q019_q023_carrier_calibration_execution_index_v1.json"
+)
+Q019_CARRIER_CALIBRATION_INDEX_RECORD_TYPE = (
+    "q019_q023_carrier_calibration_execution_index_v1"
+)
+Q019_CARRIER_CALIBRATION_INDEX_STATUS = (
+    "complete_registered_carrier_calibration_execution_index_non_authorizing"
+)
+Q019_CARRIER_CALIBRATION_ARTIFACTS = (
+    (
+        "q019-carrier-calibration-2d-onset-c0032-baseline",
+        "q019-q023-carrier-s1-onset-s0",
+        "q019-carrier-cal-01-2d-c0032-baseline-v1",
+        32,
+    ),
+    (
+        "q019-carrier-calibration-2d-onset-c0256-baseline",
+        "q019-q023-carrier-s1-onset-s0",
+        "q019-carrier-cal-02-2d-c0256-baseline-v1",
+        256,
+    ),
+    (
+        "q019-carrier-calibration-2d-onset-c0256-instrumented",
+        "q019-q023-carrier-s1-onset-s0",
+        "q019-carrier-cal-03-2d-c0256-instrumented-v1",
+        256,
+    ),
+    (
+        "q019-carrier-calibration-3d-fiducial-c0016-baseline",
+        "q019-q023-carrier-s3-3d-fiducial-s0",
+        "q019-carrier-cal-04-3d-c0016-baseline-v1",
+        16,
+    ),
+    (
+        "q019-carrier-calibration-3d-fiducial-c0064-baseline",
+        "q019-q023-carrier-s3-3d-fiducial-s0",
+        "q019-carrier-cal-05-3d-c0064-baseline-v1",
+        64,
+    ),
+    (
+        "q019-carrier-calibration-3d-fiducial-c0064-instrumented",
+        "q019-q023-carrier-s3-3d-fiducial-s0",
+        "q019-carrier-cal-06-3d-c0064-instrumented-v1",
+        64,
+    ),
+)
+Q019_CARRIER_CALIBRATION_CASE_COUNT = len(Q019_CARRIER_CALIBRATION_ARTIFACTS)
 # The capture helper authenticates a clean tracked HEAD before and after probing.
 # Pin the cycle-free reviewed blob closure here; its common-module digest is
 # checked against this executing controller below.
@@ -5682,10 +5744,13 @@ def require_policy_predecessor_snapshot_for_promotion(
     permit_exact_authorized_clean_candidate_freeze_replacement: bool = False,
     permit_completed_q043_registered_slice_retirement: bool = False,
     permit_completed_q023_registered_slice_retirement: bool = False,
+    permit_completed_q019_carrier_calibration_retirement: bool = False,
     q043_registered_matrix_path: Path | None = None,
     q043_registered_matrix_sha256: str | None = None,
     q023_registered_matrix_path: Path | None = None,
     q023_registered_matrix_sha256: str | None = None,
+    q019_carrier_qualification_path: Path | None = None,
+    q019_carrier_qualification_sha256: str | None = None,
     expected_active_policy_sha256: str | None = None,
     expected_active_promotion_sha256: str | None = None,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
@@ -5724,6 +5789,7 @@ def require_policy_predecessor_snapshot_for_promotion(
         permit_exact_authorized_clean_candidate_freeze_replacement,
         permit_completed_q043_registered_slice_retirement,
         permit_completed_q023_registered_slice_retirement,
+        permit_completed_q019_carrier_calibration_retirement,
     ]
     if sum(transition_modes) > 1:
         raise ValueError("Policy predecessor transition modes are exclusive")
@@ -5731,6 +5797,7 @@ def require_policy_predecessor_snapshot_for_promotion(
         permit_exact_authorized_clean_candidate_freeze_replacement
         or permit_completed_q043_registered_slice_retirement
         or permit_completed_q023_registered_slice_retirement
+        or permit_completed_q019_carrier_calibration_retirement
     )
     if exact_predecessor_mode:
         if not _is_lowercase_sha256(
@@ -5745,6 +5812,8 @@ def require_policy_predecessor_snapshot_for_promotion(
                 "Q043"
                 if permit_completed_q043_registered_slice_retirement
                 else "Q023"
+                if permit_completed_q023_registered_slice_retirement
+                else "Q019 carrier calibration"
             )
             raise ValueError(
                 f"Completed {campaign} retirement requires both exact active "
@@ -5785,6 +5854,22 @@ def require_policy_predecessor_snapshot_for_promotion(
         raise ValueError(
             "Q023 registered matrix bindings require completed Q023 retirement mode"
         )
+    if permit_completed_q019_carrier_calibration_retirement:
+        if not isinstance(
+            q019_carrier_qualification_path, Path
+        ) or not _is_lowercase_sha256(q019_carrier_qualification_sha256):
+            raise ValueError(
+                "Completed Q019 carrier retirement requires the immutable "
+                "qualification path and digest"
+            )
+    elif (
+        q019_carrier_qualification_path is not None
+        or q019_carrier_qualification_sha256 is not None
+    ):
+        raise ValueError(
+            "Q019 carrier qualification bindings require completed Q019 "
+            "carrier retirement mode"
+        )
     policy_path = canonical_policy_path(authorized_pic_root)
     mirror_policy_path = canonical_policy_path(authorized_project_home_root)
     promotion_path = active_promotion_path(authorized_pic_root)
@@ -5809,6 +5894,7 @@ def require_policy_predecessor_snapshot_for_promotion(
                 or permit_exact_authorized_clean_candidate_freeze_replacement
                 or permit_completed_q043_registered_slice_retirement
                 or permit_completed_q023_registered_slice_retirement
+                or permit_completed_q019_carrier_calibration_retirement
             ):
                 raise ValueError(
                     "Policy predecessor transition requires an active predecessor"
@@ -6352,6 +6438,454 @@ def require_policy_predecessor_snapshot_for_promotion(
             raise ValueError(
                 "Completed Q023 retirement requires newer authenticated storage evidence"
             )
+    if permit_completed_q019_carrier_calibration_retirement:
+        if not isinstance(storage, dict):
+            raise ValueError(
+                "Completed Q019 carrier retirement predecessor storage is malformed"
+            )
+        if predecessor_version == successor_control_plane_version:
+            raise ValueError(
+                "Completed Q019 carrier retirement requires a new control plane"
+            )
+        predecessor_slices = policy.get("registered_science_slices")
+        if (
+            not isinstance(predecessor_slices, list)
+            or len(predecessor_slices) != Q019_CARRIER_CALIBRATION_CASE_COUNT
+            or successor_policy.get("registered_science_slices") != []
+        ):
+            raise ValueError(
+                "Completed Q019 carrier retirement requires the exact nonempty "
+                "six-slice predecessor and one empty-allowlist successor"
+            )
+        assert q019_carrier_qualification_path is not None
+        expected_qualification_path = (
+            Path(os.path.abspath(authorized_pic_root))
+            / Q019_CARRIER_CALIBRATION_QUALIFICATION_RELATIVE
+        )
+        if (
+            Path(os.path.abspath(q019_carrier_qualification_path))
+            != expected_qualification_path
+        ):
+            raise ValueError(
+                "Completed Q019 carrier retirement qualification path is not "
+                "the canonical artifact"
+            )
+        qualification_bytes = read_stable_regular_file_below(
+            q019_carrier_qualification_path,
+            authorized_pic_root,
+            require_read_only_mode=True,
+        )
+        if sha256_bytes(qualification_bytes) != q019_carrier_qualification_sha256:
+            raise ValueError(
+                "Completed Q019 carrier retirement qualification digest changed"
+            )
+        qualification = read_json_bytes(
+            qualification_bytes, label=str(q019_carrier_qualification_path)
+        )
+        decision = qualification.get("decision")
+        qualification_authorization = qualification.get("authorization")
+        index_binding = qualification.get("execution_index")
+        if (
+            qualification.get("record_type")
+            != Q019_CARRIER_CALIBRATION_QUALIFICATION_RECORD_TYPE
+            or qualification.get("status")
+            != Q019_CARRIER_CALIBRATION_QUALIFICATION_STATUS
+            or qualification.get("campaign") != Q019_CARRIER_CALIBRATION_CAMPAIGN
+            or qualification.get("saturation_evidence_eligible") is not False
+            or not isinstance(decision, dict)
+            or decision.get("engineering_gate_pass") is not True
+            or decision.get("measured_resource_model_complete") is not True
+            or decision.get("production_resource_freeze_recommended") is not True
+            or decision.get("production_resource_freeze_authorized") is not False
+            or decision.get("retire_calibration_policy_before_resource_freeze")
+            is not True
+            or decision.get("repeat_calibration_required") is not False
+            or not isinstance(qualification_authorization, dict)
+            or not qualification_authorization
+            or any(value is not False for value in qualification_authorization.values())
+            or not isinstance(index_binding, dict)
+        ):
+            raise ValueError(
+                "Completed Q019 carrier retirement qualification boundary drifted"
+            )
+        expected_index_path = (
+            Path(os.path.abspath(authorized_pic_root))
+            / Q019_CARRIER_CALIBRATION_INDEX_RELATIVE
+        )
+        index_path = Path(str(index_binding.get("path", "")))
+        index_sha256 = index_binding.get("sha256")
+        if (
+            Path(os.path.abspath(index_path)) != expected_index_path
+            or not _is_lowercase_sha256(index_sha256)
+        ):
+            raise ValueError(
+                "Completed Q019 carrier retirement execution-index binding is malformed"
+            )
+        index_bytes = read_stable_regular_file_below(
+            index_path,
+            authorized_pic_root,
+            require_read_only_mode=True,
+        )
+        if sha256_bytes(index_bytes) != index_sha256:
+            raise ValueError(
+                "Completed Q019 carrier retirement execution-index digest changed"
+            )
+        index = read_json_bytes(index_bytes, label=str(index_path))
+        canonical_index_sha256 = hashlib.sha256(
+            (
+                json.dumps(
+                    index,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+        ).hexdigest()
+        attempts = index.get("attempts")
+        index_authorization = index.get("authorization")
+        if (
+            index.get("record_type") != Q019_CARRIER_CALIBRATION_INDEX_RECORD_TYPE
+            or index.get("status") != Q019_CARRIER_CALIBRATION_INDEX_STATUS
+            or index.get("campaign") != Q019_CARRIER_CALIBRATION_CAMPAIGN
+            or index.get("attempt_count") != Q019_CARRIER_CALIBRATION_CASE_COUNT
+            or index.get("saturation_evidence_eligible") is not False
+            or index.get("production_resource_freeze_authorized") is not False
+            or not isinstance(attempts, list)
+            or len(attempts) != Q019_CARRIER_CALIBRATION_CASE_COUNT
+            or not isinstance(index_authorization, dict)
+            or not index_authorization
+            or any(value is not False for value in index_authorization.values())
+            or index_binding.get("canonical_record_sha256")
+            != canonical_index_sha256
+        ):
+            raise ValueError(
+                "Completed Q019 carrier retirement execution-index boundary drifted"
+            )
+        policy_pairs = []
+        for expected, item in zip(
+            Q019_CARRIER_CALIBRATION_ARTIFACTS, predecessor_slices
+        ):
+            _, case_id, authorization_id, _ = expected
+            if (
+                not isinstance(item, dict)
+                or item.get("authorization_id") != authorization_id
+                or item.get("test_id") != case_id
+                or item.get("status")
+                != AUTHORIZED_REGISTERED_SCIENCE_SLICE_STATUS
+                or item.get("campaign") != Q019_CARRIER_CALIBRATION_CAMPAIGN
+            ):
+                raise ValueError(
+                    "Completed Q019 carrier retirement predecessor slice matrix drifted"
+                )
+            policy_pairs.append((authorization_id, case_id))
+        attempt_pairs = []
+        execution_ids: dict[str, set[object]] = {
+            "submission_id": set(),
+            "job_id": set(),
+            "artifact_root": set(),
+        }
+        dimension_groups: dict[int, list[dict[str, object]]] = {2: [], 3: []}
+        for expected, item in zip(Q019_CARRIER_CALIBRATION_ARTIFACTS, attempts):
+            artifact_id, case_id, authorization_id, cycle_limit = expected
+            if not isinstance(item, dict):
+                raise ValueError(
+                    "Completed Q019 carrier retirement attempt is malformed"
+                )
+            admission = item.get("admission_facts")
+            identity = (
+                admission.get("registered_execution_identity")
+                if isinstance(admission, dict)
+                else None
+            )
+            execution_profile = (
+                admission.get("execution_profile")
+                if isinstance(admission, dict)
+                else None
+            )
+            completion = (
+                admission.get("runtime_completion")
+                if isinstance(admission, dict)
+                else None
+            )
+            event = item.get("reconciliation_event")
+            measurement = item.get("resource_measurement")
+            dimension = 2 if "-2d-" in artifact_id else 3
+            expected_nodes = 1 if dimension == 2 else 2
+            expected_tasks = 8 if dimension == 2 else 16
+            maximum_elapsed = 1800 if dimension == 2 else 3600
+            maximum_storage = (
+                64 * 1024**3 if dimension == 2 else 128 * 1024**3
+            )
+            elapsed = event.get("elapsed_seconds") if isinstance(event, dict) else None
+            artifact_bytes = item.get("artifact_payload_bytes")
+            peak_memory = item.get("peak_resident_memory_bytes")
+            if (
+                item.get("artifact_id") != artifact_id
+                or item.get("source_case_id") != case_id
+                or item.get("authorization_id") != authorization_id
+                or item.get("completed_cycles") != cycle_limit
+                or not isinstance(item.get("submission_id"), str)
+                or not isinstance(item.get("job_id"), str)
+                or not str(item["job_id"]).isdigit()
+                or not isinstance(item.get("artifact_root"), str)
+                or not isinstance(admission, dict)
+                or admission.get("case_id") != case_id
+                or admission.get("artifact_root") != item["artifact_root"]
+                or admission.get("saturation_evidence_eligible") is not False
+                or not isinstance(identity, dict)
+                or identity.get("submission_id") != item["submission_id"]
+                or identity.get("registered_science_authorization_id")
+                != authorization_id
+                or identity.get("slurm_job_id") != item["job_id"]
+                or not isinstance(execution_profile, dict)
+                or execution_profile.get("kind") != "runtime_controller_overlay"
+                or execution_profile.get("artifact_id") != artifact_id
+                or execution_profile.get("source_case_id") != case_id
+                or execution_profile.get("authority") != "excluded_pilot_only"
+                or execution_profile.get("expected_stop_reason") != 1903
+                or execution_profile.get("saturation_evidence_eligible") is not False
+                or not isinstance(completion, dict)
+                or completion.get("run_completion_status")
+                != "completed_not_acceptance_eligible"
+                or completion.get("stop_reason_code") != "1903"
+                or completion.get("runtime_controller_trigger_cycle") != cycle_limit
+                or completion.get("process_exit_code") != 0
+                or completion.get("scheduler_terminal_state") != "COMPLETED"
+                or not isinstance(event, dict)
+                or event.get("campaign") != Q019_CARRIER_CALIBRATION_CAMPAIGN
+                or event.get("test_id") != case_id
+                or event.get("registered_science_authorization_id")
+                != authorization_id
+                or event.get("submission_id") != item["submission_id"]
+                or event.get("job_id") != item["job_id"]
+                or event.get("artifact_dir") != item["artifact_root"]
+                or event.get("state") != "COMPLETED"
+                or event.get("reconciled") is not True
+                or event.get("requested_nodes") != expected_nodes
+                or event.get("scheduler_reported_allocated_nodes") != expected_nodes
+                or event.get("scheduler_exit_code") != "0:0"
+                or type(elapsed) is not int
+                or not 0 < elapsed <= maximum_elapsed
+                or type(artifact_bytes) is not int
+                or not 0 < artifact_bytes <= maximum_storage
+                or type(item.get("raw_payload_bytes")) is not int
+                or not 0 < item["raw_payload_bytes"] <= artifact_bytes
+                or type(item.get("output_slot_count")) is not int
+                or item["output_slot_count"] < 14
+                or not isinstance(measurement, dict)
+                or measurement.get("record_type")
+                != "q019_q023_carrier_calibration_resource_measurement_v1"
+                or measurement.get("job_id") != item["job_id"]
+                or measurement.get("tasks") != expected_tasks
+                or measurement.get("peak_resident_memory_semantics")
+                != (
+                    "conservative_sum_of_slurm_step_max_task_rss_times_"
+                    "reported_step_tasks"
+                )
+                or measurement.get("peak_resident_memory_exact_aggregate") is not False
+                or measurement.get(
+                    "peak_resident_memory_is_conservative_upper_bound"
+                )
+                is not True
+                or measurement.get("trustworthy_for_capacity_planning") is not True
+                or type(peak_memory) is not int
+                or peak_memory <= 0
+                or measurement.get("peak_resident_memory_bytes") != peak_memory
+            ):
+                raise ValueError(
+                    "Completed Q019 carrier retirement attempt evidence drifted"
+                )
+            rows = measurement.get("sacct_rows")
+            step_bounds = measurement.get("slurm_step_memory_upper_bounds")
+            if (
+                not isinstance(rows, list)
+                or not rows
+                or not isinstance(step_bounds, list)
+                or not step_bounds
+                or hashlib.sha256(
+                    (
+                        json.dumps(
+                            rows,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            allow_nan=False,
+                        )
+                        + "\n"
+                    ).encode("utf-8")
+                ).hexdigest()
+                != measurement.get("sacct_rows_sha256")
+            ):
+                raise ValueError(
+                    "Completed Q019 carrier retirement accounting rows drifted"
+                )
+            rebuilt_bounds = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    raise ValueError(
+                        "Completed Q019 carrier retirement accounting row is malformed"
+                    )
+                max_rss = row.get("max_rss")
+                if not max_rss:
+                    continue
+                match = re.fullmatch(r"([1-9][0-9]*)K", str(max_rss))
+                task_count = row.get("task_count")
+                if (
+                    match is None
+                    or type(task_count) is not int
+                    or not 0 < task_count <= expected_tasks
+                    or not isinstance(row.get("max_rss_node"), str)
+                    or not row["max_rss_node"]
+                    or not isinstance(row.get("max_rss_task"), str)
+                    or not row["max_rss_task"].isdigit()
+                ):
+                    raise ValueError(
+                        "Completed Q019 carrier retirement MaxRSS attribution drifted"
+                    )
+                max_task_rss = int(match.group(1)) * 1024
+                rebuilt_bounds.append(
+                    {
+                        "job_id_raw": row.get("job_id_raw"),
+                        "reported_step_tasks": task_count,
+                        "max_task_rss_bytes": max_task_rss,
+                        "step_memory_upper_bound_bytes": (
+                            max_task_rss * task_count
+                        ),
+                        "node": row["max_rss_node"],
+                        "task": int(row["max_rss_task"]),
+                    }
+                )
+            maximum_task_rss = max(
+                (item["max_task_rss_bytes"] for item in rebuilt_bounds),
+                default=0,
+            )
+            if (
+                rebuilt_bounds != step_bounds
+                or measurement.get("maximum_observed_task_rss_bytes")
+                != maximum_task_rss
+                or measurement.get("maximum_observed_task_rss_locations")
+                != [
+                    item
+                    for item in rebuilt_bounds
+                    if item["max_task_rss_bytes"] == maximum_task_rss
+                ]
+                or peak_memory
+                != sum(
+                    item["step_memory_upper_bound_bytes"]
+                    for item in rebuilt_bounds
+                )
+            ):
+                raise ValueError(
+                    "Completed Q019 carrier retirement memory bound drifted"
+                )
+            for key in execution_ids:
+                value = item[key]
+                if value in execution_ids[key]:
+                    raise ValueError(
+                        "Completed Q019 carrier retirement execution identity reused"
+                    )
+                execution_ids[key].add(value)
+            attempt_pairs.append((authorization_id, case_id))
+            dimension_groups[dimension].append(item)
+        if attempt_pairs != policy_pairs:
+            raise ValueError(
+                "Completed Q019 carrier retirement index differs from active "
+                "authorizations"
+            )
+        for dimension, group in dimension_groups.items():
+            short, baseline, instrumented = group
+            short_elapsed = short["reconciliation_event"]["elapsed_seconds"]
+            baseline_elapsed = baseline["reconciliation_event"]["elapsed_seconds"]
+            instrumented_elapsed = instrumented["reconciliation_event"][
+                "elapsed_seconds"
+            ]
+            incremental_cycles = (
+                baseline["completed_cycles"] - short["completed_cycles"]
+            )
+            baseline_increment = baseline_elapsed - short_elapsed
+            instrumented_increment = instrumented_elapsed - short_elapsed
+            overhead_ratio = instrumented_increment / baseline_increment
+            added_seconds = instrumented_increment - baseline_increment
+            maximum_elapsed = 1800 if dimension == 2 else 3600
+            maximum_storage = (
+                64 * 1024**3 if dimension == 2 else 128 * 1024**3
+            )
+            memory_capacity = (1 if dimension == 2 else 2) * 500 * 1024**3
+            if (
+                incremental_cycles <= 0
+                or baseline_increment <= 0
+                or instrumented_increment <= 0
+                or not (overhead_ratio <= 1.25 or added_seconds <= 30)
+                or max(
+                    baseline_elapsed / maximum_elapsed,
+                    instrumented_elapsed / maximum_elapsed,
+                )
+                > 0.80
+                or max(
+                    baseline["artifact_payload_bytes"] / maximum_storage,
+                    instrumented["artifact_payload_bytes"] / maximum_storage,
+                )
+                > 0.80
+                or max(
+                    item["peak_resident_memory_bytes"] for item in group
+                )
+                / memory_capacity
+                > 0.80
+            ):
+                raise ValueError(
+                    "Completed Q019 carrier retirement engineering gates do not pass"
+                )
+        successor_storage = successor_policy.get("olcf_side_storage")
+        if not isinstance(successor_storage, dict):
+            raise ValueError(
+                "Completed Q019 carrier retirement successor storage is malformed"
+            )
+        predecessor_comparable = {
+            **policy,
+            "registered_science_slices": [],
+            "olcf_side_storage": {
+                **storage,
+                "installed_control_plane_version": None,
+                "staged_control_plane_candidate_version": None,
+                "last_preflight_utc": None,
+                "storage_preflight_evidence": None,
+            },
+        }
+        successor_comparable = {
+            **successor_policy,
+            "olcf_side_storage": {
+                **successor_storage,
+                "installed_control_plane_version": None,
+                "staged_control_plane_candidate_version": None,
+                "last_preflight_utc": None,
+                "storage_preflight_evidence": None,
+            },
+        }
+        if not _exact_json_equal(successor_comparable, predecessor_comparable):
+            raise ValueError(
+                "Completed Q019 carrier retirement changed unrelated policy fields"
+            )
+        predecessor_binding = storage.get("storage_preflight_evidence")
+        successor_binding = successor_storage.get("storage_preflight_evidence")
+        if (
+            not isinstance(predecessor_binding, dict)
+            or not isinstance(successor_binding, dict)
+            or successor_binding == predecessor_binding
+            or successor_binding.get("probe_id") == predecessor_binding.get("probe_id")
+            or successor_binding.get("sha256") == predecessor_binding.get("sha256")
+            or utc_datetime(
+                successor_storage.get("last_preflight_utc"),
+                field="successor.olcf_side_storage.last_preflight_utc",
+            )
+            <= utc_datetime(
+                storage.get("last_preflight_utc"),
+                field="predecessor.olcf_side_storage.last_preflight_utc",
+            )
+        ):
+            raise ValueError(
+                "Completed Q019 carrier retirement requires newer authenticated "
+                "storage evidence"
+            )
     predecessor_slices = policy.get("registered_science_slices")
     successor_slices = successor_policy.get("registered_science_slices")
     if (
@@ -6360,6 +6894,7 @@ def require_policy_predecessor_snapshot_for_promotion(
         and not _exact_json_equal(predecessor_slices, successor_slices)
         and not permit_completed_q043_registered_slice_retirement
         and not permit_completed_q023_registered_slice_retirement
+        and not permit_completed_q019_carrier_calibration_retirement
     ):
         raise ValueError(
             "A nonempty registered-science allowlist can change only through an "

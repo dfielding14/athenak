@@ -1599,10 +1599,13 @@ def promote(
     replace_exact_authorized_clean_candidate_freeze: bool = False,
     retire_completed_q043_registered_slices: bool = False,
     retire_completed_q023_registered_slices: bool = False,
+    retire_completed_q019_carrier_calibration_slices: bool = False,
     q043_registered_matrix: Path | None = None,
     q043_registered_matrix_sha256: str | None = None,
     q023_registered_matrix: Path | None = None,
     q023_registered_matrix_sha256: str | None = None,
+    q019_carrier_qualification: Path | None = None,
+    q019_carrier_qualification_sha256: str | None = None,
     expected_active_policy_sha256: str | None = None,
     expected_active_promotion_sha256: str | None = None,
     control_plane_dir: Path = SCRIPT_DIR,
@@ -1618,6 +1621,7 @@ def promote(
                 replace_exact_authorized_clean_candidate_freeze,
                 retire_completed_q043_registered_slices,
                 retire_completed_q023_registered_slices,
+                retire_completed_q019_carrier_calibration_slices,
             ]
         )
         > 1
@@ -1733,6 +1737,13 @@ def promote(
         raise ValueError(
             "Completed Q023 retirement requires one empty-allowlist replacement"
         )
+    if (
+        retire_completed_q019_carrier_calibration_slices
+        and registered_science_slices != []
+    ):
+        raise ValueError(
+            "Completed Q019 carrier retirement requires one empty-allowlist replacement"
+        )
     mirror_policy_parent = Path(os.path.abspath(authorized_project_home_root)) / "policy"
     durable_mkdir_parents(mirror_policy_parent, root=authorized_project_home_root)
     with _promotion_lock(authorized_pic_root) as policy_descriptor, (
@@ -1775,10 +1786,17 @@ def promote(
                 permit_completed_q023_registered_slice_retirement=(
                     retire_completed_q023_registered_slices
                 ),
+                permit_completed_q019_carrier_calibration_retirement=(
+                    retire_completed_q019_carrier_calibration_slices
+                ),
                 q043_registered_matrix_path=q043_registered_matrix,
                 q043_registered_matrix_sha256=q043_registered_matrix_sha256,
                 q023_registered_matrix_path=q023_registered_matrix,
                 q023_registered_matrix_sha256=q023_registered_matrix_sha256,
+                q019_carrier_qualification_path=q019_carrier_qualification,
+                q019_carrier_qualification_sha256=(
+                    q019_carrier_qualification_sha256
+                ),
                 expected_active_policy_sha256=expected_active_policy_sha256,
                 expected_active_promotion_sha256=expected_active_promotion_sha256,
                 authorized_pic_root=authorized_pic_root,
@@ -2012,10 +2030,16 @@ def _parser() -> argparse.ArgumentParser:
         "--retire-completed-q023-registered-slices",
         action="store_true",
     )
+    parser.add_argument(
+        "--retire-completed-q019-carrier-calibration-slices",
+        action="store_true",
+    )
     parser.add_argument("--q043-registered-matrix", type=Path)
     parser.add_argument("--q043-registered-matrix-sha256")
     parser.add_argument("--q023-registered-matrix", type=Path)
     parser.add_argument("--q023-registered-matrix-sha256")
+    parser.add_argument("--q019-carrier-qualification", type=Path)
+    parser.add_argument("--q019-carrier-qualification-sha256")
     parser.add_argument("--expected-active-policy-sha256")
     parser.add_argument("--expected-active-promotion-sha256")
     parser.add_argument("--expected-control-plane-version")
@@ -2038,6 +2062,8 @@ def main() -> None:
                 args.q043_registered_matrix_sha256,
                 args.q023_registered_matrix,
                 args.q023_registered_matrix_sha256,
+                args.q019_carrier_qualification,
+                args.q019_carrier_qualification_sha256,
             )
         ) or any(
             (
@@ -2046,6 +2072,7 @@ def main() -> None:
                 args.replace_exact_authorized_clean_candidate_freeze,
                 args.retire_completed_q043_registered_slices,
                 args.retire_completed_q023_registered_slices,
+                args.retire_completed_q019_carrier_calibration_slices,
             )
         ):
             parser.error("Active-generation verification does not accept promotion flags")
@@ -2111,10 +2138,17 @@ def main() -> None:
         retire_completed_q023_registered_slices=(
             args.retire_completed_q023_registered_slices
         ),
+        retire_completed_q019_carrier_calibration_slices=(
+            args.retire_completed_q019_carrier_calibration_slices
+        ),
         q043_registered_matrix=args.q043_registered_matrix,
         q043_registered_matrix_sha256=args.q043_registered_matrix_sha256,
         q023_registered_matrix=args.q023_registered_matrix,
         q023_registered_matrix_sha256=args.q023_registered_matrix_sha256,
+        q019_carrier_qualification=args.q019_carrier_qualification,
+        q019_carrier_qualification_sha256=(
+            args.q019_carrier_qualification_sha256
+        ),
         expected_active_policy_sha256=args.expected_active_policy_sha256,
         expected_active_promotion_sha256=args.expected_active_promotion_sha256,
     )

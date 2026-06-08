@@ -14826,6 +14826,214 @@ PY
                 storage[key] = None
         self.assertEqual(predecessor_comparable, successor_comparable)
 
+    def test_completed_q019_carrier_calibration_retirement_is_evidence_bound(
+        self,
+    ) -> None:
+        from tst.publication import (
+            q019_q023_carrier_calibration_campaign_driver_v1 as carrier_driver,
+        )
+        from tst.publication.test_q019_q023_carrier_calibration_lifecycle_v1 import (
+            _attempts as carrier_attempts,
+        )
+
+        campaign = control_plane_common.Q019_CARRIER_CALIBRATION_CAMPAIGN
+        first = control_plane_common.Q019_CARRIER_CALIBRATION_ARTIFACTS[0]
+        manifest = self._write_science_config(
+            authorize=False,
+            campaign=campaign,
+            test_id=first[1],
+            registered_science_authorization_id=first[2],
+            evidence_class="q019_q023_carrier_excluded_resource_calibration",
+            physical_mode="q019_q023_carrier_nonlinear_bell_excluded_calibration",
+        )
+        candidate = json.loads(manifest.read_text(encoding="utf-8"))
+        executable = Path(str(candidate["build"]["executable_path"]))
+        base_slice = {
+            "status": "authorized",
+            "campaign": campaign,
+            "evidence_class": "q019_q023_carrier_excluded_resource_calibration",
+            "physical_mode": (
+                "q019_q023_carrier_nonlinear_bell_excluded_calibration"
+            ),
+            "runtime_profile": "frontier_minimum_supported",
+            "selected_qos": "normal",
+            "registered_short_nonproduction": False,
+            "maximum_walltime_seconds": 3600,
+            "maximum_attempts": 1,
+            "job_script_sha256": sha256(self.sources / "job.sh"),
+            "input_deck_sha256": sha256(self.sources / "input.athinput"),
+            "environment_profile_sha256": sha256(self.sources / "environment.sh"),
+            "analysis_script_sha256": [sha256(self.sources / "analysis.py")],
+            "executable_sha256": sha256(executable),
+            "launch_contract_sha256": launch_contract_sha256(
+                self._launch_contract()
+            ),
+            "clean_candidate_manifest_sha256": sha256(manifest),
+        }
+        slices = [
+            {
+                **base_slice,
+                "authorization_id": authorization_id,
+                "test_id": case_id,
+                "maximum_nodes": 1 if "-2d-" in artifact_id else 2,
+            }
+            for artifact_id, case_id, authorization_id, _ in (
+                control_plane_common.Q019_CARRIER_CALIBRATION_ARTIFACTS
+            )
+        ]
+        authorized_freeze = self._authorized_science_freeze(manifest)
+        self.registered_science_slices = slices
+        self.science_submission_freeze = authorized_freeze
+        self._write_policy(
+            registered_science_slices=slices,
+            science_submission_freeze=authorized_freeze,
+            admission_smoke_overrides={"status": "closed_after_pass"},
+        )
+        self._promote_policy()
+        active_policy_path = self.pic_root / "policy" / "storage_policy.json"
+        active_promotion_path = self.pic_root / "policy" / "active_promotion.json"
+        predecessor_policy = json.loads(
+            active_policy_path.read_text(encoding="utf-8")
+        )
+        expected_policy_sha256 = sha256(active_policy_path)
+        expected_promotion_sha256 = sha256(active_promotion_path)
+
+        index_path = (
+            self.pic_root
+            / control_plane_common.Q019_CARRIER_CALIBRATION_INDEX_RELATIVE
+        )
+        index_path.parent.mkdir(parents=True)
+        index = carrier_driver.build_execution_index(carrier_attempts())
+        index_path.write_text(
+            json.dumps(index, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        index_path.chmod(0o444)
+        qualification_path = (
+            self.pic_root
+            / control_plane_common.Q019_CARRIER_CALIBRATION_QUALIFICATION_RELATIVE
+        )
+        qualification = {
+            "schema_version": 1,
+            "record_type": (
+                control_plane_common.
+                Q019_CARRIER_CALIBRATION_QUALIFICATION_RECORD_TYPE
+            ),
+            "status": (
+                control_plane_common.Q019_CARRIER_CALIBRATION_QUALIFICATION_STATUS
+            ),
+            "campaign": campaign,
+            "execution_index": {
+                "path": str(index_path),
+                "sha256": sha256(index_path),
+                "canonical_record_sha256": carrier_driver._canonical_sha256(
+                    index
+                ),
+            },
+            "decision": {
+                "engineering_gate_pass": True,
+                "measured_resource_model_complete": True,
+                "production_resource_freeze_recommended": True,
+                "production_resource_freeze_authorized": False,
+                "retire_calibration_policy_before_resource_freeze": True,
+                "repeat_calibration_required": False,
+            },
+            "saturation_evidence_eligible": False,
+            "authorization": {
+                "launch_authorized": False,
+                "scheduler_submission_authorized": False,
+                "policy_mutation_authorized": False,
+                "production_resource_freeze_authorized": False,
+                "scientific_claim_authorized": False,
+                "publication_authorized": False,
+            },
+        }
+        qualification_path.write_text(
+            json.dumps(qualification, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        qualification_path.chmod(0o444)
+
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(project_home_successor.name, successor.name)
+        self._write_policy(
+            registered_science_slices=[],
+            science_submission_freeze=authorized_freeze,
+            admission_smoke_overrides={"status": "closed_after_pass"},
+            installed_control_plane_version=successor.name,
+            staged_control_plane_candidate_version=successor.name,
+        )
+        self._rewrite_reviewed_storage_preflight_artifact(
+            lambda artifact: artifact.update(
+                started_utc="2026-06-08T00:00:00Z",
+                completed_utc="2026-06-08T00:00:00Z",
+            )
+        )
+        successor_policy = json.loads(self.policy.read_text(encoding="utf-8"))
+        successor_policy["olcf_side_storage"][
+            "last_preflight_utc"
+        ] = "2026-06-08T00:00:00Z"
+        self.policy.write_text(json.dumps(successor_policy), encoding="utf-8")
+        reviewed_successor = json.loads(self.policy.read_text(encoding="utf-8"))
+        anchors = [
+            self.pic_root / "policy" / "storage_policy.json",
+            self.project_home_root / "policy" / "storage_policy.json",
+            self.pic_root / "policy" / "active_promotion.json",
+            self.project_home_root / "policy" / "active_promotion.json",
+        ]
+        before = {path: path.read_bytes() for path in anchors}
+        with self.assertRaisesRegex(ValueError, "qualification digest changed"):
+            promote(
+                self.policy,
+                retire_completed_q019_carrier_calibration_slices=True,
+                q019_carrier_qualification=qualification_path,
+                q019_carrier_qualification_sha256="0" * 64,
+                expected_active_policy_sha256=expected_policy_sha256,
+                expected_active_promotion_sha256=expected_promotion_sha256,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual({path: path.read_bytes() for path in anchors}, before)
+        with patch(
+            "promote_active_policy.revalidate_clean_candidate",
+            side_effect=self._revalidate_clean_candidate_with_test_source,
+        ):
+            promote(
+                self.policy,
+                retire_completed_q019_carrier_calibration_slices=True,
+                q019_carrier_qualification=qualification_path,
+                q019_carrier_qualification_sha256=sha256(qualification_path),
+                expected_active_policy_sha256=expected_policy_sha256,
+                expected_active_promotion_sha256=expected_promotion_sha256,
+                control_plane_dir=successor,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        active, _ = require_storage_policy_unlock_snapshot(
+            control_plane_version=successor.name,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(active, reviewed_successor)
+        self.assertEqual(active["registered_science_slices"], [])
+        predecessor_comparable = copy.deepcopy(predecessor_policy)
+        successor_comparable = copy.deepcopy(active)
+        predecessor_comparable["registered_science_slices"] = []
+        for policy in [predecessor_comparable, successor_comparable]:
+            storage = policy["olcf_side_storage"]
+            for key in (
+                "installed_control_plane_version",
+                "staged_control_plane_candidate_version",
+                "last_preflight_utc",
+                "storage_preflight_evidence",
+            ):
+                storage[key] = None
+        self.assertEqual(predecessor_comparable, successor_comparable)
+
     def test_nonempty_registered_allowlist_cannot_be_silently_removed(self) -> None:
         manifest = self._write_science_config(authorize=True)
         self._write_policy(
