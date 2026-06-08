@@ -411,6 +411,7 @@ def active_manifest_bindings(
         raise CorrectedDownstreamError(f"{case_id} selected lineage is empty")
     bindings: list[dict[str, object]] = []
     sequences: list[int] = []
+    previous_output: Path | None = None
     for order, value in enumerate(lineage):
         segment = require_dict(value, f"{case_id} lineage segment {order}")
         if segment.get("kind") != "fast" or segment.get("order") != order:
@@ -453,9 +454,10 @@ def active_manifest_bindings(
         else:
             restart = manifest.get("restart")
             if (
-                sequence != sequences[-2] + 1
+                sequence <= sequences[-2]
                 or not isinstance(restart, str)
-                or not is_relative_to(Path(restart), selected_root)
+                or previous_output is None
+                or not is_relative_to(Path(restart), previous_output)
                 or manifest.get("launch_origin")
                 != "corrected_campaign_continuation"
                 or manifest.get("fresh_lineage_root") is not False
@@ -464,6 +466,7 @@ def active_manifest_bindings(
                     f"{case_id} corrected continuation lineage is invalid"
                 )
         bindings.append(binding)
+        previous_output = segment_dir / "output"
     return bindings
 
 

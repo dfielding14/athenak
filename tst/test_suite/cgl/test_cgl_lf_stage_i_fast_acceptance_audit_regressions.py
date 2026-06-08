@@ -708,6 +708,16 @@ def add_authenticated_execution_fixture(
         "user_history": source_bindings["user"]["path"],
     }]
 
+
+def test_fast_attempt_sequence_allows_gaps_but_not_reordering(fast_acceptance):
+    assert fast_acceptance.validate_fast_attempt_sequence(0, None, 0) == 0
+    assert fast_acceptance.validate_fast_attempt_sequence(2, 0, 1) == 2
+    with pytest.raises(
+        fast_acceptance.FastAcceptanceError, match="not increasing"
+    ):
+        fast_acceptance.validate_fast_attempt_sequence(2, 2, 2)
+
+
 def write_complete_diagnostics(
     fast_acceptance,
     case_dir: Path,

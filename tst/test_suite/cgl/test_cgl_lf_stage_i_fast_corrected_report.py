@@ -270,6 +270,18 @@ def test_preflight_authenticates_explicit_passive_compatibility(adapter, campaig
     )
 
 
+def test_selected_attempt_sequences_allow_preserved_failed_attempt_gaps(adapter):
+    assert adapter.validate_selected_attempt_sequences(
+        [{"sequence": 0}, {"sequence": 2}, {"sequence": 5}], "R14"
+    ) == [0, 2, 5]
+    with pytest.raises(
+        adapter.CompositeReportError, match="not strictly increasing"
+    ):
+        adapter.validate_selected_attempt_sequences(
+            [{"sequence": 0}, {"sequence": 0}], "R14"
+        )
+
+
 def test_composite_assembly_preserves_actual_source_executable_and_evidence_class(
     adapter, campaign, monkeypatch
 ):

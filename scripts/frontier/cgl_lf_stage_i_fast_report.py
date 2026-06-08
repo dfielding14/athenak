@@ -970,8 +970,8 @@ def validate_fast_restart_link(
     child_manifest = child["manifest"]
     assert isinstance(parent_manifest, dict)
     assert isinstance(child_manifest, dict)
-    if int(child["sequence"]) != int(parent["sequence"]) + 1:
-        return "child sequence is not parent sequence plus one"
+    if int(child["sequence"]) <= int(parent["sequence"]):
+        return "child attempt sequence is not greater than parent attempt sequence"
     if not restart.is_file():
         return f"restart rank-zero file is missing: {restart}"
     expected_sha = child_manifest.get("restart_sha256")

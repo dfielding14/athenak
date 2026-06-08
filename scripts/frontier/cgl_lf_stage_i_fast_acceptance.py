@@ -798,6 +798,27 @@ def replay_merged_histories(
     return replayed
 
 
+def validate_fast_attempt_sequence(
+    value: object, previous: int | None, index: int
+) -> int:
+    """Return one valid attempt ID; gaps represent retained failed attempts."""
+
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise FastAcceptanceError(
+            f"fast execution sequence is malformed at {index}"
+        )
+    if previous is None:
+        if value != 0:
+            raise FastAcceptanceError(
+                f"fast execution lineage does not start at attempt zero at {index}"
+            )
+    elif value <= previous:
+        raise FastAcceptanceError(
+            f"fast execution attempt sequence is not increasing at {index}"
+        )
+    return value
+
+
 def direct_fast_execution_lineage_evidence(
     acceptance: object,
     policy: dict[str, object],
@@ -877,7 +898,7 @@ def direct_fast_execution_lineage_evidence(
     manifest_bindings: list[dict[str, object]] = []
     fast_variants: set[str] = set()
     fast_override_sets: set[tuple[str, ...]] = set()
-    fast_sequence = 0
+    previous_fast_sequence: int | None = None
     previous_output: Path | None = None
     previous_final = -math.inf
     for index, value in enumerate(records):
@@ -916,6 +937,9 @@ def direct_fast_execution_lineage_evidence(
             ):
                 raise FastAcceptanceError(f"fast overrides are malformed at {index}")
             variant = str(manifest.get("variant") or "standard")
+            sequence = validate_fast_attempt_sequence(
+                manifest.get("sequence"), previous_fast_sequence, index
+            )
             if (
                 manifest.get("schema_version") != 1
                 or manifest.get("case_id") != case_id
@@ -925,7 +949,6 @@ def direct_fast_execution_lineage_evidence(
                 or manifest.get("executable_sha256") != expected_executable
                 or manifest.get("run_dir") != str(segment)
                 or manifest.get("output_dir") != str(output)
-                or manifest.get("sequence") != fast_sequence
                 or value.get("variant") != manifest.get("variant")
                 or value.get("command_line_overrides", []) != overrides
             ):
@@ -963,7 +986,7 @@ def direct_fast_execution_lineage_evidence(
                 raise FastAcceptanceError(f"fast continuation lacks parent restart at {index}")
             fast_variants.add(variant)
             fast_override_sets.add(tuple(overrides))
-            fast_sequence += 1
+            previous_fast_sequence = sequence
         elif kind == "historical_seed_prefix":
             if Path(str(manifest_binding["path"])) != segment / "manifest/prepared_run.json":
                 raise FastAcceptanceError(f"historical manifest path differs at {index}")

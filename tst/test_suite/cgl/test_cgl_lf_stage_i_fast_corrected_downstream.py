@@ -643,6 +643,54 @@ def test_isolated_corrected_active_inventory_is_supported(
     assert context["passive_cases"] == []
 
 
+def test_active_lineage_allows_attempt_gap_when_restart_links_selected_parent(
+    downstream, identity_tool, tmp_path
+) -> None:
+    fixture = campaign_fixture(
+        downstream, identity_tool, tmp_path, include_passive=False
+    )
+    inventory = json.loads(fixture["inventory"].read_text(encoding="utf-8"))
+    case = inventory["cases"]["R14"]
+    first_record = case["lineage"][0]
+    first_segment = Path(first_record["segment_dir"])
+    first_manifest_path = Path(first_record["manifest"]["path"])
+    first_manifest = json.loads(first_manifest_path.read_text(encoding="utf-8"))
+    restart = first_segment / "output/rst/rank_00000000/fixture.00001.rst"
+    restart.parent.mkdir(parents=True)
+    restart.write_bytes(b"restart\n")
+
+    second_segment = first_segment.parent / "fast_s002_t5_to_t10"
+    second_manifest_path = second_segment / "manifest/fast_run.json"
+    second_manifest = {
+        **first_manifest,
+        "sequence": 2,
+        "start_time": 5.0,
+        "restart": str(restart.resolve()),
+        "launch_origin": "corrected_campaign_continuation",
+        "fresh_lineage_root": False,
+    }
+    write_json(second_manifest_path, second_manifest)
+    case["lineage"].append(
+        {
+            "kind": "fast",
+            "order": 1,
+            "segment_dir": str(second_segment.resolve()),
+            "manifest": binding(second_manifest_path),
+        }
+    )
+    write_json(
+        Path(inventory["output"]) / "cases/R14/lineage.json",
+        case,
+    )
+    write_json(fixture["inventory"], inventory)
+
+    context = downstream.validate_inventory(
+        fixture["identity"], fixture["inventory"], sha256(fixture["inventory"])
+    )
+
+    assert len(context["active_manifest_bindings"]["R14"]) == 2
+
+
 def test_legacy_active_evidence_is_rejected(
     downstream, identity_tool, tmp_path
 ) -> None:

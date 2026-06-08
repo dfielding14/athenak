@@ -855,6 +855,31 @@ def case_execution_record(
     return record
 
 
+def validate_selected_attempt_sequences(
+    manifests: list[dict[str, object]], case_id: str
+) -> list[int]:
+    """Validate ordered attempt IDs without treating failed attempts as lineage."""
+
+    sequences = [manifest.get("sequence") for manifest in manifests]
+    if (
+        not sequences
+        or sequences[0] != 0
+        or any(
+            not isinstance(sequence, int) or isinstance(sequence, bool)
+            for sequence in sequences
+        )
+        or any(
+            current <= previous
+            for previous, current in zip(sequences, sequences[1:])
+        )
+    ):
+        raise CompositeReportError(
+            f"{case_id} selected attempt sequence is not strictly increasing: "
+            f"{sequences}"
+        )
+    return [int(sequence) for sequence in sequences]
+
+
 def validate_and_classify_case(
     config: CompositeConfig,
     case_id: str,
@@ -888,9 +913,7 @@ def validate_and_classify_case(
     ]
     if len(manifests) != len(lineage):
         raise CompositeReportError(f"{case_id} selected lineage is malformed")
-    sequences = [manifest.get("sequence") for manifest in manifests]
-    if sequences != list(range(len(manifests))):
-        raise CompositeReportError(f"{case_id} selected lineage sequence differs: {sequences}")
+    validate_selected_attempt_sequences(manifests, case_id)
     first = manifests[0]
     if (
         first.get("start_time") != 0.0

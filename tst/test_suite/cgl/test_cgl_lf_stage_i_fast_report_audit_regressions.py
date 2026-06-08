@@ -217,6 +217,36 @@ def test_running_race_outranks_unsubmitted_partial_continuation(
     )
 
 
+def test_restart_link_allows_gap_for_retained_failed_attempt(report, tmp_path):
+    parent = write_fast_segment(
+        report,
+        tmp_path,
+        segment_name="fast_s000_t0_to_t10",
+        sequence=0,
+        final_time=4.0,
+    )
+    restart = parent / "output/rst/rank_00000000/fixture.00001.rst"
+    write_restart(restart, 4.0)
+    child = write_fast_segment(
+        report,
+        tmp_path,
+        segment_name="fast_s002_t4_to_t10",
+        sequence=2,
+        start_time=4.0,
+        final_time=10.0,
+        restart=restart,
+        restart_sha256=sha256(restart),
+    )
+
+    selected, _unselected, warnings = report.select_fast_lineage(
+        tmp_path, CASE_ID, CASE_NAME
+    )
+
+    assert [item["sequence"] for item in selected] == [0, 2]
+    assert Path(selected[-1]["segment"]) == child
+    assert not any("attempt sequence" in warning for warning in warnings)
+
+
 def test_r15_variant_selection_retains_and_classifies_strict_failures(
     report, tmp_path, monkeypatch
 ):
