@@ -107,7 +107,7 @@ def build_qualification(
     execution_index_path: Path,
     execution_index_sha256: str,
 ) -> dict[str, object]:
-    index = campaign.validate_execution_index(execution_index)
+    index = campaign.validate_execution_index_files(execution_index)
     _require(
         execution_index_path.is_absolute()
         and execution_index_path
@@ -146,8 +146,8 @@ def build_qualification(
             campaign.MAXIMUM_STORAGE_BYTES[str(instrumented["artifact_id"])],
         )
         storage_fraction = max(
-            int(baseline["artifact_inventory"]["byte_count"]),
-            int(instrumented["artifact_inventory"]["byte_count"]),
+            int(baseline["artifact_payload_bytes"]),
+            int(instrumented["artifact_payload_bytes"]),
         ) / storage_ceiling
         headroom_pass = (
             elapsed_fraction <= MAXIMUM_RESOURCE_FRACTION

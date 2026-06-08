@@ -283,6 +283,63 @@ def _strict_equal(left: object, right: object) -> bool:
     return left == right
 
 
+def _artifact_payload_bytes(
+    binding: Mapping[str, object], *, artifact_root: Path
+) -> int:
+    path = Path(str(binding.get("path", "")))
+    _require(
+        path == artifact_root / "artifact_inventory.json",
+        "Q019 pilot artifact inventory path drifted",
+    )
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        before = os.fstat(descriptor)
+        chunks = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+        after = os.fstat(descriptor)
+        current = path.stat(follow_symlinks=False)
+        _require(
+            stat.S_ISREG(before.st_mode)
+            and before.st_nlink == 1
+            and not before.st_mode & 0o222
+            and (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+            == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino)
+            and len(payload) == binding.get("byte_count") == after.st_size
+            and hashlib.sha256(payload).hexdigest() == binding.get("sha256"),
+            "Q019 pilot artifact inventory bytes drifted",
+        )
+    finally:
+        os.close(descriptor)
+    try:
+        inventory = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DriverError("Q019 pilot artifact inventory is not UTF-8 JSON") from error
+    records = inventory.get("files") if type(inventory) is dict else None
+    _require(
+        type(inventory) is dict
+        and set(inventory) == {"schema_version", "files"}
+        and inventory.get("schema_version") == 1
+        and type(records) is list
+        and all(
+            type(record) is dict
+            and set(record) == {"path", "sha256", "size"}
+            and type(record["path"]) is str
+            and bool(record["path"])
+            and type(record["sha256"]) is str
+            and SHA256_PATTERN.fullmatch(record["sha256"]) is not None
+            and type(record["size"]) is int
+            and record["size"] >= 0
+            for record in records
+        )
+        and len({record["path"] for record in records}) == len(records),
+        "Q019 pilot artifact inventory schema drifted",
+    )
+    return sum(record["size"] for record in records)
+
+
 def build_execution_index(
     attempts: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
@@ -327,6 +384,7 @@ def build_execution_index(
         admission = attempt.get("admission")
         admission_facts = attempt.get("admission_facts")
         inventory = attempt.get("artifact_inventory")
+        payload_bytes = attempt.get("artifact_payload_bytes")
         event = attempt.get("reconciliation_event")
         _require(
             type(admission) is dict
@@ -341,7 +399,9 @@ def build_execution_index(
             and type(inventory["sha256"]) is str
             and SHA256_PATTERN.fullmatch(inventory["sha256"]) is not None
             and type(inventory["byte_count"]) is int
-            and 0 < inventory["byte_count"] <= MAXIMUM_STORAGE_BYTES[artifact_id]
+            and inventory["byte_count"] > 0
+            and type(payload_bytes) is int
+            and 0 < payload_bytes <= MAXIMUM_STORAGE_BYTES[artifact_id]
             and type(event) is dict,
             f"{artifact_id}: Q019 pilot admission or storage binding drifted",
         )
@@ -458,10 +518,8 @@ def build_execution_index(
                 "baseline_elapsed_seconds": base_elapsed,
                 "instrumented_elapsed_seconds": instrumented_elapsed,
                 "instrumentation_elapsed_ratio": instrumented_elapsed / base_elapsed,
-                "baseline_artifact_bytes": baseline["artifact_inventory"]["byte_count"],
-                "instrumented_artifact_bytes": instrumented["artifact_inventory"][
-                    "byte_count"
-                ],
+                "baseline_artifact_bytes": baseline["artifact_payload_bytes"],
+                "instrumented_artifact_bytes": instrumented["artifact_payload_bytes"],
                 "resource_measurement_only": True,
                 "scientific_selection_authorized": False,
             }
@@ -481,7 +539,7 @@ def build_execution_index(
             for item in normalized
         ),
         "total_artifact_bytes": sum(
-            int(item["artifact_inventory"]["byte_count"]) for item in normalized
+            int(item["artifact_payload_bytes"]) for item in normalized
         ),
         "saturation_evidence_eligible": False,
         "production_resource_freeze_authorized": False,
@@ -500,6 +558,20 @@ def validate_execution_index(value: object) -> dict[str, object]:
         _strict_equal(value, rebuilt),
         "Q019 pilot execution index derived fields or authority drifted",
     )
+    return rebuilt
+
+
+def validate_execution_index_files(value: object) -> dict[str, object]:
+    rebuilt = validate_execution_index(value)
+    for attempt in rebuilt["attempts"]:
+        _require(
+            _artifact_payload_bytes(
+                attempt["artifact_inventory"],
+                artifact_root=Path(str(attempt["artifact_root"])),
+            )
+            == attempt["artifact_payload_bytes"],
+            f"{attempt['artifact_id']}: Q019 artifact payload-byte total drifted",
+        )
     return rebuilt
 
 
@@ -926,6 +998,7 @@ class Driver:
             job_id=str(state["job_id"]),
             expected_event_sha256=str(receipt["reconciliation_event_sha256"]),
         )
+        artifact_inventory = dict(receipt["artifact_inventory"])
         return {
             "attempt_index": index,
             "artifact_id": member["artifact_id"],
@@ -950,7 +1023,10 @@ class Driver:
                     "authorization",
                 )
             },
-            "artifact_inventory": dict(receipt["artifact_inventory"]),
+            "artifact_inventory": artifact_inventory,
+            "artifact_payload_bytes": _artifact_payload_bytes(
+                artifact_inventory, artifact_root=artifact_root
+            ),
             "reconciliation_event": event,
         }
 

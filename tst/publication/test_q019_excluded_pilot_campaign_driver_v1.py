@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -93,8 +97,9 @@ def _attempt(index: int, artifact_id: str) -> dict[str, object]:
         "artifact_inventory": {
             "path": f"{artifact_root}/artifact_inventory.json",
             "sha256": f"{index + 4}" * 64,
-            "byte_count": 1024**3 * dimension,
+            "byte_count": 1024,
         },
+        "artifact_payload_bytes": 1024**3 * dimension,
         "reconciliation_event": event,
     }
 
@@ -149,7 +154,7 @@ def test_artifact_order_case_binding_and_storage_ceiling_fail_closed() -> None:
     with pytest.raises(driver.DriverError, match="execution identity drifted"):
         driver.build_execution_index(wrong_case)
     oversized = copy.deepcopy(attempts)
-    oversized[2]["artifact_inventory"]["byte_count"] = 257 * 1024**3
+    oversized[2]["artifact_payload_bytes"] = 257 * 1024**3
     with pytest.raises(driver.DriverError, match="storage binding drifted"):
         driver.build_execution_index(oversized)
 
@@ -194,3 +199,46 @@ def test_admission_must_prove_excluded_controller_stop_contract() -> None:
     saturation_authority[0]["admission_facts"]["saturation_evidence_eligible"] = True
     with pytest.raises(driver.DriverError, match="controller facts drifted"):
         driver.build_execution_index(saturation_authority)
+
+
+def test_artifact_payload_bytes_sum_inventory_members(tmp_path: Path) -> None:
+    inventory = {
+        "schema_version": 1,
+        "files": [
+            {"path": "raw/a.bin", "sha256": "a" * 64, "size": 100},
+            {"path": "athena_stdout.txt", "sha256": "b" * 64, "size": 23},
+        ],
+    }
+    payload = (json.dumps(inventory, sort_keys=True) + "\n").encode()
+    path = tmp_path / "artifact_inventory.json"
+    path.write_bytes(payload)
+    path.chmod(0o444)
+    assert (
+        driver._artifact_payload_bytes(
+            {
+                "path": str(path),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "byte_count": len(payload),
+            },
+            artifact_root=tmp_path,
+        )
+        == 123
+    )
+
+
+def test_execution_index_file_validation_rederives_payload_bytes() -> None:
+    attempts = _attempts()
+    index = driver.build_execution_index(attempts)
+    by_root = {
+        attempt["artifact_root"]: attempt["artifact_payload_bytes"]
+        for attempt in attempts
+    }
+    with patch.object(
+        driver,
+        "_artifact_payload_bytes",
+        side_effect=lambda _binding, *, artifact_root: by_root[str(artifact_root)],
+    ):
+        assert driver.validate_execution_index_files(index) == index
+    with patch.object(driver, "_artifact_payload_bytes", return_value=1):
+        with pytest.raises(driver.DriverError, match="payload-byte total drifted"):
+            driver.validate_execution_index_files(index)

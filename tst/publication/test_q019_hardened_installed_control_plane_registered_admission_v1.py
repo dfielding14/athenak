@@ -323,6 +323,37 @@ def test_completion_status_is_bound_to_trusted_wrapper_evidence() -> None:
 
     with pytest.raises(
         admission.RegisteredAdmissionError,
+        match="completion status or state is invalid",
+    ):
+        admission._completion_record(
+            {
+                "command_evidence": {
+                    "trusted_wrapper_evidence": {
+                        "termination_reason": "Terminating on time limit",
+                        "problem_final_evidence_status": "completed_saturation_eligible",
+                        "problem_saturation_evidence_eligible": "true",
+                    }
+                },
+                "slurm_terminal_state": "COMPLETED",
+            },
+            execution_profile={
+                "kind": "runtime_controller_overlay",
+                "expected_stop_reason": None,
+            },
+            runtime_controller_states=[
+                {
+                    "runtime_controller_triggered": False,
+                    "runtime_controller_trigger_failure": False,
+                    "runtime_controller_trigger_reason": 0,
+                    "runtime_controller_trigger_cycle": 0,
+                    "runtime_controller_trigger_time": 0.0,
+                    "runtime_controller_trigger_metric": -1.0,
+                }
+            ],
+        )
+
+    with pytest.raises(
+        admission.RegisteredAdmissionError,
         match="monitor-only controller completion state drifted",
     ):
         admission._completion_record(

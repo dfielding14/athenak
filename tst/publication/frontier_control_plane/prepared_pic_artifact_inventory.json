@@ -127,6 +127,82 @@
       "sha256": "a2beebb53c0381dc8dec4d0b42a20824f9d20385f918e43d1eaa612a4c4e3b82"
     },
     {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-noise-seeded-s0.athinput",
+      "sha256": "9882c08f430c7bf8d535638d9386f4edbfa7e2c4e81ee5304bf62addc3ac86ea"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-particle-step-small-s0.athinput",
+      "sha256": "5e57f623d434d1b1cf35f5219c4ce6a7fd397feda6059a8c72f5e478ca73afd5"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-ppc24-s0.athinput",
+      "sha256": "ebad4f89166a61ddca04de63d925a3936aa32bc257d8219e38928d645854f236"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-ppc48-s0.athinput",
+      "sha256": "acccef7f5c5c2eb267a7d2e66a2bb6cb539df136eda8a0b88ec895aa005e1967"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-resolution-coarse-s0.athinput",
+      "sha256": "5087469730797322ed9ba1c3fbf7aee1b998438911781d04758bdc014b44ae37"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-fiducial-resolution-fiducial-s0.athinput",
+      "sha256": "d4f6feb31013ddf8cf0bdbfe28a61f2d311be90f3d63696f4253ff5992235a78"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s1-fr-predecessor-k8-rho3em06-s0.athinput",
+      "sha256": "1693886bb6e2d9aa3672caa579567ebc42491efaad7aa7645e5d4ecba899f353"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-large-long-mode-sensitivity-s0.athinput",
+      "sha256": "6db30b349571ee9506c3ebb8295a394f6af574c73093fe1d1c66f2ea7e8c1c9d"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-large-s0.athinput",
+      "sha256": "b3563c3694efa30c2c9cee820eb348db3b3583a04c9424a177b81057bb43f725"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-particle-step-small-s0.athinput",
+      "sha256": "d9dc6c3687b9f2abb871cee277571ccf625f952e89a1118c1710d47043fddf15"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-ppc48-s0.athinput",
+      "sha256": "4d845cf06b83515f65bf850f9857b9053ab81e1d7f168269edfe3b7fba6e6929"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-resolution-fine-s0.athinput",
+      "sha256": "3155707c41246c06e2a2e644d016c94df76c30177b9bf1d526536eecd817c4cb"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-3d-onset-small-s0.athinput",
+      "sha256": "0fadae97e603c0a18adef25a9cf38f4676cdad610d89d3e62fa7584c1b68662c"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-fr-grid-k8-rho3em06-s0.athinput",
+      "sha256": "e5871a92cc3aa60995050d3100ef0e770864f61090cd12fbf3d68e20b23a6021"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s2-hr-current-retention-s0.athinput",
+      "sha256": "5a04db98a897edf14a361b1183c4c7634a49867bae97e526e2ecaba774c38629"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-large-s1.athinput",
+      "sha256": "37498eec32fb6b4868fed8d6a9e4a0fc275c41e1b3cc2a890e0532a0a4c0884d"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-large-s2.athinput",
+      "sha256": "2fa9f4a0a31f13d1dc74ee7b05dbde7ab72b8c1e3c2732bbbfec3be3ff676094"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-small-s1.athinput",
+      "sha256": "120fb73aa87e984acdbab4e6d78e0791c5e28bef23382d792cb02d1f1111a9d3"
+    },
+    {
+      "path": "inputs/publication/q019_nonlinear_bell_runtime_controller_v1/q019-physical-pilot-s3-fr-3d-onset-small-s2.athinput",
+      "sha256": "a1d244077648663664030dee767fa000d9fe26ce9efc2fa255f12f3caced8d2d"
+    },
+    {
       "path": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-long-mode-sensitivity-s0.athinput",
       "sha256": "f5883fb17a44607d9bfaa5c6617f80a398d4653eb6452a94574db87f28b4a887"
     },

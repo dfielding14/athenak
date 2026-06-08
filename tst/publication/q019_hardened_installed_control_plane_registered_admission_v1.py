@@ -67,9 +67,10 @@ REQUIRED_SOURCE_PATHS = frozenset(
         "tst/publication/q019_particle_state_analysis_bridge_v2.py",
         "tst/publication/q019_registered_raw_reduction_v1.py",
         "tst/publication/q019_nonlinear_bell_runtime_controller_v1.py",
-        "tst/publication/q019_excluded_pilot_launch_policy_preparation_v1.py",
         "tst/publication/q019_excluded_pilot_campaign_driver_v1.py",
         "tst/publication/q019_excluded_pilot_engineering_qualification_v1.py",
+        "tst/publication/q019_excluded_pilot_launch_policy_preparation_v1.py",
+        "tst/publication/q019_excluded_physical_pilot_launch_preparation_v1.py",
         "tst/publication/q019_hardened_provenance_boundary_v2.py",
         "tst/publication/q019_hardened_installed_control_plane_registered_admission_v1.py",
         "tst/publication/frontier_control_plane/reconcile_q019_registered_execution.py",
@@ -1151,10 +1152,12 @@ def _completion_record(
         states = runtime_controller_states
         _require(
             execution_profile.get("kind") == "runtime_controller_overlay"
+            and status == "completed_not_acceptance_eligible"
+            and eligible == "false"
             and type(states) is list
             and bool(states)
             and all(type(item) is dict for item in states),
-            "Q019 runtime-controller completion state is absent",
+            "Q019 runtime-controller completion status or state is invalid",
         )
         final_state = states[-1]
         expected_reason = execution_profile.get("expected_stop_reason")

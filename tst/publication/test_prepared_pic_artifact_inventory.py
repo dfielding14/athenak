@@ -31,7 +31,7 @@ def test_q019_campaign_is_in_prepared_artifact_inventory() -> None:
 
     assert len(expected_decks) == 77
     assert expected_decks <= deck_paths
-    assert len(expected_controller_decks) == 6
+    assert len(expected_controller_decks) == 25
     assert expected_controller_decks <= deck_paths
     assert (
         "tst/publication/analyze_q019_physics_first_nonlinear_bell_successor_v2.py"

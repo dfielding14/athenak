@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from unittest.mock import patch
 
 from tst.publication import q019_excluded_pilot_campaign_driver_v1 as campaign
 from tst.publication import q019_excluded_pilot_engineering_qualification_v1 as qual
@@ -20,11 +21,20 @@ INDEX_PATH = Path(
 
 def _build(attempts: list[dict[str, object]]) -> dict[str, object]:
     index = campaign.build_execution_index(attempts)
-    return qual.build_qualification(
-        index,
-        execution_index_path=INDEX_PATH,
-        execution_index_sha256="a" * 64,
-    )
+    by_root = {
+        attempt["artifact_root"]: attempt["artifact_payload_bytes"]
+        for attempt in attempts
+    }
+    with patch.object(
+        campaign,
+        "_artifact_payload_bytes",
+        side_effect=lambda _binding, *, artifact_root: by_root[str(artifact_root)],
+    ):
+        return qual.build_qualification(
+            index,
+            execution_index_path=INDEX_PATH,
+            execution_index_sha256="a" * 64,
+        )
 
 
 def test_fast_pairs_pass_engineering_only_without_science_authority() -> None:
