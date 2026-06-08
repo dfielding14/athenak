@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import copy
 from datetime import datetime, timezone
 import hashlib
@@ -25,6 +26,9 @@ from control_plane_common import (  # type: ignore[import-not-found]
     launch_contract_sha256,
     validate_launch_contract,
     validate_storage_policy,
+)
+from revalidate_clean_candidate import (  # type: ignore[import-not-found]  # noqa: E402
+    revalidate_clean_candidate,
 )
 
 
@@ -168,6 +172,31 @@ def _json_bytes(value: object) -> bytes:
     return (
         json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8")
+
+
+def _write_json_exclusive(path: Path, value: object) -> None:
+    payload = _json_bytes(value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+        0o444,
+    )
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError(f"short write: {path}")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
 def _strict_equal(left: object, right: object) -> bool:
@@ -386,6 +415,194 @@ def validate_final_binding_files(value: object) -> dict[str, object]:
         "Q023 canonical Q043 dependency digest drifted",
     )
     return final
+
+
+def materialize_q023_final_bindings(
+    *,
+    clean_candidate_manifest: Path,
+    clean_candidate_manifest_sha256: str,
+    expected_source_commit: str,
+    installed_control_plane_version: str,
+    q043_registered_matrix: Path,
+) -> dict[str, object]:
+    """Derive one exact Q023 launch-binding record from immutable evidence."""
+    _require(
+        _SHA256.fullmatch(clean_candidate_manifest_sha256) is not None,
+        "Q023 clean-candidate manifest digest is malformed",
+    )
+    _require(
+        _COMMIT.fullmatch(expected_source_commit) is not None,
+        "Q023 expected source commit is malformed",
+    )
+    _require(
+        _SHA256.fullmatch(installed_control_plane_version) is not None,
+        "Q023 installed control-plane version is malformed",
+    )
+    report = revalidate_clean_candidate(
+        clean_candidate_manifest,
+        expected_manifest_sha256=clean_candidate_manifest_sha256,
+        expected_git_commit=expected_source_commit,
+        expected_receipt_control_plane_version=installed_control_plane_version,
+        control_plane_dir=CONTROL_PLANE_SOURCE_DIR,
+        authorized_pic_root=AUTHORIZED_ORION_ROOT,
+        authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
+    )
+    _require(
+        report.get("status") == "passed"
+        and report.get("current_control_plane_version")
+        == installed_control_plane_version
+        and isinstance(report.get("build"), dict)
+        and report["build"].get("receipt_control_plane_version")
+        == installed_control_plane_version
+        and isinstance(report.get("source"), dict)
+        and report["source"].get("git_commit") == expected_source_commit,
+        "Q023 clean-candidate revalidation report drifted",
+    )
+
+    _, manifest_payload = q043._stable_regular_bytes(
+        clean_candidate_manifest,
+        label="Q023 clean-candidate manifest",
+    )
+    _require(
+        _sha256_bytes(manifest_payload) == clean_candidate_manifest_sha256,
+        "Q023 clean-candidate manifest digest drifted",
+    )
+    try:
+        candidate = json.loads(manifest_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise PreparationError(
+            "Q023 clean-candidate manifest is not valid JSON"
+        ) from error
+    _require(
+        type(candidate) is dict
+        and type(candidate.get("source")) is dict
+        and type(candidate.get("build")) is dict,
+        "Q023 clean-candidate manifest structure drifted",
+    )
+    source = candidate["source"]
+    build = candidate["build"]
+    _require(
+        source.get("git_commit") == expected_source_commit,
+        "Q023 clean-candidate source commit drifted",
+    )
+    candidate_dir = clean_candidate_manifest.parent
+    _require(
+        clean_candidate_manifest
+        == AUTHORIZED_ORION_ROOT
+        / "clean_candidates"
+        / candidate_dir.name
+        / "clean_candidate_manifest.json",
+        "Q023 clean-candidate manifest path is not canonical",
+    )
+    source_archive = Path(str(source.get("archive_path", "")))
+    executable = Path(str(build.get("executable_path", "")))
+    _require(
+        source_archive == candidate_dir / "source.tar"
+        and executable == candidate_dir / "athena",
+        "Q023 clean-candidate artifact path family drifted",
+    )
+    source_archive_sha256 = str(source.get("archive_sha256", ""))
+    source_bundle_sha256 = str(source.get("source_bundle_sha256", ""))
+    executable_sha256 = str(build.get("executable_sha256", ""))
+    _stable_binding(
+        str(source_archive),
+        source_archive_sha256,
+        label="Q023 source archive",
+    )
+    _stable_binding(
+        str(executable),
+        executable_sha256,
+        label="Q023 executable",
+        executable=True,
+    )
+
+    orion_controller = (
+        AUTHORIZED_ORION_ROOT / "control_plane" / installed_control_plane_version
+    )
+    project_controller = (
+        CANONICAL_PROJECT_HOME_ROOT
+        / "control_plane"
+        / installed_control_plane_version
+    )
+    controller_bindings: dict[str, tuple[str, str]] = {}
+    for name in (
+        "frontier_pic_environment.sh",
+        "frontier_job.sh",
+        "reconcile_q023_registered_execution.py",
+    ):
+        require_executable = name.endswith(".sh")
+        _, orion_payload = q043._stable_regular_bytes(
+            orion_controller / name,
+            label=f"Q023 Orion installed {name}",
+            require_executable=require_executable,
+        )
+        _, project_payload = q043._stable_regular_bytes(
+            project_controller / name,
+            label=f"Q023 Project Home installed {name}",
+            require_executable=require_executable,
+        )
+        _require(
+            orion_payload == project_payload,
+            f"Q023 paired installed {name} differs",
+        )
+        controller_bindings[name] = (
+            str(orion_controller / name),
+            _sha256_bytes(orion_payload),
+        )
+
+    try:
+        dependency = bell.registered_q043_raw_oracle_dependency(
+            q043_registered_matrix,
+            artifact_root=AUTHORIZED_ORION_ROOT,
+        )
+    except bell.ContractError as error:
+        raise PreparationError("Q023 final binding lacks a valid Q043 matrix") from error
+    _require(
+        dependency["binding_kind"] == "registered_matrix_qualification",
+        "Q023 final binding requires a registered Q043 matrix",
+    )
+    environment_path, environment_sha256 = controller_bindings[
+        "frontier_pic_environment.sh"
+    ]
+    job_path, job_sha256 = controller_bindings["frontier_job.sh"]
+    reconciler_path, reconciler_sha256 = controller_bindings[
+        "reconcile_q023_registered_execution.py"
+    ]
+    final = {
+        "record_type": FINAL_BINDING_RECORD_TYPE,
+        "schema_version": SCHEMA_VERSION,
+        "source_commit": expected_source_commit,
+        "source_bundle_sha256": source_bundle_sha256,
+        "source_archive_path": str(source_archive),
+        "source_archive_sha256": source_archive_sha256,
+        "clean_candidate_manifest_path": str(clean_candidate_manifest),
+        "clean_candidate_manifest_sha256": clean_candidate_manifest_sha256,
+        "executable_path": str(executable),
+        "executable_sha256": executable_sha256,
+        "installed_control_plane_version": installed_control_plane_version,
+        "orion_installed_control_plane_root": str(orion_controller),
+        "project_home_installed_control_plane_root": str(project_controller),
+        "environment_profile_path": environment_path,
+        "environment_profile_sha256": environment_sha256,
+        "job_script_path": job_path,
+        "job_script_sha256": job_sha256,
+        "analysis_script_paths": [reconciler_path],
+        "analysis_script_sha256": [reconciler_sha256],
+        "reconcile_q023_registered_execution_path": reconciler_path,
+        "reconcile_q023_registered_execution_sha256": reconciler_sha256,
+        "q043_registered_matrix_path": str(q043_registered_matrix),
+        "q043_registered_matrix_sha256": dependency[
+            "registered_matrix_sha256"
+        ],
+        "q043_registered_matrix_record_type": dependency[
+            "registered_matrix_record_type"
+        ],
+        "q043_registered_matrix_case_bindings_sha256": dependency[
+            "registered_matrix_case_bindings_sha256"
+        ],
+        "q043_registered_dependency_sha256": bell._dependency_digest(dependency),
+    }
+    return validate_final_binding_files(final)
 
 
 def _selected_bindings(
@@ -1286,19 +1503,65 @@ materialize_pre_submit_config = materialize_q023_pre_submit_config
 materialize_promotable_policy = materialize_q023_promotable_policy
 
 
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--materialize-final-bindings", action="store_true")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--clean-candidate-manifest", type=Path)
+    parser.add_argument("--clean-candidate-manifest-sha256")
+    parser.add_argument("--expected-source-commit")
+    parser.add_argument("--installed-control-plane-version")
+    parser.add_argument("--q043-registered-matrix", type=Path)
+    return parser
+
+
 def main() -> None:
-    manifest, files = build_materialization()
-    print(
-        json.dumps(
-            {
-                "manifest": manifest,
-                "file_count": len(files),
-                "manifest_sha256": _sha256_bytes(_json_bytes(manifest)),
-            },
-            indent=2,
-            sort_keys=True,
+    args = _parser().parse_args()
+    if args.materialize_final_bindings:
+        required = {
+            "--output": args.output,
+            "--clean-candidate-manifest": args.clean_candidate_manifest,
+            "--clean-candidate-manifest-sha256": (
+                args.clean_candidate_manifest_sha256
+            ),
+            "--expected-source-commit": args.expected_source_commit,
+            "--installed-control-plane-version": (
+                args.installed_control_plane_version
+            ),
+            "--q043-registered-matrix": args.q043_registered_matrix,
+        }
+        missing = [name for name, value in required.items() if value is None]
+        _require(not missing, f"Q023 final binding arguments missing: {missing}")
+        result = materialize_q023_final_bindings(
+            clean_candidate_manifest=args.clean_candidate_manifest,
+            clean_candidate_manifest_sha256=(
+                args.clean_candidate_manifest_sha256
+            ),
+            expected_source_commit=args.expected_source_commit,
+            installed_control_plane_version=args.installed_control_plane_version,
+            q043_registered_matrix=args.q043_registered_matrix,
         )
-    )
+        _write_json_exclusive(args.output, result)
+    else:
+        optional_values = (
+            args.output,
+            args.clean_candidate_manifest,
+            args.clean_candidate_manifest_sha256,
+            args.expected_source_commit,
+            args.installed_control_plane_version,
+            args.q043_registered_matrix,
+        )
+        _require(
+            all(value is None for value in optional_values),
+            "Q023 final binding arguments require --materialize-final-bindings",
+        )
+        manifest, files = build_materialization()
+        result = {
+            "manifest": manifest,
+            "file_count": len(files),
+            "manifest_sha256": _sha256_bytes(_json_bytes(manifest)),
+        }
+    print(json.dumps(result, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

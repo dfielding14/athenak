@@ -140,6 +140,154 @@ class Q023RegisteredLaunchPreparationTests(unittest.TestCase):
         ):
             prep.build_materialization(final)
 
+    def test_final_binding_materializer_derives_exact_immutable_identities(
+        self,
+    ) -> None:
+        version = "a" * 64
+        commit = "b" * 40
+        candidate = (
+            prep.AUTHORIZED_ORION_ROOT
+            / "clean_candidates/11111111-2222-3333-4444-555555555555"
+        )
+        manifest_path = candidate / "clean_candidate_manifest.json"
+        source_archive = candidate / "source.tar"
+        executable = candidate / "athena"
+        source_payload = b"source archive"
+        executable_payload = b"athena executable"
+        controller_payloads = {
+            "frontier_pic_environment.sh": b"environment",
+            "frontier_job.sh": b"job",
+            "reconcile_q023_registered_execution.py": b"reconciler",
+        }
+        candidate_value = {
+            "source": {
+                "archive_path": str(source_archive),
+                "archive_sha256": prep._sha256_bytes(source_payload),
+                "source_bundle_sha256": "c" * 64,
+                "git_commit": commit,
+            },
+            "build": {
+                "executable_path": str(executable),
+                "executable_sha256": prep._sha256_bytes(executable_payload),
+            },
+        }
+        manifest_payload = json.dumps(
+            candidate_value, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        manifest_sha256 = prep._sha256_bytes(manifest_payload)
+        matrix_path = (
+            prep.AUTHORIZED_ORION_ROOT
+            / "analysis/q043_registered_execution_raw_oracle_successor_v1"
+            / "q043_registered_matrix_qualification.json"
+        )
+        dependency = {
+            "binding_kind": "registered_matrix_qualification",
+            "registered_matrix_sha256": "d" * 64,
+            "registered_matrix_record_type": (
+                "q043_registered_execution_raw_oracle_matrix_qualification"
+            ),
+            "registered_matrix_case_bindings_sha256": "e" * 64,
+        }
+
+        def stable_bytes(path: Path, **_: object) -> tuple[object, bytes]:
+            if path == manifest_path:
+                return object(), manifest_payload
+            if path == source_archive:
+                return object(), source_payload
+            if path == executable:
+                return object(), executable_payload
+            if path.name in controller_payloads:
+                return object(), controller_payloads[path.name]
+            raise AssertionError(f"unexpected stable read: {path}")
+
+        report = {
+            "status": "passed",
+            "current_control_plane_version": version,
+            "build": {"receipt_control_plane_version": version},
+            "source": {"git_commit": commit},
+        }
+        with patch.object(
+            prep, "revalidate_clean_candidate", return_value=report
+        ), patch.object(
+            prep.q043, "_stable_regular_bytes", side_effect=stable_bytes
+        ), patch.object(
+            prep.bell,
+            "registered_q043_raw_oracle_dependency",
+            return_value=dependency,
+        ), patch.object(
+            prep.bell, "_dependency_digest", return_value="f" * 64
+        ), patch.object(
+            prep,
+            "validate_final_binding_files",
+            side_effect=prep.validate_final_bindings,
+        ):
+            final = prep.materialize_q023_final_bindings(
+                clean_candidate_manifest=manifest_path,
+                clean_candidate_manifest_sha256=manifest_sha256,
+                expected_source_commit=commit,
+                installed_control_plane_version=version,
+                q043_registered_matrix=matrix_path,
+            )
+
+        self.assertEqual(final["source_commit"], commit)
+        self.assertEqual(
+            final["source_archive_sha256"],
+            prep._sha256_bytes(source_payload),
+        )
+        self.assertEqual(
+            final["executable_sha256"],
+            prep._sha256_bytes(executable_payload),
+        )
+        self.assertEqual(final["q043_registered_dependency_sha256"], "f" * 64)
+        self.assertEqual(
+            final["reconcile_q023_registered_execution_sha256"],
+            prep._sha256_bytes(
+                controller_payloads["reconcile_q023_registered_execution.py"]
+            ),
+        )
+
+    def test_final_binding_materializer_rejects_revalidation_identity_drift(
+        self,
+    ) -> None:
+        with patch.object(
+            prep,
+            "revalidate_clean_candidate",
+            return_value={
+                "status": "passed",
+                "current_control_plane_version": "0" * 64,
+                "build": {"receipt_control_plane_version": "a" * 64},
+                "source": {"git_commit": "b" * 40},
+            },
+        ):
+            with self.assertRaisesRegex(
+                prep.PreparationError,
+                "revalidation report drifted",
+            ):
+                prep.materialize_q023_final_bindings(
+                    clean_candidate_manifest=(
+                        prep.AUTHORIZED_ORION_ROOT
+                        / "clean_candidates/11111111-2222-3333-4444-555555555555"
+                        / "clean_candidate_manifest.json"
+                    ),
+                    clean_candidate_manifest_sha256="c" * 64,
+                    expected_source_commit="b" * 40,
+                    installed_control_plane_version="a" * 64,
+                    q043_registered_matrix=(
+                        prep.AUTHORIZED_ORION_ROOT
+                        / "analysis/q043/matrix.json"
+                    ),
+                )
+
+    def test_final_binding_output_is_exclusive_and_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bindings.json"
+            value = {"record_type": "test", "schema_version": 1}
+            prep._write_json_exclusive(path, value)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), value)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o444)
+            with self.assertRaises(FileExistsError):
+                prep._write_json_exclusive(path, value)
+
     def test_timeout_artifact_is_strict_and_fresh(self) -> None:
         final = {
             key: value
