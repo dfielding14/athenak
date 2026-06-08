@@ -280,18 +280,18 @@
     "src/pgen/tests/q023_paper_bell_linear_joverc.hpp": "ca3d5d83de1996aad85f1418b2f4b772fc3d3f532d9f3c50584141026f2fec69",
     "tst/publication/analyze_q023_paper_bell_linear.py": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6",
     "tst/publication/analyze_q023_paper_bell_linear_joverc.py": "f86f1ba4f2c9599d975dfd464823f4b176d0ecf9d9b8bbd6ed69e4c1f4df3513",
-    "tst/publication/frontier_control_plane/control_plane_common.py": "2473a2af1a4ba8a4eae07fd6ea8eed159497b1e27289121617d17d108075d57a",
+    "tst/publication/frontier_control_plane/control_plane_common.py": "18403eb20c002d671fcdfb3d4b0a855f638a70942c30ffcd71e090bb68761534",
     "tst/publication/frontier_control_plane/launch_trampoline.py": "1cd05a9e6db1d6ea39051f66ddd51403283d6bde29a83326044bad50dbe99243",
     "tst/publication/frontier_control_plane/reconcile_q023_registered_execution.py": "3e6dfb050d2e0db1cd23ec17cdcc84ab845ff408f9c2152047007425d51a0905",
     "tst/publication/frontier_control_plane/run_control_plane.py": "bab2de7e25d61fd84c1f5a3ee08ef1563b106daa3210517ee717db1ca3e2f5fe",
-    "tst/publication/frontier_control_plane/test_control_plane.py": "1601f829cdaef016ec373c176eadb2bfb85d4f09e4fc937b1073d8f8bc3ad3cc",
+    "tst/publication/frontier_control_plane/test_control_plane.py": "beb8081c7c03a8f94431ae4be96495ce4c3921aa50c85c2c4009b9f8154b60ea",
     "tst/publication/q023_registered_execution_linear_qualification_successor_v1.py": "050f2ce71f97b1ec9765c55bb308bbf8123cc4deb2f0dd668655ad4eda1cb676",
-    "tst/publication/q023_registered_launch_policy_preparation_successor_v1.py": "36af65cd6303267359adbf99ca05df02b7814041216ea7a3a3c7b07c9edb96e4",
+    "tst/publication/q023_registered_launch_policy_preparation_successor_v1.py": "317e826b62febf10376d86f82e1efdfb547bf44dfbdb1caaf10215c2c4e98391",
     "tst/publication/q023_paper_bell_linear_joverc_host_harness.cpp": "18c551f1548f4e645bd4a02ce140d6f5d531908054ea235e42bbada0b9883a5b",
     "tst/publication/q043_registered_execution_raw_oracle_qualification_successor_v1.py": "4507de9d68fc580d8e038aecf54b5c046647e7e9f6ea07149fc4e85ca5548d81",
     "tst/publication/test_analyze_q023_paper_bell_linear_joverc.py": "5a7fb44d22902c910215f2a7b1eb6401fc62b3b3b7b5536c76c7192adb7a7e80",
     "tst/publication/test_q023_registered_execution_linear_qualification_successor_v1.py": "e4edcbb4db8803bf90d872fd48fcc289f779d28b437713c52650f2e7136e0ae0",
-    "tst/publication/test_q023_registered_launch_policy_preparation_successor_v1.py": "109bf4aea9c4e567625aea086ea84cfdf4eda63eb9768c6da63fa9c8961578b0"
+    "tst/publication/test_q023_registered_launch_policy_preparation_successor_v1.py": "3bc7fd8bd005d9f604e3cffbc58480db06cbbe5fd3d2bff3705d054204dd289d"
   },
   "explicitly_not_claimed": [
     "completed_authoritative_Q043_foundation",
