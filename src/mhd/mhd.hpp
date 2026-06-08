@@ -187,6 +187,7 @@ class MHD {
   bool has_any_parabolic_split = false;
   bool has_any_parabolic_cell_update = false;
   bool has_any_parabolic_field_update = false;
+  bool diagnose_nonfinite_rk_update = false;
   CGLSlotRepresentation cgl_slot_representation = CGLSlotRepresentation::anisotropy;
 
   // container to hold names of TaskIDs

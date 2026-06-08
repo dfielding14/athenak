@@ -6,9 +6,10 @@
 //! \file mhd.cpp
 //! \brief implementation of MHD class constructor and assorted functions
 
+#include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <string>
-#include <algorithm>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
@@ -146,6 +147,24 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // (2) Initialize scalars, diffusion, source terms
   nscalars = pin->GetOrAddInteger("mhd","nscalars",0);
+  if (peos->eos_data.is_cgl) {
+    diagnose_nonfinite_rk_update =
+        pin->GetOrAddBoolean("mhd", "cgl_diagnose_nonfinite_rk_update", false);
+    const char *diagnostic_environment =
+        std::getenv("ATHENAK_CGL_DIAGNOSE_NONFINITE_RK_UPDATE");
+    if (diagnostic_environment != nullptr) {
+      const std::string value(diagnostic_environment);
+      if (value == "1" || value == "true" || value == "TRUE") {
+        diagnose_nonfinite_rk_update = true;
+      } else if (value != "0" && value != "false" && value != "FALSE") {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "ATHENAK_CGL_DIAGNOSE_NONFINITE_RK_UPDATE must be "
+                  << "0, 1, false, or true" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+  }
 
   // Viscosity (only constructed if needed)
   if (pin->DoesParameterExist("mhd","viscosity")) {
