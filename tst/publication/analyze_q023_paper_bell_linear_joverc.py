@@ -50,6 +50,9 @@ Q043_REGISTERED_ADMISSION_BINDING_STATUS = (
 )
 Q043_REQUIRED_CASE_COUNT = 132
 SOURCE_PATH = Path("src/pgen/tests/q023_paper_bell_linear_joverc.cpp")
+CORRECTED_EIGENMODE_HEADER_PATH = Path(
+    "src/pgen/tests/q023_paper_bell_linear_joverc.hpp"
+)
 DECK_ROOT = REPO_ROOT / "inputs/tests/q023_paper_bell_linear_joverc_predecessor"
 DECK_MANIFEST = DECK_ROOT / "deck_manifest.json"
 DIMENSIONS = (1, 2, 3)
@@ -91,6 +94,8 @@ MIN_PHASE_FIT_R2 = 0.995
 LINEAR_RUNTIME_TLIM = 1.75
 LINEAR_OUTPUT_DT = 0.02
 LINEAR_NLIM = 2_000_000
+DEPOSITION_TOLERANCE_ULPS = 16.0
+FROZEN_CURRENT_GYROPERIOD_MARGIN = 4.0
 
 _BOUNDS = {
     1: ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0)),
@@ -205,6 +210,8 @@ _PROVENANCE_KEYS = {
     "deck_sha256",
     "source_path",
     "source_sha256",
+    "corrected_eigenmode_header_path",
+    "corrected_eigenmode_header_sha256",
     "q043_registered_raw_oracle_dependency_sha256",
     "authorized_artifact_root",
     "candidate_clean",
@@ -221,6 +228,17 @@ _RAW_ARTIFACT_KEYS = {"path", "sha256", "variable", "cycle", "time"}
 _MHD_FIELDS = frozenset(
     ("dens", "eint", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3")
 )
+_RAW_OUTPUT_VARIABLES = (
+    "mhd_w_bcc",
+    "prtcl_rho",
+    "prtcl_jx",
+    "prtcl_jy",
+    "prtcl_jz",
+)
+_PARTICLE_FIELDS = _RAW_OUTPUT_VARIABLES[1:]
+_RAW_OUTPUT_INDEX = {
+    variable: index for index, variable in enumerate(_RAW_OUTPUT_VARIABLES, 1)
+}
 _OUTPUT_BOOKKEEPING_KEYS = frozenset(("file_number", "last_time"))
 _EXECUTION_RECEIPT_KEYS = {
     "schema_version",
@@ -231,6 +249,8 @@ _EXECUTION_RECEIPT_KEYS = {
     "deck_sha256",
     "source_path",
     "source_sha256",
+    "corrected_eigenmode_header_path",
+    "corrected_eigenmode_header_sha256",
     "executable_path",
     "executable_sha256",
     "candidate_clean",
@@ -1142,6 +1162,10 @@ def synthetic_provenance(
         "deck_sha256": member["deck_sha256"],
         "source_path": SOURCE_PATH.as_posix(),
         "source_sha256": _sha256_file(REPO_ROOT / SOURCE_PATH),
+        "corrected_eigenmode_header_path": CORRECTED_EIGENMODE_HEADER_PATH.as_posix(),
+        "corrected_eigenmode_header_sha256": _sha256_file(
+            REPO_ROOT / CORRECTED_EIGENMODE_HEADER_PATH
+        ),
         "q043_registered_raw_oracle_dependency_sha256": _dependency_digest(dependency),
         "authorized_artifact_root": "",
         "candidate_clean": False,
@@ -1212,7 +1236,7 @@ def _validate_raw_artifact_binding(
     bound = _validate_materialized_binding(
         {"path": value["path"], "sha256": value["sha256"]}, root, label
     )
-    _require(value["variable"] == "mhd_w_bcc", f"{label} variable drifted")
+    _require(value["variable"] in _RAW_OUTPUT_VARIABLES, f"{label} variable drifted")
     _require(
         type(value["cycle"]) is int and value["cycle"] >= 0,
         f"{label} cycle must be a nonnegative integer",
@@ -1226,7 +1250,7 @@ def _validate_raw_artifact_binding(
     return (
         {
             **bound,
-            "variable": "mhd_w_bcc",
+            "variable": str(value["variable"]),
             "cycle": int(value["cycle"]),
             "time": float(value["time"]),
         },
@@ -1320,6 +1344,10 @@ def _validate_execution_receipt(
         and receipt["deck_sha256"] == member["deck_sha256"]
         and receipt["source_path"] == SOURCE_PATH.as_posix()
         and receipt["source_sha256"] == provenance["source_sha256"]
+        and receipt["corrected_eigenmode_header_path"]
+        == CORRECTED_EIGENMODE_HEADER_PATH.as_posix()
+        and receipt["corrected_eigenmode_header_sha256"]
+        == provenance["corrected_eigenmode_header_sha256"]
         and receipt["executable_path"] == provenance["executable_path"]
         and receipt["executable_sha256"] == provenance["executable_sha256"]
         and receipt["candidate_clean"] is True
@@ -1465,24 +1493,38 @@ def _validate_raw_runtime_parameters(
     return normalized, output_state
 
 
-def _validate_mhd_snapshot_output_state(
-    output_state: Mapping[str, tuple[int, float]], *, snapshot_index: int
+def _validate_snapshot_output_state(
+    output_state: Mapping[str, tuple[int, float]],
+    *,
+    snapshot_index: int,
+    variable: str,
 ) -> None:
     _require(
         set(output_state) == {f"output{index}" for index in range(1, 7)},
         "Q023 raw runtime output-state inventory drifted",
     )
+    _require(variable in _RAW_OUTPUT_INDEX, "Q023 raw output variable is unknown")
+    variable_output_index = _RAW_OUTPUT_INDEX[variable]
     expected = {
-        "output1": (
-            snapshot_index,
-            -1.0 if snapshot_index == 0 else (snapshot_index - 1) * LINEAR_OUTPUT_DT,
-        ),
-        **{
-            f"output{index}": (snapshot_index + 1, snapshot_index * LINEAR_OUTPUT_DT)
-            for index in range(2, 6)
-        },
-        "output6": (0, -1.0) if snapshot_index == 0 else (1, 0.0),
+        f"output{index}": (
+            snapshot_index if index <= variable_output_index else snapshot_index + 1,
+            (
+                -1.0
+                if snapshot_index == 0 and index <= variable_output_index
+                else (
+                    snapshot_index * LINEAR_OUTPUT_DT
+                    if index > variable_output_index
+                    else (snapshot_index - 1) * LINEAR_OUTPUT_DT
+                )
+            ),
+        )
+        for index in range(1, 6)
     }
+    expected.update(
+        {
+            "output6": (0, -1.0) if snapshot_index == 0 else (1, 0.0),
+        }
+    )
     for block, (expected_file_number, expected_last_time) in expected.items():
         file_number, last_time = output_state[block]
         _require(
@@ -1491,7 +1533,179 @@ def _validate_mhd_snapshot_output_state(
                 last_time, expected_last_time, rel_tol=0.0, abs_tol=1.0e-12
             ),
             f"Q023 raw runtime {block} violates the observed sequential "
-            "mhd_w_bcc publication counter progression",
+            f"{variable} publication counter progression",
+        )
+
+
+def _volume_mean(values: np.ndarray, grid: binary.CompositeGrid) -> float:
+    volumes = (
+        np.diff(grid.x3_faces)[:, None, None]
+        * np.diff(grid.x2_faces)[None, :, None]
+        * np.diff(grid.x1_faces)[None, None, :]
+    )
+    return float(np.sum(values * volumes) / np.sum(volumes))
+
+
+def _representation_tolerance(variable_size: int, scale: float) -> float:
+    dtype = np.float32 if variable_size == 4 else np.float64
+    return DEPOSITION_TOLERANCE_ULPS * np.finfo(dtype).eps * max(abs(scale), 1.0)
+
+
+def _frozen_current_relative_tolerance() -> float:
+    return (
+        FROZEN_CURRENT_GYROPERIOD_MARGIN
+        * SPECIES_Q_OVER_MC
+        * B_G
+        * LINEAR_RUNTIME_TLIM
+    )
+
+
+def _validate_particle_current_snapshot(
+    datasets: Mapping[str, binary.AthenaBinaryDataset],
+    *,
+    member: Mapping[str, object],
+    snapshot_index: int,
+) -> dict[str, object] | None:
+    _require(
+        set(datasets) == set(_RAW_OUTPUT_VARIABLES),
+        "Q023 raw snapshot field inventory drifted",
+    )
+    reference = datasets["mhd_w_bcc"]
+    grids: dict[str, binary.CompositeGrid] = {}
+    for variable, dataset in datasets.items():
+        expected_variables = _MHD_FIELDS if variable == "mhd_w_bcc" else {variable}
+        _require(
+            set(dataset.variable_names) == set(expected_variables),
+            f"Q023 raw {variable} variable inventory drifted",
+        )
+        _require(
+            (
+                dataset.time,
+                dataset.cycle,
+                dataset.location_size,
+                dataset.variable_size,
+                dataset.root_grid_shape,
+                dataset.meshblock_shape,
+                dataset.domain_bounds,
+            )
+            == (
+                reference.time,
+                reference.cycle,
+                reference.location_size,
+                reference.variable_size,
+                reference.root_grid_shape,
+                reference.meshblock_shape,
+                reference.domain_bounds,
+            ),
+            "Q023 raw cross-field runtime metadata disagrees",
+        )
+        if variable != "mhd_w_bcc":
+            grids[variable] = binary.compose_leaf_field(dataset, variable)
+    reference_grid = grids["prtcl_rho"]
+    for variable in _PARTICLE_FIELDS[1:]:
+        grid = grids[variable]
+        _require(
+            np.array_equal(grid.x1_faces, reference_grid.x1_faces)
+            and np.array_equal(grid.x2_faces, reference_grid.x2_faces)
+            and np.array_equal(grid.x3_faces, reference_grid.x3_faces),
+            "Q023 raw cross-field particle geometry disagrees",
+        )
+
+    particle_values = [grids[variable].values for variable in _PARTICLE_FIELDS]
+    if snapshot_index == 0:
+        _require(
+            all(np.count_nonzero(values) == 0 for values in particle_values),
+            "Q023 cycle-zero particle moments must be the pre-deposition zero state",
+        )
+        return None
+
+    rho = grids["prtcl_rho"].values
+    current = np.stack(
+        [grids[variable].values for variable in _PARTICLE_FIELDS[1:]], axis=0
+    )
+    basis = np.asarray(_mode_basis(int(member["dimension"])), dtype=np.float64)
+    expected_vector = EXPECTED_J_OVER_C * basis
+    expected_rho = (
+        int(member["ppc"])
+        * float(member["deposit_qscale"])
+        * float(member["species_charge"])
+        / float(member["root_cell_volume"])
+    )
+    _require(
+        math.isclose(
+            expected_rho * float(member["stream_speed"]),
+            EXPECTED_J_OVER_C,
+            rel_tol=1.0e-13,
+            abs_tol=1.0e-13,
+        ),
+        "Q023 configured deposited charge/current closure drifted",
+    )
+    mean_vector = np.asarray(
+        [
+            _volume_mean(current[index], grids[_PARTICLE_FIELDS[index + 1]])
+            for index in range(3)
+        ]
+    )
+    parallel = np.tensordot(basis, current, axes=1)
+    transverse = current - basis[:, None, None, None] * parallel[None, ...]
+    residual = current - expected_vector[:, None, None, None]
+    parallel_mean = float(np.dot(basis, mean_vector))
+    rho_mean = _volume_mean(rho, grids["prtcl_rho"])
+    max_transverse = float(np.max(np.sqrt(np.sum(transverse * transverse, axis=0))))
+    max_current_nonuniformity = float(np.max(np.sqrt(np.sum(residual * residual, axis=0))))
+    max_rho_nonuniformity = float(np.max(np.abs(rho - expected_rho)))
+    current_tolerance = max(
+        _representation_tolerance(reference.variable_size, EXPECTED_J_OVER_C),
+        _frozen_current_relative_tolerance() * EXPECTED_J_OVER_C,
+    )
+    rho_tolerance = max(
+        _representation_tolerance(reference.variable_size, expected_rho),
+        _frozen_current_relative_tolerance() * expected_rho,
+    )
+    _require(
+        abs(parallel_mean - EXPECTED_J_OVER_C) <= current_tolerance,
+        "Q023 guide-projected deposited current is not effectively frozen",
+    )
+    _require(
+        max_transverse <= current_tolerance,
+        "Q023 transverse deposited current is not effectively frozen",
+    )
+    _require(
+        max_current_nonuniformity <= current_tolerance,
+        "Q023 deposited current spatial nonuniformity exceeds the frozen-current bound",
+    )
+    _require(
+        abs(rho_mean - expected_rho) <= rho_tolerance
+        and max_rho_nonuniformity <= rho_tolerance,
+        "Q023 deposited charge density violates the volume-aware closure",
+    )
+    return {
+        "cycle": reference.cycle,
+        "time": reference.time,
+        "mean_vector": mean_vector,
+        "rho_mean": rho_mean,
+        "current_tolerance": current_tolerance,
+        "rho_tolerance": rho_tolerance,
+    }
+
+
+def _validate_frozen_current_trace(
+    reports: Sequence[Mapping[str, object]],
+) -> None:
+    _require(bool(reports), "Q023 raw current trace requires post-step measurements")
+    baseline_vector = np.asarray(reports[0]["mean_vector"], dtype=float)
+    baseline_rho = float(reports[0]["rho_mean"])
+    current_tolerance = float(reports[0]["current_tolerance"])
+    rho_tolerance = float(reports[0]["rho_tolerance"])
+    for report in reports[1:]:
+        _require(
+            np.linalg.norm(np.asarray(report["mean_vector"], dtype=float) - baseline_vector)
+            <= current_tolerance,
+            "Q023 deposited-current drift from the first post-step state exceeds the frozen-current bound",
+        )
+        _require(
+            abs(float(report["rho_mean"]) - baseline_rho) <= rho_tolerance,
+            "Q023 deposited-charge drift from the first post-step state exceeds the frozen-current bound",
         )
 
 
@@ -1532,8 +1746,18 @@ def _physics_trace_from_raw_datasets(
     rows = []
     for dataset in datasets:
         mapped = _dataset_observable_mapping(dataset)
-        right, left, velocity_right, velocity_left = legacy._spatial_modes_from_dataset(
-            mapped, int(member["dimension"]), geometry
+        legacy_right, legacy_left, legacy_velocity_right, legacy_velocity_left = (
+            legacy._spatial_modes_from_dataset(
+                mapped, int(member["dimension"]), geometry
+            )
+        )
+        # The historical extractor named the Bai et al. right-handed unstable
+        # polarization "left". Keep historical code byte-preserved and bind the
+        # corrected predecessor to the physical polarization here.
+        right, left = legacy_left, legacy_right
+        velocity_right, velocity_left = (
+            legacy_velocity_left,
+            legacy_velocity_right,
         )
         paper_mode, paper_abs = legacy._paper_literal_velocity_observables_from_dataset(
             mapped, int(member["dimension"]), geometry
@@ -1598,6 +1822,13 @@ def _validate_provenance(
     expected_deck = (DECK_ROOT.relative_to(REPO_ROOT) / str(member["deck_path"])).as_posix()
     _require(provenance["deck_path"] == expected_deck and provenance["deck_sha256"] == member["deck_sha256"], "Q023 trace deck binding drifted")
     _require(provenance["source_path"] == SOURCE_PATH.as_posix() and provenance["source_sha256"] == _sha256_file(REPO_ROOT / SOURCE_PATH), "Q023 trace source binding drifted")
+    _require(
+        provenance["corrected_eigenmode_header_path"]
+        == CORRECTED_EIGENMODE_HEADER_PATH.as_posix()
+        and provenance["corrected_eigenmode_header_sha256"]
+        == _sha256_file(REPO_ROOT / CORRECTED_EIGENMODE_HEADER_PATH),
+        "Q023 corrected eigenmode header binding drifted",
+    )
     _require(provenance["q043_registered_raw_oracle_dependency_sha256"] == _dependency_digest(dependency), "Q043 dependency digest binding drifted")
     if provenance["kind"] == "synthetic_contract_fixture":
         _require(provenance == synthetic_provenance(member, dependency), "synthetic Q023 provenance drifted")
@@ -1631,53 +1862,96 @@ def _validate_provenance(
     ]
     normalized = [item[0] for item in normalized_and_paths]
     _require(len({item["path"] for item in normalized}) == len(normalized), "Q023 raw artifact reused")
+    raw_sort_key = lambda item: (
+        item["cycle"],
+        item["time"],
+        _RAW_OUTPUT_INDEX[item["variable"]],
+        item["path"],
+    )
     _require(
-        normalized
-        == sorted(normalized, key=lambda item: (item["cycle"], item["time"], item["path"]))
+        normalized == sorted(normalized, key=raw_sort_key)
         and normalized[0]["cycle"] == 0
         and normalized[0]["time"] == 0.0,
         "Q023 raw artifact inventory must begin at cycle zero and be ordered",
     )
-    datasets = []
+    snapshot_groups: list[
+        tuple[tuple[int, float], list[tuple[dict[str, object], Path]]]
+    ] = []
+    for artifact_and_path in normalized_and_paths:
+        artifact = artifact_and_path[0]
+        key = (int(artifact["cycle"]), float(artifact["time"]))
+        if not snapshot_groups or snapshot_groups[-1][0] != key:
+            snapshot_groups.append((key, []))
+        snapshot_groups[-1][1].append(artifact_and_path)
+    _require(
+        all(
+            len(group) == len(_RAW_OUTPUT_VARIABLES)
+            and {str(item[0]["variable"]) for item in group}
+            == set(_RAW_OUTPUT_VARIABLES)
+            for _, group in snapshot_groups
+        ),
+        "Q023 raw snapshot field inventory drifted",
+    )
+
+    mhd_datasets = []
+    current_reports = []
     normalized_parameters = None
     previous_cycle = -1
     previous_time = -1.0
-    for snapshot_index, (artifact, path) in enumerate(normalized_and_paths):
-        try:
-            dataset = binary.parse_athenak_binary_bytes(path.read_bytes(), source=str(path))
-        except (OSError, binary.AnalysisError) as error:
-            raise ContractError("Q023 raw AthenaK output failed strict parsing") from error
+    for snapshot_index, ((cycle, time), group) in enumerate(snapshot_groups):
         _require(
-            dataset.cycle == artifact["cycle"]
-            and dataset.time == artifact["time"]
-            and dataset.cycle > previous_cycle
-            and dataset.time > previous_time,
+            cycle > previous_cycle and time > previous_time,
             "Q023 raw artifact metadata or ordering drifted",
         )
-        _require(
-            dataset.root_grid_shape == tuple(member["global_nx"])
-            and dataset.meshblock_shape == tuple(member["meshblock_nx"]),
-            "Q023 raw grid or decomposition geometry drifted",
-        )
-        runtime_parameters, output_state = _validate_raw_runtime_parameters(
-            dataset, member=member
-        )
-        _validate_mhd_snapshot_output_state(
-            output_state, snapshot_index=snapshot_index
-        )
-        if normalized_parameters is None:
-            normalized_parameters = runtime_parameters
-        else:
+        snapshot_datasets = {}
+        for artifact, path in group:
+            variable = str(artifact["variable"])
+            try:
+                dataset = binary.parse_athenak_binary_bytes(
+                    path.read_bytes(), source=str(path)
+                )
+            except (OSError, binary.AnalysisError) as error:
+                raise ContractError("Q023 raw AthenaK output failed strict parsing") from error
             _require(
-                runtime_parameters == normalized_parameters,
-                "Q023 raw immutable runtime parameters differ across snapshots",
+                dataset.cycle == cycle and dataset.time == time,
+                "Q023 raw cross-field artifact metadata disagrees",
             )
-        previous_cycle = dataset.cycle
-        previous_time = dataset.time
-        datasets.append(dataset)
+            _require(
+                dataset.root_grid_shape == tuple(member["global_nx"])
+                and dataset.meshblock_shape == tuple(member["meshblock_nx"]),
+                "Q023 raw grid or decomposition geometry drifted",
+            )
+            runtime_parameters, output_state = _validate_raw_runtime_parameters(
+                dataset, member=member
+            )
+            _validate_snapshot_output_state(
+                output_state, snapshot_index=snapshot_index, variable=variable
+            )
+            if normalized_parameters is None:
+                normalized_parameters = runtime_parameters
+            else:
+                _require(
+                    runtime_parameters == normalized_parameters,
+                    "Q023 raw immutable runtime parameters differ across snapshots and fields",
+                )
+            snapshot_datasets[variable] = dataset
+        try:
+            current_report = _validate_particle_current_snapshot(
+                snapshot_datasets, member=member, snapshot_index=snapshot_index
+            )
+        except binary.AnalysisError as error:
+            raise ContractError(
+                "Q023 raw particle-current fields failed strict composition"
+            ) from error
+        if current_report is not None:
+            current_reports.append(current_report)
+        previous_cycle = cycle
+        previous_time = time
+        mhd_datasets.append(snapshot_datasets["mhd_w_bcc"])
+    _validate_frozen_current_trace(current_reports)
     _, expected_growth = theoretical_dispersion(float(member["epsilon"]))
     _require(
-        datasets[-1].time * K0 >= 5.0 / expected_growth,
+        mhd_datasets[-1].time * K0 >= 5.0 / expected_growth,
         "Q023 raw trace does not cover the fixed growth-fit window",
     )
     receipt_path = _normalized_artifact_file(
@@ -1699,7 +1973,9 @@ def _validate_provenance(
     _require(
         isinstance(physics_trace, Mapping)
         and _canonical_json_bytes(physics_trace)
-        == _canonical_json_bytes(_physics_trace_from_raw_datasets(datasets, member=member)),
+        == _canonical_json_bytes(
+            _physics_trace_from_raw_datasets(mhd_datasets, member=member)
+        ),
         "Q023 materialized physics trace was not derived from the exact retained raw outputs",
     )
     return "registered_execution_trace"

@@ -54,7 +54,8 @@
     "pgen_name": "q023_paper_bell_linear_joverc",
     "parameter_block": "q023_paper_bell_linear_joverc",
     "source_mode": "corrected_linear_eigenmode",
-    "shared_seed_carrier": "q023_paper_bell_linear.hpp",
+    "corrected_unstable_eigenmode_carrier": "q023_paper_bell_linear_joverc.hpp",
+    "historical_shared_seed_carrier_preserved": "q023_paper_bell_linear.hpp",
     "historical_q023_source_modified": false,
     "fresh_and_restart_registration_bound": true,
     "general_species_charge_contract": "species_charge/species_mass=omega/b_g",
@@ -184,7 +185,10 @@
     "x2_or_x3_split_required_where_axis_exists": true,
     "multi_axis_split_required_where_multiple_axes_exist": true,
     "strict_provenance_required": true,
-    "provenance_contract": "exact_checked_in_deck_and_source_digests_clean_candidate_source_and_executable_parsed_registered_execution_receipt_authorized_artifact_root_exact_ordered_raw_mhd_w_bcc_inventory_strict_binary_parse_raw_runtime_deck_compatibility_trace_rederived_from_exact_raw_outputs_actual_mpi_rank_topology_plus_final_hardened_q043_registered_admission_binding_after_it_lands_and_non_authorizing_semantics",
+    "provenance_contract": "exact_checked_in_deck_source_and_corrected_eigenmode_header_digests_clean_candidate_source_and_executable_parsed_registered_execution_receipt_authorized_artifact_root_exact_ordered_aligned_raw_mhd_w_bcc_prtcl_rho_prtcl_jx_prtcl_jy_prtcl_jz_inventory_strict_binary_parse_cross_field_runtime_deck_compatibility_trace_rederived_from_exact_raw_outputs_cycle_zero_pre_deposition_state_post_step_effectively_frozen_current_actual_mpi_rank_topology_plus_final_hardened_q043_registered_admission_binding_after_it_lands_and_non_authorizing_semantics",
+    "cycle_zero_particle_moments_must_be_explicit_pre_deposition_zero_state": true,
+    "every_post_step_snapshot_requires_volume_aware_charge_and_effectively_frozen_current_validation": true,
+    "deposited_current_drift_bound_uses_species_gyrofrequency_times_runtime": true,
     "arbitrary_trace_plus_unrelated_raw_files_rejected": true,
     "materialized_evidence_requires_registered_q043_admission": true,
     "linear_qualification_prerequisites_require_passed_registered_q043_raw_oracle": true,
@@ -214,11 +218,36 @@
     "materialized_trace_exact_raw_rederivation_adversarial_test": "pass",
     "registered_execution_receipt_and_actual_mpi_topology_adversarial_test": "pass",
     "actual_host_serial_cycle_zero_source_deck_initialization": "pass_non_authorizing_smoke_only",
+    "actual_host_serial_corrected_unstable_branch_growth_phase_and_polarization": "pass_non_authorizing_unretained_local_audit",
+    "actual_host_serial_aligned_five_field_particle_current_trace": "pass_non_authorizing_unretained_local_audit",
+    "historical_opposite_branch_runtime_rejection": "pass_non_authorizing_unretained_local_audit",
     "actual_host_serial_fractional_ppc_runtime_rejection": "pass",
     "actual_host_serial_zero_species_velocity_override_runtime_rejection": "pass",
     "actual_host_serial_different_species_velocity_override_runtime_rejection": "pass",
     "full_debug_serial_athenak_build": "pass",
-    "materialized_runtime_evidence": "pending",
+    "materialized_runtime_evidence": "pending_registered_execution_and_retained_artifact_binding",
+    "qualification_effect": "none"
+  },
+  "non_authorizing_runtime_audit": {
+    "artifact_retention": "not_retained_not_registered_not_qualifying",
+    "corrected_branch": {
+      "aligned_raw_snapshot_count": 89,
+      "expected_growth_rate_over_k0_ua": 0.916515138991168,
+      "expected_signed_phase_frequency_over_k0_ua": -0.4,
+      "measured_growth_rate_over_k0_ua": 0.9058717499554857,
+      "measured_signed_phase_frequency_over_k0_ua": -0.3961355876711273,
+      "physics_gates_pass": true,
+      "post_step_frozen_current_snapshot_count": 88,
+      "right_to_left_amplitude_ratio": 1.010099398634528e+16
+    },
+    "deck": "inputs/tests/q023_paper_bell_linear_joverc_predecessor/q023-joverc-d1-fine-reference_x1-eps0p4.athinput",
+    "historical_opposite_branch": {
+      "expected_growth_rate_over_k0_ua": 0.916515138991168,
+      "expected_signed_phase_frequency_over_k0_ua": -0.4,
+      "measured_growth_rate_over_k0_ua": 0.0138124,
+      "measured_signed_phase_frequency_over_k0_ua": -1.37595,
+      "physics_gates_pass": false
+    },
     "qualification_effect": "none"
   },
   "historical_campaign_disposition": {
@@ -236,11 +265,12 @@
     "src/pgen/pgen.hpp": "80721a4bdcae07d8942fbede14389200773f41439027f689271e94d77d0c36c9",
     "src/pgen/tests/q023_paper_bell_linear.cpp": "66a1bb952ca8b9d91d17896c1ebb94b18fa276be24767a99f635466cbe8638eb",
     "src/pgen/tests/q023_paper_bell_linear.hpp": "afa7b8243b1d402faa9592137050d0e6870a06ce25f61e17d010af3fc5a080e6",
-    "src/pgen/tests/q023_paper_bell_linear_joverc.cpp": "50e4de1ef64230dfc6592f92a566cfa7a3dc499f130348fa2e99c96362d57658",
+    "src/pgen/tests/q023_paper_bell_linear_joverc.cpp": "f7f00bc59e206dce96984936560ecabd9aee5327c02d8d94788aa6ffd784f542",
+    "src/pgen/tests/q023_paper_bell_linear_joverc.hpp": "ca3d5d83de1996aad85f1418b2f4b772fc3d3f532d9f3c50584141026f2fec69",
     "tst/publication/analyze_q023_paper_bell_linear.py": "f128958a9eee9be53b106aed0fb8cc0efa9d05efae6811c3b7046d11f8ac7ce6",
-    "tst/publication/analyze_q023_paper_bell_linear_joverc.py": "1162ea7090ff508f469370aa4295e548f9dd9e3d94cc1f931d9e5a8bb143a2ea",
-    "tst/publication/q023_paper_bell_linear_joverc_host_harness.cpp": "534339f2771bd58e0a46e7917a93ad620e042b41e70be4ddd89b53b123ca2103",
-    "tst/publication/test_analyze_q023_paper_bell_linear_joverc.py": "e407cdac8997e7bd5efff7b15a8806bf4079a1fc3465f85b62056783d6d9e047"
+    "tst/publication/analyze_q023_paper_bell_linear_joverc.py": "e7dd7dde0497ba1cf8add5a2ced1bd95f304c1dacef1aba5722793b67b2a75cd",
+    "tst/publication/q023_paper_bell_linear_joverc_host_harness.cpp": "18c551f1548f4e645bd4a02ce140d6f5d531908054ea235e42bbada0b9883a5b",
+    "tst/publication/test_analyze_q023_paper_bell_linear_joverc.py": "8358f6a79f1b60383b88996f8b4b3eb8a5c5b9727d2caf83008784a99cdae4d9"
   },
   "explicitly_not_claimed": [
     "completed_authoritative_Q043_foundation",

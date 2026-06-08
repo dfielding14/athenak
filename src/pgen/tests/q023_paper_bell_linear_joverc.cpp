@@ -28,7 +28,7 @@
 #define Q023_PAPER_BELL_LINEAR_HOST_CONTRACT 1
 #define Q023_JOVERC_UNDEF_Q023_PAPER_BELL_LINEAR_HOST_CONTRACT 1
 #endif
-#include "q023_paper_bell_linear.hpp"
+#include "q023_paper_bell_linear_joverc.hpp"
 #if defined(Q023_JOVERC_UNDEF_Q023_PAPER_BELL_LINEAR_HOST_CONTRACT)
 #undef Q023_PAPER_BELL_LINEAR_HOST_CONTRACT
 #undef Q023_JOVERC_UNDEF_Q023_PAPER_BELL_LINEAR_HOST_CONTRACT
@@ -37,11 +37,9 @@
 namespace q023_paper_bell_linear_joverc {
 
 using q023_paper_bell_linear::Basis;
-using q023_paper_bell_linear::EigenmodeAtPhase;
 using q023_paper_bell_linear::ModeBasis;
 using q023_paper_bell_linear::ModeParameters;
 using q023_paper_bell_linear::Vector3;
-using q023_paper_bell_linear::VectorPotentialAt;
 
 inline double RootCellVolume(const double x1_extent, const int root_nx1,
                              const double x2_extent, const int root_nx2,
@@ -169,14 +167,14 @@ void Q023JOverCRequireBoolean(ParameterInput *pin, const std::string &block,
 void ProblemGenerator::Q023PaperBellLinearJOverC(ParameterInput *pin,
                                                   const bool restart) {
   using q023_paper_bell_linear_joverc::Basis;
-  using q023_paper_bell_linear_joverc::EigenmodeAtPhase;
   using q023_paper_bell_linear_joverc::HasRequiredSpeciesChargeOverMass;
   using q023_paper_bell_linear_joverc::HasRequiredDepositedJOverC;
   using q023_paper_bell_linear_joverc::HasMatchingVelocityVectors;
   using q023_paper_bell_linear_joverc::HasPositiveIntegralPPC;
   using q023_paper_bell_linear_joverc::ModeBasis;
   using q023_paper_bell_linear_joverc::ModeParameters;
-  using q023_paper_bell_linear_joverc::VectorPotentialAt;
+  using q023_paper_bell_linear_joverc::UnstableEigenmodeAtPhase;
+  using q023_paper_bell_linear_joverc::UnstableVectorPotentialAt;
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   if (pmbp->pmhd == nullptr || pmbp->ppart == nullptr) {
@@ -491,9 +489,9 @@ void ProblemGenerator::Q023PaperBellLinearJOverC(ParameterInput *pin,
                                  size.d_view(m).x3max);
     const Real x3f = LeftEdgeX(k - ks, nx3, size.d_view(m).x3min,
                                size.d_view(m).x3max);
-    a1(m, k, j, i) = VectorPotentialAt(parameters, {x1v, x2f, x3f}).x1;
-    a2(m, k, j, i) = VectorPotentialAt(parameters, {x1f, x2v, x3f}).x2;
-    a3(m, k, j, i) = VectorPotentialAt(parameters, {x1f, x2f, x3v}).x3;
+    a1(m, k, j, i) = UnstableVectorPotentialAt(parameters, {x1v, x2f, x3f}).x1;
+    a2(m, k, j, i) = UnstableVectorPotentialAt(parameters, {x1f, x2v, x3f}).x2;
+    a3(m, k, j, i) = UnstableVectorPotentialAt(parameters, {x1f, x2f, x3v}).x3;
   });
 
   par_for("pgen_q023_joverc_bell_ct_field", DevExeSpace(),
@@ -536,7 +534,7 @@ void ProblemGenerator::Q023PaperBellLinearJOverC(ParameterInput *pin,
                                 size.d_view(m).x3max);
     const Real phase = parameters.k0*
         (basis.parallel.x1*x1 + basis.parallel.x2*x2 + basis.parallel.x3*x3);
-    const auto sample = EigenmodeAtPhase(parameters, phase);
+    const auto sample = UnstableEigenmodeAtPhase(parameters, phase);
     w0(m, IDN, k, j, i) = parameters.rho;
     w0(m, IVX, k, j, i) = sample.velocity.x1;
     w0(m, IVY, k, j, i) = sample.velocity.x2;

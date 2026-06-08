@@ -33,4 +33,14 @@ int main() {
             << HasMatchingVelocityVectors(2.5, 0.0, 0.0, 2.5, 0.0, 0.0) << " "
             << HasMatchingVelocityVectors(2.5, 0.0, 0.0, 0.0, 0.0, 0.0) << " "
             << HasMatchingVelocityVectors(2.5, 0.0, 0.0, 2.0, 0.0, 0.0) << "\n";
+  const ModeParameters parameters{1, 0.4, 1.0e-6, 1.0, 1.0, 1.0, 1.0,
+                                  2.0*M_PI};
+  const auto unstable = UnstableEigenmodeAtPhase(parameters, 0.0);
+  const auto historical = q023_paper_bell_linear::EigenmodeAtPhase(parameters, 0.0);
+  std::cout << "unstable_phase_zero " << unstable.magnetic.x2 << " "
+            << unstable.magnetic.x3 << " " << unstable.velocity.x2 << " "
+            << unstable.velocity.x3 << "\n";
+  std::cout << "historical_phase_zero " << historical.magnetic.x2 << " "
+            << historical.magnetic.x3 << " " << historical.velocity.x2 << " "
+            << historical.velocity.x3 << "\n";
 }

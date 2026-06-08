@@ -88,19 +88,24 @@ def _set_physics_trace(
     }
 
 
-def _runtime_header(member: dict[str, object], snapshot_index: int) -> bytes:
+def _runtime_header(
+    member: dict[str, object], snapshot_index: int, variable_output_index: int
+) -> bytes:
     text = bell.render_deck(member)
     for index in range(1, 7):
-        if index == 1:
-            file_number = snapshot_index
+        if index <= 5:
+            file_number = (
+                snapshot_index if index <= variable_output_index else snapshot_index + 1
+            )
             last_time = (
                 -1.0
-                if snapshot_index == 0
-                else (snapshot_index - 1) * bell.LINEAR_OUTPUT_DT
+                if snapshot_index == 0 and index <= variable_output_index
+                else (
+                    snapshot_index * bell.LINEAR_OUTPUT_DT
+                    if index > variable_output_index
+                    else (snapshot_index - 1) * bell.LINEAR_OUTPUT_DT
+                )
             )
-        elif index <= 5:
-            file_number = snapshot_index + 1
-            last_time = snapshot_index * bell.LINEAR_OUTPUT_DT
         else:
             file_number = 0 if snapshot_index == 0 else 1
             last_time = -1.0 if snapshot_index == 0 else 0.0
@@ -137,11 +142,11 @@ def _mode_fields(member: dict[str, object], physical_time: float) -> dict[str, n
     phase = spatial_phase - epsilon * normalized_time
     amplitude = 1.0e-6 * np.exp(growth * normalized_time)
     magnetic_a = amplitude * np.cos(phase)
-    magnetic_b = -amplitude * np.sin(phase)
+    magnetic_b = amplitude * np.sin(phase)
     right = 0.5 * amplitude * np.exp(-1.0j * epsilon * normalized_time)
     velocity_right = complex(-epsilon, -growth) * right
     velocity_a = 2.0 * np.real(velocity_right * np.exp(1.0j * spatial_phase))
-    velocity_b = 2.0 * np.real(1.0j * velocity_right * np.exp(1.0j * spatial_phase))
+    velocity_b = 2.0 * np.real(-1.0j * velocity_right * np.exp(1.0j * spatial_phase))
     magnetic = (
         parallel[:, None, None, None]
         + transverse_a[:, None, None, None] * magnetic_a
@@ -164,9 +169,15 @@ def _mode_fields(member: dict[str, object], physical_time: float) -> dict[str, n
     }
 
 
-def _raw_payload(member: dict[str, object], physical_time: float, cycle: int) -> bytes:
-    fields = ("dens", "eint", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3")
-    values = _mode_fields(member, physical_time)
+def _raw_payload_from_fields(
+    member: dict[str, object],
+    physical_time: float,
+    cycle: int,
+    *,
+    fields: tuple[str, ...],
+    values: dict[str, np.ndarray],
+    variable_output_index: int,
+) -> bytes:
     meshblock = tuple(int(value) for value in member["meshblock_nx"])
     splits = tuple(int(value) for value in member["decomposition_splits"])
     bounds = tuple(tuple(float(value) for value in axis) for axis in member["bounds"])
@@ -215,7 +226,7 @@ def _raw_payload(member: dict[str, object], physical_time: float, cycle: int) ->
                         ]
                     ).tobytes()
                 )
-    parameter_header = _runtime_header(member, cycle)
+    parameter_header = _runtime_header(member, cycle, variable_output_index)
     return (
         b"Athena binary output version=1.1\n"
         b"  size of preheader=5\n"
@@ -230,6 +241,46 @@ def _raw_payload(member: dict[str, object], physical_time: float, cycle: int) ->
         + f"  header offset={len(parameter_header)}\n".encode()
         + parameter_header
         + b"".join(blocks)
+    )
+
+
+def _raw_payload(member: dict[str, object], physical_time: float, cycle: int) -> bytes:
+    fields = ("dens", "eint", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3")
+    return _raw_payload_from_fields(
+        member,
+        physical_time,
+        cycle,
+        fields=fields,
+        values=_mode_fields(member, physical_time),
+        variable_output_index=1,
+    )
+
+
+def _particle_raw_payload(
+    member: dict[str, object], physical_time: float, cycle: int, variable: str
+) -> bytes:
+    shape = tuple(reversed(tuple(int(value) for value in member["global_nx"])))
+    if cycle == 0:
+        value = 0.0
+    elif variable == "prtcl_rho":
+        value = (
+            int(member["ppc"])
+            * float(member["deposit_qscale"])
+            * float(member["species_charge"])
+            / float(member["root_cell_volume"])
+        )
+    else:
+        component = {"prtcl_jx": 0, "prtcl_jy": 1, "prtcl_jz": 2}[variable]
+        value = bell.EXPECTED_J_OVER_C * bell._mode_basis(int(member["dimension"]))[
+            component
+        ]
+    return _raw_payload_from_fields(
+        member,
+        physical_time,
+        cycle,
+        fields=(variable,),
+        values={variable: np.full(shape, value)},
+        variable_output_index=bell._RAW_OUTPUT_INDEX[variable],
     )
 
 
@@ -266,6 +317,20 @@ def _write_materialized_member(
         datasets.append(
             bell.binary.parse_athenak_binary_bytes(path.read_bytes(), source=str(path))
         )
+        for variable in bell._PARTICLE_FIELDS:
+            particle_path = root / f"raw/{variable}.{cycle:05d}.bin"
+            particle_path.write_bytes(
+                _particle_raw_payload(member, physical_time, cycle, variable)
+            )
+            raw_artifacts.append(
+                {
+                    "path": particle_path.relative_to(root).as_posix(),
+                    "sha256": _sha256(particle_path),
+                    "variable": variable,
+                    "cycle": cycle,
+                    "time": physical_time,
+                }
+            )
     physics_trace = bell._physics_trace_from_raw_datasets(datasets, member=member)
     rank_count = math.prod(int(value) for value in member["decomposition_splits"])
     topology_path = root / "execution/rank_topology.json"
@@ -307,6 +372,10 @@ def _write_materialized_member(
         "deck_sha256": member["deck_sha256"],
         "source_path": bell.SOURCE_PATH.as_posix(),
         "source_sha256": _sha256(REPO_ROOT / bell.SOURCE_PATH),
+        "corrected_eigenmode_header_path": bell.CORRECTED_EIGENMODE_HEADER_PATH.as_posix(),
+        "corrected_eigenmode_header_sha256": _sha256(
+            REPO_ROOT / bell.CORRECTED_EIGENMODE_HEADER_PATH
+        ),
         "executable_path": "candidate/athena",
         "executable_sha256": _sha256(executable),
         "candidate_clean": True,
@@ -430,6 +499,21 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
             if line.startswith("velocity_match ")
         )
         self.assertEqual(velocity_match[1:], ["1", "0", "0"])
+        unstable = next(
+            line.split()
+            for line in self.harness_lines
+            if line.startswith("unstable_phase_zero ")
+        )
+        historical = next(
+            line.split()
+            for line in self.harness_lines
+            if line.startswith("historical_phase_zero ")
+        )
+        self.assertAlmostEqual(float(unstable[1]), 1.0e-6)
+        self.assertEqual(float(unstable[2]), 0.0)
+        self.assertAlmostEqual(float(unstable[3]), -0.4e-6)
+        self.assertLess(float(unstable[4]), 0.0)
+        self.assertGreater(float(historical[4]), 0.0)
 
     def test_source_is_unique_registered_and_strictly_downstream_of_q043(self) -> None:
         source = (REPO_ROOT / bell.SOURCE_PATH).read_text(encoding="utf-8")
@@ -940,6 +1024,82 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             provenance["registered_execution_receipt_sha256"] = _sha256(receipt_path)
             with self.assertRaisesRegex(bell.ContractError, "counter progression"):
+                bell._validate_provenance(
+                    provenance,
+                    member=member,
+                    dependency=dependency,
+                    artifact_root=root,
+                    physics_trace=physics_trace,
+                )
+
+    def test_materialized_particle_current_inventory_and_physics_fail_closed(
+        self,
+    ) -> None:
+        dependency = _q043_bound_dependency_fixture_for_q023_provenance_only()
+        member = next(
+            value
+            for value in bell._manifest_members().values()
+            if value["member_id"] == "d1-coarse-reference_x1-eps0p4"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            provenance, physics_trace = _write_materialized_member(
+                root, member, dependency
+            )
+            provenance["raw_artifacts"] = [
+                artifact
+                for artifact in provenance["raw_artifacts"]
+                if not (
+                    artifact["variable"] == "prtcl_jz" and artifact["cycle"] == 1
+                )
+            ]
+            receipt_path = root / provenance["registered_execution_receipt_path"]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["raw_artifacts"] = provenance["raw_artifacts"]
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            provenance["registered_execution_receipt_sha256"] = _sha256(receipt_path)
+            with self.assertRaisesRegex(bell.ContractError, "field inventory"):
+                bell._validate_provenance(
+                    provenance,
+                    member=member,
+                    dependency=dependency,
+                    artifact_root=root,
+                    physics_trace=physics_trace,
+                )
+
+            provenance, physics_trace = _write_materialized_member(
+                root, member, dependency
+            )
+            artifact = next(
+                value
+                for value in provenance["raw_artifacts"]
+                if value["variable"] == "prtcl_jy" and value["cycle"] == 1
+            )
+            raw_path = root / artifact["path"]
+            shape = tuple(
+                reversed(tuple(int(value) for value in member["global_nx"]))
+            )
+            transverse = np.zeros(shape)
+            transverse.flat[0] = 0.1
+            raw_path.write_bytes(
+                _raw_payload_from_fields(
+                    member,
+                    float(artifact["time"]),
+                    int(artifact["cycle"]),
+                    fields=("prtcl_jy",),
+                    values={"prtcl_jy": transverse},
+                    variable_output_index=bell._RAW_OUTPUT_INDEX["prtcl_jy"],
+                )
+            )
+            artifact["sha256"] = _sha256(raw_path)
+            receipt_path = root / provenance["registered_execution_receipt_path"]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["raw_artifacts"] = provenance["raw_artifacts"]
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            provenance["registered_execution_receipt_sha256"] = _sha256(receipt_path)
+            with self.assertRaisesRegex(
+                bell.ContractError, "transverse deposited current"
+            ):
                 bell._validate_provenance(
                     provenance,
                     member=member,
