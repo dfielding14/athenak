@@ -1998,7 +1998,7 @@ def test_inconclusive_or_failed_health_cannot_populate_response_products(
         if value["case_id"] == "R14" and value["family"] == "limiter"
     )
     assert limiter["abs_dp"] is None
-    assert limiter["applied_heat_flux_work_abs"] is None
+    assert limiter["applied_heat_flux_work_total"] is None
     resolution = publication.resolution_rows(data)
     assert next(
         value for value in resolution
@@ -2011,6 +2011,66 @@ def test_inconclusive_or_failed_health_cannot_populate_response_products(
     assert "Evidence state: **partial/transient**" in publication.report_markdown(
         data, [], tmp_path
     )
+
+
+def test_headline_sensitivity_rows_use_reviewed_science_not_fast_report(
+    publication, tmp_path
+):
+    data = empty_data(publication, tmp_path)
+    data.cases["R02"].diagnostics = {
+        "windows": {
+            "steady": {
+                "history": {"analysis_window": {"kinetic_mean": 10.0}}
+            }
+        }
+    }
+    data.cases["R04"].diagnostics = {
+        "windows": {
+            "steady": {
+                "history": {"analysis_window": {"kinetic_mean": 20.0}}
+            }
+        }
+    }
+    data.science_record = {
+        "families": {
+            "forcing": {
+                "R02_R04": {
+                    "left": "R02",
+                    "right": "R04",
+                    "result": "pass",
+                    "claim_eligible": True,
+                    "metrics": [{
+                        "metric": "kinetic",
+                        "available": True,
+                        "left_mean": 1.0,
+                        "right_mean": 1.4,
+                        "difference": -0.4,
+                        "combined_standard_error": 0.1,
+                        "pooled_within_realization_standard_deviation": 0.32,
+                        "standardized_effect": -1.25,
+                        "standardized_effect_scope": (
+                            "descriptive_within_realization"
+                        ),
+                        "claim_scope": "descriptive_within_realization",
+                    }],
+                }
+            }
+        }
+    }
+
+    row = next(
+        value for value in publication.robustness_rows(data)
+        if value["contrast"] == "forcing A, beta=10"
+        and value["metric"] == "kinetic"
+    )
+
+    assert row["reference_value"] == pytest.approx(1.0)
+    assert row["variant_value"] == pytest.approx(1.4)
+    assert row["variant_minus_reference"] == pytest.approx(0.4)
+    assert row["reviewed_left_minus_right"] == pytest.approx(-0.4)
+    assert row["standardized_effect"] == pytest.approx(-1.25)
+    assert row["authority"] == publication.SCIENCE_AUTHORITY
+    assert row["release_authorizing"] is False
 
 
 def test_r14_scope_prioritizes_hard_bound_and_never_invents_variant(
@@ -2599,7 +2659,18 @@ def install_material_science(publication, data, bindings: dict[str, dict]) -> No
                     "metrics": [{
                         "metric": "abs_dp",
                         "available": True,
+                        "active_mean": 1.0,
+                        "passive_mean": 2.0,
+                        "difference": -1.0,
+                        "pooled_within_realization_standard_deviation": 2.0 / 3.0,
                         "standardized_effect": -1.5,
+                        "standardized_effect_scope": (
+                            "descriptive_within_realization"
+                        ),
+                        "expected_direction": "active_lower",
+                        "direction_coherent": True,
+                        "large_direction_coherent_effect": True,
+                        "claim_scope": "descriptive_within_realization",
                     }],
                 }
             }
@@ -3254,7 +3325,9 @@ def test_final_evidence_tables_preserve_semantics_and_fail_closed(
         "active_lt_passive"
     )
     assert directions["c_b2_full_window_mean"]["descriptive_direction"] == "equal"
-    assert directions["reviewed_abs_dp_standardized_effect"][
+    assert directions[
+        "reviewed_abs_dp_signed_standardized_active_minus_passive_effect"
+    ][
         "descriptive_direction"
     ] == "inconclusive"
     assert directions["applied_pressure_work_total"]["inference_scope"] == (

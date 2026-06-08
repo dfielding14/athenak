@@ -11,9 +11,12 @@ revalidates those retained products and exclusively creates one immutable
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import importlib.util
+import io
 import json
+import math
 import os
 from pathlib import Path
 import stat
@@ -47,10 +50,165 @@ ACTIVE_CASES = (
 )
 PASSIVE_CASES = ("R06", "R07", "R08", "R09")
 ALL_CASES = tuple(f"R{number:02d}" for number in range(2, 18))
+ACTIVE_PASSIVE_PAIRS = (
+    ("R02", "R06"),
+    ("R03", "R07"),
+    ("R04", "R08"),
+    ("R05", "R09"),
+)
 ACTIVE_EVIDENCE_CLASS = "corrected_active_production"
 PASSIVE_EVIDENCE_CLASS = "authenticated_legacy_passive_control"
 VALID_SCIENCE_RESULTS = {"pass", "fail", "inconclusive"}
 VALID_CT_RESULTS = {"pass", "fail", "inconclusive"}
+SCIENCE_AUTHORITY = "non-authorizing-direct-fast-scientific-assessment"
+SIGNED_WORK_SEMANTICS = (
+    "applied columns are signed stage ledgers; reconstructed columns are "
+    "sparse retained-snapshot estimates and are not applied accounting"
+)
+SIGNED_WORK_REPORT_STATEMENT = (
+    "Signed LF applied-stage ledgers remain distinct from sparse retained-"
+    "snapshot pressure-work and heat-flux reconstructions; signs are preserved."
+)
+REVIEWED_CONTRAST_COLUMNS = (
+    "family",
+    "contrast",
+    "left",
+    "right",
+    "result",
+    "claim_eligible",
+    "metric",
+    "available",
+    "left_mean",
+    "right_mean",
+    "left_minus_right",
+    "right_minus_left",
+    "active_mean",
+    "passive_mean",
+    "active_minus_passive",
+    "passive_minus_active",
+    "combined_standard_error",
+    "pooled_within_realization_standard_deviation",
+    "standardized_effect",
+    "standardized_effect_scope",
+    "signed_standardized_left_minus_right_effect",
+    "signed_standardized_active_minus_passive_effect",
+    "expected_direction",
+    "direction_coherent",
+    "large_direction_coherent_effect",
+    "intervention_estimand",
+    "intervention_enabled_components",
+    "excluded_interpretation",
+    "intervention_declaration",
+    "inference_scope",
+    "current_science_scope_disposition",
+    "full_scope_independent_review_complete",
+    "reason",
+    "authority",
+    "release_authorizing",
+    "claim_scope",
+)
+ACTIVE_PASSIVE_SUMMARY_COLUMNS = (
+    "pair",
+    "metric",
+    "active",
+    "passive",
+    "active_minus_passive",
+    "passive_minus_active",
+    "combined_standard_error",
+    "pooled_within_realization_standard_deviation",
+    "standardized_effect",
+    "standardized_effect_scope",
+    "signed_standardized_active_minus_passive_effect",
+    "expected_direction",
+    "direction_coherent",
+    "large_direction_coherent_effect",
+    "result",
+    "claim_eligible",
+    "claim_scope",
+    "inference_scope",
+    "authority",
+    "release_authorizing",
+    "reason",
+)
+ROBUSTNESS_CONTRASTS = (
+    ("forcing A, beta=10", "forcing", "R02", "R04"),
+    ("forcing A, beta=100", "forcing", "R03", "R05"),
+    ("forcing P, beta=10", "forcing", "R06", "R08"),
+    ("forcing P, beta=100", "forcing", "R07", "R09"),
+    ("beta, A Alfvenic", "beta", "R02", "R03"),
+    ("beta, A random", "beta", "R04", "R05"),
+    ("beta, P Alfvenic", "beta", "R06", "R07"),
+    ("beta, P random", "beta", "R08", "R09"),
+    ("forcing correlation", "tcorr", "R05", "R11"),
+)
+ROBUSTNESS_METRICS = (
+    ("kinetic", "kinetic"),
+    ("magnetic", "magnetic"),
+    ("abs_dp", "abs_dp"),
+    ("unstable", "unstable_occupancy"),
+    ("nu_eff", "nu_eff"),
+)
+ROBUSTNESS_SUMMARY_COLUMNS = (
+    "contrast",
+    "family",
+    "reference",
+    "variant",
+    "metric",
+    "reference_value",
+    "variant_value",
+    "variant_minus_reference",
+    "signed_relative_difference",
+    "reviewed_left_minus_right",
+    "combined_standard_error",
+    "pooled_within_realization_standard_deviation",
+    "standardized_effect",
+    "standardized_effect_scope",
+    "signed_standardized_reference_minus_variant_effect",
+    "result",
+    "claim_eligible",
+    "claim_scope",
+    "inference_scope",
+    "authority",
+    "release_authorizing",
+    "reason",
+)
+STANDARD_REVIEWED_CLAIM_SCOPE = "standard reviewed-science scope"
+R15_RESTRICTED_CLAIM_SCOPE = (
+    "restricted nonfatal-hard-bound diagnostic; not strict R15 success"
+)
+SIGNED_WORK_COLUMNS = (
+    "case_id",
+    "availability",
+    "diagnostics_provenance",
+    "applied_heat_flux_availability",
+    "applied_pressure_work_availability",
+    "reconstructed_pressure_availability",
+    "reconstructed_heat_flux_availability",
+    "applied_ledgers_signed",
+    "applied_heat_flux_parallel",
+    "applied_heat_flux_perpendicular",
+    "applied_heat_flux_total",
+    "applied_pressure_work_total",
+    "applied_pressure_work_anisotropic",
+    "cap_parallel_over_1",
+    "cap_parallel_over_10",
+    "cap_perpendicular_over_1",
+    "cap_perpendicular_over_10",
+    "reconstructed_pressure_snapshot_count",
+    "reconstructed_pressure_applied_to_flow",
+    "reconstructed_isotropic_perpendicular_pressure_power_mean",
+    "reconstructed_anisotropic_stress_power_mean",
+    "reconstructed_total_cgl_pressure_power_mean",
+    "reconstructed_anisotropic_stress_power_integral",
+    "reconstructed_heat_flux_snapshot_count",
+    "reconstructed_regularized_heat_flux_power_mean",
+    "reconstructed_unlimited_heat_flux_power_mean",
+    "reconstructed_parallel_cap_active_volume_fraction_mean",
+    "reconstructed_perpendicular_cap_active_volume_fraction_mean",
+    "reconstructed_regularized_heat_flux_power_integral",
+    "reconstructed_unlimited_heat_flux_power_integral",
+    "semantics",
+)
 
 SCHEMA = "athenak-cgl-corrected-composite-manuscript-ready"
 SCHEMA_VERSION = 1
@@ -181,6 +339,39 @@ def require_text(value: object, label: str) -> str:
     return value
 
 
+def require_bool(value: object, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ManuscriptReadyError(f"{label} must be a boolean")
+    return value
+
+
+def require_finite(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ManuscriptReadyError(f"{label} must be a finite number")
+    result = float(value)
+    if not math.isfinite(result):
+        raise ManuscriptReadyError(f"{label} must be a finite number")
+    return result
+
+
+def require_close(observed: object, expected: float, label: str) -> float:
+    current = require_finite(observed, label)
+    if not math.isclose(current, expected, rel_tol=1.0e-12, abs_tol=1.0e-15):
+        raise ManuscriptReadyError(
+            f"{label} differs: observed={current!r}, expected={expected!r}"
+        )
+    return current
+
+
+def nested(value: object, path: str) -> object:
+    current = value
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
 def require_exact_scope_records(
     value: dict[str, object],
     limitation: dict[str, object],
@@ -193,6 +384,16 @@ def require_exact_scope_records(
         raise ManuscriptReadyError(f"{label} current science scope limitation differs")
     if value.get("active_passive_intervention_scope") != intervention:
         raise ManuscriptReadyError(f"{label} active/passive intervention scope differs")
+
+
+def publication_claim_scope(left: object, right: object) -> str:
+    """Return the exact reviewed-science scope rendered for this campaign."""
+
+    return (
+        R15_RESTRICTED_CLAIM_SCOPE
+        if "R15" in {str(left), str(right)}
+        else STANDARD_REVIEWED_CLAIM_SCOPE
+    )
 
 
 def sha256_file(path: Path) -> str:
@@ -276,6 +477,82 @@ def stable_json(value: object) -> bytes:
     return (
         json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode("utf-8")
+
+
+def publication_text(value: object, *, csv_value: bool = False) -> str:
+    if value is None:
+        return "--"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return "--"
+        return repr(value) if csv_value else f"{value:.8g}"
+    if isinstance(value, (list, tuple)):
+        return "; ".join(
+            publication_text(item, csv_value=csv_value) for item in value
+        )
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return str(value)
+
+
+def tex_unescape(value: str) -> str:
+    placeholder = "\0"
+    result = value.replace(r"\textbackslash{}", placeholder)
+    for encoded, plain in (
+        (r"\&", "&"),
+        (r"\%", "%"),
+        (r"\_", "_"),
+        (r"\#", "#"),
+        (r"\$", "$"),
+        (r"\{", "{"),
+        (r"\}", "}"),
+    ):
+        result = result.replace(encoded, plain)
+    return result.replace(placeholder, "\\")
+
+
+def load_csv_table(
+    path: Path, columns: tuple[str, ...], label: str
+) -> list[dict[str, str]]:
+    try:
+        with path.open(encoding="utf-8", newline="") as stream:
+            reader = csv.DictReader(stream)
+            if reader.fieldnames != list(columns):
+                raise ManuscriptReadyError(f"{label} columns differ")
+            rows = [dict(row) for row in reader]
+    except (OSError, UnicodeError, csv.Error) as error:
+        raise ManuscriptReadyError(f"cannot load {label}: {path}") from error
+    return rows
+
+
+def load_tex_table(
+    path: Path, columns: tuple[str, ...], label: str
+) -> list[dict[str, str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise ManuscriptReadyError(f"cannot load {label}: {path}") from error
+    if len(lines) < 6 or lines[1] != r"\hline" or lines[3] != r"\hline":
+        raise ManuscriptReadyError(f"{label} layout differs")
+
+    def cells(line: str) -> list[str]:
+        if not line.endswith(r" \\"):
+            raise ManuscriptReadyError(f"{label} row terminator differs")
+        return [tex_unescape(value) for value in line[:-3].split(" & ")]
+
+    if cells(lines[2]) != list(columns):
+        raise ManuscriptReadyError(f"{label} columns differ")
+    if lines[-2:] != [r"\hline", r"\end{tabular}"]:
+        raise ManuscriptReadyError(f"{label} footer differs")
+    result = []
+    for index, line in enumerate(lines[4:-2]):
+        values = cells(line)
+        if len(values) != len(columns):
+            raise ManuscriptReadyError(f"{label} row {index} width differs")
+        result.append(dict(zip(columns, values)))
+    return result
 
 
 def canonical_directory(path: Path, label: str) -> Path:
@@ -429,6 +706,213 @@ def validate_corrected_context(
     return science, context
 
 
+def reviewed_contrast_authority(
+    direct: dict[str, object], intervention: dict[str, object]
+) -> dict[tuple[str, str, str], dict[str, object]]:
+    """Validate and flatten the reviewed contrast values used by claim products."""
+
+    if (
+        direct.get("authority") != SCIENCE_AUTHORITY
+        or direct.get("release_authorizing") is not False
+    ):
+        raise ManuscriptReadyError(
+            "direct reviewed science lacks its exact non-authorizing authority"
+        )
+    families = require_dict(direct.get("families"), "direct reviewed science families")
+    records: dict[tuple[str, str, str], dict[str, object]] = {}
+    for family, contrasts_value in sorted(families.items()):
+        contrasts = require_dict(
+            contrasts_value, f"direct reviewed science family {family}"
+        )
+        for contrast_name, contrast_value in sorted(contrasts.items()):
+            contrast = require_dict(
+                contrast_value,
+                f"direct reviewed science contrast {family}.{contrast_name}",
+            )
+            left = contrast.get("active", contrast.get("left"))
+            right = contrast.get("passive", contrast.get("right"))
+            if left not in ALL_CASES or right not in ALL_CASES:
+                raise ManuscriptReadyError(
+                    f"direct reviewed science contrast {family}.{contrast_name} "
+                    "has invalid case semantics"
+                )
+            if family == "active_passive":
+                if [left, right] not in [list(pair) for pair in ACTIVE_PASSIVE_PAIRS]:
+                    raise ManuscriptReadyError(
+                        f"direct reviewed science contrast {contrast_name} "
+                        "has invalid active/passive ordering"
+                    )
+                if contrast.get("intervention_scope") != intervention:
+                    raise ManuscriptReadyError(
+                        f"direct reviewed science contrast {contrast_name} "
+                        "intervention scope differs"
+                    )
+            metrics = require_list(
+                contrast.get("metrics"),
+                f"direct reviewed science contrast {family}.{contrast_name} metrics",
+            )
+            if not metrics:
+                raise ManuscriptReadyError(
+                    f"direct reviewed science contrast {family}.{contrast_name} "
+                    "has no reviewed metrics"
+                )
+            for index, metric_value in enumerate(metrics):
+                label = (
+                    f"direct reviewed science contrast {family}.{contrast_name} "
+                    f"metric {index}"
+                )
+                metric = require_dict(metric_value, label)
+                metric_name = require_text(metric.get("metric"), f"{label} name")
+                available = require_bool(metric.get("available"), f"{label} availability")
+                key = (str(family), str(contrast_name), metric_name)
+                if key in records:
+                    raise ManuscriptReadyError(
+                        f"direct reviewed science contains duplicate metric {key}"
+                    )
+                record = {
+                    "family": str(family),
+                    "contrast": str(contrast_name),
+                    "left": str(left),
+                    "right": str(right),
+                    "result": require_text(
+                        contrast.get("result"), f"{label} contrast result"
+                    ),
+                    "claim_eligible": require_bool(
+                        contrast.get("claim_eligible"), f"{label} claim eligibility"
+                    ),
+                    "metric": metric_name,
+                    "available": available,
+                    "reason": metric.get("reason", contrast.get("reason")),
+                    "source_claim_scope": metric.get("claim_scope"),
+                    "claim_scope": publication_claim_scope(left, right),
+                    "inference_scope": (
+                        intervention.get("claim_scope")
+                        if family == "active_passive"
+                        else "descriptive_within_realization"
+                    ),
+                }
+                if available:
+                    left_key, right_key = (
+                        ("active_mean", "passive_mean")
+                        if family == "active_passive"
+                        else ("left_mean", "right_mean")
+                    )
+                    left_mean = require_finite(metric.get(left_key), f"{label} {left_key}")
+                    right_mean = require_finite(
+                        metric.get(right_key), f"{label} {right_key}"
+                    )
+                    difference = require_finite(
+                        metric.get(
+                            "difference",
+                            metric.get("difference_left_minus_right"),
+                        ),
+                        f"{label} left-minus-right difference",
+                    )
+                    require_close(
+                        difference,
+                        left_mean - right_mean,
+                        f"{label} left-minus-right sign convention",
+                    )
+                    combined_error = require_finite(
+                        metric.get("combined_standard_error"),
+                        f"{label} combined standard error",
+                    )
+                    if combined_error < 0.0:
+                        raise ManuscriptReadyError(
+                            f"{label} combined standard error is negative"
+                        )
+                    pooled = require_finite(
+                        metric.get(
+                            "pooled_within_realization_standard_deviation"
+                        ),
+                        f"{label} pooled standard deviation",
+                    )
+                    if pooled < 0.0:
+                        raise ManuscriptReadyError(
+                            f"{label} pooled standard deviation is negative"
+                        )
+                    effect = require_finite(
+                        metric.get("standardized_effect"),
+                        f"{label} standardized effect",
+                    )
+                    expected_effect = (
+                        0.0
+                        if difference == 0.0
+                        else sys.float_info.max
+                        if pooled == 0.0
+                        else abs(difference / pooled)
+                    )
+                    require_close(
+                        effect,
+                        expected_effect,
+                        f"{label} standardized-effect magnitude semantics",
+                    )
+                    if effect < 0.0:
+                        raise ManuscriptReadyError(
+                            f"{label} standardized effect is not a magnitude"
+                        )
+                    signed_effect = (
+                        math.copysign(effect, difference)
+                        if difference != 0.0 else 0.0
+                    )
+                    record.update(
+                        {
+                            "left_mean": left_mean,
+                            "right_mean": right_mean,
+                            "difference": difference,
+                            "combined_standard_error": combined_error,
+                            "pooled_within_realization_standard_deviation": pooled,
+                            "standardized_effect": effect,
+                            "standardized_effect_scope": require_text(
+                                metric.get("standardized_effect_scope"),
+                                f"{label} standardized-effect scope",
+                            ),
+                            "signed_standardized_effect": signed_effect,
+                        }
+                    )
+                    if (
+                        record["standardized_effect_scope"]
+                        != "descriptive_within_realization"
+                    ):
+                        raise ManuscriptReadyError(
+                            f"{label} standardized-effect scope differs"
+                        )
+                    if family == "active_passive":
+                        expected_direction = require_text(
+                            metric.get("expected_direction"),
+                            f"{label} expected direction",
+                        )
+                        coherent = require_bool(
+                            metric.get("direction_coherent"),
+                            f"{label} direction coherence",
+                        )
+                        expected_coherent = (
+                            difference < 0.0
+                            if expected_direction == "active_lower"
+                            else difference > 0.0
+                            if expected_direction == "active_higher"
+                            else None
+                        )
+                        if expected_coherent is None or coherent != expected_coherent:
+                            raise ManuscriptReadyError(
+                                f"{label} expected-direction semantics differ"
+                            )
+                        record.update(
+                            {
+                                "expected_direction": expected_direction,
+                                "direction_coherent": coherent,
+                                "large_direction_coherent_effect": require_bool(
+                                    metric.get("large_direction_coherent_effect"),
+                                    f"{label} large-effect coherence",
+                                ),
+                            }
+                        )
+                records[key] = record
+    if not records:
+        raise ManuscriptReadyError("direct reviewed science has no contrast authority")
+    return records
+
+
 def validate_reviewed_science(
     args: argparse.Namespace, science: object, context: dict[str, object]
 ) -> dict[str, object]:
@@ -497,6 +981,7 @@ def validate_reviewed_science(
     require_exact_scope_records(
         direct, limitation, intervention, "direct reviewed science"
     )
+    contrasts = reviewed_contrast_authority(direct, intervention)
     return {
         "root": str(science_root),
         "acceptance_root": str(acceptance),
@@ -504,7 +989,9 @@ def validate_reviewed_science(
         "current_science_scope_limitation": limitation,
         "record": record,
         "record_binding": record_binding,
+        "direct": direct,
         "direct_record": direct_binding,
+        "contrasts": contrasts,
     }
 
 
@@ -666,6 +1153,512 @@ def source_record_paths(
     return records
 
 
+def table_index(
+    rows: list[dict[str, str]], keys: tuple[str, ...], label: str
+) -> dict[tuple[str, ...], dict[str, str]]:
+    result: dict[tuple[str, ...], dict[str, str]] = {}
+    for index, row in enumerate(rows):
+        key = tuple(row.get(name, "") for name in keys)
+        if not all(key) or key in result:
+            raise ManuscriptReadyError(f"{label} row {index} has invalid key {key}")
+        result[key] = row
+    return result
+
+
+def require_table_text(
+    row: dict[str, str], field: str, expected: object, label: str, *, tex: bool = False
+) -> None:
+    current = row.get(field)
+    wanted = publication_text(expected, csv_value=not tex)
+    if current != wanted:
+        raise ManuscriptReadyError(
+            f"{label} {field} differs: observed={current!r}, expected={wanted!r}"
+        )
+
+
+def require_table_number(
+    row: dict[str, str], field: str, expected: float, label: str
+) -> None:
+    value = row.get(field)
+    try:
+        current = float(value) if value not in (None, "", "--") else math.nan
+    except ValueError as error:
+        raise ManuscriptReadyError(f"{label} {field} is not numeric") from error
+    require_close(current, expected, f"{label} {field}")
+
+
+def require_table_value(
+    row: dict[str, str],
+    field: str,
+    expected: object,
+    label: str,
+    *,
+    tex: bool,
+) -> None:
+    """Compare one deterministic publication cell to its reconstructed value."""
+
+    if (
+        not tex
+        and isinstance(expected, (int, float))
+        and not isinstance(expected, bool)
+    ):
+        require_table_number(row, field, float(expected), label)
+    else:
+        require_table_text(row, field, expected, label, tex=tex)
+
+
+def reviewed_publication_row(
+    record: dict[str, object],
+    intervention: dict[str, object],
+    limitation: dict[str, object],
+) -> dict[str, object]:
+    """Reconstruct one reviewed-science publication row from its authority."""
+
+    available = record["available"] is True
+    active_passive = record["family"] == "active_passive"
+    difference = float(record["difference"]) if available else None
+    signed_effect = (
+        float(record["signed_standardized_effect"]) if available else None
+    )
+    return {
+        "family": record["family"],
+        "contrast": record["contrast"],
+        "left": record["left"],
+        "right": record["right"],
+        "result": record["result"],
+        "claim_eligible": record["claim_eligible"],
+        "metric": record["metric"],
+        "available": record["available"],
+        "left_mean": record.get("left_mean"),
+        "right_mean": record.get("right_mean"),
+        "left_minus_right": difference,
+        "right_minus_left": -difference if difference is not None else None,
+        "active_mean": record.get("left_mean") if active_passive else None,
+        "passive_mean": record.get("right_mean") if active_passive else None,
+        "active_minus_passive": difference if active_passive else None,
+        "passive_minus_active": (
+            -difference if active_passive and difference is not None else None
+        ),
+        "combined_standard_error": record.get("combined_standard_error"),
+        "pooled_within_realization_standard_deviation": record.get(
+            "pooled_within_realization_standard_deviation"
+        ),
+        "standardized_effect": record.get("standardized_effect"),
+        "standardized_effect_scope": record.get("standardized_effect_scope"),
+        "signed_standardized_left_minus_right_effect": signed_effect,
+        "signed_standardized_active_minus_passive_effect": (
+            signed_effect if active_passive else None
+        ),
+        "expected_direction": record.get("expected_direction"),
+        "direction_coherent": record.get("direction_coherent"),
+        "large_direction_coherent_effect": record.get(
+            "large_direction_coherent_effect"
+        ),
+        "intervention_estimand": (
+            intervention.get("estimand") if active_passive else None
+        ),
+        "intervention_enabled_components": (
+            intervention.get("enabled_components") if active_passive else None
+        ),
+        "excluded_interpretation": (
+            intervention.get("excluded_interpretation") if active_passive else None
+        ),
+        "intervention_declaration": (
+            intervention.get("declaration") if active_passive else None
+        ),
+        "inference_scope": record["inference_scope"],
+        "current_science_scope_disposition": limitation.get("disposition"),
+        "full_scope_independent_review_complete": limitation.get(
+            "full_scope_independent_review_complete"
+        ),
+        "reason": record.get("reason"),
+        "authority": SCIENCE_AUTHORITY,
+        "release_authorizing": False,
+        "claim_scope": record["claim_scope"],
+    }
+
+
+def validate_reviewed_contrast_table(
+    root: Path,
+    science: dict[str, object],
+) -> None:
+    """Require CSV/TeX reviewed claims to preserve the authority's exact semantics."""
+
+    csv_rows = load_csv_table(
+        root / "tables/reviewed_science_contrasts.csv",
+        REVIEWED_CONTRAST_COLUMNS,
+        "publication reviewed-science CSV",
+    )
+    tex_rows = load_tex_table(
+        root / "tables/reviewed_science_contrasts.tex",
+        REVIEWED_CONTRAST_COLUMNS,
+        "publication reviewed-science TeX",
+    )
+    keys = ("family", "contrast", "metric")
+    csv_index = table_index(csv_rows, keys, "publication reviewed-science CSV")
+    tex_index = table_index(tex_rows, keys, "publication reviewed-science TeX")
+    authority = science["contrasts"]
+    if set(csv_index) != set(authority) or set(tex_index) != set(authority):
+        raise ManuscriptReadyError(
+            "publication reviewed-science metric inventory differs from authority"
+        )
+    intervention = science["active_passive_intervention_scope"]
+    limitation = science["current_science_scope_limitation"]
+    for key, expected in authority.items():
+        values = reviewed_publication_row(expected, intervention, limitation)
+        for rows, tex, label in (
+            (csv_index, False, "publication reviewed-science CSV"),
+            (tex_index, True, "publication reviewed-science TeX"),
+        ):
+            row = rows[key]
+            for field in REVIEWED_CONTRAST_COLUMNS:
+                require_table_value(
+                    row, field, values[field], f"{label} {key}", tex=tex
+                )
+
+
+def active_passive_publication_metrics(
+    science: dict[str, object],
+) -> dict[tuple[str, str], dict[str, object]]:
+    result: dict[tuple[str, str], dict[str, object]] = {}
+    for record in science["contrasts"].values():
+        if record["family"] != "active_passive":
+            continue
+        key = (f"{record['left']}/{record['right']}", str(record["metric"]))
+        result[key] = record
+    return result
+
+
+def validate_active_passive_summary_table(
+    root: Path, science: dict[str, object]
+) -> None:
+    """Reject stale fast-report values and passive-minus-active sign drift."""
+
+    expected = active_passive_publication_metrics(science)
+    if not expected:
+        raise ManuscriptReadyError(
+            "reviewed science has no active/passive scalar claim authority"
+        )
+    csv_rows = load_csv_table(
+        root / "tables/active_passive_summary.csv",
+        ACTIVE_PASSIVE_SUMMARY_COLUMNS,
+        "publication active/passive CSV",
+    )
+    tex_rows = load_tex_table(
+        root / "tables/active_passive_summary.tex",
+        ACTIVE_PASSIVE_SUMMARY_COLUMNS,
+        "publication active/passive TeX",
+    )
+    keys = ("pair", "metric")
+    csv_index = table_index(csv_rows, keys, "publication active/passive CSV")
+    tex_index = table_index(tex_rows, keys, "publication active/passive TeX")
+    if set(csv_index) != set(expected) or set(tex_index) != set(expected):
+        raise ManuscriptReadyError(
+            "publication active/passive summary inventory differs from reviewed science"
+        )
+    for key, record in expected.items():
+        available = record["available"] is True
+        difference = float(record["difference"]) if available else None
+        values = {
+            "pair": key[0],
+            "metric": key[1],
+            "active": record.get("left_mean"),
+            "passive": record.get("right_mean"),
+            "active_minus_passive": difference,
+            "passive_minus_active": (
+                -difference if difference is not None else None
+            ),
+            "combined_standard_error": record.get("combined_standard_error"),
+            "pooled_within_realization_standard_deviation": record.get(
+                "pooled_within_realization_standard_deviation"
+            ),
+            "standardized_effect": record.get("standardized_effect"),
+            "standardized_effect_scope": record.get("standardized_effect_scope"),
+            "signed_standardized_active_minus_passive_effect": record.get(
+                "signed_standardized_effect"
+            ),
+            "expected_direction": record.get("expected_direction"),
+            "direction_coherent": record.get("direction_coherent"),
+            "large_direction_coherent_effect": record.get(
+                "large_direction_coherent_effect"
+            ),
+            "result": record["result"],
+            "claim_eligible": record["claim_eligible"],
+            "claim_scope": record["claim_scope"],
+            "inference_scope": record["inference_scope"],
+            "authority": SCIENCE_AUTHORITY,
+            "release_authorizing": False,
+            "reason": record.get("reason"),
+        }
+        for rows, tex, label in (
+            (csv_index, False, "publication active/passive CSV"),
+            (tex_index, True, "publication active/passive TeX"),
+        ):
+            row = rows[key]
+            for field in ACTIVE_PASSIVE_SUMMARY_COLUMNS:
+                require_table_value(
+                    row, field, values[field], f"{label} {key}", tex=tex
+                )
+
+
+def robustness_publication_metrics(
+    science: dict[str, object],
+) -> dict[tuple[str, str], dict[str, object]]:
+    """Reconstruct the exact reviewed robustness rows rendered for publication."""
+
+    authority = science["contrasts"]
+    result: dict[tuple[str, str], dict[str, object]] = {}
+    for label, family, reference, variant in ROBUSTNESS_CONTRASTS:
+        contrast = f"{reference}_{variant}"
+        for metric, source_metric in ROBUSTNESS_METRICS:
+            source = authority.get((family, contrast, source_metric))
+            if not isinstance(source, dict):
+                raise ManuscriptReadyError(
+                    "reviewed science omits required robustness metric "
+                    f"{family}.{contrast}.{source_metric}"
+                )
+            available = source["available"] is True
+            left = float(source["left_mean"]) if available else None
+            right = float(source["right_mean"]) if available else None
+            difference = float(source["difference"]) if available else None
+            scale = (
+                max(abs(left), abs(right), 1.0e-300)
+                if left is not None and right is not None
+                else None
+            )
+            result[(label, metric)] = {
+                "contrast": label,
+                "family": family,
+                "reference": reference,
+                "variant": variant,
+                "metric": metric,
+                "reference_value": left,
+                "variant_value": right,
+                "variant_minus_reference": (
+                    right - left if left is not None and right is not None else None
+                ),
+                "signed_relative_difference": (
+                    (right - left) / scale
+                    if left is not None and right is not None and scale is not None
+                    else None
+                ),
+                "reviewed_left_minus_right": difference,
+                "combined_standard_error": source.get("combined_standard_error"),
+                "pooled_within_realization_standard_deviation": source.get(
+                    "pooled_within_realization_standard_deviation"
+                ),
+                "standardized_effect": source.get("standardized_effect"),
+                "standardized_effect_scope": source.get(
+                    "standardized_effect_scope"
+                ),
+                "signed_standardized_reference_minus_variant_effect": source.get(
+                    "signed_standardized_effect"
+                ),
+                "result": source["result"],
+                "claim_eligible": source["claim_eligible"],
+                "claim_scope": source["claim_scope"],
+                "inference_scope": source["inference_scope"],
+                "authority": SCIENCE_AUTHORITY,
+                "release_authorizing": False,
+                "reason": source.get("reason"),
+            }
+    return result
+
+
+def validate_robustness_summary_table(
+    root: Path, science: dict[str, object]
+) -> None:
+    """Reject diagnostic fallback values in claim-facing sensitivity summaries."""
+
+    expected = robustness_publication_metrics(science)
+    csv_rows = load_csv_table(
+        root / "tables/robustness_summary.csv",
+        ROBUSTNESS_SUMMARY_COLUMNS,
+        "publication robustness CSV",
+    )
+    tex_rows = load_tex_table(
+        root / "tables/robustness_summary.tex",
+        ROBUSTNESS_SUMMARY_COLUMNS,
+        "publication robustness TeX",
+    )
+    keys = ("contrast", "metric")
+    csv_index = table_index(csv_rows, keys, "publication robustness CSV")
+    tex_index = table_index(tex_rows, keys, "publication robustness TeX")
+    if set(csv_index) != set(expected) or set(tex_index) != set(expected):
+        raise ManuscriptReadyError(
+            "publication robustness summary inventory differs from reviewed science"
+        )
+    for key, values in expected.items():
+        for rows, tex, label in (
+            (csv_index, False, "publication robustness CSV"),
+            (tex_index, True, "publication robustness TeX"),
+        ):
+            row = rows[key]
+            for field in ROBUSTNESS_SUMMARY_COLUMNS:
+                require_table_value(
+                    row, field, values[field], f"{label} {key}", tex=tex
+                )
+
+
+def signed_work_expected_rows(
+    downstream: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    """Build the signed applied-ledger authority directly from bound diagnostics."""
+
+    rows: dict[str, dict[str, object]] = {}
+    for case_id in ALL_CASES:
+        item = require_dict(
+            downstream["analysis"].get(case_id), f"{case_id} completion analysis"
+        )
+        binding = verify_binding(item.get("diagnostics"), f"{case_id} diagnostics")
+        diagnostics = load_json(Path(str(binding["path"])), f"{case_id} diagnostics")
+        lf = nested(diagnostics, "windows.steady.lf_history")
+        lf = lf if isinstance(lf, dict) else {}
+        heat = lf.get("applied_heat_flux_work")
+        pressure = lf.get("applied_pressure_work")
+        heat = heat if isinstance(heat, dict) else None
+        pressure = pressure if isinstance(pressure, dict) else None
+        if heat is not None and heat.get("signed") is not True:
+            raise ManuscriptReadyError(
+                f"{case_id} applied heat-flux work lost signed semantics"
+            )
+        if pressure is not None and pressure.get("signed") is not True:
+            raise ManuscriptReadyError(
+                f"{case_id} applied pressure work lost signed semantics"
+            )
+        if heat is not None:
+            parallel = require_finite(
+                heat.get("parallel"), f"{case_id} applied heat-flux parallel work"
+            )
+            perpendicular = require_finite(
+                heat.get("perpendicular"),
+                f"{case_id} applied heat-flux perpendicular work",
+            )
+            total = require_finite(
+                heat.get("total"), f"{case_id} applied heat-flux total work"
+            )
+            require_close(
+                total,
+                parallel + perpendicular,
+                f"{case_id} applied heat-flux signed total",
+            )
+        else:
+            parallel = perpendicular = total = None
+        if pressure is not None:
+            pressure_total = require_finite(
+                pressure.get("total"), f"{case_id} applied pressure total work"
+            )
+            anisotropic = require_finite(
+                pressure.get("anisotropic"),
+                f"{case_id} applied pressure anisotropic work",
+            )
+        else:
+            pressure_total = anisotropic = None
+        caps = lf.get("heat_flux_cap_fractions")
+        caps = caps if isinstance(caps, dict) else {}
+        rows[case_id] = {
+            "case_id": case_id,
+            "availability": (
+                "available" if heat is not None or pressure is not None else "inconclusive"
+            ),
+            "diagnostics_provenance": "authenticated",
+            "applied_heat_flux_availability": (
+                "available" if heat is not None else "inconclusive"
+            ),
+            "applied_pressure_work_availability": (
+                "available" if pressure is not None else "inconclusive"
+            ),
+            "applied_ledgers_signed": (
+                True if heat is not None and pressure is not None else None
+            ),
+            "applied_heat_flux_parallel": parallel,
+            "applied_heat_flux_perpendicular": perpendicular,
+            "applied_heat_flux_total": total,
+            "applied_pressure_work_total": pressure_total,
+            "applied_pressure_work_anisotropic": anisotropic,
+            "cap_parallel_over_1": caps.get("parallel_over_1"),
+            "cap_parallel_over_10": caps.get("parallel_over_10"),
+            "cap_perpendicular_over_1": caps.get("perpendicular_over_1"),
+            "cap_perpendicular_over_10": caps.get("perpendicular_over_10"),
+            "semantics": SIGNED_WORK_SEMANTICS,
+        }
+    return rows
+
+
+def validate_signed_work_table(root: Path, downstream: dict[str, object]) -> None:
+    expected = signed_work_expected_rows(downstream)
+    csv_rows = load_csv_table(
+        root / "tables/signed_lf_cap_work_ledger.csv",
+        SIGNED_WORK_COLUMNS,
+        "publication signed-work CSV",
+    )
+    tex_rows = load_tex_table(
+        root / "tables/signed_lf_cap_work_ledger.tex",
+        SIGNED_WORK_COLUMNS,
+        "publication signed-work TeX",
+    )
+    csv_index = table_index(csv_rows, ("case_id",), "publication signed-work CSV")
+    tex_index = table_index(tex_rows, ("case_id",), "publication signed-work TeX")
+    expected_keys = {(case_id,) for case_id in ALL_CASES}
+    if set(csv_index) != expected_keys or set(tex_index) != expected_keys:
+        raise ManuscriptReadyError(
+            "publication signed-work ledger case inventory differs"
+        )
+    fields = (
+        "availability",
+        "diagnostics_provenance",
+        "applied_heat_flux_availability",
+        "applied_pressure_work_availability",
+        "applied_ledgers_signed",
+        "applied_heat_flux_parallel",
+        "applied_heat_flux_perpendicular",
+        "applied_heat_flux_total",
+        "applied_pressure_work_total",
+        "applied_pressure_work_anisotropic",
+        "cap_parallel_over_1",
+        "cap_parallel_over_10",
+        "cap_perpendicular_over_1",
+        "cap_perpendicular_over_10",
+        "semantics",
+    )
+    for case_id, values in expected.items():
+        key = (case_id,)
+        for rows, tex, label in (
+            (csv_index, False, "publication signed-work CSV"),
+            (tex_index, True, "publication signed-work TeX"),
+        ):
+            row = rows[key]
+            for field in fields:
+                expected_value = values[field]
+                if (
+                    not tex
+                    and isinstance(expected_value, (int, float))
+                    and not isinstance(expected_value, bool)
+                ):
+                    require_table_number(
+                        row,
+                        field,
+                        float(expected_value),
+                        f"{label} {case_id}",
+                    )
+                else:
+                    require_table_text(
+                        row,
+                        field,
+                        expected_value,
+                        f"{label} {case_id}",
+                        tex=tex,
+                    )
+    try:
+        report = (root / "report.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ManuscriptReadyError("cannot load publication report") from error
+    if SIGNED_WORK_REPORT_STATEMENT not in report:
+        raise ManuscriptReadyError(
+            "publication report loses signed applied-work semantics"
+        )
+
+
 def validate_publication(
     context: dict[str, object],
     downstream: dict[str, object],
@@ -786,6 +1779,10 @@ def validate_publication(
             f"publication omits or stale-binds required evidence: "
             f"missing={missing}, stale={stale}"
         )
+    validate_reviewed_contrast_table(root, science)
+    validate_active_passive_summary_table(root, science)
+    validate_robustness_summary_table(root, science)
+    validate_signed_work_table(root, downstream)
     return {
         "root": str(root),
         "manifest": manifest_binding,

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -69,6 +71,176 @@ def write_text(path: Path, value: str = "fixture\n") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(value, encoding="utf-8")
     return path
+
+
+def tex_escape(value: object) -> str:
+    text = str(value)
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "_": r"\_",
+        "#": r"\#",
+        "$": r"\$",
+        "{": r"\{",
+        "}": r"\}",
+    }
+    return "".join(replacements.get(character, character) for character in text)
+
+
+def write_publication_table(
+    gate,
+    directory: Path,
+    name: str,
+    columns: tuple[str, ...],
+    rows: list[dict[str, object]],
+) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    csv_buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        csv_buffer, fieldnames=columns, extrasaction="ignore", lineterminator="\n"
+    )
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(
+            {
+                column: gate.publication_text(row.get(column), csv_value=True)
+                for column in columns
+            }
+        )
+    write_text(directory / f"{name}.csv", csv_buffer.getvalue())
+
+    lines = [
+        r"\begin{tabular}{" + "l" * len(columns) + "}",
+        r"\hline",
+        " & ".join(tex_escape(column) for column in columns) + r" \\",
+        r"\hline",
+    ]
+    lines.extend(
+        " & ".join(
+            tex_escape(gate.publication_text(row.get(column)))
+            for column in columns
+        )
+        + r" \\"
+        for row in rows
+    )
+    lines.extend([r"\hline", r"\end{tabular}", ""])
+    write_text(directory / f"{name}.tex", "\n".join(lines))
+
+
+def replace_csv_cell(
+    path: Path,
+    keys: dict[str, str],
+    field: str,
+    value: object,
+) -> None:
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    matches = [
+        row for row in rows
+        if all(row.get(name) == expected for name, expected in keys.items())
+    ]
+    assert len(matches) == 1
+    matches[0][field] = str(value)
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def reviewed_metric(
+    metric: str, seed: int, *, active_passive: bool
+) -> dict[str, object]:
+    base = 1.0 + 0.1 * seed
+    left = base if active_passive else base + 0.25
+    right = base + 0.5 if active_passive else base
+    difference = left - right
+    pooled = 0.5
+    result = {
+        "metric": metric,
+        "available": True,
+        "difference": difference,
+        "combined_standard_error": 0.05,
+        "pooled_within_realization_standard_deviation": pooled,
+        "standardized_effect": abs(difference / pooled),
+        "standardized_effect_scope": "descriptive_within_realization",
+        "claim_scope": "descriptive_within_realization",
+    }
+    if active_passive:
+        result.update(
+            {
+                "active_mean": left,
+                "passive_mean": right,
+                "expected_direction": "active_lower",
+                "direction_coherent": True,
+                "large_direction_coherent_effect": True,
+            }
+        )
+    else:
+        result.update(
+            {
+                "left_mean": left,
+                "right_mean": right,
+                "difference_left_minus_right": difference,
+            }
+        )
+    return result
+
+
+def reviewed_families(gate) -> dict[str, object]:
+    families: dict[str, dict[str, object]] = {"active_passive": {}}
+    for pair_index, (active, passive) in enumerate(gate.ACTIVE_PASSIVE_PAIRS):
+        families["active_passive"][f"{active}_{passive}"] = {
+            "active": active,
+            "passive": passive,
+            "result": "pass",
+            "claim_eligible": True,
+            "reason": "reviewed active/passive fixture",
+            "intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+            "metrics": [
+                reviewed_metric(metric, pair_index * 3 + metric_index, active_passive=True)
+                for metric_index, metric in enumerate(
+                    ("abs_dp", "unstable_occupancy", "peak_alignment")
+                )
+            ],
+        }
+    for contrast_index, (_label, family, left, right) in enumerate(
+        gate.ROBUSTNESS_CONTRASTS
+    ):
+        contrasts = families.setdefault(family, {})
+        contrasts[f"{left}_{right}"] = {
+            "left": left,
+            "right": right,
+            "result": "available",
+            "claim_eligible": True,
+            "reason": "reviewed robustness fixture",
+            "metrics": [
+                reviewed_metric(
+                    source_metric,
+                    20 + contrast_index * len(gate.ROBUSTNESS_METRICS) + metric_index,
+                    active_passive=False,
+                )
+                for metric_index, (_metric, source_metric) in enumerate(
+                    gate.ROBUSTNESS_METRICS
+                )
+            ],
+        }
+    return families
+
+
+def science_authority(gate, fixture: dict[str, object]) -> dict[str, object]:
+    direct = json.loads(
+        (fixture["args"].science_output / "science.json").read_text(encoding="utf-8")
+    )
+    return {
+        "contrasts": gate.reviewed_contrast_authority(
+            direct, ACTIVE_PASSIVE_INTERVENTION_SCOPE
+        ),
+        "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
+    }
 
 
 def snapshot_files(root: Path) -> dict[str, bytes]:
@@ -155,15 +327,18 @@ def fixture_tree(
     )
 
     science_root = tmp_path / "analysis/composite-science"
+    direct_science_value = {
+        "record_type": gate.DIRECT_SCIENCE_RECORD_TYPE,
+        "authority": gate.SCIENCE_AUTHORITY,
+        "release_authorizing": False,
+        "result": science_result,
+        "selected_cases": list(gate.ALL_CASES),
+        "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
+        "families": reviewed_families(gate),
+    }
     direct_science = write_json(
-        science_root / "science.json",
-        {
-            "record_type": gate.DIRECT_SCIENCE_RECORD_TYPE,
-            "result": science_result,
-            "selected_cases": list(gate.ALL_CASES),
-            "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
-            "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
-        },
+        science_root / "science.json", direct_science_value
     )
     science_provenance = write_json(
         science_root / "provenance.json",
@@ -237,7 +412,33 @@ def fixture_tree(
     for case_id in gate.ALL_CASES:
         diagnostics = write_json(
             analysis / "cases" / case_id / "diagnostics.json",
-            {"record_type": "case-diagnostics", "case_id": case_id},
+            {
+                "record_type": "case-diagnostics",
+                "case_id": case_id,
+                "windows": {
+                    "steady": {
+                        "lf_history": {
+                            "applied_heat_flux_work": {
+                                "signed": True,
+                                "parallel": -0.25,
+                                "perpendicular": 0.1,
+                                "total": -0.15,
+                            },
+                            "applied_pressure_work": {
+                                "signed": True,
+                                "total": 0.75,
+                                "anisotropic": -0.2,
+                            },
+                            "heat_flux_cap_fractions": {
+                                "parallel_over_1": 0.2,
+                                "parallel_over_10": 0.02,
+                                "perpendicular_over_1": 0.1,
+                                "perpendicular_over_10": 0.01,
+                            },
+                        }
+                    }
+                },
+            },
         )
         downstream_analysis[case_id] = {"diagnostics": binding(diagnostics)}
 
@@ -280,8 +481,98 @@ def fixture_tree(
     )
 
     publication = workflow / "publication"
+    for relative in gate.REQUIRED_PUBLICATION_PRODUCTS:
+        write_text(publication / relative, f"{relative}\n")
+
+    contrast_authority = gate.reviewed_contrast_authority(
+        direct_science_value, ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    science_authority = {
+        "contrasts": contrast_authority,
+        "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
+    }
+    reviewed_rows = [
+        gate.reviewed_publication_row(
+            record,
+            ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+            CURRENT_SCIENCE_SCOPE_LIMITATION,
+        )
+        for record in contrast_authority.values()
+    ]
+    write_publication_table(
+        gate,
+        publication / "tables",
+        "reviewed_science_contrasts",
+        gate.REVIEWED_CONTRAST_COLUMNS,
+        reviewed_rows,
+    )
+    active_rows = []
+    for (pair, metric), record in gate.active_passive_publication_metrics(
+        science_authority
+    ).items():
+        difference = float(record["difference"])
+        active_rows.append(
+            {
+                "pair": pair,
+                "metric": metric,
+                "active": record["left_mean"],
+                "passive": record["right_mean"],
+                "active_minus_passive": difference,
+                "passive_minus_active": -difference,
+                "combined_standard_error": record["combined_standard_error"],
+                "pooled_within_realization_standard_deviation": record[
+                    "pooled_within_realization_standard_deviation"
+                ],
+                "standardized_effect": record["standardized_effect"],
+                "standardized_effect_scope": record["standardized_effect_scope"],
+                "signed_standardized_active_minus_passive_effect": record[
+                    "signed_standardized_effect"
+                ],
+                "expected_direction": record["expected_direction"],
+                "direction_coherent": record["direction_coherent"],
+                "large_direction_coherent_effect": record[
+                    "large_direction_coherent_effect"
+                ],
+                "result": record["result"],
+                "claim_eligible": record["claim_eligible"],
+                "claim_scope": record["claim_scope"],
+                "inference_scope": record["inference_scope"],
+                "authority": gate.SCIENCE_AUTHORITY,
+                "release_authorizing": False,
+                "reason": record["reason"],
+            }
+        )
+    write_publication_table(
+        gate,
+        publication / "tables",
+        "active_passive_summary",
+        gate.ACTIVE_PASSIVE_SUMMARY_COLUMNS,
+        active_rows,
+    )
+    write_publication_table(
+        gate,
+        publication / "tables",
+        "robustness_summary",
+        gate.ROBUSTNESS_SUMMARY_COLUMNS,
+        list(gate.robustness_publication_metrics(science_authority).values()),
+    )
+    signed_rows = list(
+        gate.signed_work_expected_rows({"analysis": downstream_analysis}).values()
+    )
+    write_publication_table(
+        gate,
+        publication / "tables",
+        "signed_lf_cap_work_ledger",
+        gate.SIGNED_WORK_COLUMNS,
+        signed_rows,
+    )
+    write_text(
+        publication / "report.md",
+        f"# Publication fixture\n\n{gate.SIGNED_WORK_REPORT_STATEMENT}\n",
+    )
     products = [
-        binding(write_text(publication / relative, f"{relative}\n"))
+        binding(publication / relative)
         for relative in gate.REQUIRED_PUBLICATION_PRODUCTS
     ]
     sources = [
@@ -378,6 +669,8 @@ def fixture_tree(
         "context": context,
         "corrected_science": corrected_science,
         "publication_manifest": publication_manifest_path,
+        "publication": publication,
+        "downstream_analysis": downstream_analysis,
         "completion": completion_path,
         "pointer": pointer_path,
         "hyper_root": hyper_root,
@@ -654,3 +947,95 @@ def test_incomplete_ct_coverage_is_rejected(gate, tmp_path, monkeypatch):
 
     with pytest.raises(gate.ManuscriptReadyError, match="coverage is incomplete"):
         gate.build_marker(fixture["args"])
+
+
+def test_reviewed_authority_rejects_signed_effect_in_magnitude_field(
+    gate, tmp_path
+):
+    fixture = fixture_tree(gate, tmp_path)
+    direct = json.loads(
+        (fixture["args"].science_output / "science.json").read_text(encoding="utf-8")
+    )
+    direct["families"]["active_passive"]["R02_R06"]["metrics"][0][
+        "standardized_effect"
+    ] = -1.0
+
+    with pytest.raises(
+        gate.ManuscriptReadyError, match="standardized-effect magnitude semantics"
+    ):
+        gate.reviewed_contrast_authority(
+            direct, ACTIVE_PASSIVE_INTERVENTION_SCOPE
+        )
+
+
+def test_reviewed_table_rejects_reverse_sign_projection(gate, tmp_path):
+    fixture = fixture_tree(gate, tmp_path)
+    replace_csv_cell(
+        fixture["publication"] / "tables/reviewed_science_contrasts.csv",
+        {
+            "family": "active_passive",
+            "contrast": "R02_R06",
+            "metric": "abs_dp",
+        },
+        "right_minus_left",
+        -0.5,
+    )
+
+    with pytest.raises(gate.ManuscriptReadyError, match="right_minus_left differs"):
+        gate.validate_reviewed_contrast_table(
+            fixture["publication"], science_authority(gate, fixture)
+        )
+
+
+def test_active_passive_summary_rejects_stale_or_reversed_claim_value(
+    gate, tmp_path
+):
+    fixture = fixture_tree(gate, tmp_path)
+    replace_csv_cell(
+        fixture["publication"] / "tables/active_passive_summary.csv",
+        {"pair": "R02/R06", "metric": "abs_dp"},
+        "active_minus_passive",
+        0.5,
+    )
+
+    with pytest.raises(
+        gate.ManuscriptReadyError, match="active_minus_passive differs"
+    ):
+        gate.validate_active_passive_summary_table(
+            fixture["publication"], science_authority(gate, fixture)
+        )
+
+
+def test_robustness_summary_rejects_unreviewed_diagnostic_substitution(
+    gate, tmp_path
+):
+    fixture = fixture_tree(gate, tmp_path)
+    replace_csv_cell(
+        fixture["publication"] / "tables/robustness_summary.csv",
+        {"contrast": "forcing A, beta=10", "metric": "unstable"},
+        "variant_value",
+        999.0,
+    )
+
+    with pytest.raises(gate.ManuscriptReadyError, match="variant_value differs"):
+        gate.validate_robustness_summary_table(
+            fixture["publication"], science_authority(gate, fixture)
+        )
+
+
+def test_signed_work_table_rejects_absolute_value_substitution(gate, tmp_path):
+    fixture = fixture_tree(gate, tmp_path)
+    replace_csv_cell(
+        fixture["publication"] / "tables/signed_lf_cap_work_ledger.csv",
+        {"case_id": "R02"},
+        "applied_heat_flux_total",
+        0.15,
+    )
+
+    with pytest.raises(
+        gate.ManuscriptReadyError, match="applied_heat_flux_total differs"
+    ):
+        gate.validate_signed_work_table(
+            fixture["publication"],
+            {"analysis": fixture["downstream_analysis"]},
+        )

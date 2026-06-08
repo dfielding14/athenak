@@ -40,15 +40,15 @@ ACTIVE_PASSIVE_PAIRS = (
     ("R05", "R09"),
 )
 ROBUSTNESS_CONTRASTS = (
-    ("forcing A, beta=10", "R02", "R04"),
-    ("forcing A, beta=100", "R03", "R05"),
-    ("forcing P, beta=10", "R06", "R08"),
-    ("forcing P, beta=100", "R07", "R09"),
-    ("beta, A Alfvenic", "R02", "R03"),
-    ("beta, A random", "R04", "R05"),
-    ("beta, P Alfvenic", "R06", "R07"),
-    ("beta, P random", "R08", "R09"),
-    ("forcing correlation", "R05", "R11"),
+    ("forcing A, beta=10", "forcing", "R02", "R04"),
+    ("forcing A, beta=100", "forcing", "R03", "R05"),
+    ("forcing P, beta=10", "forcing", "R06", "R08"),
+    ("forcing P, beta=100", "forcing", "R07", "R09"),
+    ("beta, A Alfvenic", "beta", "R02", "R03"),
+    ("beta, A random", "beta", "R04", "R05"),
+    ("beta, P Alfvenic", "beta", "R06", "R07"),
+    ("beta, P random", "beta", "R08", "R09"),
+    ("forcing correlation", "tcorr", "R05", "R11"),
 )
 HEAT_FLUX_CASES = ("R12", "R02", "R06", "R13")
 LIMITER_CASES = ("R14", "R15", "R03", "R07")
@@ -1060,6 +1060,92 @@ def science_record_errors(
                 metrics = contrast.get("metrics")
                 if not isinstance(metrics, list):
                     errors.append(f"{label} contrast {family}.{name} lacks metrics")
+                    continue
+                if family != "active_passive":
+                    continue
+                for metric_index, metric in enumerate(metrics):
+                    metric_label = (
+                        f"{label} contrast {family}.{name} metric {metric_index}"
+                    )
+                    if not isinstance(metric, dict):
+                        errors.append(f"{metric_label} is not an object")
+                        continue
+                    if metric.get("available") is not True:
+                        continue
+                    active_mean = as_float(
+                        metric.get("active_mean", metric.get("left_mean"))
+                    )
+                    passive_mean = as_float(
+                        metric.get("passive_mean", metric.get("right_mean"))
+                    )
+                    active_minus_passive = as_float(
+                        metric.get(
+                            "difference",
+                            metric.get("difference_left_minus_right"),
+                        )
+                    )
+                    standardized_effect = as_float(
+                        metric.get("standardized_effect")
+                    )
+                    if None in (
+                        active_mean,
+                        passive_mean,
+                        active_minus_passive,
+                        standardized_effect,
+                    ):
+                        errors.append(
+                            f"{metric_label} lacks finite active/passive effect fields"
+                        )
+                    elif not math.isclose(
+                        active_minus_passive,
+                        active_mean - passive_mean,
+                        rel_tol=1.0e-12,
+                        abs_tol=1.0e-12,
+                    ):
+                        errors.append(
+                            f"{metric_label} active-minus-passive difference is "
+                            "inconsistent with its means"
+                        )
+                    if metric.get("standardized_effect_scope") != (
+                        "descriptive_within_realization"
+                    ):
+                        errors.append(
+                            f"{metric_label} lacks the reviewed standardized-effect "
+                            "scope"
+                        )
+                    expected_direction = metric.get("expected_direction")
+                    if expected_direction not in {"active_lower", "active_higher"}:
+                        errors.append(
+                            f"{metric_label} lacks a valid expected direction"
+                        )
+                    direction_coherent = metric.get("direction_coherent")
+                    if not isinstance(direction_coherent, bool):
+                        errors.append(
+                            f"{metric_label} lacks boolean direction coherence"
+                        )
+                    elif active_minus_passive is not None:
+                        expected_coherence = (
+                            active_minus_passive < 0.0
+                            if expected_direction == "active_lower"
+                            else active_minus_passive > 0.0
+                        )
+                        if direction_coherent != expected_coherence:
+                            errors.append(
+                                f"{metric_label} direction coherence is inconsistent "
+                                "with active-minus-passive"
+                            )
+                    if not isinstance(
+                        metric.get("large_direction_coherent_effect"), bool
+                    ):
+                        errors.append(
+                            f"{metric_label} lacks boolean large-effect coherence"
+                        )
+                    if metric.get("claim_scope") != (
+                        "descriptive_within_realization"
+                    ):
+                        errors.append(
+                            f"{metric_label} lacks the reviewed claim scope"
+                        )
     gates = record.get("gates")
     if not isinstance(gates, list) or not gates:
         errors.append(f"{label} lacks required science gates")
@@ -1844,39 +1930,33 @@ def response_metric_value(
     return metric_value(case, metric) if scientific_response_eligible(data, case) else None
 
 
-def lf_ledger_metric(case: CaseRecord, kind: str) -> float | None:
-    """Return one developed-window applied-work ledger magnitude."""
+def lf_ledger_metric(
+    source: CaseRecord | dict[str, Any], kind: str
+) -> float | None:
+    """Return one developed-window signed applied-work total."""
 
     if kind == "heat_flux_work":
-        paths = (
-            "windows.steady.lf_history.applied_heat_flux_work.total",
-            "windows.steady.lf_history.applied_heat_flux_work.parallel",
-        )
+        ledger_path = "windows.steady.lf_history.applied_heat_flux_work"
     elif kind == "pressure_work":
-        paths = (
-            "windows.steady.lf_history.applied_pressure_work.total",
-            "windows.steady.lf_history.applied_pressure_work.anisotropic",
-        )
+        ledger_path = "windows.steady.lf_history.applied_pressure_work"
     else:
         raise PublicationError(f"unsupported LF ledger metric: {kind}")
-    values = [
-        abs(value)
-        for value in (as_float(nested(case.diagnostics, path)) for path in paths)
-        if value is not None
-    ]
-    return max(values) if values else None
+    diagnostics = source.diagnostics if isinstance(source, CaseRecord) else source
+    ledger = nested(diagnostics, ledger_path)
+    if not isinstance(ledger, dict) or ledger.get("signed") is not True:
+        return None
+    return as_float(ledger.get("total"))
 
 
 def response_lf_ledger_metric(
     data: PublicationData, case: CaseRecord, kind: str
 ) -> float | None:
-    """Return an LF ledger response only for a numerically healthy case."""
+    """Return authenticated signed LF/CGL work for a healthy reviewed case."""
 
-    return (
-        lf_ledger_metric(case, kind)
-        if scientific_response_eligible(data, case)
-        else None
-    )
+    if not scientific_response_eligible(data, case):
+        return None
+    diagnostics = authenticated_case_diagnostics(data, case.case_id)
+    return lf_ledger_metric(diagnostics, kind) if diagnostics is not None else None
 
 
 def final_time(case: CaseRecord) -> float | None:
@@ -2478,9 +2558,10 @@ def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
                 continue
             left = contrast.get("active", contrast.get("left"))
             right = contrast.get("passive", contrast.get("right"))
+            active_passive = family == "active_passive"
             intervention_scope = (
                 contrast.get("intervention_scope")
-                if family == "active_passive"
+                if active_passive
                 else None
             )
             metrics = contrast.get("metrics")
@@ -2489,6 +2570,28 @@ def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
             for metric in metrics:
                 if not isinstance(metric, dict):
                     continue
+                left_mean = metric.get(
+                    "active_mean" if active_passive else "left_mean",
+                    metric.get("left_mean"),
+                )
+                right_mean = metric.get(
+                    "passive_mean" if active_passive else "right_mean",
+                    metric.get("right_mean"),
+                )
+                left_minus_right = metric.get(
+                    "difference", metric.get("difference_left_minus_right")
+                )
+                parsed_difference = as_float(left_minus_right)
+                parsed_effect = as_float(metric.get("standardized_effect"))
+                signed_standardized_effect = (
+                    math.copysign(abs(parsed_effect), parsed_difference)
+                    if parsed_effect is not None
+                    and parsed_difference is not None
+                    and parsed_difference != 0.0
+                    else 0.0
+                    if parsed_effect is not None and parsed_difference == 0.0
+                    else None
+                )
                 rows.append({
                     "family": family,
                     "contrast": name,
@@ -2500,13 +2603,42 @@ def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
                     "claim_eligible": contrast.get("claim_eligible") is True,
                     "metric": metric.get("metric"),
                     "available": metric.get("available") is True,
-                    "left_mean": metric.get("left_mean"),
-                    "right_mean": metric.get("right_mean"),
-                    "difference": metric.get(
-                        "difference", metric.get("difference_left_minus_right")
+                    "left_mean": left_mean,
+                    "right_mean": right_mean,
+                    "left_minus_right": left_minus_right,
+                    "right_minus_left": (
+                        -parsed_difference
+                        if parsed_difference is not None else None
+                    ),
+                    "active_mean": left_mean if active_passive else None,
+                    "passive_mean": right_mean if active_passive else None,
+                    "active_minus_passive": (
+                        left_minus_right if active_passive else None
+                    ),
+                    "passive_minus_active": (
+                        -parsed_difference
+                        if active_passive and parsed_difference is not None
+                        else None
                     ),
                     "combined_standard_error": metric.get("combined_standard_error"),
+                    "pooled_within_realization_standard_deviation": metric.get(
+                        "pooled_within_realization_standard_deviation"
+                    ),
                     "standardized_effect": metric.get("standardized_effect"),
+                    "standardized_effect_scope": metric.get(
+                        "standardized_effect_scope"
+                    ),
+                    "signed_standardized_left_minus_right_effect": (
+                        signed_standardized_effect
+                    ),
+                    "signed_standardized_active_minus_passive_effect": (
+                        signed_standardized_effect if active_passive else None
+                    ),
+                    "expected_direction": metric.get("expected_direction"),
+                    "direction_coherent": metric.get("direction_coherent"),
+                    "large_direction_coherent_effect": metric.get(
+                        "large_direction_coherent_effect"
+                    ),
                     "intervention_estimand": (
                         intervention_scope.get("estimand")
                         if isinstance(intervention_scope, dict) else None
@@ -3926,7 +4058,9 @@ def mechanism_metric_value(
     }
     if metric in reconstructed_paths:
         return as_float(nested(ensemble, reconstructed_paths[metric]))
-    if metric == "reviewed_abs_dp_standardized_effect":
+    if metric == (
+        "reviewed_abs_dp_signed_standardized_active_minus_passive_effect"
+    ):
         effects = [
             row for active, passive in ACTIVE_PASSIVE_PAIRS
             if active == case_id
@@ -3934,7 +4068,12 @@ def mechanism_metric_value(
             if row.get("metric") == "abs_dp"
         ]
         return (
-            as_float(effects[0].get("standardized_effect")) if len(effects) == 1
+            as_float(
+                effects[0].get(
+                    "signed_standardized_active_minus_passive_effect"
+                )
+            )
+            if len(effects) == 1
             else None
         )
     raise PublicationError(f"unsupported mechanism metric: {metric}")
@@ -3951,13 +4090,15 @@ def coherent_direction_mechanism_rows(
         "applied_pressure_work_anisotropic",
         "reconstructed_anisotropic_stress_power_mean",
         "parallel_strain_rms_mean",
-        "reviewed_abs_dp_standardized_effect",
+        "reviewed_abs_dp_signed_standardized_active_minus_passive_effect",
     )
     rows: list[dict[str, object]] = []
     for metric in metrics:
         differences: dict[str, float | None] = {}
         for active, passive in ACTIVE_PASSIVE_PAIRS:
-            if metric == "reviewed_abs_dp_standardized_effect":
+            if metric == (
+                "reviewed_abs_dp_signed_standardized_active_minus_passive_effect"
+            ):
                 active_value = mechanism_metric_value(data, active, metric)
                 passive_value = 0.0 if active_value is not None else None
             else:
@@ -4114,29 +4255,41 @@ def render_active_passive(data: PublicationData, plt: Any, path: Path) -> None:
 
 
 def active_passive_rows(data: PublicationData) -> list[dict[str, object]]:
-    """Return active/passive developed-window summary rows."""
+    """Return reviewed active/passive claim rows without recomputing effects."""
 
-    rows: list[dict[str, object]] = []
-    for active, passive in ACTIVE_PASSIVE_PAIRS:
-        for metric in ("kinetic", "magnetic", "abs_dp", "unstable", "nu_eff"):
-            left = response_metric_value(data, data.cases[active], metric)
-            right = response_metric_value(data, data.cases[passive], metric)
-            rows.append({
-                "pair": f"{active}/{passive}",
-                "metric": metric,
-                "active": left,
-                "passive": right,
-                "passive_minus_active": (
-                    right - left if left is not None and right is not None else None
-                ),
-                "passive_over_active": (
-                    right / left
-                    if left is not None and right is not None and left != 0.0 else None
-                ),
-                "active_acceptance": acceptance_status(data, data.cases[active]),
-                "passive_acceptance": acceptance_status(data, data.cases[passive]),
-            })
-    return rows
+    return [
+        {
+            "pair": f"{row['left']}/{row['right']}",
+            "metric": row.get("metric"),
+            "active": row.get("active_mean"),
+            "passive": row.get("passive_mean"),
+            "active_minus_passive": row.get("active_minus_passive"),
+            "passive_minus_active": row.get("passive_minus_active"),
+            "combined_standard_error": row.get("combined_standard_error"),
+            "pooled_within_realization_standard_deviation": row.get(
+                "pooled_within_realization_standard_deviation"
+            ),
+            "standardized_effect": row.get("standardized_effect"),
+            "standardized_effect_scope": row.get("standardized_effect_scope"),
+            "signed_standardized_active_minus_passive_effect": row.get(
+                "signed_standardized_active_minus_passive_effect"
+            ),
+            "expected_direction": row.get("expected_direction"),
+            "direction_coherent": row.get("direction_coherent"),
+            "large_direction_coherent_effect": row.get(
+                "large_direction_coherent_effect"
+            ),
+            "result": row.get("result"),
+            "claim_eligible": row.get("claim_eligible"),
+            "claim_scope": row.get("claim_scope"),
+            "inference_scope": row.get("inference_scope"),
+            "authority": row.get("authority"),
+            "release_authorizing": row.get("release_authorizing"),
+            "reason": row.get("reason"),
+        }
+        for row in science_contrast_rows(data)
+        if row.get("family") == "active_passive"
+    ]
 
 
 def authenticated_science_response_case(
@@ -4243,6 +4396,9 @@ def reviewed_pair_effect_rows(
         and row.get("claim_eligible") is True
         and row.get("available") is True
         and as_float(row.get("standardized_effect")) is not None
+        and as_float(
+            row.get("signed_standardized_active_minus_passive_effect")
+        ) is not None
     ]
 
 
@@ -4305,7 +4461,10 @@ def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None
         if effects:
             effect_axis.barh(
                 list(range(len(effects))),
-                [float(row["standardized_effect"]) for row in effects],
+                [
+                    float(row["signed_standardized_active_minus_passive_effect"])
+                    for row in effects
+                ],
                 color=CASE_COLORS[active],
                 edgecolor="black",
                 linewidth=0.35,
@@ -4345,19 +4504,48 @@ def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None
 
 
 def robustness_rows(data: PublicationData) -> list[dict[str, object]]:
-    """Return the fixed measured-sensitivity contrast table."""
+    """Project reviewed forcing, beta, and correlation-time contrasts."""
 
     rows: list[dict[str, object]] = []
-    for label, reference, variant in ROBUSTNESS_CONTRASTS:
-        for metric in ("kinetic", "magnetic", "abs_dp", "unstable", "nu_eff"):
-            left = response_metric_value(data, data.cases[reference], metric)
-            right = response_metric_value(data, data.cases[variant], metric)
+    reviewed = {
+        (
+            row.get("family"),
+            row.get("left"),
+            row.get("right"),
+            row.get("metric"),
+        ): row
+        for row in science_contrast_rows(data)
+        if row.get("family") in {"forcing", "beta", "tcorr"}
+    }
+    metric_sources = (
+        ("kinetic", "kinetic"),
+        ("magnetic", "magnetic"),
+        ("abs_dp", "abs_dp"),
+        ("unstable", "unstable_occupancy"),
+        ("nu_eff", "nu_eff"),
+    )
+    for label, family, reference, variant in ROBUSTNESS_CONTRASTS:
+        for metric, source_metric in metric_sources:
+            source = reviewed.get((family, reference, variant, source_metric))
+            available = (
+                isinstance(source, dict)
+                and source.get("available") is True
+            )
+            left = (
+                as_float(source.get("left_mean"))
+                if available and source is not None else None
+            )
+            right = (
+                as_float(source.get("right_mean"))
+                if available and source is not None else None
+            )
             scale = (
                 max(abs(left), abs(right), 1.0e-300)
                 if left is not None and right is not None else None
             )
             rows.append({
                 "contrast": label,
+                "family": family,
                 "reference": reference,
                 "variant": variant,
                 "metric": metric,
@@ -4371,6 +4559,52 @@ def robustness_rows(data: PublicationData) -> list[dict[str, object]]:
                     if left is not None and right is not None and scale is not None
                     else None
                 ),
+                "reviewed_left_minus_right": (
+                    source.get("left_minus_right")
+                    if isinstance(source, dict) else None
+                ),
+                "combined_standard_error": (
+                    source.get("combined_standard_error")
+                    if isinstance(source, dict) else None
+                ),
+                "pooled_within_realization_standard_deviation": (
+                    source.get("pooled_within_realization_standard_deviation")
+                    if isinstance(source, dict) else None
+                ),
+                "standardized_effect": (
+                    source.get("standardized_effect")
+                    if isinstance(source, dict) else None
+                ),
+                "standardized_effect_scope": (
+                    source.get("standardized_effect_scope")
+                    if isinstance(source, dict) else None
+                ),
+                "signed_standardized_reference_minus_variant_effect": (
+                    source.get("signed_standardized_left_minus_right_effect")
+                    if isinstance(source, dict) else None
+                ),
+                "result": source.get("result") if isinstance(source, dict) else None,
+                "claim_eligible": (
+                    source.get("claim_eligible")
+                    if isinstance(source, dict) else None
+                ),
+                "claim_scope": (
+                    source.get("claim_scope")
+                    if isinstance(source, dict) else None
+                ),
+                "inference_scope": (
+                    source.get("inference_scope")
+                    if isinstance(source, dict) else None
+                ),
+                "authority": (
+                    source.get("authority")
+                    if isinstance(source, dict) else None
+                ),
+                "release_authorizing": (
+                    source.get("release_authorizing")
+                    if isinstance(source, dict) else None
+                ),
+                "reason": source.get("reason") if isinstance(source, dict) else None,
             })
     return rows
 
@@ -4381,7 +4615,7 @@ def render_robustness(data: PublicationData, plt: Any, colors: Any, path: Path) 
     metrics = ("kinetic", "magnetic", "abs_dp", "unstable", "nu_eff")
     rows = robustness_rows(data)
     values: list[list[float]] = []
-    for label, _, _ in ROBUSTNESS_CONTRASTS:
+    for label, _, _, _ in ROBUSTNESS_CONTRASTS:
         by_metric = {
             str(row["metric"]): row["signed_relative_difference"]
             for row in rows if row["contrast"] == label
@@ -4399,7 +4633,7 @@ def render_robustness(data: PublicationData, plt: Any, colors: Any, path: Path) 
     axis.set_xticks(range(len(metrics)), metrics)
     axis.set_yticks(
         range(len(ROBUSTNESS_CONTRASTS)),
-        [label for label, _, _ in ROBUSTNESS_CONTRASTS],
+        [label for label, _, _, _ in ROBUSTNESS_CONTRASTS],
     )
     axis.tick_params(top=True, bottom=False, labeltop=True, labelbottom=False)
     for row, values_row in enumerate(values):
@@ -4463,11 +4697,15 @@ def limiter_heat_flux_rows(data: PublicationData) -> list[dict[str, object]]:
                 "unstable_fraction": response_metric_value(data, case, "unstable"),
                 "nu_eff": response_metric_value(data, case, "nu_eff"),
                 "hard_bound_fraction": response_metric_value(data, case, "hard_bound"),
-                "applied_heat_flux_work_abs": response_lf_ledger_metric(
+                "applied_heat_flux_work_total": response_lf_ledger_metric(
                     data, case, "heat_flux_work"
                 ),
-                "applied_pressure_work_abs": response_lf_ledger_metric(
+                "applied_pressure_work_total": response_lf_ledger_metric(
                     data, case, "pressure_work"
+                ),
+                "applied_work_semantics": (
+                    "signed developed-window stage ledgers; pressure work is applied "
+                    "to flow"
                 ),
             })
     return rows
@@ -4561,8 +4799,8 @@ def render_limiter_heat_flux(data: PublicationData, plt: Any, path: Path) -> Non
         (
             ("abs_dp", r"$\langle|\Delta p|\rangle$"),
             ("unstable", "unstable fraction"),
-            ("heat_flux_work", r"$|W_q|$"),
-            ("pressure_work", r"$|W_{\Delta p}|$"),
+            ("heat_flux_work", r"$W_q$ (signed)"),
+            ("pressure_work", r"$W_{\Delta p}$ (signed, to flow)"),
         ),
         scan_tick_labels(data, HEAT_FLUX_CASES, "heat_flux"),
     )
@@ -7305,17 +7543,32 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
         (
             "active_passive_summary",
             [
-                "pair", "metric", "active", "passive", "passive_minus_active",
-                "passive_over_active", "active_acceptance", "passive_acceptance",
+                "pair", "metric", "active", "passive",
+                "active_minus_passive", "passive_minus_active",
+                "combined_standard_error",
+                "pooled_within_realization_standard_deviation",
+                "standardized_effect", "standardized_effect_scope",
+                "signed_standardized_active_minus_passive_effect",
+                "expected_direction", "direction_coherent",
+                "large_direction_coherent_effect", "result", "claim_eligible",
+                "claim_scope", "inference_scope", "authority",
+                "release_authorizing", "reason",
             ],
             active_passive_rows(data),
         ),
         (
             "robustness_summary",
             [
-                "contrast", "reference", "variant", "metric", "reference_value",
+                "contrast", "family", "reference", "variant", "metric",
+                "reference_value",
                 "variant_value", "variant_minus_reference",
                 "signed_relative_difference",
+                "reviewed_left_minus_right", "combined_standard_error",
+                "pooled_within_realization_standard_deviation",
+                "standardized_effect", "standardized_effect_scope",
+                "signed_standardized_reference_minus_variant_effect",
+                "result", "claim_eligible", "claim_scope", "inference_scope",
+                "authority", "release_authorizing", "reason",
             ],
             robustness_rows(data),
         ),
@@ -7326,7 +7579,8 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
                 "claim_scope", "limiter_hardwall", "limiter_nu_coll",
                 "strict_admissibility",
                 "abs_dp", "unstable_fraction", "nu_eff", "hard_bound_fraction",
-                "applied_heat_flux_work_abs", "applied_pressure_work_abs",
+                "applied_heat_flux_work_total", "applied_pressure_work_total",
+                "applied_work_semantics",
             ],
             limiter_heat_flux_rows(data),
         ),
@@ -7363,8 +7617,15 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
             [
                 "family", "contrast", "left", "right", "result",
                 "claim_eligible", "metric", "available", "left_mean",
-                "right_mean", "difference", "combined_standard_error",
-                "standardized_effect", "intervention_estimand",
+                "right_mean", "left_minus_right", "right_minus_left",
+                "active_mean", "passive_mean", "active_minus_passive",
+                "passive_minus_active", "combined_standard_error",
+                "pooled_within_realization_standard_deviation",
+                "standardized_effect", "standardized_effect_scope",
+                "signed_standardized_left_minus_right_effect",
+                "signed_standardized_active_minus_passive_effect",
+                "expected_direction", "direction_coherent",
+                "large_direction_coherent_effect", "intervention_estimand",
                 "intervention_enabled_components", "excluded_interpretation",
                 "intervention_declaration", "inference_scope",
                 "current_science_scope_disposition",
