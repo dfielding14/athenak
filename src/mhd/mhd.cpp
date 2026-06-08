@@ -7,6 +7,7 @@
 //! \brief implementation of MHD class constructor and assorted functions
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -165,6 +166,21 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
                   << "0, 1, false, or true" << std::endl;
         std::exit(EXIT_FAILURE);
       }
+    }
+    const char *diagnostic_time_environment =
+        std::getenv("ATHENAK_CGL_DIAGNOSE_NONFINITE_AFTER_TIME");
+    if (diagnostic_time_environment != nullptr) {
+      char *end = nullptr;
+      const Real value = std::strtod(diagnostic_time_environment, &end);
+      if (end == diagnostic_time_environment || *end != '\0' ||
+          !std::isfinite(value)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "ATHENAK_CGL_DIAGNOSE_NONFINITE_AFTER_TIME must be "
+                  << "a finite real number" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      diagnose_nonfinite_after_time = value;
     }
   }
 
