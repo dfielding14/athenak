@@ -443,7 +443,11 @@ def materialize_q023_final_bindings(
         expected_manifest_sha256=clean_candidate_manifest_sha256,
         expected_git_commit=expected_source_commit,
         expected_receipt_control_plane_version=installed_control_plane_version,
-        control_plane_dir=CONTROL_PLANE_SOURCE_DIR,
+        control_plane_dir=(
+            AUTHORIZED_ORION_ROOT
+            / "control_plane"
+            / installed_control_plane_version
+        ),
         authorized_pic_root=AUTHORIZED_ORION_ROOT,
         authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
     )
@@ -1506,7 +1510,10 @@ materialize_promotable_policy = materialize_q023_promotable_policy
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--materialize-final-bindings", action="store_true")
+    parser.add_argument("--materialize-promotable-policy", action="store_true")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--baseline-policy", type=Path)
+    parser.add_argument("--final-bindings", type=Path)
     parser.add_argument("--clean-candidate-manifest", type=Path)
     parser.add_argument("--clean-candidate-manifest-sha256")
     parser.add_argument("--expected-source-commit")
@@ -1517,6 +1524,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _parser().parse_args()
+    _require(
+        int(args.materialize_final_bindings)
+        + int(args.materialize_promotable_policy)
+        <= 1,
+        "select at most one Q023 materialization operation",
+    )
     if args.materialize_final_bindings:
         required = {
             "--output": args.output,
@@ -1542,9 +1555,39 @@ def main() -> None:
             q043_registered_matrix=args.q043_registered_matrix,
         )
         _write_json_exclusive(args.output, result)
+    elif args.materialize_promotable_policy:
+        required = {
+            "--output": args.output,
+            "--baseline-policy": args.baseline_policy,
+            "--final-bindings": args.final_bindings,
+        }
+        missing = [name for name, value in required.items() if value is None]
+        _require(not missing, f"Q023 promotable policy arguments missing: {missing}")
+        _, baseline_payload = q043._stable_regular_bytes(
+            args.baseline_policy,
+            label="Q023 baseline policy",
+        )
+        _, final_payload = q043._stable_regular_bytes(
+            args.final_bindings,
+            label="Q023 final bindings",
+        )
+        try:
+            baseline_policy = json.loads(baseline_payload)
+            final_bindings = json.loads(final_payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise PreparationError(
+                "Q023 promotable policy inputs are not valid JSON"
+            ) from error
+        result = materialize_q023_promotable_policy(
+            baseline_policy=baseline_policy,
+            final_bindings=final_bindings,
+        )
+        _write_json_exclusive(args.output, result)
     else:
         optional_values = (
             args.output,
+            args.baseline_policy,
+            args.final_bindings,
             args.clean_candidate_manifest,
             args.clean_candidate_manifest_sha256,
             args.expected_source_commit,

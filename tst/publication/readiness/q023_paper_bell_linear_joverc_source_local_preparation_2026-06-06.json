@@ -286,12 +286,12 @@
     "tst/publication/frontier_control_plane/run_control_plane.py": "bab2de7e25d61fd84c1f5a3ee08ef1563b106daa3210517ee717db1ca3e2f5fe",
     "tst/publication/frontier_control_plane/test_control_plane.py": "1601f829cdaef016ec373c176eadb2bfb85d4f09e4fc937b1073d8f8bc3ad3cc",
     "tst/publication/q023_registered_execution_linear_qualification_successor_v1.py": "050f2ce71f97b1ec9765c55bb308bbf8123cc4deb2f0dd668655ad4eda1cb676",
-    "tst/publication/q023_registered_launch_policy_preparation_successor_v1.py": "0c6ada361ef8831d34c5e13f45654509489b44dfd67ba2378c3d54a60d32b19d",
+    "tst/publication/q023_registered_launch_policy_preparation_successor_v1.py": "36af65cd6303267359adbf99ca05df02b7814041216ea7a3a3c7b07c9edb96e4",
     "tst/publication/q023_paper_bell_linear_joverc_host_harness.cpp": "18c551f1548f4e645bd4a02ce140d6f5d531908054ea235e42bbada0b9883a5b",
     "tst/publication/q043_registered_execution_raw_oracle_qualification_successor_v1.py": "4507de9d68fc580d8e038aecf54b5c046647e7e9f6ea07149fc4e85ca5548d81",
     "tst/publication/test_analyze_q023_paper_bell_linear_joverc.py": "5a7fb44d22902c910215f2a7b1eb6401fc62b3b3b7b5536c76c7192adb7a7e80",
     "tst/publication/test_q023_registered_execution_linear_qualification_successor_v1.py": "e4edcbb4db8803bf90d872fd48fcc289f779d28b437713c52650f2e7136e0ae0",
-    "tst/publication/test_q023_registered_launch_policy_preparation_successor_v1.py": "91e93fdfce79bb8b3b936920d37b641d625aa87f90c6ad8d9746b3f2cc1e9e35"
+    "tst/publication/test_q023_registered_launch_policy_preparation_successor_v1.py": "109bf4aea9c4e567625aea086ea84cfdf4eda63eb9768c6da63fa9c8961578b0"
   },
   "explicitly_not_claimed": [
     "completed_authoritative_Q043_foundation",

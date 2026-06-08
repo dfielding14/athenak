@@ -7,6 +7,7 @@ import copy
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -208,7 +209,7 @@ class Q023RegisteredLaunchPreparationTests(unittest.TestCase):
         }
         with patch.object(
             prep, "revalidate_clean_candidate", return_value=report
-        ), patch.object(
+        ) as revalidate, patch.object(
             prep.q043, "_stable_regular_bytes", side_effect=stable_bytes
         ), patch.object(
             prep.bell,
@@ -229,6 +230,17 @@ class Q023RegisteredLaunchPreparationTests(unittest.TestCase):
                 q043_registered_matrix=matrix_path,
             )
 
+        revalidate.assert_called_once_with(
+            manifest_path,
+            expected_manifest_sha256=manifest_sha256,
+            expected_git_commit=commit,
+            expected_receipt_control_plane_version=version,
+            control_plane_dir=(
+                prep.AUTHORIZED_ORION_ROOT / "control_plane" / version
+            ),
+            authorized_pic_root=prep.AUTHORIZED_ORION_ROOT,
+            authorized_project_home_root=prep.CANONICAL_PROJECT_HOME_ROOT,
+        )
         self.assertEqual(final["source_commit"], commit)
         self.assertEqual(
             final["source_archive_sha256"],
@@ -287,6 +299,44 @@ class Q023RegisteredLaunchPreparationTests(unittest.TestCase):
             self.assertEqual(path.stat().st_mode & 0o777, 0o444)
             with self.assertRaises(FileExistsError):
                 prep._write_json_exclusive(path, value)
+
+    def test_promotable_policy_cli_reads_bound_inputs_and_writes_exclusively(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            final = root / "final.json"
+            output = root / "reviewed.json"
+            baseline_value = {"baseline": True}
+            final_value = {"final": True}
+            baseline.write_text(json.dumps(baseline_value), encoding="utf-8")
+            final.write_text(json.dumps(final_value), encoding="utf-8")
+            baseline.chmod(0o444)
+            final.chmod(0o444)
+            successor = {"reviewed": True}
+            argv = [
+                "q023-preparation",
+                "--materialize-promotable-policy",
+                "--baseline-policy",
+                str(baseline),
+                "--final-bindings",
+                str(final),
+                "--output",
+                str(output),
+            ]
+            with patch.object(sys, "argv", argv), patch.object(
+                prep,
+                "materialize_q023_promotable_policy",
+                return_value=successor,
+            ) as materialize:
+                prep.main()
+            materialize.assert_called_once_with(
+                baseline_policy=baseline_value,
+                final_bindings=final_value,
+            )
+            self.assertEqual(json.loads(output.read_text()), successor)
+            self.assertEqual(output.stat().st_mode & 0o777, 0o444)
 
     def test_timeout_artifact_is_strict_and_fresh(self) -> None:
         final = {
