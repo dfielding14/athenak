@@ -33,6 +33,44 @@
 
 namespace {
 
+constexpr const char *kQ019RuntimeControllerBlock =
+    "q019_nonlinear_bell_runtime_controller_v1";
+constexpr int kQ019RuntimeControllerSchema = 1;
+constexpr int kQ019ResolutionStopReason = 1901;
+constexpr int kQ019BoxEdgeStopReason = 1902;
+constexpr int kQ019PilotCycleStopReason = 1903;
+constexpr int kQ019DiagnosticFailureReason = 1991;
+constexpr std::array<const char *, 15> kQ019RuntimeControllerImmutableParameters = {
+  "schema",
+  "authority",
+  "contract_id",
+  "cadence_status",
+  "stop_disposition",
+  "source_case_id",
+  "monitor_dt",
+  "box_edge_monitor_enabled",
+  "resolution_monitor_enabled",
+  "diagnostic_failure_stop_armed",
+  "resolution_stop_armed",
+  "resolution_stop_B_over_B0",
+  "box_edge_stop_armed",
+  "box_edge_stop_ppm",
+  "pilot_cycle_limit"
+};
+constexpr std::array<const char *, 11> kQ019RuntimeControllerMutableParameters = {
+  "runtime_resolution_samples",
+  "runtime_resolution_last_cycle",
+  "runtime_resolution_last_time",
+  "runtime_resolution_last_B_over_B0",
+  "runtime_resolution_max_B_over_B0",
+  "runtime_controller_triggered",
+  "runtime_controller_trigger_failure",
+  "runtime_controller_trigger_reason",
+  "runtime_controller_trigger_cycle",
+  "runtime_controller_trigger_time",
+  "runtime_controller_trigger_metric"
+};
+
 using q019_physics_first_nonlinear_bell_successor_v2::Add;
 using q019_physics_first_nonlinear_bell_successor_v2::
     AxisAlignedEigenmodeVelocityAt;
@@ -179,7 +217,8 @@ std::string Q019MatrixIdentityPayload(ParameterInput *pin,
                                       const std::string &q019_block) {
   std::vector<std::tuple<std::string, std::string, std::string>> entries;
   for (const auto &input_block : pin->block) {
-    if (input_block.block_name == "comment") continue;
+    if (input_block.block_name == "comment" ||
+        input_block.block_name == kQ019RuntimeControllerBlock) continue;
     for (const auto &input_line : input_block.line) {
       if (input_block.block_name == q019_block &&
           input_line.param_name == "matrix_identity_fingerprint") {
@@ -291,6 +330,69 @@ std::string Q019MatrixIdentityFingerprint(const std::string &payload) {
   fingerprint << std::hex << std::setfill('0');
   for (const std::uint32_t word : state) fingerprint << std::setw(8) << word;
   return fingerprint.str();
+}
+
+std::string Q019RuntimeControllerIdentityPayload(ParameterInput *pin) {
+  std::vector<std::pair<std::string, std::string>> entries;
+  std::array<bool, kQ019RuntimeControllerImmutableParameters.size()>
+      immutable_seen = {};
+  std::array<bool, kQ019RuntimeControllerMutableParameters.size()>
+      mutable_seen = {};
+  int fingerprint_count = 0;
+  for (const auto &input_block : pin->block) {
+    if (input_block.block_name != kQ019RuntimeControllerBlock) continue;
+    for (const auto &input_line : input_block.line) {
+      if (input_line.param_name == "controller_identity_fingerprint") {
+        ++fingerprint_count;
+        continue;
+      }
+      const auto immutable = std::find(
+          kQ019RuntimeControllerImmutableParameters.begin(),
+          kQ019RuntimeControllerImmutableParameters.end(),
+          input_line.param_name);
+      if (immutable != kQ019RuntimeControllerImmutableParameters.end()) {
+        const auto index = static_cast<std::size_t>(
+            immutable - kQ019RuntimeControllerImmutableParameters.begin());
+        if (immutable_seen[index]) {
+          Q019NonlinearFatal("Q019 runtime controller parameter is duplicated");
+        }
+        immutable_seen[index] = true;
+        entries.emplace_back(input_line.param_name, input_line.param_value);
+        continue;
+      }
+      const auto mutable_parameter = std::find(
+          kQ019RuntimeControllerMutableParameters.begin(),
+          kQ019RuntimeControllerMutableParameters.end(),
+          input_line.param_name);
+      if (mutable_parameter == kQ019RuntimeControllerMutableParameters.end()) {
+        Q019NonlinearFatal("Q019 runtime controller contains an unknown parameter");
+      }
+      const auto index = static_cast<std::size_t>(
+          mutable_parameter - kQ019RuntimeControllerMutableParameters.begin());
+      if (mutable_seen[index]) {
+        Q019NonlinearFatal("Q019 runtime controller parameter is duplicated");
+      }
+      mutable_seen[index] = true;
+    }
+  }
+  if (fingerprint_count != 1 ||
+      std::find(immutable_seen.begin(), immutable_seen.end(), false) !=
+          immutable_seen.end()) {
+    Q019NonlinearFatal("Q019 runtime controller immutable inventory drifted");
+  }
+  const int mutable_count = static_cast<int>(
+      std::count(mutable_seen.begin(), mutable_seen.end(), true));
+  if (mutable_count != 0 &&
+      mutable_count != static_cast<int>(mutable_seen.size())) {
+    Q019NonlinearFatal("Q019 runtime controller mutable inventory drifted");
+  }
+  std::sort(entries.begin(), entries.end());
+  std::ostringstream payload;
+  for (const auto &[parameter_name, value] : entries) {
+    payload << kQ019RuntimeControllerBlock << '/' << parameter_name
+            << '=' << value << '\n';
+  }
+  return payload.str();
 }
 
 struct Q019CanonicalMatrixIdentity {
@@ -507,6 +609,79 @@ Real q019_runtime_box_edge_last_time = 0.0;
 Real q019_runtime_box_edge_last_power_fraction = -1.0;
 Real q019_runtime_box_edge_max_power_fraction = -1.0;
 Real q019_runtime_box_edge_last_fluctuation_mean = -1.0;
+bool q019_runtime_controller_enabled = false;
+bool q019_runtime_controller_box_edge_monitor_enabled = false;
+bool q019_runtime_resolution_monitor_enabled = false;
+bool q019_runtime_diagnostic_failure_stop_armed = false;
+bool q019_runtime_resolution_stop_armed = false;
+bool q019_runtime_controller_box_edge_stop_armed = false;
+bool q019_runtime_controller_triggered = false;
+bool q019_runtime_controller_trigger_failure = false;
+int q019_runtime_controller_trigger_reason = 0;
+int q019_runtime_controller_trigger_cycle = 0;
+int q019_runtime_resolution_samples = 0;
+int q019_runtime_resolution_last_cycle = 0;
+int q019_runtime_controller_box_edge_stop_ppm = -1;
+int q019_runtime_controller_pilot_cycle_limit = -1;
+Real q019_runtime_background_b = 0.0;
+Real q019_runtime_controller_monitor_dt = 0.0;
+Real q019_runtime_resolution_stop_b_over_b0 = -1.0;
+Real q019_runtime_resolution_last_time = 0.0;
+Real q019_runtime_resolution_last_b_over_b0 = -1.0;
+Real q019_runtime_resolution_max_b_over_b0 = -1.0;
+Real q019_runtime_controller_trigger_time = 0.0;
+Real q019_runtime_controller_trigger_metric = -1.0;
+
+void Q019StoreRuntimeControllerState() {
+  if (!q019_runtime_controller_enabled || q019_runtime_pin == nullptr) return;
+  const std::string block = kQ019RuntimeControllerBlock;
+  q019_runtime_pin->SetInteger(block, "runtime_resolution_samples",
+                               q019_runtime_resolution_samples);
+  q019_runtime_pin->SetInteger(block, "runtime_resolution_last_cycle",
+                               q019_runtime_resolution_last_cycle);
+  q019_runtime_pin->SetReal(block, "runtime_resolution_last_time",
+                            q019_runtime_resolution_last_time);
+  q019_runtime_pin->SetReal(block, "runtime_resolution_last_B_over_B0",
+                            q019_runtime_resolution_last_b_over_b0);
+  q019_runtime_pin->SetReal(block, "runtime_resolution_max_B_over_B0",
+                            q019_runtime_resolution_max_b_over_b0);
+  q019_runtime_pin->SetBoolean(block, "runtime_controller_triggered",
+                               q019_runtime_controller_triggered);
+  q019_runtime_pin->SetBoolean(block, "runtime_controller_trigger_failure",
+                               q019_runtime_controller_trigger_failure);
+  q019_runtime_pin->SetInteger(block, "runtime_controller_trigger_reason",
+                               q019_runtime_controller_trigger_reason);
+  q019_runtime_pin->SetInteger(block, "runtime_controller_trigger_cycle",
+                               q019_runtime_controller_trigger_cycle);
+  q019_runtime_pin->SetReal(block, "runtime_controller_trigger_time",
+                            q019_runtime_controller_trigger_time);
+  q019_runtime_pin->SetReal(block, "runtime_controller_trigger_metric",
+                            q019_runtime_controller_trigger_metric);
+}
+
+void Q019RequestRuntimeControllerStop(Mesh *pm, const int reason,
+                                      const bool failure, const Real metric) {
+  if (pm == nullptr || pm->pgen == nullptr) {
+    Q019NonlinearFatal("Q019 runtime controller cannot address the driver");
+  }
+  const int completed_cycle = pm->ncycle + 1;
+  const Real completed_time = pm->time + pm->dt;
+  if (q019_runtime_controller_triggered) {
+    if (q019_runtime_controller_trigger_reason != reason ||
+        q019_runtime_controller_trigger_failure != failure) {
+      Q019NonlinearFatal("Q019 runtime controllers requested conflicting stops");
+    }
+    return;
+  }
+  q019_runtime_controller_triggered = true;
+  q019_runtime_controller_trigger_failure = failure;
+  q019_runtime_controller_trigger_reason = reason;
+  q019_runtime_controller_trigger_cycle = completed_cycle;
+  q019_runtime_controller_trigger_time = completed_time;
+  q019_runtime_controller_trigger_metric = metric;
+  Q019StoreRuntimeControllerState();
+  pm->pgen->RequestUserStop(reason, failure);
+}
 
 void Q019StoreBoxEdgeMonitorState() {
   if (q019_runtime_pin == nullptr) {
@@ -828,12 +1003,144 @@ void Q019RuntimeBoxEdgeMonitor(Mesh *pm) {
       fluctuation_sum/global_cells);
 }
 
+void Q019RuntimeResolutionMonitor(Mesh *pm) {
+  if (!q019_runtime_controller_enabled ||
+      !q019_runtime_resolution_monitor_enabled || pm == nullptr ||
+      pm->pmb_pack == nullptr || pm->pmb_pack->pmhd == nullptr) {
+    return;
+  }
+  const int completed_cycle = pm->ncycle + 1;
+  if (q019_runtime_box_edge_last_cycle != completed_cycle) return;
+
+  auto *pmbp = pm->pmb_pack;
+  auto &indcs = pm->mb_indcs;
+  auto &bcc = pmbp->pmhd->bcc0;
+  const int is = indcs.is;
+  const int js = indcs.js;
+  const int ks = indcs.ks;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int nmb = pmbp->nmb_thispack;
+  const int nkji = nx3*nx2*nx1;
+  const int nji = nx2*nx1;
+  Real maximum_b2 = 0.0;
+  Kokkos::parallel_reduce(
+      "q019_runtime_resolution_maximum_b2",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb*nkji),
+  KOKKOS_LAMBDA(const int idx, Real &value) {
+    const int m = idx/nkji;
+    const int k = (idx - m*nkji)/nji + ks;
+    const int j = (idx - m*nkji - (k - ks)*nji)/nx1 + js;
+    const int i = idx - m*nkji - (k - ks)*nji - (j - js)*nx1 + is;
+    const Real b1 = bcc(m, IBX, k, j, i);
+    const Real b2 = bcc(m, IBY, k, j, i);
+    const Real b3 = bcc(m, IBZ, k, j, i);
+    value = fmax(value, b1*b1 + b2*b2 + b3*b3);
+  }, Kokkos::Max<Real>(maximum_b2));
+  Kokkos::fence();
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &maximum_b2, 1, MPI_ATHENA_REAL, MPI_MAX,
+                MPI_COMM_WORLD);
+#endif
+  const Real sampled_b_over_b0 =
+      std::sqrt(maximum_b2)/q019_runtime_background_b;
+  if (!std::isfinite(sampled_b_over_b0) || sampled_b_over_b0 <= 0.0) {
+    if (q019_runtime_diagnostic_failure_stop_armed) {
+      Q019RequestRuntimeControllerStop(
+          pm, kQ019DiagnosticFailureReason, true, -1.0);
+    }
+    return;
+  }
+  ++q019_runtime_resolution_samples;
+  q019_runtime_resolution_last_cycle = completed_cycle;
+  q019_runtime_resolution_last_time = pm->time + pm->dt;
+  q019_runtime_resolution_last_b_over_b0 = sampled_b_over_b0;
+  q019_runtime_resolution_max_b_over_b0 = std::max(
+      q019_runtime_resolution_max_b_over_b0, sampled_b_over_b0);
+  Q019StoreRuntimeControllerState();
+  if (q019_runtime_resolution_stop_armed &&
+      sampled_b_over_b0 >= q019_runtime_resolution_stop_b_over_b0) {
+    Q019RequestRuntimeControllerStop(
+        pm, kQ019ResolutionStopReason, false, sampled_b_over_b0);
+  }
+}
+
 void Q019RuntimeDiagnostics(Mesh *pm) {
+  const int completed_cycle = pm == nullptr ? 0 : pm->ncycle + 1;
+  const int slots_before = q019_runtime_box_edge_completed_slots;
+  const int expected_crossings =
+      q019_runtime_controller_box_edge_monitor_enabled && pm != nullptr ?
+      BoxEdgeCrossedSlotCount(slots_before, q019_runtime_box_edge_monitor_dt,
+                              pm->time + pm->dt) : 0;
   Q019RuntimeBoxEdgeMonitor(pm);
+  if (q019_runtime_diagnostic_failure_stop_armed &&
+      q019_runtime_controller_box_edge_monitor_enabled &&
+      expected_crossings != 0 &&
+      q019_runtime_box_edge_last_cycle != completed_cycle) {
+    Q019RequestRuntimeControllerStop(
+        pm, kQ019DiagnosticFailureReason, true,
+        static_cast<Real>(q019_runtime_box_edge_last_status));
+    return;
+  }
+  Q019RuntimeResolutionMonitor(pm);
+  if (!q019_runtime_controller_enabled ||
+      q019_runtime_controller_triggered || pm == nullptr) {
+    return;
+  }
+  if (q019_runtime_controller_box_edge_stop_armed &&
+      q019_runtime_box_edge_last_cycle == completed_cycle) {
+    if (q019_runtime_box_edge_last_status ==
+        static_cast<int>(BoxEdgeDiagnosticStatus::valid)) {
+      const Real threshold = static_cast<Real>(
+          q019_runtime_controller_box_edge_stop_ppm)*1.0e-6;
+      if (q019_runtime_box_edge_last_power_fraction >= threshold) {
+        Q019RequestRuntimeControllerStop(
+            pm, kQ019BoxEdgeStopReason, false,
+            q019_runtime_box_edge_last_power_fraction);
+      }
+    } else {
+      Q019RequestRuntimeControllerStop(
+          pm, kQ019DiagnosticFailureReason, true,
+          static_cast<Real>(q019_runtime_box_edge_last_status));
+    }
+  }
+  if (!q019_runtime_controller_triggered &&
+      q019_runtime_controller_pilot_cycle_limit > 0 &&
+      completed_cycle >= q019_runtime_controller_pilot_cycle_limit) {
+    Q019RequestRuntimeControllerStop(
+        pm, kQ019PilotCycleStopReason, false,
+        static_cast<Real>(completed_cycle));
+  }
 }
 
 void Q019BoxEdgeHistory(HistoryData *pdata, Mesh *) {
   pdata->nhist = 12;
+  if (q019_runtime_controller_enabled) {
+    const char *labels[12] = {
+      "boxedge", "boxmax", "boxstat", "boxmask",
+      "resB", "resBmax", "rescyc", "ressamp",
+      "stopwhy", "stopcyc", "stoptime", "stopval"
+    };
+    for (int n = 0; n < pdata->nhist; ++n) {
+      pdata->label[n] = labels[n];
+      pdata->hdata[n] = 0.0;
+    }
+    if (global_variable::my_rank != 0) return;
+    pdata->hdata[0] = q019_runtime_box_edge_last_power_fraction;
+    pdata->hdata[1] = q019_runtime_box_edge_max_power_fraction;
+    pdata->hdata[2] = static_cast<Real>(q019_runtime_box_edge_last_status);
+    pdata->hdata[3] = static_cast<Real>(q019_runtime_box_edge_status_mask);
+    pdata->hdata[4] = q019_runtime_resolution_last_b_over_b0;
+    pdata->hdata[5] = q019_runtime_resolution_max_b_over_b0;
+    pdata->hdata[6] = static_cast<Real>(q019_runtime_resolution_last_cycle);
+    pdata->hdata[7] = static_cast<Real>(q019_runtime_resolution_samples);
+    pdata->hdata[8] = static_cast<Real>(q019_runtime_controller_trigger_reason);
+    pdata->hdata[9] = static_cast<Real>(q019_runtime_controller_trigger_cycle);
+    pdata->hdata[10] = q019_runtime_controller_trigger_time;
+    pdata->hdata[11] = q019_runtime_controller_trigger_metric;
+    return;
+  }
   pdata->label[0] = "boxedge";
   pdata->label[1] = "boxmax";
   pdata->label[2] = "boxcyc";
@@ -877,6 +1184,14 @@ void Q019FinalEvidenceStatus(ParameterInput *, Mesh *) {
             << q019_runtime_box_edge_last_power_fraction << std::endl;
   std::cout << "Q019_BOX_EDGE_MAX_POWER_FRACTION="
             << q019_runtime_box_edge_max_power_fraction << std::endl;
+  std::cout << "Q019_RUNTIME_RESOLUTION_SAMPLES="
+            << q019_runtime_resolution_samples << std::endl;
+  std::cout << "Q019_RUNTIME_RESOLUTION_MAX_B_OVER_B0="
+            << q019_runtime_resolution_max_b_over_b0 << std::endl;
+  std::cout << "Q019_RUNTIME_CONTROLLER_TRIGGERED="
+            << (q019_runtime_controller_triggered ? "true" : "false") << std::endl;
+  std::cout << "Q019_RUNTIME_CONTROLLER_TRIGGER_REASON="
+            << q019_runtime_controller_trigger_reason << std::endl;
   std::cout << "Q019_FINAL_EVIDENCE_STATUS=completed_not_acceptance_eligible"
             << std::endl;
   std::cout << "Q019_SATURATION_EVIDENCE_ELIGIBLE=false" << std::endl;
@@ -1631,11 +1946,196 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
                    finite_shell_speed);
   q019_runtime_dimension = dimension;
   q019_runtime_pin = pin;
+  q019_runtime_background_b = b_g;
+  q019_runtime_controller_enabled = pin->DoesParameterExist(
+      kQ019RuntimeControllerBlock, "schema");
+  q019_runtime_controller_box_edge_monitor_enabled = false;
+  q019_runtime_resolution_monitor_enabled = false;
+  q019_runtime_diagnostic_failure_stop_armed = false;
+  q019_runtime_resolution_stop_armed = false;
+  q019_runtime_controller_box_edge_stop_armed = false;
+  q019_runtime_controller_triggered = false;
+  q019_runtime_controller_trigger_failure = false;
+  q019_runtime_controller_trigger_reason = 0;
+  q019_runtime_controller_trigger_cycle = 0;
+  q019_runtime_resolution_samples = 0;
+  q019_runtime_resolution_last_cycle = 0;
+  q019_runtime_controller_box_edge_stop_ppm = -1;
+  q019_runtime_controller_pilot_cycle_limit = -1;
+  q019_runtime_controller_monitor_dt = 0.0;
+  q019_runtime_resolution_stop_b_over_b0 = -1.0;
+  q019_runtime_resolution_last_time = 0.0;
+  q019_runtime_resolution_last_b_over_b0 = -1.0;
+  q019_runtime_resolution_max_b_over_b0 = -1.0;
+  q019_runtime_controller_trigger_time = 0.0;
+  q019_runtime_controller_trigger_metric = -1.0;
+  if (q019_runtime_controller_enabled) {
+    const std::string controller = kQ019RuntimeControllerBlock;
+    if (pin->GetInteger(controller, "schema") != kQ019RuntimeControllerSchema) {
+      Q019NonlinearFatal("Q019 runtime controller schema drifted");
+    }
+    const std::string controller_authority =
+        pin->GetString(controller, "authority");
+    const bool runtime_regression =
+        controller_authority == "runtime_regression_only";
+    const bool excluded_pilot =
+        controller_authority == "excluded_pilot_only";
+    if (!runtime_regression && !excluded_pilot) {
+      Q019NonlinearFatal("Q019 runtime controller authority is invalid");
+    }
+    Q019RequireString(
+        pin, controller, "contract_id",
+        runtime_regression ? "q019-runtime-controller-v1-regression" :
+                             "q019-runtime-controller-v1-excluded-pilot");
+    Q019RequireString(
+        pin, controller, "cadence_status",
+        runtime_regression ? "accelerated_runtime_regression" :
+                             "excluded_pilot_candidate_not_frozen");
+    Q019RequireString(pin, controller, "stop_disposition",
+                      "accepted_guard_stop_or_diagnostic_failure");
+    Q019RequireString(pin, controller, "source_case_id", case_id);
+    const std::string controller_identity = Q019MatrixIdentityFingerprint(
+        Q019RuntimeControllerIdentityPayload(pin));
+    if (pin->GetString(controller, "controller_identity_fingerprint") !=
+        controller_identity) {
+      Q019NonlinearFatal("Q019 runtime controller identity fingerprint drifted");
+    }
+    q019_runtime_resolution_monitor_enabled =
+        pin->GetBoolean(controller, "resolution_monitor_enabled");
+    q019_runtime_controller_box_edge_monitor_enabled =
+        pin->GetBoolean(controller, "box_edge_monitor_enabled");
+    q019_runtime_diagnostic_failure_stop_armed =
+        pin->GetBoolean(controller, "diagnostic_failure_stop_armed");
+    q019_runtime_resolution_stop_armed =
+        pin->GetBoolean(controller, "resolution_stop_armed");
+    q019_runtime_controller_box_edge_stop_armed =
+        pin->GetBoolean(controller, "box_edge_stop_armed");
+    q019_runtime_resolution_stop_b_over_b0 =
+        pin->GetReal(controller, "resolution_stop_B_over_B0");
+    q019_runtime_controller_box_edge_stop_ppm =
+        pin->GetInteger(controller, "box_edge_stop_ppm");
+    q019_runtime_controller_monitor_dt =
+        pin->GetReal(controller, "monitor_dt");
+    q019_runtime_controller_pilot_cycle_limit =
+        pin->GetInteger(controller, "pilot_cycle_limit");
+    if (q019_runtime_resolution_monitor_enabled !=
+            q019_runtime_controller_box_edge_monitor_enabled ||
+        (q019_runtime_resolution_stop_armed &&
+         !q019_runtime_resolution_monitor_enabled) ||
+        (q019_runtime_controller_box_edge_stop_armed &&
+         !q019_runtime_controller_box_edge_monitor_enabled) ||
+        (q019_runtime_diagnostic_failure_stop_armed &&
+         !q019_runtime_resolution_monitor_enabled) ||
+        ((q019_runtime_resolution_stop_armed ||
+          q019_runtime_controller_box_edge_stop_armed) &&
+         !q019_runtime_diagnostic_failure_stop_armed) ||
+        !(std::isfinite(q019_runtime_controller_monitor_dt) &&
+          q019_runtime_controller_monitor_dt > 0.0) ||
+        (q019_runtime_resolution_stop_armed &&
+         !(std::isfinite(q019_runtime_resolution_stop_b_over_b0) &&
+           q019_runtime_resolution_stop_b_over_b0 > 1.0)) ||
+        (!q019_runtime_resolution_stop_armed &&
+         q019_runtime_resolution_stop_b_over_b0 != -1.0) ||
+        (q019_runtime_controller_box_edge_stop_armed &&
+         (q019_runtime_controller_box_edge_stop_ppm <= 0 ||
+          q019_runtime_controller_box_edge_stop_ppm > 1000000)) ||
+        (!q019_runtime_controller_box_edge_stop_armed &&
+         q019_runtime_controller_box_edge_stop_ppm != -1) ||
+        q019_runtime_controller_pilot_cycle_limit == 0 ||
+        q019_runtime_controller_pilot_cycle_limit < -1 ||
+        (runtime_regression &&
+         case_id != "q019-fr-runtime-initializer-ppc24-s0")) {
+      Q019NonlinearFatal("Q019 runtime controller configuration is invalid");
+    }
+    if (q019_runtime_resolution_stop_armed) {
+      Q019RequireClose(
+          "Q019 excluded-pilot resolution stop threshold",
+          q019_runtime_resolution_stop_b_over_b0,
+          pin->GetReal(block, "maximum_sampled_B_over_B0_before_resolution_stop"));
+    }
+    q019_runtime_resolution_samples = pin->GetOrAddInteger(
+        controller, "runtime_resolution_samples", 0);
+    q019_runtime_resolution_last_cycle = pin->GetOrAddInteger(
+        controller, "runtime_resolution_last_cycle", 0);
+    q019_runtime_resolution_last_time = pin->GetOrAddReal(
+        controller, "runtime_resolution_last_time", 0.0);
+    q019_runtime_resolution_last_b_over_b0 = pin->GetOrAddReal(
+        controller, "runtime_resolution_last_B_over_B0", -1.0);
+    q019_runtime_resolution_max_b_over_b0 = pin->GetOrAddReal(
+        controller, "runtime_resolution_max_B_over_B0", -1.0);
+    q019_runtime_controller_triggered = pin->GetOrAddBoolean(
+        controller, "runtime_controller_triggered", false);
+    q019_runtime_controller_trigger_failure = pin->GetOrAddBoolean(
+        controller, "runtime_controller_trigger_failure", false);
+    q019_runtime_controller_trigger_reason = pin->GetOrAddInteger(
+        controller, "runtime_controller_trigger_reason", 0);
+    q019_runtime_controller_trigger_cycle = pin->GetOrAddInteger(
+        controller, "runtime_controller_trigger_cycle", 0);
+    q019_runtime_controller_trigger_time = pin->GetOrAddReal(
+        controller, "runtime_controller_trigger_time", 0.0);
+    q019_runtime_controller_trigger_metric = pin->GetOrAddReal(
+        controller, "runtime_controller_trigger_metric", -1.0);
+    const bool empty_resolution_state =
+        q019_runtime_resolution_samples == 0 &&
+        q019_runtime_resolution_last_cycle == 0 &&
+        q019_runtime_resolution_last_time == 0.0 &&
+        q019_runtime_resolution_last_b_over_b0 == -1.0 &&
+        q019_runtime_resolution_max_b_over_b0 == -1.0;
+    const Real restart_time_tolerance =
+        static_cast<Real>(512.0)*std::numeric_limits<Real>::epsilon()*
+        std::max(static_cast<Real>(1.0), std::abs(pmy_mesh_->time));
+    const bool sampled_resolution_state =
+        q019_runtime_resolution_samples > 0 &&
+        q019_runtime_resolution_last_cycle > 0 &&
+        q019_runtime_resolution_last_cycle <= pmy_mesh_->ncycle &&
+        std::isfinite(q019_runtime_resolution_last_time) &&
+        q019_runtime_resolution_last_time >= 0.0 &&
+        q019_runtime_resolution_last_time <=
+            pmy_mesh_->time + restart_time_tolerance &&
+        std::isfinite(q019_runtime_resolution_last_b_over_b0) &&
+        q019_runtime_resolution_last_b_over_b0 > 0.0 &&
+        std::isfinite(q019_runtime_resolution_max_b_over_b0) &&
+        q019_runtime_resolution_max_b_over_b0 >=
+            q019_runtime_resolution_last_b_over_b0;
+    const bool empty_trigger_state =
+        !q019_runtime_controller_triggered &&
+        !q019_runtime_controller_trigger_failure &&
+        q019_runtime_controller_trigger_reason == 0 &&
+        q019_runtime_controller_trigger_cycle == 0 &&
+        q019_runtime_controller_trigger_time == 0.0 &&
+        q019_runtime_controller_trigger_metric == -1.0;
+    const bool trigger_reason_is_failure =
+        q019_runtime_controller_trigger_reason == kQ019DiagnosticFailureReason;
+    const bool trigger_reason_is_guard =
+        q019_runtime_controller_trigger_reason == kQ019ResolutionStopReason ||
+        q019_runtime_controller_trigger_reason == kQ019BoxEdgeStopReason ||
+        q019_runtime_controller_trigger_reason == kQ019PilotCycleStopReason;
+    const bool observed_trigger_state =
+        q019_runtime_controller_triggered &&
+        (trigger_reason_is_failure || trigger_reason_is_guard) &&
+        q019_runtime_controller_trigger_failure == trigger_reason_is_failure &&
+        q019_runtime_controller_trigger_cycle > 0 &&
+        q019_runtime_controller_trigger_cycle <= pmy_mesh_->ncycle &&
+        std::isfinite(q019_runtime_controller_trigger_time) &&
+        q019_runtime_controller_trigger_time >= 0.0 &&
+        q019_runtime_controller_trigger_time <=
+            pmy_mesh_->time + restart_time_tolerance &&
+        std::isfinite(q019_runtime_controller_trigger_metric);
+    const bool resolution_state =
+        empty_resolution_state || sampled_resolution_state;
+    const bool trigger_state = empty_trigger_state || observed_trigger_state;
+    if ((restart && !(resolution_state && trigger_state)) ||
+        (!restart && !(empty_resolution_state && empty_trigger_state))) {
+      Q019NonlinearFatal("Q019 runtime controller restart state drifted");
+    }
+  }
   q019_runtime_box_edge_monitor_enabled =
-      pin->GetBoolean(block, "runtime_box_edge_monitor_enabled");
+      pin->GetBoolean(block, "runtime_box_edge_monitor_enabled") ||
+      q019_runtime_controller_box_edge_monitor_enabled;
   q019_runtime_box_edge_stop_armed =
       pin->GetBoolean(block, "runtime_box_edge_stop_armed");
   q019_runtime_box_edge_monitor_dt =
+      q019_runtime_controller_enabled ? q019_runtime_controller_monitor_dt :
       pin->GetReal(block, "runtime_box_edge_monitor_dt");
   q019_runtime_box_edge_stop_ppm =
       pin->GetInteger(block, "runtime_box_edge_stop_ppm");
@@ -1643,8 +2143,10 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
         q019_runtime_box_edge_monitor_dt > 0.0)) {
     Q019NonlinearFatal("Q019 box-edge monitor cadence is invalid");
   }
-  Q019RequireClose("immutable Q019 box-edge monitor cadence",
-                   q019_runtime_box_edge_monitor_dt, 0.1);
+  if (!q019_runtime_controller_enabled) {
+    Q019RequireClose("immutable Q019 box-edge monitor cadence",
+                     q019_runtime_box_edge_monitor_dt, 0.1);
+  }
   if (q019_runtime_box_edge_stop_armed ||
       q019_runtime_box_edge_stop_ppm != -1) {
     Q019NonlinearFatal(
@@ -1706,7 +2208,7 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
                  expected_next_nominal_time) <= chronology_tolerance &&
         std::abs(q019_runtime_box_edge_last_nominal_time -
                  expected_last_nominal_time) <= chronology_tolerance;
-    const bool empty_state =
+    const bool unobserved_payload =
         q019_runtime_box_edge_completed_slots == 0 &&
         q019_runtime_box_edge_valid_samples == 0 &&
         q019_runtime_box_edge_skipped_slots == 0 &&
@@ -1719,9 +2221,12 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
         q019_runtime_box_edge_last_time == 0.0 &&
         q019_runtime_box_edge_last_power_fraction == -1.0 &&
         q019_runtime_box_edge_max_power_fraction == -1.0 &&
-        q019_runtime_box_edge_last_fluctuation_mean == -1.0 &&
-        pmy_mesh_->ncycle == 0 &&
-        std::abs(pmy_mesh_->time) <= chronology_tolerance;
+        q019_runtime_box_edge_last_fluctuation_mean == -1.0;
+    const bool unobserved_state =
+        unobserved_payload &&
+        (!q019_runtime_box_edge_monitor_enabled ||
+         pmy_mesh_->time + chronology_tolerance <
+             q019_runtime_box_edge_next_nominal_time);
     const bool maximum_state =
         (q019_runtime_box_edge_valid_samples == 0 &&
          q019_runtime_box_edge_max_power_fraction == -1.0) ||
@@ -1776,40 +2281,44 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
         maximum_state &&
         (valid_metric_state || zero_fluctuation_state ||
          other_unavailable_state);
-    if (!(schedule_state && (empty_state || observed_state))) {
+    if (!(schedule_state && (unobserved_state || observed_state))) {
       Q019NonlinearFatal("Q019 box-edge monitor restart chronology drifted");
     }
   } else {
-    if (pin->GetInteger(block, "runtime_box_edge_monitor_schema") != 2 ||
+    if (!q019_runtime_controller_enabled &&
+        (pin->GetInteger(block, "runtime_box_edge_monitor_schema") != 2 ||
         pin->GetInteger(block, "runtime_box_edge_monitor_last_cycle") != 0 ||
         pin->GetInteger(block, "runtime_box_edge_monitor_completed_slots") != 0 ||
         pin->GetInteger(block, "runtime_box_edge_monitor_valid_samples") != 0 ||
         pin->GetInteger(block, "runtime_box_edge_monitor_skipped_slots") != 0 ||
         pin->GetInteger(block, "runtime_box_edge_monitor_last_status") !=
             static_cast<int>(BoxEdgeDiagnosticStatus::not_sampled) ||
-        pin->GetInteger(block, "runtime_box_edge_monitor_status_mask") != 0) {
+        pin->GetInteger(block, "runtime_box_edge_monitor_status_mask") != 0)) {
       Q019NonlinearFatal("Q019 box-edge monitor initial integer state drifted");
     }
-    Q019RequireClose("initial box-edge next nominal time",
-                     pin->GetReal(block, "runtime_box_edge_monitor_next_nominal_time"),
-                     q019_runtime_box_edge_monitor_dt);
-    Q019RequireClose("initial box-edge last nominal time",
-                     pin->GetReal(block, "runtime_box_edge_monitor_last_nominal_time"),
-                     -1.0);
-    Q019RequireClose("initial box-edge last prior time",
-                     pin->GetReal(block, "runtime_box_edge_monitor_last_prior_time"),
-                     0.0);
-    Q019RequireClose("initial box-edge last time",
-                     pin->GetReal(block, "runtime_box_edge_monitor_last_time"), 0.0);
-    Q019RequireClose("initial box-edge last power fraction",
-                     pin->GetReal(block, "runtime_box_edge_monitor_last_power_fraction"),
-                     -1.0);
-    Q019RequireClose("initial box-edge maximum power fraction",
-                     pin->GetReal(block, "runtime_box_edge_monitor_max_power_fraction"),
-                     -1.0);
-    Q019RequireClose("initial box-edge fluctuation mean",
-                     pin->GetReal(block, "runtime_box_edge_monitor_last_fluctuation_mean"),
-                     -1.0);
+    if (!q019_runtime_controller_enabled) {
+      Q019RequireClose(
+          "initial box-edge next nominal time",
+          pin->GetReal(block, "runtime_box_edge_monitor_next_nominal_time"),
+          q019_runtime_box_edge_monitor_dt);
+      Q019RequireClose(
+          "initial box-edge last nominal time",
+          pin->GetReal(block, "runtime_box_edge_monitor_last_nominal_time"), -1.0);
+      Q019RequireClose(
+          "initial box-edge last prior time",
+          pin->GetReal(block, "runtime_box_edge_monitor_last_prior_time"), 0.0);
+      Q019RequireClose("initial box-edge last time",
+                       pin->GetReal(block, "runtime_box_edge_monitor_last_time"), 0.0);
+      Q019RequireClose(
+          "initial box-edge last power fraction",
+          pin->GetReal(block, "runtime_box_edge_monitor_last_power_fraction"), -1.0);
+      Q019RequireClose(
+          "initial box-edge maximum power fraction",
+          pin->GetReal(block, "runtime_box_edge_monitor_max_power_fraction"), -1.0);
+      Q019RequireClose(
+          "initial box-edge fluctuation mean",
+          pin->GetReal(block, "runtime_box_edge_monitor_last_fluctuation_mean"), -1.0);
+    }
     q019_runtime_box_edge_next_nominal_time =
         q019_runtime_box_edge_monitor_dt;
     q019_runtime_box_edge_last_nominal_time = -1.0;
@@ -1827,11 +2336,17 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
     q019_runtime_box_edge_last_fluctuation_mean = -1.0;
   }
   Q019StoreBoxEdgeMonitorState();
+  Q019StoreRuntimeControllerState();
   user_work_in_loop = true;
   user_work_in_loop_func = Q019RuntimeDiagnostics;
   user_hist = true;
   user_hist_func = Q019BoxEdgeHistory;
   pgen_final_func = Q019FinalEvidenceStatus;
+
+  if (restart && q019_runtime_controller_triggered) {
+    RequestUserStop(q019_runtime_controller_trigger_reason,
+                    q019_runtime_controller_trigger_failure);
+  }
 
   if (restart) return;
 
