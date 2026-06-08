@@ -29,6 +29,7 @@ void MHD::DiagnoseNonfiniteCGLState(int stage, const char *operation,
                                    const char *phase, const char *sweep,
                                    const char *representation,
                                    DvceArray5D<Real> state) {
+  if (pmy_pack->pmesh->time < diagnose_nonfinite_after_time) return;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is;
   const int js = indcs.js;

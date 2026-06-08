@@ -150,6 +150,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   if (peos->eos_data.is_cgl) {
     diagnose_nonfinite_rk_update =
         pin->GetOrAddBoolean("mhd", "cgl_diagnose_nonfinite_rk_update", false);
+    diagnose_nonfinite_after_time =
+        pin->GetOrAddReal("mhd", "cgl_diagnose_nonfinite_after_time", -1.0);
     const char *diagnostic_environment =
         std::getenv("ATHENAK_CGL_DIAGNOSE_NONFINITE_RK_UPDATE");
     if (diagnostic_environment != nullptr) {
