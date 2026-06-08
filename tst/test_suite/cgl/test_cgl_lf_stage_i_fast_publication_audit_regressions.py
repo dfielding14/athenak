@@ -2474,6 +2474,19 @@ def material_diagnostics(case_id: str) -> dict[str, object]:
                     "anisotropic_stress_power_integral": -1.2 - offset,
                 },
             },
+            "pressure_balance": {
+                "available": True,
+                "snapshot_count": 3,
+                "correlation_mean": -0.9 + offset,
+                "normalized_residual_variance_mean": 0.1 + offset,
+            },
+            "spectral_scalar_diagnostics": {
+                "compressive_velocity_power_fraction": {
+                    "available": True,
+                    "snapshot_count": 3,
+                    "fraction_mean": 0.2 - offset,
+                },
+            },
             "heat_flux_transport_proxy": {
                 "available": True,
                 "snapshot_count": 3,
@@ -3324,6 +3337,15 @@ def test_final_evidence_tables_preserve_semantics_and_fail_closed(
     assert directions["parallel_strain_rms_mean"]["descriptive_direction"] == (
         "active_lt_passive"
     )
+    assert directions["pressure_balance_correlation"]["descriptive_direction"] == (
+        "active_lt_passive"
+    )
+    assert directions[
+        "pressure_balance_normalized_residual_variance"
+    ]["descriptive_direction"] == "active_lt_passive"
+    assert directions[
+        "compressive_velocity_power_fraction"
+    ]["descriptive_direction"] == "active_gt_passive"
     assert directions["c_b2_full_window_mean"]["descriptive_direction"] == "equal"
     assert directions[
         "reviewed_abs_dp_signed_standardized_active_minus_passive_effect"

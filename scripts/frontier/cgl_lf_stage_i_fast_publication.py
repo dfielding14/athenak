@@ -4055,6 +4055,16 @@ def mechanism_metric_value(
         "parallel_strain_rms_mean": (
             "pressure_work_decomposition.parallel_strain_rms_mean"
         ),
+        "pressure_balance_correlation": (
+            "pressure_balance.correlation_mean"
+        ),
+        "pressure_balance_normalized_residual_variance": (
+            "pressure_balance.normalized_residual_variance_mean"
+        ),
+        "compressive_velocity_power_fraction": (
+            "spectral_scalar_diagnostics."
+            "compressive_velocity_power_fraction.fraction_mean"
+        ),
     }
     if metric in reconstructed_paths:
         return as_float(nested(ensemble, reconstructed_paths[metric]))
@@ -4090,6 +4100,9 @@ def coherent_direction_mechanism_rows(
         "applied_pressure_work_anisotropic",
         "reconstructed_anisotropic_stress_power_mean",
         "parallel_strain_rms_mean",
+        "pressure_balance_correlation",
+        "pressure_balance_normalized_residual_variance",
+        "compressive_velocity_power_fraction",
         "reviewed_abs_dp_signed_standardized_active_minus_passive_effect",
     )
     rows: list[dict[str, object]] = []
