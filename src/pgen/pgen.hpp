@@ -81,6 +81,8 @@ class ProblemGenerator {
                                                     const bool restart);
   void Q007PaperCRSILinearPreparation(ParameterInput *pin, const bool restart);
   void Q007PaperCRPAILinearPreparation(ParameterInput *pin, const bool restart);
+  void Q019PhysicsFirstNonlinearBellSuccessorV2(ParameterInput *pin,
+                                                const bool restart);
   void Q023PaperBellLinear(ParameterInput *pin, const bool restart);
   void Q023PaperBellLinearJOverC(ParameterInput *pin, const bool restart);
   void Q043BellCurrentVolumeAware(ParameterInput *pin, const bool restart);

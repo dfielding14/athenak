@@ -1,0 +1,399 @@
+# Q019 physics-first nonlinear Bell candidate. No execution authority.
+
+<comment>
+problem = q019-fr-fiducial-riemann-hlld-s0 source-local candidate not authorized
+
+<job>
+basename = q019-fr-fiducial-riemann-hlld-s0
+
+<mesh>
+nghost = 2
+nx1 = 1024
+x1min = 0
+x1max = 8
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 512
+x2min = 0
+x2max = 4
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0
+x3max = 1
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+refinement = none
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.20000000000000001
+nlim = -1
+tlim = 12
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+gamma = 1.6666666666666667
+
+<particles>
+particle_type = cosmic_ray
+ppc = 48
+pusher = boris_tsc
+nspecies = 1
+cr_distribution = random
+deposit_moments = true
+deposit_order = 2
+deposit_qscale = 3.8146972656249998e-12
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_coeff = 1
+couple_moments_energy_coeff = 1
+cr_vx0 = 418.87902047863906
+cr_vy0 = 0
+cr_vz0 = 0
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_enable_2d3v = true
+pic_cr_light_speed = 100000000
+pic_cr_initial_state = velocity
+pic_cr_hall_mode = off
+pic_wave_damping_mode = off
+pic_deltaf_mode = off
+pic_expanding_box_mode = off
+pic_max_cell_cross = 2
+pic_theta_max = 0.29999999999999999
+pic_load_balance_cost_per_particle = 1
+pic_sort_interval = 10
+pic_intermediate_arrays = auto
+pic_random_seed = 29001
+
+<species0>
+mass = 1
+charge = 10000
+vx0 = 418.87902047863906
+vy0 = 0
+vz0 = 0
+
+<problem>
+pgen_name = q019_physics_first_nonlinear_bell_successor_v2
+user_work_in_loop = true
+user_hist = true
+
+<q019_physics_first_nonlinear_bell_successor_v2>
+case_id = q019-fr-fiducial-riemann-hlld-s0
+campaign_id = Q019-FR-ISOTROPIC-SHELL-ONSET-CANDIDATE-NONSHOCK-V4
+branch = finite_rigidity_self_consistent
+role = finite_rigidity_numerical_or_noise_control
+dimension = 2
+seed_topology = shared_spectrum_only
+finite_sampling_mode = cell_centered_nested_haar_octahedral_packets
+high_sampling_mode = not_applicable
+high_position_noise_reference_case_id = not_applicable
+matrix_identity_fingerprint = ae6177113ef277401b7abdba71f8fd12c149b679f0ab4c666b4e94459d3b282b
+runtime_identity_checksum_status = sha256_cryptographic_immutable_runtime_semantics_bound_by_compiled_registry
+external_sha256_execution_receipt_required = true
+external_sha256_execution_receipt_bound = false
+deck_role = source_local_physics_first_candidate_not_authorized
+source_lineage = hardened_control_plane_q043_then_corrected_q023_then_q019_v4
+matrix_scope = physics_first_preproduction_design_successor_v4
+domain_time_status = engineering_candidate_pending_excluded_resource_and_window_pilots
+axis_alignment = B0_parallel_JCR_parallel_x1
+rho = 1
+pressure = 1
+b_g = 1
+u_a = 1
+wavelength = 1
+k0 = 6.2831853071795862
+epsilon = 0.0023873241463784303
+omega = 10000
+k0_rg0 = 8
+rho_cr_over_rho0 = 3.0000000000000001e-06
+species_mass = 1
+n_cr = 3.0000000000000001e-06
+applicability_scope = similarity_scaled_equal_cr_background_qom_mhd_scale_and_R_explicit_applicability_review_pending_not_strong_shock_mapping
+strong_shock_applicability_authorized = false
+no_hall_applicability = bounded_linear_correction_candidate_pending_review_not_accepted
+no_hall_applicability_accepted = false
+nonlinear_no_hall_applicability_status = fail_closed_pending_registered_local_diagnostics_thresholds_and_external_review
+evolving_local_hall_applicability_diagnostics_complete = false
+bounded_hall_omission_candidate = true
+bounded_hall_omission_review_complete = false
+mhd_resolved_scale_applicability_accepted = false
+R_much_less_than_one_applicability_accepted = false
+no_hall_mapping_basis = equal_similarity_scaled_cr_background_qom_with_exact_Bai_R_k0di_Lambda_resolved_scale_and_signed_Bai_linear_reduction
+species_q_over_mc_matches_background = true
+charge_density_ratio_equal_background_qom = 2.9999910000270001e-06
+hall_parameter_equal_background_qom = 0.0012566332915360425
+hall_parameter_from_current = 0.0012566332915360425
+background_q_over_mc_reference = 10000
+background_ion_gyrofrequency = 10000
+background_ion_inertial_length = 0.0001
+k0_background_ion_inertial_length = 0.00062831853071795862
+hall_parameter_over_twice_k0_di = 0.99999700000899994
+hall_order_unity_reference_margin = 795.77710278362315
+hall_order_unity_reference = 1
+bai_hall_linear_factor = 1.0000003947818072
+bai_hall_growth_rate_fractional_shift = -1.9739084511360971e-07
+bai_hall_wavenumber_fractional_shift = -3.9478165136941357e-07
+bai_hall_growth_rate_reduction_factor = 0.99999980260915489
+bai_hall_wavenumber_reduction_factor = 0.99999960521834863
+minimum_active_dx_over_background_di = 78.125
+no_subion_cell_scale_envelope_satisfied = true
+background_q_over_mc_at_lambda_equal_one_reference = 12.566332915360427
+cr_inertia_parameter = 3.0000000000000001e-06
+cr_momentum_loading_parameter = 0.0012566370614359172
+cr_rms_speed_kinetic_loading_proxy_to_background_magnetic_energy = 486.86806586317743
+energy_loading_regime = isotropic_shell_plus_drift_energy_accounted_periodic_system
+energy_loading_gate_status = unqualified_requires_coupled_response_grid_conservation_and_saturation_review
+energy_loading_grid_review_complete = false
+universal_saturation_inference_authorized = false
+feedback_force_parameter = 2
+positive_finite_loading_accounting_satisfied = true
+eigenmode_amplitude = 9.9999999999999995e-07
+broadband_amplitude = 2.4999999999999999e-07
+separated_long_mode_amplitude = 0
+finite_shell_speed = 12732.395447351628
+characteristic_shell_p_iso_over_m = 12732.395447351628
+nominal_rg0 = 1.2732395447351628
+initial_nominal_rg0_over_max_active_dx = 162.97466172610083
+required_initial_rg0_over_max_active_dx = 8
+preregistered_nonlinear_onset_Bperp_rms_over_B0 = 0
+resolution_design_maximum_sampled_B_over_B0 = 0
+maximum_sampled_B_over_B0_before_resolution_stop = 20.371832715762604
+common_nonlinear_onset_resolution_reachable = false
+common_nonlinear_onset_reachability_status = not_applicable
+coarse_resolution_stop_or_intermittency_limitation = false
+minimum_characteristic_shell_rl_over_dx = 8
+resolution_envelope_satisfied_by_design = true
+runtime_resolution_stop_controller_installed = false
+runtime_resolution_stop_controller_status = not_installed_unbounded_per_cycle_scan_removed_pending_excluded_pilot_benchmark_and_freeze
+runtime_resolution_guard_pilot_qualified = false
+postprocessing_resolution_gate_required = true
+runtime_box_edge_monitor_installed = true
+runtime_box_edge_monitor_enabled = false
+runtime_box_edge_stop_boundary_frozen = false
+runtime_box_edge_stop_armed = false
+runtime_box_edge_monitor_passive = true
+runtime_box_edge_monitor_selection_rule = physical_wave_number_ball_abs_k_le_sqrt_dimension_times_2pi_over_shortest_active_extent
+runtime_box_edge_monitor_geometry = frozen_x1_to_transverse_aspect_ratio_2
+runtime_box_edge_monitor_diagnostic_authority = none_quarantined_excluded_pilot_only
+runtime_box_edge_monitor_unique_mode_count = 7
+runtime_box_edge_monitor_cell_passes_per_sample = 3
+runtime_box_edge_monitor_global_reductions_per_sample = 3
+runtime_box_edge_monitor_dt = 0.10000000000000001
+runtime_box_edge_stop_ppm = -1
+runtime_box_edge_monitor_schema = 2
+runtime_box_edge_monitor_next_nominal_time = 0.10000000000000001
+runtime_box_edge_monitor_last_nominal_time = -1
+runtime_box_edge_monitor_last_cycle = 0
+runtime_box_edge_monitor_completed_slots = 0
+runtime_box_edge_monitor_valid_samples = 0
+runtime_box_edge_monitor_skipped_slots = 0
+runtime_box_edge_monitor_last_status = 0
+runtime_box_edge_monitor_status_mask = 0
+runtime_box_edge_monitor_last_prior_time = 0
+runtime_box_edge_monitor_last_time = 0
+runtime_box_edge_monitor_last_power_fraction = -1
+runtime_box_edge_monitor_max_power_fraction = -1
+runtime_box_edge_monitor_last_fluctuation_mean = -1
+runtime_dominant_scale_stop_controller_installed = false
+raw_production_authorized = false
+nonlinear_saturation_claim_authorized = false
+pic_max_cell_cross = 2
+pic_theta_max = 0.29999999999999999
+matched_control_family = none
+control_interpretation = matched_finite_2d_numerical_or_noise_control
+isolated_variable_claim_authorized = false
+box_pair_id = not_applicable
+saturation_candidate = false
+spectral_sensitivity_control = false
+minimum_active_extent_over_nominal_rg0 = 3.1415926535897931
+minimum_active_extent_over_seed_wavelength = 4
+initial_particle_cell_crossing_dt_bound = 1.1880977800456365e-06
+initial_particle_gyro_dt_bound = 2.9999999999999997e-05
+initial_particle_timestep_limiter = cell_crossing
+field_seed = 19001
+finite_distribution = single_species_equal_weight_isotropic_shell_plus_guide_drift
+finite_position_sampling = one_cell_centered_collocated_nested_haar_octahedral_packets_per_cell
+finite_gyrophase_position_coupling = nested_haar_rotated_antipodal_packets_exact_zero_rest_mean_isotropic_second_moment_and_local_tsc_current_quiet_start
+high_position_sampling = not_applicable
+finite_packet_grouping_contract = ppc_divisible_by_six_nested_packets_bound_to_global_root_cell_identity_and_within_cell_packet_index_and_field_particle_seeds_with_collocated_packet_spatial_current_quiet_path_proved
+finite_packet_grouping_against_actual_initializer_proved = true
+finite_packet_independent_spatial_anchors_per_cell_expected = 1
+finite_density_parallel_current_quiet_by_construction = true
+finite_density_parallel_current_quiet_measured_and_accepted = false
+finite_initial_rho_jx_noise_pair_gate = required_quiet_isotropic_shell_vs_independent_positions_first_snapshot_rho_jx
+finite_initial_rho_jx_noise_pair_case_id = q019-fr-fiducial-noise-seeded-s0
+nested_spectrum_contract = box_convergence_uses_identical_shared_spectrum_and_separate_long_mode_control
+evolving_resolution_stop_contract = postprocessing_fail_closed_gate_required_runtime_controller_removed_pending_excluded_pilot_benchmark_and_freeze
+high_rigidity_validity_gate = measured_not_assumed
+high_rigidity_convergence_envelope = staged_2d_ppc_resolution_timestep_and_stochastic_position_controls_required_before_3d_nonlinear_use
+finite_rigidity_predecessor_gate = measured_complex_mode_response_and_convergence_required
+current_agreement_gate = deposited_grid_vs_reconstructed_particle_required
+morphology_and_relative_drift_diagnostics = required
+physical_pilot_gate = explicit_independent_q043_then_q023_then_finite_predecessor_source_compatibility_then_excluded_pilots
+q043_independent_raw_cycle_one_oracle_id = Q043-BELL-DEPOSITED-J-OVER-C-VOLUME-AWARE_raw_cycle_one
+q043_independent_raw_cycle_one_oracle_bound = false
+q023_independent_linear_predecessor_id = Q023-PAPER-BELL-LINEAR-JOVERC_after_passed_Q043_oracle
+q023_independent_linear_predecessor_bound = false
+independent_prerequisites_complete = false
+nonlinear_execution_prerequisites_passed = false
+current_normalization = deposited_j_over_c_equals_2_b_g_k0
+deposit_qscale_semantics = root_cell_macro_mass_volume_aware
+deposited_prtcl_rho_semantics = single_species_charge_density
+deposited_cr_mass_density_derivation = prtcl_rho_times_species_mass_over_species_charge
+species_mass_and_charge_bound_in_immutable_payload = true
+configured_root_cell_volume = 6.103515625e-05
+configured_volume_mean_j_over_c = 12.566370614359172
+configured_rho_cr_over_rho0 = 3.0000000000000001e-06
+qualification_effect = none_source_local_design_only
+numeric_tolerance_status = machine_scale_moment_tolerance_and_pilot_science_thresholds_unset
+resource_classification = source_local_or_frontier_staged_nonproduction
+launch_authorized = false
+policy_authorized = false
+claim_authorized = false
+physical_pilot_authorized = false
+
+<output1>
+file_type = bin
+variable = mhd_w_bcc
+id = mhd_w_bcc
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output2>
+file_type = bin
+variable = prtcl_rho
+id = prtcl_rho
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output3>
+file_type = bin
+variable = prtcl_jx
+id = prtcl_jx
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output4>
+file_type = bin
+variable = prtcl_jy
+id = prtcl_jy
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output5>
+file_type = bin
+variable = prtcl_jz
+id = prtcl_jz
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output6>
+file_type = bin
+variable = prtcl_dedt
+id = prtcl_dedt
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output7>
+file_type = bin
+variable = prtcl_dpxdt
+id = prtcl_dpxdt
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output8>
+file_type = bin
+variable = prtcl_dpydt
+id = prtcl_dpydt
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output9>
+file_type = bin
+variable = prtcl_dpzdt
+id = prtcl_dpzdt
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output10>
+file_type = bin
+variable = prtcl_ebdot
+id = prtcl_ebdot
+dt = 0.10000000000000001
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output11>
+file_type = pvtk
+variable = prtcl_all
+id = prtcl_all
+dt = 0.5
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+
+<output12>
+file_type = rst
+id = rst
+dt = 0.5
+ghost_zones = false
+gid = -1
+data_format = %12.5e
+single_file_per_rank = false
+
+<output13>
+file_type = hst
+dcycle = 1
+ghost_zones = false
+gid = -1
+user_hist_only = false
+data_format = %24.16e

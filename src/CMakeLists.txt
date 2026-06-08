@@ -121,6 +121,7 @@ add_executable(
         pgen/tests/q006_paper_multispecies_oscillation.cpp
         pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp
         pgen/tests/q007_paper_deltaf_linear.cpp
+        pgen/tests/q019_physics_first_nonlinear_bell_successor_v2.cpp
         pgen/tests/q023_paper_bell_linear.cpp
         pgen/tests/q023_paper_bell_linear_joverc.cpp
         pgen/tests/q043_bell_current_volume_aware.cpp
