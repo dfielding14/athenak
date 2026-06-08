@@ -297,7 +297,9 @@ ANALYSIS_BINDING_PATHS = (
     "tst/publication/q019_physics_first_nonlinear_bell_successor_v2.py",
     "tst/publication/analyze_q019_physics_first_nonlinear_bell_successor_v2.py",
     "tst/publication/q019_finite_rigidity_early_time_physics_predecessor_v2.py",
+    "tst/publication/q019_nonlinear_bell_particle_state.py",
     "tst/publication/q019_particle_state_analysis_bridge_v2.py",
+    "tst/publication/q019_registered_raw_reduction_v1.py",
     "tst/publication/q019_hardened_provenance_boundary_v2.py",
 )
 

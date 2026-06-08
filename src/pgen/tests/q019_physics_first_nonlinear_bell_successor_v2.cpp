@@ -37,6 +37,8 @@ using q019_physics_first_nonlinear_bell_successor_v2::Add;
 using q019_physics_first_nonlinear_bell_successor_v2::
     AxisAlignedEigenmodeVelocityAt;
 using q019_physics_first_nonlinear_bell_successor_v2::
+    AxisAlignedMagneticFieldAt;
+using q019_physics_first_nonlinear_bell_successor_v2::
     AxisAlignedVectorPotentialAt;
 using q019_physics_first_nonlinear_bell_successor_v2::BackgroundIonGyrofrequency;
 using q019_physics_first_nonlinear_bell_successor_v2::BackgroundIonInertialLength;
@@ -1938,8 +1940,8 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
   });
   pmbp->pmhd->peos->PrimToCons(w0, bcc0, u0, is, ie, js, je, ks, ke);
 
+  auto *ppart = pmbp->ppart;
   if (!high_rigidity) {
-    auto *ppart = pmbp->ppart;
     const int finite_ppc = integral_ppc;
     const int nx1_local = indcs.nx1;
     const int nx2_local = indcs.nx2;
@@ -2040,4 +2042,22 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
     });
     Kokkos::fence();
   }
+
+  auto &particle_idata = ppart->prtcl_idata;
+  auto &particle_rdata = ppart->prtcl_rdata;
+  const int gids = pmbp->gids;
+  par_for("pgen_q019_initialize_particle_magnetic_field_cache", DevExeSpace(),
+          0, ppart->nprtcl_thispack - 1,
+  KOKKOS_LAMBDA(const int p) {
+    const int m = particle_idata(PGID, p) - gids;
+    if (m < 0 || m >= nmb) return;
+    const Vector3 field = AxisAlignedMagneticFieldAt(
+        parameters,
+        {particle_rdata(IPX, p), particle_rdata(IPY, p),
+         dimension == 3 ? particle_rdata(IPZ, p) : 0.0});
+    particle_rdata(IPBX, p) = field.x1;
+    particle_rdata(IPBY, p) = field.x2;
+    particle_rdata(IPBZ, p) = field.x3;
+  });
+  Kokkos::fence();
 }

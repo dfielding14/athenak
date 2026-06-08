@@ -67,9 +67,11 @@ TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE = (
 )
 Q043_REGISTERED_CAMPAIGN = "q043_registered_execution_raw_oracle_successor_v1"
 Q023_REGISTERED_CAMPAIGN = "q023_paper_bell_linear_joverc_registered_successor_v1"
+Q019_REGISTERED_CAMPAIGN = "q019_nonlinear_bell_registered_successor_v1"
 REGISTERED_WRAPPER_CAMPAIGNS = {
     Q043_REGISTERED_CAMPAIGN: ("Q043", r"q043-current-oracle-[a-z0-9_-]+"),
     Q023_REGISTERED_CAMPAIGN: ("Q023", r"[a-z0-9][a-z0-9_-]{0,127}"),
+    Q019_REGISTERED_CAMPAIGN: ("Q019", r"q019-[a-z0-9][a-z0-9_-]{0,123}"),
 }
 _TASK_LOCAL_EXEC = r"""
 import hashlib

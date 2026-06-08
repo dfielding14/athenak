@@ -67,6 +67,37 @@ bool PhysicalLowKEnumerationIsComplete(
   return true;
 }
 
+double MagneticFieldCurlError(const q019::SeedParameters parameters,
+                              const q019::Vector3 position) {
+  constexpr double step = 1.0e-6;
+  auto derivative = [&](const int component, const int axis) {
+    q019::Vector3 plus = position;
+    q019::Vector3 minus = position;
+    double *plus_values[] = {&plus.x1, &plus.x2, &plus.x3};
+    double *minus_values[] = {&minus.x1, &minus.x2, &minus.x3};
+    *plus_values[axis] += step;
+    *minus_values[axis] -= step;
+    const q019::Vector3 a_plus =
+        q019::AxisAlignedVectorPotentialAt(parameters, plus);
+    const q019::Vector3 a_minus =
+        q019::AxisAlignedVectorPotentialAt(parameters, minus);
+    const double plus_components[] = {a_plus.x1, a_plus.x2, a_plus.x3};
+    const double minus_components[] = {a_minus.x1, a_minus.x2, a_minus.x3};
+    return (plus_components[component] - minus_components[component])/(2.0*step);
+  };
+  const q019::Vector3 finite_difference = {
+    derivative(2, 1) - derivative(1, 2),
+    derivative(0, 2) - derivative(2, 0),
+    derivative(1, 0) - derivative(0, 1)
+  };
+  const q019::Vector3 analytic =
+      q019::AxisAlignedMagneticFieldAt(parameters, position);
+  return std::max(
+      {std::abs(analytic.x1 - finite_difference.x1),
+       std::abs(analytic.x2 - finite_difference.x2),
+       std::abs(analytic.x3 - finite_difference.x3)});
+}
+
 SpectrumResult EvaluatePureTransverseMode(
     const int dimension, const std::array<double, 3> &extents,
     const std::array<int, 3> &cells, const q019::IntegerVector3 pure_mode,
@@ -168,6 +199,7 @@ SpectrumResult EvaluatePureTransverseMode(
 
 int main() {
   using q019::Add;
+  using q019::AxisAlignedMagneticFieldAt;
   using q019::BackgroundIonGyrofrequency;
   using q019::BackgroundIonInertialLength;
   using q019::BaiHallGrowthRateReductionFactor;
@@ -284,6 +316,22 @@ int main() {
             << BoxEdgeCrossedSlotCount(0, 0.1, 0.099) << ' '
             << BoxEdgeLastNominalTime(4, 0.1) << ' '
             << BoxEdgeNextNominalTime(4, 0.1) << '\n';
+  const q019::SeedParameters seed_2d = {
+    2, 19001, 1.0, k0, 0.01, 1.0, 1.0e-6, 2.0e-7, 3.0e-7,
+    8.0, 4.0, 1.0,
+    q019::SeedTopology::shared_spectrum_plus_separated_long_modes
+  };
+  const q019::SeedParameters seed_3d = {
+    3, 19001, 1.0, k0, 0.01, 1.0, 1.0e-6, 2.0e-7, 3.0e-7,
+    16.0, 8.0, 8.0,
+    q019::SeedTopology::shared_spectrum_plus_separated_long_modes
+  };
+  const Vector3 field_2d = AxisAlignedMagneticFieldAt(seed_2d, {0.37, 0.41, 0.0});
+  const Vector3 field_3d = AxisAlignedMagneticFieldAt(seed_3d, {0.37, 0.41, 0.29});
+  std::cout << "analytic_field "
+            << MagneticFieldCurlError(seed_2d, {0.37, 0.41, 0.0}) << ' '
+            << MagneticFieldCurlError(seed_3d, {0.37, 0.41, 0.29}) << ' '
+            << field_2d.x1 << ' ' << field_3d.x1 << '\n';
 
   const std::uint64_t global_cell = GlobalCellLinearId(23, 11, 0, 64, 32);
   bool nested = true;

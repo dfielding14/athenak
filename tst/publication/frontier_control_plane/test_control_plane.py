@@ -34,6 +34,7 @@ import promote_active_policy
 import q011_pressure_review_packet_verifier as pressure_packet_verifier
 import reconcile_frontier_job
 import reconcile_q023_registered_execution
+import reconcile_q019_registered_execution
 import reconcile_q043_registered_execution
 import reconcile_manual_frontier_allocations
 import revalidate_clean_candidate
@@ -7094,6 +7095,114 @@ class SnapshotTests(unittest.TestCase):
                 manifest,
                 action,
                 task_lines.replace(b"rank=1", b"rank=0"),
+            )
+
+    def test_q019_trusted_wrapper_evidence_requires_exact_successful_rank_set(self) -> None:
+        manifest = {
+            "campaign": launch_trampoline.Q019_REGISTERED_CAMPAIGN,
+            "test_id": "q019-fr-runtime-initializer-ppc24-s0",
+        }
+        action = {"resources": {"tasks": 2}}
+        task_lines = (
+            b"PIC trusted GPU launch: rank=0 host=nid000001 ROCR_VISIBLE_DEVICES=0 "
+            b"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+            b"PIC trusted GPU launch: rank=1 host=nid000001 ROCR_VISIBLE_DEVICES=1 "
+            b"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+        )
+        self.assertEqual(
+            launch_trampoline._registered_trusted_wrapper_evidence_bytes(
+                manifest, action, task_lines
+            ),
+            (
+                b"Q019_REGISTERED_EXECUTION "
+                b"case_id=q019-fr-runtime-initializer-ppc24-s0 "
+                b"mpi_world_size=2 rank_ids=0,1\n"
+                b"Q019_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+            ),
+        )
+
+    def test_q019_reconciler_requires_complete_mixed_output_inventory(self) -> None:
+        member_id = "q019-fr-runtime-initializer-ppc24-s0"
+        stdout = (
+            b"Q019_REGISTERED_EXECUTION "
+            b"case_id=q019-fr-runtime-initializer-ppc24-s0 "
+            b"mpi_world_size=2 rank_ids=0,1\n"
+            b"Q019_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+            b"Q019_FINAL_EVIDENCE_STATUS=completed_not_acceptance_eligible\n"
+            b"Q019_SATURATION_EVIDENCE_ELIGIBLE=false\n"
+            b"Terminating on cycle limit\n"
+            b"time=1.900962e-06 cycle=1\n"
+            b"tlim=1.000000e-04 nlim=1\n"
+        )
+        contract = {
+            "schema_version": 1,
+            "executor": control_plane_common.TRUSTED_LAUNCH_EXECUTOR,
+            "pre_actions": [],
+            "actions": [
+                {
+                    "action_id": member_id,
+                    "kind": "athena",
+                    "resources": {
+                        "nodes": 1,
+                        "tasks": 2,
+                        "cpus_per_task": 1,
+                        "gpus_per_task": 1,
+                        "gpu_bind": "closest",
+                    },
+                    "arguments": [
+                        {"literal": "-i"},
+                        {"snapshot_role": "input-deck"},
+                        {"literal": "-d"},
+                        {"artifact_directory": "raw"},
+                    ],
+                    "stdout_artifact": "athena_stdout.txt",
+                    "stderr_artifact": "athena_stderr.txt",
+                }
+            ],
+            "post_actions": [],
+        }
+        records = {
+            "athena_stdout.txt": {
+                "sha256": hashlib.sha256(stdout).hexdigest(),
+                "size": len(stdout),
+            }
+        }
+        for index in range(2):
+            for field in reconcile_q019_registered_execution.REQUIRED_FIELDS:
+                records[f"raw/bin/{member_id}.{field}.{index:05d}.bin"] = {
+                    "sha256": "a" * 64,
+                    "size": 1,
+                }
+            records[
+                f"raw/pvtk/{member_id}.prtcl_all.{index:05d}.part.vtk"
+            ] = {"sha256": "b" * 64, "size": 1}
+            stem = f"raw/rst/{member_id}.{index:05d}.rst"
+            for suffix in ("", ".complete", ".manifest", ".manifest.complete"):
+                records[stem + suffix] = {"sha256": "c" * 64, "size": 1}
+        for suffix in ("mhd.hst", "user.hst"):
+            records[f"raw/{member_id}.{suffix}"] = {
+                "sha256": "d" * 64,
+                "size": 1,
+            }
+        sealed = {"records": records, "athena_stdout_payload": stdout}
+        report = reconcile_q019_registered_execution._structured_launch_evidence(
+            {"launch_contract": contract},
+            sealed,
+            member_id=member_id,
+            artifact_dir=Path("/tmp/q019"),
+            producer={"launch_trampoline_sha256": "e" * 64},
+        )
+        self.assertEqual(report["binary_output_indices"], [0, 1])
+        self.assertEqual(report["checkpoint_output_indices"], [0, 1])
+        self.assertEqual(len(report["raw_inventory"]), 32)
+        del records[f"raw/rst/{member_id}.00001.rst.manifest.complete"]
+        with self.assertRaisesRegex(ValueError, "exact expected inventory"):
+            reconcile_q019_registered_execution._structured_launch_evidence(
+                {"launch_contract": contract},
+                sealed,
+                member_id=member_id,
+                artifact_dir=Path("/tmp/q019"),
+                producer={"launch_trampoline_sha256": "e" * 64},
             )
 
     def test_q023_reconciler_requires_exact_terminal_and_binary_inventory(self) -> None:

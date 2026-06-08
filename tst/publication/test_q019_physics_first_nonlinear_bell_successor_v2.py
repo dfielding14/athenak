@@ -544,6 +544,8 @@ class Q019PhysicsDesignTests(unittest.TestCase):
         self.assertNotIn("Q019RequestIncompleteStop", monitor)
         self.assertNotIn("RequestUserStop", monitor)
         self.assertIn("NestedHaarOctahedralShellVelocityAtSample", source)
+        self.assertIn("AxisAlignedMagneticFieldAt", source)
+        self.assertIn("pgen_q019_initialize_particle_magnetic_field_cache", source)
         self.assertIn("GlobalCellLinearId", source)
         self.assertIn("cell_centered_nested_haar_octahedral_packets", source)
         self.assertNotIn("const int packet = p/finite_ppc", source)
@@ -558,6 +560,7 @@ class Q019PhysicsDesignTests(unittest.TestCase):
         self.assertNotIn("PGID", packet_identity)
         self.assertNotIn("rank", packet_identity)
         self.assertIn("ppc % 6 == 0", header)
+        self.assertIn("Q019_NLB_INLINE Vector3 AxisAlignedMagneticFieldAt", header)
 
     def test_restart_mutable_output_state_is_excluded_but_immutable_state_is_bound(self) -> None:
         case = self.by_id["q019-fr-runtime-initializer-ppc24-s0"]
@@ -1057,6 +1060,13 @@ class Q019HostHarnessTests(unittest.TestCase):
         self.assertEqual(exact_cadence[1:6], ["1", "1", "1", "1", "0"])
         self.assertAlmostEqual(float(exact_cadence[6]), 0.4)
         self.assertAlmostEqual(float(exact_cadence[7]), 0.5)
+        analytic_field = next(
+            line.split() for line in self.lines if line.startswith("analytic_field ")
+        )
+        self.assertLess(float(analytic_field[1]), 1.0e-9)
+        self.assertLess(float(analytic_field[2]), 1.0e-9)
+        self.assertGreater(float(analytic_field[3]), 0.999)
+        self.assertGreater(float(analytic_field[4]), 0.999)
         nested = next(line.split() for line in self.lines if line.startswith("nested "))
         self.assertEqual(nested[1], "1")
         decomposition = next(

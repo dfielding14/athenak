@@ -639,6 +639,53 @@ Q019_NLB_INLINE Vector3 AxisAlignedVectorPotentialAt(
   return potential;
 }
 
+Q019_NLB_INLINE Vector3 AxisAlignedMagneticFieldAt(
+    const SeedParameters parameters, const Vector3 position) {
+  const double phase0 =
+      parameters.k0*position.x1 + SeedPhase(parameters.field_seed, 0);
+  const double phase1 = parameters.k0*(position.x1 + position.x2) +
+      SeedPhase(parameters.field_seed, 1);
+  const double phase2 = 2.0*parameters.k0*(position.x1 - position.x2) +
+      SeedPhase(parameters.field_seed, 2);
+  Vector3 field = {
+    parameters.b_g + parameters.broadband_amplitude*
+        (0.5*std::cos(phase1) - 0.7*std::cos(phase2)),
+    parameters.eigenmode_amplitude*std::sin(phase0) -
+        parameters.broadband_amplitude*
+            (0.5*std::cos(phase1) + 0.7*std::cos(phase2)),
+    parameters.eigenmode_amplitude*std::cos(phase0)
+  };
+  if (parameters.dimension == 3) {
+    const double phase3 = parameters.k0*(position.x1 + position.x3) +
+        SeedPhase(parameters.field_seed, 3);
+    const double phase4 = parameters.k0*(position.x2 + position.x3) +
+        SeedPhase(parameters.field_seed, 4);
+    field.x1 -= 0.4*parameters.broadband_amplitude*std::cos(phase3);
+    field.x2 += 0.3*parameters.broadband_amplitude*std::cos(phase4);
+    field.x3 += 0.4*parameters.broadband_amplitude*std::cos(phase3) -
+        0.3*parameters.broadband_amplitude*std::cos(phase4);
+  }
+  if (parameters.seed_topology ==
+      SeedTopology::shared_spectrum_plus_separated_long_modes) {
+    const double k1 = 2.0*M_PI/parameters.x1_extent;
+    const double k2 = 2.0*M_PI/parameters.x2_extent;
+    field.x1 -= 0.6*parameters.separated_long_mode_amplitude*
+        std::sin(k2*position.x2 + SeedPhase(parameters.field_seed, 7));
+    field.x2 -= parameters.separated_long_mode_amplitude*
+        std::cos(k1*position.x1 + SeedPhase(parameters.field_seed, 5));
+    field.x3 -= 0.8*parameters.separated_long_mode_amplitude*
+        std::sin(k1*position.x1 + SeedPhase(parameters.field_seed, 6));
+    if (parameters.dimension == 3) {
+      const double k3 = 2.0*M_PI/parameters.x3_extent;
+      field.x1 += 0.5*parameters.separated_long_mode_amplitude*
+          std::sin(k3*position.x3 + SeedPhase(parameters.field_seed, 9));
+      field.x2 += 0.7*parameters.separated_long_mode_amplitude*
+          std::cos(k3*position.x3 + SeedPhase(parameters.field_seed, 8));
+    }
+  }
+  return field;
+}
+
 Q019_NLB_INLINE double NominalRigidityLength(const double momentum_per_mass,
                                               const double omega) {
   return momentum_per_mass/omega;
