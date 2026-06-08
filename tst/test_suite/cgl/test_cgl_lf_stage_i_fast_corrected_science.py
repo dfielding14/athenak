@@ -55,6 +55,13 @@ def binding(path: Path) -> dict[str, object]:
     }
 
 
+def dependency_args(tool) -> dict[str, str]:
+    return {
+        argument: sha256(path)
+        for argument, _label, path in tool.DEPENDENCY_PINS
+    }
+
+
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -193,6 +200,26 @@ def test_commands_delegate_exact_r02_r17_to_existing_tools(tool, tmp_path):
     assert science[1] == str(tool.FAST_SCIENCE_TOOL)
     assert science[science.index("--cases") + 1] == cases
     assert science[science.index("--acceptance") + 1] == str(tmp_path / "acceptance")
+
+
+def test_dependency_pins_cover_every_direct_workflow_tool(tool):
+    assert {
+        path for _argument, _label, path in tool.DEPENDENCY_PINS
+    } == {
+        tool.CORRECTED_DOWNSTREAM_TOOL,
+        tool.CORRECTED_REPORT_TOOL,
+        tool.FAST_ACCEPTANCE_TOOL,
+        tool.FAST_SCIENCE_TOOL,
+        tool.REVIEWED_ACCEPTANCE_TOOL,
+    }
+
+
+def test_dependency_pin_mismatch_fails_closed(tool):
+    args = SimpleNamespace(**dependency_args(tool))
+    args.fast_science_sha256 = "0" * 64
+
+    with pytest.raises(tool.CorrectedScienceError, match="fast science SHA-256 differs"):
+        tool.verify_dependency_pins(args)
 
 
 def product_fixture(tool, tmp_path: Path, *, complete: bool = True):
@@ -487,6 +514,7 @@ def test_run_orders_acceptance_then_science_and_revalidates(
         criteria=tool.DEFAULT_CRITERIA,
         criteria_review=tool.DEFAULT_CRITERIA_REVIEW,
         python=Path(sys.executable),
+        **dependency_args(tool),
     )
 
     path = tool.run_workflow(args)

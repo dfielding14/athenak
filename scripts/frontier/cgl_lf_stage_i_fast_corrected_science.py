@@ -77,6 +77,13 @@ ACTIVE_CASES = (
 PASSIVE_CASES = ("R06", "R07", "R08", "R09")
 ALL_CASES = tuple(f"R{number:02d}" for number in range(2, 18))
 VALID_RESULTS = {"pass", "fail", "inconclusive"}
+DEPENDENCY_PINS = (
+    ("corrected_downstream_sha256", "corrected downstream", CORRECTED_DOWNSTREAM_TOOL),
+    ("corrected_report_sha256", "corrected report", CORRECTED_REPORT_TOOL),
+    ("fast_acceptance_sha256", "fast acceptance", FAST_ACCEPTANCE_TOOL),
+    ("fast_science_sha256", "fast science", FAST_SCIENCE_TOOL),
+    ("reviewed_acceptance_sha256", "reviewed acceptance", REVIEWED_ACCEPTANCE_TOOL),
+)
 EXPECTED_SCIENCE_TABLES = tuple(
     f"tables/{stem}.{suffix}"
     for stem in ("cases", "contrasts", "gates", "resolution", "mks24")
@@ -111,6 +118,34 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def require_sha256(value: object, label: str) -> str:
+    """Return one exact lowercase SHA-256 digest."""
+
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise CorrectedScienceError(f"{label} must be a lowercase SHA-256 digest")
+    return value
+
+
+def verify_dependency_pins(args: argparse.Namespace) -> dict[str, dict[str, object]]:
+    """Verify every directly imported or invoked workflow dependency."""
+
+    verified: dict[str, dict[str, object]] = {}
+    for argument, label, path in DEPENDENCY_PINS:
+        expected = require_sha256(getattr(args, argument), f"{label} pin")
+        current = binding(path)
+        if current["sha256"] != expected:
+            raise CorrectedScienceError(
+                f"{label} SHA-256 differs: expected={expected} "
+                f"actual={current['sha256']} path={current['path']}"
+            )
+        verified[argument] = current
+    return verified
 
 
 def binding(path: Path) -> dict[str, object]:
@@ -656,6 +691,7 @@ def validate_products(
 def run_workflow(args: argparse.Namespace) -> Path:
     """Run existing acceptance/science tools and write the corrected binding record."""
 
+    verify_dependency_pins(args)
     context = validate_corrected_context(
         args.identity, args.inventory, args.inventory_sha256
     )
@@ -669,8 +705,10 @@ def run_workflow(args: argparse.Namespace) -> Path:
         context, acceptance, science, criteria, review, python
     )
     run_checked(commands[0])
+    verify_dependency_pins(args)
     validate_corrected_context(args.identity, args.inventory, args.inventory_sha256)
     run_checked(commands[1])
+    verify_dependency_pins(args)
     context = validate_corrected_context(
         args.identity, args.inventory, args.inventory_sha256
     )
@@ -681,6 +719,7 @@ def run_workflow(args: argparse.Namespace) -> Path:
         context, acceptance, science, criteria, review
     ):
         raise CorrectedScienceError("corrected reviewed-science record differs")
+    verify_dependency_pins(args)
     print(f"wrote corrected/composite reviewed-science record: {path}")
     return path
 
@@ -688,6 +727,7 @@ def run_workflow(args: argparse.Namespace) -> Path:
 def validate_workflow(args: argparse.Namespace) -> Path:
     """Revalidate the corrected/composite binding record and all source evidence."""
 
+    verify_dependency_pins(args)
     context = validate_corrected_context(
         args.identity, args.inventory, args.inventory_sha256
     )
@@ -704,6 +744,7 @@ def validate_workflow(args: argparse.Namespace) -> Path:
     path = science / RECORD_NAME
     if load_json(path, "corrected reviewed-science record") != expected:
         raise CorrectedScienceError("corrected reviewed-science record differs")
+    verify_dependency_pins(args)
     print(f"validated corrected/composite reviewed-science record: {path}")
     return path
 
@@ -716,6 +757,11 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--science-output", type=Path, default=DEFAULT_SCIENCE)
     parser.add_argument("--criteria", type=Path, default=DEFAULT_CRITERIA)
     parser.add_argument("--criteria-review", type=Path, default=DEFAULT_CRITERIA_REVIEW)
+    parser.add_argument("--corrected-downstream-sha256", required=True)
+    parser.add_argument("--corrected-report-sha256", required=True)
+    parser.add_argument("--fast-acceptance-sha256", required=True)
+    parser.add_argument("--fast-science-sha256", required=True)
+    parser.add_argument("--reviewed-acceptance-sha256", required=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
