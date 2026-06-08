@@ -117,12 +117,7 @@ def test_source_archive_requires_complete_runtime_and_analysis_closure() -> None
 
 def test_candidate_analysis_closure_binds_manifest_deck_and_executing_sources() -> None:
     case = admission._case("q019-fr-runtime-initializer-ppc24-s0")
-    required = {
-        *admission.REQUIRED_SOURCE_PATHS,
-        *admission.EXECUTING_QUALIFICATION_SOURCE_PATHS,
-        *admission.design.ANALYSIS_BINDING_PATHS,
-        str(case["path"]),
-    }
+    required = admission._case_required_source_paths(case)
     payloads = {
         relative: (admission.REPO_ROOT / relative).read_bytes()
         for relative in required
@@ -133,7 +128,7 @@ def test_candidate_analysis_closure_binds_manifest_deck_and_executing_sources() 
         admission.design.ANALYSIS_BINDING_PATHS
     )
     assert set(closure["executing_qualification_source_bindings"]) == (
-        admission.EXECUTING_QUALIFICATION_SOURCE_PATHS
+        admission._case_executing_source_paths(case)
     )
     assert closure["execution_deck"]["kind"] == "base_matrix_case"
 
@@ -146,12 +141,7 @@ def test_candidate_analysis_closure_binds_manifest_deck_and_executing_sources() 
 
 def test_candidate_analysis_closure_accepts_only_exact_controller_overlay() -> None:
     case = admission._case("q019-fr-grid-k8-rho1em05-s0")
-    required = {
-        *admission.REQUIRED_SOURCE_PATHS,
-        *admission.EXECUTING_QUALIFICATION_SOURCE_PATHS,
-        *admission.design.ANALYSIS_BINDING_PATHS,
-        str(case["path"]),
-    }
+    required = admission._case_required_source_paths(case)
     payloads = {
         relative: (admission.REPO_ROOT / relative).read_bytes()
         for relative in required
@@ -172,7 +162,7 @@ def test_candidate_analysis_closure_accepts_only_exact_controller_overlay() -> N
 
     with pytest.raises(
         admission.RegisteredAdmissionError,
-        match="not one exact runtime-controller overlay",
+        match="not one exact checked-in contract",
     ):
         admission._candidate_analysis_closure(
             payloads,
@@ -562,6 +552,15 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
         "_receipt_payload": receipt_payload,
         "_terminal_payload": terminal_payload,
     }
+    case_contract = admission.case_contracts.resolve_case(receipt["member_id"])
+    base_execution_identity = {
+        "base_family_id": case_contract["family_id"],
+        "base_manifest_path": case_contract["base_manifest_path"],
+        "source_matrix_identity_fingerprint": case_contract[
+            "matrix_identity_fingerprint"
+        ],
+        "source_deck_sha256": case_contract["deck_sha256"],
+    }
     reduction = {
         "snapshots": [{"cycle": 0, "time": 0.0}],
         "particle_states": [{"cycle": 0, "time": 0.0}],
@@ -570,6 +569,7 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
             "source_case_id": receipt["member_id"],
             "artifact_id": None,
             "authority": "matrix_case",
+            **base_execution_identity,
             "saturation_evidence_eligible": False,
         },
     }
@@ -622,6 +622,7 @@ def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
                     "source_case_id": receipt["member_id"],
                     "artifact_id": None,
                     "authority": "matrix_case",
+                    **base_execution_identity,
                     "saturation_evidence_eligible": False,
                 }
             },

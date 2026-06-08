@@ -20,6 +20,7 @@ from tst.publication import analyze_q011_section54_outputs as binary
 from tst.publication import q019_nonlinear_bell_particle_state as particle_reducer
 from tst.publication import q019_particle_state_analysis_bridge_v2 as particle_bridge
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as decks
+from tst.publication import q019_registered_case_contracts_v1 as case_contracts
 from tst.publication import q019_nonlinear_bell_runtime_controller_v1 as controller
 
 
@@ -76,9 +77,10 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _case(case_id: str) -> dict[str, object]:
-    matches = [row for row in decks.expected_cases() if row["case_id"] == case_id]
-    _require(len(matches) == 1, "Q019 raw reduction case identity is unknown")
-    return dict(matches[0])
+    try:
+        return dict(case_contracts.resolve_case(case_id)["case"])
+    except case_contracts.CaseContractError as error:
+        raise RawReductionError(str(error)) from error
 
 
 def _canonical_nonnegative_integer(value: str, *, label: str) -> None:
@@ -259,6 +261,10 @@ def _execution_profile(
     *,
     case: Mapping[str, object],
 ) -> tuple[dict[str, dict[str, str]], dict[str, object]]:
+    try:
+        contract = case_contracts.resolve_case(str(case["case_id"]))
+    except case_contracts.CaseContractError as error:
+        raise RawReductionError(str(error)) from error
     normalized = _normalized_runtime_parameters(parameters)
     block = normalized.get(controller.CONTROLLER_BLOCK)
     if block is None:
@@ -267,23 +273,25 @@ def _execution_profile(
             "source_case_id": case["case_id"],
             "artifact_id": None,
             "authority": "matrix_case",
+            "base_family_id": contract["family_id"],
+            "base_manifest_path": contract["base_manifest_path"],
+            "source_matrix_identity_fingerprint": contract[
+                "matrix_identity_fingerprint"
+            ],
+            "source_deck_sha256": contract["deck_sha256"],
             "saturation_evidence_eligible": False,
         }
     immutable = {
         name: value for name, value in block.items() if not name.startswith("runtime_")
     }
     state = _runtime_controller_state(block)
-    matches = [
-        overlay
-        for overlay in controller.expected_overlays()
-        if overlay["source_case_id"] == case["case_id"]
-        and overlay["controller_parameters"] == immutable
-    ]
-    _require(
-        len(matches) == 1,
-        "Q019 runtime-controller overlay is not one exact checked-in contract",
-    )
-    overlay = matches[0]
+    try:
+        overlay = case_contracts.match_controller_overlay(
+            str(case["case_id"]),
+            immutable_parameters=immutable,
+        )
+    except case_contracts.CaseContractError as error:
+        raise RawReductionError(str(error)) from error
     base = dict(normalized)
     del base[controller.CONTROLLER_BLOCK]
     return base, {
@@ -291,6 +299,15 @@ def _execution_profile(
         "source_case_id": case["case_id"],
         "artifact_id": overlay["artifact_id"],
         "authority": overlay["authority"],
+        "base_family_id": contract["family_id"],
+        "base_manifest_path": contract["base_manifest_path"],
+        "source_matrix_identity_fingerprint": contract[
+            "matrix_identity_fingerprint"
+        ],
+        "source_deck_sha256": contract["deck_sha256"],
+        "controller_packet_id": overlay["controller_packet_id"],
+        "controller_manifest_path": overlay["controller_manifest_path"],
+        "execution_deck_sha256": overlay["rendered_sha256"],
         "controller_identity_fingerprint": immutable[
             "controller_identity_fingerprint"
         ],

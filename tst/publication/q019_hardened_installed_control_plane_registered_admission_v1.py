@@ -26,6 +26,7 @@ import numpy as np
 
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as design
 from tst.publication import q019_registered_raw_reduction_v1 as raw_reduction
+from tst.publication import q019_registered_case_contracts_v1 as case_contracts
 from tst.publication import q019_nonlinear_bell_runtime_controller_v1 as controller
 from tst.publication import (
     q023_registered_execution_linear_qualification_successor_v1 as q023,
@@ -73,6 +74,7 @@ REQUIRED_SOURCE_PATHS = frozenset(
         "tst/publication/q019_excluded_physical_pilot_launch_preparation_v1.py",
         "tst/publication/q019_hardened_provenance_boundary_v2.py",
         "tst/publication/q019_hardened_installed_control_plane_registered_admission_v1.py",
+        case_contracts.REGISTRY_SOURCE_PATH,
         "tst/publication/frontier_control_plane/reconcile_q019_registered_execution.py",
         "tst/publication/analyze_q011_section54_outputs.py",
         "tst/publication/q011_section54_restart.py",
@@ -86,6 +88,7 @@ REQUIRED_SOURCE_PATHS = frozenset(
 EXECUTING_QUALIFICATION_SOURCE_PATHS = frozenset(
     {
         "tst/publication/q019_hardened_installed_control_plane_registered_admission_v1.py",
+        case_contracts.REGISTRY_SOURCE_PATH,
         "tst/publication/q019_physics_first_nonlinear_bell_successor_v2.py",
         "tst/publication/q019_registered_raw_reduction_v1.py",
         "tst/publication/q019_nonlinear_bell_runtime_controller_v1.py",
@@ -341,17 +344,60 @@ def _validate_restart_publication(
 
 
 def _case(case_id: str) -> dict[str, object]:
-    matches = [row for row in design.expected_cases() if row["case_id"] == case_id]
-    _require(len(matches) == 1, "Q019 registered case identity is unknown")
-    case = dict(matches[0])
-    deck_path = (
-        "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/"
-        f"{case_id}.athinput"
-    )
-    deck_payload = design.render_deck(case).encode("utf-8")
-    case["path"] = deck_path
-    case["sha256"] = hashlib.sha256(deck_payload).hexdigest()
+    try:
+        contract = case_contracts.resolve_case(case_id)
+    except case_contracts.CaseContractError as error:
+        raise RegisteredAdmissionError(str(error)) from error
+    case = dict(contract["case"])
+    case["path"] = contract["deck_path"]
+    case["sha256"] = contract["deck_sha256"]
+    case["registered_family_id"] = contract["family_id"]
+    case["registered_base_manifest_path"] = contract["base_manifest_path"]
     return case
+
+
+def _case_required_source_paths(case: Mapping[str, object]) -> frozenset[str]:
+    try:
+        contract = case_contracts.resolve_case(str(case["case_id"]))
+        controller_paths = case_contracts.required_controller_paths(
+            str(case["case_id"])
+        )
+    except case_contracts.CaseContractError as error:
+        raise RegisteredAdmissionError(str(error)) from error
+    paths = {
+        *REQUIRED_SOURCE_PATHS,
+        *EXECUTING_QUALIFICATION_SOURCE_PATHS,
+        *design.ANALYSIS_BINDING_PATHS,
+        str(contract["base_manifest_path"]),
+        str(contract["deck_path"]),
+        *controller_paths,
+    }
+    if contract["family_id"] == case_contracts.CARRIER_FAMILY_ID:
+        paths.update(
+            {
+                "tst/publication/q019_q023_carrier_nonlinear_bell_redesign_v1.py",
+                "tst/publication/"
+                "q019_q023_carrier_resource_calibration_runtime_controller_v1.py",
+            }
+        )
+    return frozenset(paths)
+
+
+def _case_executing_source_paths(
+    case: Mapping[str, object],
+) -> frozenset[str]:
+    paths = set(EXECUTING_QUALIFICATION_SOURCE_PATHS)
+    if case["registered_family_id"] == case_contracts.CARRIER_FAMILY_ID:
+        paths.update(
+            {
+                "tst/publication/"
+                "analyze_q019_physics_first_nonlinear_bell_successor_v2.py",
+                "tst/publication/q019_q023_carrier_nonlinear_bell_redesign_v1.py",
+                "tst/publication/"
+                "q019_q023_carrier_resource_calibration_runtime_controller_v1.py",
+            }
+        )
+    return frozenset(paths)
 
 
 def _source_archive_payloads(
@@ -414,38 +460,61 @@ def _candidate_analysis_closure(
     case: Mapping[str, object],
     execution_deck_sha256: str | None = None,
 ) -> dict[str, object]:
+    try:
+        contract = case_contracts.resolve_case(str(case["case_id"]))
+        packets = case_contracts.controller_packets(str(case["case_id"]))
+    except case_contracts.CaseContractError as error:
+        raise RegisteredAdmissionError(str(error)) from error
+    manifest_path = str(contract["base_manifest_path"])
+    _require(
+        manifest_path in payloads,
+        "Q019 source archive lacks the selected base manifest",
+    )
     manifest = _json_object(
-        payloads[DECK_MANIFEST_PATH],
+        payloads[manifest_path],
         label="Q019 archived deck manifest",
     )
-    analysis_bindings = manifest.get("analysis_bindings")
     _require(
-        manifest.get("schema_version") == design.SCHEMA_VERSION
-        and manifest.get("record_type")
-        == "q019_physics_first_nonlinear_bell_successor_v2_deck_manifest"
-        and type(analysis_bindings) is list,
-        "Q019 archived deck manifest identity drifted",
+        _strict_equal(manifest, contract["base_manifest"]),
+        "Q019 archived selected base manifest drifted",
     )
-    expected_analysis_paths = list(design.ANALYSIS_BINDING_PATHS)
-    _require(
-        len(analysis_bindings) == len(expected_analysis_paths),
-        "Q019 archived analysis binding inventory drifted",
-    )
-    normalized = []
-    for index, expected_path in enumerate(expected_analysis_paths):
-        item = analysis_bindings[index]
+    normalized: list[dict[str, object]] = []
+    if contract["family_id"] == case_contracts.HISTORICAL_FAMILY_ID:
+        analysis_bindings = manifest.get("analysis_bindings")
+        expected_analysis_paths = list(design.ANALYSIS_BINDING_PATHS)
         _require(
-            type(item) is dict
-            and set(item) == {"path", "sha256"}
-            and item["path"] == expected_path
-            and type(item["sha256"]) is str
-            and _SHA256.fullmatch(item["sha256"]) is not None
-            and expected_path in payloads
-            and item["sha256"]
-            == hashlib.sha256(payloads[expected_path]).hexdigest(),
-            f"Q019 archived analysis binding[{index}] drifted",
+            type(analysis_bindings) is list
+            and len(analysis_bindings) == len(expected_analysis_paths),
+            "Q019 archived analysis binding inventory drifted",
         )
-        normalized.append(dict(item))
+        for index, expected_path in enumerate(expected_analysis_paths):
+            item = analysis_bindings[index]
+            _require(
+                type(item) is dict
+                and set(item) == {"path", "sha256"}
+                and item["path"] == expected_path
+                and type(item["sha256"]) is str
+                and _SHA256.fullmatch(item["sha256"]) is not None
+                and expected_path in payloads
+                and item["sha256"]
+                == hashlib.sha256(payloads[expected_path]).hexdigest(),
+                f"Q019 archived analysis binding[{index}] drifted",
+            )
+            normalized.append(dict(item))
+    else:
+        for expected_path in design.ANALYSIS_BINDING_PATHS:
+            _require(
+                expected_path in payloads,
+                f"Q019 carrier analysis source is absent: {expected_path}",
+            )
+            normalized.append(
+                {
+                    "path": expected_path,
+                    "sha256": hashlib.sha256(
+                        payloads[expected_path]
+                    ).hexdigest(),
+                }
+            )
     deck_path = str(case["path"])
     decks = manifest.get("decks")
     _require(type(decks) is list, "Q019 archived deck inventory is malformed")
@@ -458,8 +527,11 @@ def _candidate_analysis_closure(
         len(matches) == 1
         and matches[0].get("path") == deck_path
         and matches[0].get("sha256") == case["sha256"]
+        and matches[0].get("matrix_identity_fingerprint")
+        == contract["matrix_identity_fingerprint"]
+        and deck_path in payloads
         and hashlib.sha256(payloads[deck_path]).hexdigest() == case["sha256"],
-        "Q019 archived registered deck binding drifted",
+        "Q019 archived registered deck fingerprint or SHA-256 drifted",
     )
     selected_deck_sha256 = (
         str(case["sha256"])
@@ -479,32 +551,54 @@ def _candidate_analysis_closure(
             "path": deck_path,
             "sha256": case["sha256"],
             "byte_count": len(payloads[deck_path]),
+            "base_family_id": contract["family_id"],
+            "base_manifest_path": manifest_path,
+            "source_matrix_identity_fingerprint": contract[
+                "matrix_identity_fingerprint"
+            ],
+            "source_deck_sha256": contract["deck_sha256"],
             "saturation_evidence_eligible": False,
         }
     else:
+        try:
+            overlay = case_contracts.match_controller_overlay(
+                str(case["case_id"]),
+                rendered_sha256=selected_deck_sha256,
+            )
+        except case_contracts.CaseContractError as error:
+            raise RegisteredAdmissionError(str(error)) from error
+        packet_matches = [
+            packet
+            for packet in packets
+            if packet["packet_id"] == overlay["controller_packet_id"]
+        ]
+        _require(
+            len(packet_matches) == 1,
+            "Q019 selected controller packet is absent or ambiguous",
+        )
+        packet = packet_matches[0]
+        runtime_manifest_path = str(packet["manifest_path"])
+        _require(
+            runtime_manifest_path in payloads,
+            "Q019 source archive lacks the selected controller manifest",
+        )
         runtime_manifest = _json_object(
-            payloads[RUNTIME_CONTROLLER_MANIFEST_PATH],
+            payloads[runtime_manifest_path],
             label="Q019 archived runtime-controller manifest",
         )
         _require(
-            _strict_equal(runtime_manifest, controller.build_manifest()),
-            "Q019 archived runtime-controller packet drifted",
+            _strict_equal(runtime_manifest, packet["manifest"]),
+            "Q019 archived selected runtime-controller packet drifted",
         )
-        overlay_matches = [
-            item
-            for item in runtime_manifest["artifacts"]
-            if item["source_case_id"] == case["case_id"]
-            and item["rendered_sha256"] == selected_deck_sha256
-        ]
-        _require(
-            len(overlay_matches) == 1,
-            "Q019 execution deck is not one exact runtime-controller overlay",
-        )
-        overlay = overlay_matches[0]
-        overlay_path = f"{RUNTIME_CONTROLLER_ROOT}/{overlay['filename']}"
+        overlay_path = f"{packet['root']}/{overlay['filename']}"
         _require(
             overlay["source_deck"] == deck_path
             and overlay["source_deck_sha256"] == case["sha256"]
+            and (
+                "source_matrix_identity_fingerprint" not in overlay
+                or overlay["source_matrix_identity_fingerprint"]
+                == contract["matrix_identity_fingerprint"]
+            )
             and overlay_path in payloads
             and hashlib.sha256(payloads[overlay_path]).hexdigest()
             == selected_deck_sha256,
@@ -518,14 +612,52 @@ def _candidate_analysis_closure(
             "path": overlay_path,
             "sha256": selected_deck_sha256,
             "byte_count": len(payloads[overlay_path]),
+            "base_family_id": contract["family_id"],
+            "base_manifest_path": manifest_path,
+            "source_matrix_identity_fingerprint": contract[
+                "matrix_identity_fingerprint"
+            ],
+            "source_deck_sha256": contract["deck_sha256"],
+            "controller_packet_id": overlay["controller_packet_id"],
+            "controller_manifest_path": runtime_manifest_path,
             "controller_identity_fingerprint": overlay[
                 "controller_parameters"
             ]["controller_identity_fingerprint"],
             "expected_stop_reason": overlay["expected_stop_reason"],
             "saturation_evidence_eligible": False,
         }
+    selected_packet = (
+        next(
+            packet
+            for packet in packets
+            if (
+                execution_deck["kind"] == "base_matrix_case"
+                or packet["packet_id"]
+                == execution_deck["controller_packet_id"]
+            )
+        )
+        if len(packets) == 1
+        else None
+    )
+    _require(
+        selected_packet is not None,
+        "Q019 controller packet selection is ambiguous",
+    )
+    runtime_manifest_path = str(selected_packet["manifest_path"])
+    _require(
+        runtime_manifest_path in payloads,
+        "Q019 source archive lacks the versioned controller packet",
+    )
+    runtime_manifest = _json_object(
+        payloads[runtime_manifest_path],
+        label="Q019 archived runtime-controller manifest",
+    )
+    _require(
+        _strict_equal(runtime_manifest, selected_packet["manifest"]),
+        "Q019 archived versioned runtime-controller packet drifted",
+    )
     executing = {}
-    for relative in sorted(EXECUTING_QUALIFICATION_SOURCE_PATHS):
+    for relative in sorted(_case_executing_source_paths(case)):
         _require(
             relative in payloads,
             f"Q019 archived qualification source is absent: {relative}",
@@ -548,22 +680,25 @@ def _candidate_analysis_closure(
         }
     return {
         "deck_manifest": {
-            "path": DECK_MANIFEST_PATH,
-            "sha256": hashlib.sha256(payloads[DECK_MANIFEST_PATH]).hexdigest(),
-            "byte_count": len(payloads[DECK_MANIFEST_PATH]),
+            "path": manifest_path,
+            "sha256": hashlib.sha256(payloads[manifest_path]).hexdigest(),
+            "byte_count": len(payloads[manifest_path]),
+            "family_id": contract["family_id"],
         },
         "analysis_bindings": normalized,
         "registered_deck": {
             "path": deck_path,
             "sha256": str(case["sha256"]),
             "byte_count": len(payloads[deck_path]),
+            "matrix_identity_fingerprint": contract[
+                "matrix_identity_fingerprint"
+            ],
         },
         "runtime_controller_manifest": {
-            "path": RUNTIME_CONTROLLER_MANIFEST_PATH,
-            "sha256": hashlib.sha256(
-                payloads[RUNTIME_CONTROLLER_MANIFEST_PATH]
-            ).hexdigest(),
-            "byte_count": len(payloads[RUNTIME_CONTROLLER_MANIFEST_PATH]),
+            "path": runtime_manifest_path,
+            "sha256": hashlib.sha256(payloads[runtime_manifest_path]).hexdigest(),
+            "byte_count": len(payloads[runtime_manifest_path]),
+            "packet_id": selected_packet["packet_id"],
         },
         "execution_deck": execution_deck,
         "executing_qualification_source_bindings": executing,
@@ -665,14 +800,7 @@ def _manifest_and_candidate(
         == receipt.get("environment_sha256"),
         "Q019 executable or environment snapshot binding drifted",
     )
-    required_source_paths = frozenset(
-        {
-            *REQUIRED_SOURCE_PATHS,
-            *EXECUTING_QUALIFICATION_SOURCE_PATHS,
-            *design.ANALYSIS_BINDING_PATHS,
-            str(case["path"]),
-        }
-    )
+    required_source_paths = _case_required_source_paths(case)
     source_payloads = _source_archive_payloads(
         archive_payload,
         required_paths=required_source_paths,
@@ -1409,12 +1537,26 @@ def derive_case_bundle(
         and execution_deck["source_case_id"]
         == execution_profile["source_case_id"]
         and execution_deck["artifact_id"] == execution_profile["artifact_id"]
-        and execution_deck["authority"] == execution_profile["authority"],
+        and execution_deck["authority"] == execution_profile["authority"]
+        and execution_deck["base_family_id"]
+        == execution_profile["base_family_id"]
+        and execution_deck["base_manifest_path"]
+        == execution_profile["base_manifest_path"]
+        and execution_deck["source_matrix_identity_fingerprint"]
+        == execution_profile["source_matrix_identity_fingerprint"]
+        and execution_deck["source_deck_sha256"]
+        == execution_profile["source_deck_sha256"],
         "Q019 archived execution deck and raw runtime profile differ",
     )
     if execution_deck["kind"] == "runtime_controller_overlay":
         _require(
-            execution_deck["controller_identity_fingerprint"]
+            execution_deck["controller_packet_id"]
+            == execution_profile["controller_packet_id"]
+            and execution_deck["controller_manifest_path"]
+            == execution_profile["controller_manifest_path"]
+            and execution_deck["sha256"]
+            == execution_profile["execution_deck_sha256"]
+            and execution_deck["controller_identity_fingerprint"]
             == execution_profile["controller_identity_fingerprint"]
             and execution_deck["expected_stop_reason"]
             == execution_profile["expected_stop_reason"],

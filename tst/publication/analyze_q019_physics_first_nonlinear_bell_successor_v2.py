@@ -20,6 +20,7 @@ from tst.publication import q019_finite_rigidity_early_time_physics_predecessor_
 from tst.publication import q019_hardened_provenance_boundary_v2 as provenance_boundary
 from tst.publication import q019_particle_state_analysis_bridge_v2 as particle_bridge
 from tst.publication import q019_physics_first_nonlinear_bell_successor_v2 as decks
+from tst.publication import q019_registered_case_contracts_v1 as case_contracts
 
 
 RECORD_TYPE = "q019_physics_first_nonlinear_bell_successor_v2_analysis"
@@ -56,7 +57,12 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _case_map() -> dict[str, dict[str, object]]:
-    return {str(case["case_id"]): case for case in decks.expected_cases()}
+    try:
+        return {
+            str(case["case_id"]): case for case in case_contracts.expected_cases()
+        }
+    except case_contracts.CaseContractError as error:
+        raise ContractError(str(error)) from error
 
 
 def validate_raw_provenance(provenance: Mapping[str, object]) -> dict[str, object]:
