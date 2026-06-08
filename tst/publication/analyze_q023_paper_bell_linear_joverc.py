@@ -1041,7 +1041,11 @@ def validate_rendered_deck(member: Mapping[str, object], text: str) -> dict[str,
     }
 
 
-def build_deck_manifest() -> tuple[dict[str, object], dict[str, str]]:
+def build_deck_manifest(
+    *,
+    q043_registered_raw_oracle_dependency: Mapping[str, object] | None = None,
+    q043_artifact_root: Path | None = None,
+) -> tuple[dict[str, object], dict[str, str]]:
     decks: dict[str, str] = {}
     records = []
     for member in expected_deck_members():
@@ -1049,6 +1053,41 @@ def build_deck_manifest() -> tuple[dict[str, object], dict[str, str]]:
         text = render_deck(member)
         decks[relative] = text
         records.append({**member, "deck_path": relative, **validate_rendered_deck(member, text)})
+    registered_binding: dict[str, object] = {
+        "foundational_registered_admission_binding_status": (
+            Q043_REGISTERED_ADMISSION_BINDING_STATUS
+        ),
+        "foundational_registered_admission_digest_bound": False,
+        "foundational_registered_admission_schema_bound": False,
+    }
+    if q043_registered_raw_oracle_dependency is not None:
+        dependency = validate_q043_dependency(
+            q043_registered_raw_oracle_dependency,
+            artifact_root=q043_artifact_root,
+        )
+        _require(
+            dependency["binding_kind"] == "registered_matrix_qualification",
+            "Q023 checked-in decks require a registered Q043 matrix dependency",
+        )
+        registered_binding = {
+            "foundational_registered_admission_binding_status": (
+                Q043_REGISTERED_MATRIX_BINDING_STATUS
+            ),
+            "foundational_registered_admission_digest_bound": True,
+            "foundational_registered_admission_schema_bound": True,
+            "foundational_registered_matrix_sha256": dependency[
+                "registered_matrix_sha256"
+            ],
+            "foundational_registered_matrix_record_type": dependency[
+                "registered_matrix_record_type"
+            ],
+            "foundational_registered_matrix_case_bindings_sha256": dependency[
+                "registered_matrix_case_bindings_sha256"
+            ],
+            "foundational_registered_dependency_sha256": _dependency_digest(
+                dependency
+            ),
+        }
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "record_type": "q023_paper_bell_linear_joverc_predecessor_deck_manifest",
@@ -1061,11 +1100,7 @@ def build_deck_manifest() -> tuple[dict[str, object], dict[str, str]]:
             Q043_RAW_ORACLE_DECK_MANIFEST_SHA256
         ),
         "foundational_supersession_sha256": Q043_SUPERSESSION_SHA256,
-        "foundational_registered_admission_binding_status": (
-            Q043_REGISTERED_ADMISSION_BINDING_STATUS
-        ),
-        "foundational_registered_admission_digest_bound": False,
-        "foundational_registered_admission_schema_bound": False,
+        **registered_binding,
         "foundational_raw_oracle_id": Q043_RAW_ORACLE_ID,
         "foundational_raw_oracle_case_count": Q043_REQUIRED_CASE_COUNT,
         "foundational_registered_execution_admission": FOUNDATIONAL_ADMISSION_REQUIREMENT,
@@ -1085,8 +1120,26 @@ def build_deck_manifest() -> tuple[dict[str, object], dict[str, str]]:
     return manifest, decks
 
 
-def materialize_checked_in_decks(*, replace: bool = False) -> dict[str, object]:
-    manifest, decks = build_deck_manifest()
+def materialize_checked_in_decks(
+    *,
+    replace: bool = False,
+    q043_registered_matrix: Path | None = None,
+    q043_artifact_root: Path | None = None,
+) -> dict[str, object]:
+    dependency = None
+    if q043_registered_matrix is not None:
+        _require(
+            q043_artifact_root is not None,
+            "registered Q043 deck rebinding requires an artifact root",
+        )
+        dependency = registered_q043_raw_oracle_dependency(
+            q043_registered_matrix,
+            artifact_root=q043_artifact_root,
+        )
+    manifest, decks = build_deck_manifest(
+        q043_registered_raw_oracle_dependency=dependency,
+        q043_artifact_root=q043_artifact_root,
+    )
     if DECK_ROOT.exists():
         _require(replace, "checked-in predecessor deck root already exists")
         shutil.rmtree(DECK_ROOT)
@@ -1097,8 +1150,17 @@ def materialize_checked_in_decks(*, replace: bool = False) -> dict[str, object]:
     return manifest
 
 
-def validate_checked_in_decks() -> dict[str, object]:
-    expected, decks = build_deck_manifest()
+def validate_checked_in_decks(
+    *,
+    q043_registered_raw_oracle_dependency: Mapping[str, object] | None = None,
+    q043_artifact_root: Path | None = None,
+) -> dict[str, object]:
+    expected, decks = build_deck_manifest(
+        q043_registered_raw_oracle_dependency=(
+            q043_registered_raw_oracle_dependency
+        ),
+        q043_artifact_root=q043_artifact_root,
+    )
     _require(DECK_MANIFEST.is_file(), "checked-in predecessor deck manifest missing")
     _require(json.loads(DECK_MANIFEST.read_text(encoding="utf-8")) == expected, "deck manifest drifted")
     _require(
@@ -3498,6 +3560,8 @@ def main() -> None:
     parser.add_argument("--materialize-checked-in-decks", action="store_true")
     parser.add_argument("--validate-checked-in-decks", action="store_true")
     parser.add_argument("--replace", action="store_true")
+    parser.add_argument("--q043-registered-matrix", type=Path)
+    parser.add_argument("--q043-artifact-root", type=Path)
     parser.add_argument("--synthetic-bundle", action="store_true")
     parser.add_argument("--artifact-root", type=Path)
     parser.add_argument("bundle", type=Path, nargs="?")
@@ -3512,9 +3576,26 @@ def main() -> None:
     )
     _require(selected == 1, "select exactly one Q023 predecessor operation")
     if args.materialize_checked_in_decks:
-        result = materialize_checked_in_decks(replace=args.replace)
+        result = materialize_checked_in_decks(
+            replace=args.replace,
+            q043_registered_matrix=args.q043_registered_matrix,
+            q043_artifact_root=args.q043_artifact_root,
+        )
     elif args.validate_checked_in_decks:
-        result = validate_checked_in_decks()
+        dependency = None
+        if args.q043_registered_matrix is not None:
+            _require(
+                args.q043_artifact_root is not None,
+                "registered Q043 deck validation requires an artifact root",
+            )
+            dependency = registered_q043_raw_oracle_dependency(
+                args.q043_registered_matrix,
+                artifact_root=args.q043_artifact_root,
+            )
+        result = validate_checked_in_decks(
+            q043_registered_raw_oracle_dependency=dependency,
+            q043_artifact_root=args.q043_artifact_root,
+        )
     elif args.synthetic_bundle:
         result = synthetic_predecessor_bundle()
     else:

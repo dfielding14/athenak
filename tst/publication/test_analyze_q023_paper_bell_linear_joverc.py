@@ -836,6 +836,55 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
             for index in range(1, 6):
                 self.assertEqual(float(blocks[f"output{index}"]["dt"]), bell.LINEAR_OUTPUT_DT)
 
+    def test_registered_manifest_rebinding_changes_only_dependency_metadata(
+        self,
+    ) -> None:
+        dependency = bell.synthetic_q043_registered_raw_oracle_dependency()
+        dependency.update(
+            {
+                "binding_kind": "registered_matrix_qualification",
+                "registered_admission_binding_status": (
+                    bell.Q043_REGISTERED_MATRIX_BINDING_STATUS
+                ),
+                "registered_admission_digest_bound": True,
+                "registered_admission_schema_bound": True,
+                "registered_execution_qualification_check_pass": True,
+                "registered_raw_oracle_pass": True,
+                "complete_foundational_raw_oracle_matrix_pass": True,
+                "registered_matrix_path": "analysis/q043/matrix.json",
+                "registered_matrix_sha256": "a" * 64,
+                "registered_matrix_record_type": (
+                    "q043_registered_execution_raw_oracle_matrix_qualification"
+                ),
+                "registered_matrix_case_bindings_sha256": "b" * 64,
+                "measured_case_count": bell.Q043_REQUIRED_CASE_COUNT,
+            }
+        )
+        pending, pending_decks = bell.build_deck_manifest()
+        with patch.object(
+            bell, "validate_q043_dependency", return_value=dependency
+        ):
+            registered, registered_decks = bell.build_deck_manifest(
+                q043_registered_raw_oracle_dependency=dependency,
+                q043_artifact_root=Path("/registered/q043"),
+            )
+        self.assertEqual(registered_decks, pending_decks)
+        self.assertEqual(registered["cases"], pending["cases"])
+        self.assertEqual(
+            registered["foundational_registered_admission_binding_status"],
+            bell.Q043_REGISTERED_MATRIX_BINDING_STATUS,
+        )
+        self.assertTrue(
+            registered["foundational_registered_admission_digest_bound"]
+        )
+        self.assertEqual(
+            registered["foundational_registered_matrix_sha256"], "a" * 64
+        )
+        self.assertEqual(
+            registered["foundational_registered_dependency_sha256"],
+            bell._dependency_digest(dependency),
+        )
+
     def test_fractional_ppc_and_source_string_drift_fail_closed(self) -> None:
         member = bell.expected_deck_members()[0]
         text = bell.render_deck(member)

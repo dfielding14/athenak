@@ -58,7 +58,7 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear_joverc.py",
-      "sha256": "e7dd7dde0497ba1cf8add5a2ced1bd95f304c1dacef1aba5722793b67b2a75cd"
+      "sha256": "f86f1ba4f2c9599d975dfd464823f4b176d0ecf9d9b8bbd6ed69e4c1f4df3513"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear_vl2_tsc.py",

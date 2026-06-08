@@ -404,7 +404,23 @@ def _selected_bindings(
 def _members(
     final_bindings: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
-    manifest = bell.validate_checked_in_decks()
+    dependency = None
+    artifact_root = None
+    measured_manifest = json.loads(bell.DECK_MANIFEST.read_text(encoding="utf-8"))
+    registered_manifest = (
+        measured_manifest.get("foundational_registered_admission_binding_status")
+        == bell.Q043_REGISTERED_MATRIX_BINDING_STATUS
+    )
+    if final_bindings is not None and registered_manifest:
+        artifact_root = AUTHORIZED_ORION_ROOT
+        dependency = bell.registered_q043_raw_oracle_dependency(
+            Path(str(final_bindings["q043_registered_matrix_path"])),
+            artifact_root=artifact_root,
+        )
+    manifest = bell.validate_checked_in_decks(
+        q043_registered_raw_oracle_dependency=dependency,
+        q043_artifact_root=artifact_root,
+    )
     cases = [dict(case) for case in manifest["cases"]]
     _require(
         len(cases) == EXPECTED_CASE_COUNT
