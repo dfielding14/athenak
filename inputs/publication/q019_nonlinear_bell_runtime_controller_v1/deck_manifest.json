@@ -30,14 +30,14 @@
       "monitor_dt": 1e-06,
       "pilot_cycle_limit": 2,
       "production_promotion_authorized": false,
-      "rendered_sha256": "61dc86ec2f5b93732fc6d8adecdf604d4d1b07995b4b98efd4ff91f58aa15129",
+      "rendered_sha256": "4967bb10415fde5f4b468c6bcaca46cb430d37915c8e933e2c948c9c02d71641",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-runtime-initializer-ppc24-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-runtime-initializer-ppc24-s0.athinput",
-      "source_deck_sha256": "d0e33e7917621ada0ce300962244df759f73be5a195c77478832a3ac6200db51"
+      "source_deck_sha256": "156a296c3b5e3dd13d49357a7c52b6e62c7cd0f23711ba681ff003bd50b75115"
     },
     {
       "artifact_id": "q019-controller-regression-cycle-stop",
@@ -69,14 +69,14 @@
       "monitor_dt": 1e-06,
       "pilot_cycle_limit": 1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "a2beebb53c0381dc8dec4d0b42a20824f9d20385f918e43d1eaa612a4c4e3b82",
+      "rendered_sha256": "9aa07752cc13b93ee0e13a58cae7fd92ddc0fff036d638bd376caaaf82b3129c",
       "resolution_monitor_enabled": false,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-runtime-initializer-ppc24-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-runtime-initializer-ppc24-s0.athinput",
-      "source_deck_sha256": "d0e33e7917621ada0ce300962244df759f73be5a195c77478832a3ac6200db51"
+      "source_deck_sha256": "156a296c3b5e3dd13d49357a7c52b6e62c7cd0f23711ba681ff003bd50b75115"
     },
     {
       "artifact_id": "q019-controller-pilot-2d-baseline",
@@ -108,14 +108,14 @@
       "monitor_dt": 1e-06,
       "pilot_cycle_limit": 20,
       "production_promotion_authorized": false,
-      "rendered_sha256": "163885b5f19227ecdf69f91a598368cc2619dbd829f6c2cf66dcf8de52bc3d21",
+      "rendered_sha256": "0e3cde83df032317b82e9f079fcc7ef21664495148feca8e21e38ad4eaf6f80d",
       "resolution_monitor_enabled": false,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-grid-k8-rho1em05-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em05-s0.athinput",
-      "source_deck_sha256": "9ecffeffd6b56fafb1c484e57e3ef227d4d4b3c6e2094983d341797f74d7731a"
+      "source_deck_sha256": "43b04b615dfd62d20aa850cf068a1106c7a3accebf34cb55223862882419b212"
     },
     {
       "artifact_id": "q019-controller-pilot-2d-instrumented",
@@ -147,14 +147,14 @@
       "monitor_dt": 1e-06,
       "pilot_cycle_limit": 20,
       "production_promotion_authorized": false,
-      "rendered_sha256": "a5871c14c68d84532045ea6c9d81aef8ca66126a3adda0078247b5920dbc50e7",
+      "rendered_sha256": "04ed7bfb40e0c901c8799a2a873ba968e037b08fef01d58e7d5dfc9ca9ca568f",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-grid-k8-rho1em05-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho1em05-s0.athinput",
-      "source_deck_sha256": "9ecffeffd6b56fafb1c484e57e3ef227d4d4b3c6e2094983d341797f74d7731a"
+      "source_deck_sha256": "43b04b615dfd62d20aa850cf068a1106c7a3accebf34cb55223862882419b212"
     },
     {
       "artifact_id": "q019-controller-pilot-3d-baseline",
@@ -186,14 +186,14 @@
       "monitor_dt": 1e-05,
       "pilot_cycle_limit": 20,
       "production_promotion_authorized": false,
-      "rendered_sha256": "3d4da3332b91f23cd8b38b329d8bb18f4de46c7acb16e81c995ffa2227d0fad4",
+      "rendered_sha256": "338102e4db6ae5922aa661a6d1de1996c7e50fed590188f135d23d7bc6d79669",
       "resolution_monitor_enabled": false,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s0.athinput",
-      "source_deck_sha256": "512527cb36fe4cf56e8bd05dd30a5eed1080c788572f0aa2a7172215942ae90f"
+      "source_deck_sha256": "5309b4a9b370c4a01f2c2e707e29606f540a469ad275562c9e2f195affacf83f"
     },
     {
       "artifact_id": "q019-controller-pilot-3d-instrumented",
@@ -225,14 +225,14 @@
       "monitor_dt": 1e-05,
       "pilot_cycle_limit": 20,
       "production_promotion_authorized": false,
-      "rendered_sha256": "5db30893870a656f30964b03c4d07ff118bb092e0639e4c38c2cb4f0a3c0cdb0",
+      "rendered_sha256": "b09d33fd05b6fd11afb01b412a3fb0ea1cf97d3beae950e2456d34f9683ffc59",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s0.athinput",
-      "source_deck_sha256": "512527cb36fe4cf56e8bd05dd30a5eed1080c788572f0aa2a7172215942ae90f"
+      "source_deck_sha256": "5309b4a9b370c4a01f2c2e707e29606f540a469ad275562c9e2f195affacf83f"
     },
     {
       "artifact_id": "q019-physical-pilot-s1-fr-predecessor-k8-rho3em06-s0",
@@ -265,14 +265,14 @@
       "physical_pilot_stage": 1,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "1693886bb6e2d9aa3672caa579567ebc42491efaad7aa7645e5d4ecba899f353",
+      "rendered_sha256": "3ae1016d5da1c6b32e5c086e1a121f822ef5f65bee8cb097751f0b513b532569",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-predecessor-k8-rho3em06-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-k8-rho3em06-s0.athinput",
-      "source_deck_sha256": "b393c103e21a7b365e2f5515791b2ebdec4296edfbf511cf19ec9494302a18de"
+      "source_deck_sha256": "891bffeaf5b10b83059264accbe3886d5ae035bea03b719f7a3ccf01053b5385"
     },
     {
       "artifact_id": "q019-physical-pilot-s1-fr-predecessor-fiducial-ppc24-s0",
@@ -305,14 +305,14 @@
       "physical_pilot_stage": 1,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "ebad4f89166a61ddca04de63d925a3936aa32bc257d8219e38928d645854f236",
+      "rendered_sha256": "3eca102321da4fe747f8c409804ff98cf0da5310ca2ffd0ab5909a4ff1f3210e",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-predecessor-fiducial-ppc24-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-ppc24-s0.athinput",
-      "source_deck_sha256": "b0877ffebcb677058dd74b3da946f43db9f520ba8508226e42727d616698d503"
+      "source_deck_sha256": "7baad882dd0dc5c2432b11ae657728a0d280cd02dd2f0e726e16fce2b0564979"
     },
     {
       "artifact_id": "q019-physical-pilot-s1-fr-predecessor-fiducial-ppc48-s0",
@@ -345,14 +345,14 @@
       "physical_pilot_stage": 1,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "acccef7f5c5c2eb267a7d2e66a2bb6cb539df136eda8a0b88ec895aa005e1967",
+      "rendered_sha256": "7297f837f0827b24abf8c3e97c22ffea411f393ffe7518bd40c09c539b2b7acf",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-predecessor-fiducial-ppc48-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-ppc48-s0.athinput",
-      "source_deck_sha256": "5dcd138892f71004af7132d8759fe67308be67f59b3b832959cceff210856775"
+      "source_deck_sha256": "73d5cbd0dbaa06d476fb92115e71f42e1bcdb4446716e20259c0fe1c3399cc3e"
     },
     {
       "artifact_id": "q019-physical-pilot-s1-fr-predecessor-fiducial-resolution-coarse-s0",
@@ -385,14 +385,14 @@
       "physical_pilot_stage": 1,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "5087469730797322ed9ba1c3fbf7aee1b998438911781d04758bdc014b44ae37",
+      "rendered_sha256": "0f57c009b09fdf5ecea1d1339c9e4dd83439d9752d48c1bdfe9cb44a22ccfa28",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-predecessor-fiducial-resolution-coarse-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-resolution-coarse-s0.athinput",
-      "source_deck_sha256": "f5c55561fe8a397d4cff1b4ee83882eaac0c3c282b2f0218172b4a3cb68abae3"
+      "source_deck_sha256": "9e197832ae03cf94ddec65a2f30ddbdeee19c3cd13fbaa8fc3ec6cf774d3a577"
     },
     {
       "artifact_id": "q019-physical-pilot-s1-fr-predecessor-fiducial-resolution-fiducial-s0",
@@ -425,14 +425,14 @@
       "physical_pilot_stage": 1,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "d4f6feb31013ddf8cf0bdbfe28a61f2d311be90f3d63696f4253ff5992235a78",
+      "rendered_sha256": "0b9fe6e4f5053df96b0665b6161cbf42e6488e5878ea996c84d603a31b0c3bd8",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-predecessor-fiducial-resolution-fiducial-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-resolution-fiducial-s0.athinput",
-      "source_deck_sha256": "73ce1ed5e9480a0a317f69ede0f646b8b293fa0a85d79f44b2038e749a7e1dd1"
+      "source_deck_sha256": "1e30335bfbfc2a969700d871525f297d911ac3db5153846377d745ffeb48f9d4"
     },
     {
       "artifact_id": "q019-physical-pilot-s1-fr-predecessor-fiducial-particle-step-small-s0",
@@ -465,14 +465,14 @@
       "physical_pilot_stage": 1,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "5e57f623d434d1b1cf35f5219c4ce6a7fd397feda6059a8c72f5e478ca73afd5",
+      "rendered_sha256": "feaa7f980d5fd11fb7b6e26c4d55a9622d2c260b57d1e09910be77771c5c93a2",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-predecessor-fiducial-particle-step-small-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-particle-step-small-s0.athinput",
-      "source_deck_sha256": "93849b34822a745b02e0eb312e5a4bfe48fdeeef349345682cb8d67b51c2a066"
+      "source_deck_sha256": "ac9eb358775200746bbf34dea212122b9d997d10af5356d6a66762656cba7b78"
     },
     {
       "artifact_id": "q019-physical-pilot-s1-fr-predecessor-fiducial-noise-seeded-s0",
@@ -505,14 +505,14 @@
       "physical_pilot_stage": 1,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "9882c08f430c7bf8d535638d9386f4edbfa7e2c4e81ee5304bf62addc3ac86ea",
+      "rendered_sha256": "88e86bd124d2e9d9224633540711ffbdd16be96d86b1f2faca07c046152d2255",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-predecessor-fiducial-noise-seeded-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-predecessor-fiducial-noise-seeded-s0.athinput",
-      "source_deck_sha256": "c1701630d138694dc7513d8ad176dcfd1e636014e0ac1916f7fb84bb93508ec8"
+      "source_deck_sha256": "332f427468b7ab8caf0b1743d103636fe378cc3d59951ad61dfe69bba78c4427"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-hr-current-retention-s0",
@@ -545,14 +545,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "5a04db98a897edf14a361b1183c4c7634a49867bae97e526e2ecaba774c38629",
+      "rendered_sha256": "de55b225159c6923de1d80454c8858616d05b5b2b009dcad3cae9c1a7fc7bc9d",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-hr-current-retention-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-hr-current-retention-s0.athinput",
-      "source_deck_sha256": "893b09ef6a59c940801d6a09da2072cfdb4eba1d6ef2561be09e1e148a550aa5"
+      "source_deck_sha256": "91387072dd4fb03b30601f07955bea986eeff49aa1f76ff6949aec91b1474947"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-fr-grid-k8-rho3em06-s0",
@@ -585,14 +585,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "e5871a92cc3aa60995050d3100ef0e770864f61090cd12fbf3d68e20b23a6021",
+      "rendered_sha256": "7a02e987265c4931f24fe1f894fce3d5b34a92bd38b0b89980bf25885f43e25e",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-grid-k8-rho3em06-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-grid-k8-rho3em06-s0.athinput",
-      "source_deck_sha256": "ab8b8fd6ec8b8991bb02b7411942e7c5d21a0f29f2b74216c8f8cfda89d44348"
+      "source_deck_sha256": "45ccddf4ffc5a46bb8ee10af633750deaa82ec11e7b28257f82c29474d2722b5"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-fr-3d-onset-small-s0",
@@ -625,14 +625,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "0fadae97e603c0a18adef25a9cf38f4676cdad610d89d3e62fa7584c1b68662c",
+      "rendered_sha256": "284da784681435a804ad5551c5b3e5993c0a978aa9d34e0c568ce1202fedae5f",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s0.athinput",
-      "source_deck_sha256": "512527cb36fe4cf56e8bd05dd30a5eed1080c788572f0aa2a7172215942ae90f"
+      "source_deck_sha256": "5309b4a9b370c4a01f2c2e707e29606f540a469ad275562c9e2f195affacf83f"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-fr-3d-onset-large-s0",
@@ -665,14 +665,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "b3563c3694efa30c2c9cee820eb348db3b3583a04c9424a177b81057bb43f725",
+      "rendered_sha256": "6fdced03c60ade76b9f89b4f1a3dccbcada46a6b64e813e015c533e938c3fb48",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-large-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-s0.athinput",
-      "source_deck_sha256": "bcbde21cfacf88405dae8d22ebeceaa716ea6d4bafddd30cbcd206565a2889da"
+      "source_deck_sha256": "03ff4a3692692cd32b8640a32408bb2ef55f8118aa13e95f54bebb22641b8776"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-fr-3d-onset-small-ppc48-s0",
@@ -705,14 +705,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "4d845cf06b83515f65bf850f9857b9053ab81e1d7f168269edfe3b7fba6e6929",
+      "rendered_sha256": "c9592a6f989458df34ca00dc3c12d353b27407ea7099be8a62e5d0c44be82a50",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-ppc48-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-ppc48-s0.athinput",
-      "source_deck_sha256": "317fa18fb09b054ded19f7d40a99cc81f05b0a8bf4652f4f3bb13cfe03805e23"
+      "source_deck_sha256": "42d94dda4ca7195ed020310ff9b777c99abf7a4bffd860a1e63dd7156cc3ce3f"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-fr-3d-onset-small-resolution-fine-s0",
@@ -745,14 +745,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "3155707c41246c06e2a2e644d016c94df76c30177b9bf1d526536eecd817c4cb",
+      "rendered_sha256": "563693a1b32e6d29e3db6640b78b790c73e69e09dd837bcf30bb24561437ac35",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-resolution-fine-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-resolution-fine-s0.athinput",
-      "source_deck_sha256": "7d953213eda04c76a7a9176c55278a77f224ebbaeaf5d3580ddb95aa6c130402"
+      "source_deck_sha256": "04958020ae4fa358eba73c3bd7a94b7d47bcd7675e497b6f8b1d51ae05c9dd6b"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-fr-3d-onset-small-particle-step-small-s0",
@@ -785,14 +785,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "d9dc6c3687b9f2abb871cee277571ccf625f952e89a1118c1710d47043fddf15",
+      "rendered_sha256": "a10d5de33ac346c15082526ad76483048df0ce0408d745d22603c5044c6f746f",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-particle-step-small-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-particle-step-small-s0.athinput",
-      "source_deck_sha256": "20bbe8fe1dfa9bee7df92995bf6391f9bf6eaa68373022cfea6c29612db288ae"
+      "source_deck_sha256": "34a2d59645838bfeac13b2217b8df11b90a9dcc5fb92129e7bb470114dc70fc2"
     },
     {
       "artifact_id": "q019-physical-pilot-s2-fr-3d-onset-large-long-mode-sensitivity-s0",
@@ -825,14 +825,14 @@
       "physical_pilot_stage": 2,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "6db30b349571ee9506c3ebb8295a394f6af574c73093fe1d1c66f2ea7e8c1c9d",
+      "rendered_sha256": "adde7df98a86775e738e7b11389eca1ecb2e72f3c4ad2e8e9757999196303f49",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-large-long-mode-sensitivity-s0",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-long-mode-sensitivity-s0.athinput",
-      "source_deck_sha256": "f5883fb17a44607d9bfaa5c6617f80a398d4653eb6452a94574db87f28b4a887"
+      "source_deck_sha256": "a22e279153c8177cb95a8d3c2e9c85e4b93dc3fbf27d4e5f152e555500c59827"
     },
     {
       "artifact_id": "q019-physical-pilot-s3-fr-3d-onset-small-s1",
@@ -865,14 +865,14 @@
       "physical_pilot_stage": 3,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "120fb73aa87e984acdbab4e6d78e0791c5e28bef23382d792cb02d1f1111a9d3",
+      "rendered_sha256": "09b865691fd07396cd4c36e2c9c33bb1d5a96ff40973ce9a4b98a20e21e9c3fe",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-s1",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s1.athinput",
-      "source_deck_sha256": "9c9bcc4ff22b8392f468cb78798c75546fa1aaafedf57c71a01ef3600a9698b7"
+      "source_deck_sha256": "ec899021b4752339e77422f8ed3fffcf16e38bee5cc1e993e61406d9d4df56fc"
     },
     {
       "artifact_id": "q019-physical-pilot-s3-fr-3d-onset-large-s1",
@@ -905,14 +905,14 @@
       "physical_pilot_stage": 3,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "37498eec32fb6b4868fed8d6a9e4a0fc275c41e1b3cc2a890e0532a0a4c0884d",
+      "rendered_sha256": "680634e810a14ade2a70076fa76cf712817ec4425d1e83ed3bc437c7d4dee350",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-large-s1",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-s1.athinput",
-      "source_deck_sha256": "e8595eae389538d0153f86a3ff24c76b6ac977448dc43b163eeea507e936c34c"
+      "source_deck_sha256": "aa26cc9c0b773d9e1e6cef5cc4ac8f402f63a3ba19b7c5e0d9eac3f4dee6cabe"
     },
     {
       "artifact_id": "q019-physical-pilot-s3-fr-3d-onset-small-s2",
@@ -945,14 +945,14 @@
       "physical_pilot_stage": 3,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "a1d244077648663664030dee767fa000d9fe26ce9efc2fa255f12f3caced8d2d",
+      "rendered_sha256": "3d12bc0ee4883d1b3dd2f4c3b3bc7d1d60fdfe1ba2ff0856e4eaa88e30657845",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-small-s2",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-small-s2.athinput",
-      "source_deck_sha256": "2d68c125223bdc2687e337c9f7243349ae2a2cc08f43767d634e5b2ab6ca58b1"
+      "source_deck_sha256": "767f61cb5730a38fa8873d812be4a4e4f55efeb6953326c7b705b464c7277664"
     },
     {
       "artifact_id": "q019-physical-pilot-s3-fr-3d-onset-large-s2",
@@ -985,14 +985,14 @@
       "physical_pilot_stage": 3,
       "pilot_cycle_limit": -1,
       "production_promotion_authorized": false,
-      "rendered_sha256": "2fa9f4a0a31f13d1dc74ee7b05dbde7ab72b8c1e3c2732bbbfec3be3ff676094",
+      "rendered_sha256": "87aa405ea3c40780d5a0f3dbdef12347a2554d516f81317eb59f1290120acfcd",
       "resolution_monitor_enabled": true,
       "resolution_stop_armed": false,
       "resolution_stop_b_over_b0": -1.0,
       "saturation_evidence_eligible": false,
       "source_case_id": "q019-fr-3d-onset-large-s2",
       "source_deck": "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2/q019-fr-3d-onset-large-s2.athinput",
-      "source_deck_sha256": "99580406aa878f73dd4067de54fdcfe78ad1507aa5ab4c76ff8f4a41671b4187"
+      "source_deck_sha256": "d3f3d53b47b94ad5a4a7aae2ccd4b25932c3f86b944584cc0ad649a41a3cbb22"
     }
   ],
   "authority": "runtime_regression_and_excluded_pilot_only",

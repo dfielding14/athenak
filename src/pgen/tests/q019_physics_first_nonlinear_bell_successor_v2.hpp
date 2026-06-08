@@ -26,6 +26,7 @@ namespace q019_physics_first_nonlinear_bell_successor_v2 {
 
 enum class Branch {
   high_rigidity_current_retention_candidate,
+  high_rigidity_q023_carrier_candidate,
   finite_rigidity_self_consistent,
   finite_rigidity_early_time_predecessor
 };
@@ -426,7 +427,8 @@ Q019_NLB_INLINE bool HighPPCIsSupported(const double ppc) {
 
 Q019_NLB_INLINE bool FiniteSamplingModeIsValid(
     const Branch branch, const FiniteSamplingMode mode) {
-  if (branch == Branch::high_rigidity_current_retention_candidate) {
+  if (branch == Branch::high_rigidity_current_retention_candidate ||
+      branch == Branch::high_rigidity_q023_carrier_candidate) {
     return mode == FiniteSamplingMode::not_applicable;
   }
   return mode == FiniteSamplingMode::cell_centered_nested_haar_octahedral_packets ||
@@ -446,7 +448,8 @@ Q019_NLB_INLINE bool BranchSamplingIsValid(const Branch branch, const double ppc
                                             const int nspecies,
                                             const bool random_distribution) {
   if (!PositiveIntegralPPCIsValid(ppc)) return false;
-  if (branch == Branch::high_rigidity_current_retention_candidate) {
+  if (branch == Branch::high_rigidity_current_retention_candidate ||
+      branch == Branch::high_rigidity_q023_carrier_candidate) {
     return HighPPCIsSupported(ppc) && nspecies == 1;
   }
   return FinitePPCIsSupported(ppc) && nspecies == 1 && random_distribution;
@@ -455,7 +458,8 @@ Q019_NLB_INLINE bool BranchSamplingIsValid(const Branch branch, const double ppc
 Q019_NLB_INLINE bool BranchRigidityIsValid(const Branch branch,
                                             const double k0_rg0) {
   if (!std::isfinite(k0_rg0) || k0_rg0 <= 0.0) return false;
-  if (branch == Branch::high_rigidity_current_retention_candidate) {
+  if (branch == Branch::high_rigidity_current_retention_candidate ||
+      branch == Branch::high_rigidity_q023_carrier_candidate) {
     return k0_rg0 >= 128.0;
   }
   return k0_rg0 >= 4.0 && k0_rg0 <= 16.0;

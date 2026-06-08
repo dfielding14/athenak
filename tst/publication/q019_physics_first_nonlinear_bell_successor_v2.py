@@ -260,6 +260,7 @@ RUNTIME_DEFAULT_SEMANTICS = {
         "fofc": "0",
     },
     "particles": {
+        "pic_boundary_conservation_ledger": "0",
         "track_displacement": "0",
         "pic_ion_neutral_collision_rate": "0",
         "pic_deltaf_f0": "",
@@ -1888,6 +1889,13 @@ def _species_rows(case: Mapping[str, object]) -> list[dict[str, float]]:
     ]
 
 
+def _is_high_rigidity_case(case: Mapping[str, object]) -> bool:
+    return str(case["branch"]) in {
+        "high_rigidity_current_retention_candidate",
+        "high_rigidity_q023_carrier_candidate",
+    }
+
+
 def _render_deck(
     case: Mapping[str, object], *, matrix_identity_fingerprint_value: str
 ) -> str:
@@ -1895,7 +1903,7 @@ def _render_deck(
     extents = [float(value) for value in case["extents"]]
     nx = [int(value) for value in case["nx"]]
     mb = [int(value) for value in case["meshblock_nx"]]
-    high = case["branch"] == "high_rigidity_current_retention_candidate"
+    high = _is_high_rigidity_case(case)
     quiet = case["finite_sampling_mode"] == FINITE_STRATIFIED_SAMPLING_MODE
     lines = [
         "# Q019 physics-first nonlinear Bell candidate. No execution authority.",
@@ -1964,7 +1972,8 @@ def _render_deck(
             "pic_feedback_mode = coupled",
             "pic_interp_scheme = tsc",
             "pic_enable_2d3v = true",
-            f"pic_cr_light_speed = {_float_token(ARTIFICIAL_LIGHT_SPEED)}",
+            "pic_cr_light_speed = "
+            f"{_float_token(float(case.get('artificial_light_speed', ARTIFICIAL_LIGHT_SPEED)))}",
             "pic_cr_initial_state = velocity",
             "pic_cr_hall_mode = off",
             "pic_wave_damping_mode = off",
@@ -2014,9 +2023,10 @@ def _render_deck(
             "external_sha256_execution_receipt_required = true",
             "external_sha256_execution_receipt_bound = false",
             "deck_role = source_local_physics_first_candidate_not_authorized",
-            "source_lineage = hardened_control_plane_q043_then_corrected_q023_then_q019_v4",
-            f"matrix_scope = {MATRIX_SCOPE}",
-            f"domain_time_status = {DOMAIN_TIME_STATUS}",
+            "source_lineage = "
+            f"{case.get('source_lineage', 'hardened_control_plane_q043_then_corrected_q023_then_q019_v4')}",
+            f"matrix_scope = {case.get('matrix_scope', MATRIX_SCOPE)}",
+            f"domain_time_status = {case.get('domain_time_status', DOMAIN_TIME_STATUS)}",
             "axis_alignment = B0_parallel_JCR_parallel_x1",
             f"rho = {_float_token(float(case['rho']))}",
             f"pressure = {_float_token(float(case['pressure']))}",
@@ -2042,7 +2052,8 @@ def _render_deck(
             "mhd_resolved_scale_applicability_accepted = false",
             "R_much_less_than_one_applicability_accepted = false",
             f"no_hall_mapping_basis = {case['no_hall_mapping_basis']}",
-            "species_q_over_mc_matches_background = true",
+            "species_q_over_mc_matches_background = "
+            f"{str(bool(case['species_q_over_mc_matches_background'])).lower()}",
             "charge_density_ratio_equal_background_qom = "
             f"{_float_token(float(case['charge_density_ratio_equal_background_qom']))}",
             "hall_parameter_equal_background_qom = "
@@ -2226,8 +2237,8 @@ def _render_deck(
             "convergence_required",
             "current_agreement_gate = deposited_grid_vs_reconstructed_particle_required",
             "morphology_and_relative_drift_diagnostics = required",
-            "physical_pilot_gate = explicit_independent_q043_then_q023_then_finite_"
-            "predecessor_source_compatibility_then_excluded_pilots",
+            "physical_pilot_gate = "
+            f"{case.get('physical_pilot_gate', 'explicit_independent_q043_then_q023_then_finite_predecessor_source_compatibility_then_excluded_pilots')}",
             "q043_independent_raw_cycle_one_oracle_id = "
             f"{case['q043_independent_raw_cycle_one_oracle_id']}",
             "q043_independent_raw_cycle_one_oracle_bound = false",
@@ -2537,15 +2548,18 @@ def validate_rendered_deck(case: Mapping[str, object], text: str) -> dict[str, o
         / root_cell_volume
     )
     measured_rho = ppc * qscale / root_cell_volume / float(case["rho"])
+    q_over_mc_matches = math.isclose(
+        float(species["charge"]),
+        float(contract["background_q_over_mc_reference"]),
+        rel_tol=0.0,
+        abs_tol=0.0,
+    )
     _require(
-        math.isclose(
-            float(species["charge"]),
-            float(contract["background_q_over_mc_reference"]),
-            rel_tol=0.0,
-            abs_tol=0.0,
-        )
-        and contract["species_q_over_mc_matches_background"] == "true",
-        "rendered CR/background q/(mc) equality drifted",
+        q_over_mc_matches
+        == bool(case["species_q_over_mc_matches_background"])
+        and (contract["species_q_over_mc_matches_background"] == "true")
+        == q_over_mc_matches,
+        "rendered CR/background q/(mc) relation drifted",
     )
     _require(
         math.isclose(measured_j, float(case["expected_j_over_c"]), rel_tol=1.0e-13),
@@ -2614,7 +2628,7 @@ def validate_rendered_deck(case: Mapping[str, object], text: str) -> dict[str, o
         "bounded_hall_omission_candidate": True,
         "mhd_resolved_scale_applicability_accepted": False,
         "no_subion_cell_scale_envelope_satisfied": True,
-        "species_q_over_mc_matches_background": True,
+        "species_q_over_mc_matches_background": q_over_mc_matches,
         "per_cycle_history_retains_actual_completed_step_dt": True,
         "registered_actual_timestep_history_binding_complete": False,
         "complete_runtime_deck_semantics_bound": False,

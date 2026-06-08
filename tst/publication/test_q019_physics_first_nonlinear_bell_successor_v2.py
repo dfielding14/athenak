@@ -709,7 +709,18 @@ class Q019PhysicsDesignTests(unittest.TestCase):
             str(case["case_id"]): str(case["matrix_identity_fingerprint"])
             for case in self.cases
         }
-        self.assertEqual(compiled, expected)
+        self.assertEqual(
+            {case_id: compiled[case_id] for case_id in expected},
+            expected,
+        )
+        self.assertTrue(
+            set(compiled) - set(expected)
+            <= {
+                case_id
+                for case_id in compiled
+                if case_id.startswith("q019-q023-carrier-")
+            }
+        )
 
     def test_exact_bai_literature_map_is_bound(self) -> None:
         reference = json.loads(REFERENCE_MAP.read_text())

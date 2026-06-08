@@ -401,160 +401,188 @@ struct Q019CanonicalMatrixIdentity {
 };
 
 constexpr Q019CanonicalMatrixIdentity q019_canonical_matrix_identities[] = {
+  {"q019-q023-carrier-s1-onset-s0",
+   "e0028fddc9f769bc4096773196528be1df3a35083386fc148be47640f4a71a4b"},
+  {"q019-q023-carrier-s1-onset-s1",
+   "32c355d803a53a999e28c0957dfbfbbf7eb9b0d8d4416ef7175ae9e49ffc82b1"},
+  {"q019-q023-carrier-s2-window-fiducial-s0",
+   "97a0b9c85a2e603a1dd92a3857d390c6cc070d6ba6c66a92d2619fe961b09629"},
+  {"q019-q023-carrier-s2-window-fiducial-s1",
+   "bf2c7a617ef5291fa9b4d9ec4c8bb29beec7459f48f53291f67114deb384605a"},
+  {"q019-q023-carrier-s2-resolution-coarse-s0",
+   "47eb08f359e93c8b6927069d7b87cf1635a216c503594792b50d229d8a4d2f52"},
+  {"q019-q023-carrier-s2-resolution-fine-s0",
+   "f580ffd28b6fbc96e5d886ae9ced50f3c2b73d290caf9ef86b994fba29eba0a8"},
+  {"q019-q023-carrier-s2-cfl-small-s0",
+   "5d5a1bc259debe274e00c8cfc3a514956359174b011d961b81047c44490ab710"},
+  {"q019-q023-carrier-s2-cell-cross-one-s0",
+   "7b7baa9429f813f8c5f1f2f15821969d2ff8a691616486cf894ffa3e953e2cde"},
+  {"q019-q023-carrier-s2-riemann-hlld-s0",
+   "e79a061ca125612a63ffcaf511e0cff7b33952dadd825198366655e2acff418c"},
+  {"q019-q023-carrier-s2-reconstruct-wenoz-s0",
+   "ca916cf8cd79059473acac2835f7f29b794b1db526ac11410ac3505efe9f9f59"},
+  {"q019-q023-carrier-s2-qom1em4-s0",
+   "03f66330d3ab1da4f06246a8582644553e9474bd5893fc24a0980b6db062f6bc"},
+  {"q019-q023-carrier-s2-qom1em5-s0",
+   "f6927649d2efe6281bd74003f10de86da3a343b7c90c443b698f50b96a1b2f14"},
+  {"q019-q023-carrier-s3-3d-fiducial-s0",
+   "023503a56d13b4f9f432435ac5e9e90637428a1282703237d5f1394c46ba0be7"},
+  {"q019-q023-carrier-s3-3d-large-s0",
+   "53c4b368e999a85aecc32c8eab356726c8dd602ad236951f6c02adb262bef4d7"},
   {"q019-hr-current-retention-s0",
-   "b2c9452a178fd73b01afcd9369343f036942a8b6a4779166b27056ae44690201"},
+   "799cb9c639ac432481b97b74b807283a9369ae94f91d020850d47561058c527e"},
   {"q019-hr-current-retention-s1",
-   "72173e17bafe340384110f2bde7262d3002588551aa836eb4a294541f75916c4"},
+   "db20573806afee27d9017aacf0def2ee91ad215d83172647a3beb1320eb16105"},
   {"q019-hr-current-retention-s2",
-   "519e567985baf67be1f9bda6b32ee30afeabd7b41f04aa5008b4546f6cbbe5c2"},
+   "1117ae78944dc5eec328aa25c98a88bb45758ea7ea5380afc0232d206737a5ea"},
   {"q019-hr-fiducial-ppc8-centered-s0",
-   "aa48117da4ba4e040e9df2dbad62cda7527ea7804358a047c704fdd9d1f54534"},
+   "c7d312be0a20ee31688d0ba112d3e1cc48deaa6670f0939a9b85ffff359e5d3e"},
   {"q019-hr-fiducial-ppc32-centered-s0",
-   "bf8b9803303008117409872b0e7b847f9042d9523d27bfa50be2227bfa8f949b"},
+   "c990d8b56c6538988426039c36971a5a2a573f6e0bf73b8d1bf8a7f5b784f741"},
   {"q019-hr-fiducial-resolution-coarse-s0",
-   "30b4190b2b6e5a381354f762772046e6aca7ee9d344cab2ff3514d65a7167396"},
+   "3ccdec0d0d207e9fb56b4696f1ec0c53b8d81ca9906b26b87606c747bcdb5aab"},
   {"q019-hr-fiducial-resolution-fine-s0",
-   "52362a0b02ab1dbbcdd866ae5a84280bf1b1b24324be2c5b7095e50fc894801c"},
+   "e1f860e805a5ee6e4e817c61419f3c8305ea11bbdb3823ce527ebdec686f2bd8"},
   {"q019-hr-fiducial-particle-step-small-s0",
-   "36bb813ce376a86c90621f046d2ee1a6770a023de88fc480dee2417ae23433dd"},
+   "69b3aecc3e71914a122069e844959ad00c7453bd5b250232e83dfadb49533b5c"},
   {"q019-hr-fiducial-stochastic-position-s0",
-   "065ef90ce08e9cc7eaba103740d1509ee7973a5c6bd71887e5bf4f3926b6639d"},
+   "a1cd6d1aed0844e7eb29cb11b3a742c315c14bf9094e37b658d57ec0ca0ac5bf"},
   {"q019-hr-fiducial-stochastic-position-s1",
-   "f7e714c4bca4a7498b4167934b79ce13d29681e5ee12de53b8709e72ea8b26a9"},
+   "78b5341ab6987262d8587d78446f24f2993f83f0a03fa78fe3c03b82ffb31f11"},
   {"q019-hr-fiducial-stochastic-position-s2",
-   "bfb659dca97d042fe3f035c0c0e14144c4a2c0460c33323bccead193b489e3f0"},
+   "b111215d22dc5a9bce3c5ed008d35685908d01a53731b81e77eda52f42d62edf"},
   {"q019-fr-grid-k4-rho1em06-s0",
-   "10b3778821d6d033a0cc4d2eef12e65fc326ec93e8121d87152095930e92ff88"},
+   "d6292f5792ac29a8428a0c5b0a49eccf9d54eef454b006e6514f1e8b5a7b8a9e"},
   {"q019-fr-grid-k4-rho1em06-s1",
-   "84a2d8cc6b8cced3376f044803f69194f3e9c949cd9f60f6c6de36e4cb7c458a"},
+   "ed35d6e4d903665648805266f1c47f4cb5aec742f3c6312e5fe1b2091cd83ddd"},
   {"q019-fr-grid-k4-rho1em06-s2",
-   "cf69e8c1614f5b8dadf4037556ebcd1e6d0d26fa4c781ebe4a9a2a91f9b25586"},
+   "b44f225520174d9ee35c21933ecbd96a2f1d0d06969172fb9429eb22577ff709"},
   {"q019-fr-grid-k4-rho3em06-s0",
-   "0f6c3b787c542403849bf73022f7c9cc0a52d9189e7bf023b09ea55db7223670"},
+   "6b01ad9d66d36391e43e135988bc309e11247d5d9941682762fbd27745e67254"},
   {"q019-fr-grid-k4-rho3em06-s1",
-   "5d8617fe4452751a7e0a10521a8fd8d72f271f6aac92de74b33e2e508188e831"},
+   "0dc6892c65529a4670a15e20371b2532c374f3cb804b5ccce53deaea767c469f"},
   {"q019-fr-grid-k4-rho3em06-s2",
-   "bed57fada09c7ede9f8e87f94a122f82375f642fa11cf800d936f07024573775"},
+   "12aef7a88a2cadc410b345f5398a05d6ac3a07644b20ccab84391caea4700e52"},
   {"q019-fr-grid-k4-rho1em05-s0",
-   "d5316acc3bdf30f0e45dcc17dd3d11d117309ed4c26f28e064f475f6c657c94e"},
+   "62606f69d9d6171d3d4c8e99ff94ccba8e3424feef0f209769853f3ccb4f85e5"},
   {"q019-fr-grid-k4-rho1em05-s1",
-   "e79ff51ca9d5c208d56af7ece3d816e008317d3897991821e4ec1829e27214ae"},
+   "614d8bcb11048427926ab44bfea5d087aed42773442e26ea45d26d63f3685a83"},
   {"q019-fr-grid-k4-rho1em05-s2",
-   "cbcc7c3b5f29d75a7664e682cd729ed88be021ebaa1a745c8a3059e05058adba"},
+   "1146bba3c26825569fa6426681e956dc244413fb304dfe203be54ac5a8b4f18c"},
   {"q019-fr-grid-k8-rho1em06-s0",
-   "620cab2c7067e8ad104fb24737eb0dd2f6721fff10ff348e37483002affd406b"},
+   "d3762e89224da830cdf7872ee9b93fcde705afeb59df5c3b5ebf5ec58a79b2f7"},
   {"q019-fr-grid-k8-rho1em06-s1",
-   "4daf1015f03e95e760e0b0eb23d8a935313a3993e71fe6e6c73971a0f08319f7"},
+   "670666a31c3894f4a2e248192123eefa35b1cf3a8b68557a8b21c4af49e4fdc5"},
   {"q019-fr-grid-k8-rho1em06-s2",
-   "e1aecbdc6f7a9512bc1116afec7928f8219cc8fd0b7b649a088c2743dbfe25c8"},
+   "0611feeed0225976cec8dafddbb4e9a6c71ffe53876e6292fe1c5ef50e84a2e2"},
   {"q019-fr-grid-k8-rho3em06-s0",
-   "1731d4fa3e63d5e93a205ea54787f3f4e8d6f686be95a274ee456afbbc18d23b"},
+   "fdc59740a5a391c5e97d54e500fb3ba67c963447ce61d2814c8516c03fd37b30"},
   {"q019-fr-grid-k8-rho3em06-s1",
-   "633ee55d150acd65827412a8ed38ab77701c78f2c41d5cd3a9b1047035b14191"},
+   "bd9f039566b13d4330e1ce50bb55a969cb2ac55d36fd8e336365e3fb4e82e15b"},
   {"q019-fr-grid-k8-rho3em06-s2",
-   "a992db827bf2d99c4084cd4e31b4fd927c53cd8fb9a7914c04bc8ffe7a8a4dc4"},
+   "dcbc569b3e72b4f5088136cae33c205692967152087062d3af6b4f72563c6bff"},
   {"q019-fr-grid-k8-rho1em05-s0",
-   "9ce6e2e0cac6901ed84d7245b9058d48e2216c2ef4c8c00e14d60c970d066b8f"},
+   "e25135a6709149f0c8384749cdc11436cb2d3e49df1889bf81a0ae84cd045e71"},
   {"q019-fr-grid-k8-rho1em05-s1",
-   "70d2266c6e4e283964a5ffee577ae4e9b80c81596f1704c23e2b2c77fbf5cf01"},
+   "4bc9e145720f1a29ddd534a0f08481ca1459102f99c189f918f7393eeb2747e6"},
   {"q019-fr-grid-k8-rho1em05-s2",
-   "0c1521afe1b094799010b609eaee19a633e524cc0f667d1a799214147270cd90"},
+   "1a0b73d814c6f07a9271c323809260f5ddf01fb849b9e0eabd97eceb148cbf22"},
   {"q019-fr-grid-k16-rho1em06-s0",
-   "6559ead01452bdde55a90ce7a14344f0cdb12bc28b66a42d700e6251b3333871"},
+   "7be9247672d74f3804a01d4792cad4299a2e93d94050d1096e883a0663ac8590"},
   {"q019-fr-grid-k16-rho1em06-s1",
-   "ba616989f5cd4a971d2bb7b1e4dd55aa143f400e288e22907fec3d171d45413e"},
+   "1f0d8560bc048399939eeeaded913635326bdb527eb400adf5fd8e1421a8f744"},
   {"q019-fr-grid-k16-rho1em06-s2",
-   "e2884dba3a3314205af5ed7ccdcc8b0b7452e12ded731523b538560e7730cb04"},
+   "8ac21753ed96b45bd80a1039f7f2c5b0e2adbecaf78059512dd908fc621029f0"},
   {"q019-fr-grid-k16-rho3em06-s0",
-   "3b806b9a445affc17bea797ee3bde2ed7aeff55010097e8426e2aa9050617601"},
+   "5f5ed92ecad913493d08764fd057a17ff2283250c4962097f0fe555a8172580c"},
   {"q019-fr-grid-k16-rho3em06-s1",
-   "15409c03cef18d7e44e4dd451d370be5a12bca8654677371d6f45c2950e192ca"},
+   "4c8513b715e0e8c18ac55dfa3f2444cb649c17432f5b9599a5e5634e69cef1d6"},
   {"q019-fr-grid-k16-rho3em06-s2",
-   "a7ed20d5d1f6b3fc3f18d917dbfdfd150c5f63dd78cc9d3f3d9a2f2a3196226c"},
+   "fdc7df931f80029cbcf261ed11cb2ea936b2d5af2e6ac39a61f59754cd7cdb58"},
   {"q019-fr-grid-k16-rho1em05-s0",
-   "0f4ceb92cbf3ac683d1cc65b4155cbe6f64383cd18b0bcea929b04a797adf7c3"},
+   "44f9c2b15e9eed74d968384e9777f430e91216f41b3bd8a413106a1e9af9a17e"},
   {"q019-fr-grid-k16-rho1em05-s1",
-   "808d8acb1e641a9c456fc72eab07a841ba3ff0b3ffae9783b143363684fe85d0"},
+   "b58262d06ec9dacd0ae074a09ce41af4071e3ad364765fa3b833bcb2e2cddf64"},
   {"q019-fr-grid-k16-rho1em05-s2",
-   "a77888ef046cdbfd37f23669e537e31181a6f8a6db738334f82d855276209f47"},
+   "2a778c3aafdf77dbea617a4b448b0a2700f12d52c84cedf7f98f50507a9333fe"},
   {"q019-fr-rigidity-isolation-k4-s0",
-   "bda095439b47b2d2dc969dac7008f25eaef924e0c87e2c58fe3ff70aa5b86ba5"},
+   "a752617ab4d07bc4b31d5de53639e2107d6d7affad5dfd4001e2a9c84d7030da"},
   {"q019-fr-rigidity-isolation-k8-s0",
-   "26fa33df52377881508848330e138437f497b0d9e494402100e9f7e113cd8573"},
+   "0a911e8557691df7777f09bd49b4a37c5c55ef78bc9ff12ac3abce4971c0466b"},
   {"q019-fr-rigidity-isolation-k16-s0",
-   "721285967f4ba87310af067eab52092992f6465ed550d7025e7b20bd0126c89a"},
+   "656d36ed9878b4e77056646bffa5a2fd8707ad552dc95ed839bf79c56c638118"},
   {"q019-fr-fiducial-ppc24-s0",
-   "b53ee9cc8b023c1062b91a6549da185b6c660f39942e9a1e02e8427ef320f2b9"},
+   "ef639c7a3e761f1a4945e4e14acc1fa1638124649d6b54f42049a3c3e1c1ab9b"},
   {"q019-fr-fiducial-ppc96-s0",
-   "5cfb52c74ced107a7ce5b01e3a99550e54975ca221fdbba0612a023eab316d5e"},
+   "813018c931f5358ffb46c9c262fb1831fa1f35d8e47774a8b78e1cc33ed3a280"},
   {"q019-fr-fiducial-resolution-coarse-s0",
-   "cd3a2c956ccfed03d35e2bb33967ba0415fe21bc704e3a9f2254254aa6c54174"},
+   "6e607bc1932cf6bad712f5881492429f993ab2feedfc87a29dd299255b450034"},
   {"q019-fr-fiducial-resolution-fine-s0",
-   "cce736e24f2139614b7cd5bc4558c29bd5662a9b3d9463129a562d2a9512f3e7"},
+   "5b94c5a55feea5a5606aafea0d913aa0c1ba27372cce9f882b6a2e16063f340d"},
   {"q019-fr-fiducial-particle-step-small-s0",
-   "4f842d69787703ac4df173ad252e9f256de152ff9760ba5c69335330fbe0a5d5"},
+   "5204e252307f33794365360278b99de77f2cedb9a194405d7223f23572f23c03"},
   {"q019-fr-fiducial-noise-seeded-s0",
-   "c3971d3e23ab2c9587f616233669e96ecdbe86e43422a5aec571ffac94f91fe1"},
+   "0c1dc586e5e189153576c6a696b71e10cb84ef4dbd3945848dc86495140eb341"},
   {"q019-fr-fiducial-riemann-hlld-s0",
-   "ae6177113ef277401b7abdba71f8fd12c149b679f0ab4c666b4e94459d3b282b"},
+   "3e38179885f367a406f479086f4864af8823260fa05c735b87b63c063b4e37c3"},
   {"q019-fr-fiducial-reconstruct-wenoz-s0",
-   "abb4498db6b5d589eed6fecd2b7790803d22750b712e54afc5fa169a8205e23f"},
+   "ea9fed9133a533f8ce0dbb61d3f52e0518d344462a23f3abec888209b0267c14"},
   {"q019-fr-runtime-initializer-ppc24-s0",
-   "bda29de353dffb78dc5fff20206d6cfb637a0a703ffb119ef4a9ee755f97c5c3"},
+   "71f73a64e2139159816d93f9021350df555618b966e69c0af7bc2da2d51c3fa6"},
   {"q019-fr-runtime-initializer-ppc96-s0",
-   "e410a46e72bdb6fc875638cae7500e0e79d763ac4795d66e39623ec09d2d277e"},
+   "e87a28bfb1fd14a2669a1d480978a6a6e8f7a7c1a8ceb61698b6e95f41cd6b6e"},
   {"q019-fr-3d-onset-small-s0",
-   "2c3afb364493200fd81490a87f5a048d9d708c598f6587c4bf2c909aff68026e"},
+   "57ba341bd55e14531afb0f2ca7abd9b11b910eee61a48e947bcbd349f2e277eb"},
   {"q019-fr-3d-onset-large-s0",
-   "ef870b1120a57dcda09764d88a751db52354c0fc4e63762a58c98e48c43993dd"},
+   "d2ff1c3bdedfc4927df49bb816c5acb8108f1d073931e4a0263122778cbfc105"},
   {"q019-fr-3d-onset-small-s1",
-   "9f2cdbcfac33597445401ca214b96bd7d97664b67797a5c0cedec5660e48a81a"},
+   "77c30c6173b61dfba27eb973c8185a353da2681c087a4f691f19ba4d345b5e11"},
   {"q019-fr-3d-onset-large-s1",
-   "1aa91f7fa1420d9cc9b1e00e80b20b9043cf3c5d52d1ca791d2a5f6762beba51"},
+   "33fab9e7370205adde79ba44b56241e623d81dee127c72c140e2f499ecc459a6"},
   {"q019-fr-3d-onset-small-s2",
-   "9df5cb31a8ee1d933bf2b915a556474e4ea4271507ea7c28621de310db63aef6"},
+   "55bf3d61fca7a935274e355a9c71b91557d84e487095bec085ddca3e2df48840"},
   {"q019-fr-3d-onset-large-s2",
-   "3fa8f8c85e9f0b70de06e68143a9190022c575b4456d50657a14894b05ca7ac9"},
+   "e63a208d2488f294ef7bd5ce0be86e675764ac26d6b027055ba085ea4f0df77d"},
   {"q019-fr-3d-onset-small-ppc48-s0",
-   "53e0d68b13f7a254007fd514c3e4cb62e97a1da42d1a99b8b7f05f2a787ada34"},
+   "b05065fd57f3bf77084404d2c6e8bbfccfccbaf612831e086f19e15ce3fda760"},
   {"q019-fr-3d-onset-small-resolution-coarse-s0",
-   "ca6d1c0fd305245950c5e571ace1b62f38b0184c0a2bcdb8d6cf88f8624cf82b"},
+   "b52c18e7550e26fdd5bf8b63ad6d7aa7563bd0043c3d782f444a785f05867f42"},
   {"q019-fr-3d-onset-small-resolution-fine-s0",
-   "336f759fd529ae6f3267f67929ad983b0144abb4e83435e70db325f73d6ea205"},
+   "a8a30a52e707cb340dbdf66ede0ea96b92330ff0eb98dde4d407b7c58c454a03"},
   {"q019-fr-3d-onset-small-particle-step-small-s0",
-   "4ae5a2c45f52c36a6d0a5c80eb08b0fc9e5189f74a30915640a042ff57fb49f7"},
+   "99b17e031ebd803026351ee1b7eb3ddfe2c90f7fa7734ef285048681efce0e16"},
   {"q019-fr-3d-onset-large-long-mode-sensitivity-s0",
-   "2452805b2255b87cff27736e9adce091fca99e78186c602da40a53137d8cc9a2"},
+   "dbb37db10440bb8ed4e0c59b19dc8edae464e6f8d7a26c5a117a9144cc7304a3"},
   {"q019-fr-predecessor-k4-rho1em06-s0",
-   "788ffc0eb1c60195a7637fe1d77e9e9a47f6496ab15a39db55bef840266a15ad"},
+   "d45231c0c415a1abae767014956ee2076fdda5c98258818cd116e1efab7f6d95"},
   {"q019-fr-predecessor-k4-rho3em06-s0",
-   "4f6cf2c4d8f23ba92fe733e7d44820940c6d19206d7c10ad2a339ea8b39c4d8b"},
+   "9a84c2412d8eefced3e0edb500e025f78cb05182db0fed926f906b7b9d006e13"},
   {"q019-fr-predecessor-k4-rho1em05-s0",
-   "fa41e16c82c28c40fadd95c6b3e9f48cb1c46eb1561a6134e323fe8e0c03d03c"},
+   "c4460fa6a8f1994996dda31eb426b39bb98815a3bdb2130d03c11bb90e15ae13"},
   {"q019-fr-predecessor-k8-rho1em06-s0",
-   "b0f105228d3615cc0e8cc4dabdfeec3fc6d4728050adddb5afb3641f04d5a235"},
+   "3a0828f624a6ba09eaf6c991ab9af6dc9f87eab2951c112347de2ff55a609491"},
   {"q019-fr-predecessor-k8-rho3em06-s0",
-   "2991196f18fb99c222097279b28fba58d5bd24eb943602e74a2a97d4a1b2d5f9"},
+   "2ba513470763c608a716c35e03553013aac8b8733aa1b92863195fd23a9a2cd8"},
   {"q019-fr-predecessor-k8-rho1em05-s0",
-   "eecb1b09495e699bc45379f00e675a72140ad99e36540dda8f6958695802808a"},
+   "5fdf7839c8501bef907a942b697998743ab02b69ef3570da82cc243c57ab3471"},
   {"q019-fr-predecessor-k16-rho1em06-s0",
-   "2fd8d313c8c793942dcabbbdaf92ebc41e258efa8f41c3217c844fc169184a6d"},
+   "9d7e529dd3bc00575b3f49f0483fd6c7bc17c29001358a59ba7d16cc559ef5ef"},
   {"q019-fr-predecessor-k16-rho3em06-s0",
-   "716ff430d958cf3ebbfb5c5f773d9d55b58a53cf8224236c922a8b3ec97cf41f"},
+   "84a3da12481fd0043f6f38008fa243527dc639ba146c81a43731f6aeb484e400"},
   {"q019-fr-predecessor-k16-rho1em05-s0",
-   "e1b1317c123cad6dddc5d97fa35c5150972316c94513ff82237fc9204b164391"},
+   "a7d8394a57fba2ce059bad445a6f1487cedfe3c64e20ca526c50f3a06e3e7e55"},
   {"q019-fr-predecessor-fiducial-ppc24-s0",
-   "e2f71d37a65fcb9c6bea403ae7c690a8ca3894218786d8e7a31985dbdc9c8b0d"},
+   "85eb47817a7a6c8eb178ddb8099a31ee942b2b2c097a4d15441f3b5774a2c8de"},
   {"q019-fr-predecessor-fiducial-ppc48-s0",
-   "268292e41b5372fdb944abfbc593aaad30379cdbd366a1033642688400cc092b"},
+   "cf87e50926ec556e038467c2014dd033b5092f8ff02dffdfb1f1c122a8441b82"},
   {"q019-fr-predecessor-fiducial-resolution-coarse-s0",
-   "2fc75e5f69fc5c2adcac3b6695b6d629cf4e10bdbe3f756302ba7be5203e89e2"},
+   "48e395a9d29d987258774a64a200f72211719c738925ea02796ce7ddfb56a259"},
   {"q019-fr-predecessor-fiducial-resolution-fiducial-s0",
-   "c3bf27e7b56ab17bf14ed4a8f9281fbf557c3bbc8d689d2ad3e5f039aa793d08"},
+   "d50d4585c450cde4bf5444ac699eaede02737cf86a34a2370ff409d6a8e12f27"},
   {"q019-fr-predecessor-fiducial-particle-step-small-s0",
-   "4ecbbc28eedd2c7aa8843fdb7e6136b7cfb0fdbc68728c831f9bd5e5fca7e936"},
+   "84cb50cc0d875e8a77d3c86e3ee8239be35e7e23cc39388b7d20125dac072d17"},
   {"q019-fr-predecessor-fiducial-noise-seeded-s0",
-   "9b422b0a6c91dd4947269a74b1349a3a701583b8e1621c1ec95be0cadaf4b15a"},
+   "626eee951bdebca0e081085ca0ff8d2410f37d9442723ad6b86b61145aab5a6e"},
 };
 
 const char *Q019CanonicalMatrixFingerprint(const std::string &case_id) {
@@ -570,6 +598,17 @@ bool Q019RoleMatchesBranchAndDimension(const std::string &role, const Branch bra
     return dimension == 2 &&
         (role == "high_rigidity_current_retention_seed_ensemble" ||
          role == "high_rigidity_staged_convergence_control");
+  }
+  if (branch == Branch::high_rigidity_q023_carrier_candidate) {
+    if (dimension == 3) {
+      return role == "q023_carrier_3d_window_pilot" ||
+          role == "q023_carrier_3d_box_control";
+    }
+    return dimension == 2 &&
+        (role == "q023_carrier_linear_onset_pilot" ||
+         role == "q023_carrier_nonlinear_window_pilot" ||
+         role == "q023_carrier_numerical_control" ||
+         role == "q023_carrier_rigidity_control");
   }
   if (branch == Branch::finite_rigidity_early_time_predecessor) {
     return dimension == 2 &&
@@ -1201,6 +1240,9 @@ Branch ParseBranch(const std::string &name) {
   if (name.compare("high_rigidity_current_retention_candidate") == 0) {
     return Branch::high_rigidity_current_retention_candidate;
   }
+  if (name.compare("high_rigidity_q023_carrier_candidate") == 0) {
+    return Branch::high_rigidity_q023_carrier_candidate;
+  }
   if (name.compare("finite_rigidity_self_consistent") == 0) {
     return Branch::finite_rigidity_self_consistent;
   }
@@ -1280,7 +1322,10 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
   Q019RequireString(pin, "job", "basename", case_id);
   const Branch branch = ParseBranch(branch_name);
   const bool high_rigidity =
-      branch == Branch::high_rigidity_current_retention_candidate;
+      branch == Branch::high_rigidity_current_retention_candidate ||
+      branch == Branch::high_rigidity_q023_carrier_candidate;
+  const bool q023_carrier =
+      branch == Branch::high_rigidity_q023_carrier_candidate;
   if (!Q019RoleMatchesBranchAndDimension(role, branch, dimension)) {
     Q019NonlinearFatal("Q019 role does not match its branch and dimension");
   }
@@ -1308,7 +1353,9 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
   const bool finite_predecessor =
       branch == Branch::finite_rigidity_early_time_predecessor;
   const std::string expected_campaign_id =
-      high_rigidity ?
+      q023_carrier ?
+      "Q019-HR-JOVERC-Q023-CARRIER-FIXED-CURRENT-LIKE-NOHALL-V1"
+                   : high_rigidity ?
       "Q019-HR-SIMILARITY-MAPPED-HALL-OMISSION-CANDIDATE-NONSHOCK-V4"
                     : (finite_predecessor ?
                        "Q019-FR-ISOTROPIC-SHELL-EARLY-TIME-PREDECESSOR-V4" :
@@ -1340,19 +1387,35 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
                     "source_local_physics_first_candidate_not_authorized");
   Q019RequireString(
       pin, block, "source_lineage",
+      q023_carrier ?
+      "hardened_q043_then_registered_q023_joverc_then_q019_q023_carrier_v1" :
       "hardened_control_plane_q043_then_corrected_q023_then_q019_v4");
-  Q019RequireString(pin, block, "matrix_scope",
-                    "physics_first_preproduction_design_successor_v4");
-  Q019RequireString(pin, block, "domain_time_status",
-                    "engineering_candidate_pending_excluded_resource_and_window_pilots");
+  Q019RequireString(
+      pin, block, "matrix_scope",
+      q023_carrier ? "q023_carrier_excluded_physical_pilot_design_v1" :
+      "physics_first_preproduction_design_successor_v4");
+  Q019RequireString(
+      pin, block, "domain_time_status",
+      q023_carrier ?
+      "versioned_redesign_after_finite_rigidity_resource_overrun_execution_prohibited" :
+      "engineering_candidate_pending_excluded_resource_and_window_pilots");
   Q019RequireString(
       pin, block, "applicability_scope",
+      q023_carrier ?
+      "q023_low_gyrofrequency_large_inertia_external_current_surrogate_"
+      "periodic_ideal_mhd_no_finite_rigidity_or_physical_cr_density_claim" :
       "similarity_scaled_equal_cr_background_qom_mhd_scale_and_R_explicit_"
       "applicability_review_pending_not_strong_shock_mapping");
-  Q019RequireString(pin, block, "energy_loading_regime",
-                    "isotropic_shell_plus_drift_energy_accounted_periodic_system");
+  Q019RequireString(
+      pin, block, "energy_loading_regime",
+      q023_carrier ?
+      "large_inertial_carrier_reservoir_explicitly_reported_not_physical_cr_density" :
+      "isotropic_shell_plus_drift_energy_accounted_periodic_system");
   Q019RequireString(
       pin, block, "energy_loading_gate_status",
+      q023_carrier ?
+      "external_current_surrogate_only_requires_measured_current_momentum_energy_"
+      "invariance_and_conservation" :
       "unqualified_requires_coupled_response_grid_conservation_and_saturation_review");
   Q019RequireString(
       pin, block, "finite_distribution",
@@ -1433,6 +1496,9 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
       "fail_closed_pending_registered_local_diagnostics_thresholds_and_external_review");
   Q019RequireString(
       pin, block, "no_hall_mapping_basis",
+      q023_carrier ?
+      "q023_cr_qom_separate_from_similarity_mapped_background_ion_qom_with_exact_"
+      "Bai_R_k0di_Lambda_accounting_and_no_hall_claim_withheld" :
       "equal_similarity_scaled_cr_background_qom_with_exact_Bai_R_k0di_Lambda_"
       "resolved_scale_and_signed_Bai_linear_reduction");
   Q019RequireBoolean(pin, block, "no_hall_applicability_accepted", false);
@@ -1443,7 +1509,8 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
   Q019RequireBoolean(pin, block, "mhd_resolved_scale_applicability_accepted", false);
   Q019RequireBoolean(pin, block, "R_much_less_than_one_applicability_accepted", false);
   Q019RequireBoolean(pin, block, "no_subion_cell_scale_envelope_satisfied", true);
-  Q019RequireBoolean(pin, block, "species_q_over_mc_matches_background", true);
+  Q019RequireBoolean(
+      pin, block, "species_q_over_mc_matches_background", !q023_carrier);
   Q019RequireBoolean(pin, block,
                      "positive_finite_loading_accounting_satisfied", true);
   Q019RequireBoolean(pin, block, "resolution_envelope_satisfied_by_design", true);
@@ -1485,6 +1552,9 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
   Q019RequireBoolean(pin, block, "physical_pilot_authorized", false);
   Q019RequireString(
       pin, block, "physical_pilot_gate",
+      q023_carrier ?
+      "explicit_independent_q043_then_registered_q023_then_versioned_resource_"
+      "redesign_then_excluded_q023_carrier_pilots" :
       "explicit_independent_q043_then_q023_then_finite_predecessor_source_"
       "compatibility_then_excluded_pilots");
   Q019RequireString(
@@ -1799,8 +1869,15 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
                    configured_n_cr);
   const Real background_q_over_mc_reference =
       pin->GetReal(block, "background_q_over_mc_reference");
-  Q019RequireClose("equal similarity-scaled ion CR/background q/(mc)",
-                   species_charge, background_q_over_mc_reference);
+  if (q023_carrier) {
+    if (!(species_charge < background_q_over_mc_reference)) {
+      Q019NonlinearFatal(
+          "Q019 Q023 carrier requires CR q/(mc) below the background-ion mapping");
+    }
+  } else {
+    Q019RequireClose("equal similarity-scaled ion CR/background q/(mc)",
+                     species_charge, background_q_over_mc_reference);
+  }
   Q019RequireClose("declared similarity-scaled ion q/(mc)",
                    background_q_over_mc_reference, 10000.0);
   const Real background_ion_gyrofrequency =
@@ -1870,7 +1947,10 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
   Q019RequireClose("Bai Hall wavenumber reduction factor",
                    BaiHallWavenumberReductionFactor(hall_parameter_from_current),
                    pin->GetReal(block, "bai_hall_wavenumber_reduction_factor"));
-  if (!(charge_density_ratio > 0.0 && charge_density_ratio <= 1.0e-5 &&
+  const Real maximum_charge_density_ratio =
+      q023_carrier ? static_cast<Real>(1.0e-3) : static_cast<Real>(1.0e-5);
+  if (!(charge_density_ratio > 0.0 &&
+        charge_density_ratio <= maximum_charge_density_ratio &&
         hall_parameter_from_current > 0.0 &&
         hall_parameter_from_current < hall_order_unity_reference)) {
     Q019NonlinearFatal(
