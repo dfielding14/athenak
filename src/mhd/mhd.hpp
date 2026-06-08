@@ -265,8 +265,10 @@ class MHD {
  private:
   void AddSelectedDiffusionFluxes(DiffusionSelection selection);
   void AddSelectedDiffusionEMF(DiffusionSelection selection);
-  void DiagnoseNonfiniteRKState(int stage, const char *phase,
-                                DvceArray5D<Real> state);
+  void DiagnoseNonfiniteCGLState(int stage, const char *operation,
+                                 const char *phase, const char *sweep,
+                                 const char *representation,
+                                 DvceArray5D<Real> state);
   void RecomputeTimeStepFromCurrentState(Driver *pdrive);
   MeshBlockPack* pmy_pack;   // ptr to MeshBlockPack containing this MHD
   // temporary variables used to store face-centered electric fields returned by RS

@@ -39,6 +39,12 @@ bool UpdateSTSMHDVariable(const int n, const bool update_momentum,
   return false;
 }
 
+const char *STSSweepName(const Driver *pdrive) {
+  if (pdrive->sts.sweep == Driver::STSSweep::pre) return "pre";
+  if (pdrive->sts.sweep == Driver::STSSweep::post) return "post";
+  return "none";
+}
+
 } // namespace
 
 namespace mhd {
@@ -143,6 +149,10 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "pre",
+                              STSSweepName(pdrive), "anisotropy", u0);
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
@@ -150,6 +160,10 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   peos->CGLAnisotropyToMagneticMoment(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
   cgl_slot_representation = CGLSlotRepresentation::magnetic_moment;
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "post",
+                              STSSweepName(pdrive), "magnetic-moment", u0);
+  }
   return TaskStatus::complete;
 }
 
@@ -175,6 +189,11 @@ TaskStatus MHD::STSEField(Driver *pdrive, int stage) {
 TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   if (!has_any_parabolic_cell_update || !(pdrive->sts.enabled)) {
     return TaskStatus::complete;
+  }
+
+  if (diagnose_nonfinite_rk_update && has_cgl_lf_split) {
+    DiagnoseNonfiniteCGLState(stage, "sts-update-u", "pre", STSSweepName(pdrive),
+                              "magnetic-moment", u0);
   }
 
   if (stage == 1) {
@@ -264,6 +283,10 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   if (has_cgl_lf_split && pcgl_lf != nullptr) {
     pcgl_lf->AdvanceHeatFluxWorkDiagnostics(dt_sweep, coeffs, stage,
                                             pdrive->sts.nstages);
+  }
+  if (diagnose_nonfinite_rk_update && has_cgl_lf_split) {
+    DiagnoseNonfiniteCGLState(stage, "sts-update-u", "post", STSSweepName(pdrive),
+                              "magnetic-moment", u0);
   }
 
   return TaskStatus::complete;
@@ -380,6 +403,10 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
 
 TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
   RequireCGLMagneticMomentRepresentation("CGL Landau-fluid primitive refresh");
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "primitive-refresh", "pre",
+                              STSSweepName(pdrive), "magnetic-moment", u0);
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
@@ -394,6 +421,10 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
       pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before,
       pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
       stage, pdrive->sts.nstages);
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "primitive-refresh", "post",
+                              STSSweepName(pdrive), "magnetic-moment", u0);
+  }
   return TaskStatus::complete;
 }
 
@@ -406,6 +437,10 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   RequireCGLMagneticMomentRepresentation("CGL Landau-fluid sweep end");
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "pre",
+                              STSSweepName(pdrive), "magnetic-moment", u0);
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
@@ -413,6 +448,10 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   peos->CGLMagneticMomentToAnisotropy(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
   cgl_slot_representation = CGLSlotRepresentation::anisotropy;
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "post",
+                              STSSweepName(pdrive), "anisotropy", u0);
+  }
   return TaskStatus::complete;
 }
 
@@ -428,6 +467,10 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid post-sweep collisions");
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "post-sweep-collisions", "pre",
+                              STSSweepName(pdrive), "anisotropy", u0);
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
@@ -435,6 +478,10 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_sweep,
                    0, n1m1, 0, n2m1, 0, n3m1);
+  if (diagnose_nonfinite_rk_update) {
+    DiagnoseNonfiniteCGLState(stage, "post-sweep-collisions", "post",
+                              STSSweepName(pdrive), "anisotropy", u0);
+  }
   return TaskStatus::complete;
 }
 

@@ -23,10 +23,12 @@
 
 namespace mhd {
 //----------------------------------------------------------------------------------------
-//! \brief Fail with a global count and first-cell report for a nonfinite CGL RK state.
+//! \brief Fail with a global count and first-cell report for a nonfinite CGL state.
 
-void MHD::DiagnoseNonfiniteRKState(int stage, const char *phase,
-                                  DvceArray5D<Real> state) {
+void MHD::DiagnoseNonfiniteCGLState(int stage, const char *operation,
+                                   const char *phase, const char *sweep,
+                                   const char *representation,
+                                   DvceArray5D<Real> state) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is;
   const int js = indcs.js;
@@ -46,7 +48,7 @@ void MHD::DiagnoseNonfiniteRKState(int stage, const char *phase,
   int bad_energy = 0;
   int bad_anisotropy = 0;
   Kokkos::parallel_reduce(
-      "cgl_nonfinite_rk_state_audit",
+      "cgl_nonfinite_state_audit",
       Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
       KOKKOS_LAMBDA(const int idx, int& density_count,
                     int& momentum1_count, int& momentum2_count,
@@ -87,7 +89,7 @@ void MHD::DiagnoseNonfiniteRKState(int stage, const char *phase,
 
   int first_bad = std::numeric_limits<int>::max();
   Kokkos::parallel_reduce(
-      "cgl_nonfinite_rk_state_first_cell",
+      "cgl_nonfinite_state_first_cell",
       Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
       KOKKOS_LAMBDA(const int idx, int& minimum) {
         const int m = idx / nkji;
@@ -136,7 +138,10 @@ void MHD::DiagnoseNonfiniteRKState(int stage, const char *phase,
     Kokkos::deep_copy(host_cell[5],
                       Kokkos::subview(state_, m, static_cast<int>(IAN), k, j, i));
     std::cout.precision(std::numeric_limits<Real>::max_digits10);
-    std::cout << "CGL RK state first nonfinite cell: phase=" << phase
+    std::cout << "CGL state first nonfinite cell: operation=" << operation
+              << " phase=" << phase
+              << " sweep=" << sweep
+              << " representation=" << representation
               << " rank=" << first_rank
               << " m=" << m << " k=" << k << " j=" << j << " i=" << i
               << " state={density:" << host_cell[0]
@@ -150,7 +155,10 @@ void MHD::DiagnoseNonfiniteRKState(int stage, const char *phase,
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   if (global_variable::my_rank == 0) {
-    std::cout << "### FATAL ERROR in CGL RK state diagnostic: phase=" << phase
+    std::cout << "### FATAL ERROR in CGL state diagnostic: operation=" << operation
+              << " phase=" << phase
+              << " sweep=" << sweep
+              << " representation=" << representation
               << " time=" << pmy_pack->pmesh->time
               << " cycle=" << pmy_pack->pmesh->ncycle
               << " stage=" << stage
@@ -193,8 +201,10 @@ TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
   auto &mbsize = pmy_pack->pmb->mb_size;
 
   if (diagnose_nonfinite_rk_update) {
-    DiagnoseNonfiniteRKState(stage, "pre-u0", u0_);
-    DiagnoseNonfiniteRKState(stage, "pre-u1", u1_);
+    DiagnoseNonfiniteCGLState(stage, "rk-update", "pre-u0", "none",
+                              "anisotropy", u0_);
+    DiagnoseNonfiniteCGLState(stage, "rk-update", "pre-u1", "none",
+                              "anisotropy", u1_);
   }
 
   // hierarchical parallel loop that updates conserved variables to intermediate step
