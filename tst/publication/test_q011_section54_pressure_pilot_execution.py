@@ -260,11 +260,9 @@ class PressurePilotExecutionTest(unittest.TestCase):
         )
         queue_snapshot = _put(root / "queue_snapshot.txt", b"", 0o444)
         pre_manifest_attestation = _sealed_attestation(root, case)
-        historical_sources = execution._historical_v2_preregistration()[
-            "source_bindings"
-        ]
+        current_sources = execution.source_bindings()
         with patch.object(
-            execution, "source_bindings", return_value=historical_sources
+            execution, "source_bindings", return_value=current_sources
         ), patch.object(
             execution,
             "validate_source_tranche",
@@ -356,6 +354,15 @@ class PressurePilotExecutionTest(unittest.TestCase):
         status = execution.historical_v2_source_tranche_status()
         self.assertEqual(status["state"], "historical_consumed_slice_non_authorizing")
         self.assertFalse(status["source_bindings_match_current_checkout"])
+        self.assertEqual(
+            execution.source_bindings()["generator_source"],
+            {
+                "path": "src/pgen/tests/pic_parallel_shock.cpp",
+                "sha256": (
+                    "38e9200f061a9ece744aa7c516c6caf4612d465ed45a0526f8cb00223f41331b"
+                ),
+            },
+        )
         self.assertEqual(status["launch_reauthorization_effect"], "none")
         self.assertFalse(status["consumed_slice_reauthorization_allowed"])
         with self.assertRaisesRegex(
@@ -554,8 +561,8 @@ class PressurePilotExecutionTest(unittest.TestCase):
             self.assertEqual(
                 record["analysis_script_sha256"],
                 [
-                    "8596d95c9b8952dcb760b10fbe00bf7ba8a2c895713cc3d36dd1efa1aac11ecc",
-                    "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
+                    "4a2114a0b459f4cd54aa53f41bfe15222eeb520324ad036fb465bce93fd8e7ce",
+                    "7be737cff07035f494c4ccec5b291eb84306b443e9408b55dad618336914b13b",
                 ],
             )
 
@@ -616,11 +623,9 @@ class PressurePilotExecutionTest(unittest.TestCase):
                         ],
                     )
                     output = root / f"{case.case_id}-reviewed-config"
-                    historical_sources = execution._historical_v2_preregistration()[
-                        "source_bindings"
-                    ]
+                    current_sources = execution.source_bindings()
                     with patch.object(
-                        execution, "source_bindings", return_value=historical_sources
+                        execution, "source_bindings", return_value=current_sources
                     ), patch.object(
                         execution,
                         "validate_source_tranche",
@@ -657,7 +662,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
                     )
                     self.assertEqual(len(manifest["required_next_steps"]), 9)
                     with patch.object(
-                        execution, "source_bindings", return_value=historical_sources
+                        execution, "source_bindings", return_value=current_sources
                     ), patch.object(
                         execution,
                         "validate_source_tranche",
