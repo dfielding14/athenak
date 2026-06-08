@@ -359,7 +359,7 @@ class PressurePilotExecutionTest(unittest.TestCase):
             {
                 "path": "src/pgen/tests/pic_parallel_shock.cpp",
                 "sha256": (
-                    "38e9200f061a9ece744aa7c516c6caf4612d465ed45a0526f8cb00223f41331b"
+                    "c972ea20eaf5d7e32dbc27879a261b01cffabe46c719dfb1e851b63c17e80f92"
                 ),
             },
         )

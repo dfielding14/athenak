@@ -226,7 +226,7 @@
     },
     {
       "path": "src/pgen/tests/pic_parallel_shock.cpp",
-      "sha256": "a87c3be84626e3fc162853edb4e373705a4aa7b13e44f52a0f5fe36d9311893e"
+      "sha256": "c972ea20eaf5d7e32dbc27879a261b01cffabe46c719dfb1e851b63c17e80f92"
     },
     {
       "path": "tst/publication/q011_section54_exact_conservation_closure_successor_v1.py",

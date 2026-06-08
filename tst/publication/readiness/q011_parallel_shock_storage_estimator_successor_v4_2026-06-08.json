@@ -1,0 +1,182 @@
+{
+  "record_type": "q011_parallel_shock_storage_estimator_readiness",
+  "schema_version": 1,
+  "date": "2026-06-08",
+  "predecessor_record": "tst/publication/readiness/q011_parallel_shock_storage_estimator_successor_v3_2026-06-02.json",
+  "predecessor_sha256": "6a8080a63882669773161a51f06acf24e7020a1f1d2dacc1797223823be454b8",
+  "gate": "Q-011",
+  "qualification_effect": "phase1_storage_review_planning_closure_only_no_runtime_evidence_no_storage_reservation_no_execution_authorization_no_claim_closure",
+  "claim_closure": false,
+  "frontier_authorization": "not_bound",
+  "scope": "Deterministic additive VL2 TSC Section 5.4 storage-review successor for the conservation-enabled source integration. It preserves the predecessor numerical projection and conservative envelope while rebinding the current particle runtime layout and focused validation test. The exact-conservation ledger adds bounded fixed-size runtime state covered by the existing fixed publication and filesystem allowances; production-scale observed bytes remain required. This record contains no observed runtime payload size, does not reserve filesystem capacity, does not authorize execution and does not qualify a Section 5.4 claim.",
+  "source_bindings": {
+    "sidecar": {
+      "path": "tst/publication/q011_parallel_shock_storage_estimator.py",
+      "sha256": "10376b6a4db52b6833bef1f99a0db6d7f3c3520f331cb3bc2f2e28d906b4f0fa"
+    },
+    "focused_test": {
+      "path": "tst/publication/test_q011_parallel_shock_storage_estimator.py",
+      "sha256": "f4b1195d5c520fec08276fde85e13bb7686623215e6af9a7a9672029eb16283b"
+    },
+    "paper_deck": {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
+      "sha256": "0b1cbd62d54027ec81a5f4f5c88d5ee56b86b8cc0cb018c3fbebfb37a11be7b1"
+    },
+    "cr_index_layout": {
+      "path": "src/athena.hpp",
+      "sha256": "418dcc88f50316d74a6bacea54f034c10c994dabbf717ba8f3ddee8ceaa54013"
+    },
+    "cr_runtime_layout": {
+      "path": "src/particles/particles.cpp",
+      "sha256": "b296a573029145818887a8b5da85afd75196c99aeb6d2f54a0399d70577c86d6"
+    },
+    "restart_serializer": {
+      "path": "src/outputs/restart.cpp",
+      "sha256": "20f04864f995ab4c5c10ab36df039266f3d7949fc59dd78d94fb892e3958fa3e"
+    }
+  },
+  "retained_raw_pvtk_projection": {
+    "method": "continuous_swept_mass_no_escape_analytical_projection",
+    "particle_retention": "No particle escape. All shock-injected particles with birth_time >= 45 remain retained.",
+    "cadence": "Retain PVTK at t=0 and every declared prtcl_all PVTK dt=100 through time/tlim=1200.",
+    "quantization": "Continuous swept-mass analytical rate. Runtime timestep-edge and carried mass-reservoir sub-particle quantization are excluded.",
+    "pvtk_snapshot_count_per_run": 13,
+    "bytes_per_particle": 56,
+    "retained_particle_count_at_t1200_analytical_approx": 160160000.0002002,
+    "raw_pvtk_payload_bytes_per_run_before_overhead_analytical_approx": 56376320000.07047,
+    "raw_pvtk_payload_gb_decimal_per_run_before_overhead_analytical_approx": 56.37632000007047,
+    "raw_pvtk_payload_bytes_campaign_before_overhead_analytical_approx": 1353031680001.6914,
+    "raw_pvtk_payload_tb_decimal_campaign_before_overhead_analytical_approx": 1.3530316800016915
+  },
+  "planning_policy": {
+    "evidence_boundary": "Every non-PVTK value below is a deterministic conservative planning projection or allowance, not an observed runtime payload size, measured Orion overhead, quota reservation, execution authorization or qualification result.",
+    "campaign_matrix": {
+      "grid_count": 3,
+      "seed_count": 8,
+      "run_count": 24
+    },
+    "mesh_bin_products": {
+      "required_ids": [
+        "rho",
+        "bmag",
+        "prtcl_jx",
+        "j2"
+      ],
+      "snapshot_times_omega0_inverse": [
+        0,
+        100,
+        200,
+        300,
+        400,
+        500,
+        600,
+        700,
+        800,
+        900,
+        1000,
+        1100,
+        1200
+      ],
+      "float_bytes_per_cell": 4,
+      "meshblock_metadata_bytes": 88,
+      "ascii_headers": "Not modeled byte-exactly. The filesystem-allocation overhead allowance covers headers conservatively."
+    },
+    "restart_payload": {
+      "checkpoint_times_omega0_inverse": [
+        100,
+        200,
+        300,
+        400,
+        500,
+        600,
+        700,
+        800,
+        900,
+        1000,
+        1100,
+        1200
+      ],
+      "particle_layout_source_boundary": "Cosmic-ray restart particle arrays carry 26 Real fields and 4 integer fields in the bound src/athena.hpp and src/particles/particles.cpp source. The bound src/outputs/restart.cpp serializer writes those dynamic extents. The planning allowance uses 8 bytes per Real and 4 bytes per integer, for 224 bytes per retained particle. This is source-layout-derived, not a measured checkpoint size.",
+      "restart_particle_bytes_per_retained_particle_planning_allowance": 224,
+      "restart_mesh_bytes_per_cell_planning_allowance": 256,
+      "restart_fixed_publication_bytes_per_checkpoint_allowance": 16777216,
+      "classification": "Planning allowance only. Runtime AMR occupancy, rank layout, serialized checkpoint bytes, manifests and completion markers must still be measured and retained."
+    },
+    "log_telemetry_bytes_per_run_allowance": 67108864,
+    "filesystem_allocation_overhead_fraction": 0.1,
+    "replication_policy": {
+      "copy_count": 1,
+      "selected_destination": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+      "role": "user_selected_sole_bulk_evidence_root",
+      "durability_risk": "Orion-only retention is user-directed and does not provide an institutional or approved off-site durable archive."
+    },
+    "safety_margin_fraction": 0.25
+  },
+  "variant_projection": [
+    {
+      "variant": "coarse_uniform_dx12",
+      "projection_method": "uniform_root_grid_exact",
+      "cell_count": 1040000,
+      "meshblock_count": 2600,
+      "mesh_bin_binary_payload_bytes_per_run_before_ascii_headers": 228217600,
+      "restart_payload_bytes_per_run_planning_allowance_approx": 228901486592.2819,
+      "logical_bytes_per_run_before_filesystem_overhead_approx": 285573133056.35236
+    },
+    {
+      "variant": "three_level_amr_root_dx12_finest_dx3",
+      "projection_method": "full_domain_finest_level_upper_bound_not_runtime_amr_occupancy",
+      "cell_count": 16640000,
+      "meshblock_count": 41600,
+      "mesh_bin_binary_payload_bytes_per_run_before_ascii_headers": 3651481600,
+      "restart_payload_bytes_per_run_planning_allowance_approx": 276824686592.28186,
+      "logical_bytes_per_run_before_filesystem_overhead_approx": 336919597056.35236
+    },
+    {
+      "variant": "fine_uniform_dx3",
+      "projection_method": "uniform_fine_grid_exact_from_frozen_variant_override",
+      "cell_count": 16640000,
+      "meshblock_count": 41600,
+      "mesh_bin_binary_payload_bytes_per_run_before_ascii_headers": 3651481600,
+      "restart_payload_bytes_per_run_planning_allowance_approx": 276824686592.28186,
+      "logical_bytes_per_run_before_filesystem_overhead_approx": 336919597056.35236
+    }
+  ],
+  "current_projection": {
+    "grid_count": 3,
+    "seed_count": 8,
+    "run_count": 24,
+    "pvtk_snapshot_count_per_run": 13,
+    "retained_particle_count_at_t1200_analytical_approx": 160160000.0002002,
+    "raw_pvtk_payload_bytes_per_run_before_overhead_analytical_approx": 56376320000.07047,
+    "raw_pvtk_payload_gb_decimal_per_run_before_overhead_analytical_approx": 56.37632000007047,
+    "raw_pvtk_payload_bytes_campaign_before_overhead_analytical_approx": 1353031680001.6914,
+    "raw_pvtk_payload_tb_decimal_campaign_before_overhead_analytical_approx": 1.3530316800016915,
+    "mesh_bin_binary_payload_bytes_campaign_before_ascii_headers": 60249446400,
+    "restart_payload_bytes_campaign_planning_allowance_approx": 6260406878214.765,
+    "log_telemetry_bytes_campaign_allowance": 1610612736,
+    "logical_campaign_bytes_before_filesystem_overhead_approx": 7675298617352.456,
+    "filesystem_allocation_overhead_bytes_allowance_approx": 767529861735.2456,
+    "bytes_after_filesystem_overhead_approx": 8442828479087.702,
+    "replication_copy_count": 1,
+    "bytes_after_replication_policy_approx": 8442828479087.702,
+    "safety_margin_bytes_allowance_approx": 2110707119771.9255,
+    "reservation_envelope_bytes_approx": 10553535598859.627,
+    "reservation_envelope_tb_decimal": 10.553535598859627
+  },
+  "phase1_storage_review": {
+    "status": "closed_deterministic_planning_envelope",
+    "remaining_runtime_obligations": [
+      "Measure and retain actual PVTK, mesh-bin, restart, log and telemetry bytes for every attempted campaign run.",
+      "Retain actual runtime AMR occupancy, rank layout, filesystem usage and checkpoint publication metadata.",
+      "Confirm Orion free capacity and any required quota or reservation operationally before qualifying campaign launch.",
+      "Preserve the Orion-only durability risk until a separately reviewed durable-retention successor exists."
+    ]
+  },
+  "limitations": [
+    "This successor closes the Phase 1 local storage-review planning item only.",
+    "It does not claim observed runtime payload sizes, measured Orion filesystem overhead or a filesystem reservation.",
+    "It does not authorize a Frontier submission or qualify Section 5.4 physics.",
+    "The Orion-only replication factor is one because the selected live policy has no approved bulk replica; this is recorded as a durability risk, not represented as durable archival."
+  ],
+  "q011_disposition": "phase1_full_storage_review_planning_envelope_closed_runtime_measurement_capacity_confirmation_frontier_execution_and_full_q011_qualification_open"
+}

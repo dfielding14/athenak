@@ -50,8 +50,8 @@
     }
   },
   "deterministic_contract_bindings": {
-    "pipeline_contract_sha256": "036276a5d4f9457e46d461ee520e3bd586c148ded8a221ad4ae379820f764d56",
-    "runtime_source_closure_sha256": "ff63fc7fc77a210b4db6254906e203041f1cca22983e9de1877b8cc8e37344c4",
+    "pipeline_contract_sha256": "41de77c58f4f1c9d601e84368b35225e2351990617ee549fb2b78ed85b3cd417",
+    "runtime_source_closure_sha256": "9fe154c708ec45bd499c009c6eae16ce734cc3b8a19f888dba36e74e95f912ed",
     "source_local_gate_records_sha256": "124d68b0a3f2bf8157c8591f427fb85842a414fcbe500985b55bfc3430152d4b",
     "campaign_size_resource_design_sha256": "17bfe5d01276d1a1c40f70fa28b0e8a5867bd3cc466bcf6ca95d07812e1366f7",
     "resource_only_freeze_definition_sha256": "1c4e95391c95934d8215bddcc1d43758fb32e4e06807622157118c166b7e1aba",

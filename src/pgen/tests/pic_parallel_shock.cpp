@@ -1119,6 +1119,10 @@ void ValidatePaperVL2CommittedEscapeChronology(const particles::Particles *ppart
               << std::endl
               << "pic_parallel_shock " << context
               << " paper-VL2 escape-audit chronology is invalid." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+}
+
 constexpr std::array<const char *, 5> ps_cons_mhd_boundary_fields = {
   "ps_cons_mhd_boundary_mass_global",
   "ps_cons_mhd_boundary_momentum_x1_global",
