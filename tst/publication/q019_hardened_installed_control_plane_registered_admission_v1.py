@@ -69,6 +69,7 @@ REQUIRED_SOURCE_PATHS = frozenset(
         "tst/publication/q019_nonlinear_bell_runtime_controller_v1.py",
         "tst/publication/q019_excluded_pilot_launch_policy_preparation_v1.py",
         "tst/publication/q019_excluded_pilot_campaign_driver_v1.py",
+        "tst/publication/q019_excluded_pilot_engineering_qualification_v1.py",
         "tst/publication/q019_hardened_provenance_boundary_v2.py",
         "tst/publication/q019_hardened_installed_control_plane_registered_admission_v1.py",
         "tst/publication/frontier_control_plane/reconcile_q019_registered_execution.py",
