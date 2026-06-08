@@ -12,6 +12,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -971,16 +972,65 @@ class Q019AnalyzerAndAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(provenance.ProvenanceBoundaryError, "nonzero"):
             provenance.classify_runtime_completion(bad)
 
-    def test_raw_science_remains_disabled(self) -> None:
+    def test_raw_science_requires_hardened_registered_admission(self) -> None:
         contract = provenance.contract()
         self.assertIn(
             "structured_runtime_completion_status_and_problem_stop_reason",
             contract["required_bindings"],
         )
+        self.assertTrue(contract["source_local_raw_science_analysis_enabled"])
         with self.assertRaisesRegex(
-            analysis.ContractError, "raw Q019 science analysis is disabled"
+            analysis.ContractError, "requires a valid hardened"
         ):
             analysis.validate_raw_provenance({"self_attested": True})
+
+    def test_raw_analysis_binds_exact_bundle_and_passed_independent_prerequisites(
+        self,
+    ) -> None:
+        case_id = "q019-fr-grid-k8-rho3em06-s0"
+        snapshots, particles = _synthetic_evidence(case_id)
+        completion = {
+            "record_type": provenance.RUNTIME_COMPLETION_RECORD_TYPE,
+            "run_completion_status": "completed_not_acceptance_eligible",
+            "problem_stop_requested": False,
+            "stop_reason_code": "Terminating on time limit",
+            "process_exit_code": 0,
+            "scheduler_terminal_state": "COMPLETED",
+            "trusted_execution_binding_present": True,
+        }
+        hardened = {
+            "raw_science_admission_eligible": True,
+            "saturation_evidence_eligible": False,
+        }
+        with mock.patch.object(
+            provenance,
+            "validate_raw_science_bundle",
+            return_value=hardened,
+        ) as validate:
+            report = analysis.analyze_snapshots(
+                case_id,
+                snapshots,
+                particles,
+                source_kind="raw_registered_bundle",
+                provenance={"record_type": provenance.REQUIRED_ADAPTER_RECORD_TYPE},
+                completion_record=completion,
+            )
+        validate.assert_called_once_with(
+            {"record_type": provenance.REQUIRED_ADAPTER_RECORD_TYPE},
+            snapshots=snapshots,
+            particle_states=particles,
+            completion_record=completion,
+        )
+        gate = report["structured_runtime_completion_gate"]
+        self.assertTrue(gate["raw_science_admission_eligible"])
+        self.assertFalse(gate["saturation_evidence_eligible"])
+        self.assertEqual(
+            gate["evidence_disposition"], "admitted_registered_raw_analysis"
+        )
+        prerequisite = report["independent_prerequisite_gate"]
+        self.assertTrue(prerequisite["q043_independent_raw_cycle_one_oracle_bound"])
+        self.assertTrue(prerequisite["q023_independent_linear_predecessor_bound"])
+        self.assertTrue(prerequisite["gate_passed"])
 
 
 class Q019HostHarnessTests(unittest.TestCase):

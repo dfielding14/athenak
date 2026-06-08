@@ -60,7 +60,7 @@ def _case_map() -> dict[str, dict[str, object]]:
 
 
 def validate_raw_provenance(provenance: Mapping[str, object]) -> dict[str, object]:
-    """Reject raw science until the future hardened adapter is installed."""
+    """Validate one hardened registered raw-science admission."""
     try:
         return provenance_boundary.validate_raw_science_admission(provenance)
     except provenance_boundary.ProvenanceBoundaryError as error:
@@ -1080,9 +1080,22 @@ def analyze_snapshots(
 ) -> dict[str, object]:
     """Analyze matched fixture snapshots without granting authority."""
     _require(source_kind in {"synthetic_contract_fixture", "raw_registered_bundle"}, "source kind is invalid")
+    raw_admission: dict[str, object] | None = None
     if source_kind == "raw_registered_bundle":
         _require(provenance is not None, "raw registered bundle requires provenance")
-        validate_raw_provenance(provenance)
+        _require(
+            completion_record is not None,
+            "raw registered bundle requires structured runtime completion status",
+        )
+        try:
+            raw_admission = provenance_boundary.validate_raw_science_bundle(
+                provenance,
+                snapshots=snapshots,
+                particle_states=particle_states,
+                completion_record=completion_record,
+            )
+        except provenance_boundary.ProvenanceBoundaryError as error:
+            raise ContractError(str(error)) from error
     else:
         _require(provenance is None, "synthetic fixtures cannot carry provenance")
     case_map = _case_map()
@@ -1163,6 +1176,23 @@ def analyze_snapshots(
         case, valid_parsed_grid, valid_grid, valid_particle
     )
     completion_gate = _completion_gate(source_kind, completion_record)
+    if raw_admission is not None:
+        completion_gate = {
+            **completion_gate,
+            "evidence_disposition": (
+                "rejected_incomplete"
+                if completion_gate["incomplete_rejected"]
+                else "admitted_registered_raw_analysis"
+            ),
+            "saturation_evidence_eligible": (
+                not completion_gate["incomplete_rejected"]
+                and raw_admission["saturation_evidence_eligible"] is True
+            ),
+            "raw_science_admission_eligible": (
+                not completion_gate["incomplete_rejected"]
+                and raw_admission["raw_science_admission_eligible"] is True
+            ),
+        }
     report = {
         "schema_version": 3,
         "record_type": RECORD_TYPE,
@@ -1236,15 +1266,15 @@ def analyze_snapshots(
             "q043_independent_raw_cycle_one_oracle_id": case[
                 "q043_independent_raw_cycle_one_oracle_id"
             ],
-            "q043_independent_raw_cycle_one_oracle_bound": False,
+            "q043_independent_raw_cycle_one_oracle_bound": raw_admission is not None,
             "q023_independent_linear_predecessor_id": case[
                 "q023_independent_linear_predecessor_id"
             ],
-            "q023_independent_linear_predecessor_bound": False,
-            "independent_prerequisites_complete": False,
-            "nonlinear_execution_prerequisites_passed": False,
+            "q023_independent_linear_predecessor_bound": raw_admission is not None,
+            "independent_prerequisites_complete": raw_admission is not None,
+            "nonlinear_execution_prerequisites_passed": raw_admission is not None,
             "matrix_authorizes_execution": False,
-            "gate_passed": False,
+            "gate_passed": raw_admission is not None,
         },
         "energy_loading_gate": {
             "cr_rms_speed_kinetic_loading_proxy_to_background_magnetic_energy": case[

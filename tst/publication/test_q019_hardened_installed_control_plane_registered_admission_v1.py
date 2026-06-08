@@ -1,0 +1,386 @@
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+from pathlib import Path
+import struct
+import tarfile
+
+import numpy as np
+import pytest
+
+from tst.publication import (
+    q019_hardened_installed_control_plane_registered_admission_v1 as admission,
+)
+
+
+def _marker(payload: bytes) -> bytes:
+    return (
+        "ATHENAK_RESTART_COMPLETE_V1\n"
+        f"size={len(payload)}\n"
+        f"fnv1a64={admission._fnv1a64(payload):016x}\n"
+    ).encode("ascii")
+
+
+def _restart(cycle: int = 7, time: float = 0.5) -> bytes:
+    mesh_header = struct.pack(
+        admission._RESTART_MESH_HEADER_FORMAT,
+        2,
+        1,
+        *([0.0] * 9),
+        *([0] * 19),
+        *([0] * 19),
+        time,
+        0.01,
+        cycle,
+        1,
+    )
+    return b"<time>\ntlim = 1\n<par_end>\n" + mesh_header + b"schema-7-payload"
+
+
+def _publication() -> tuple[str, dict[str, bytes]]:
+    stem = "rst/q019-fr-runtime-initializer-ppc24-s0.00001.rst"
+    restart = _restart()
+    manifest = (
+        json.dumps(
+            {
+                "schema": "ATHENAK_RESTART_MANIFEST_V1",
+                "members": [
+                    {
+                        "path": stem,
+                        "size": len(restart),
+                        "fnv1a64": f"{admission._fnv1a64(restart):016x}",
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n"
+    ).encode("utf-8")
+    return stem, {
+        stem: restart,
+        stem + ".complete": _marker(restart),
+        stem + ".manifest": manifest,
+        stem + ".manifest.complete": _marker(manifest),
+    }
+
+
+def _source_archive(*, omit: str | None = None) -> bytes:
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w") as archive:
+        for path in sorted(admission.REQUIRED_SOURCE_PATHS):
+            if path == omit:
+                continue
+            payload = f"fixture:{path}\n".encode("ascii")
+            member = tarfile.TarInfo(path)
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+    return output.getvalue()
+
+
+def test_restart_publication_binds_marker_manifest_cycle_and_time() -> None:
+    stem, payloads = _publication()
+    assert admission._validate_restart_publication(stem=stem, payloads=payloads) == (
+        7,
+        0.5,
+    )
+    payloads[stem + ".complete"] = payloads[stem + ".complete"].replace(
+        b"size=", b"size=1"
+    )
+    with pytest.raises(admission.RegisteredAdmissionError, match="marker"):
+        admission._validate_restart_publication(stem=stem, payloads=payloads)
+
+
+def test_restart_manifest_substitution_fails_closed() -> None:
+    stem, payloads = _publication()
+    manifest = json.loads(payloads[stem + ".manifest"])
+    manifest["members"][0]["path"] = "rst/substituted.rst"
+    replacement = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+    payloads[stem + ".manifest"] = replacement
+    payloads[stem + ".manifest.complete"] = _marker(replacement)
+    with pytest.raises(admission.RegisteredAdmissionError, match="manifest"):
+        admission._validate_restart_publication(stem=stem, payloads=payloads)
+
+
+def test_source_archive_requires_complete_runtime_and_analysis_closure() -> None:
+    bindings = admission._source_archive_bindings(_source_archive())
+    assert set(bindings) == admission.REQUIRED_SOURCE_PATHS
+    assert all(
+        len(item["sha256"]) == 64 and item["byte_count"] > 0
+        for item in bindings.values()
+    )
+    missing = next(iter(admission.REQUIRED_SOURCE_PATHS))
+    with pytest.raises(admission.RegisteredAdmissionError, match="complete"):
+        admission._source_archive_bindings(_source_archive(omit=missing))
+
+
+def test_candidate_analysis_closure_binds_manifest_deck_and_executing_sources() -> None:
+    case = admission._case("q019-fr-runtime-initializer-ppc24-s0")
+    required = {
+        *admission.REQUIRED_SOURCE_PATHS,
+        *admission.EXECUTING_QUALIFICATION_SOURCE_PATHS,
+        *admission.design.ANALYSIS_BINDING_PATHS,
+        str(case["path"]),
+    }
+    payloads = {
+        relative: (admission.REPO_ROOT / relative).read_bytes()
+        for relative in required
+    }
+    closure = admission._candidate_analysis_closure(payloads, case=case)
+    assert closure["registered_deck"]["sha256"] == case["sha256"]
+    assert [item["path"] for item in closure["analysis_bindings"]] == list(
+        admission.design.ANALYSIS_BINDING_PATHS
+    )
+    assert set(closure["executing_qualification_source_bindings"]) == (
+        admission.EXECUTING_QUALIFICATION_SOURCE_PATHS
+    )
+
+    substituted = dict(payloads)
+    analyzer = "tst/publication/analyze_q019_physics_first_nonlinear_bell_successor_v2.py"
+    substituted[analyzer] += b"\n# substituted\n"
+    with pytest.raises(admission.RegisteredAdmissionError, match="analysis binding"):
+        admission._candidate_analysis_closure(substituted, case=case)
+
+    substituted = dict(payloads)
+    dependency = "tst/publication/q023_registered_execution_linear_qualification_successor_v1.py"
+    substituted[dependency] += b"\n# substituted\n"
+    with pytest.raises(
+        admission.RegisteredAdmissionError,
+        match="executing qualification source differs",
+    ):
+        admission._candidate_analysis_closure(substituted, case=case)
+
+
+def test_reduction_binding_hashes_exact_array_bytes() -> None:
+    reduction = {
+        "record_type": "q019_registered_raw_reduction_v1",
+        "case_id": "q019-fr-runtime-initializer-ppc24-s0",
+        "campaign_id": "Q019",
+        "matched_checkpoint_count": 1,
+        "chronology": [{"cycle": 0, "time": 0.0}],
+        "reference_budget": {"total_momentum": [0.0, 0.0, 0.0], "total_energy": 1.0},
+        "snapshots": [
+            {
+                "cycle": 0,
+                "time": 0.0,
+                "x1_faces": np.asarray([0.0, 1.0]),
+                "x2_faces": np.asarray([0.0, 1.0]),
+                "x3_faces": np.asarray([0.0, 1.0]),
+                "fields": {"dens": np.ones((1, 1, 1), dtype=np.float64)},
+            }
+        ],
+        "particle_states": [{"cycle": 0, "authority": {"claim_authorized": False}}],
+    }
+    binding = admission._reduction_binding(reduction)
+    expected = hashlib.sha256(np.ones((1, 1, 1)).tobytes()).hexdigest()
+    assert binding["snapshots"][0]["fields"]["dens"]["sha256"] == expected
+    changed = dict(reduction)
+    changed["snapshots"] = [dict(reduction["snapshots"][0])]
+    changed["snapshots"][0]["fields"] = {"dens": np.zeros((1, 1, 1))}
+    assert (
+        admission._reduction_binding(changed)["snapshots"][0]["fields"]["dens"][
+            "sha256"
+        ]
+        != expected
+    )
+
+
+def test_completion_status_is_bound_to_trusted_wrapper_evidence() -> None:
+    record = admission._completion_record(
+        {
+            "command_evidence": {
+                "trusted_wrapper_evidence": {
+                    "termination_reason": "Terminating on time limit",
+                    "problem_final_evidence_status": "completed_saturation_eligible",
+                    "problem_saturation_evidence_eligible": "true",
+                }
+            },
+            "slurm_terminal_state": "COMPLETED",
+        }
+    )
+    assert record["trusted_execution_binding_present"]
+    assert record["problem_saturation_evidence_eligible"]
+    with pytest.raises(admission.RegisteredAdmissionError, match="status"):
+        admission._completion_record(
+            {
+                "command_evidence": {
+                    "trusted_wrapper_evidence": {
+                        "termination_reason": "Terminating on time limit",
+                        "problem_final_evidence_status": "completed",
+                        "problem_saturation_evidence_eligible": True,
+                    }
+                }
+            }
+        )
+
+
+def test_caller_supplied_admission_cannot_self_attest() -> None:
+    with pytest.raises(admission.RegisteredAdmissionError, match="path anchor"):
+        admission.validate_admission(
+            {
+                "record_type": admission.RECORD_TYPE,
+                "case_id": "q019-fr-runtime-initializer-ppc24-s0",
+                "artifact_root": "/tmp/self-attested",
+                "q043_dependency": {"path": "/tmp/q043.json"},
+                "q043_artifact_root": "/tmp/q043",
+                "q023_dependency": {"path": "/tmp/q023.json"},
+                "raw_science_admission_eligible": True,
+            }
+        )
+
+
+def test_bound_analysis_inputs_reject_array_or_completion_substitution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = {"record_type": admission.RECORD_TYPE}
+    bundle = {
+        "snapshots": [{"fields": {"dens": np.ones((1, 1, 1), dtype=np.float64)}}],
+        "particle_states": [{"cycle": 0, "time": 0.0}],
+        "completion_record": {"record_type": "q019_runtime_completion_status_v1"},
+    }
+    monkeypatch.setattr(
+        admission, "validate_analysis_bundle", lambda value: (record, bundle)
+    )
+    assert (
+        admission.validate_bound_analysis_inputs(
+            record,
+            snapshots=bundle["snapshots"],
+            particle_states=bundle["particle_states"],
+            completion_record=bundle["completion_record"],
+        )
+        == record
+    )
+    substituted = [{"fields": {"dens": np.zeros((1, 1, 1), dtype=np.float64)}}]
+    with pytest.raises(admission.RegisteredAdmissionError, match="differ"):
+        admission.validate_bound_analysis_inputs(
+            record,
+            snapshots=substituted,
+            particle_states=bundle["particle_states"],
+            completion_record=bundle["completion_record"],
+        )
+
+
+def test_derive_case_bundle_cross_binds_q023_to_selected_q043(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    orion = tmp_path / "orion"
+    project_home = tmp_path / "project-home"
+    q043_root = orion / "analysis/q043"
+    artifact_root = (
+        orion
+        / "runs"
+        / admission.REGISTERED_CAMPAIGN
+        / "12345678-1234-4123-8123-123456789abc"
+    )
+    for path in (q043_root, artifact_root, project_home):
+        path.mkdir(parents=True, exist_ok=True)
+    q043_record = {
+        "record_type": "q043_registered_execution_raw_oracle_matrix_qualification",
+        "case_bindings_sha256": "a" * 64,
+    }
+    q043_path = q043_root / "matrix.json"
+    q043_payload = (json.dumps(q043_record) + "\n").encode("utf-8")
+    q043_path.write_bytes(q043_payload)
+    q043_path.chmod(0o444)
+    q043_sha256 = hashlib.sha256(q043_payload).hexdigest()
+    q023_path = orion / "analysis/q023.json"
+    q023_path.parent.mkdir(parents=True, exist_ok=True)
+    q023_path.write_text("{}\n", encoding="utf-8")
+    q023_path.chmod(0o444)
+    q023_record = {
+        "q043_dependency": {
+            "binding_kind": "registered_matrix_qualification",
+            "registered_matrix_path": "matrix.json",
+            "registered_matrix_sha256": q043_sha256,
+            "registered_matrix_record_type": q043_record["record_type"],
+            "registered_matrix_case_bindings_sha256": q043_record[
+                "case_bindings_sha256"
+            ],
+        }
+    }
+    receipt = {
+        "member_id": "q019-fr-runtime-initializer-ppc24-s0",
+        "campaign_id": "Q019-PHYSICS-FIRST-NONLINEAR-BELL",
+        "slurm_terminal_state": "COMPLETED",
+        "slurm_exit_code": "0:0",
+        "reservation_id": "reservation",
+        "submission_id": artifact_root.name,
+        "reconciliation_event_sha256": "b" * 64,
+        "reconciliation_mirror_ack_sha256": "c" * 64,
+        "control_plane_version": "d" * 64,
+        "registered_science_authorization_id": "q019-fixture",
+        "slurm_job_id": "12345",
+        "pre_submit_manifest_sha256": "e" * 64,
+        "command_evidence": {
+            "trusted_wrapper_evidence": {
+                "termination_reason": "Terminating on cycle limit",
+                "problem_final_evidence_status": "completed_not_acceptance_eligible",
+                "problem_saturation_evidence_eligible": "true",
+            }
+        },
+    }
+    paired = {
+        "execution_receipt": {"sha256": "f" * 64},
+        "terminal_receipt": {"sha256": "0" * 64},
+        "_receipt_payload": b"receipt",
+        "_terminal_payload": b"terminal",
+    }
+    reduction = {
+        "snapshots": [{"cycle": 0, "time": 0.0}],
+        "particle_states": [{"cycle": 0, "time": 0.0}],
+    }
+    monkeypatch.setattr(
+        admission.q043,
+        "validate_downstream_q023_q019_prerequisite",
+        lambda value: q043_record,
+    )
+    monkeypatch.setattr(
+        admission.q023,
+        "validate_downstream_q019_prerequisite",
+        lambda *args, **kwargs: q023_record,
+    )
+    monkeypatch.setattr(admission, "_receipt_pair", lambda **kwargs: (receipt, paired))
+    monkeypatch.setattr(
+        admission,
+        "_installed_rederivation",
+        lambda *args, **kwargs: {"exact_byte_rederivation_passed": True},
+    )
+    monkeypatch.setattr(
+        admission,
+        "_manifest_and_candidate",
+        lambda *args, **kwargs: {"source_bindings": {}},
+    )
+    monkeypatch.setattr(
+        admission,
+        "_raw_bundle",
+        lambda *args, **kwargs: (reduction, {"raw_inventory_sha256": "1" * 64}),
+    )
+    artifact_root.chmod(0o555)
+    try:
+        record, bundle = admission.derive_case_bundle(
+            case_id=receipt["member_id"],
+            artifact_root=artifact_root,
+            q043_qualification_path=q043_path,
+            q043_artifact_root=q043_root,
+            q023_qualification_path=q023_path,
+            authorized_orion_root=orion,
+            authorized_project_home_root=project_home,
+        )
+        assert record["q043_dependency"]["sha256"] == q043_sha256
+        assert record["problem_reported_saturation_evidence_eligible"] is True
+        assert record["saturation_evidence_eligible"] is False
+        assert bundle["snapshots"] == reduction["snapshots"]
+        q023_record["q043_dependency"]["registered_matrix_sha256"] = "2" * 64
+        with pytest.raises(admission.RegisteredAdmissionError, match="selected Q043"):
+            admission.derive_case_bundle(
+                case_id=receipt["member_id"],
+                artifact_root=artifact_root,
+                q043_qualification_path=q043_path,
+                q043_artifact_root=q043_root,
+                q023_qualification_path=q023_path,
+                authorized_orion_root=orion,
+                authorized_project_home_root=project_home,
+            )
+    finally:
+        artifact_root.chmod(0o755)
