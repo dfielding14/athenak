@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import math
 import os
@@ -12,8 +13,10 @@ from pathlib import Path
 import re
 import struct
 import subprocess
+import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -177,6 +180,7 @@ def _raw_payload_from_fields(
     fields: tuple[str, ...],
     values: dict[str, np.ndarray],
     variable_output_index: int,
+    snapshot_index: int | None = None,
 ) -> bytes:
     meshblock = tuple(int(value) for value in member["meshblock_nx"])
     splits = tuple(int(value) for value in member["decomposition_splits"])
@@ -226,7 +230,11 @@ def _raw_payload_from_fields(
                         ]
                     ).tobytes()
                 )
-    parameter_header = _runtime_header(member, cycle, variable_output_index)
+    parameter_header = _runtime_header(
+        member,
+        cycle if snapshot_index is None else snapshot_index,
+        variable_output_index,
+    )
     return (
         b"Athena binary output version=1.1\n"
         b"  size of preheader=5\n"
@@ -244,7 +252,13 @@ def _raw_payload_from_fields(
     )
 
 
-def _raw_payload(member: dict[str, object], physical_time: float, cycle: int) -> bytes:
+def _raw_payload(
+    member: dict[str, object],
+    physical_time: float,
+    cycle: int,
+    *,
+    snapshot_index: int | None = None,
+) -> bytes:
     fields = ("dens", "eint", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3")
     return _raw_payload_from_fields(
         member,
@@ -253,11 +267,17 @@ def _raw_payload(member: dict[str, object], physical_time: float, cycle: int) ->
         fields=fields,
         values=_mode_fields(member, physical_time),
         variable_output_index=1,
+        snapshot_index=snapshot_index,
     )
 
 
 def _particle_raw_payload(
-    member: dict[str, object], physical_time: float, cycle: int, variable: str
+    member: dict[str, object],
+    physical_time: float,
+    cycle: int,
+    variable: str,
+    *,
+    snapshot_index: int | None = None,
 ) -> bytes:
     shape = tuple(reversed(tuple(int(value) for value in member["global_nx"])))
     if cycle == 0:
@@ -281,6 +301,7 @@ def _particle_raw_payload(
         fields=(variable,),
         values={variable: np.full(shape, value)},
         variable_output_index=bell._RAW_OUTPUT_INDEX[variable],
+        snapshot_index=snapshot_index,
     )
 
 
@@ -288,6 +309,9 @@ def _write_materialized_member(
     root: Path,
     member: dict[str, object],
     dependency: dict[str, object],
+    *,
+    cycles: list[int] | None = None,
+    physical_times: list[float] | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     executable = root / "candidate/athena"
     executable.parent.mkdir(parents=True, exist_ok=True)
@@ -295,16 +319,32 @@ def _write_materialized_member(
     stdout = root / "execution/stdout.txt"
     stdout.parent.mkdir(parents=True, exist_ok=True)
     stdout.write_text("athenak_driver_completed_successfully\n", encoding="utf-8")
-    normalized_times = np.linspace(
-        0.0, 6.0 / bell.theoretical_dispersion(float(member["epsilon"]))[1], 49
-    )
+    if physical_times is None:
+        physical_times = [
+            *(index * bell.LINEAR_OUTPUT_DT for index in range(88)),
+            bell.LINEAR_RUNTIME_TLIM,
+        ]
+    if len(physical_times) != 89:
+        raise ValueError("materialized fixture time inventory must contain 89 entries")
+    measured_cycles = list(range(len(physical_times))) if cycles is None else cycles
+    if len(measured_cycles) != len(physical_times):
+        raise ValueError("materialized fixture cycle inventory must contain 89 entries")
     raw_artifacts = []
     datasets = []
-    for cycle, normalized_time in enumerate(normalized_times):
-        physical_time = float(normalized_time / bell.K0)
-        path = root / f"raw/mhd_w_bcc.{cycle:05d}.bin"
+    basename = "q023_joverc_" + str(member["member_id"]).replace("-", "_")
+    for output_index, (cycle, physical_time) in enumerate(
+        zip(measured_cycles, physical_times)
+    ):
+        path = root / f"raw/bin/{basename}.mhd_w_bcc.{output_index:05d}.bin"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(_raw_payload(member, physical_time, cycle))
+        path.write_bytes(
+            _raw_payload(
+                member,
+                physical_time,
+                cycle,
+                snapshot_index=output_index,
+            )
+        )
         raw_artifacts.append(
             {
                 "path": path.relative_to(root).as_posix(),
@@ -318,9 +358,17 @@ def _write_materialized_member(
             bell.binary.parse_athenak_binary_bytes(path.read_bytes(), source=str(path))
         )
         for variable in bell._PARTICLE_FIELDS:
-            particle_path = root / f"raw/{variable}.{cycle:05d}.bin"
+            particle_path = (
+                root / f"raw/bin/{basename}.{variable}.{output_index:05d}.bin"
+            )
             particle_path.write_bytes(
-                _particle_raw_payload(member, physical_time, cycle, variable)
+                _particle_raw_payload(
+                    member,
+                    physical_time,
+                    cycle,
+                    variable,
+                    snapshot_index=output_index,
+                )
             )
             raw_artifacts.append(
                 {
@@ -441,6 +489,121 @@ def _q043_bound_dependency_fixture_for_q023_provenance_only() -> dict[str, objec
     dependency["complete_foundational_raw_oracle_matrix_pass"] = True
     dependency["measured_case_count"] = bell.Q043_REQUIRED_CASE_COUNT
     return dependency
+
+
+def _write_registered_manifest_fixture(
+    root: Path,
+    case_root: Path,
+    member: dict[str, object],
+) -> tuple[dict[str, object], Path]:
+    submission_id = "11111111-1111-4111-8111-111111111111"
+    freeze_id = "22222222-2222-4222-8222-222222222222"
+    candidate_root = root / "clean_candidates" / freeze_id
+    candidate_root.mkdir(parents=True)
+    candidate_executable = candidate_root / "athena"
+    candidate_executable.write_bytes(b"registered executable fixture\n")
+    executable_sha256 = _sha256(candidate_executable)
+    source_archive = candidate_root / "source.tar"
+    with tarfile.open(source_archive, "w") as archive:
+        for relative in (
+            bell.SOURCE_PATH.as_posix(),
+            bell.CORRECTED_EIGENMODE_HEADER_PATH.as_posix(),
+        ):
+            payload = (REPO_ROOT / relative).read_bytes()
+            member_info = tarfile.TarInfo(relative)
+            member_info.size = len(payload)
+            member_info.mode = 0o644
+            archive.addfile(member_info, io.BytesIO(payload))
+    source_archive_sha256 = _sha256(source_archive)
+    source_bundle_sha256 = "c" * 64
+    candidate_manifest = candidate_root / "clean_candidate_manifest.json"
+    candidate_manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 4,
+                "freeze_id": freeze_id,
+                "source": {
+                    "archive_path": str(source_archive),
+                    "archive_sha256": source_archive_sha256,
+                    "source_bundle_sha256": source_bundle_sha256,
+                    "git_commit": "a" * 40,
+                    "worktree_status": "clean",
+                },
+                "build": {
+                    "source_archive_sha256": source_archive_sha256,
+                    "source_bundle_sha256": source_bundle_sha256,
+                    "executable_path": str(candidate_executable),
+                    "executable_sha256": executable_sha256,
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    candidate_manifest.chmod(0o444)
+    source_archive.chmod(0o444)
+    candidate_executable.chmod(0o555)
+    manifest_root = (
+        root
+        / "manifests"
+        / bell.REGISTERED_CAMPAIGN
+        / submission_id
+    )
+    snapshot = manifest_root / "snapshot"
+    snapshot.mkdir(parents=True)
+    executable = snapshot / "athena"
+    executable.write_bytes(candidate_executable.read_bytes())
+    executable.chmod(0o555)
+    receipt = {
+        "submission_id": submission_id,
+        "source_commit": "a" * 40,
+        "control_plane_version": "b" * 64,
+        "registered_science_authorization_id": "q023-linear-001-v1",
+        "clean_candidate_manifest_sha256": _sha256(candidate_manifest),
+        "executable_sha256": executable_sha256,
+        "source_bundle_sha256": source_bundle_sha256,
+        "source_archive_sha256": source_archive_sha256,
+    }
+    manifest = {
+        "schema_version": bell.SCHEMA_VERSION,
+        "pic_root": str(root),
+        "campaign": bell.REGISTERED_CAMPAIGN,
+        "test_id": member["member_id"],
+        "submission_id": submission_id,
+        "submission_scope": "registered_science",
+        "artifact_dir": str(case_root),
+        "git_commit": receipt["source_commit"],
+        "control_plane_version": receipt["control_plane_version"],
+        "registered_science_authorization_id": receipt[
+            "registered_science_authorization_id"
+        ],
+        "clean_candidate_manifest_path": str(candidate_manifest),
+        "clean_candidate_manifest_sha256": receipt[
+            "clean_candidate_manifest_sha256"
+        ],
+        "snapshot_files": [
+            {
+                "role": "executable",
+                "path": str(executable),
+                "sha256": executable_sha256,
+                "source_path": str(candidate_executable),
+                "source_sha256": executable_sha256,
+            }
+        ],
+    }
+    manifest_path = manifest_root / "pre_submit_manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    manifest_path.chmod(0o444)
+    receipt.update(
+        {
+            "pre_submit_manifest_path": str(manifest_path),
+            "pre_submit_manifest_sha256": _sha256(manifest_path),
+        }
+    )
+    return receipt, executable
 
 
 class Q023PaperBellLinearJOverCTests(unittest.TestCase):
@@ -733,7 +896,8 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
             )
 
     def test_complete_synthetic_matrix_passes_all_gates_without_authority(self) -> None:
-        report = bell.analyze_predecessor_bundle(bell.synthetic_predecessor_bundle())
+        bundle = bell.synthetic_predecessor_bundle()
+        report = bell.analyze_predecessor_bundle(bundle)
         self.assertEqual(report["record_count"], 55)
         self.assertTrue(report["q043_dependency_contract_pass"])
         self.assertFalse(report["q043_registered_raw_oracle_dependency_pass"])
@@ -760,6 +924,43 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
         self.assertFalse(report["scientific_claim_authorized"])
         self.assertFalse(report["publication_authorized"])
         self.assertFalse(report["complete_authoritative_q043_foundation_claimed"])
+        physics = bell.analyze_physics_trace_matrix(
+            [
+                {
+                    key: record[key]
+                    for key in bell._PHYSICS_MATRIX_RECORD_KEYS
+                }
+                for record in bundle["records"]
+            ]
+        )
+        self.assertTrue(physics["predecessor_contract_pass"])
+        self.assertFalse(physics["qualification_eligible"])
+        self.assertFalse(physics["passed"])
+        self.assertEqual(
+            physics["records"],
+            [
+                {
+                    key: record[key]
+                    for key in record
+                    if key not in {"provenance_kind", "provenance_gate_pass"}
+                }
+                for record in report["records"]
+            ],
+        )
+
+    def test_pure_physics_matrix_rejects_noncanonical_order(self) -> None:
+        records = [
+            {
+                key: record[key]
+                for key in bell._PHYSICS_MATRIX_RECORD_KEYS
+            }
+            for record in bell.synthetic_predecessor_bundle()["records"]
+        ]
+        records[0], records[1] = records[1], records[0]
+        with self.assertRaisesRegex(
+            bell.ContractError, "incomplete, extra, or noncanonical"
+        ):
+            bell.analyze_physics_trace_matrix(records)
 
     def test_growth_signed_phase_and_polarization_fail_scientifically(self) -> None:
         mutations = (
@@ -930,6 +1131,46 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
         with self.assertRaisesRegex(bell.ContractError, "deck binding drifted"):
             bell.analyze_predecessor_bundle(bundle)
 
+    def test_registered_q043_dependency_binds_exact_hardened_matrix(self) -> None:
+        matrix = {
+            "record_type": bell.q043_registered.MATRIX_RECORD_TYPE,
+            "case_count": bell.Q043_REQUIRED_CASE_COUNT,
+            "case_bindings_sha256": "a" * 64,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            path = root / "q043-matrix.json"
+            path.write_text(
+                json.dumps(matrix, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            with patch.object(
+                bell.q043_registered,
+                "validate_downstream_q023_q019_prerequisite",
+                return_value=matrix,
+            ):
+                dependency = bell.registered_q043_raw_oracle_dependency(
+                    path, artifact_root=root
+                )
+                self.assertEqual(
+                    dependency["binding_kind"], "registered_matrix_qualification"
+                )
+                self.assertTrue(
+                    dependency["complete_foundational_raw_oracle_matrix_pass"]
+                )
+                self.assertEqual(
+                    dependency["registered_matrix_case_bindings_sha256"],
+                    matrix["case_bindings_sha256"],
+                )
+                bell.validate_q043_dependency(
+                    dependency, artifact_root=root
+                )
+
+                path.write_text("{}\n", encoding="utf-8")
+                with self.assertRaisesRegex(bell.ContractError, "digest drifted"):
+                    bell.validate_q043_dependency(
+                        dependency, artifact_root=root
+                    )
+
     def test_materialized_provenance_requires_clean_bound_files_and_registered_q043(
         self,
     ) -> None:
@@ -976,6 +1217,256 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
                     artifact_root=root,
                     physics_trace=physics_trace,
                 )
+
+    def test_hardened_registered_receipt_binds_controller_and_raw_inventory(
+        self,
+    ) -> None:
+        dependency = _q043_bound_dependency_fixture_for_q023_provenance_only()
+        member = next(
+            value
+            for value in bell._manifest_members().values()
+            if value["member_id"] == "d1-coarse-reference_x1-eps0p4"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            provenance, _ = _write_materialized_member(root, member, dependency)
+            rank_count = math.prod(
+                int(value) for value in member["decomposition_splits"]
+            )
+            stdout = root / "athena_stdout.txt"
+            stdout.write_text(
+                (
+                    f"Q023_REGISTERED_EXECUTION case_id={member['member_id']} "
+                    f"mpi_world_size={rank_count} "
+                    f"rank_ids={','.join(str(rank) for rank in range(rank_count))}\n"
+                    "Q023_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+                    "Terminating on time limit\n"
+                    "time=1.750000e+00 cycle=100\n"
+                    "tlim=1.750000e+00 nlim=2000000\n"
+                ),
+                encoding="utf-8",
+            )
+            raw_inventory = [
+                {
+                    "path": str(artifact["path"]).removeprefix("raw/"),
+                    "sha256": artifact["sha256"],
+                    "byte_count": (root / artifact["path"]).stat().st_size,
+                    "member_id": member["member_id"],
+                    "variable": artifact["variable"],
+                    "output_index": index // len(bell._RAW_OUTPUT_VARIABLES),
+                }
+                for index, artifact in enumerate(provenance["raw_artifacts"])
+            ]
+            producer = {
+                "entrypoint": "reconcile_q023_registered_execution.py",
+                "entrypoint_sha256": "1" * 64,
+                "launch_trampoline_sha256": "2" * 64,
+                "control_plane_version": "3" * 64,
+            }
+            action = {
+                "action_id": member["member_id"],
+                "kind": "athena",
+                "resources": {"tasks": rank_count},
+                "arguments": [
+                    {"literal": "-i"},
+                    {"snapshot_role": "input-deck"},
+                    {"literal": "-d"},
+                    {"artifact_directory": "raw"},
+                ],
+            }
+            wrapper = {
+                "stdout_sha256": _sha256(stdout),
+                "observed_world_size": rank_count,
+                "observed_rank_ids": list(range(rank_count)),
+                "terminal_cycle": 88,
+                "terminal_time": bell.LINEAR_RUNTIME_TLIM,
+            }
+            receipt = {
+                "schema_version": bell.SCHEMA_VERSION,
+                "record_type": "q023_reconciled_registered_execution_receipt",
+                "receipt_role": "immutable_reconciled_registered_execution",
+                "registration_scope": "registered_science",
+                "reconciled": True,
+                "campaign_id": bell.CAMPAIGN_ID,
+                "member_id": member["member_id"],
+                "reservation_id": "r",
+                "submission_id": "s",
+                "reconciliation_event_sha256": "4" * 64,
+                "reconciliation_mirror_ack_sha256": "5" * 64,
+                "control_plane_version": producer["control_plane_version"],
+                "project_home_mirrors": {},
+                "producer": producer,
+                "registered_science_authorization_id": "q023-linear-001",
+                "source_commit": "a" * 40,
+                "source_bundle_sha256": "6" * 64,
+                "source_archive_sha256": "7" * 64,
+                "clean_candidate_manifest_sha256": "8" * 64,
+                "executable_sha256": provenance["executable_sha256"],
+                "environment_sha256": "9" * 64,
+                "deck_sha256": member["deck_sha256"],
+                "command_evidence": {
+                    "source": "trusted_pre_submit_manifest_and_installed_trampoline",
+                    "executor": "trusted_trampoline_athena_argv_v1",
+                    "action": action,
+                    "launch_trampoline_entrypoint": "launch_trampoline.py",
+                    "launch_trampoline_sha256": producer[
+                        "launch_trampoline_sha256"
+                    ],
+                    "trusted_wrapper_evidence": wrapper,
+                },
+                "mpi_evidence": {
+                    "tasks": rank_count,
+                    "observed_world_size": rank_count,
+                    "observed_rank_ids": list(range(rank_count)),
+                },
+                "slurm_job_id": "123",
+                "slurm_terminal_state": "COMPLETED",
+                "slurm_exit_code": "0:0",
+                "terminal_cycle": 88,
+                "terminal_time": bell.LINEAR_RUNTIME_TLIM,
+                "raw_output_root": str(root / "raw"),
+                "artifact_dir": str(root),
+                "artifact_inventory": {},
+                "trampoline_completion_receipt": {},
+                "terminal_receipt_sha256": "a" * 64,
+                "pre_submit_manifest_path": str(root / "manifest.json"),
+                "pre_submit_manifest_sha256": "b" * 64,
+                "raw_inventory": raw_inventory,
+                "raw_inventory_sha256": bell._sha256_bytes(
+                    bell._canonical_json_bytes(raw_inventory)
+                ),
+            }
+            bell._validate_registered_execution_receipt(
+                receipt,
+                root=root,
+                member=member,
+                provenance=provenance,
+                raw_artifacts=provenance["raw_artifacts"],
+            )
+            receipt["raw_inventory"][0]["sha256"] = "0" * 64
+            receipt["raw_inventory_sha256"] = bell._sha256_bytes(
+                bell._canonical_json_bytes(receipt["raw_inventory"])
+            )
+            with self.assertRaisesRegex(
+                bell.ContractError, "raw inventory differs from provenance"
+            ):
+                bell._validate_registered_execution_receipt(
+                    receipt,
+                    root=root,
+                    member=member,
+                    provenance=provenance,
+                    raw_artifacts=provenance["raw_artifacts"],
+                )
+
+    def test_registered_manifest_binds_only_canonical_immutable_executable(
+        self,
+    ) -> None:
+        member = next(iter(bell._manifest_members().values()))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            case_root = root / "runs/case"
+            case_root.mkdir(parents=True)
+            receipt, executable = _write_registered_manifest_fixture(
+                root, case_root, member
+            )
+            binding = bell.registered_manifest_executable_binding(
+                receipt,
+                member=member,
+                artifact_root=case_root,
+                authorized_manifest_root=root,
+            )
+            self.assertEqual(binding["path"], str(executable))
+            self.assertEqual(binding["sha256"], _sha256(executable))
+            self.assertEqual(
+                binding["source_bindings"][bell.SOURCE_PATH.as_posix()][
+                    "sha256"
+                ],
+                _sha256(REPO_ROOT / bell.SOURCE_PATH),
+            )
+
+            traversing_receipt = copy.deepcopy(receipt)
+            traversing_receipt["submission_id"] = "../escape"
+            with self.assertRaisesRegex(
+                bell.ContractError, "submission ID is not a canonical UUID"
+            ):
+                bell.registered_manifest_executable_binding(
+                    traversing_receipt,
+                    member=member,
+                    artifact_root=case_root,
+                    authorized_manifest_root=root,
+                )
+
+            manifest_path = Path(str(receipt["pre_submit_manifest_path"]))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            alternate = manifest_path.parent / "snapshot/alternate-athena"
+            alternate.write_bytes(executable.read_bytes())
+            alternate.chmod(0o555)
+            manifest["snapshot_files"][0]["path"] = str(alternate)
+            manifest_path.chmod(0o644)
+            manifest_path.write_text(
+                json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            manifest_path.chmod(0o444)
+            receipt["pre_submit_manifest_sha256"] = _sha256(manifest_path)
+            with self.assertRaisesRegex(
+                bell.ContractError, "executable snapshot record"
+            ):
+                bell.registered_manifest_executable_binding(
+                    receipt,
+                    member=member,
+                    artifact_root=case_root,
+                    authorized_manifest_root=root,
+                )
+
+            manifest["snapshot_files"][0]["path"] = str(executable)
+            manifest_path.chmod(0o644)
+            manifest_path.write_text(
+                json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            manifest_path.chmod(0o444)
+            receipt["pre_submit_manifest_sha256"] = _sha256(manifest_path)
+            os.link(executable, executable.parent / "hardlink-athena")
+            with self.assertRaisesRegex(
+                bell.ContractError, "immutable retained file"
+            ):
+                bell.registered_manifest_executable_binding(
+                    receipt,
+                    member=member,
+                    artifact_root=case_root,
+                    authorized_manifest_root=root,
+                )
+
+    def test_retained_raw_batch_rejects_namespace_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            raw_bin = root / "raw/bin"
+            raw_bin.mkdir(parents=True)
+            raw_path = raw_bin / "sample.bin"
+            raw_path.write_bytes(b"receipt-bound raw bytes\n")
+            raw_path.chmod(0o444)
+            raw_bin.chmod(0o555)
+            raw_bin.parent.chmod(0o555)
+            root.chmod(0o555)
+            binding = {
+                "path": "raw/bin/sample.bin",
+                "sha256": _sha256(raw_path),
+                "byte_count": raw_path.stat().st_size,
+            }
+            batch = bell._RetainedRawBatch(root, [binding])
+            try:
+                raw_bin.chmod(0o755)
+                displaced = raw_bin / "displaced.bin"
+                raw_path.rename(displaced)
+                raw_path.write_bytes(displaced.read_bytes())
+                raw_path.chmod(0o444)
+                raw_bin.chmod(0o555)
+                with self.assertRaisesRegex(
+                    bell.ContractError,
+                    "retained raw namespace changed during analysis",
+                ):
+                    batch.revalidate()
+            finally:
+                batch.close()
 
     def test_materialized_receipt_and_actual_mpi_topology_fail_closed(self) -> None:
         dependency = _q043_bound_dependency_fixture_for_q023_provenance_only()
@@ -1132,7 +1623,7 @@ class Q023PaperBellLinearJOverCTests(unittest.TestCase):
         dependency["binding_kind"] = "registered_matrix_qualification"
         with self.assertRaisesRegex(
             bell.ContractError,
-            "hardened Q043 registered-admission digest/schema binding is pending",
+            "registered Q043 dependency requires an absolute artifact root",
         ):
             bell.validate_q043_dependency(dependency)
 

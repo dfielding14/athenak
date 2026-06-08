@@ -66,6 +66,11 @@ TRAMPOLINE_COMPLETION_LEDGER_RECORD_TYPE = (
     "trusted_trampoline_completion_ledger_binding"
 )
 Q043_REGISTERED_CAMPAIGN = "q043_registered_execution_raw_oracle_successor_v1"
+Q023_REGISTERED_CAMPAIGN = "q023_paper_bell_linear_joverc_registered_successor_v1"
+REGISTERED_WRAPPER_CAMPAIGNS = {
+    Q043_REGISTERED_CAMPAIGN: ("Q043", r"q043-current-oracle-[a-z0-9_-]+"),
+    Q023_REGISTERED_CAMPAIGN: ("Q023", r"[a-z0-9][a-z0-9_-]{0,127}"),
+}
 _TASK_LOCAL_EXEC = r"""
 import hashlib
 import os
@@ -220,7 +225,11 @@ class _PinnedSnapshot:
                 dir_fd=self.parent_descriptor,
             )
             metadata = os.fstat(self.descriptor)
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or metadata.st_mode & 0o222
+            ):
                 raise ValueError(f"Snapshot is not a read-only regular file: {self.path}")
             if self.require_executable and not metadata.st_mode & 0o111:
                 raise ValueError(f"Snapshot executable is not executable: {self.path}")
@@ -1650,28 +1659,30 @@ def _profile_environment() -> dict[str, str]:
     }
 
 
-def _q043_trusted_wrapper_evidence_bytes(
+def _registered_trusted_wrapper_evidence_bytes(
     manifest: dict[str, object],
     action: dict[str, object],
     stdout_payload: bytes,
 ) -> bytes:
-    """Return aggregate Q043 success evidence after exact task-rank verification."""
-    if manifest.get("campaign") != Q043_REGISTERED_CAMPAIGN:
+    """Return aggregate registered-execution evidence after rank verification."""
+    specification = REGISTERED_WRAPPER_CAMPAIGNS.get(manifest.get("campaign"))
+    if specification is None:
         return b""
+    label, case_pattern = specification
     case_id = manifest.get("test_id")
     resources = action.get("resources")
     if (
         not isinstance(case_id, str)
-        or not re.fullmatch(r"q043-current-oracle-[a-z0-9_-]+", case_id)
+        or not re.fullmatch(case_pattern, case_id)
         or not isinstance(resources, dict)
         or type(resources.get("tasks")) is not int
         or int(resources["tasks"]) <= 0
     ):
-        raise ValueError("Q043 trusted-wrapper manifest identity is malformed")
+        raise ValueError(f"{label} trusted-wrapper manifest identity is malformed")
     try:
         lines = stdout_payload.decode("utf-8").splitlines()
     except UnicodeDecodeError as error:
-        raise ValueError("Q043 trusted-wrapper stdout is not UTF-8") from error
+        raise ValueError(f"{label} trusted-wrapper stdout is not UTF-8") from error
     pattern = re.compile(
         r"^PIC trusted GPU launch: rank=([0-9]+) host=\S+ "
         r"ROCR_VISIBLE_DEVICES=[0-9]+ "
@@ -1684,13 +1695,26 @@ def _q043_trusted_wrapper_evidence_bytes(
     ]
     expected = list(range(int(resources["tasks"])))
     if sorted(observed) != expected or len(observed) != len(expected):
-        raise ValueError("Q043 trusted-wrapper task-rank evidence is incomplete or duplicated")
+        raise ValueError(
+            f"{label} trusted-wrapper task-rank evidence is incomplete or duplicated"
+        )
     return (
-        f"Q043_REGISTERED_EXECUTION case_id={case_id} "
+        f"{label}_REGISTERED_EXECUTION case_id={case_id} "
         f"mpi_world_size={len(expected)} "
         f"rank_ids={','.join(str(rank) for rank in expected)}\n"
-        "Q043_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+        f"{label}_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
     ).encode("utf-8")
+
+
+def _q043_trusted_wrapper_evidence_bytes(
+    manifest: dict[str, object],
+    action: dict[str, object],
+    stdout_payload: bytes,
+) -> bytes:
+    """Backward-compatible Q043 helper retained for focused tests."""
+    return _registered_trusted_wrapper_evidence_bytes(
+        manifest, action, stdout_payload
+    )
 
 
 def _create_artifact_directory(
@@ -1919,7 +1943,7 @@ def _launch_actions(
                         )
                         stdout.flush()
                         os.fsync(stdout.fileno())
-                        wrapper_evidence = _q043_trusted_wrapper_evidence_bytes(
+                        wrapper_evidence = _registered_trusted_wrapper_evidence_bytes(
                             manifest,
                             action,
                             _read_artifact_bytes(

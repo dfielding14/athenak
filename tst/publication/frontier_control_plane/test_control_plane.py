@@ -33,6 +33,7 @@ import ledger
 import promote_active_policy
 import q011_pressure_review_packet_verifier as pressure_packet_verifier
 import reconcile_frontier_job
+import reconcile_q023_registered_execution
 import reconcile_q043_registered_execution
 import reconcile_manual_frontier_allocations
 import revalidate_clean_candidate
@@ -191,6 +192,24 @@ class SnapshotTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_launch_snapshot_rejects_hard_link_alias(self) -> None:
+        snapshot_root = self.root / "snapshot-hardlink"
+        snapshot_root.mkdir()
+        executable = snapshot_root / "athena"
+        executable.write_bytes(b"immutable executable\n")
+        executable.chmod(0o555)
+        os.link(executable, snapshot_root / "athena-alias")
+        with self.assertRaisesRegex(ValueError, "read-only regular file"):
+            with launch_trampoline._PinnedSnapshot(
+                executable,
+                root=self.root,
+                expected_sha256=hashlib.sha256(
+                    b"immutable executable\n"
+                ).hexdigest(),
+                require_executable=True,
+            ):
+                pass
 
     def _write(self, name: str, text: str) -> Path:
         path = self.sources / name
@@ -7046,6 +7065,135 @@ class SnapshotTests(unittest.TestCase):
             ),
             b"",
         )
+
+    def test_q023_trusted_wrapper_evidence_requires_exact_successful_rank_set(self) -> None:
+        manifest = {
+            "campaign": launch_trampoline.Q023_REGISTERED_CAMPAIGN,
+            "test_id": "d3-fine-split_xyz-eps0p4",
+        }
+        action = {"resources": {"tasks": 2}}
+        task_lines = (
+            b"PIC trusted GPU launch: rank=0 host=nid000001 ROCR_VISIBLE_DEVICES=0 "
+            b"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+            b"PIC trusted GPU launch: rank=1 host=nid000001 ROCR_VISIBLE_DEVICES=1 "
+            b"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n"
+        )
+        self.assertEqual(
+            launch_trampoline._registered_trusted_wrapper_evidence_bytes(
+                manifest, action, task_lines
+            ),
+            (
+                b"Q023_REGISTERED_EXECUTION "
+                b"case_id=d3-fine-split_xyz-eps0p4 "
+                b"mpi_world_size=2 rank_ids=0,1\n"
+                b"Q023_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "incomplete or duplicated"):
+            launch_trampoline._registered_trusted_wrapper_evidence_bytes(
+                manifest,
+                action,
+                task_lines.replace(b"rank=1", b"rank=0"),
+            )
+
+    def test_q023_reconciler_requires_exact_terminal_and_binary_inventory(self) -> None:
+        member_id = "d3-fine-split_xyz-eps0p4"
+        basename = "q023_joverc_" + member_id.replace("-", "_")
+        stdout = (
+            b"Q023_REGISTERED_EXECUTION case_id=d3-fine-split_xyz-eps0p4 "
+            b"mpi_world_size=2 rank_ids=0,1\n"
+            b"Q023_REGISTERED_EXECUTION_EXIT exit_code=0 signal=0\n"
+            b"Terminating on time limit\n"
+            b"time=1.750000e+00 cycle=120\n"
+            b"tlim=1.750000e+00 nlim=2000000\n"
+        )
+        contract = {
+            "schema_version": 1,
+            "executor": control_plane_common.TRUSTED_LAUNCH_EXECUTOR,
+            "pre_actions": [],
+            "actions": [
+                {
+                    "action_id": member_id,
+                    "kind": "athena",
+                    "resources": {
+                        "nodes": 1,
+                        "tasks": 2,
+                        "cpus_per_task": 1,
+                        "gpus_per_task": 1,
+                        "gpu_bind": "closest",
+                    },
+                    "arguments": [
+                        {"literal": "-i"},
+                        {"snapshot_role": "input-deck"},
+                        {"literal": "-d"},
+                        {"artifact_directory": "raw"},
+                    ],
+                    "stdout_artifact": "athena_stdout.txt",
+                    "stderr_artifact": "athena_stderr.txt",
+                }
+            ],
+            "post_actions": [],
+        }
+        records = {
+            "athena_stdout.txt": {
+                "sha256": hashlib.sha256(stdout).hexdigest(),
+                "size": len(stdout),
+            }
+        }
+        for index in reconcile_q023_registered_execution.REQUIRED_OUTPUT_INDICES:
+            for field in reconcile_q023_registered_execution.REQUIRED_FIELDS:
+                relative = f"raw/bin/{basename}.{field}.{index:05d}.bin"
+                records[relative] = {"sha256": "a" * 64, "size": 1}
+        sealed = {"records": records, "athena_stdout_payload": stdout}
+        report = reconcile_q023_registered_execution._structured_launch_evidence(
+            {"launch_contract": contract},
+            sealed,
+            member_id=member_id,
+            artifact_dir=Path("/tmp/q023"),
+            producer={"launch_trampoline_sha256": "b" * 64},
+        )
+        self.assertEqual(len(report["raw_inventory"]), 445)
+        self.assertEqual(report["terminal_time"], 1.75)
+        self.assertEqual(report["terminal_cycle"], 120)
+        del records[f"raw/bin/{basename}.prtcl_jz.00088.bin"]
+        with self.assertRaisesRegex(ValueError, "exact expected inventory"):
+            reconcile_q023_registered_execution._structured_launch_evidence(
+                {"launch_contract": contract},
+                sealed,
+                member_id=member_id,
+                artifact_dir=Path("/tmp/q023"),
+                producer={"launch_trampoline_sha256": "b" * 64},
+            )
+
+    def test_q023_reconciler_event_requires_registered_success(self) -> None:
+        event = {
+            "event_type": "reconciliation",
+            "job_id": "123",
+            "campaign": reconcile_q023_registered_execution.REGISTERED_CAMPAIGN,
+            "submission_scope": "registered_science",
+            "registered_science_authorization_id": "q023-linear-001",
+            "state": "COMPLETED",
+            "scheduler_exit_code": "0:0",
+            "reconciled": True,
+            "reconciled_by_control_plane_version": "a" * 64,
+            "event_sha256": "b" * 64,
+            "test_id": "d1-coarse-reference_x1-eps0p4",
+        }
+        self.assertEqual(
+            reconcile_q023_registered_execution._q023_event(
+                [event],
+                job_id="123",
+                producer_control_plane_version="a" * 64,
+            ),
+            event,
+        )
+        event["scheduler_exit_code"] = "1:0"
+        with self.assertRaisesRegex(ValueError, "successful registered execution"):
+            reconcile_q023_registered_execution._q023_event(
+                [event],
+                job_id="123",
+                producer_control_plane_version="a" * 64,
+            )
 
     def test_q043_reservation_rejects_any_nonempty_same_user_queue(self) -> None:
         case_id = "q043-current-oracle-d1-coarse-ppc1-single-cvr100"

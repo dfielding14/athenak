@@ -5,21 +5,31 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
+import tarfile
 from typing import Any, Mapping, Sequence
+import uuid
 
 import numpy as np
 
 from tst.publication import analyze_q011_section54_outputs as binary
 from tst.publication import analyze_q023_paper_bell_linear as legacy
+from tst.publication import (
+    q043_registered_execution_raw_oracle_qualification_successor_v1
+    as q043_registered,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CAMPAIGN_ID = "Q023-PAPER-BELL-LINEAR-JOVERC"
+REGISTERED_CAMPAIGN = "q023_paper_bell_linear_joverc_registered_successor_v1"
 SUPERSEDES_CAMPAIGN_ID = "Q023-PAPER-BELL-LINEAR"
 PGEN_NAME = "q023_paper_bell_linear_joverc"
 SCHEMA_VERSION = 1
@@ -48,6 +58,7 @@ Q043_SUPERSESSION_SHA256 = (
 Q043_REGISTERED_ADMISSION_BINDING_STATUS = (
     "pending_hardened_successor_digest_and_schema"
 )
+Q043_REGISTERED_MATRIX_BINDING_STATUS = "exact_registered_matrix_bound"
 Q043_REQUIRED_CASE_COUNT = 132
 SOURCE_PATH = Path("src/pgen/tests/q023_paper_bell_linear_joverc.cpp")
 CORRECTED_EIGENMODE_HEADER_PATH = Path(
@@ -168,6 +179,7 @@ PGEN_REQUIRED_STRINGS = {
 }
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _COMMIT = re.compile(r"[0-9a-f]{40}")
+_WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
 _Q043_DEPENDENCY_KEYS = {
     "schema_version",
     "record_type",
@@ -186,6 +198,10 @@ _Q043_DEPENDENCY_KEYS = {
     "registered_execution_qualification_check_pass",
     "registered_raw_oracle_pass",
     "complete_foundational_raw_oracle_matrix_pass",
+    "registered_matrix_path",
+    "registered_matrix_sha256",
+    "registered_matrix_record_type",
+    "registered_matrix_case_bindings_sha256",
     "required_case_count",
     "measured_case_count",
     "qualification_effect",
@@ -203,6 +219,7 @@ _MATRIX_RECORD_KEYS = {
     "physics_trace",
     "provenance",
 }
+_PHYSICS_MATRIX_RECORD_KEYS = _MATRIX_RECORD_KEYS - {"provenance"}
 _PHYSICS_TRACE_KEYS = legacy._TRACE_KEYS - {"dimension", "epsilon", "raw_provenance"}
 _PROVENANCE_KEYS = {
     "kind",
@@ -240,7 +257,7 @@ _RAW_OUTPUT_INDEX = {
     variable: index for index, variable in enumerate(_RAW_OUTPUT_VARIABLES, 1)
 }
 _OUTPUT_BOOKKEEPING_KEYS = frozenset(("file_number", "last_time"))
-_EXECUTION_RECEIPT_KEYS = {
+_LEGACY_EXECUTION_RECEIPT_KEYS = {
     "schema_version",
     "record_type",
     "campaign_id",
@@ -262,6 +279,46 @@ _EXECUTION_RECEIPT_KEYS = {
     "stdout",
     "raw_artifacts",
     "publication_authorized",
+}
+_REGISTERED_EXECUTION_RECEIPT_KEYS = {
+    "schema_version",
+    "record_type",
+    "receipt_role",
+    "registration_scope",
+    "reconciled",
+    "campaign_id",
+    "member_id",
+    "reservation_id",
+    "submission_id",
+    "reconciliation_event_sha256",
+    "reconciliation_mirror_ack_sha256",
+    "control_plane_version",
+    "project_home_mirrors",
+    "producer",
+    "registered_science_authorization_id",
+    "source_commit",
+    "source_bundle_sha256",
+    "source_archive_sha256",
+    "clean_candidate_manifest_sha256",
+    "executable_sha256",
+    "environment_sha256",
+    "deck_sha256",
+    "command_evidence",
+    "mpi_evidence",
+    "slurm_job_id",
+    "slurm_terminal_state",
+    "slurm_exit_code",
+    "terminal_cycle",
+    "terminal_time",
+    "raw_output_root",
+    "artifact_dir",
+    "artifact_inventory",
+    "trampoline_completion_receipt",
+    "terminal_receipt_sha256",
+    "pre_submit_manifest_path",
+    "pre_submit_manifest_sha256",
+    "raw_inventory",
+    "raw_inventory_sha256",
 }
 _COMMAND_KEYS = {"argv", "working_directory"}
 _MPI_KEYS = {
@@ -308,6 +365,288 @@ def _sha256_bytes(payload: bytes) -> str:
 
 def _sha256_file(path: Path) -> str:
     return _sha256_bytes(path.read_bytes())
+
+
+def _stable_regular_bytes(path: Path, *, label: str) -> bytes:
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise ContractError(f"{label} is not an openable regular file") from error
+    try:
+        before = os.fstat(descriptor)
+        _require(
+            stat.S_ISREG(before.st_mode) and before.st_nlink == 1,
+            f"{label} is not one regular file",
+        )
+        payload = bytearray()
+        while chunk := os.read(descriptor, 1024 * 1024):
+            payload.extend(chunk)
+        after = os.fstat(descriptor)
+        current = os.stat(path, follow_symlinks=False)
+        identity = lambda value: (
+            value.st_dev,
+            value.st_ino,
+            value.st_mode,
+            value.st_nlink,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+        _require(
+            identity(before) == identity(after)
+            and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino)
+            and len(payload) == after.st_size,
+            f"{label} changed while reading",
+        )
+        return bytes(payload)
+    finally:
+        os.close(descriptor)
+
+
+def _stable_read_only_bytes_below(
+    path: Path,
+    *,
+    root: Path,
+    label: str,
+    executable: bool = False,
+) -> tuple[Path, bytes]:
+    try:
+        canonical_root = Path(os.path.abspath(root)).resolve(strict=True)
+        lexical = Path(os.path.abspath(path))
+        resolved = lexical.resolve(strict=True)
+        relative = lexical.relative_to(canonical_root)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise ContractError(f"{label} is missing or outside the authorized root") from error
+    _require(
+        lexical == resolved and relative.as_posix() not in {"", "."},
+        f"{label} path contains a symlink or alias",
+    )
+    try:
+        descriptor = os.open(lexical, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise ContractError(f"{label} is not an openable regular file") from error
+    try:
+        before = os.fstat(descriptor)
+        expected_mode = 0o555 if executable else 0o444
+        _require(
+            stat.S_ISREG(before.st_mode)
+            and before.st_nlink == 1
+            and stat.S_IMODE(before.st_mode) == expected_mode,
+            f"{label} is not one immutable retained file",
+        )
+        payload = bytearray()
+        while chunk := os.read(descriptor, 1024 * 1024):
+            payload.extend(chunk)
+        after = os.fstat(descriptor)
+        current = os.stat(lexical, follow_symlinks=False)
+        identity = lambda value: (
+            value.st_dev,
+            value.st_ino,
+            value.st_mode,
+            value.st_nlink,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+        _require(
+            identity(before) == identity(after)
+            and (after.st_dev, after.st_ino) == (current.st_dev, current.st_ino)
+            and len(payload) == after.st_size,
+            f"{label} changed while reading",
+        )
+        return lexical, bytes(payload)
+    finally:
+        os.close(descriptor)
+
+
+class _RetainedRawBatch:
+    """Keep the complete receipt-bound raw namespace open through analysis."""
+
+    _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    _FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+
+    def __init__(
+        self,
+        root: Path,
+        bindings: Sequence[Mapping[str, object]],
+    ) -> None:
+        self.root = Path(os.path.abspath(root))
+        self.root_fd: int | None = None
+        self.raw_fd: int | None = None
+        self.bin_fd: int | None = None
+        self.files: dict[
+            str, tuple[int, str, bytes, tuple[int, int, int, int, int, int, int]]
+        ] = {}
+        try:
+            _require(
+                self.root.resolve(strict=True) == self.root,
+                "Q023 retained raw root contains a symlink or alias",
+            )
+            self.root_fd = os.open(self.root, self._DIRECTORY_FLAGS)
+            self._validate_root()
+            self.raw_fd = self._open_directory(
+                self.root_fd, "raw", label="Q023 retained raw directory"
+            )
+            self.bin_fd = self._open_directory(
+                self.raw_fd, "bin", label="Q023 retained raw/bin directory"
+            )
+            for binding in bindings:
+                self._retain(binding)
+        except BaseException:
+            self.close()
+            raise
+
+    @staticmethod
+    def _identity(value: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
+        return (
+            value.st_dev,
+            value.st_ino,
+            value.st_mode,
+            value.st_nlink,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+
+    def _validate_root(self) -> None:
+        _require(
+            self.root_fd is not None,
+            "Q023 retained raw root descriptor is closed",
+        )
+        lexical = self.root.stat(follow_symlinks=False)
+        retained = os.fstat(self.root_fd)
+        _require(
+            stat.S_ISDIR(retained.st_mode)
+            and not retained.st_mode & _WRITE_BITS
+            and (retained.st_dev, retained.st_ino)
+            == (lexical.st_dev, lexical.st_ino),
+            "Q023 retained raw root identity or permissions drifted",
+        )
+
+    def _open_directory(self, parent_fd: int, name: str, *, label: str) -> int:
+        descriptor = os.open(name, self._DIRECTORY_FLAGS, dir_fd=parent_fd)
+        retained = os.fstat(descriptor)
+        lexical = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        _require(
+            stat.S_ISDIR(retained.st_mode)
+            and not retained.st_mode & _WRITE_BITS
+            and (retained.st_dev, retained.st_ino)
+            == (lexical.st_dev, lexical.st_ino),
+            f"{label} identity or permissions drifted",
+        )
+        return descriptor
+
+    def _retain(self, binding: Mapping[str, object]) -> None:
+        _require(
+            set(binding) == {"path", "sha256", "byte_count"},
+            "Q023 retained raw binding schema drifted",
+        )
+        relative = binding["path"]
+        digest = binding["sha256"]
+        byte_count = binding["byte_count"]
+        _require(
+            isinstance(relative, str)
+            and PurePosixPath(relative).parts[:2] == ("raw", "bin")
+            and len(PurePosixPath(relative).parts) == 3
+            and relative == PurePosixPath(relative).as_posix()
+            and isinstance(digest, str)
+            and _SHA256.fullmatch(digest) is not None
+            and type(byte_count) is int
+            and byte_count > 0
+            and relative not in self.files,
+            "Q023 retained raw binding is malformed or duplicated",
+        )
+        _require(self.bin_fd is not None, "Q023 retained raw/bin descriptor is closed")
+        name = PurePosixPath(relative).name
+        descriptor = os.open(name, self._FILE_FLAGS, dir_fd=self.bin_fd)
+        try:
+            before = os.fstat(descriptor)
+            payload = bytearray()
+            while chunk := os.read(descriptor, 1024 * 1024):
+                payload.extend(chunk)
+            after = os.fstat(descriptor)
+            lexical = os.stat(name, dir_fd=self.bin_fd, follow_symlinks=False)
+            identity = self._identity(after)
+            _require(
+                stat.S_ISREG(before.st_mode)
+                and before.st_nlink == 1
+                and not before.st_mode & _WRITE_BITS
+                and self._identity(before) == identity
+                and (after.st_dev, after.st_ino)
+                == (lexical.st_dev, lexical.st_ino)
+                and len(payload) == byte_count == after.st_size
+                and _sha256_bytes(payload) == digest,
+                f"Q023 retained raw file bytes or identity drifted: {relative}",
+            )
+            self.files[relative] = (
+                descriptor,
+                name,
+                bytes(payload),
+                identity,
+            )
+        except BaseException:
+            os.close(descriptor)
+            raise
+
+    def payload(self, relative: str) -> bytes:
+        _require(
+            relative in self.files,
+            "Q023 analyzer requested a raw file outside the retained batch",
+        )
+        return self.files[relative][2]
+
+    def absolute_path(self, relative: str) -> Path:
+        _require(
+            relative in self.files,
+            "Q023 analyzer requested a raw path outside the retained batch",
+        )
+        return self.root.joinpath(*PurePosixPath(relative).parts)
+
+    def revalidate(self) -> None:
+        self._validate_root()
+        _require(
+            self.root_fd is not None
+            and self.raw_fd is not None
+            and self.bin_fd is not None,
+            "Q023 retained raw namespace is closed",
+        )
+        for parent_fd, name, descriptor, label in (
+            (self.root_fd, "raw", self.raw_fd, "Q023 retained raw directory"),
+            (self.raw_fd, "bin", self.bin_fd, "Q023 retained raw/bin directory"),
+        ):
+            retained = os.fstat(descriptor)
+            lexical = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            _require(
+                stat.S_ISDIR(retained.st_mode)
+                and not retained.st_mode & _WRITE_BITS
+                and (retained.st_dev, retained.st_ino)
+                == (lexical.st_dev, lexical.st_ino),
+                f"{label} changed during analysis",
+            )
+        for relative, (descriptor, name, payload, identity) in self.files.items():
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            observed = bytearray()
+            while chunk := os.read(descriptor, 1024 * 1024):
+                observed.extend(chunk)
+            retained = os.fstat(descriptor)
+            lexical = os.stat(name, dir_fd=self.bin_fd, follow_symlinks=False)
+            _require(
+                self._identity(retained) == identity
+                and (retained.st_dev, retained.st_ino)
+                == (lexical.st_dev, lexical.st_ino)
+                and bytes(observed) == payload,
+                f"Q023 retained raw namespace changed during analysis: {relative}",
+            )
+
+    def close(self) -> None:
+        for descriptor, _, _, _ in self.files.values():
+            os.close(descriptor)
+        self.files.clear()
+        for attribute in ("bin_fd", "raw_fd", "root_fd"):
+            descriptor = getattr(self, attribute)
+            if descriptor is not None:
+                os.close(descriptor)
+                setattr(self, attribute, None)
 
 
 def _float_token(value: float) -> str:
@@ -791,6 +1130,10 @@ def synthetic_q043_registered_raw_oracle_dependency() -> dict[str, object]:
         "registered_execution_qualification_check_pass": False,
         "registered_raw_oracle_pass": False,
         "complete_foundational_raw_oracle_matrix_pass": False,
+        "registered_matrix_path": "",
+        "registered_matrix_sha256": "",
+        "registered_matrix_record_type": "",
+        "registered_matrix_case_bindings_sha256": "",
         "required_case_count": Q043_REQUIRED_CASE_COUNT,
         "measured_case_count": 0,
         "qualification_effect": DEPENDENCY_EFFECT,
@@ -807,9 +1150,10 @@ def validate_q043_dependency(
     dependency = dict(value)
     _require(dependency["schema_version"] == SCHEMA_VERSION, "Q043 dependency schema drifted")
     _require(dependency["record_type"] == "q043_registered_raw_oracle_dependency", "Q043 dependency type drifted")
+    binding_kind = dependency["binding_kind"]
     _require(
-        dependency["binding_kind"] == "synthetic_contract_fixture",
-        "hardened Q043 registered-admission digest/schema binding is pending",
+        binding_kind in {"synthetic_contract_fixture", "registered_matrix_qualification"},
+        "Q043 dependency binding kind is not recognized",
     )
     _require(dependency["current_campaign_id"] == Q043_CURRENT_CAMPAIGN_ID, "Q043 current campaign drifted")
     _require(dependency["raw_oracle_id"] == Q043_RAW_ORACLE_ID, "Q043 raw oracle drifted")
@@ -842,27 +1186,139 @@ def validate_q043_dependency(
             f"Q043 foundational {name} does not bind final integration checkpoint "
             f"{Q043_FOUNDATIONAL_LINEAGE_COMMIT}",
         )
-    _require(
-        dependency["registered_admission_binding_status"]
-        == Q043_REGISTERED_ADMISSION_BINDING_STATUS
-        and dependency["registered_admission_digest_bound"] is False
-        and dependency["registered_admission_schema_bound"] is False,
-        "provisional Q043 registered-admission binding is forbidden",
-    )
-    _require(
-        dependency["registered_execution_qualification_check_pass"] is False
-        and dependency["registered_raw_oracle_pass"] is False
-        and dependency["complete_foundational_raw_oracle_matrix_pass"] is False,
-        "pending Q043 registered admission must remain unclaimed",
-    )
-    _require(
-        dependency["required_case_count"] == Q043_REQUIRED_CASE_COUNT
-        and dependency["measured_case_count"] == 0,
-        "pending Q043 foundational case count status drifted",
-    )
+    if binding_kind == "synthetic_contract_fixture":
+        _require(
+            dependency["registered_admission_binding_status"]
+            == Q043_REGISTERED_ADMISSION_BINDING_STATUS
+            and dependency["registered_admission_digest_bound"] is False
+            and dependency["registered_admission_schema_bound"] is False,
+            "provisional Q043 registered-admission binding is forbidden",
+        )
+        _require(
+            dependency["registered_execution_qualification_check_pass"] is False
+            and dependency["registered_raw_oracle_pass"] is False
+            and dependency["complete_foundational_raw_oracle_matrix_pass"] is False,
+            "pending Q043 registered admission must remain unclaimed",
+        )
+        _require(
+            dependency["registered_matrix_path"] == ""
+            and dependency["registered_matrix_sha256"] == ""
+            and dependency["registered_matrix_record_type"] == ""
+            and dependency["registered_matrix_case_bindings_sha256"] == "",
+            "synthetic Q043 dependency cannot bind registered matrix evidence",
+        )
+        _require(
+            dependency["required_case_count"] == Q043_REQUIRED_CASE_COUNT
+            and dependency["measured_case_count"] == 0,
+            "pending Q043 foundational case count status drifted",
+        )
+    else:
+        _require(
+            artifact_root is not None and Path(artifact_root).is_absolute(),
+            "registered Q043 dependency requires an absolute artifact root",
+        )
+        root = Path(artifact_root).resolve(strict=True)
+        binding = _validate_materialized_binding(
+            {
+                "path": dependency["registered_matrix_path"],
+                "sha256": dependency["registered_matrix_sha256"],
+            },
+            root,
+            "registered Q043 matrix",
+        )
+        matrix_path = root / binding["path"]
+        try:
+            matrix = json.loads(
+                _stable_regular_bytes(
+                    matrix_path, label="registered Q043 matrix"
+                ).decode("utf-8")
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ContractError("registered Q043 matrix is not valid JSON") from error
+        try:
+            matrix = q043_registered.validate_downstream_q023_q019_prerequisite(
+                matrix
+            )
+        except q043_registered.AdmissionError as error:
+            raise ContractError(
+                "registered Q043 matrix failed hardened prerequisite validation"
+            ) from error
+        _require(
+            dependency["registered_admission_binding_status"]
+            == Q043_REGISTERED_MATRIX_BINDING_STATUS
+            and dependency["registered_admission_digest_bound"] is True
+            and dependency["registered_admission_schema_bound"] is True
+            and dependency["registered_execution_qualification_check_pass"] is True
+            and dependency["registered_raw_oracle_pass"] is True
+            and dependency["complete_foundational_raw_oracle_matrix_pass"] is True,
+            "registered Q043 dependency pass or binding status drifted",
+        )
+        _require(
+            dependency["registered_matrix_record_type"]
+            == q043_registered.MATRIX_RECORD_TYPE
+            == matrix["record_type"]
+            and dependency["registered_matrix_case_bindings_sha256"]
+            == matrix["case_bindings_sha256"],
+            "registered Q043 matrix schema or case binding drifted",
+        )
+        _require(
+            dependency["required_case_count"] == Q043_REQUIRED_CASE_COUNT
+            and dependency["measured_case_count"] == Q043_REQUIRED_CASE_COUNT
+            and matrix["case_count"] == Q043_REQUIRED_CASE_COUNT,
+            "registered Q043 foundational case count status drifted",
+        )
     _require(dependency["qualification_effect"] == DEPENDENCY_EFFECT, "Q043 dependency authority drifted")
     _require(dependency["launch_authorized"] is False and dependency["scientific_claim_authorized"] is False and dependency["publication_authorized"] is False, "Q043 dependency improperly grants authority")
     return dependency
+
+
+def registered_q043_raw_oracle_dependency(
+    matrix_path: Path, *, artifact_root: Path
+) -> dict[str, object]:
+    """Bind one exact hardened Q043 matrix for downstream Q023 analysis."""
+    root = Path(artifact_root).resolve(strict=True)
+    path = Path(matrix_path).resolve(strict=True)
+    try:
+        relative = path.relative_to(root).as_posix()
+    except ValueError as error:
+        raise ContractError(
+            "registered Q043 matrix is outside the authorized artifact root"
+        ) from error
+    payload = _stable_regular_bytes(path, label="registered Q043 matrix")
+    try:
+        matrix = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError("registered Q043 matrix is not valid JSON") from error
+    try:
+        matrix = q043_registered.validate_downstream_q023_q019_prerequisite(
+            matrix
+        )
+    except q043_registered.AdmissionError as error:
+        raise ContractError(
+            "registered Q043 matrix failed hardened prerequisite validation"
+        ) from error
+    dependency = synthetic_q043_registered_raw_oracle_dependency()
+    dependency.update(
+        {
+            "binding_kind": "registered_matrix_qualification",
+            "registered_admission_binding_status": (
+                Q043_REGISTERED_MATRIX_BINDING_STATUS
+            ),
+            "registered_admission_digest_bound": True,
+            "registered_admission_schema_bound": True,
+            "registered_execution_qualification_check_pass": True,
+            "registered_raw_oracle_pass": True,
+            "complete_foundational_raw_oracle_matrix_pass": True,
+            "registered_matrix_path": relative,
+            "registered_matrix_sha256": _sha256_bytes(payload),
+            "registered_matrix_record_type": matrix["record_type"],
+            "registered_matrix_case_bindings_sha256": matrix[
+                "case_bindings_sha256"
+            ],
+            "measured_case_count": matrix["case_count"],
+        }
+    )
+    return validate_q043_dependency(dependency, artifact_root=root)
 
 
 def _dependency_digest(dependency: Mapping[str, object]) -> str:
@@ -1222,20 +1678,41 @@ def _validate_materialized_binding(value: object, root: Path, label: str) -> dic
     path = _normalized_artifact_file(value["path"], root, f"{label}/path")
     digest = value["sha256"]
     _require(isinstance(digest, str) and _SHA256.fullmatch(digest) is not None, f"{label} digest malformed")
-    _require(_sha256_file(path) == digest, f"{label} digest drifted")
+    _require(
+        _sha256_bytes(_stable_regular_bytes(path, label=label)) == digest,
+        f"{label} digest drifted",
+    )
     return {"path": str(value["path"]), "sha256": str(digest)}
 
 
 def _validate_raw_artifact_binding(
-    value: object, root: Path, label: str
+    value: object,
+    root: Path,
+    label: str,
+    *,
+    retained_raw_batch: _RetainedRawBatch | None = None,
 ) -> tuple[dict[str, object], Path]:
     _require(
         isinstance(value, Mapping) and set(value) == _RAW_ARTIFACT_KEYS,
         f"{label} keys drifted",
     )
-    bound = _validate_materialized_binding(
-        {"path": value["path"], "sha256": value["sha256"]}, root, label
-    )
+    if retained_raw_batch is None:
+        bound = _validate_materialized_binding(
+            {"path": value["path"], "sha256": value["sha256"]}, root, label
+        )
+        path = root / bound["path"]
+    else:
+        path = _normalized_artifact_file(value["path"], root, f"{label}/path")
+        payload = retained_raw_batch.payload(str(value["path"]))
+        _require(
+            _sha256_bytes(payload) == value["sha256"],
+            f"{label} digest drifted",
+        )
+        _require(
+            path == retained_raw_batch.absolute_path(str(value["path"])),
+            f"{label} path differs from the retained raw batch",
+        )
+        bound = {"path": str(value["path"]), "sha256": str(value["sha256"])}
     _require(value["variable"] in _RAW_OUTPUT_VARIABLES, f"{label} variable drifted")
     _require(
         type(value["cycle"]) is int and value["cycle"] >= 0,
@@ -1254,7 +1731,7 @@ def _validate_raw_artifact_binding(
             "cycle": int(value["cycle"]),
             "time": float(value["time"]),
         },
-        root / bound["path"],
+        path,
     )
 
 
@@ -1321,7 +1798,7 @@ def _validate_rank_topology(
     )
 
 
-def _validate_execution_receipt(
+def _validate_legacy_execution_receipt(
     receipt: object,
     *,
     root: Path,
@@ -1330,7 +1807,7 @@ def _validate_execution_receipt(
     raw_artifacts: Sequence[Mapping[str, object]],
 ) -> None:
     _require(
-        isinstance(receipt, Mapping) and set(receipt) == _EXECUTION_RECEIPT_KEYS,
+        isinstance(receipt, Mapping) and set(receipt) == _LEGACY_EXECUTION_RECEIPT_KEYS,
         "Q023 registered execution receipt keys drifted",
     )
     expected_deck = (DECK_ROOT.relative_to(REPO_ROOT) / str(member["deck_path"])).as_posix()
@@ -1445,6 +1922,490 @@ def _validate_execution_receipt(
         stdout["completion_marker"] in stdout_text,
         "Q023 execution stdout completion marker is absent",
     )
+
+
+def _validate_registered_execution_receipt(
+    receipt: object,
+    *,
+    root: Path,
+    member: Mapping[str, object],
+    provenance: Mapping[str, object],
+    raw_artifacts: Sequence[Mapping[str, object]],
+) -> None:
+    _require(
+        isinstance(receipt, Mapping)
+        and set(receipt) == _REGISTERED_EXECUTION_RECEIPT_KEYS,
+        "Q023 hardened registered execution receipt keys drifted",
+    )
+    rank_count = math.prod(int(value) for value in member["decomposition_splits"])
+    sha_fields = (
+        "reconciliation_event_sha256",
+        "reconciliation_mirror_ack_sha256",
+        "control_plane_version",
+        "source_bundle_sha256",
+        "source_archive_sha256",
+        "clean_candidate_manifest_sha256",
+        "executable_sha256",
+        "environment_sha256",
+        "deck_sha256",
+        "terminal_receipt_sha256",
+        "pre_submit_manifest_sha256",
+        "raw_inventory_sha256",
+    )
+    _require(
+        receipt["schema_version"] == SCHEMA_VERSION
+        and receipt["record_type"] == "q023_reconciled_registered_execution_receipt"
+        and receipt["receipt_role"] == "immutable_reconciled_registered_execution"
+        and receipt["registration_scope"] == "registered_science"
+        and receipt["reconciled"] is True
+        and receipt["campaign_id"] == CAMPAIGN_ID
+        and receipt["member_id"] == member["member_id"]
+        and receipt["deck_sha256"] == member["deck_sha256"]
+        and receipt["executable_sha256"] == provenance["executable_sha256"]
+        and all(
+            isinstance(receipt[name], str)
+            and _SHA256.fullmatch(receipt[name]) is not None
+            for name in sha_fields
+        )
+        and isinstance(receipt["registered_science_authorization_id"], str)
+        and receipt["registered_science_authorization_id"].startswith("q023-")
+        and receipt["slurm_terminal_state"] == "COMPLETED"
+        and receipt["slurm_exit_code"] == "0:0"
+        and type(receipt["terminal_cycle"]) is int
+        and receipt["terminal_cycle"] > 0
+        and type(receipt["terminal_time"]) in (int, float)
+        and math.isclose(
+            float(receipt["terminal_time"]),
+            LINEAR_RUNTIME_TLIM,
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
+        ),
+        "Q023 hardened receipt identity, digest, or terminal binding drifted",
+    )
+    _require(
+        receipt["artifact_dir"] == str(root)
+        and receipt["raw_output_root"] == str(root / "raw")
+        and Path(str(receipt["pre_submit_manifest_path"])).is_absolute(),
+        "Q023 hardened receipt artifact or manifest root drifted",
+    )
+    producer = receipt["producer"]
+    _require(
+        isinstance(producer, Mapping)
+        and set(producer)
+        == {
+            "entrypoint",
+            "entrypoint_sha256",
+            "launch_trampoline_sha256",
+            "control_plane_version",
+        }
+        and producer["entrypoint"] == "reconcile_q023_registered_execution.py"
+        and producer["control_plane_version"] == receipt["control_plane_version"]
+        and all(
+            isinstance(producer[name], str)
+            and _SHA256.fullmatch(producer[name]) is not None
+            for name in (
+                "entrypoint_sha256",
+                "launch_trampoline_sha256",
+                "control_plane_version",
+            )
+        ),
+        "Q023 hardened receipt producer binding drifted",
+    )
+    command = receipt["command_evidence"]
+    _require(
+        isinstance(command, Mapping)
+        and command.get("source")
+        == "trusted_pre_submit_manifest_and_installed_trampoline"
+        and command.get("executor") == "trusted_trampoline_athena_argv_v1"
+        and command.get("launch_trampoline_entrypoint") == "launch_trampoline.py"
+        and command.get("launch_trampoline_sha256")
+        == producer["launch_trampoline_sha256"],
+        "Q023 hardened receipt command producer drifted",
+    )
+    action = command.get("action")
+    _require(
+        isinstance(action, Mapping)
+        and action.get("action_id") == member["member_id"]
+        and action.get("kind") == "athena",
+        "Q023 hardened receipt launch action drifted",
+    )
+    arguments = action.get("arguments")
+    _require(
+        isinstance(arguments, list)
+        and any(
+            arguments[index] == {"literal": "-i"}
+            and arguments[index + 1] == {"snapshot_role": "input-deck"}
+            for index in range(len(arguments) - 1)
+        )
+        and any(
+            arguments[index] == {"literal": "-d"}
+            and arguments[index + 1] == {"artifact_directory": "raw"}
+            for index in range(len(arguments) - 1)
+        ),
+        "Q023 hardened receipt launch arguments drifted",
+    )
+    mpi = receipt["mpi_evidence"]
+    _require(
+        isinstance(mpi, Mapping)
+        and mpi.get("tasks") == rank_count
+        and mpi.get("observed_world_size") == rank_count
+        and mpi.get("observed_rank_ids") == list(range(rank_count)),
+        "Q023 hardened receipt MPI evidence drifted",
+    )
+    wrapper = command.get("trusted_wrapper_evidence")
+    _require(
+        isinstance(wrapper, Mapping)
+        and wrapper.get("observed_world_size") == rank_count
+        and wrapper.get("observed_rank_ids") == list(range(rank_count))
+        and wrapper.get("terminal_cycle") == receipt["terminal_cycle"]
+        and math.isclose(
+            float(wrapper.get("terminal_time", math.nan)),
+            LINEAR_RUNTIME_TLIM,
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
+        ),
+        "Q023 hardened receipt trusted-wrapper evidence drifted",
+    )
+    stdout_path = root / "athena_stdout.txt"
+    stdout_payload = _stable_regular_bytes(stdout_path, label="Q023 retained stdout")
+    _require(
+        hashlib.sha256(stdout_payload).hexdigest() == wrapper.get("stdout_sha256")
+        and (
+            f"Q023_REGISTERED_EXECUTION case_id={member['member_id']} "
+            f"mpi_world_size={rank_count} "
+            f"rank_ids={','.join(str(rank) for rank in range(rank_count))}"
+        ).encode("utf-8")
+        in stdout_payload,
+        "Q023 retained stdout differs from hardened receipt",
+    )
+    inventory = receipt["raw_inventory"]
+    _require(
+        isinstance(inventory, list)
+        and len(inventory) == 89 * len(_RAW_OUTPUT_VARIABLES)
+        and len(inventory) == len(raw_artifacts)
+        and receipt["raw_inventory_sha256"]
+        == _sha256_bytes(_canonical_json_bytes(inventory)),
+        "Q023 hardened receipt raw inventory count or digest drifted",
+    )
+    by_path = {str(item["path"]): item for item in raw_artifacts}
+    _require(len(by_path) == len(raw_artifacts), "Q023 raw artifact path reused")
+    basename = "q023_joverc_" + str(member["member_id"]).replace("-", "_")
+    for position, item in enumerate(inventory):
+        output_index, variable_index = divmod(position, len(_RAW_OUTPUT_VARIABLES))
+        expected_variable = _RAW_OUTPUT_VARIABLES[variable_index]
+        expected_path = (
+            f"bin/{basename}.{expected_variable}.{output_index:05d}.bin"
+        )
+        _require(
+            isinstance(item, Mapping)
+            and set(item)
+            == {
+                "path",
+                "sha256",
+                "byte_count",
+                "member_id",
+                "variable",
+                "output_index",
+            }
+            and item["path"] == expected_path
+            and item["member_id"] == member["member_id"]
+            and item["variable"] == expected_variable
+            and type(item["output_index"]) is int
+            and item["output_index"] == output_index
+            and type(item["byte_count"]) is int
+            and item["byte_count"] > 0,
+            "Q023 hardened receipt raw member is malformed",
+        )
+        artifact = by_path.get("raw/" + str(item["path"]))
+        _require(
+            artifact is not None
+            and artifact["sha256"] == item["sha256"]
+            and artifact["variable"] == item["variable"]
+            and (root / str(artifact["path"])).stat(follow_symlinks=False).st_size
+            == item["byte_count"],
+            "Q023 hardened receipt raw inventory differs from provenance",
+        )
+    first = [
+        by_path["raw/" + str(item["path"])] for item in inventory[:5]
+    ]
+    final = [
+        by_path["raw/" + str(item["path"])] for item in inventory[-5:]
+    ]
+    _require(
+        {int(item["cycle"]) for item in first} == {0}
+        and {float(item["time"]) for item in first} == {0.0},
+        "Q023 registered raw inventory does not begin at cycle/time zero",
+    )
+    _require(
+        {int(item["cycle"]) for item in final} == {receipt["terminal_cycle"]}
+        and len({float(item["time"]) for item in final}) == 1
+        and math.isclose(
+            float(final[0]["time"]),
+            float(receipt["terminal_time"]),
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
+        ),
+        "Q023 final raw snapshot differs from the terminal receipt",
+    )
+
+
+def registered_manifest_executable_binding(
+    receipt: Mapping[str, object],
+    *,
+    member: Mapping[str, object],
+    artifact_root: Path,
+    authorized_manifest_root: Path,
+) -> dict[str, object]:
+    """Validate the immutable executable and source archive for one run."""
+    try:
+        root = Path(os.path.abspath(authorized_manifest_root)).resolve(strict=True)
+        case_root = Path(os.path.abspath(artifact_root)).resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ContractError("Q023 authorized manifest or artifact root is missing") from error
+    submission_id = receipt.get("submission_id")
+    _require(
+        type(submission_id) is str,
+        "Q023 receipt submission ID is not a canonical UUID",
+    )
+    try:
+        parsed_submission_id = uuid.UUID(submission_id)
+    except (ValueError, AttributeError) as error:
+        raise ContractError(
+            "Q023 receipt submission ID is not a canonical UUID"
+        ) from error
+    _require(
+        str(parsed_submission_id) == submission_id,
+        "Q023 receipt submission ID is not a canonical UUID",
+    )
+    manifest_path = (
+        root
+        / "manifests"
+        / REGISTERED_CAMPAIGN
+        / submission_id
+        / "pre_submit_manifest.json"
+    )
+    _require(
+        receipt.get("pre_submit_manifest_path") == str(manifest_path),
+        "Q023 receipt does not name the canonical pre-submit manifest",
+    )
+    manifest_path, manifest_payload = _stable_read_only_bytes_below(
+        manifest_path,
+        root=root,
+        label="Q023 pre-submit manifest",
+    )
+    _require(
+        _sha256_bytes(manifest_payload) == receipt.get("pre_submit_manifest_sha256"),
+        "Q023 pre-submit manifest digest differs from the reconciled receipt",
+    )
+    try:
+        manifest = json.loads(manifest_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError("Q023 pre-submit manifest is not valid UTF-8 JSON") from error
+    _require(
+        isinstance(manifest, Mapping)
+        and manifest.get("schema_version") == SCHEMA_VERSION
+        and manifest.get("pic_root") == str(root)
+        and manifest.get("campaign") == REGISTERED_CAMPAIGN
+        and manifest.get("test_id") == member["member_id"]
+        and manifest.get("submission_id") == receipt.get("submission_id")
+        and manifest.get("submission_scope") == "registered_science"
+        and manifest.get("artifact_dir") == str(case_root)
+        and manifest.get("git_commit") == receipt.get("source_commit")
+        and manifest.get("control_plane_version")
+        == receipt.get("control_plane_version")
+        and manifest.get("registered_science_authorization_id")
+        == receipt.get("registered_science_authorization_id")
+        and manifest.get("clean_candidate_manifest_sha256")
+        == receipt.get("clean_candidate_manifest_sha256"),
+        "Q023 pre-submit manifest identity differs from the reconciled execution",
+    )
+    snapshot_files = manifest.get("snapshot_files")
+    _require(
+        isinstance(snapshot_files, list),
+        "Q023 pre-submit manifest snapshot inventory is malformed",
+    )
+    matches = [
+        item
+        for item in snapshot_files
+        if isinstance(item, Mapping) and item.get("role") == "executable"
+    ]
+    _require(
+        len(matches) == 1
+        and set(matches[0])
+        == {"role", "path", "sha256", "source_path", "source_sha256"},
+        "Q023 pre-submit manifest must contain exactly one executable snapshot",
+    )
+    executable_record = matches[0]
+    executable_path = manifest_path.parent / "snapshot/athena"
+    clean_candidate_manifest_path = Path(
+        str(manifest.get("clean_candidate_manifest_path", ""))
+    )
+    candidate_root = clean_candidate_manifest_path.parent
+    expected_source_path = clean_candidate_manifest_path.parent / "athena"
+    _require(
+        executable_record["path"] == str(executable_path)
+        and executable_record["sha256"] == receipt.get("executable_sha256")
+        and executable_record["source_sha256"] == receipt.get("executable_sha256")
+        and executable_record["source_path"] == str(expected_source_path)
+        and clean_candidate_manifest_path.is_absolute(),
+        "Q023 executable snapshot record differs from the reconciled receipt",
+    )
+    try:
+        canonical_freeze_id = str(uuid.UUID(candidate_root.name))
+    except (ValueError, AttributeError) as error:
+        raise ContractError(
+            "Q023 clean-candidate manifest fixed-root layout drifted"
+        ) from error
+    _require(
+        candidate_root.parent == root / "clean_candidates"
+        and candidate_root.name == canonical_freeze_id
+        and clean_candidate_manifest_path
+        == candidate_root / "clean_candidate_manifest.json",
+        "Q023 clean-candidate manifest fixed-root layout drifted",
+    )
+    clean_candidate_manifest_path, candidate_manifest_payload = (
+        _stable_read_only_bytes_below(
+            clean_candidate_manifest_path,
+            root=root,
+            label="Q023 clean-candidate manifest",
+        )
+    )
+    _require(
+        _sha256_bytes(candidate_manifest_payload)
+        == receipt.get("clean_candidate_manifest_sha256"),
+        "Q023 clean-candidate manifest digest differs from the reconciled receipt",
+    )
+    try:
+        candidate_manifest = json.loads(candidate_manifest_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError(
+            "Q023 clean-candidate manifest is not valid UTF-8 JSON"
+        ) from error
+    candidate_source = (
+        candidate_manifest.get("source")
+        if isinstance(candidate_manifest, Mapping)
+        else None
+    )
+    candidate_build = (
+        candidate_manifest.get("build")
+        if isinstance(candidate_manifest, Mapping)
+        else None
+    )
+    source_archive_path = candidate_root / "source.tar"
+    _require(
+        isinstance(candidate_manifest, Mapping)
+        and candidate_manifest.get("schema_version") == 4
+        and candidate_manifest.get("freeze_id") == candidate_root.name
+        and isinstance(candidate_source, Mapping)
+        and isinstance(candidate_build, Mapping)
+        and candidate_source.get("worktree_status") == "clean"
+        and candidate_source.get("git_commit") == receipt.get("source_commit")
+        and candidate_source.get("source_bundle_sha256")
+        == receipt.get("source_bundle_sha256")
+        and candidate_source.get("archive_path") == str(source_archive_path)
+        and candidate_source.get("archive_sha256")
+        == receipt.get("source_archive_sha256")
+        and candidate_build.get("source_archive_sha256")
+        == receipt.get("source_archive_sha256")
+        and candidate_build.get("source_bundle_sha256")
+        == receipt.get("source_bundle_sha256")
+        and candidate_build.get("executable_path") == str(expected_source_path)
+        and candidate_build.get("executable_sha256")
+        == receipt.get("executable_sha256"),
+        "Q023 clean-candidate manifest lineage differs from the reconciled receipt",
+    )
+    source_archive_path, source_archive_payload = _stable_read_only_bytes_below(
+        source_archive_path,
+        root=root,
+        label="Q023 clean-candidate source archive",
+    )
+    _require(
+        _sha256_bytes(source_archive_payload)
+        == receipt.get("source_archive_sha256"),
+        "Q023 clean-candidate source archive digest drifted",
+    )
+    source_bindings = _candidate_source_bindings(source_archive_payload)
+    executable_path, executable_payload = _stable_read_only_bytes_below(
+        executable_path,
+        root=root,
+        label="Q023 immutable executable snapshot",
+        executable=True,
+    )
+    executable_sha256 = _sha256_bytes(executable_payload)
+    _require(
+        executable_sha256 == executable_record["sha256"],
+        "Q023 immutable executable snapshot digest drifted",
+    )
+    return {
+        "path": str(executable_path),
+        "sha256": executable_sha256,
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": _sha256_bytes(manifest_payload),
+        "clean_candidate_manifest_path": str(clean_candidate_manifest_path),
+        "clean_candidate_manifest_sha256": _sha256_bytes(
+            candidate_manifest_payload
+        ),
+        "source_archive_path": str(source_archive_path),
+        "source_archive_sha256": _sha256_bytes(source_archive_payload),
+        "source_bindings": source_bindings,
+    }
+
+
+def _candidate_source_bindings(payload: bytes) -> dict[str, dict[str, object]]:
+    required = {
+        SOURCE_PATH.as_posix(),
+        CORRECTED_EIGENMODE_HEADER_PATH.as_posix(),
+    }
+    observed: dict[str, tarfile.TarInfo] = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
+            for member in archive.getmembers():
+                name = member.name.rstrip("/")
+                path = PurePosixPath(name)
+                _require(
+                    bool(name)
+                    and not path.is_absolute()
+                    and "." not in path.parts
+                    and ".." not in path.parts
+                    and path.as_posix() == name,
+                    "Q023 clean-candidate source archive has an unsafe member path",
+                )
+                _require(
+                    member.isdir() or member.isreg(),
+                    "Q023 clean-candidate source archive has a non-regular member",
+                )
+                _require(
+                    name not in observed,
+                    "Q023 clean-candidate source archive has a duplicate member",
+                )
+                observed[name] = member
+            _require(
+                required <= set(observed),
+                "Q023 clean-candidate source archive lacks required pgen sources",
+            )
+            bindings: dict[str, dict[str, object]] = {}
+            for relative in sorted(required):
+                member = observed[relative]
+                _require(
+                    member.isreg(),
+                    f"Q023 clean-candidate source member is not regular: {relative}",
+                )
+                stream = archive.extractfile(member)
+                _require(
+                    stream is not None,
+                    f"Q023 clean-candidate source member is unreadable: {relative}",
+                )
+                archived = stream.read()
+                bindings[relative] = {
+                    "path": relative,
+                    "sha256": _sha256_bytes(archived),
+                    "byte_count": len(archived),
+                }
+    except (tarfile.TarError, OSError) as error:
+        raise ContractError(
+            "Q023 clean-candidate source archive is malformed"
+        ) from error
+    return bindings
 
 
 def _validate_raw_runtime_parameters(
@@ -1809,6 +2770,15 @@ def _physics_trace_from_raw_datasets(
     }
 
 
+def physics_trace_from_raw_datasets(
+    datasets: Sequence[binary.AthenaBinaryDataset],
+    *,
+    member: Mapping[str, object],
+) -> dict[str, object]:
+    """Derive the canonical Q023 physics trace from retained MHD snapshots."""
+    return _physics_trace_from_raw_datasets(datasets, member=member)
+
+
 def _validate_provenance(
     value: object,
     *,
@@ -1816,18 +2786,21 @@ def _validate_provenance(
     dependency: Mapping[str, object],
     artifact_root: Path | None,
     physics_trace: object,
+    authorized_manifest_root: Path | None = None,
+    retained_raw_batch: _RetainedRawBatch | None = None,
 ) -> str:
     _require(isinstance(value, Mapping) and set(value) == _PROVENANCE_KEYS, "Q023 trace provenance keys drifted")
     provenance = dict(value)
     expected_deck = (DECK_ROOT.relative_to(REPO_ROOT) / str(member["deck_path"])).as_posix()
     _require(provenance["deck_path"] == expected_deck and provenance["deck_sha256"] == member["deck_sha256"], "Q023 trace deck binding drifted")
-    _require(provenance["source_path"] == SOURCE_PATH.as_posix() and provenance["source_sha256"] == _sha256_file(REPO_ROOT / SOURCE_PATH), "Q023 trace source binding drifted")
+    _require(
+        provenance["source_path"] == SOURCE_PATH.as_posix(),
+        "Q023 trace source path drifted",
+    )
     _require(
         provenance["corrected_eigenmode_header_path"]
-        == CORRECTED_EIGENMODE_HEADER_PATH.as_posix()
-        and provenance["corrected_eigenmode_header_sha256"]
-        == _sha256_file(REPO_ROOT / CORRECTED_EIGENMODE_HEADER_PATH),
-        "Q023 corrected eigenmode header binding drifted",
+        == CORRECTED_EIGENMODE_HEADER_PATH.as_posix(),
+        "Q023 corrected eigenmode header path drifted",
     )
     _require(provenance["q043_registered_raw_oracle_dependency_sha256"] == _dependency_digest(dependency), "Q043 dependency digest binding drifted")
     if provenance["kind"] == "synthetic_contract_fixture":
@@ -1849,16 +2822,81 @@ def _validate_provenance(
         raise ContractError("materialized Q023 artifact root is missing") from error
     _require(root.is_dir() and provenance["authorized_artifact_root"] == str(root), "Q023 authorized artifact root drifted")
     _require(provenance["candidate_clean"] is True and provenance["source_clean"] is True and provenance["executable_clean"] is True, "Q023 materialized candidate/source/executable must be clean")
-    for prefix in ("executable", "registered_execution_receipt"):
+    receipt_path = _normalized_artifact_file(
+        provenance["registered_execution_receipt_path"],
+        root,
+        "registered_execution_receipt/path",
+    )
+    receipt_payload = _stable_regular_bytes(
+        receipt_path, label="registered_execution_receipt"
+    )
+    _require(
+        _sha256_bytes(receipt_payload)
+        == provenance["registered_execution_receipt_sha256"],
+        "registered_execution_receipt digest drifted",
+    )
+    try:
+        receipt = json.loads(receipt_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError("Q023 registered execution receipt is not valid JSON") from error
+    if dependency["binding_kind"] == "registered_matrix_qualification":
+        _require(
+            authorized_manifest_root is not None
+            and Path(authorized_manifest_root).is_absolute(),
+            "registered Q023 provenance requires an authorized manifest root",
+        )
+        executable = registered_manifest_executable_binding(
+            receipt,
+            member=member,
+            artifact_root=root,
+            authorized_manifest_root=Path(authorized_manifest_root),
+        )
+        _require(
+            provenance["executable_path"] == executable["path"]
+            and provenance["executable_sha256"] == executable["sha256"],
+            "Q023 provenance does not bind the immutable manifest executable",
+        )
+        source_bindings = executable["source_bindings"]
+        _require(
+            isinstance(source_bindings, Mapping)
+            and provenance["source_sha256"]
+            == source_bindings[SOURCE_PATH.as_posix()]["sha256"]
+            and provenance["corrected_eigenmode_header_sha256"]
+            == source_bindings[CORRECTED_EIGENMODE_HEADER_PATH.as_posix()][
+                "sha256"
+            ],
+            "Q023 provenance does not bind the executed candidate source archive",
+        )
+        _require(
+            retained_raw_batch is not None,
+            "registered Q023 analysis requires one retained raw batch",
+        )
+    else:
+        _require(
+            provenance["source_sha256"]
+            == _sha256_file(REPO_ROOT / SOURCE_PATH)
+            and provenance["corrected_eigenmode_header_sha256"]
+            == _sha256_file(REPO_ROOT / CORRECTED_EIGENMODE_HEADER_PATH),
+            "Q023 trace source binding drifted",
+        )
         _validate_materialized_binding(
-            {"path": provenance[f"{prefix}_path"], "sha256": provenance[f"{prefix}_sha256"]},
+            {
+                "path": provenance["executable_path"],
+                "sha256": provenance["executable_sha256"],
+            },
             root,
-            prefix,
+            "executable",
         )
     artifacts = provenance["raw_artifacts"]
     _require(isinstance(artifacts, list) and bool(artifacts), "Q023 materialized trace requires raw artifacts")
     normalized_and_paths = [
-        _validate_raw_artifact_binding(item, root, "raw_artifact") for item in artifacts
+        _validate_raw_artifact_binding(
+            item,
+            root,
+            "raw_artifact",
+            retained_raw_batch=retained_raw_batch,
+        )
+        for item in artifacts
     ]
     normalized = [item[0] for item in normalized_and_paths]
     _require(len({item["path"] for item in normalized}) == len(normalized), "Q023 raw artifact reused")
@@ -1907,8 +2945,17 @@ def _validate_provenance(
         for artifact, path in group:
             variable = str(artifact["variable"])
             try:
+                payload = (
+                    retained_raw_batch.payload(str(artifact["path"]))
+                    if retained_raw_batch is not None
+                    else _stable_regular_bytes(path, label="Q023 raw artifact")
+                )
+                _require(
+                    _sha256_bytes(payload) == artifact["sha256"],
+                    "Q023 raw artifact digest drifted before parsing",
+                )
                 dataset = binary.parse_athenak_binary_bytes(
-                    path.read_bytes(), source=str(path)
+                    payload, source=str(path)
                 )
             except (OSError, binary.AnalysisError) as error:
                 raise ContractError("Q023 raw AthenaK output failed strict parsing") from error
@@ -1954,22 +3001,22 @@ def _validate_provenance(
         mhd_datasets[-1].time * K0 >= 5.0 / expected_growth,
         "Q023 raw trace does not cover the fixed growth-fit window",
     )
-    receipt_path = _normalized_artifact_file(
-        provenance["registered_execution_receipt_path"],
-        root,
-        "registered_execution_receipt/path",
-    )
-    try:
-        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ContractError("Q023 registered execution receipt is not valid JSON") from error
-    _validate_execution_receipt(
-        receipt,
-        root=root,
-        member=member,
-        provenance=provenance,
-        raw_artifacts=normalized,
-    )
+    if dependency["binding_kind"] == "registered_matrix_qualification":
+        _validate_registered_execution_receipt(
+            receipt,
+            root=root,
+            member=member,
+            provenance=provenance,
+            raw_artifacts=normalized,
+        )
+    else:
+        _validate_legacy_execution_receipt(
+            receipt,
+            root=root,
+            member=member,
+            provenance=provenance,
+            raw_artifacts=normalized,
+        )
     _require(
         isinstance(physics_trace, Mapping)
         and _canonical_json_bytes(physics_trace)
@@ -1978,6 +3025,8 @@ def _validate_provenance(
         ),
         "Q023 materialized physics trace was not derived from the exact retained raw outputs",
     )
+    if retained_raw_batch is not None:
+        retained_raw_batch.revalidate()
     return "registered_execution_trace"
 
 
@@ -1987,6 +3036,8 @@ def _analyze_matrix_record(
     members: Mapping[str, Mapping[str, object]],
     dependency: Mapping[str, object],
     artifact_root: Path | None,
+    authorized_manifest_root: Path | None,
+    retained_raw_batch: _RetainedRawBatch | None = None,
 ) -> dict[str, object]:
     _require(set(record) == _MATRIX_RECORD_KEYS, "Q023 matrix record keys drifted")
     member_id = str(record["member_id"])
@@ -2006,7 +3057,41 @@ def _analyze_matrix_record(
         member=member,
         dependency=dependency,
         artifact_root=artifact_root,
+        authorized_manifest_root=authorized_manifest_root,
+        retained_raw_batch=retained_raw_batch,
         physics_trace=record["physics_trace"],
+    )
+    report = _analyze_physics_matrix_record(
+        {key: record[key] for key in _PHYSICS_MATRIX_RECORD_KEYS},
+        members=members,
+    )
+    return {
+        **report,
+        "provenance_kind": provenance_kind,
+        "provenance_gate_pass": True,
+    }
+
+
+def _analyze_physics_matrix_record(
+    record: Mapping[str, object],
+    *,
+    members: Mapping[str, Mapping[str, object]],
+) -> dict[str, object]:
+    _require(
+        set(record) == _PHYSICS_MATRIX_RECORD_KEYS,
+        "Q023 physics matrix record keys drifted",
+    )
+    member_id = str(record["member_id"])
+    _require(member_id in members, "Q023 physics matrix member is unknown")
+    member = members[member_id]
+    for name in ("dimension", "resolution", "decomposition", "decomposition_splits"):
+        _require(record[name] == member[name], f"Q023 physics matrix {name} drifted")
+    epsilon = record["epsilon"]
+    _require(
+        type(epsilon) in (int, float)
+        and float(epsilon) == float(member["epsilon"])
+        and float(epsilon) in EPSILON_VALUES,
+        "Q023 physics matrix epsilon drifted",
     )
     trace = record["physics_trace"]
     _require(isinstance(trace, Mapping), "Q023 physics trace must be an object")
@@ -2018,7 +3103,6 @@ def _analyze_matrix_record(
         "resolution": member["resolution"],
         "decomposition": member["decomposition"],
         "decomposition_splits": member["decomposition_splits"],
-        "provenance_kind": provenance_kind,
         "growth_gate_pass": physics["growth_pass"] and physics["velocity_growth_pass"] and physics["paper_literal_growth_pass"],
         "signed_phase_gate_pass": physics["phase_pass"] and physics["velocity_phase_pass"] and physics["paper_literal_phase_pass"],
         "polarization_gate_pass": physics["polarization_pass"] and physics["velocity_polarization_pass"],
@@ -2033,7 +3117,6 @@ def _analyze_matrix_record(
             and physics["paper_literal_phase_fit_r2"] >= MIN_PHASE_FIT_R2
         ),
         "velocity_magnetic_ratio_gate_pass": physics["velocity_magnetic_ratio_pass"],
-        "provenance_gate_pass": True,
         "measured_growth_rate_over_k0_ua": physics["measured_growth_rate_over_k0_ua"],
         "expected_growth_rate_over_k0_ua": physics["expected_growth_rate_over_k0_ua"],
         "measured_signed_phase_frequency_over_k0_ua": physics["measured_phase_frequency_over_k0_ua"],
@@ -2047,6 +3130,94 @@ def _analyze_matrix_record(
         "paper_literal_phase_fit_r2": physics["paper_literal_phase_fit_r2"],
         "physics_gates_pass": physics["passed"],
     }
+
+
+def analyze_rederived_predecessor_record(
+    record: Mapping[str, object],
+    *,
+    q043_registered_raw_oracle_dependency: Mapping[str, object],
+    q043_artifact_root: Path,
+    artifact_root: Path,
+    authorized_manifest_root: Path,
+    installed_reconciliation_rederivation: Mapping[str, object],
+    retained_raw_batch: _RetainedRawBatch,
+) -> dict[str, object]:
+    """Analyze a case only after the qualifier re-derived its receipts."""
+    _require(
+        set(installed_reconciliation_rederivation)
+        == {
+            "control_plane_version",
+            "entrypoint",
+            "entrypoint_sha256",
+            "reconciliation_event_sha256",
+            "reconciliation_mirror_ack_sha256",
+            "receipt_sha256",
+            "terminal_receipt_sha256",
+            "exact_byte_rederivation_passed",
+        }
+        and installed_reconciliation_rederivation[
+            "exact_byte_rederivation_passed"
+        ]
+        is True,
+        "Q023 case analysis requires installed-producer exact-byte rederivation",
+    )
+    provenance = (
+        record.get("provenance") if isinstance(record, Mapping) else None
+    )
+    _require(
+        isinstance(provenance, Mapping)
+        and installed_reconciliation_rederivation["receipt_sha256"]
+        == provenance.get("registered_execution_receipt_sha256"),
+        "Q023 installed-producer proof does not bind the analyzed receipt",
+    )
+    root = Path(artifact_root).resolve(strict=True)
+    receipt_path = _normalized_artifact_file(
+        provenance["registered_execution_receipt_path"],
+        root,
+        "registered_execution_receipt/path",
+    )
+    receipt_payload = _stable_regular_bytes(
+        receipt_path, label="registered_execution_receipt"
+    )
+    try:
+        receipt = json.loads(receipt_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError("Q023 registered execution receipt is not valid JSON") from error
+    producer = receipt.get("producer")
+    _require(
+        isinstance(producer, Mapping)
+        and installed_reconciliation_rederivation["control_plane_version"]
+        == receipt.get("control_plane_version")
+        and installed_reconciliation_rederivation["entrypoint"]
+        == producer.get("entrypoint")
+        and installed_reconciliation_rederivation["entrypoint_sha256"]
+        == producer.get("entrypoint_sha256")
+        and installed_reconciliation_rederivation["reconciliation_event_sha256"]
+        == receipt.get("reconciliation_event_sha256")
+        and installed_reconciliation_rederivation[
+            "reconciliation_mirror_ack_sha256"
+        ]
+        == receipt.get("reconciliation_mirror_ack_sha256")
+        and installed_reconciliation_rederivation["terminal_receipt_sha256"]
+        == receipt.get("terminal_receipt_sha256"),
+        "Q023 installed-producer proof differs from the reconciled receipt",
+    )
+    dependency = validate_q043_dependency(
+        q043_registered_raw_oracle_dependency,
+        artifact_root=q043_artifact_root,
+    )
+    _require(
+        dependency["binding_kind"] == "registered_matrix_qualification",
+        "Q023 retained predecessor case requires the registered Q043 matrix",
+    )
+    return _analyze_matrix_record(
+        record,
+        members=_manifest_members(),
+        dependency=dependency,
+        artifact_root=artifact_root,
+        authorized_manifest_root=authorized_manifest_root,
+        retained_raw_batch=retained_raw_batch,
+    )
 
 
 def _convergence_and_decomposition_reports(
@@ -2114,8 +3285,86 @@ def _convergence_and_decomposition_reports(
     return convergence, decomposition, all_pass
 
 
+def analyze_physics_trace_matrix(
+    records: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """Evaluate the exact 55-member trace matrix without admitting provenance."""
+    _require(
+        type(records) is list,
+        "Q023 physics trace matrix records must be a list",
+    )
+    members = _manifest_members()
+    expected_ids = list(members)
+    reports = []
+    observed_ids = []
+    for record in records:
+        _require(
+            isinstance(record, Mapping),
+            "Q023 physics trace matrix record must be an object",
+        )
+        report = _analyze_physics_matrix_record(record, members=members)
+        member_id = str(report["member_id"])
+        _require(
+            member_id not in observed_ids,
+            "duplicate Q023 physics trace matrix record",
+        )
+        observed_ids.append(member_id)
+        reports.append(report)
+    _require(
+        observed_ids == expected_ids,
+        "Q023 physics trace matrix is incomplete, extra, or noncanonical",
+    )
+    reports.sort(
+        key=lambda item: (item["dimension"], item["epsilon"], item["member_id"])
+    )
+    convergence, decomposition, comparison_pass = (
+        _convergence_and_decomposition_reports(reports)
+    )
+    physics_pass = all(bool(report["physics_gates_pass"]) for report in reports)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "record_type": "q023_paper_bell_linear_joverc_physics_trace_matrix_analysis",
+        "campaign_id": CAMPAIGN_ID,
+        "record_count": len(reports),
+        "growth_gates_pass": all(
+            bool(report["growth_gate_pass"]) for report in reports
+        ),
+        "signed_phase_gates_pass": all(
+            bool(report["signed_phase_gate_pass"]) for report in reports
+        ),
+        "polarization_gates_pass": all(
+            bool(report["polarization_gate_pass"]) for report in reports
+        ),
+        "growth_fit_quality_gates_pass": all(
+            bool(report["growth_fit_quality_gate_pass"]) for report in reports
+        ),
+        "phase_fit_quality_gates_pass": all(
+            bool(report["phase_fit_quality_gate_pass"]) for report in reports
+        ),
+        "resolution_convergence_gate_pass": all(
+            item["convergence_gate_pass"] for item in convergence
+        ),
+        "multidirectional_decomposition_gate_pass": all(
+            item["decomposition_invariance_gate_pass"] for item in decomposition
+        ),
+        "predecessor_contract_pass": physics_pass and comparison_pass,
+        "qualification_effect": QUALIFICATION_EFFECT,
+        "launch_authorized": False,
+        "qualification_eligible": False,
+        "scientific_claim_authorized": False,
+        "publication_authorized": False,
+        "passed": False,
+        "records": reports,
+        "convergence": convergence,
+        "decomposition_invariance": decomposition,
+    }
+
+
 def analyze_predecessor_bundle(
-    bundle: Mapping[str, object], *, artifact_root: Path | None = None
+    bundle: Mapping[str, object],
+    *,
+    artifact_root: Path | None = None,
+    authorized_manifest_root: Path | None = None,
 ) -> dict[str, object]:
     """Analyze the complete corrected linear predecessor without granting authority."""
     _require(
@@ -2138,12 +3387,10 @@ def analyze_predecessor_bundle(
     members = _manifest_members()
     records = bundle["records"]
     _require(isinstance(records, list), "Q023 predecessor records must be a list")
-    expected = {
-        (member_id, float(member["epsilon"]))
-        for member_id, member in members.items()
-    }
-    measured = []
+    expected_ids = list(members)
+    measured_ids = []
     reports = []
+    physics_records = []
     for record in records:
         _require(isinstance(record, Mapping), "Q023 predecessor record must be an object")
         report = _analyze_matrix_record(
@@ -2151,12 +3398,22 @@ def analyze_predecessor_bundle(
             members=members,
             dependency=dependency,
             artifact_root=artifact_root,
+            authorized_manifest_root=authorized_manifest_root,
         )
-        key = (str(report["member_id"]), float(report["epsilon"]))
-        _require(key not in measured, "duplicate Q023 predecessor matrix record")
-        measured.append(key)
+        member_id = str(report["member_id"])
+        _require(
+            member_id not in measured_ids,
+            "duplicate Q023 predecessor matrix record",
+        )
+        measured_ids.append(member_id)
         reports.append(report)
-    _require(set(measured) == expected, "Q023 predecessor matrix is incomplete or contains extra records")
+        physics_records.append(
+            {key: record[key] for key in _PHYSICS_MATRIX_RECORD_KEYS}
+        )
+    _require(
+        measured_ids == expected_ids,
+        "Q023 predecessor matrix is incomplete, extra, or noncanonical",
+    )
     provenance_kinds = {str(report["provenance_kind"]) for report in reports}
     _require(len(provenance_kinds) == 1, "Q023 predecessor matrix cannot mix provenance kinds")
     provenance_kind = next(iter(provenance_kinds))
@@ -2172,10 +3429,17 @@ def analyze_predecessor_bundle(
         or registered_q043_foundation_bound,
         "materialized Q023 predecessor evidence is not downstream of the final hardened Q043 admission",
     )
+    physics_analysis = analyze_physics_trace_matrix(physics_records)
     reports.sort(key=lambda item: (item["dimension"], item["epsilon"], item["member_id"]))
-    convergence, decomposition, comparison_pass = _convergence_and_decomposition_reports(reports)
-    physics_pass = all(bool(report["physics_gates_pass"]) for report in reports)
-    predecessor_contract_pass = physics_pass and comparison_pass
+    _require(
+        [
+            {key: report[key] for key in report if key not in {"provenance_kind", "provenance_gate_pass"}}
+            for report in reports
+        ]
+        == physics_analysis["records"],
+        "Q023 provenance-admitted reports differ from pure physics recompute",
+    )
+    predecessor_contract_pass = physics_analysis["predecessor_contract_pass"]
     materialized_q023_trace_matrix_bound = provenance_kind == "registered_execution_trace"
     return {
         "schema_version": SCHEMA_VERSION,
@@ -2191,19 +3455,23 @@ def analyze_predecessor_bundle(
         "registered_q043_foundation_bound": registered_q043_foundation_bound,
         "materialized_q023_trace_matrix_bound": materialized_q023_trace_matrix_bound,
         "analysis_input_kind": provenance_kind,
-        "record_count": len(reports),
-        "growth_gates_pass": all(bool(report["growth_gate_pass"]) for report in reports),
-        "signed_phase_gates_pass": all(bool(report["signed_phase_gate_pass"]) for report in reports),
-        "polarization_gates_pass": all(bool(report["polarization_gate_pass"]) for report in reports),
-        "growth_fit_quality_gates_pass": all(
-            bool(report["growth_fit_quality_gate_pass"]) for report in reports
-        ),
-        "phase_fit_quality_gates_pass": all(
-            bool(report["phase_fit_quality_gate_pass"]) for report in reports
-        ),
+        "record_count": physics_analysis["record_count"],
+        "growth_gates_pass": physics_analysis["growth_gates_pass"],
+        "signed_phase_gates_pass": physics_analysis["signed_phase_gates_pass"],
+        "polarization_gates_pass": physics_analysis["polarization_gates_pass"],
+        "growth_fit_quality_gates_pass": physics_analysis[
+            "growth_fit_quality_gates_pass"
+        ],
+        "phase_fit_quality_gates_pass": physics_analysis[
+            "phase_fit_quality_gates_pass"
+        ],
         "provenance_gates_pass": all(bool(report["provenance_gate_pass"]) for report in reports),
-        "resolution_convergence_gate_pass": all(item["convergence_gate_pass"] for item in convergence),
-        "multidirectional_decomposition_gate_pass": all(item["decomposition_invariance_gate_pass"] for item in decomposition),
+        "resolution_convergence_gate_pass": physics_analysis[
+            "resolution_convergence_gate_pass"
+        ],
+        "multidirectional_decomposition_gate_pass": physics_analysis[
+            "multidirectional_decomposition_gate_pass"
+        ],
         "predecessor_contract_pass": predecessor_contract_pass,
         "linear_qualification_prerequisites_pass": (
             predecessor_contract_pass
@@ -2218,8 +3486,10 @@ def analyze_predecessor_bundle(
         "complete_authoritative_q043_foundation_claimed": False,
         "passed": False,
         "records": reports,
-        "convergence": convergence,
-        "decomposition_invariance": decomposition,
+        "convergence": physics_analysis["convergence"],
+        "decomposition_invariance": physics_analysis[
+            "decomposition_invariance"
+        ],
     }
 
 

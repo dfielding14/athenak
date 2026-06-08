@@ -104,7 +104,7 @@ AUTHORIZED_STORAGE_PREFLIGHT_CAPTURE_SOURCE_BLOBS = {
         "b6dae64b28dbcc7ce82877ad25d53bc4f0637016c4bd274431c1a4ba947ec94b"
     ),
     "runner_sha256": (
-        "fe2a2b89b34c5a830df82025a157c6d99fc5a02a58982dcf42d274571b8d7bb9"
+        "a066cb0b9e4857dbd95bfdcbd7584c775a1ffccda3e1d21d02fd0932e217a4e1"
     ),
     "schema_sha256": (
         "348b80f6b56fa56da57a4d30932b41784c939f5a2b1bf49c82d3a6acd024ee3f"
@@ -528,6 +528,7 @@ CONTROL_PLANE_FILES = [
     "q011_pressure_review_packet_verifier.py",
     "reconcile_frontier_job.py",
     "reconcile_manual_frontier_allocations.py",
+    "reconcile_q023_registered_execution.py",
     "reconcile_q043_registered_execution.py",
     "revalidate_clean_candidate.py",
     "run_installed_control_plane_job.sh",
