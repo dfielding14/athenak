@@ -2479,12 +2479,31 @@ def material_diagnostics(case_id: str) -> dict[str, object]:
                 "snapshot_count": 3,
                 "correlation_mean": -0.9 + offset,
                 "normalized_residual_variance_mean": 0.1 + offset,
+                "uncertainty": {
+                    "correlation": {
+                        "available": True,
+                        "snapshot_count": 3,
+                        "equal_snapshot_standard_error": 0.01 + offset,
+                    },
+                    "normalized_residual_variance": {
+                        "available": True,
+                        "snapshot_count": 3,
+                        "equal_snapshot_standard_error": 0.02 + offset,
+                    },
+                },
             },
             "spectral_scalar_diagnostics": {
                 "compressive_velocity_power_fraction": {
                     "available": True,
                     "snapshot_count": 3,
                     "fraction_mean": 0.2 - offset,
+                    "uncertainty": {
+                        "fraction": {
+                            "available": True,
+                            "snapshot_count": 3,
+                            "equal_snapshot_standard_error": 0.03 + offset,
+                        },
+                    },
                 },
             },
             "heat_flux_transport_proxy": {
@@ -3273,7 +3292,10 @@ def test_final_evidence_tables_preserve_semantics_and_fail_closed(
     data = empty_data(publication, analysis)
     bindings = {
         case_id: install_material_case(publication, data, analysis, case_id)
-        for case_id in ("R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09")
+        for case_id in (
+            "R02", "R03", "R04", "R05", "R06",
+            "R07", "R08", "R09", "R11",
+        )
     }
     install_material_science(publication, data, bindings)
     data.science_record["mks24"] = {
@@ -3346,6 +3368,15 @@ def test_final_evidence_tables_preserve_semantics_and_fail_closed(
     assert directions[
         "compressive_velocity_power_fraction"
     ]["descriptive_direction"] == "active_gt_passive"
+    assert directions["compressive_velocity_power_fraction"]["case_values"][
+        "R11"
+    ] == pytest.approx(0.09)
+    assert directions["compressive_velocity_power_fraction"]["case_uncertainty"][
+        "R11"
+    ]["equal_snapshot_standard_error"] == pytest.approx(0.14)
+    assert directions["pressure_balance_correlation"]["case_values"][
+        "R05"
+    ] == pytest.approx(-0.85)
     assert directions["c_b2_full_window_mean"]["descriptive_direction"] == "equal"
     assert directions[
         "reviewed_abs_dp_signed_standardized_active_minus_passive_effect"

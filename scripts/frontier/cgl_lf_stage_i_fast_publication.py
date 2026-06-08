@@ -4089,6 +4089,32 @@ def mechanism_metric_value(
     raise PublicationError(f"unsupported mechanism metric: {metric}")
 
 
+def mechanism_metric_uncertainty(
+    data: PublicationData, case_id: str, metric: str
+) -> dict[str, Any] | None:
+    """Return authenticated within-realization uncertainty for one metric."""
+
+    ensemble = authenticated_snapshot_ensemble(data, case_id)
+    if ensemble is None:
+        return None
+    paths = {
+        "pressure_balance_correlation": (
+            "pressure_balance.uncertainty.correlation"
+        ),
+        "pressure_balance_normalized_residual_variance": (
+            "pressure_balance.uncertainty.normalized_residual_variance"
+        ),
+        "compressive_velocity_power_fraction": (
+            "spectral_scalar_diagnostics."
+            "compressive_velocity_power_fraction.uncertainty.fraction"
+        ),
+    }
+    if metric not in paths:
+        return None
+    record = nested(ensemble, paths[metric])
+    return record if isinstance(record, dict) else None
+
+
 def coherent_direction_mechanism_rows(
     data: PublicationData,
 ) -> list[dict[str, object]]:
@@ -4107,16 +4133,29 @@ def coherent_direction_mechanism_rows(
     )
     rows: list[dict[str, object]] = []
     for metric in metrics:
+        case_values = {
+            case_id: mechanism_metric_value(data, case_id, metric)
+            for case_id in CASE_IDS
+        }
+        case_uncertainty = {
+            case_id: uncertainty
+            for case_id in CASE_IDS
+            if (
+                uncertainty := mechanism_metric_uncertainty(
+                    data, case_id, metric
+                )
+            ) is not None
+        }
         differences: dict[str, float | None] = {}
         for active, passive in ACTIVE_PASSIVE_PAIRS:
             if metric == (
                 "reviewed_abs_dp_signed_standardized_active_minus_passive_effect"
             ):
-                active_value = mechanism_metric_value(data, active, metric)
+                active_value = case_values[active]
                 passive_value = 0.0 if active_value is not None else None
             else:
-                active_value = mechanism_metric_value(data, active, metric)
-                passive_value = mechanism_metric_value(data, passive, metric)
+                active_value = case_values[active]
+                passive_value = case_values[passive]
             differences[f"{active}_{passive}"] = (
                 active_value - passive_value
                 if active_value is not None and passive_value is not None else None
@@ -4145,6 +4184,8 @@ def coherent_direction_mechanism_rows(
             "inconclusive_pair_count": len(ACTIVE_PASSIVE_PAIRS) - len(available),
             "descriptive_direction": direction,
             "pair_active_minus_passive": differences,
+            "case_values": case_values,
+            "case_uncertainty": case_uncertainty,
             "inference_scope": "descriptive_only_no_preregistered_pass_gate",
         })
     return rows
@@ -7535,7 +7576,8 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
                 "positive_active_minus_passive_count",
                 "negative_active_minus_passive_count", "equal_count",
                 "inconclusive_pair_count", "descriptive_direction",
-                "pair_active_minus_passive", "inference_scope",
+                "pair_active_minus_passive", "case_values",
+                "case_uncertainty", "inference_scope",
             ],
             coherent_direction_mechanism_rows(data),
         ),
