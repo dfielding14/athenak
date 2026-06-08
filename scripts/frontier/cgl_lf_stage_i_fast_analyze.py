@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 import math
 from pathlib import Path
@@ -29,6 +30,9 @@ DEFAULT_CPUS_PER_TASK = 56
 DEFAULT_SNAPSHOT_WORKERS = 4
 DEFAULT_SNAPSHOT_MEMORY_BUDGET_GIB = 384.0
 REPORTER = Path(__file__).resolve().with_name("cgl_lf_stage_i_fast_report.py")
+CORRECTED_REPORTER = Path(__file__).resolve().with_name(
+    "cgl_lf_stage_i_fast_corrected_report.py"
+)
 CASE_ID = re.compile(r"R\d{2}")
 JOB_ID = re.compile(r"[1-9]\d*(?:;[A-Za-z0-9_.-]+)?")
 FAILED_STATES = {
@@ -134,6 +138,57 @@ def current_binding_errors(
     return errors
 
 
+def load_corrected_reporter() -> object:
+    """Load the exact corrected reporter that owns terminal authorization."""
+
+    name = "_cgl_lf_stage_i_fast_analyze_corrected_reporter"
+    existing = sys.modules.get(name)
+    if existing is not None:
+        return existing
+    spec = importlib.util.spec_from_file_location(name, CORRECTED_REPORTER)
+    if spec is None or spec.loader is None:
+        raise AnalysisLaunchError(f"cannot import corrected reporter: {CORRECTED_REPORTER}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def authenticated_terminal_cases(
+    inventory_path: Path, inventory: dict[str, object]
+) -> set[str]:
+    """Revalidate a corrected composite before admitting terminal partials."""
+
+    cases = inventory.get("cases")
+    if not isinstance(cases, dict) or not any(
+        isinstance(record, dict) and record.get("status") == "failed_partial"
+        for record in cases.values()
+    ):
+        return set()
+    if inventory.get("record_type") != "cgl_lf_stage_i_corrected_composite_report":
+        return set()
+    try:
+        corrected = load_corrected_reporter()
+        expected_adapter = artifact_binding(CORRECTED_REPORTER)
+        if inventory.get("composite_adapter") != expected_adapter:
+            raise AnalysisLaunchError("corrected composite adapter binding differs")
+        validation = corrected.validate_composite_inventory(
+            corrected.DEFAULT_CONFIG, inventory_path.parent
+        )
+        if validation.get("inventory") != artifact_binding(inventory_path):
+            raise AnalysisLaunchError("corrected composite validation binding differs")
+        dispositions = validation.get("terminal_dispositions")
+        if not isinstance(dispositions, dict):
+            raise AnalysisLaunchError("corrected terminal dispositions are malformed")
+        return set(dispositions)
+    except AnalysisLaunchError:
+        raise
+    except Exception as error:
+        raise AnalysisLaunchError(
+            f"corrected composite terminal validation failed: {error}"
+        ) from error
+
+
 def analysis_completion_errors(
     attempt_dir: Path, manifest: dict[str, object]
 ) -> list[str]:
@@ -188,10 +243,28 @@ def analysis_completion_errors(
             errors.append("case diagnostics predate the analysis attempt")
     except ValueError:
         errors.append("case diagnostics or job preparation timestamp is malformed")
-    if diagnostics.get("assembly_status") != "complete":
-        errors.append("case diagnostics assembly_status is not complete")
-    if diagnostics.get("analysis_status") != "complete":
-        errors.append("case diagnostics analysis_status is not complete")
+    inventory_case: dict[str, object] | None = None
+    if inventory is not None:
+        cases = inventory.get("cases")
+        value = cases.get(case_id) if isinstance(cases, dict) else None
+        inventory_case = value if isinstance(value, dict) else None
+    terminal_cases: set[str] = set()
+    if inventory is not None:
+        try:
+            terminal_cases = authenticated_terminal_cases(inventory_path, inventory)
+        except AnalysisLaunchError as error:
+            errors.append(str(error))
+    terminal_failure = case_id in terminal_cases
+    expected_assembly = "failed_partial" if terminal_failure else "complete"
+    expected_analysis = "partial" if terminal_failure else "complete"
+    if diagnostics.get("assembly_status") != expected_assembly:
+        errors.append(
+            f"case diagnostics assembly_status is not {expected_assembly}"
+        )
+    if diagnostics.get("analysis_status") != expected_analysis:
+        errors.append(
+            f"case diagnostics analysis_status is not {expected_analysis}"
+        )
     if diagnostics.get("snapshot_analysis_status") != "complete":
         errors.append("case diagnostics snapshot_analysis_status is not complete")
     if diagnostics.get("analysis_errors") != []:
@@ -218,13 +291,13 @@ def analysis_completion_errors(
         )
     )
     if inventory is not None:
-        cases = inventory.get("cases")
-        inventory_case = cases.get(case_id) if isinstance(cases, dict) else None
         if not isinstance(inventory_case, dict):
             errors.append("job inventory lacks the expected case record")
         else:
-            if inventory_case.get("status") != "complete":
-                errors.append("job inventory case status is not complete")
+            if inventory_case.get("status") != expected_assembly:
+                errors.append(
+                    f"job inventory case status is not {expected_assembly}"
+                )
             if diagnostics.get("case_name") != inventory_case.get("case_name"):
                 errors.append("case diagnostics name differs from the job inventory")
             try:
@@ -247,7 +320,7 @@ def is_relative_to(path: Path, parent: Path) -> bool:
 
 def inventory_context(
     analysis_argument: Path, jobs_argument: Path | None
-) -> tuple[Path, Path, Path, dict[str, object]]:
+) -> tuple[Path, Path, Path, dict[str, object], set[str]]:
     supplied = analysis_argument.expanduser().resolve()
     inventory_path = supplied if supplied.is_file() else supplied / "inventory.json"
     analysis = inventory_path.parent
@@ -275,7 +348,13 @@ def inventory_context(
         jobs, simulation_root
     ):
         raise AnalysisLaunchError("analysis jobs and output must be outside runs/")
-    return analysis, inventory_path, jobs, inventory
+    return (
+        analysis,
+        inventory_path,
+        jobs,
+        inventory,
+        authenticated_terminal_cases(inventory_path, inventory),
+    )
 
 
 def expand_case_tokens(tokens: Iterable[str], available: set[str]) -> list[str]:
@@ -307,7 +386,10 @@ def expand_case_tokens(tokens: Iterable[str], available: set[str]) -> list[str]:
 
 
 def eligible_cases(
-    inventory: dict[str, object], selectors: Iterable[str], include_all: bool
+    inventory: dict[str, object],
+    selectors: Iterable[str],
+    include_all: bool,
+    terminal_cases: set[str] | None = None,
 ) -> list[str]:
     records = inventory["cases"]
     assert isinstance(records, dict)
@@ -317,7 +399,10 @@ def eligible_cases(
     eligible = []
     for case_id in selected:
         record = records[case_id]
-        if isinstance(record, dict) and record.get("status") == "complete":
+        if (
+            isinstance(record, dict)
+            and record.get("status") == "complete"
+        ) or case_id in (terminal_cases or set()):
             eligible.append(case_id)
         else:
             print(f"skip {case_id}: assembled lineage is not complete")
@@ -562,10 +647,10 @@ def print_attempt(case_id: str, attempt_dir: Path) -> str:
 
 
 def launch(args: argparse.Namespace) -> int:
-    analysis, inventory_path, jobs, inventory = inventory_context(
+    analysis, inventory_path, jobs, inventory, terminal_cases = inventory_context(
         args.analysis, args.jobs_dir
     )
-    cases = eligible_cases(inventory, args.cases, args.all)
+    cases = eligible_cases(inventory, args.cases, args.all, terminal_cases)
     report_options = analysis_arguments(args)
     python = args.python.expanduser().absolute()
     for case_id in cases:
@@ -593,7 +678,7 @@ def launch(args: argparse.Namespace) -> int:
 
 
 def status(args: argparse.Namespace) -> int:
-    _, _, jobs, inventory = inventory_context(args.analysis, args.jobs_dir)
+    _, _, jobs, inventory, _ = inventory_context(args.analysis, args.jobs_dir)
     records = inventory["cases"]
     assert isinstance(records, dict)
     cases = expand_case_tokens(args.cases, set(records))
@@ -609,10 +694,10 @@ def status(args: argparse.Namespace) -> int:
 
 
 def retry(args: argparse.Namespace) -> int:
-    analysis, inventory_path, jobs, inventory = inventory_context(
+    analysis, inventory_path, jobs, inventory, terminal_cases = inventory_context(
         args.analysis, args.jobs_dir
     )
-    cases = eligible_cases(inventory, args.cases, args.all)
+    cases = eligible_cases(inventory, args.cases, args.all, terminal_cases)
     python = args.python.expanduser().absolute()
     for case_id in cases:
         attempts = attempt_directories(jobs, case_id)

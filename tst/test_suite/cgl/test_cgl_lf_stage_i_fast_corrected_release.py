@@ -58,6 +58,12 @@ def binding(path: Path) -> dict[str, object]:
     }
 
 
+def report_binding(path: Path) -> dict[str, object]:
+    value = binding(path)
+    value["mtime_ns"] = path.resolve().stat().st_mtime_ns
+    return value
+
+
 def write_json(path: Path, value: object) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -265,7 +271,12 @@ def exact_invocation(gate, analysis: Path, publication: Path, roots: list[Path])
 
 
 def fixture_tree(
-    gate, tmp_path: Path, *, science_result: str = "pass", ct_result: str = "pass"
+    gate,
+    tmp_path: Path,
+    *,
+    science_result: str = "pass",
+    ct_result: str = "pass",
+    r14_failure: bool = False,
 ) -> dict[str, object]:
     identity_path = write_json(tmp_path / "identity.json", {"identity": "corrected"})
     analysis = tmp_path / "analysis/composite"
@@ -282,6 +293,29 @@ def fixture_tree(
             "evidence_class": evidence_class,
             "execution_authority": {"evidence_class": evidence_class},
         }
+    terminal_dispositions: dict[str, object] = {}
+    if r14_failure:
+        terminal_segment = tmp_path / "runs/R14/replay"
+        disposition = {
+            "record_type": "cgl_lf_stage_i_terminal_disposition",
+            "case_id": "R14",
+            "status": "failed_partial",
+            "disposition": "reproducible_finite_time_model_runtime_failure",
+            "attempt_count": 2,
+            "selected_terminal_segment": str(terminal_segment.resolve()),
+            "attempts": [{
+                "segment": str(terminal_segment.resolve()),
+                "run_exit_code": 1,
+            }],
+        }
+        cases["R14"]["status"] = "failed_partial"
+        cases["R14"]["terminal_disposition"] = disposition
+        cases["R14"]["lineage"] = [{
+            "state": "failed",
+            "segment_dir": str(terminal_segment.resolve()),
+            "run_exit_code": 1,
+        }]
+        terminal_dispositions["R14"] = disposition
     inventory = {
         "record_type": "cgl_lf_stage_i_corrected_composite_report",
         "output": str(analysis.resolve()),
@@ -301,6 +335,7 @@ def fixture_tree(
         "inventory_binding": binding(inventory_path),
         "identity_binding": binding(identity_path),
         "inventory_output": analysis.resolve(),
+        "terminal_dispositions": terminal_dispositions,
     }
 
     acceptance = tmp_path / "analysis/composite-acceptance"
@@ -357,6 +392,7 @@ def fixture_tree(
         "campaign_identity": context["identity_binding"],
         "inventory": context["inventory_binding"],
         "case_classification": gate.expected_science_classification(),
+        "terminal_dispositions": terminal_dispositions,
         "acceptance": {
             "root": str(acceptance.resolve()),
             "provenance": binding(acceptance_provenance),
@@ -385,7 +421,16 @@ def fixture_tree(
         "cases": {
             case_id: {
                 "provenance_authenticated": True,
-                "native_restart_ct": {"coverage_complete": True},
+                "audit_status": (
+                    "authenticated_inconclusive"
+                    if r14_failure and case_id == "R14"
+                    else "authenticated_complete"
+                ),
+                "native_restart_ct": {
+                    "coverage_complete": not (
+                        r14_failure and case_id == "R14"
+                    )
+                },
             }
             for case_id in gate.ALL_CASES
         },
@@ -448,7 +493,9 @@ def fixture_tree(
         {
             "case_results": {case_id: {} for case_id in gate.ALL_CASES},
             "campaign_health": {
-                "partial_or_unavailable_cases": [],
+                "partial_or_unavailable_cases": (
+                    ["R14"] if r14_failure else []
+                ),
                 "structural_error_cases": [],
             },
         },
@@ -468,17 +515,40 @@ def fixture_tree(
         },
     )
     write_text(analysis / "manuscript/open_questions.md")
-    write_json(
-        analysis / "verify.json",
-        {
-            "result": "pass",
-            "require_complete": True,
-            "cases": {case_id: {"errors": []} for case_id in gate.ALL_CASES},
-            "errors": [],
-            "warnings": [],
-            "inventory": context["inventory_binding"],
-        },
-    )
+    verify_record = {
+        "result": "pass",
+        "require_complete": True,
+        "adapter": {"fixture": True},
+        "cases": {case_id: {"errors": []} for case_id in gate.ALL_CASES},
+        "errors": [],
+        "warnings": [],
+        "inventory": context["inventory_binding"],
+    }
+    if r14_failure:
+        terminal_error = (
+            "selected lineage segment 0 has nonzero run exit code: 1"
+        )
+        incomplete_error = "case is not complete: failed_partial"
+        base_record = json.loads(json.dumps(verify_record))
+        base_record["result"] = "fail"
+        base_record["cases"]["R14"]["errors"] = [
+            terminal_error,
+            incomplete_error,
+        ]
+        base_record["errors"] = [
+            f"R14: {terminal_error}",
+            f"R14: {incomplete_error}",
+        ]
+        base_path = write_json(analysis / "verify.base.json", base_record)
+        verify_record.update({
+            "record_type": "cgl_lf_stage_i_corrected_composite_verification",
+            "adapter": report_binding(gate.CORRECTED_REPORT_TOOL),
+            "base_adapter": base_record["adapter"],
+            "base_verification": report_binding(base_path),
+            "terminal_dispositions": terminal_dispositions,
+            "accepted_base_errors": base_record["errors"],
+        })
+    write_json(analysis / "verify.json", verify_record)
 
     publication = workflow / "publication"
     for relative in gate.REQUIRED_PUBLICATION_PRODUCTS:
@@ -613,7 +683,7 @@ def fixture_tree(
             "record_type": gate.CT_RECORD_TYPE,
             "numerical_result": ct_result,
             "selected_cases": list(gate.ALL_CASES),
-            "full_stage_i_coverage": True,
+            "full_stage_i_coverage": not r14_failure,
             "release_authorizing": False,
         },
         "sources": sources,
@@ -680,6 +750,9 @@ def fixture_tree(
 
 
 def install_dependencies(gate, monkeypatch, fixture: dict[str, object]) -> None:
+    corrected_report = gate.load_module(
+        "_cgl_release_test_corrected_report", gate.CORRECTED_REPORT_TOOL
+    )
     science = SimpleNamespace(
         validate_corrected_context=lambda *_args: fixture["context"],
         validate_products=lambda *_args: json.loads(
@@ -699,6 +772,8 @@ def install_dependencies(gate, monkeypatch, fixture: dict[str, object]) -> None:
             if Path(path) == gate.CORRECTED_SCIENCE_TOOL
             else downstream
             if Path(path) == gate.CORRECTED_DOWNSTREAM_TOOL
+            else corrected_report
+            if Path(path) == gate.CORRECTED_REPORT_TOOL
             else pytest.fail(f"unexpected dependency: {path}")
         ),
     )
@@ -935,6 +1010,50 @@ def test_inconclusive_reviewed_science_is_honestly_manuscript_ready(
     assert record["status"] == "manuscript_ready"
     assert record["reviewed_science_result"] == "inconclusive"
     assert record["reviewed_science"]["result"] == "inconclusive"
+
+
+def test_authenticated_r14_terminal_failure_is_honestly_manuscript_ready(
+    gate, tmp_path, monkeypatch
+):
+    fixture = fixture_tree(
+        gate,
+        tmp_path,
+        science_result="inconclusive",
+        ct_result="inconclusive",
+        r14_failure=True,
+    )
+    install_dependencies(gate, monkeypatch, fixture)
+
+    record = gate.build_marker(fixture["args"])
+
+    assert record["status"] == "manuscript_ready"
+    assert record["ct_coverage_complete"] is False
+    assert record["terminal_dispositions"] == fixture["context"][
+        "terminal_dispositions"
+    ]
+
+
+def test_r14_authenticated_complete_ct_requires_complete_native_coverage(
+    gate, tmp_path, monkeypatch
+):
+    fixture = fixture_tree(
+        gate,
+        tmp_path,
+        science_result="inconclusive",
+        ct_result="inconclusive",
+        r14_failure=True,
+    )
+    install_dependencies(gate, monkeypatch, fixture)
+    ct = json.loads(fixture["ct"].read_text(encoding="utf-8"))
+    ct["cases"]["R14"]["audit_status"] = "authenticated_complete"
+    write_json(fixture["ct"], ct)
+    rebind_ct_evidence(fixture)
+
+    with pytest.raises(
+        gate.ManuscriptReadyError,
+        match="authenticated-complete CT lacks complete coverage",
+    ):
+        gate.build_marker(fixture["args"])
 
 
 def test_incomplete_ct_coverage_is_rejected(gate, tmp_path, monkeypatch):

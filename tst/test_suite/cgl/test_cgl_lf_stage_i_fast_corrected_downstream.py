@@ -201,6 +201,83 @@ def ct_workflow_fixture(downstream, tmp_path: Path) -> dict[str, object]:
     }
 
 
+def complete_ct_case(result: str = "pass") -> dict[str, object]:
+    return {
+        "provenance_authenticated": True,
+        "snapshot_content_authenticated": True,
+        "audit_status": "authenticated_complete",
+        "ct_result": result,
+        "ct_claim_supported": True,
+        "native_restart_ct": {
+            "status": "complete",
+            "result": result,
+            "coverage_complete": True,
+            "meshblock_coverage_complete": True,
+            "ct_evidence_available": True,
+            "ct_claim_supported": True,
+        },
+    }
+
+
+def partial_r14_ct_case(*, retained_evidence: bool = True) -> dict[str, object]:
+    return {
+        "provenance_authenticated": True,
+        "snapshot_content_authenticated": retained_evidence,
+        "audit_status": (
+            "authenticated_inconclusive"
+            if retained_evidence
+            else "partial_inconclusive"
+        ),
+        "ct_result": "inconclusive",
+        "ct_claim_supported": False,
+        "native_restart_ct": {
+            "status": "partial",
+            "result": "inconclusive",
+            "coverage_complete": False,
+            "meshblock_coverage_complete": False,
+            "ct_evidence_available": False,
+            "ct_claim_supported": False,
+        },
+    }
+
+
+def r14_terminal_disposition() -> dict[str, object]:
+    return {
+        "record_type": "cgl_lf_stage_i_terminal_disposition",
+        "case_id": "R14",
+        "status": "failed_partial",
+        "disposition": "reproducible_finite_time_model_runtime_failure",
+        "attempt_count": 2,
+    }
+
+
+def validate_ct_fixture(
+    downstream,
+    fixture: dict[str, object],
+    cases: dict[str, dict[str, object]],
+    result: str,
+) -> dict[str, object]:
+    fixture["context"]["selected_cases"] = list(cases)
+    write_json(
+        fixture["output"] / "ct_audit.json",
+        {
+            "inventory": fixture["context"]["inventory_binding"],
+            "selection": {
+                "cases": fixture["context"]["selected_cases"],
+                "snapshot_policy": "all",
+            },
+            "result": result,
+            "cases": cases,
+        },
+    )
+    return downstream.validated_ct_output(
+        fixture["workflow"],
+        fixture["context"],
+        fixture["initial"],
+        binding(fixture["initial"] / "manifest.json"),
+    )
+
+
 def completed_upstream_fixture(tmp_path: Path) -> dict[str, object]:
     hyper_attempt = tmp_path / "upstream/hyper/R02/attempt-001"
     hyper_manifest = hyper_attempt / "manifest.json"
@@ -531,14 +608,24 @@ def install_composite_validator(downstream, monkeypatch) -> None:
     class CompositeError(RuntimeError):
         pass
 
-    fake = SimpleNamespace(
-        DEFAULT_CONFIG=object(),
-        CompositeReportError=CompositeError,
-        validate_composite_inventory=lambda _config, output: {
+    def validate_composite_inventory(_config, output):
+        inventory = json.loads((Path(output) / "inventory.json").read_text())
+        dispositions = {
+            case_id: value["terminal_disposition"]
+            for case_id, value in inventory["cases"].items()
+            if value.get("terminal_disposition") is not None
+        }
+        return {
             "result": "pass",
             "output": str(output),
             "cases": list(downstream.ALL_CASES),
-        },
+            "terminal_dispositions": dispositions,
+        }
+
+    fake = SimpleNamespace(
+        DEFAULT_CONFIG=object(),
+        CompositeReportError=CompositeError,
+        validate_composite_inventory=validate_composite_inventory,
     )
     monkeypatch.setattr(
         downstream,
@@ -736,6 +823,7 @@ def test_commands_are_all_snapshot_literature_correct_and_never_mix_passive_hype
     assert "--formula" in hyper
     assert hyper[hyper.index("--formula") + 1] == "literature-correct"
     assert hyper[hyper.index("--snapshot-policy") + 1] == "all"
+    assert "--include-partial" in hyper
     assert "--exploratory" in hyper
     assert not set(downstream.PASSIVE_CASES) & set(hyper)
     assert set(downstream.ACTIVE_CASES) <= set(hyper)
@@ -747,6 +835,99 @@ def test_commands_are_all_snapshot_literature_correct_and_never_mix_passive_hype
     assert "--acceptance" in publication
     assert "--submit" not in hyper
     assert "--submit" not in analysis
+
+
+def test_only_authenticated_r14_failed_partial_is_admitted(
+    downstream, identity_tool, tmp_path, monkeypatch
+) -> None:
+    install_composite_validator(downstream, monkeypatch)
+    fixture = campaign_fixture(downstream, identity_tool, tmp_path)
+    inventory = json.loads(fixture["inventory"].read_text(encoding="utf-8"))
+    disposition = {
+        "record_type": "cgl_lf_stage_i_terminal_disposition",
+        "case_id": "R14",
+        "status": "failed_partial",
+        "disposition": "reproducible_finite_time_model_runtime_failure",
+        "attempt_count": 2,
+    }
+    inventory["cases"]["R14"]["status"] = "failed_partial"
+    inventory["cases"]["R14"]["terminal_disposition"] = disposition
+    write_json(
+        Path(inventory["output"]) / "cases/R14/lineage.json",
+        inventory["cases"]["R14"],
+    )
+    write_json(fixture["inventory"], inventory)
+
+    context = downstream.validate_inventory(
+        fixture["identity"],
+        fixture["inventory"],
+        sha256(fixture["inventory"]),
+    )
+
+    assert context["terminal_dispositions"] == {"R14": disposition}
+
+
+def test_active_only_inventory_cannot_self_authorize_terminal_partial(
+    downstream, identity_tool, tmp_path
+) -> None:
+    fixture = campaign_fixture(
+        downstream, identity_tool, tmp_path, include_passive=False
+    )
+    inventory = json.loads(fixture["inventory"].read_text(encoding="utf-8"))
+    inventory["cases"]["R14"]["status"] = "failed_partial"
+    inventory["cases"]["R14"]["terminal_disposition"] = {
+        "record_type": "cgl_lf_stage_i_terminal_disposition",
+        "case_id": "R14",
+        "status": "failed_partial",
+        "disposition": "reproducible_finite_time_model_runtime_failure",
+        "attempt_count": 2,
+    }
+    write_json(
+        Path(inventory["output"]) / "cases/R14/lineage.json",
+        inventory["cases"]["R14"],
+    )
+    write_json(fixture["inventory"], inventory)
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="requires authenticated corrected-composite validation",
+    ):
+        downstream.validate_inventory(
+            fixture["identity"],
+            fixture["inventory"],
+            sha256(fixture["inventory"]),
+        )
+
+
+def test_non_r14_failed_partial_is_rejected(
+    downstream, identity_tool, tmp_path, monkeypatch
+) -> None:
+    install_composite_validator(downstream, monkeypatch)
+    fixture = campaign_fixture(downstream, identity_tool, tmp_path)
+    inventory = json.loads(fixture["inventory"].read_text(encoding="utf-8"))
+    inventory["cases"]["R15"]["status"] = "failed_partial"
+    inventory["cases"]["R15"]["terminal_disposition"] = {
+        "record_type": "cgl_lf_stage_i_terminal_disposition",
+        "case_id": "R15",
+        "status": "failed_partial",
+        "disposition": "reproducible_finite_time_model_runtime_failure",
+        "attempt_count": 2,
+    }
+    write_json(
+        Path(inventory["output"]) / "cases/R15/lineage.json",
+        inventory["cases"]["R15"],
+    )
+    write_json(fixture["inventory"], inventory)
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="not an authenticated R14 failure",
+    ):
+        downstream.validate_inventory(
+            fixture["identity"],
+            fixture["inventory"],
+            sha256(fixture["inventory"]),
+        )
 
 
 def test_prepare_writes_jobs_and_workflow_without_submitting(
@@ -801,6 +982,7 @@ def test_prepare_writes_jobs_and_workflow_without_submitting(
     assert workflow["formula_binding"]["corrected_eos"] == binding(
         fixture["artifacts"]["eos"]
     )
+    assert workflow["terminal_dispositions"] == context["terminal_dispositions"]
     for stage in ("ct", "publication"):
         job = workflow_root / f"jobs/{stage}/attempt-000"
         manifest = json.loads((job / "manifest.json").read_text(encoding="utf-8"))
@@ -885,6 +1067,186 @@ def test_retry_ct_reuses_valid_success(
     )
 
     assert downstream.retry_ct(fixture["root"]) == fixture["initial"]
+
+
+@pytest.mark.parametrize("result", ["pass", "fail"])
+def test_complete_non_r14_ct_evidence_is_accepted(
+    downstream, tmp_path, result
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+
+    record = validate_ct_fixture(
+        downstream, fixture, {"R02": complete_ct_case(result)}, result
+    )
+
+    assert record["audit"] == binding(fixture["output"] / "ct_audit.json")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("audit_status", "authenticated_inconclusive"),
+        ("ct_claim_supported", False),
+    ],
+)
+def test_non_r14_incomplete_or_nonclaimable_ct_evidence_is_rejected(
+    downstream, tmp_path, field, value
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    case = complete_ct_case()
+    case[field] = value
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="lacks strict complete native coverage",
+    ):
+        validate_ct_fixture(downstream, fixture, {"R02": case}, "pass")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("status", "partial"),
+        ("coverage_complete", False),
+        ("meshblock_coverage_complete", False),
+        ("ct_claim_supported", False),
+    ],
+)
+def test_non_r14_requires_complete_native_ct_fields(
+    downstream, tmp_path, field, value
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    case = complete_ct_case()
+    case["native_restart_ct"][field] = value
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="lacks strict complete native coverage",
+    ):
+        validate_ct_fixture(downstream, fixture, {"R02": case}, "pass")
+
+
+@pytest.mark.parametrize("retained_evidence", [True, False])
+def test_r14_partial_ct_status_is_derived_from_retained_evidence(
+    downstream, tmp_path, retained_evidence
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    fixture["context"]["terminal_dispositions"] = {
+        "R14": r14_terminal_disposition()
+    }
+
+    record = validate_ct_fixture(
+        downstream,
+        fixture,
+        {"R14": partial_r14_ct_case(retained_evidence=retained_evidence)},
+        "inconclusive",
+    )
+
+    assert record["audit"] == binding(fixture["output"] / "ct_audit.json")
+
+
+def test_r14_authenticated_inconclusive_accepts_native_ct_evidence(
+    downstream, tmp_path
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    fixture["context"]["terminal_dispositions"] = {
+        "R14": r14_terminal_disposition()
+    }
+    case = partial_r14_ct_case(retained_evidence=False)
+    case["native_restart_ct"]["ct_evidence_available"] = True
+    case["audit_status"] = "authenticated_inconclusive"
+
+    validate_ct_fixture(
+        downstream, fixture, {"R14": case}, "inconclusive"
+    )
+
+
+def test_r14_partial_ct_rejects_status_inconsistent_with_retained_evidence(
+    downstream, tmp_path
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    fixture["context"]["terminal_dispositions"] = {
+        "R14": r14_terminal_disposition()
+    }
+    case = partial_r14_ct_case(retained_evidence=True)
+    case["audit_status"] = "partial_inconclusive"
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="audit status differs from retained evidence",
+    ):
+        validate_ct_fixture(
+            downstream, fixture, {"R14": case}, "inconclusive"
+        )
+
+
+def test_r14_partial_ct_rejects_complete_or_claimable_native_evidence(
+    downstream, tmp_path
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    fixture["context"]["terminal_dispositions"] = {
+        "R14": r14_terminal_disposition()
+    }
+    case = partial_r14_ct_case()
+    case["native_restart_ct"]["coverage_complete"] = True
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="terminal CT disposition is not partial/inconclusive",
+    ):
+        validate_ct_fixture(
+            downstream, fixture, {"R14": case}, "inconclusive"
+        )
+
+
+def test_ct_case_and_native_results_must_match(downstream, tmp_path) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    case = complete_ct_case()
+    case["native_restart_ct"]["result"] = "fail"
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="case/native result differs",
+    ):
+        validate_ct_fixture(downstream, fixture, {"R02": case}, "pass")
+
+
+@pytest.mark.parametrize(
+    ("cases", "reported", "expected"),
+    [
+        (
+            {"R02": complete_ct_case(), "R03": complete_ct_case("fail")},
+            "pass",
+            "fail",
+        ),
+        (
+            {"R02": complete_ct_case(), "R14": partial_r14_ct_case()},
+            "pass",
+            "inconclusive",
+        ),
+        (
+            {"R02": complete_ct_case("fail"), "R14": partial_r14_ct_case()},
+            "inconclusive",
+            "fail",
+        ),
+    ],
+)
+def test_ct_top_level_result_must_match_selected_case_reduction(
+    downstream, tmp_path, cases, reported, expected
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    if "R14" in cases:
+        fixture["context"]["terminal_dispositions"] = {
+            "R14": r14_terminal_disposition()
+        }
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="top-level result differs",
+    ):
+        validate_ct_fixture(downstream, fixture, cases, reported)
+
+    validate_ct_fixture(downstream, fixture, cases, expected)
 
 
 def test_retry_ct_replaces_scheduler_success_with_invalid_output(

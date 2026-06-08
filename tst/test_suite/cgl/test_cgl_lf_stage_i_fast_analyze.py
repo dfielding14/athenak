@@ -70,6 +70,19 @@ def inventory_fixture(
                     "case_name": "case-r03",
                     "status": "in_progress",
                 },
+                "R14": {
+                    "case_id": "R14",
+                    "case_name": "case-r14",
+                    "status": "failed_partial",
+                    "terminal_disposition": {
+                        "record_type": "cgl_lf_stage_i_terminal_disposition",
+                        "case_id": "R14",
+                        "status": "failed_partial",
+                        "disposition":
+                        "reproducible_finite_time_model_runtime_failure",
+                        "attempt_count": 2,
+                    },
+                },
             },
         },
     )
@@ -211,8 +224,48 @@ def test_only_complete_cases_launch_unless_all_is_explicit(
 
     assert (complete_jobs / "R02/attempt-000/manifest.json").is_file()
     assert not (complete_jobs / "R03").exists()
+    assert not (complete_jobs / "R14").exists()
     assert (all_jobs / "R02/attempt-000/manifest.json").is_file()
     assert (all_jobs / "R03/attempt-000/manifest.json").is_file()
+    assert (all_jobs / "R14/attempt-000/manifest.json").is_file()
+
+
+def test_corrected_composite_validator_authorizes_terminal_partial(
+    fast_analyze, tmp_path, monkeypatch
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    monkeypatch.setattr(
+        fast_analyze,
+        "authenticated_terminal_cases",
+        lambda _path, _inventory: {"R14"},
+    )
+
+    fast_analyze.launch(command_args(analysis, jobs))
+
+    assert (jobs / "R02/attempt-000/manifest.json").is_file()
+    assert not (jobs / "R03").exists()
+    assert (jobs / "R14/attempt-000/manifest.json").is_file()
+
+
+def test_forged_or_wrong_case_partial_disposition_is_not_eligible(
+    fast_analyze, tmp_path
+):
+    _root, analysis, inventory_path = inventory_fixture(tmp_path)
+    inventory = fast_analyze.load_json(inventory_path)
+    inventory["cases"]["R03"]["status"] = "failed_partial"
+    inventory["cases"]["R03"]["terminal_disposition"] = dict(
+        inventory["cases"]["R14"]["terminal_disposition"]
+    )
+    inventory["cases"]["R14"]["terminal_disposition"]["attempt_count"] = 1
+    write_json(inventory_path, inventory)
+
+    jobs = tmp_path / "jobs"
+    fast_analyze.launch(command_args(analysis, jobs))
+
+    assert (jobs / "R02/attempt-000/manifest.json").is_file()
+    assert not (jobs / "R03").exists()
+    assert not (jobs / "R14").exists()
 
 
 def test_generated_batch_script_quotes_arguments_and_captures_exit(

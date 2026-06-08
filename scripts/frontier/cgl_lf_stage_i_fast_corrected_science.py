@@ -390,6 +390,36 @@ def validate_corrected_context(
     return context
 
 
+def authenticated_terminal_failure(
+    context: dict[str, object], case_id: str
+) -> dict[str, object] | None:
+    """Return the exact downstream-authenticated R14 failure disposition."""
+
+    dispositions = require_dict(
+        context.get("terminal_dispositions", {}), "terminal dispositions"
+    )
+    value = dispositions.get(case_id)
+    if value is None:
+        return None
+    disposition = require_dict(value, f"{case_id} terminal disposition")
+    if (
+        case_id != "R14"
+        or disposition.get("record_type")
+        != "cgl_lf_stage_i_terminal_disposition"
+        or disposition.get("case_id") != "R14"
+        or disposition.get("status") != "failed_partial"
+        or disposition.get("disposition")
+        != "reproducible_finite_time_model_runtime_failure"
+        or not isinstance(disposition.get("attempt_count"), int)
+        or isinstance(disposition.get("attempt_count"), bool)
+        or int(disposition["attempt_count"]) < 2
+    ):
+        raise CorrectedScienceError(
+            f"{case_id} terminal disposition is not an authenticated R14 failure"
+        )
+    return disposition
+
+
 def workflow_commands(
     context: dict[str, object],
     acceptance_output: Path,
@@ -555,6 +585,22 @@ def validate_products(
         raise CorrectedScienceError("reviewed science dispositions do not cover R02-R17")
     for case_id, value in dispositions.items():
         disposition = require_dict(value, f"{case_id} science disposition")
+        terminal_failure = authenticated_terminal_failure(context, case_id)
+        if terminal_failure is not None:
+            if (
+                disposition.get("inventory_status") != "failed_partial"
+                or disposition.get("acceptance_result") != "inconclusive"
+                or disposition.get("claim_eligible") is not False
+                or disposition.get("diagnostics_available") is not True
+                or not isinstance(
+                    disposition.get("snapshot_products_authenticated"), bool
+                )
+            ):
+                raise CorrectedScienceError(
+                    "R14 terminal failure is not represented as authenticated "
+                    "partial science"
+                )
+            continue
         if (
             disposition.get("inventory_status") != "complete"
             or disposition.get("diagnostics_available") is not True
@@ -562,6 +608,23 @@ def validate_products(
         ):
             raise CorrectedScienceError(
                 f"{case_id} lacks complete authenticated downstream science products"
+            )
+    terminal_failure = authenticated_terminal_failure(context, "R14")
+    if terminal_failure is not None:
+        if science_record.get("result") != "inconclusive":
+            raise CorrectedScienceError(
+                "R14 terminal failure must make reviewed science inconclusive"
+            )
+        gates = require_list(science_record.get("gates"), "reviewed science gates")
+        limiter = [
+            require_dict(value, "finite-limiter science gate")
+            for value in gates
+            if isinstance(value, dict)
+            and value.get("gate") == "finite_limiter_ordering:R15_gt_R14"
+        ]
+        if len(limiter) != 1 or limiter[0].get("result") != "inconclusive":
+            raise CorrectedScienceError(
+                "R14 terminal failure must make the finite-limiter ordering inconclusive"
             )
 
     science_provenance = load_json(
@@ -652,6 +715,9 @@ def validate_products(
             "authenticated_legacy_passive": list(PASSIVE_CASES),
             "selected": list(ALL_CASES),
         },
+        "terminal_dispositions": require_dict(
+            context.get("terminal_dispositions", {}), "terminal dispositions"
+        ),
         "passive_compatibility": {
             "contract_id": compatibility["contract_id"],
             "result": compatibility["result"],

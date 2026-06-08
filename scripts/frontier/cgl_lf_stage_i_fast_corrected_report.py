@@ -16,8 +16,10 @@ from dataclasses import dataclass
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -46,6 +48,22 @@ ACTIVE_CASES = (
 )
 PASSIVE_CONTROLS = ("R06", "R07", "R08", "R09")
 ALL_CASES = tuple(f"R{number:02d}" for number in range(2, 18))
+R14_FAILURE_CASE = "R14"
+R14_FAILURE_TIME_TOLERANCE = 1.0e-12
+R14_FATAL_SIGNATURE = (
+    "### FATAL ERROR in turbulence driver: "
+    "cannot inject non-zero dedt with a zero forcing field"
+)
+R14_STRICT_OVERRIDE = "mhd/cgl_lf_strict_admissibility=false"
+R14_APPROVED_VARIANT = "finite_limiter_hard_bound_diagnostic_nonfatal"
+R14_APPROVED_OVERRIDES = [R14_STRICT_OVERRIDE]
+R14_APPROVED_MODEL_CHOICES = {
+    "backup_limiters": "false",
+    "cgl_lf_strict_admissibility": "false",
+    "firehose_limiter": "true",
+    "limiter_nu_coll": "20.0",
+    "mirror_limiter": "true",
+}
 MATRIX_RELATIVE = Path("inputs/cgl_lf_paper/mks24_stage_i_manifest.json")
 RUNS_RELATIVE = Path("runs/mks24-stage-i-fast/E03-forcing-policy")
 PASSIVE_RSOLVER_RELATIVE = Path("src/mhd/rsolvers/hlle_cgl.hpp")
@@ -880,6 +898,414 @@ def validate_selected_attempt_sequences(
     return [int(sequence) for sequence in sequences]
 
 
+def finite_float(value: object, label: str) -> float:
+    """Return one finite floating-point value."""
+
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as error:
+        raise CompositeReportError(f"{label} is not numeric: {value!r}") from error
+    if not math.isfinite(result):
+        raise CompositeReportError(f"{label} is not finite: {value!r}")
+    return result
+
+
+def history_final_time(path: Path, label: str) -> float:
+    """Authenticate one retained history and return its terminal time."""
+
+    try:
+        history, warnings = report.read_history_source(path)
+    except (OSError, report.ReportError, ValueError) as error:
+        raise CompositeReportError(f"{label} is unavailable: {path}") from error
+    if warnings:
+        raise CompositeReportError(f"{label} is not stable: {warnings}")
+    rows = history.get("rows")
+    if not isinstance(rows, list) or not rows or not isinstance(rows[-1], list):
+        raise CompositeReportError(f"{label} has no retained rows: {path}")
+    return finite_float(rows[-1][0], f"{label} terminal time")
+
+
+def slurm_log_for_manifest(
+    authority: ExecutionAuthority,
+    case_id: str,
+    manifest: dict[str, object],
+) -> Path:
+    """Resolve the exact immutable Slurm log declared by one failed attempt."""
+
+    sequence = manifest.get("sequence")
+    job_id = manifest.get("job_id")
+    expected_pattern = authority.root / "logs/slurm-fast/%x.%j.log"
+    if (
+        not isinstance(sequence, int)
+        or isinstance(sequence, bool)
+        or not isinstance(job_id, str)
+        or re.fullmatch(r"[1-9][0-9]*", job_id) is None
+        or manifest.get("slurm_log") != str(expected_pattern)
+    ):
+        raise CompositeReportError(
+            f"{case_id} failed attempt lacks exact Slurm log metadata"
+        )
+    job_name = f"cglc_{case_id}_s{sequence:03d}"
+    path = Path(
+        str(expected_pattern).replace("%x", job_name).replace("%j", job_id)
+    )
+    resolved = canonical_existing(path, f"{case_id} failed-attempt Slurm log", directory=False)
+    require_beneath(
+        resolved,
+        authority.root / "logs/slurm-fast",
+        f"{case_id} failed-attempt Slurm log",
+    )
+    return resolved
+
+
+def synthetic_lineage_for_manifest(
+    authority: ExecutionAuthority, manifest_path: Path
+) -> dict[str, object]:
+    """Build the minimal lineage projection used to authenticate a source attempt."""
+
+    manifest_path, run_root = selected_authority_run_root(
+        authority, manifest_path, "source attempt manifest"
+    )
+    manifest = load_json(manifest_path, "source attempt manifest")
+    run_dir = manifest_path.parent.parent
+    return {
+        "kind": "fast",
+        "segment_dir": str(run_dir),
+        "source_root": str(run_root),
+        "input": manifest.get("input"),
+        "input_sha256": manifest.get("input_sha256"),
+        "matrix_sha256": manifest.get("matrix_sha256"),
+        "executable": manifest.get("executable"),
+        "executable_sha256": manifest.get("executable_sha256"),
+        "manifest": report.artifact_binding(manifest_path),
+    }
+
+
+def authenticate_r14_failed_attempt(
+    config: CompositeConfig,
+    case: dict[str, object],
+    manifest_path: Path,
+    selected_variant: object,
+    selected_overrides: list[str],
+    parent_restart: Path,
+    parent_restart_sha256: str,
+) -> dict[str, object] | None:
+    """Authenticate one source attempt replaying the selected R14 checkpoint."""
+
+    authority = config.corrected
+    try:
+        preview = load_json(manifest_path, "R14 source attempt manifest")
+        if (
+            preview.get("restart") != str(parent_restart)
+            or preview.get("restart_sha256") != parent_restart_sha256
+        ):
+            return None
+        lineage = synthetic_lineage_for_manifest(authority, manifest_path)
+        manifest = validate_segment_manifest(
+            config, authority, R14_FAILURE_CASE, case, lineage
+        )
+        sequence = manifest.get("sequence")
+        run_dir = Path(str(manifest["run_dir"])).resolve(strict=True)
+        if (
+            not isinstance(sequence, int)
+            or isinstance(sequence, bool)
+            or sequence <= 0
+            or manifest.get("variant") != R14_APPROVED_VARIANT
+            or selected_variant != R14_APPROVED_VARIANT
+            or manifest.get("command_line_overrides") != R14_APPROVED_OVERRIDES
+            or selected_overrides != R14_APPROVED_OVERRIDES
+            or manifest.get("strict_admissibility") is not False
+            or manifest.get("continuation_policy")
+            != "finite_progress_complete_terminal_products"
+            or manifest.get("runtime_segmentation_changes_physics") is not False
+        ):
+            return None
+
+        exit_path = run_dir / "manifest/run_exit_code"
+        exit_binding = report.artifact_binding(
+            canonical_existing(
+                exit_path, "R14 failed-attempt exit artifact", directory=False
+            )
+        )
+        exit_code = int(exit_path.read_text(encoding="utf-8").strip())
+        if exit_code == 0:
+            return None
+
+        output = run_dir / "output"
+        mhd_path, user_path = report.history_paths(output)
+        if mhd_path is None or user_path is None:
+            return None
+        mhd_final = history_final_time(mhd_path, "R14 failed-attempt MHD history")
+        user_final = history_final_time(user_path, "R14 failed-attempt user history")
+        if not math.isclose(
+            mhd_final,
+            user_final,
+            rel_tol=0.0,
+            abs_tol=R14_FAILURE_TIME_TOLERANCE,
+        ):
+            return None
+
+        log_path = slurm_log_for_manifest(authority, R14_FAILURE_CASE, manifest)
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+        signature_count = log_text.count(R14_FATAL_SIGNATURE)
+        if signature_count <= 0:
+            return None
+        return {
+            "sequence": sequence,
+            "segment": str(run_dir),
+            "job_id": manifest["job_id"],
+            "run_exit_code": exit_code,
+            "failure_time": mhd_final,
+            "fatal_signature_count": signature_count,
+            "mhd_history_sha256": report.artifact_binding(mhd_path)["sha256"],
+            "user_history_sha256": report.artifact_binding(user_path)["sha256"],
+            "provenance": {
+                "manifest": report.artifact_binding(manifest_path),
+                "run_exit_code": exit_binding,
+                "mhd_history": report.artifact_binding(mhd_path),
+                "user_history": report.artifact_binding(user_path),
+                "slurm_log": report.artifact_binding(log_path),
+            },
+        }
+    except (
+        CompositeReportError,
+        OSError,
+        UnicodeError,
+        ValueError,
+        report.ReportError,
+    ):
+        return None
+
+
+def retained_r14_history(
+    record: dict[str, object], failure_time: float
+) -> dict[str, object]:
+    """Authenticate the merged R14 history retained by the composite report."""
+
+    histories = record.get("histories")
+    if not isinstance(histories, dict):
+        raise CompositeReportError("R14 retained history inventory is missing")
+    retained: dict[str, object] = {}
+    for kind in ("mhd", "user"):
+        item = histories.get(kind)
+        if (
+            not isinstance(item, dict)
+            or item.get("available") is not True
+            or item.get("errors") not in (None, [])
+            or not isinstance(item.get("path"), str)
+            or not isinstance(item.get("binding"), dict)
+        ):
+            raise CompositeReportError(f"R14 retained {kind} history is unavailable")
+        path = canonical_existing(
+            Path(str(item["path"])), f"R14 retained {kind} history", directory=False
+        )
+        if item["binding"] != report.artifact_binding(path):
+            raise CompositeReportError(
+                f"R14 retained {kind} history binding is stale"
+            )
+        final = history_final_time(path, f"R14 retained {kind} history")
+        if not math.isclose(
+            final,
+            failure_time,
+            rel_tol=0.0,
+            abs_tol=R14_FAILURE_TIME_TOLERANCE,
+        ):
+            raise CompositeReportError(
+                f"R14 retained {kind} history does not reach the failure time"
+            )
+        retained[kind] = report.artifact_binding(path)
+    return retained
+
+
+def derive_r14_terminal_disposition(
+    config: CompositeConfig,
+    case: dict[str, object],
+    record: dict[str, object],
+    manifests: list[dict[str, object]],
+) -> dict[str, object]:
+    """Derive the only admissible R14 partial disposition from source attempts."""
+
+    lineage = record.get("lineage")
+    if (
+        record.get("status") != "failed_partial"
+        or not isinstance(lineage, list)
+        or len(lineage) < 2
+        or len(manifests) != len(lineage)
+    ):
+        raise CompositeReportError("R14 is not an authenticated failed partial lineage")
+    terminal = lineage[-1]
+    parent = lineage[-2]
+    if (
+        not isinstance(terminal, dict)
+        or not isinstance(parent, dict)
+        or terminal.get("state") != "failed"
+        or terminal.get("kind") != "fast"
+        or parent.get("kind") != "fast"
+    ):
+        raise CompositeReportError("R14 selected terminal is not a failed fast attempt")
+
+    selected_manifest = manifests[-1]
+    selected_overrides = selected_manifest.get("command_line_overrides")
+    if not isinstance(selected_overrides, list) or not all(
+        isinstance(value, str) for value in selected_overrides
+    ):
+        raise CompositeReportError("R14 selected overrides are malformed")
+    expected_model = report.model_choices_for_input(
+        expected_input(config.corrected, case, R14_FAILURE_CASE),
+        selected_overrides,
+    )
+    if (
+        expected_model.get("cgl_lf_strict_admissibility") != "false"
+        or record.get("model_choices") != expected_model
+        or any(
+            expected_model.get(key) != expected
+            for key, expected in R14_APPROVED_MODEL_CHOICES.items()
+        )
+        or selected_manifest.get("variant") != R14_APPROVED_VARIANT
+        or selected_overrides != R14_APPROVED_OVERRIDES
+        or selected_manifest.get("strict_admissibility") is not False
+        or selected_manifest.get("continuation_policy")
+        != "finite_progress_complete_terminal_products"
+        or selected_manifest.get("runtime_segmentation_changes_physics") is not False
+    ):
+        raise CompositeReportError(
+            "R14 failed-partial disposition differs from the approved physics contract"
+        )
+
+    parent_segment = Path(str(parent.get("segment_dir", ""))).resolve(strict=True)
+    parent_restart_value = selected_manifest.get("restart")
+    parent_restart_sha256 = selected_manifest.get("restart_sha256")
+    if (
+        not isinstance(parent_restart_value, str)
+        or not isinstance(parent_restart_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", parent_restart_sha256) is None
+    ):
+        raise CompositeReportError("R14 selected terminal lacks a parent restart")
+    parent_restart = require_beneath(
+        parent_restart_value,
+        parent_segment / "output/rst",
+        "R14 selected parent restart",
+    )
+    if sha256(parent_restart) != parent_restart_sha256:
+        raise CompositeReportError("R14 selected parent restart binding is stale")
+    restart_time = finite_float(
+        report.fast_restart_time(parent_restart), "R14 selected parent restart time"
+    )
+    start_time = finite_float(
+        selected_manifest.get("start_time"), "R14 selected terminal start time"
+    )
+    parent_final = finite_float(
+        parent.get("observed_final_time"), "R14 selected parent final time"
+    )
+    if not (
+        math.isclose(
+            restart_time,
+            start_time,
+            rel_tol=0.0,
+            abs_tol=report.RESTART_TIME_TOLERANCE,
+        )
+        and math.isclose(
+            restart_time,
+            parent_final,
+            rel_tol=0.0,
+            abs_tol=report.RESTART_TIME_TOLERANCE,
+        )
+    ):
+        raise CompositeReportError(
+            "R14 replay attempts do not start from the selected parent checkpoint"
+        )
+
+    failure_time = finite_float(record.get("final_time"), "R14 retained final time")
+    attempts: list[dict[str, object]] = []
+    for run_root in config.corrected.run_roots:
+        case_root = run_root / R14_FAILURE_CASE
+        if not case_root.is_dir():
+            continue
+        for manifest_path in sorted(case_root.glob("fast_s*/manifest/fast_run.json")):
+            attempt = authenticate_r14_failed_attempt(
+                config,
+                case,
+                manifest_path,
+                selected_manifest.get("variant"),
+                selected_overrides,
+                parent_restart,
+                parent_restart_sha256,
+            )
+            if attempt is not None:
+                attempts.append(attempt)
+    attempts.sort(key=lambda value: int(value["sequence"]))
+    if (
+        len(attempts) < 2
+        or len({str(value["segment"]) for value in attempts}) != len(attempts)
+        or len({int(value["sequence"]) for value in attempts}) != len(attempts)
+        or len({str(value["job_id"]) for value in attempts}) != len(attempts)
+    ):
+        raise CompositeReportError(
+            "R14 requires at least two distinct authenticated failed replay attempts"
+        )
+    selected_segment = str(Path(str(terminal["segment_dir"])).resolve(strict=True))
+    if selected_segment not in {str(value["segment"]) for value in attempts}:
+        raise CompositeReportError(
+            "R14 selected terminal is not one of the authenticated failed replays"
+        )
+    if any(
+        not math.isclose(
+            finite_float(value["failure_time"], "R14 replay failure time"),
+            failure_time,
+            rel_tol=0.0,
+            abs_tol=R14_FAILURE_TIME_TOLERANCE,
+        )
+        for value in attempts
+    ):
+        raise CompositeReportError(
+            "R14 failed replay attempts do not share one physical failure time"
+        )
+    mhd_hashes = {str(value["mhd_history_sha256"]) for value in attempts}
+    user_hashes = {str(value["user_history_sha256"]) for value in attempts}
+    if len(mhd_hashes) != 1 or len(user_hashes) != 1:
+        raise CompositeReportError(
+            "R14 failed replay histories are not byte-identical"
+        )
+
+    retained_history = retained_r14_history(record, failure_time)
+    return {
+        "schema_version": 1,
+        "record_type": "cgl_lf_stage_i_terminal_disposition",
+        "case_id": R14_FAILURE_CASE,
+        "status": "failed_partial",
+        "disposition": "reproducible_finite_time_model_runtime_failure",
+        "claim_scope": "authenticated_history_through_failure_time",
+        "failure_time": failure_time,
+        "failure_time_absolute_tolerance": R14_FAILURE_TIME_TOLERANCE,
+        "fatal_signature": R14_FATAL_SIGNATURE,
+        "physics": {
+            "variant": R14_APPROVED_VARIANT,
+            "command_line_overrides": R14_APPROVED_OVERRIDES,
+            "cgl_lf_strict_admissibility": False,
+            "backup_limiters": False,
+            "mirror_limiter": True,
+            "firehose_limiter": True,
+            "limiter_nu_coll": 20.0,
+        },
+        "replay_history_consensus": {
+            "mhd_sha256": next(iter(mhd_hashes)),
+            "user_sha256": next(iter(user_hashes)),
+        },
+        "selected_parent": {
+            "segment": str(parent_segment),
+            "sequence": manifests[-2].get("sequence"),
+            "restart": {
+                **report.artifact_binding(parent_restart),
+                "physical_time": restart_time,
+            },
+        },
+        "selected_terminal_segment": selected_segment,
+        "attempt_count": len(attempts),
+        "attempts": attempts,
+        "retained_history": retained_history,
+    }
+
+
 def validate_and_classify_case(
     config: CompositeConfig,
     case_id: str,
@@ -899,10 +1325,13 @@ def validate_and_classify_case(
         raise CompositeReportError(f"{case_id} assembly retained errors: {errors}")
     if record.get("status") == "assembly_error":
         raise CompositeReportError(f"{case_id} assembly failed")
-    if require_complete and record.get("status") != "complete":
+    status = record.get("status")
+    if require_complete and status not in ("complete", "failed_partial"):
         raise CompositeReportError(
-            f"{case_id} is not complete: {record.get('status')}"
+            f"{case_id} is not complete: {status}"
         )
+    if status == "failed_partial" and case_id != R14_FAILURE_CASE:
+        raise CompositeReportError(f"{case_id} is not complete: {status}")
     lineage = record.get("lineage")
     if not isinstance(lineage, list) or not lineage:
         raise CompositeReportError(f"{case_id} selected lineage is missing")
@@ -931,6 +1360,22 @@ def validate_and_classify_case(
     if identities != expected_identities:
         raise CompositeReportError(
             f"{case_id} assembled lineage identities differ: {identities}"
+        )
+
+    if status == "failed_partial":
+        expected_disposition = derive_r14_terminal_disposition(
+            config, case, record, manifests
+        )
+        retained_disposition = record.get("terminal_disposition")
+        if retained_disposition is None:
+            record["terminal_disposition"] = expected_disposition
+        elif retained_disposition != expected_disposition:
+            raise CompositeReportError(
+                "R14 retained terminal disposition differs from source attempts"
+            )
+    elif "terminal_disposition" in record:
+        raise CompositeReportError(
+            f"{case_id} complete lineage retains a terminal disposition"
         )
 
     execution = case_execution_record(authority, case_id, case, compatibility)
@@ -1208,7 +1653,151 @@ def validate_composite_inventory(
         "output": str(output),
         "cases": list(ALL_CASES),
         "evidence_classes": inventory["evidence_classes"],
+        "terminal_dispositions": {
+            case_id: inline_cases[case_id]["terminal_disposition"]
+            for case_id in ALL_CASES
+            if isinstance(inline_cases[case_id], dict)
+            and inline_cases[case_id].get("terminal_disposition") is not None
+        },
     }
+
+
+def corrected_verification(
+    output: Path,
+    validation: dict[str, object],
+) -> dict[str, object]:
+    """Remove only the base-verifier errors authorized by the R14 disposition."""
+
+    base_path = output / "verify.base.json"
+    base = load_json(base_path, "base verification")
+    inventory = load_json(output / "inventory.json", "composite inventory")
+    cases = inventory.get("cases")
+    dispositions = validation.get("terminal_dispositions")
+    if not isinstance(cases, dict) or not isinstance(dispositions, dict):
+        raise CompositeReportError(
+            "corrected verification evidence is malformed"
+        )
+    if set(dispositions) not in (set(), {R14_FAILURE_CASE}):
+        raise CompositeReportError(
+            "corrected verification has unsupported terminal dispositions"
+        )
+
+    case_results = base.get("cases")
+    base_errors = base.get("errors")
+    base_warnings = base.get("warnings")
+    if (
+        not isinstance(case_results, dict)
+        or not isinstance(base_errors, list)
+        or not isinstance(base_warnings, list)
+    ):
+        raise CompositeReportError("base verification record is malformed")
+    flattened = [
+        f"{case_id}: {error}"
+        for case_id, value in case_results.items()
+        if isinstance(value, dict)
+        for error in value.get("errors", [])
+    ]
+    if base_errors != flattened:
+        raise CompositeReportError(
+            "base verification top-level errors differ from case errors"
+        )
+
+    adjusted = json.loads(json.dumps(base))
+    accepted_top: list[str] = []
+    if dispositions:
+        r14 = cases.get(R14_FAILURE_CASE)
+        disposition = dispositions[R14_FAILURE_CASE]
+        if not isinstance(r14, dict) or not isinstance(disposition, dict):
+            raise CompositeReportError("R14 corrected verification evidence is malformed")
+        lineage = r14.get("lineage")
+        attempts = disposition.get("attempts")
+        if (
+            not isinstance(lineage, list)
+            or not lineage
+            or not isinstance(attempts, list)
+        ):
+            raise CompositeReportError("R14 corrected verification lineage is malformed")
+        terminal = lineage[-1]
+        if not isinstance(terminal, dict):
+            raise CompositeReportError("R14 corrected verification terminal is malformed")
+        terminal_segment = str(Path(str(terminal.get("segment_dir"))).resolve())
+        exit_code = terminal.get("run_exit_code")
+        matching = [
+            value
+            for value in attempts
+            if isinstance(value, dict)
+            and str(Path(str(value.get("segment"))).resolve()) == terminal_segment
+        ]
+        if (
+            terminal.get("state") != "failed"
+            or terminal_segment != disposition.get("selected_terminal_segment")
+            or not isinstance(exit_code, int)
+            or isinstance(exit_code, bool)
+            or exit_code == 0
+            or len(matching) != 1
+            or matching[0].get("run_exit_code") != exit_code
+        ):
+            raise CompositeReportError(
+                "R14 corrected verification terminal differs from authenticated attempts"
+            )
+        accepted = [
+            (
+                f"selected lineage segment {len(lineage) - 1} has nonzero "
+                f"run exit code: {exit_code}"
+            ),
+        ]
+        if base.get("require_complete") is True:
+            accepted.append("case is not complete: failed_partial")
+        r14_result = case_results.get(R14_FAILURE_CASE)
+        if not isinstance(r14_result, dict) or not isinstance(
+            r14_result.get("errors"), list
+        ):
+            raise CompositeReportError("base R14 verification result is malformed")
+        if any(r14_result["errors"].count(error) != 1 for error in accepted):
+            raise CompositeReportError(
+                "base verification lacks the exact authenticated R14 errors"
+            )
+        adjusted_r14 = adjusted["cases"][R14_FAILURE_CASE]
+        adjusted_r14["errors"] = [
+            error for error in adjusted_r14["errors"] if error not in accepted
+        ]
+        accepted_top = [f"R14: {error}" for error in accepted]
+        adjusted["errors"] = [
+            error for error in adjusted["errors"] if error not in accepted_top
+        ]
+    adjusted["result"] = (
+        "fail"
+        if adjusted["errors"]
+        else "warnings"
+        if adjusted["warnings"]
+        else "pass"
+    )
+    adjusted.update(
+        {
+            "record_type": "cgl_lf_stage_i_corrected_composite_verification",
+            "adapter": report.artifact_binding(SCRIPT_PATH),
+            "base_adapter": base.get("adapter"),
+            "base_verification": report.artifact_binding(base_path),
+            "terminal_dispositions": dispositions,
+            "accepted_base_errors": accepted_top,
+        }
+    )
+    return adjusted
+
+
+def command_verify(output: Path, values: list[str]) -> int:
+    """Run the strict base verifier and adapt only authenticated R14 errors."""
+
+    validation = validate_composite_inventory(DEFAULT_CONFIG, output)
+    report.main(reporter_arguments(output, "verify", values))
+    verify_path = output / "verify.json"
+    if not verify_path.is_file():
+        raise CompositeReportError("base verifier did not write verify.json")
+    base_path = output / "verify.base.json"
+    os.replace(verify_path, base_path)
+    adjusted = corrected_verification(output, validation)
+    write_json(verify_path, adjusted)
+    return 1 if adjusted["errors"] else 0
 
 
 def reporter_arguments(output: Path, command: str, values: Iterable[str]) -> list[str]:
@@ -1286,7 +1875,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         validate_composite_inventory(DEFAULT_CONFIG, args.output)
         values = getattr(args, "arguments", [])
-        result = report.main(reporter_arguments(args.output, args.command, values))
+        result = (
+            command_verify(args.output, values)
+            if args.command == "verify"
+            else report.main(reporter_arguments(args.output, args.command, values))
+        )
         validate_composite_inventory(DEFAULT_CONFIG, args.output)
         return result
     except (

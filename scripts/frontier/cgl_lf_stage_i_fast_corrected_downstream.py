@@ -470,6 +470,34 @@ def active_manifest_bindings(
     return bindings
 
 
+def terminal_failure_disposition(
+    case_id: str, case: dict[str, object]
+) -> dict[str, object] | None:
+    """Return the exact report-authenticated R14 terminal disposition."""
+
+    value = case.get("terminal_disposition")
+    if value is None:
+        return None
+    disposition = require_dict(value, f"{case_id} terminal disposition")
+    if (
+        case_id != "R14"
+        or case.get("status") != "failed_partial"
+        or disposition.get("record_type")
+        != "cgl_lf_stage_i_terminal_disposition"
+        or disposition.get("case_id") != "R14"
+        or disposition.get("status") != "failed_partial"
+        or disposition.get("disposition")
+        != "reproducible_finite_time_model_runtime_failure"
+        or not isinstance(disposition.get("attempt_count"), int)
+        or isinstance(disposition.get("attempt_count"), bool)
+        or int(disposition["attempt_count"]) < 2
+    ):
+        raise CorrectedDownstreamError(
+            f"{case_id} terminal disposition is not an authenticated R14 failure"
+        )
+    return disposition
+
+
 def validate_inventory(
     identity_path: Path,
     inventory_path: Path,
@@ -568,6 +596,7 @@ def validate_inventory(
     selected_roots = selected_active_roots(identity)
     active_bindings: dict[str, list[dict[str, object]]] = {}
     passive_executables: dict[str, list[str]] = {}
+    terminal_dispositions: dict[str, dict[str, object]] = {}
     selected_cases = sorted(cases)
     for case_id in selected_cases:
         case = require_dict(cases[case_id], f"{case_id} assembled case")
@@ -577,8 +606,26 @@ def validate_inventory(
             raise CorrectedDownstreamError(
                 f"{case_id} inventory record differs from lineage.json"
             )
-        if case.get("case_id") != case_id or case.get("status") != "complete":
-            raise CorrectedDownstreamError(f"{case_id} is not a complete assembled case")
+        status = case.get("status")
+        if case.get("case_id") != case_id:
+            raise CorrectedDownstreamError(f"{case_id} assembled identity differs")
+        if status == "failed_partial":
+            if composite_validation is None:
+                raise CorrectedDownstreamError(
+                    f"{case_id} terminal failure requires authenticated "
+                    "corrected-composite validation"
+                )
+            disposition = terminal_failure_disposition(case_id, case)
+            assert disposition is not None
+            terminal_dispositions[case_id] = disposition
+        elif status != "complete":
+            raise CorrectedDownstreamError(
+                f"{case_id} is not complete or an authenticated terminal failure"
+            )
+        elif case.get("terminal_disposition") is not None:
+            raise CorrectedDownstreamError(
+                f"{case_id} complete case retains a terminal disposition"
+            )
         if case.get("errors") != []:
             raise CorrectedDownstreamError(f"{case_id} retains assembly errors")
         is_passive = passive_delta(case, case_id)
@@ -612,6 +659,16 @@ def validate_inventory(
                 for value in executables
             ]
 
+    if composite_validation is not None:
+        validated_dispositions = require_dict(
+            composite_validation.get("terminal_dispositions", {}),
+            "composite terminal dispositions",
+        )
+        if terminal_dispositions != validated_dispositions:
+            raise CorrectedDownstreamError(
+                "inventory terminal dispositions differ from composite validation"
+            )
+
     return {
         "identity": identity,
         "identity_validation": identity_result,
@@ -634,6 +691,7 @@ def validate_inventory(
         "passive_cases": sorted(set(selected_cases) & set(PASSIVE_CASES)),
         "active_manifest_bindings": active_bindings,
         "passive_executable_sha256": passive_executables,
+        "terminal_dispositions": terminal_dispositions,
     }
 
 
@@ -726,6 +784,7 @@ def workflow_commands(
         "--exploratory",
         "--snapshot-policy",
         "all",
+        "--include-partial",
         "--account",
         account,
         "--partition",
@@ -1208,6 +1267,7 @@ def prepare_workflow(args: argparse.Namespace) -> Path:
         },
         "active_execution_manifests": context["active_manifest_bindings"],
         "passive_executable_sha256": context["passive_executable_sha256"],
+        "terminal_dispositions": context["terminal_dispositions"],
         "tools": tools,
         "commands": commands,
         "submission_policy": (
@@ -1268,6 +1328,10 @@ def workflow_context(workflow: dict[str, object]) -> dict[str, object]:
         raise CorrectedDownstreamError("workflow case classification differs")
     if workflow.get("active_execution_manifests") != context["active_manifest_bindings"]:
         raise CorrectedDownstreamError("workflow active execution bindings differ")
+    if workflow.get("terminal_dispositions") != context["terminal_dispositions"]:
+        raise CorrectedDownstreamError(
+            "workflow terminal dispositions differ from authenticated inventory"
+        )
     return context
 
 
@@ -2178,6 +2242,76 @@ def validated_ct_output(
         for value in cases.values()
     ):
         raise CorrectedDownstreamError("CT audit lacks authenticated selected coverage")
+    terminal_dispositions = require_dict(
+        context.get("terminal_dispositions", {}), "terminal dispositions"
+    )
+    case_results: list[str] = []
+    for case_id in context["selected_cases"]:
+        case = require_dict(cases.get(case_id), f"{case_id} CT case")
+        native = require_dict(case.get("native_restart_ct"), f"{case_id} native CT")
+        case_result = case.get("ct_result")
+        native_result = native.get("result")
+        if case_result != native_result:
+            raise CorrectedDownstreamError(
+                f"{case_id} CT case/native result differs"
+            )
+        if case_result not in {"pass", "fail", "inconclusive"}:
+            raise CorrectedDownstreamError(
+                f"{case_id} CT result is not recognized"
+            )
+        case_results.append(str(case_result))
+
+        if case_id in terminal_dispositions:
+            if (
+                case_id != "R14"
+                or native.get("status") != "partial"
+                or native.get("coverage_complete") is not False
+                or case_result != "inconclusive"
+                or case.get("ct_claim_supported") is not False
+                or native.get("ct_claim_supported") is not False
+            ):
+                raise CorrectedDownstreamError(
+                    f"{case_id} terminal CT disposition is not partial/inconclusive"
+                )
+            has_evidence = (
+                case.get("snapshot_content_authenticated") is True
+                or native.get("ct_evidence_available") is True
+            )
+            expected_status = (
+                "authenticated_inconclusive"
+                if has_evidence
+                else "partial_inconclusive"
+            )
+            if case.get("audit_status") != expected_status:
+                raise CorrectedDownstreamError(
+                    f"{case_id} terminal CT audit status differs from retained evidence"
+                )
+            continue
+
+        if (
+            case.get("audit_status") != "authenticated_complete"
+            or native.get("status") != "complete"
+            or native.get("coverage_complete") is not True
+            or native.get("meshblock_coverage_complete") is not True
+            or case_result not in {"pass", "fail"}
+            or case.get("ct_claim_supported") is not True
+            or native.get("ct_claim_supported") is not True
+        ):
+            raise CorrectedDownstreamError(
+                f"{case_id} CT evidence lacks strict complete native coverage"
+            )
+
+    expected_result = (
+        "fail"
+        if "fail" in case_results
+        else "pass"
+        if case_results and all(result == "pass" for result in case_results)
+        else "inconclusive"
+    )
+    if audit.get("result") != expected_result:
+        raise CorrectedDownstreamError(
+            "CT audit top-level result differs from selected case results"
+        )
     return {"job_manifest": job_manifest, "audit": binding}
 
 
@@ -2443,6 +2577,7 @@ def completion_record(
         "inventory": context["inventory_binding"],
         "workflow": workflow_binding,
         "case_classification": workflow["case_classification"],
+        "terminal_dispositions": context["terminal_dispositions"],
         "corrected_executable": executable,
         "formula_binding": {
             **exact_formula_binding(context),

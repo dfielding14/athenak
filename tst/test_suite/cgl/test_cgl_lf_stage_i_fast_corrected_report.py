@@ -78,6 +78,10 @@ def campaign(adapter, tmp_path: Path) -> dict[str, object]:
             "<mhd>\n"
             f"passive = {'true' if passive else 'false'}\n"
             "cgl_lf_strict_admissibility = true\n"
+            "backup_limiters = false\n"
+            "mirror_limiter = true\n"
+            "firehose_limiter = true\n"
+            "limiter_nu_coll = 20.0\n"
         )
         target_sources = (corrected_source, legacy_source) if passive else (corrected_source,)
         for source in target_sources:
@@ -250,6 +254,202 @@ def fake_assemble(adapter, campaign: dict[str, object], monkeypatch) -> None:
     monkeypatch.setattr(adapter.report, "assemble_fast_case", assemble)
 
 
+def history_payload(times: list[float]) -> str:
+    rows = "".join(f"{time:.16e} 1.0000000000000000e+00\n" for time in times)
+    return f"# [1]=time [2]=value\n{rows}"
+
+
+def install_r14_failed_replay_fixture(
+    adapter, campaign: dict[str, object], monkeypatch, mutate=None
+) -> None:
+    """Replace fixture R14 with two failed replays from one checkpoint."""
+
+    fake_assemble(adapter, campaign, monkeypatch)
+    original = adapter.report.assemble_fast_case
+    config = campaign["config"]
+
+    def assemble(root, source, output, case_id, case):
+        record = original(root, source, output, case_id, case)
+        if case_id != "R14":
+            return record
+
+        parent = Path(record["lineage"][0]["segment_dir"])
+        parent_manifest_path = parent / "manifest/fast_run.json"
+        parent_manifest = json.loads(parent_manifest_path.read_text(encoding="utf-8"))
+        parent_time = 4.0
+        failure_time = 4.25
+        overrides = [adapter.R14_STRICT_OVERRIDE]
+        parent_manifest.update(
+            {
+                "variant": adapter.R14_APPROVED_VARIANT,
+                "command_line_overrides": overrides,
+                "strict_admissibility": False,
+                "continuation_policy": "finite_progress_complete_terminal_products",
+                "runtime_segmentation_changes_physics": False,
+                "job_id": "9000",
+                "slurm_log": str(
+                    config.corrected.root / "logs/slurm-fast/%x.%j.log"
+                ),
+            }
+        )
+        write_json(parent_manifest_path, parent_manifest)
+        parent_output = parent / "output"
+        parent_mhd = parent_output / "fixture_parent.mhd.hst"
+        parent_user = parent_output / "fixture_parent.user.hst"
+        parent_mhd.write_text(history_payload([0.0, parent_time]), encoding="utf-8")
+        parent_user.write_text(history_payload([0.0, parent_time]), encoding="utf-8")
+        (parent / "manifest/run_exit_code").write_text("0\n", encoding="utf-8")
+        restart = parent_output / "rst/rank_00000000/fixture.00001.rst"
+        restart.parent.mkdir(parents=True)
+        restart.write_text(
+            f"<time>\ntime = {parent_time:.16e}\n<par_end>\n",
+            encoding="utf-8",
+        )
+        restart_sha = sha256(restart)
+
+        attempts = []
+        logs = []
+        for sequence, job_id in ((1, "9001"), (2, "9002")):
+            segment = (
+                config.corrected.run_root
+                / "R14"
+                / f"fast_s{sequence:03d}_t4_to_t10"
+            )
+            manifest_path = segment / "manifest/fast_run.json"
+            output_dir = segment / "output"
+            output_dir.mkdir(parents=True)
+            manifest = dict(parent_manifest)
+            manifest.update(
+                {
+                    "sequence": sequence,
+                    "run_dir": str(segment.resolve()),
+                    "output_dir": str(output_dir.resolve()),
+                    "run_basename": f"fixture_R14_s{sequence:03d}",
+                    "start_time": parent_time,
+                    "restart": str(restart.resolve()),
+                    "restart_sha256": restart_sha,
+                    "job_id": job_id,
+                }
+            )
+            write_json(manifest_path, manifest)
+            (segment / "manifest/run_exit_code").write_text("1\n", encoding="utf-8")
+            mhd = output_dir / f"fixture_R14_s{sequence:03d}.mhd.hst"
+            user = output_dir / f"fixture_R14_s{sequence:03d}.user.hst"
+            mhd.write_text(
+                history_payload([parent_time, failure_time]), encoding="utf-8"
+            )
+            user.write_text(
+                history_payload([parent_time, failure_time]), encoding="utf-8"
+            )
+            log = (
+                config.corrected.root
+                / "logs/slurm-fast"
+                / f"cglc_R14_s{sequence:03d}.{job_id}.log"
+            )
+            log.parent.mkdir(parents=True, exist_ok=True)
+            log.write_text(
+                f"time={failure_time:.16e}\n{adapter.R14_FATAL_SIGNATURE}\n",
+                encoding="utf-8",
+            )
+            attempts.append(
+                {
+                    "sequence": sequence,
+                    "segment": segment,
+                    "manifest": manifest_path,
+                    "mhd": mhd,
+                    "user": user,
+                    "log": log,
+                }
+            )
+            logs.append(log)
+
+        selected = attempts[-1]
+        parent_lineage = record["lineage"][0]
+        parent_lineage.update(
+            {
+                "manifest": {
+                    "path": str(parent_manifest_path.resolve()),
+                    "sha256": sha256(parent_manifest_path),
+                },
+                "observed_final_time": parent_time,
+                "state": "exited_success_partial",
+                "run_exit_code": 0,
+                "variant": parent_manifest["variant"],
+                "command_line_overrides": overrides,
+                "mhd_history": str(parent_mhd.resolve()),
+                "user_history": str(parent_user.resolve()),
+            }
+        )
+        selected_manifest = json.loads(
+            selected["manifest"].read_text(encoding="utf-8")
+        )
+        selected_lineage = {
+            "kind": "fast",
+            "segment_dir": str(selected["segment"].resolve()),
+            "source_root": str(config.corrected.run_root.resolve()),
+            "input": selected_manifest["input"],
+            "input_sha256": selected_manifest["input_sha256"],
+            "matrix_sha256": selected_manifest["matrix_sha256"],
+            "executable": selected_manifest["executable"],
+            "executable_sha256": selected_manifest["executable_sha256"],
+            "manifest": {
+                "path": str(selected["manifest"].resolve()),
+                "sha256": sha256(selected["manifest"]),
+            },
+            "observed_final_time": failure_time,
+            "state": "failed",
+            "run_exit_code": 1,
+            "restart": str(restart.resolve()),
+            "restart_sha256": restart_sha,
+            "variant": selected_manifest["variant"],
+            "command_line_overrides": overrides,
+            "mhd_history": str(selected["mhd"].resolve()),
+            "user_history": str(selected["user"].resolve()),
+        }
+        record["lineage"] = [parent_lineage, selected_lineage]
+        record["status"] = "failed_partial"
+        record["final_time"] = failure_time
+        record["model_choices"] = adapter.report.model_choices_for_input(
+            config.corrected.source / case["input"], overrides
+        )
+        history_dir = output / "cases/R14/history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        merged_mhd = history_dir / f"{case['name']}.mhd.hst"
+        merged_user = history_dir / f"{case['name']}.user.hst"
+        for path in (merged_mhd, merged_user):
+            path.write_text(
+                history_payload([0.0, parent_time, failure_time]), encoding="utf-8"
+            )
+        record["histories"] = {
+            "mhd": {
+                "available": True,
+                "path": str(merged_mhd.resolve()),
+                "binding": adapter.report.artifact_binding(merged_mhd),
+                "time_final": failure_time,
+                "errors": [],
+            },
+            "user": {
+                "available": True,
+                "path": str(merged_user.resolve()),
+                "binding": adapter.report.artifact_binding(merged_user),
+                "time_final": failure_time,
+                "errors": [],
+            },
+        }
+        context = {
+            "record": record,
+            "parent_restart": restart,
+            "attempts": attempts,
+            "logs": logs,
+            "failure_time": failure_time,
+        }
+        if mutate is not None:
+            mutate(context)
+        return record
+
+    monkeypatch.setattr(adapter.report, "assemble_fast_case", assemble)
+
+
 def test_preflight_authenticates_explicit_passive_compatibility(adapter, campaign):
     validation = adapter.validate_authorities(campaign["config"])
     compatibility = validation["passive_compatibility"]
@@ -394,14 +594,17 @@ def test_only_explicit_legacy_race_root_is_accepted(adapter, campaign):
         adapter.selected_authority_run_root(authority, unauthorized, "relaxed run")
 
 
-def test_final_composite_rejects_partial_case(adapter, campaign, monkeypatch):
+@pytest.mark.parametrize("status", ["partial", "failed_partial"])
+def test_final_composite_rejects_non_r14_partial_case(
+    adapter, campaign, monkeypatch, status
+):
     fake_assemble(adapter, campaign, monkeypatch)
     original = adapter.report.assemble_fast_case
 
     def partial(root, source, output, case_id, case):
         record = original(root, source, output, case_id, case)
         if case_id == "R17":
-            record["status"] = "partial"
+            record["status"] = status
             record["final_time"] = 9.5
         return record
 
@@ -409,3 +612,290 @@ def test_final_composite_rejects_partial_case(adapter, campaign, monkeypatch):
     with pytest.raises(adapter.CompositeReportError, match="R17 is not complete"):
         adapter.assemble_composite(campaign["config"], campaign["output"])
     assert not campaign["output"].exists()
+
+
+def diverge_first_replay_restart(context):
+    original = context["parent_restart"]
+    replacement = original.with_name("different-checkpoint.rst")
+    replacement.write_text(
+        "<time>\ntime = 4.0000000000000000e+00\n<par_end>\n",
+        encoding="utf-8",
+    )
+    manifest_path = context["attempts"][0]["manifest"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["restart"] = str(replacement.resolve())
+    manifest["restart_sha256"] = sha256(replacement)
+    write_json(manifest_path, manifest)
+
+
+def test_r14_reproducible_failure_is_stamped_and_revalidated(
+    adapter, campaign, monkeypatch
+):
+    install_r14_failed_replay_fixture(adapter, campaign, monkeypatch)
+
+    inventory_path = adapter.assemble_composite(
+        campaign["config"], campaign["output"]
+    )
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    disposition = inventory["cases"]["R14"]["terminal_disposition"]
+
+    assert disposition["disposition"] == (
+        "reproducible_finite_time_model_runtime_failure"
+    )
+    assert disposition["attempt_count"] == 2
+    assert [attempt["sequence"] for attempt in disposition["attempts"]] == [1, 2]
+    assert disposition["physics"]["cgl_lf_strict_admissibility"] is False
+    assert disposition["physics"]["variant"] == adapter.R14_APPROVED_VARIANT
+    assert disposition["physics"]["command_line_overrides"] == (
+        adapter.R14_APPROVED_OVERRIDES
+    )
+    assert disposition["physics"]["backup_limiters"] is False
+    assert disposition["failure_time"] == pytest.approx(4.25, abs=1.0e-12)
+    assert disposition["replay_history_consensus"]["mhd_sha256"]
+    assert disposition["replay_history_consensus"]["user_sha256"]
+    retained = json.loads(
+        (
+            campaign["output"] / "cases/R14/lineage.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert retained["terminal_disposition"] == disposition
+    assert adapter.validate_composite_inventory(
+        campaign["config"], campaign["output"]
+    )["result"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda context: context["logs"][0].write_text(
+                "different fatal event\n", encoding="utf-8"
+            ),
+            "at least two distinct authenticated failed replay attempts",
+        ),
+        (
+            lambda context: context["attempts"][0]["mhd"].write_text(
+                history_payload([4.0, 4.250001]), encoding="utf-8"
+            ),
+            "at least two distinct authenticated failed replay attempts",
+        ),
+        (
+            lambda context: context["attempts"][0]["mhd"].write_text(
+                history_payload([4.0, 4.1, 4.25]), encoding="utf-8"
+            ),
+            "histories are not byte-identical",
+        ),
+        (
+            lambda context: context["attempts"][0]["user"].write_text(
+                history_payload([4.0, 4.1, 4.25]), encoding="utf-8"
+            ),
+            "histories are not byte-identical",
+        ),
+        (
+            diverge_first_replay_restart,
+            "at least two distinct authenticated failed replay attempts",
+        ),
+        (
+            lambda context: context["record"]["model_choices"].update(
+                {"cgl_lf_strict_admissibility": "true"}
+            ),
+            "approved physics contract",
+        ),
+        (
+            lambda context: context["record"]["model_choices"].update(
+                {"backup_limiters": "true"}
+            ),
+            "approved physics contract",
+        ),
+        (
+            lambda context: context["record"]["histories"]["mhd"].update(
+                {"available": False}
+            ),
+            "retained mhd history is unavailable",
+        ),
+    ],
+)
+def test_r14_failure_disposition_fails_closed_on_incomplete_evidence(
+    adapter, campaign, monkeypatch, mutation, message
+):
+    install_r14_failed_replay_fixture(
+        adapter, campaign, monkeypatch, mutate=mutation
+    )
+
+    with pytest.raises(adapter.CompositeReportError, match=message):
+        adapter.assemble_composite(campaign["config"], campaign["output"])
+    assert not campaign["output"].exists()
+
+
+def test_r14_retained_disposition_is_rederived_from_source_attempts(
+    adapter, campaign, monkeypatch
+):
+    install_r14_failed_replay_fixture(adapter, campaign, monkeypatch)
+    inventory_path = adapter.assemble_composite(
+        campaign["config"], campaign["output"]
+    )
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    inventory["cases"]["R14"]["terminal_disposition"]["failure_time"] = 9.0
+    write_json(inventory_path, inventory)
+    lineage_path = campaign["output"] / "cases/R14/lineage.json"
+    lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+    lineage["terminal_disposition"]["failure_time"] = 9.0
+    write_json(lineage_path, lineage)
+
+    with pytest.raises(
+        adapter.CompositeReportError,
+        match="terminal disposition differs from source attempts",
+    ):
+        adapter.validate_composite_inventory(
+            campaign["config"], campaign["output"]
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda manifest: manifest.update({"variant": "unreviewed_variant"}),
+        lambda manifest: manifest.update(
+            {
+                "command_line_overrides": [
+                    "mhd/cgl_lf_strict_admissibility=false",
+                    "mhd/backup_limiters=true",
+                ]
+            }
+        ),
+        lambda manifest: manifest.update(
+            {"runtime_segmentation_changes_physics": True}
+        ),
+    ],
+)
+def test_r14_failure_rejects_unapproved_manifest_physics(
+    adapter, campaign, monkeypatch, mutation
+):
+    def mutate(context):
+        for attempt in context["attempts"]:
+            manifest = json.loads(
+                attempt["manifest"].read_text(encoding="utf-8")
+            )
+            mutation(manifest)
+            write_json(attempt["manifest"], manifest)
+        selected = context["record"]["lineage"][-1]
+        selected_manifest = json.loads(
+            context["attempts"][-1]["manifest"].read_text(encoding="utf-8")
+        )
+        selected["manifest"]["sha256"] = sha256(context["attempts"][-1]["manifest"])
+        selected["variant"] = selected_manifest["variant"]
+        selected["command_line_overrides"] = selected_manifest[
+            "command_line_overrides"
+        ]
+
+    install_r14_failed_replay_fixture(
+        adapter, campaign, monkeypatch, mutate=mutate
+    )
+
+    with pytest.raises(adapter.CompositeReportError):
+        adapter.assemble_composite(campaign["config"], campaign["output"])
+
+
+def corrected_verification_fixture(
+    adapter, tmp_path: Path, *, extra_error: str | None = None
+) -> tuple[Path, dict[str, object]]:
+    output = tmp_path / "report"
+    segment = tmp_path / "runs/R14/replay"
+    terminal_error = "selected lineage segment 0 has nonzero run exit code: 1"
+    incomplete_error = "case is not complete: failed_partial"
+    errors = [terminal_error, incomplete_error]
+    if extra_error is not None:
+        errors.append(extra_error)
+    disposition = {
+        "record_type": "cgl_lf_stage_i_terminal_disposition",
+        "case_id": "R14",
+        "status": "failed_partial",
+        "disposition": "reproducible_finite_time_model_runtime_failure",
+        "selected_terminal_segment": str(segment.resolve()),
+        "attempts": [{
+            "segment": str(segment.resolve()),
+            "run_exit_code": 1,
+        }],
+    }
+    write_json(
+        output / "inventory.json",
+        {
+            "cases": {
+                "R14": {
+                    "lineage": [{
+                        "state": "failed",
+                        "segment_dir": str(segment.resolve()),
+                        "run_exit_code": 1,
+                    }]
+                }
+            }
+        },
+    )
+    write_json(
+        output / "verify.base.json",
+        {
+            "result": "fail",
+            "require_complete": True,
+            "adapter": {"fixture": True},
+            "cases": {"R14": {"errors": errors}},
+            "errors": [f"R14: {error}" for error in errors],
+            "warnings": [],
+        },
+    )
+    return output, {"terminal_dispositions": {"R14": disposition}}
+
+
+def test_corrected_verification_removes_only_authenticated_r14_errors(
+    adapter, tmp_path
+):
+    output, validation = corrected_verification_fixture(adapter, tmp_path)
+
+    record = adapter.corrected_verification(output, validation)
+
+    assert record["result"] == "pass"
+    assert record["errors"] == []
+    assert record["cases"]["R14"]["errors"] == []
+    assert record["record_type"] == (
+        "cgl_lf_stage_i_corrected_composite_verification"
+    )
+    assert len(record["accepted_base_errors"]) == 2
+
+
+def test_corrected_verification_preserves_unrelated_errors(adapter, tmp_path):
+    output, validation = corrected_verification_fixture(
+        adapter, tmp_path, extra_error="history authentication differs"
+    )
+
+    record = adapter.corrected_verification(output, validation)
+
+    assert record["result"] == "fail"
+    assert record["errors"] == ["R14: history authentication differs"]
+    assert record["cases"]["R14"]["errors"] == [
+        "history authentication differs"
+    ]
+
+
+def test_corrected_verification_accepts_complete_campaign_without_exception(
+    adapter, tmp_path
+):
+    output = tmp_path / "report"
+    write_json(output / "inventory.json", {"cases": {"R14": {}}})
+    write_json(
+        output / "verify.base.json",
+        {
+            "result": "pass",
+            "require_complete": True,
+            "adapter": {"fixture": True},
+            "cases": {"R14": {"errors": []}},
+            "errors": [],
+            "warnings": [],
+        },
+    )
+
+    record = adapter.corrected_verification(
+        output, {"terminal_dispositions": {}}
+    )
+
+    assert record["result"] == "pass"
+    assert record["terminal_dispositions"] == {}
+    assert record["accepted_base_errors"] == []

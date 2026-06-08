@@ -687,6 +687,9 @@ def validate_corrected_context(
     cases = require_dict(inventory.get("cases"), "composite inventory cases")
     if set(cases) != set(ALL_CASES):
         raise ManuscriptReadyError("composite inventory does not cover exact R02-R17")
+    terminal_dispositions = require_dict(
+        context.get("terminal_dispositions", {}), "terminal dispositions"
+    )
     for case_id in ALL_CASES:
         case = require_dict(cases[case_id], f"{case_id} composite case")
         authority = require_dict(
@@ -695,13 +698,43 @@ def validate_corrected_context(
         expected = (
             ACTIVE_EVIDENCE_CLASS if case_id in ACTIVE_CASES else PASSIVE_EVIDENCE_CLASS
         )
+        terminal = terminal_dispositions.get(case_id)
+        if terminal is not None:
+            disposition = require_dict(
+                terminal, f"{case_id} terminal disposition"
+            )
+            if (
+                case_id != "R14"
+                or case.get("status") != "failed_partial"
+                or case.get("terminal_disposition") != disposition
+                or disposition.get("record_type")
+                != "cgl_lf_stage_i_terminal_disposition"
+                or disposition.get("case_id") != "R14"
+                or disposition.get("status") != "failed_partial"
+                or disposition.get("disposition")
+                != "reproducible_finite_time_model_runtime_failure"
+                or not isinstance(disposition.get("attempt_count"), int)
+                or isinstance(disposition.get("attempt_count"), bool)
+                or int(disposition["attempt_count"]) < 2
+            ):
+                raise ManuscriptReadyError(
+                    f"{case_id} terminal disposition is not the authenticated "
+                    "reproducible R14 failure"
+                )
+        elif case.get("status") != "complete":
+            raise ManuscriptReadyError(
+                f"{case_id} is not complete evidence from its exact authority"
+            )
+        elif case.get("terminal_disposition") is not None:
+            raise ManuscriptReadyError(
+                f"{case_id} complete case retains a terminal disposition"
+            )
         if (
-            case.get("status") != "complete"
-            or case.get("evidence_class") != expected
+            case.get("evidence_class") != expected
             or authority.get("evidence_class") != expected
         ):
             raise ManuscriptReadyError(
-                f"{case_id} is not complete evidence from its exact authority"
+                f"{case_id} is not evidence from its exact authority"
             )
     return science, context
 
@@ -951,6 +984,12 @@ def validate_reviewed_science(
         raise ManuscriptReadyError(
             "corrected/composite reviewed-science identity or coverage differs"
         )
+    if record.get("terminal_dispositions", {}) != context.get(
+        "terminal_dispositions", {}
+    ):
+        raise ManuscriptReadyError(
+            "corrected/composite reviewed-science terminal dispositions differ"
+        )
     require_exact_scope_records(
         record, limitation, intervention, "corrected/composite reviewed science"
     )
@@ -1071,10 +1110,30 @@ def validate_downstream_completion(
     for case_id, value in cases.items():
         case = require_dict(value, f"{case_id} CT audit")
         native = require_dict(case.get("native_restart_ct"), f"{case_id} native CT")
-        if (
-            case.get("provenance_authenticated") is not True
-            or native.get("coverage_complete") is not True
-        ):
+        terminal = require_dict(
+            context.get("terminal_dispositions", {}), "terminal dispositions"
+        ).get(case_id)
+        if case.get("provenance_authenticated") is not True:
+            raise ManuscriptReadyError(
+                f"{case_id} CT authentication or native-restart coverage is incomplete"
+            )
+        if terminal is not None:
+            audit_status = case.get("audit_status")
+            if audit_status not in {
+                "authenticated_inconclusive",
+                "authenticated_complete",
+            }:
+                raise ManuscriptReadyError(
+                    f"{case_id} CT terminal disposition is not authenticated"
+                )
+            if (
+                audit_status == "authenticated_complete"
+                and native.get("coverage_complete") is not True
+            ):
+                raise ManuscriptReadyError(
+                    f"{case_id} authenticated-complete CT lacks complete coverage"
+                )
+        elif native.get("coverage_complete") is not True:
             raise ManuscriptReadyError(
                 f"{case_id} CT authentication or native-restart coverage is incomplete"
             )
@@ -1118,6 +1177,22 @@ def publication_roots(
             analysis / "corrected-downstream/hyperbolicity",
             "composite hyperbolicity root",
         ),
+    )
+
+
+def ct_coverage_complete(ct_record: dict[str, object]) -> bool:
+    """Return whether every selected case has complete native-restart CT coverage."""
+
+    cases = require_dict(ct_record.get("cases"), "CT audit cases")
+    return all(
+        require_dict(
+            require_dict(cases.get(case_id), f"{case_id} CT audit").get(
+                "native_restart_ct"
+            ),
+            f"{case_id} native CT",
+        ).get("coverage_complete")
+        is True
+        for case_id in ALL_CASES
     )
 
 
@@ -1675,6 +1750,7 @@ def validate_publication(
         )
     reviewed = require_dict(manifest.get("reviewed_science"), "publication science")
     ct = require_dict(manifest.get("direct_ct_audit"), "publication CT audit")
+    complete_ct_coverage = ct_coverage_complete(downstream["ct_record"])
     if (
         manifest.get("schema_version") != 2
         or manifest.get("record_type") != PUBLICATION_RECORD_TYPE
@@ -1689,7 +1765,7 @@ def validate_publication(
         or ct.get("record_type") != CT_RECORD_TYPE
         or ct.get("numerical_result") != downstream["ct_record"]["result"]
         or ct.get("selected_cases") != list(ALL_CASES)
-        or ct.get("full_stage_i_coverage") is not True
+        or ct.get("full_stage_i_coverage") is not complete_ct_coverage
         or ct.get("release_authorizing") is not False
     ):
         raise ManuscriptReadyError(
@@ -1812,6 +1888,26 @@ def validate_manuscript_products(context: dict[str, object]) -> dict[str, object
     require_same_binding(
         verify.get("inventory"), context["inventory_binding"], "verify inventory"
     )
+    terminal_dispositions = require_dict(
+        context.get("terminal_dispositions", {}), "terminal dispositions"
+    )
+    if terminal_dispositions:
+        corrected_report = load_module(
+            "_cgl_manuscript_ready_corrected_report", CORRECTED_REPORT_TOOL
+        )
+        try:
+            expected_verify = corrected_report.corrected_verification(
+                analysis,
+                {"terminal_dispositions": terminal_dispositions},
+            )
+        except Exception as error:
+            raise ManuscriptReadyError(
+                f"corrected composite verification cannot be rederived: {error}"
+            ) from error
+        if verify != expected_verify:
+            raise ManuscriptReadyError(
+                "composite report verification differs from corrected rederivation"
+            )
 
     results = load_json(analysis / "manuscript/results.json", "manuscript results")
     if set(require_dict(results.get("case_results"), "manuscript case results")) != set(
@@ -1819,8 +1915,16 @@ def validate_manuscript_products(context: dict[str, object]) -> dict[str, object
     ):
         raise ManuscriptReadyError("manuscript results do not cover exact R02-R17")
     health = require_dict(results.get("campaign_health"), "manuscript campaign health")
-    if health.get("partial_or_unavailable_cases") not in (None, []):
-        raise ManuscriptReadyError("manuscript report retains partial cases")
+    expected_partial = sorted(
+        require_dict(
+            context.get("terminal_dispositions", {}), "terminal dispositions"
+        )
+    )
+    if sorted(health.get("partial_or_unavailable_cases") or []) != expected_partial:
+        raise ManuscriptReadyError(
+            "manuscript report partial cases differ from authenticated terminal "
+            "dispositions"
+        )
     if health.get("structural_error_cases") not in (None, []):
         raise ManuscriptReadyError("manuscript report retains structural errors")
 
@@ -1891,6 +1995,7 @@ def build_marker(args: argparse.Namespace) -> dict[str, object]:
     publication = validate_publication(context, downstream, science)
     manuscript = validate_manuscript_products(context)
     marker = validate_marker_layout(args, context, downstream, science)
+    complete_ct_coverage = ct_coverage_complete(downstream["ct_record"])
     return {
         "schema": SCHEMA,
         "schema_version": SCHEMA_VERSION,
@@ -1907,7 +2012,10 @@ def build_marker(args: argparse.Namespace) -> dict[str, object]:
         ],
         "ct_numerical_result": downstream["ct_record"]["result"],
         "ct_authentication_complete": True,
-        "ct_coverage_complete": True,
+        "ct_coverage_complete": complete_ct_coverage,
+        "terminal_dispositions": require_dict(
+            context.get("terminal_dispositions", {}), "terminal dispositions"
+        ),
         "case_classification": expected_science_classification(),
         "campaign_identity": verify_binding(
             context["identity_binding"], "marker campaign identity"
@@ -1945,7 +2053,8 @@ def build_marker(args: argparse.Namespace) -> dict[str, object]:
             "legacy_active_evidence_permitted": False,
             "authenticated_legacy_passive_controls": list(PASSIVE_CASES),
             "reviewed_science_results_permitted": sorted(VALID_SCIENCE_RESULTS),
-            "ct_authentication_and_coverage_required": True,
+            "ct_authentication_required": True,
+            "ct_complete_coverage_required_except_authenticated_terminal_failures": True,
             "marker_is_final_initiative_release": False,
             "required_publication_product_count": len(REQUIRED_PUBLICATION_PRODUCTS),
         },

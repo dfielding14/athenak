@@ -222,8 +222,28 @@ def test_dependency_pin_mismatch_fails_closed(tool):
         tool.verify_dependency_pins(args)
 
 
-def product_fixture(tool, tmp_path: Path, *, complete: bool = True):
+def product_fixture(
+    tool,
+    tmp_path: Path,
+    *,
+    complete: bool = True,
+    r14_failure: bool = False,
+    r14_snapshots_authenticated: bool = False,
+):
     context = context_fixture(tool, tmp_path)
+    if r14_failure:
+        disposition = {
+            "record_type": "cgl_lf_stage_i_terminal_disposition",
+            "case_id": "R14",
+            "status": "failed_partial",
+            "disposition": "reproducible_finite_time_model_runtime_failure",
+            "attempt_count": 2,
+        }
+        context["inventory"]["cases"]["R14"]["status"] = "failed_partial"
+        context["terminal_dispositions"] = {"R14": disposition}
+        inventory_path = Path(context["inventory_binding"]["path"])
+        write_json(inventory_path, context["inventory"])
+        context["inventory_binding"] = binding(inventory_path)
     acceptance = tmp_path / "acceptance"
     science = tmp_path / "science"
     criteria = tmp_path / "criteria.json"
@@ -273,17 +293,42 @@ def product_fixture(tool, tmp_path: Path, *, complete: bool = True):
     science_record = {
         "record_type": "cgl-lf-stage-i-direct-fast-reviewed-science-comparisons",
         "selected_cases": list(tool.ALL_CASES),
-        "result": "pass",
+        "result": "inconclusive" if r14_failure else "pass",
         "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
         "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
         "case_dispositions": {
             case_id: {
-                "inventory_status": "complete",
+                "case_name": f"fixture_{case_id}",
+                "inventory_status": (
+                    "failed_partial"
+                    if r14_failure and case_id == "R14"
+                    else "complete"
+                ),
+                "acceptance_result": (
+                    "inconclusive"
+                    if r14_failure and case_id == "R14"
+                    else "pass"
+                ),
+                "claim_eligible": not (r14_failure and case_id == "R14"),
+                "eligibility_reason": (
+                    "direct-fast case acceptance is inconclusive"
+                    if r14_failure and case_id == "R14"
+                    else "eligible"
+                ),
                 "diagnostics_available": complete,
-                "snapshot_products_authenticated": complete,
+                "snapshot_products_authenticated": (
+                    r14_snapshots_authenticated
+                    if r14_failure and case_id == "R14"
+                    else complete
+                ),
+                "diagnostics_reason": "fixture",
             }
             for case_id in tool.ALL_CASES
         },
+        "gates": [{
+            "gate": "finite_limiter_ordering:R15_gt_R14",
+            "result": "inconclusive" if r14_failure else "pass",
+        }],
         "provenance": {},
     }
     case_lineages = {}
@@ -476,6 +521,47 @@ def test_incomplete_downstream_science_products_cannot_be_finalized(
 
     with pytest.raises(tool.CorrectedScienceError, match="R02 lacks complete"):
         tool.validate_products(context, acceptance, science, criteria, review)
+
+
+def test_authenticated_r14_terminal_failure_is_complete_evidence_but_inconclusive_science(
+    tool, tmp_path, monkeypatch
+):
+    context, acceptance, science, criteria, review, provenance = product_fixture(
+        tool, tmp_path, r14_failure=True
+    )
+    install_science_modules(tool, monkeypatch, provenance)
+
+    record = tool.validate_products(context, acceptance, science, criteria, review)
+
+    assert record["status"] == "complete"
+    assert record["result"] == "inconclusive"
+    assert record["terminal_dispositions"]["R14"]["disposition"] == (
+        "reproducible_finite_time_model_runtime_failure"
+    )
+    r14_science = json.loads(
+        (science / "science.json").read_text(encoding="utf-8")
+    )["case_dispositions"]["R14"]
+    assert r14_science["inventory_status"] == "failed_partial"
+    assert r14_science["acceptance_result"] == "inconclusive"
+    assert r14_science["claim_eligible"] is False
+    assert record["result"] == "inconclusive"
+
+
+def test_authenticated_r14_terminal_failure_accepts_authenticated_partial_snapshots(
+    tool, tmp_path, monkeypatch
+):
+    context, acceptance, science, criteria, review, provenance = product_fixture(
+        tool,
+        tmp_path,
+        r14_failure=True,
+        r14_snapshots_authenticated=True,
+    )
+    install_science_modules(tool, monkeypatch, provenance)
+
+    record = tool.validate_products(context, acceptance, science, criteria, review)
+
+    assert record["status"] == "complete"
+    assert record["result"] == "inconclusive"
 
 
 def test_run_orders_acceptance_then_science_and_revalidates(
