@@ -54,7 +54,7 @@
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear_joverc.py",
-      "sha256": "1162ea7090ff508f469370aa4295e548f9dd9e3d94cc1f931d9e5a8bb143a2ea"
+      "sha256": "e7dd7dde0497ba1cf8add5a2ced1bd95f304c1dacef1aba5722793b67b2a75cd"
     },
     {
       "path": "tst/publication/analyze_q023_paper_bell_linear_vl2_tsc.py",
@@ -300,11 +300,11 @@
     },
     {
       "path": "inputs/tests/pic_paper_smooth_tsc_interface.athinput",
-      "sha256": "5c2050eda91edf5ba2deb16a47237d5f1de07afcaf6d682b5930d02df4540f80"
+      "sha256": "6797bc7a58e44319df62951af46c0db430aa21002f4f9ff3e8578d9b41711b71"
     },
     {
       "path": "inputs/tests/pic_paper_smooth_tsc_interface_3d.athinput",
-      "sha256": "cdaa2357210973755ac2030ab70399cc82352c7f1219dd28b0c910f21ab5c1a3"
+      "sha256": "0242fcc5416d3a15178ee9fbe651fe536cdfda66916a59c387bad16f76fb960b"
     },
     {
       "path": "inputs/tests/pic_parallel_shock_amr_fiducial.athinput",

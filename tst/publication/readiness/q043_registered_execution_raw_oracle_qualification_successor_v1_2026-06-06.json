@@ -71,7 +71,7 @@
     },
     "prepared_artifact_inventory": {
       "path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
-      "sha256": "34eed0911e12ba53fbb16b731447c976c5a0be5d33fa76c997cc3fb355a93617"
+      "sha256": "09db81f147d336154891c955d20da0f1b9d13e41199e795a7e63db3023cffade"
     }
   },
   "foundation_bindings": {
