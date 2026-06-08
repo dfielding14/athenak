@@ -135,6 +135,72 @@ def publication_workflow_fixture(downstream, tmp_path: Path) -> dict[str, object
     }
 
 
+def ct_workflow_fixture(downstream, tmp_path: Path) -> dict[str, object]:
+    authority = tmp_path / "ct-authority"
+    identity = write_artifact(authority / "identity.json", "{}\n")
+    inventory = write_artifact(authority / "inventory.json", "{}\n")
+    executable = write_artifact(authority / "athena", "corrected\n")
+    audit = write_artifact(authority / "audit.py", "audit\n")
+    eos = write_artifact(authority / "eos.hpp", "corrected eos\n")
+    root = tmp_path / "workflow"
+    initial = root / "jobs/ct/attempt-000"
+    output = root / "ct"
+    context = {
+        "identity_binding": binding(identity),
+        "inventory_binding": binding(inventory),
+        "inventory_output": (tmp_path / "analysis").resolve(),
+        "identity_artifacts": {
+            "executable": binding(executable),
+            "audit": binding(audit),
+            "eos": binding(eos),
+        },
+        "selected_cases": ["R02"],
+    }
+    tools = {"orchestrator": binding(TOOL)}
+    command = [
+        sys.executable,
+        str(downstream.CT_TOOL),
+        "--inventory",
+        str(inventory.resolve()),
+        "--output",
+        str(output.resolve()),
+    ]
+    manifest = downstream.generic_job_manifest(
+        "ct",
+        initial,
+        command,
+        context,
+        tools,
+        "ast207",
+        "batch",
+        "02:00:00",
+        56,
+    )
+    manifest["job_id"] = "100"
+    downstream.prepare_generic_job(manifest)
+    workflow = {
+        "workflow_root": str(root.resolve()),
+        "tools": tools,
+        "commands": {
+            "ct": {
+                "job_dir": str(initial.resolve()),
+                "output": str(output.resolve()),
+                "command": command,
+            },
+        },
+    }
+    workflow_file = root / "workflow.json"
+    write_json(workflow_file, workflow)
+    return {
+        "root": root,
+        "workflow": workflow,
+        "workflow_binding": binding(workflow_file),
+        "context": context,
+        "initial": initial,
+        "output": output,
+    }
+
+
 def completed_upstream_fixture(tmp_path: Path) -> dict[str, object]:
     hyper_attempt = tmp_path / "upstream/hyper/R02/attempt-001"
     hyper_manifest = hyper_attempt / "manifest.json"
@@ -205,6 +271,38 @@ def add_publication_attempt(
     return attempt
 
 
+def add_ct_attempt(
+    downstream,
+    fixture: dict[str, object],
+    name: str,
+    job_id: str,
+    exit_code: int | None,
+) -> Path:
+    workflow = fixture["workflow"]
+    context = fixture["context"]
+    stage = workflow["commands"]["ct"]
+    initial = json.loads(
+        (fixture["initial"] / "manifest.json").read_text(encoding="utf-8")
+    )
+    attempt = fixture["initial"].parent / name
+    manifest = downstream.generic_job_manifest(
+        "ct",
+        attempt,
+        stage["command"],
+        context,
+        workflow["tools"],
+        initial["account"],
+        initial["partition"],
+        initial["walltime"],
+        initial["cpus_per_task"],
+    )
+    manifest["job_id"] = job_id
+    downstream.prepare_generic_job(manifest)
+    if exit_code is not None:
+        write_artifact(attempt / "exit_code.txt", f"{exit_code}\n")
+    return attempt
+
+
 def scheduler_observation(
     disposition: str, state: str, reason: str = ""
 ) -> dict[str, str]:
@@ -227,6 +325,32 @@ def install_scheduler_observations(
         return observations[job_id]
 
     monkeypatch.setattr(downstream, "publication_scheduler_observation", observe)
+
+
+def install_ct_scheduler_observations(
+    downstream, monkeypatch, observations: dict[str, dict[str, str]]
+) -> None:
+    def observe(job_id: str) -> dict[str, str]:
+        if job_id not in observations:
+            raise downstream.CorrectedDownstreamError(
+                f"unexpected CT scheduler job in test: {job_id}"
+            )
+        return observations[job_id]
+
+    monkeypatch.setattr(downstream, "ct_scheduler_observation", observe)
+
+
+def install_ct_retry_context(
+    downstream, monkeypatch, fixture: dict[str, object]
+) -> None:
+    monkeypatch.setattr(
+        downstream,
+        "load_workflow",
+        lambda _root: (fixture["workflow"], fixture["workflow_binding"]),
+    )
+    monkeypatch.setattr(
+        downstream, "workflow_context", lambda _workflow: fixture["context"]
+    )
 
 
 def install_retry_context(
@@ -637,6 +761,114 @@ def test_prepare_writes_jobs_and_workflow_without_submitting(
         assert manifest["formula_id"] == "literature-correct"
         assert "require_sha" in script
         assert "/usr/bin/sbatch" not in script
+
+
+def test_retry_ct_submits_fresh_attempt_after_terminal_failure(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    calls: list[list[str]] = []
+    install_ct_retry_context(downstream, monkeypatch, fixture)
+    install_ct_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {"100": scheduler_observation("quiescent", "FAILED")},
+    )
+
+    def submit(command, **_kwargs):
+        calls.append(command)
+        assert (Path(command[-1]).parent / downstream.SUBMISSION_INTENT_NAME).is_file()
+        return SimpleNamespace(stdout="900;frontier\n")
+
+    monkeypatch.setattr(downstream.subprocess, "run", submit)
+
+    attempt = downstream.retry_ct(fixture["root"])
+    manifest = json.loads((attempt / "manifest.json").read_text(encoding="utf-8"))
+
+    assert attempt.name == "attempt-001"
+    assert manifest["job_id"] == "900"
+    assert calls == [[
+        "/usr/bin/sbatch",
+        "--parsable",
+        str(attempt / "run.sbatch"),
+    ]]
+
+
+def test_retry_ct_is_idempotent_while_attempt_is_active(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    install_ct_retry_context(downstream, monkeypatch, fixture)
+    install_ct_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {"100": scheduler_observation("active", "RUNNING")},
+    )
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("active CT attempt must not resubmit"),
+    )
+
+    assert downstream.retry_ct(fixture["root"]) == fixture["initial"]
+    assert not (fixture["initial"].parent / "attempt-001").exists()
+
+
+def test_retry_ct_reuses_valid_success(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    write_artifact(fixture["initial"] / "exit_code.txt", "0\n")
+    install_ct_retry_context(downstream, monkeypatch, fixture)
+    install_ct_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {"100": scheduler_observation("quiescent", "COMPLETED")},
+    )
+    monkeypatch.setattr(
+        downstream,
+        "validated_ct_output",
+        lambda *_args: {"job_manifest": {}, "audit": {}},
+    )
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("valid CT success must not resubmit"),
+    )
+
+    assert downstream.retry_ct(fixture["root"]) == fixture["initial"]
+
+
+def test_retry_ct_replaces_scheduler_success_with_invalid_output(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = ct_workflow_fixture(downstream, tmp_path)
+    write_artifact(fixture["initial"] / "exit_code.txt", "0\n")
+    install_ct_retry_context(downstream, monkeypatch, fixture)
+    install_ct_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {"100": scheduler_observation("quiescent", "COMPLETED")},
+    )
+    monkeypatch.setattr(
+        downstream,
+        "validated_ct_output",
+        lambda *_args: (_ for _ in ()).throw(
+            downstream.CorrectedDownstreamError("invalid CT output")
+        ),
+    )
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout="900\n"),
+    )
+
+    attempt = downstream.retry_ct(fixture["root"])
+
+    assert attempt.name == "attempt-001"
+    assert json.loads(
+        (attempt / "manifest.json").read_text(encoding="utf-8")
+    )["job_id"] == "900"
 
 
 def test_retry_publication_submits_fresh_attempt_bound_to_current_upstream_jobs(
@@ -1118,6 +1350,13 @@ def test_completed_publication_rejects_stale_retry_dependencies(
 
 
 def test_retry_publication_cli_is_explicit(downstream, tmp_path) -> None:
+    retry_ct = downstream.build_parser().parse_args([
+        "retry-ct",
+        "--workflow-root",
+        str(tmp_path / "workflow"),
+    ])
+    assert retry_ct.command == "retry-ct"
+
     args = downstream.build_parser().parse_args([
         "retry-publication",
         "--workflow-root",

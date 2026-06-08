@@ -11,8 +11,9 @@ well-formed composite inventory.
 ``prepare`` creates the all-snapshot literature-correct hyperbolicity and
 analysis attempts through the existing launchers and creates CT/publication
 Slurm jobs.  It never submits jobs.  ``submit`` is an explicit later action.
-``retry-publication`` validates the latest successful upstream attempts before
-preparing and submitting a fresh publication attempt bound to their job IDs.
+``retry-ct`` and ``retry-publication`` create fresh authenticated attempts
+without overlapping active writers.  Publication retries bind the latest
+successful upstream attempts through their exact Slurm job IDs.
 ``publication-quiescent`` authenticates every publication attempt and returns
 success only when none can still write the shared publication output.
 ``complete`` writes immutable corrected-production completion records only
@@ -1410,6 +1411,89 @@ def submit_workflow(workflow_root: Path) -> Path:
     return path
 
 
+def ct_stage(workflow: dict[str, object]) -> dict[str, object]:
+    return require_dict(
+        require_dict(workflow.get("commands"), "workflow commands").get("ct"),
+        "CT stage",
+    )
+
+
+def ct_attempt_directories(workflow: dict[str, object]) -> list[Path]:
+    initial = Path(require_text(ct_stage(workflow).get("job_dir"), "CT job"))
+    if initial.name != "attempt-000":
+        raise CorrectedDownstreamError("initial CT job directory must be attempt-000")
+    return sorted(
+        path
+        for path in initial.parent.glob("attempt-[0-9][0-9][0-9]")
+        if path.is_dir() and ATTEMPT_PATTERN.fullmatch(path.name) is not None
+    )
+
+
+def ct_contract_manifest(
+    workflow: dict[str, object],
+    context: dict[str, object],
+    template: dict[str, object],
+    attempt: Path,
+) -> dict[str, object]:
+    stage = ct_stage(workflow)
+    return generic_job_manifest(
+        "ct",
+        attempt,
+        [
+            require_text(value, "CT command argument")
+            for value in require_list(stage.get("command"), "CT command")
+        ],
+        context,
+        require_dict(workflow.get("tools"), "workflow tools"),
+        require_text(template.get("account"), "CT account"),
+        require_text(template.get("partition"), "CT partition"),
+        require_text(template.get("walltime"), "CT walltime"),
+        int(template["cpus_per_task"]),
+    )
+
+
+def ct_template_manifest(
+    workflow: dict[str, object], context: dict[str, object]
+) -> dict[str, object]:
+    stage = ct_stage(workflow)
+    initial = Path(require_text(stage.get("job_dir"), "CT job"))
+    manifest, _ = load_bound_json(initial / "manifest.json", "CT template")
+    cpus_per_task = manifest.get("cpus_per_task")
+    if (
+        not isinstance(cpus_per_task, int)
+        or isinstance(cpus_per_task, bool)
+        or cpus_per_task < 1
+    ):
+        raise CorrectedDownstreamError("CT template cpus_per_task must be positive")
+    expected = ct_contract_manifest(workflow, context, manifest, initial)
+    if any(
+        manifest.get(key) != value
+        for key, value in expected.items()
+        if key != "job_id"
+    ):
+        raise CorrectedDownstreamError(
+            "initial CT job differs from the corrected workflow contract"
+        )
+    if manifest.get("job_id") is not None:
+        require_job_id(manifest.get("job_id"), "CT template job ID")
+    return manifest
+
+
+def ct_attempt_matches(
+    workflow: dict[str, object],
+    context: dict[str, object],
+    template: dict[str, object],
+    attempt: Path,
+    manifest: dict[str, object],
+) -> bool:
+    expected = ct_contract_manifest(workflow, context, template, attempt)
+    return all(
+        manifest.get(key) == value
+        for key, value in expected.items()
+        if key != "job_id"
+    )
+
+
 def publication_stage(workflow: dict[str, object]) -> dict[str, object]:
     return require_dict(
         require_dict(workflow.get("commands"), "workflow commands").get("publication"),
@@ -1605,15 +1689,15 @@ def scheduler_row(output: str, job_id: str, label: str) -> tuple[str, str] | Non
     return matches[0] if matches else None
 
 
-def publication_scheduler_observation(job_id: str) -> dict[str, str]:
+def stage_scheduler_observation(job_id: str, stage: str) -> dict[str, str]:
     queued = scheduler_row(
         scheduler_output(
             ["/usr/bin/squeue", "-h", "-j", job_id, "-o", "%i|%T|%r"],
-            "publication squeue",
+            f"{stage} squeue",
             missing_job_is_empty=True,
         ),
         job_id,
-        "publication squeue",
+        f"{stage} squeue",
     )
     accounted = scheduler_row(
         scheduler_output(
@@ -1627,30 +1711,30 @@ def publication_scheduler_observation(job_id: str) -> dict[str, str]:
                 "-o",
                 "JobIDRaw,State,Reason",
             ],
-            "publication sacct",
+            f"{stage} sacct",
         ),
         job_id,
-        "publication sacct",
+        f"{stage} sacct",
     )
     known_states = ACTIVE_SCHEDULER_STATES | TERMINAL_SCHEDULER_STATES
     if accounted is not None and accounted[0] not in known_states:
         raise CorrectedDownstreamError(
-            f"publication scheduler state is unknown for job {job_id}: {accounted[0]}"
+            f"{stage} scheduler state is unknown for job {job_id}: {accounted[0]}"
         )
     if queued is not None:
         queue_state, queue_reason = queued
         if queue_state not in ACTIVE_SCHEDULER_STATES:
             raise CorrectedDownstreamError(
-                f"publication squeue state is ambiguous for job {job_id}: {queue_state}"
+                f"{stage} squeue state is ambiguous for job {job_id}: {queue_state}"
             )
         if accounted is not None and accounted[0] in TERMINAL_SCHEDULER_STATES:
             raise CorrectedDownstreamError(
-                f"publication scheduler evidence conflicts for job {job_id}"
+                f"{stage} scheduler evidence conflicts for job {job_id}"
             )
         if queue_state == "PENDING" and dependency_never_satisfied(queue_reason):
             if accounted is not None and accounted[0] != "PENDING":
                 raise CorrectedDownstreamError(
-                    f"publication dependency evidence conflicts for job {job_id}"
+                    f"{stage} dependency evidence conflicts for job {job_id}"
                 )
             return {
                 "disposition": "quiescent",
@@ -1666,7 +1750,7 @@ def publication_scheduler_observation(job_id: str) -> dict[str, str]:
         }
     if accounted is None:
         raise CorrectedDownstreamError(
-            f"publication scheduler accounting is unknown for job {job_id}"
+            f"{stage} scheduler accounting is unknown for job {job_id}"
         )
     account_state, account_reason = accounted
     if (
@@ -1681,7 +1765,7 @@ def publication_scheduler_observation(job_id: str) -> dict[str, str]:
         }
     if account_state in ACTIVE_SCHEDULER_STATES:
         raise CorrectedDownstreamError(
-            f"publication scheduler evidence is ambiguous for job {job_id}: "
+            f"{stage} scheduler evidence is ambiguous for job {job_id}: "
             f"sacct={account_state}, squeue absent"
         )
     return {
@@ -1690,6 +1774,14 @@ def publication_scheduler_observation(job_id: str) -> dict[str, str]:
         "reason": account_reason,
         "source": "sacct",
     }
+
+
+def publication_scheduler_observation(job_id: str) -> dict[str, str]:
+    return stage_scheduler_observation(job_id, "publication")
+
+
+def ct_scheduler_observation(job_id: str) -> dict[str, str]:
+    return stage_scheduler_observation(job_id, "CT")
 
 
 def bound_job_id(
@@ -1746,16 +1838,19 @@ def zero_exit(job_dir: Path, label: str) -> None:
         raise CorrectedDownstreamError(f"{label} failed with exit code {value}")
 
 
-def publication_attempt_observation(
-    attempt: Path, manifest: dict[str, object]
+def stage_attempt_observation(
+    attempt: Path,
+    manifest: dict[str, object],
+    stage: str,
+    scheduler_observation: Callable[[str], dict[str, str]],
 ) -> dict[str, object]:
     job_id_value = manifest.get("job_id")
     exit_path = attempt / "exit_code.txt"
-    exit_code = job_exit_code(attempt, "publication") if exit_path.is_file() else None
+    exit_code = job_exit_code(attempt, stage) if exit_path.is_file() else None
     if job_id_value is None:
         if exit_code is not None:
             raise CorrectedDownstreamError(
-                f"unsubmitted publication attempt has an exit code: {attempt}"
+                f"unsubmitted {stage} attempt has an exit code: {attempt}"
             )
         return {
             "disposition": "quiescent",
@@ -1763,8 +1858,8 @@ def publication_attempt_observation(
             "job_id": None,
             "scheduler": None,
         }
-    job_id = require_job_id(job_id_value, "publication attempt job ID")
-    scheduler = publication_scheduler_observation(job_id)
+    job_id = require_job_id(job_id_value, f"{stage} attempt job ID")
+    scheduler = scheduler_observation(job_id)
     if scheduler["disposition"] == "active":
         return {
             "disposition": "active",
@@ -1777,23 +1872,23 @@ def publication_attempt_observation(
     if state == "COMPLETED":
         if exit_code is None:
             raise CorrectedDownstreamError(
-                f"completed publication attempt lacks an exit code: {attempt}"
+                f"completed {stage} attempt lacks an exit code: {attempt}"
             )
         if exit_code != 0:
             raise CorrectedDownstreamError(
-                f"publication scheduler completion conflicts with exit code: {attempt}"
+                f"{stage} scheduler completion conflicts with exit code: {attempt}"
             )
         result = "successful"
     elif state == "PENDING" and dependency_never_satisfied(reason):
         if exit_code is not None:
             raise CorrectedDownstreamError(
-                f"dependency-never-satisfied publication has an exit code: {attempt}"
+                f"dependency-never-satisfied {stage} has an exit code: {attempt}"
             )
         result = "dependency_never_satisfied"
     else:
         if exit_code == 0:
             raise CorrectedDownstreamError(
-                f"publication terminal scheduler state conflicts with exit code: {attempt}"
+                f"{stage} terminal scheduler state conflicts with exit code: {attempt}"
             )
         result = "terminal_failed"
     return {
@@ -1802,6 +1897,81 @@ def publication_attempt_observation(
         "job_id": job_id,
         "scheduler": scheduler,
     }
+
+
+def publication_attempt_observation(
+    attempt: Path, manifest: dict[str, object]
+) -> dict[str, object]:
+    return stage_attempt_observation(
+        attempt, manifest, "publication", publication_scheduler_observation
+    )
+
+
+def ct_attempt_observation(
+    attempt: Path, manifest: dict[str, object]
+) -> dict[str, object]:
+    return stage_attempt_observation(attempt, manifest, "CT", ct_scheduler_observation)
+
+
+def authenticated_ct_attempts(
+    workflow: dict[str, object], context: dict[str, object]
+) -> list[dict[str, object]]:
+    template = ct_template_manifest(workflow, context)
+    attempts = ct_attempt_directories(workflow)
+    if not attempts:
+        raise CorrectedDownstreamError("CT has no prepared attempts")
+    authenticated: list[dict[str, object]] = []
+    for attempt in attempts:
+        manifest_path = attempt / "manifest.json"
+        if not manifest_path.is_file():
+            raise CorrectedDownstreamError(
+                f"CT attempt lacks a manifest: {attempt}"
+            )
+        manifest, binding = load_bound_json(manifest_path, "CT attempt manifest")
+        if not ct_attempt_matches(workflow, context, template, attempt, manifest):
+            raise CorrectedDownstreamError(
+                f"CT attempt differs from workflow contract: {attempt}"
+            )
+        intent = validate_submission_intent(attempt, manifest, [])
+        if intent is not None and manifest.get("job_id") is None:
+            raise CorrectedDownstreamError(
+                f"submission intent exists without recorded job ID; "
+                f"CT state is ambiguous: {attempt}"
+            )
+        authenticated.append({
+            "attempt": attempt,
+            "manifest": manifest,
+            "manifest_binding": binding,
+            "observation": ct_attempt_observation(attempt, manifest),
+        })
+    return authenticated
+
+
+def matching_ct_attempt(
+    workflow: dict[str, object], context: dict[str, object]
+) -> tuple[Path, dict[str, object], dict[str, object]]:
+    attempts = authenticated_ct_attempts(workflow, context)
+    if any(
+        require_dict(record["observation"], "CT observation").get("disposition")
+        == "active"
+        for record in attempts
+    ):
+        raise CorrectedDownstreamError(
+            "CT completion is blocked while an attempt can still write"
+        )
+    for record in reversed(attempts):
+        if (
+            require_dict(record["observation"], "CT observation").get("result")
+            == "successful"
+        ):
+            return (
+                Path(str(record["attempt"])),
+                require_dict(record["manifest"], "CT attempt manifest"),
+                require_dict(
+                    record["manifest_binding"], "CT attempt manifest binding"
+                ),
+            )
+    raise CorrectedDownstreamError("CT lacks a successful authenticated attempt")
 
 
 def authenticated_publication_attempts(
@@ -1977,14 +2147,17 @@ def completed_analysis(
     return records
 
 
-def completed_ct(
-    workflow: dict[str, object], context: dict[str, object]
+def validated_ct_output(
+    workflow: dict[str, object],
+    context: dict[str, object],
+    job_dir: Path,
+    job_manifest: dict[str, object],
 ) -> dict[str, object]:
-    stage = require_dict(
-        require_dict(workflow["commands"], "workflow commands")["ct"], "CT stage"
-    )
-    job_dir = Path(str(stage["job_dir"]))
-    zero_exit(job_dir, "CT audit")
+    stage = ct_stage(workflow)
+    if Path(require_text(job_manifest.get("path"), "CT job manifest path")).resolve() != (
+        job_dir / "manifest.json"
+    ).resolve():
+        raise CorrectedDownstreamError("CT job manifest path differs")
     audit_path = Path(str(stage["output"])) / "ct_audit.json"
     audit, binding = load_bound_json(audit_path, "CT audit")
     if not same_binding(audit.get("inventory"), context["inventory_binding"], "CT inventory"):
@@ -2002,7 +2175,87 @@ def completed_ct(
         for value in cases.values()
     ):
         raise CorrectedDownstreamError("CT audit lacks authenticated selected coverage")
-    return {"job_manifest": artifact_binding(job_dir / "manifest.json"), "audit": binding}
+    return {"job_manifest": job_manifest, "audit": binding}
+
+
+def completed_ct(
+    workflow: dict[str, object], context: dict[str, object]
+) -> dict[str, object]:
+    job_dir, _, job_manifest = matching_ct_attempt(workflow, context)
+    return validated_ct_output(workflow, context, job_dir, job_manifest)
+
+
+def retry_ct(workflow_root: Path) -> Path:
+    workflow, _ = load_workflow(workflow_root)
+    context = workflow_context(workflow)
+    template = ct_template_manifest(workflow, context)
+    attempts = authenticated_ct_attempts(workflow, context)
+    active = [
+        record
+        for record in attempts
+        if require_dict(record["observation"], "CT observation").get("disposition")
+        == "active"
+    ]
+    if active:
+        if len(active) == 1:
+            attempt = Path(str(active[0]["attempt"]))
+            print(f"CT attempt remains active: {attempt}")
+            return attempt
+        raise CorrectedDownstreamError(
+            "CT retry is blocked by multiple active or ambiguous attempts"
+        )
+
+    successful = [
+        record
+        for record in attempts
+        if require_dict(record["observation"], "CT observation").get("result")
+        == "successful"
+    ]
+    if successful:
+        attempt = Path(str(successful[-1]["attempt"]))
+        manifest_binding = require_dict(
+            successful[-1]["manifest_binding"], "CT attempt manifest binding"
+        )
+        try:
+            validated_ct_output(workflow, context, attempt, manifest_binding)
+        except CorrectedDownstreamError:
+            pass
+        else:
+            print(f"CT attempt already succeeded: {attempt}")
+            return attempt
+
+    prepared = [
+        record
+        for record in attempts
+        if require_dict(record["observation"], "CT observation").get("result")
+        == "prepared"
+    ]
+    if len(prepared) > 1:
+        raise CorrectedDownstreamError("CT has ambiguous prepared attempts")
+    if prepared:
+        attempt = Path(str(prepared[0]["attempt"]))
+        submit_manifest_job(attempt)
+        print(f"submitted prepared CT retry: {attempt}")
+        return attempt
+
+    attempt_paths = [Path(str(record["attempt"])) for record in attempts]
+    last_index = max(
+        int(ATTEMPT_PATTERN.fullmatch(attempt.name).group(1))
+        for attempt in attempt_paths
+    )
+    if last_index >= 999:
+        raise CorrectedDownstreamError("CT attempt namespace is exhausted")
+    attempt = attempt_paths[0].parent / f"attempt-{last_index + 1:03d}"
+    try:
+        attempt.mkdir()
+    except FileExistsError as error:
+        raise CorrectedDownstreamError(
+            f"CT retry attempt appeared concurrently: {attempt}"
+        ) from error
+    prepare_generic_job(ct_contract_manifest(workflow, context, template, attempt))
+    submit_manifest_job(attempt)
+    print(f"prepared and submitted fresh CT retry: {attempt}")
+    return attempt
 
 
 def retry_publication(workflow_root: Path) -> Path:
@@ -2266,6 +2519,10 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("submit", "explicitly submit a previously prepared workflow"),
         (
+            "retry-ct",
+            "reuse a valid CT result or submit a fresh authenticated CT attempt",
+        ),
+        (
             "retry-publication",
             "validate current upstream outputs and submit a fresh publication attempt",
         ),
@@ -2293,6 +2550,8 @@ def main(argv: list[str] | None = None) -> int:
             prepare_workflow(args)
         elif args.command == "submit":
             submit_workflow(args.workflow_root)
+        elif args.command == "retry-ct":
+            retry_ct(args.workflow_root)
         elif args.command == "retry-publication":
             retry_publication(args.workflow_root)
         elif args.command == "publication-quiescent":
