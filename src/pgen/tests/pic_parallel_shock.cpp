@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -29,6 +30,7 @@
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -364,31 +366,34 @@ inline Real FrameVelocityOffset(const Real t) {
   return -vfollow*FrameRampFactor(t);
 }
 
-std::string ParallelShockJsonEscape(const std::string &value) {
-  std::ostringstream escaped;
-  for (const unsigned char next : value) {
-    switch (next) {
-      case '"': escaped << "\\\""; break;
-      case '\\': escaped << "\\\\"; break;
-      case '\b': escaped << "\\b"; break;
-      case '\f': escaped << "\\f"; break;
-      case '\n': escaped << "\\n"; break;
-      case '\r': escaped << "\\r"; break;
-      case '\t': escaped << "\\t"; break;
-      default:
-        if (next < 0x20) {
-          escaped << "\\u00" << std::hex << std::setfill('0') << std::setw(2)
-                  << static_cast<int>(next) << std::dec;
-        } else {
-          escaped << next;
-        }
-    }
+constexpr char kParallelShockEscapeHeaderMagic[8] =
+    {'Q', '0', '1', '1', 'E', 'S', 'C', '1'};
+constexpr char kParallelShockEscapeTrailerMagic[8] =
+    {'Q', '0', '1', '1', 'E', 'N', 'D', '1'};
+constexpr std::uint32_t kParallelShockEscapeSchema = 1;
+constexpr std::uint32_t kParallelShockEscapeEventBytes = 176;
+constexpr std::size_t kParallelShockEscapeHeaderDoubleCount = 26;
+
+template <typename UInt>
+void AppendParallelShockLittleEndian(std::vector<unsigned char> &bytes,
+                                     const UInt value) {
+  static_assert(std::is_unsigned<UInt>::value, "unsigned integer required");
+  for (std::size_t n = 0; n < sizeof(UInt); ++n) {
+    bytes.push_back(static_cast<unsigned char>((value >> (8*n)) & 0xffU));
   }
-  return escaped.str();
 }
 
-void AppendParallelShockEscapeEventLine(const std::string &line,
-                                        const bool include_in_prefix = true) {
+void AppendParallelShockDouble(std::vector<unsigned char> &bytes,
+                               const Real value) {
+  const double converted = static_cast<double>(value);
+  std::uint64_t bits = 0;
+  static_assert(sizeof(bits) == sizeof(converted), "unexpected double width");
+  std::memcpy(&bits, &converted, sizeof(bits));
+  AppendParallelShockLittleEndian(bytes, bits);
+}
+
+void AppendParallelShockEscapeBytes(const std::vector<unsigned char> &bytes,
+                                    const bool include_in_prefix = true) {
   if (!ps_escape_raw_events) return;
   if (!ps_escape_event_stream.is_open() || ps_escape_event_stream_finalized) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -397,7 +402,9 @@ void AppendParallelShockEscapeEventLine(const std::string &line,
               << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  ps_escape_event_stream << line << '\n';
+  ps_escape_event_stream.write(
+      reinterpret_cast<const char *>(bytes.data()),
+      static_cast<std::streamsize>(bytes.size()));
   if (!ps_escape_event_stream.good()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -406,18 +413,9 @@ void AppendParallelShockEscapeEventLine(const std::string &line,
     restart_utils::AbortOnFatalError();
   }
   if (include_in_prefix) {
-    HashParallelShockRestartBytes(ps_escape_event_prefix_hash, line.data(),
-                                  line.size());
-    constexpr char newline = '\n';
-    HashParallelShockRestartBytes(ps_escape_event_prefix_hash, &newline, 1);
+    HashParallelShockRestartBytes(ps_escape_event_prefix_hash, bytes.data(),
+                                  bytes.size());
   }
-}
-
-std::string ParallelShockEscapePrefixHash() {
-  std::ostringstream out;
-  out << std::hex << std::setfill('0') << std::setw(16)
-      << ps_escape_event_prefix_hash;
-  return out.str();
 }
 
 void InitializeParallelShockEscapeEventStream(ParameterInput *pin, Mesh *pm) {
@@ -450,7 +448,7 @@ void InitializeParallelShockEscapeEventStream(ParameterInput *pin, Mesh *pm) {
   std::ostringstream path;
   path << basename << ".q011_escape_events.cycle" << std::setfill('0')
        << std::setw(8) << pm->ncycle << ".rank" << std::setw(8)
-       << global_variable::my_rank << ".jsonl";
+       << global_variable::my_rank << ".bin";
   ps_escape_event_path = path.str();
   ps_escape_event_stream.open(ps_escape_event_path,
                               std::ios::out | std::ios::binary | std::ios::trunc);
@@ -462,62 +460,91 @@ void InitializeParallelShockEscapeEventStream(ParameterInput *pin, Mesh *pm) {
     restart_utils::AbortOnFatalError();
   }
 
-  std::ostringstream header;
-  header << std::scientific
-         << std::setprecision(std::numeric_limits<Real>::max_digits10)
-         << "{\"record_type\":\"q011_escape_event_stream_header\""
-         << ",\"schema_version\":1"
-         << ",\"control_fingerprint\":\""
-         << ParallelShockJsonEscape(ParallelShockRestartControlFingerprint()) << "\""
-         << ",\"basename\":\"" << ParallelShockJsonEscape(basename) << "\""
-         << ",\"rank\":" << global_variable::my_rank
-         << ",\"nranks\":" << global_variable::nranks
-         << ",\"segment_start_cycle\":" << pm->ncycle
-         << ",\"segment_start_time\":" << pm->time
-         << ",\"state_kind\":\""
-         << (ps_particle_momentum_state ? "momentum_per_mass" : "velocity") << "\""
-         << ",\"light_speed\":" << ps_particle_light_speed
-         << ",\"injected_species\":" << ps_inject_species
-         << ",\"species_mass\":" << ps_particle_mass
-         << ",\"species_charge\":" << ps_particle_charge
-         << ",\"q_over_m\":" << ps_particle_q_over_m
-         << ",\"macro_mass\":" << ps_particle_macro_mass
-         << ",\"field_interpolation\":\"tsc_bcc0_w0\""
-         << ",\"mesh_x1min\":" << pm->mesh_size.x1min
-         << ",\"mesh_x1max\":" << pm->mesh_size.x1max
-         << ",\"mesh_x2min\":" << pm->mesh_size.x2min
-         << ",\"mesh_x2max\":" << pm->mesh_size.x2max
-         << ",\"mesh_x3min\":" << pm->mesh_size.x3min
-         << ",\"mesh_x3max\":" << pm->mesh_size.x3max
-         << ",\"escape_audit_calls_at_start\":" << ps_escape_audit_calls
-         << ",\"escape_last_audit_time_at_start\":" << ps_escape_last_audit_time
-         << ",\"global_escape_count_at_start\":"
-         << ps_escaped_injected_cr_count_global
-         << ",\"global_escape_mass_at_start\":"
-         << ps_escaped_injected_cr_mass_global
-         << ",\"global_escape_momentum_x1_at_start\":"
-         << ps_escaped_injected_cr_momentum_x1_global
-         << ",\"global_escape_momentum_x2_at_start\":"
-         << ps_escaped_injected_cr_momentum_x2_global
-         << ",\"global_escape_momentum_x3_at_start\":"
-         << ps_escaped_injected_cr_momentum_x3_global
-         << ",\"global_escape_energy_at_start\":"
-         << ps_escaped_injected_cr_energy_global
-         << ",\"global_initial_escape_count_at_start\":"
-         << ps_escaped_initial_cr_count_global
-         << ",\"global_escape_term_count_at_start\":"
-         << ps_escaped_injected_cr_term_count_global
-         << ",\"global_escape_abs_mass_at_start\":"
-         << ps_escaped_injected_cr_abs_mass_global
-         << ",\"global_escape_abs_momentum_x1_at_start\":"
-         << ps_escaped_injected_cr_abs_momentum_x1_global
-         << ",\"global_escape_abs_momentum_x2_at_start\":"
-         << ps_escaped_injected_cr_abs_momentum_x2_global
-         << ",\"global_escape_abs_momentum_x3_at_start\":"
-         << ps_escaped_injected_cr_abs_momentum_x3_global
-         << ",\"global_escape_abs_energy_at_start\":"
-         << ps_escaped_injected_cr_abs_energy_global << "}";
-  AppendParallelShockEscapeEventLine(header.str());
+  const std::string fingerprint = ParallelShockRestartControlFingerprint();
+  if (basename.size() > std::numeric_limits<std::uint32_t>::max() ||
+      fingerprint.size() > std::numeric_limits<std::uint32_t>::max()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock raw escape-event metadata is too large."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  constexpr std::size_t fixed_bytes =
+      8 + 8*sizeof(std::uint32_t) + sizeof(std::uint64_t) +
+      2*sizeof(std::uint32_t);
+  const std::size_t header_bytes =
+      fixed_bytes + kParallelShockEscapeHeaderDoubleCount*sizeof(double) +
+      basename.size() + fingerprint.size();
+  if (header_bytes > std::numeric_limits<std::uint32_t>::max()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock raw escape-event header is too large."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  std::vector<unsigned char> header;
+  header.reserve(header_bytes);
+  header.insert(header.end(), std::begin(kParallelShockEscapeHeaderMagic),
+                std::end(kParallelShockEscapeHeaderMagic));
+  AppendParallelShockLittleEndian(header, kParallelShockEscapeSchema);
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(header_bytes));
+  AppendParallelShockLittleEndian(header, kParallelShockEscapeEventBytes);
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(global_variable::my_rank));
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(global_variable::nranks));
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(pm->ncycle));
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(ps_inject_species));
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(ps_particle_momentum_state ? 1 : 0));
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint64_t>(ps_escape_audit_calls));
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(basename.size()));
+  AppendParallelShockLittleEndian(
+      header, static_cast<std::uint32_t>(fingerprint.size()));
+  for (const Real value : {
+           pm->time,
+           ps_particle_light_speed,
+           ps_particle_mass,
+           ps_particle_charge,
+           ps_particle_q_over_m,
+           ps_particle_macro_mass,
+           pm->mesh_size.x1min,
+           pm->mesh_size.x1max,
+           pm->mesh_size.x2min,
+           pm->mesh_size.x2max,
+           pm->mesh_size.x3min,
+           pm->mesh_size.x3max,
+           ps_escape_last_audit_time,
+           ps_escaped_injected_cr_count_global,
+           ps_escaped_injected_cr_mass_global,
+           ps_escaped_injected_cr_momentum_x1_global,
+           ps_escaped_injected_cr_momentum_x2_global,
+           ps_escaped_injected_cr_momentum_x3_global,
+           ps_escaped_injected_cr_energy_global,
+           ps_escaped_initial_cr_count_global,
+           ps_escaped_injected_cr_term_count_global,
+           ps_escaped_injected_cr_abs_mass_global,
+           ps_escaped_injected_cr_abs_momentum_x1_global,
+           ps_escaped_injected_cr_abs_momentum_x2_global,
+           ps_escaped_injected_cr_abs_momentum_x3_global,
+           ps_escaped_injected_cr_abs_energy_global}) {
+    AppendParallelShockDouble(header, value);
+  }
+  header.insert(header.end(), basename.begin(), basename.end());
+  header.insert(header.end(), fingerprint.begin(), fingerprint.end());
+  if (header.size() != header_bytes) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock raw escape-event header size drifted."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  AppendParallelShockEscapeBytes(header);
   ps_escape_event_stream.flush();
   if (!ps_escape_event_stream.good()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -532,49 +559,35 @@ void AppendParallelShockEscapeEvent(const RawEscapeEvent &event,
                                     const int cycle, const int stage,
                                     const Real audit_time) {
   if (!ps_escape_raw_events) return;
-  const std::int64_t event_index = ps_escape_event_rank_count;
   const Real frame_velocity = FrameVelocityOffset(audit_time);
-  std::ostringstream line;
-  line << std::scientific
-       << std::setprecision(std::numeric_limits<Real>::max_digits10)
-       << "{\"record_type\":\"q011_escape_event\""
-       << ",\"schema_version\":1"
-       << ",\"rank\":" << global_variable::my_rank
-       << ",\"rank_event_index\":" << event_index
-       << ",\"cycle\":" << cycle
-       << ",\"stage\":" << stage
-       << ",\"audit_time\":" << audit_time
-       << ",\"tag\":" << event.tag
-       << ",\"source\":" << event.source
-       << ",\"species\":" << event.species
-       << ",\"destruction_reason\":" << event.destruction_reason
-       << ",\"physical_boundary_mask\":" << event.physical_boundary_mask
-       << ",\"parent_gid\":" << event.parent_gid
-       << ",\"x1\":" << event.x1
-       << ",\"x2\":" << event.x2
-       << ",\"x3\":" << event.x3
-       << ",\"state_x1\":" << event.state_x1
-       << ",\"state_x2\":" << event.state_x2
-       << ",\"state_x3\":" << event.state_x3
-       << ",\"state_kind\":\""
-       << (ps_particle_momentum_state ? "momentum_per_mass" : "velocity") << "\""
-       << ",\"light_speed\":" << ps_particle_light_speed
-       << ",\"species_mass\":" << ps_particle_mass
-       << ",\"species_charge\":" << ps_particle_charge
-       << ",\"q_over_m\":" << event.q_over_m
-       << ",\"macro_weight\":" << event.weight
-       << ",\"macro_mass\":" << ps_particle_macro_mass
-       << ",\"kinetic_energy_per_mass\":" << event.kinetic_energy_per_mass
-       << ",\"b1\":" << event.b1
-       << ",\"b2\":" << event.b2
-       << ",\"b3\":" << event.b3
-       << ",\"fluid_v1\":" << event.fluid_v1
-       << ",\"fluid_v2\":" << event.fluid_v2
-       << ",\"fluid_v3\":" << event.fluid_v3
-       << ",\"field_interpolation\":\"tsc_bcc0_w0\""
-       << ",\"frame_velocity_x1\":" << frame_velocity
-       << ",\"shock_speed\":" << ps_shock_speed << "}";
-  AppendParallelShockEscapeEventLine(line.str());
+  std::vector<unsigned char> bytes;
+  bytes.reserve(kParallelShockEscapeEventBytes);
+  AppendParallelShockLittleEndian(
+      bytes, static_cast<std::uint64_t>(ps_escape_event_rank_count));
+  for (const int value : {
+           cycle, stage, event.tag, event.source, event.species,
+           event.destruction_reason, event.physical_boundary_mask,
+           event.parent_gid}) {
+    AppendParallelShockLittleEndian(bytes, static_cast<std::uint32_t>(value));
+  }
+  for (const Real value : {
+           audit_time,
+           event.x1, event.x2, event.x3,
+           event.state_x1, event.state_x2, event.state_x3,
+           event.q_over_m, event.weight,
+           event.b1, event.b2, event.b3,
+           event.fluid_v1, event.fluid_v2, event.fluid_v3,
+           frame_velocity, ps_shock_speed}) {
+    AppendParallelShockDouble(bytes, value);
+  }
+  if (bytes.size() != kParallelShockEscapeEventBytes) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock raw escape-event record size drifted."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  AppendParallelShockEscapeBytes(bytes);
   ++ps_escape_event_rank_count;
 }
 
@@ -599,14 +612,14 @@ void FinalizeParallelShockEscapeEventStream() {
               << "finalization." << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  std::ostringstream trailer;
-  trailer << "{\"record_type\":\"q011_escape_event_stream_trailer\""
-          << ",\"schema_version\":1"
-          << ",\"rank\":" << global_variable::my_rank
-          << ",\"rank_event_count\":" << ps_escape_event_rank_count
-          << ",\"prefix_fnv1a64\":\"" << ParallelShockEscapePrefixHash()
-          << "\"}";
-  AppendParallelShockEscapeEventLine(trailer.str(), false);
+  std::vector<unsigned char> trailer;
+  trailer.reserve(24);
+  trailer.insert(trailer.end(), std::begin(kParallelShockEscapeTrailerMagic),
+                 std::end(kParallelShockEscapeTrailerMagic));
+  AppendParallelShockLittleEndian(
+      trailer, static_cast<std::uint64_t>(ps_escape_event_rank_count));
+  AppendParallelShockLittleEndian(trailer, ps_escape_event_prefix_hash);
+  AppendParallelShockEscapeBytes(trailer, false);
   ps_escape_event_stream.flush();
   if (!ps_escape_event_stream.good()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

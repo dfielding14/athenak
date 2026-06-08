@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -11,6 +12,14 @@ from typing import Any, Iterable, Mapping, Sequence
 
 class EscapeEvidenceError(ValueError):
     """Raised when raw escape evidence is incomplete or inconsistent."""
+
+
+_BINARY_HEADER_MAGIC = b"Q011ESC1"
+_BINARY_TRAILER_MAGIC = b"Q011END1"
+_BINARY_HEADER_FIXED = struct.Struct("<8sIIIIIIIIQII")
+_BINARY_HEADER_DOUBLES = struct.Struct("<26d")
+_BINARY_EVENT = struct.Struct("<Q8I17d")
+_BINARY_TRAILER = struct.Struct("<8sQQ")
 
 
 _HEADER_FIELDS = {
@@ -374,7 +383,232 @@ def _validate_event(
         raise EscapeEvidenceError(f"{context}: kinetic energy is not recomputable")
 
 
+def _parse_binary_stream_bytes(payload: bytes, *, path: str) -> EscapeStream:
+    minimum = (
+        _BINARY_HEADER_FIXED.size
+        + _BINARY_HEADER_DOUBLES.size
+        + _BINARY_TRAILER.size
+    )
+    if len(payload) < minimum:
+        raise EscapeEvidenceError(f"{path}: binary stream is truncated")
+    fixed = _BINARY_HEADER_FIXED.unpack_from(payload, 0)
+    (
+        magic,
+        schema,
+        header_bytes,
+        event_bytes,
+        rank,
+        nranks,
+        start_cycle,
+        injected_species,
+        state_kind_code,
+        audit_calls,
+        basename_bytes,
+        fingerprint_bytes,
+    ) = fixed
+    if magic != _BINARY_HEADER_MAGIC or schema != 1:
+        raise EscapeEvidenceError(f"{path}: unsupported binary header")
+    if event_bytes != _BINARY_EVENT.size:
+        raise EscapeEvidenceError(f"{path}: binary event size drifted")
+    expected_header = (
+        _BINARY_HEADER_FIXED.size
+        + _BINARY_HEADER_DOUBLES.size
+        + basename_bytes
+        + fingerprint_bytes
+    )
+    if header_bytes != expected_header or header_bytes > len(payload) - _BINARY_TRAILER.size:
+        raise EscapeEvidenceError(f"{path}: binary header size drifted")
+    doubles = _BINARY_HEADER_DOUBLES.unpack_from(
+        payload, _BINARY_HEADER_FIXED.size
+    )
+    strings_offset = _BINARY_HEADER_FIXED.size + _BINARY_HEADER_DOUBLES.size
+    try:
+        basename = payload[
+            strings_offset : strings_offset + basename_bytes
+        ].decode("ascii")
+        fingerprint = payload[
+            strings_offset + basename_bytes : header_bytes
+        ].decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise EscapeEvidenceError(f"{path}: binary metadata is not ASCII") from exc
+    (
+        start_time,
+        light_speed,
+        species_mass,
+        species_charge,
+        q_over_m,
+        macro_mass,
+        mesh_x1min,
+        mesh_x1max,
+        mesh_x2min,
+        mesh_x2max,
+        mesh_x3min,
+        mesh_x3max,
+        last_audit_time,
+        start_count,
+        start_mass,
+        start_momentum_x1,
+        start_momentum_x2,
+        start_momentum_x3,
+        start_energy,
+        start_initial_count,
+        start_term_count,
+        start_abs_mass,
+        start_abs_momentum_x1,
+        start_abs_momentum_x2,
+        start_abs_momentum_x3,
+        start_abs_energy,
+    ) = doubles
+    if state_kind_code not in {0, 1}:
+        raise EscapeEvidenceError(f"{path}: invalid binary state kind")
+    state_kind = "momentum_per_mass" if state_kind_code == 1 else "velocity"
+    header = {
+        "record_type": "q011_escape_event_stream_header",
+        "schema_version": schema,
+        "control_fingerprint": fingerprint,
+        "basename": basename,
+        "rank": rank,
+        "nranks": nranks,
+        "segment_start_cycle": start_cycle,
+        "segment_start_time": start_time,
+        "state_kind": state_kind,
+        "light_speed": light_speed,
+        "injected_species": injected_species,
+        "species_mass": species_mass,
+        "species_charge": species_charge,
+        "q_over_m": q_over_m,
+        "macro_mass": macro_mass,
+        "field_interpolation": "tsc_bcc0_w0",
+        "mesh_x1min": mesh_x1min,
+        "mesh_x1max": mesh_x1max,
+        "mesh_x2min": mesh_x2min,
+        "mesh_x2max": mesh_x2max,
+        "mesh_x3min": mesh_x3min,
+        "mesh_x3max": mesh_x3max,
+        "escape_audit_calls_at_start": audit_calls,
+        "escape_last_audit_time_at_start": last_audit_time,
+        "global_escape_count_at_start": start_count,
+        "global_escape_mass_at_start": start_mass,
+        "global_escape_momentum_x1_at_start": start_momentum_x1,
+        "global_escape_momentum_x2_at_start": start_momentum_x2,
+        "global_escape_momentum_x3_at_start": start_momentum_x3,
+        "global_escape_energy_at_start": start_energy,
+        "global_initial_escape_count_at_start": start_initial_count,
+        "global_escape_term_count_at_start": start_term_count,
+        "global_escape_abs_mass_at_start": start_abs_mass,
+        "global_escape_abs_momentum_x1_at_start": start_abs_momentum_x1,
+        "global_escape_abs_momentum_x2_at_start": start_abs_momentum_x2,
+        "global_escape_abs_momentum_x3_at_start": start_abs_momentum_x3,
+        "global_escape_abs_energy_at_start": start_abs_energy,
+    }
+    trailer_magic, event_count, prefix_hash = _BINARY_TRAILER.unpack_from(
+        payload, len(payload) - _BINARY_TRAILER.size
+    )
+    if trailer_magic != _BINARY_TRAILER_MAGIC:
+        raise EscapeEvidenceError(f"{path}: binary trailer magic drifted")
+    expected_size = (
+        header_bytes + event_count * event_bytes + _BINARY_TRAILER.size
+    )
+    if len(payload) != expected_size:
+        raise EscapeEvidenceError(f"{path}: binary event count/size mismatch")
+    actual_hash = _fnv1a64(payload[: -_BINARY_TRAILER.size])
+    if actual_hash != prefix_hash:
+        raise EscapeEvidenceError(f"{path}: prefix FNV-1a mismatch")
+    events = []
+    offset = header_bytes
+    for event_number in range(event_count):
+        values = _BINARY_EVENT.unpack_from(payload, offset)
+        offset += event_bytes
+        (
+            event_index,
+            cycle,
+            stage,
+            tag,
+            source,
+            species,
+            destruction_reason,
+            boundary_mask,
+            parent_gid,
+            audit_time,
+            x1,
+            x2,
+            x3,
+            state_x1,
+            state_x2,
+            state_x3,
+            event_q_over_m,
+            macro_weight,
+            b1,
+            b2,
+            b3,
+            fluid_v1,
+            fluid_v2,
+            fluid_v3,
+            frame_velocity_x1,
+            shock_speed,
+        ) = values
+        event = {
+            "record_type": "q011_escape_event",
+            "schema_version": 1,
+            "rank": rank,
+            "rank_event_index": event_index,
+            "cycle": cycle,
+            "stage": stage,
+            "audit_time": audit_time,
+            "tag": tag,
+            "source": source,
+            "species": species,
+            "destruction_reason": destruction_reason,
+            "physical_boundary_mask": boundary_mask,
+            "parent_gid": parent_gid,
+            "x1": x1,
+            "x2": x2,
+            "x3": x3,
+            "state_x1": state_x1,
+            "state_x2": state_x2,
+            "state_x3": state_x3,
+            "state_kind": state_kind,
+            "light_speed": light_speed,
+            "species_mass": species_mass,
+            "species_charge": species_charge,
+            "q_over_m": event_q_over_m,
+            "macro_weight": macro_weight,
+            "macro_mass": macro_mass,
+            "kinetic_energy_per_mass": 0.0,
+            "b1": b1,
+            "b2": b2,
+            "b3": b3,
+            "fluid_v1": fluid_v1,
+            "fluid_v2": fluid_v2,
+            "fluid_v3": fluid_v3,
+            "field_interpolation": "tsc_bcc0_w0",
+            "frame_velocity_x1": frame_velocity_x1,
+            "shock_speed": shock_speed,
+        }
+        event["kinetic_energy_per_mass"] = _specific_energy(event)
+        _validate_event(
+            event,
+            header,
+            context=f"{path}:event[{event_number}]",
+            expected_index=event_number,
+        )
+        events.append(event)
+    _validate_header(header, context=f"{path}:header")
+    trailer = {
+        "record_type": "q011_escape_event_stream_trailer",
+        "schema_version": 1,
+        "rank": rank,
+        "rank_event_count": event_count,
+        "prefix_fnv1a64": f"{prefix_hash:016x}",
+    }
+    return EscapeStream(
+        path=path, header=header, events=tuple(events), trailer=trailer
+    )
+
+
 def parse_stream_bytes(payload: bytes, *, path: str = "<bytes>") -> EscapeStream:
+    if payload.startswith(_BINARY_HEADER_MAGIC):
+        return _parse_binary_stream_bytes(payload, path=path)
     if not payload or not payload.endswith(b"\n"):
         raise EscapeEvidenceError(f"{path}: stream is empty or lacks final newline")
     lines = payload.splitlines(keepends=True)

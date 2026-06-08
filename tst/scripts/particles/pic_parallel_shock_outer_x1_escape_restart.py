@@ -79,7 +79,7 @@ def _remove_outputs(basename):
             os.remove(path)
     for path in glob.glob(
         os.path.join(
-            _athena_exe_dir(), basename + ".q011_escape_events.*.jsonl"
+            _athena_exe_dir(), basename + ".q011_escape_events.*"
         )
     ):
         if os.path.isfile(path):
@@ -99,7 +99,7 @@ def _escape_event_streams(basename):
     matches = sorted(
         glob.glob(
             os.path.join(
-                _athena_exe_dir(), basename + ".q011_escape_events.*.jsonl"
+                _athena_exe_dir(), basename + ".q011_escape_events.*.bin"
             )
         )
     )

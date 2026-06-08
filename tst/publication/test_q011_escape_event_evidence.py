@@ -113,6 +113,108 @@ def _stream(header=None, events=None):
     return prefix + json.dumps(trailer, separators=(",", ":")).encode("ascii") + b"\n"
 
 
+def _binary_stream(header=None, events=None):
+    header = _header() if header is None else header
+    events = [_event()] if events is None else events
+    basename = header["basename"].encode("ascii")
+    fingerprint = header["control_fingerprint"].encode("ascii")
+    header_size = (
+        evidence._BINARY_HEADER_FIXED.size
+        + evidence._BINARY_HEADER_DOUBLES.size
+        + len(basename)
+        + len(fingerprint)
+    )
+    fixed = evidence._BINARY_HEADER_FIXED.pack(
+        evidence._BINARY_HEADER_MAGIC,
+        1,
+        header_size,
+        evidence._BINARY_EVENT.size,
+        header["rank"],
+        header["nranks"],
+        header["segment_start_cycle"],
+        header["injected_species"],
+        1 if header["state_kind"] == "momentum_per_mass" else 0,
+        header["escape_audit_calls_at_start"],
+        len(basename),
+        len(fingerprint),
+    )
+    doubles = evidence._BINARY_HEADER_DOUBLES.pack(
+        *(
+            header[field]
+            for field in (
+                "segment_start_time",
+                "light_speed",
+                "species_mass",
+                "species_charge",
+                "q_over_m",
+                "macro_mass",
+                "mesh_x1min",
+                "mesh_x1max",
+                "mesh_x2min",
+                "mesh_x2max",
+                "mesh_x3min",
+                "mesh_x3max",
+                "escape_last_audit_time_at_start",
+                "global_escape_count_at_start",
+                "global_escape_mass_at_start",
+                "global_escape_momentum_x1_at_start",
+                "global_escape_momentum_x2_at_start",
+                "global_escape_momentum_x3_at_start",
+                "global_escape_energy_at_start",
+                "global_initial_escape_count_at_start",
+                "global_escape_term_count_at_start",
+                "global_escape_abs_mass_at_start",
+                "global_escape_abs_momentum_x1_at_start",
+                "global_escape_abs_momentum_x2_at_start",
+                "global_escape_abs_momentum_x3_at_start",
+                "global_escape_abs_energy_at_start",
+            )
+        )
+    )
+    prefix = bytearray(fixed + doubles + basename + fingerprint)
+    for event in events:
+        prefix.extend(
+            evidence._BINARY_EVENT.pack(
+                event["rank_event_index"],
+                event["cycle"],
+                event["stage"],
+                event["tag"],
+                event["source"],
+                event["species"],
+                event["destruction_reason"],
+                event["physical_boundary_mask"],
+                event["parent_gid"],
+                *(
+                    event[field]
+                    for field in (
+                        "audit_time",
+                        "x1",
+                        "x2",
+                        "x3",
+                        "state_x1",
+                        "state_x2",
+                        "state_x3",
+                        "q_over_m",
+                        "macro_weight",
+                        "b1",
+                        "b2",
+                        "b3",
+                        "fluid_v1",
+                        "fluid_v2",
+                        "fluid_v3",
+                        "frame_velocity_x1",
+                        "shock_speed",
+                    )
+                ),
+            )
+        )
+    return bytes(prefix) + evidence._BINARY_TRAILER.pack(
+        evidence._BINARY_TRAILER_MAGIC,
+        len(events),
+        evidence._fnv1a64(bytes(prefix)),
+    )
+
+
 def test_parse_and_recompute_raw_event():
     stream = evidence.parse_stream_bytes(_stream())
     reduction = evidence.reduce_streams([stream])
@@ -122,6 +224,24 @@ def test_parse_and_recompute_raw_event():
     assert final["momentum_x1"] == pytest.approx(0.003)
     assert final["momentum_x2"] == pytest.approx(0.004)
     assert final["energy"] == pytest.approx(0.001 * _event()["kinetic_energy_per_mass"])
+
+
+def test_binary_parse_and_recompute_raw_event():
+    stream = evidence.parse_stream_bytes(_binary_stream())
+    reduction = evidence.reduce_streams([stream])
+    assert reduction["unique_particle_tags"] == 1
+    assert reduction["derived_final_ledger"]["momentum_x2"] == pytest.approx(0.004)
+
+
+def test_binary_tampering_and_truncation_rejected():
+    payload = bytearray(_binary_stream())
+    payload[-evidence._BINARY_TRAILER.size - 1] ^= 1
+    with pytest.raises(evidence.EscapeEvidenceError, match="FNV-1a"):
+        evidence.parse_stream_bytes(bytes(payload))
+    with pytest.raises(
+        evidence.EscapeEvidenceError, match="size|truncated|trailer magic"
+    ):
+        evidence.parse_stream_bytes(_binary_stream()[:-1])
 
 
 @pytest.mark.parametrize(
