@@ -61,6 +61,11 @@ QUALIFYING_PARTICLE_SEEDS = (
 )
 
 ONSET_BPERP_RMS_OVER_B0 = 1.0
+MINIMUM_LINEAR_FIT_SPAN_TAU = 4.0
+MAXIMUM_LINEAR_FIT_SPAN_TAU = 8.0
+MINIMUM_LINEAR_FIT_SAMPLES = 5
+MAXIMUM_LINEAR_FIT_BPERP_MODE_OVER_B0 = 0.10
+MINIMUM_LINEAR_LOG_AMPLITUDE_R_SQUARED = 0.98
 MINIMUM_PLATEAU_SPAN_TAU = 4.0
 MAXIMUM_PLATEAU_SPAN_TAU = 8.0
 MINIMUM_PLATEAU_SAMPLES = 5
@@ -80,6 +85,8 @@ MAXIMUM_HIGH_RIGIDITY_CR_MOMENTUM_CHANGE = 0.05
 MAXIMUM_HIGH_RIGIDITY_CR_ENERGY_CHANGE = 0.05
 MAXIMUM_ABSOLUTE_LOCAL_HALL_PARAMETER = 0.10
 MAXIMUM_LOCAL_BAI_CHARGE_FRACTION = 0.01
+MAXIMUM_QUIET_START_RELATIVE_NOISE = 1.0e-12
+MINIMUM_NOISE_CONTROL_RELATIVE_NOISE = 1.0e-8
 MAXIMUM_PILOT_NODE_HOURS = 500.0
 MAXIMUM_UNRESERVED_BUDGET_FRACTION = 0.10
 MAXIMUM_ATTEMPTS_PER_CASE = 1
@@ -228,6 +235,23 @@ def build_preregistration() -> dict[str, object]:
         },
         "selection_rules": {
             "normalized_time": "tau=k0*U_A*t",
+            "finite_rigidity_early_time_fit": {
+                "quantity": "absolute_signed_complex_Bperp_k0_mode_over_B0",
+                "minimum_span_tau": MINIMUM_LINEAR_FIT_SPAN_TAU,
+                "maximum_span_tau": MAXIMUM_LINEAR_FIT_SPAN_TAU,
+                "minimum_samples": MINIMUM_LINEAR_FIT_SAMPLES,
+                "maximum_Bperp_mode_over_B0": (
+                    MAXIMUM_LINEAR_FIT_BPERP_MODE_OVER_B0
+                ),
+                "minimum_log_amplitude_R_squared": (
+                    MINIMUM_LINEAR_LOG_AMPLITUDE_R_SQUARED
+                ),
+                "positive_growth_required": True,
+                "selection": (
+                    "earliest_passing_contiguous_window; fit_log_amplitude_and_"
+                    "unwrapped_phase_against_tau"
+                ),
+            },
             "nonlinear_onset": {
                 "definition": "first_retained_sample_at_or_above_threshold",
                 "Bperp_rms_over_B0": ONSET_BPERP_RMS_OVER_B0,
@@ -282,6 +306,75 @@ def build_preregistration() -> dict[str, object]:
             "maximum_local_Bai_charge_fraction": (
                 MAXIMUM_LOCAL_BAI_CHARGE_FRACTION
             ),
+            "maximum_quiet_start_relative_noise": (
+                MAXIMUM_QUIET_START_RELATIVE_NOISE
+            ),
+            "minimum_noise_control_relative_noise": (
+                MINIMUM_NOISE_CONTROL_RELATIVE_NOISE
+            ),
+        },
+        "paired_comparison_rules": {
+            "predecessor_reference_case_id": PREDECESSOR_CORE[0],
+            "predecessor_controls": list(PREDECESSOR_CORE[1:]),
+            "predecessor_observables": {
+                "normalized_growth_rate": (
+                    "absolute_difference_divided_by_maximum_absolute_pair_value"
+                ),
+                "normalized_angular_frequency": "absolute_difference",
+            },
+            "nonlinear_observables": {
+                "plateau_Bperp_rms_over_B0": (
+                    "absolute_difference_divided_by_maximum_absolute_pair_value"
+                ),
+                "onset_tau": "absolute_difference",
+                "plateau_end_tau": "absolute_difference",
+            },
+            "stage_2_pairs": [
+                [
+                    "q019-fr-3d-onset-small-s0",
+                    "q019-fr-3d-onset-small-ppc48-s0",
+                ],
+                [
+                    "q019-fr-3d-onset-small-s0",
+                    "q019-fr-3d-onset-small-resolution-fine-s0",
+                ],
+                [
+                    "q019-fr-3d-onset-small-s0",
+                    "q019-fr-3d-onset-small-particle-step-small-s0",
+                ],
+                [
+                    "q019-fr-3d-onset-small-s0",
+                    "q019-fr-3d-onset-large-s0",
+                ],
+                [
+                    "q019-fr-3d-onset-large-s0",
+                    "q019-fr-3d-onset-large-long-mode-sensitivity-s0",
+                ],
+            ],
+            "stage_3_small_large_pairs": [
+                [
+                    "q019-fr-3d-onset-small-s1",
+                    "q019-fr-3d-onset-large-s1",
+                ],
+                [
+                    "q019-fr-3d-onset-small-s2",
+                    "q019-fr-3d-onset-large-s2",
+                ],
+            ],
+            "stage_3_seed_replication_groups": [
+                [
+                    "q019-fr-3d-onset-small-s0",
+                    "q019-fr-3d-onset-small-s1",
+                    "q019-fr-3d-onset-small-s2",
+                ],
+                [
+                    "q019-fr-3d-onset-large-s0",
+                    "q019-fr-3d-onset-large-s1",
+                    "q019-fr-3d-onset-large-s2",
+                ],
+            ],
+            "relative_observables_use_maximum_paired_relative_difference": True,
+            "time_observables_use_maximum_paired_time_difference_tau": True,
         },
         "threshold_classification": {
             "onset_Bperp_over_B0": "physics_definition_preregistered_by_project",
@@ -312,6 +405,103 @@ def _slope(x: Sequence[float], y: Sequence[float]) -> float:
     denominator = sum((value - xbar) ** 2 for value in x)
     _require(denominator > 0.0, "plateau fit has no time variance")
     return sum((a - xbar) * (b - ybar) for a, b in zip(x, y)) / denominator
+
+
+def _linear_fit(x: Sequence[float], y: Sequence[float]) -> tuple[float, float, float]:
+    slope = _slope(x, y)
+    intercept = statistics.fmean(y) - slope * statistics.fmean(x)
+    residual = sum(
+        (value - (intercept + slope * coordinate)) ** 2
+        for coordinate, value in zip(x, y)
+    )
+    centered = sum((value - statistics.fmean(y)) ** 2 for value in y)
+    r_squared = (
+        1.0 if residual == 0.0 else 0.0
+    ) if centered == 0.0 else 1.0 - residual / centered
+    return intercept, slope, r_squared
+
+
+def _unwrap_phase(values: Sequence[complex]) -> list[float]:
+    phases = [math.atan2(value.imag, value.real) for value in values]
+    unwrapped = [phases[0]]
+    for phase in phases[1:]:
+        delta = phase - unwrapped[-1]
+        while delta > math.pi:
+            phase -= 2.0 * math.pi
+            delta = phase - unwrapped[-1]
+        while delta < -math.pi:
+            phase += 2.0 * math.pi
+            delta = phase - unwrapped[-1]
+        unwrapped.append(phase)
+    return unwrapped
+
+
+def select_early_time_fit_window(
+    times: Sequence[float],
+    complex_bperp_k0: Sequence[complex],
+    *,
+    k0: float,
+    u_a: float,
+    b0: float,
+) -> dict[str, object]:
+    """Apply the frozen finite-rigidity early-time complex-mode fit rule."""
+    _require(
+        len(times) == len(complex_bperp_k0)
+        and len(times) >= MINIMUM_LINEAR_FIT_SAMPLES,
+        "early-time fit trace length is invalid",
+    )
+    _require(k0 > 0.0 and u_a > 0.0 and b0 > 0.0, "fit normalization is invalid")
+    amplitudes = [abs(value) / b0 for value in complex_bperp_k0]
+    _require(
+        all(math.isfinite(value) for value in times)
+        and all(math.isfinite(value) and value > 0.0 for value in amplitudes)
+        and all(right > left for left, right in zip(times, times[1:])),
+        "early-time fit trace is nonfinite, nonpositive, or nonmonotonic",
+    )
+    tau = [k0 * u_a * value for value in times]
+    phase = _unwrap_phase(complex_bperp_k0)
+    selected: tuple[int, int, float, float, float] | None = None
+    for start in range(len(times) - MINIMUM_LINEAR_FIT_SAMPLES + 1):
+        for end in range(start + MINIMUM_LINEAR_FIT_SAMPLES - 1, len(times)):
+            span = tau[end] - tau[start]
+            if span < MINIMUM_LINEAR_FIT_SPAN_TAU:
+                continue
+            if span > MAXIMUM_LINEAR_FIT_SPAN_TAU:
+                break
+            if (
+                max(amplitudes[start : end + 1])
+                > MAXIMUM_LINEAR_FIT_BPERP_MODE_OVER_B0
+            ):
+                break
+            _, growth, r_squared = _linear_fit(
+                tau[start : end + 1],
+                [math.log(value) for value in amplitudes[start : end + 1]],
+            )
+            if growth <= 0.0 or r_squared < MINIMUM_LINEAR_LOG_AMPLITUDE_R_SQUARED:
+                continue
+            _, frequency, _ = _linear_fit(
+                tau[start : end + 1], phase[start : end + 1]
+            )
+            selected = (start, end, growth, frequency, r_squared)
+            break
+        if selected is not None:
+            break
+    _require(selected is not None, "no preregistered early-time fit window was found")
+    start, end, growth, frequency, r_squared = selected
+    return {
+        "fit_start_index": start,
+        "fit_end_index": end,
+        "fit_start_time": times[start],
+        "fit_end_time": times[end],
+        "fit_start_tau": tau[start],
+        "fit_end_tau": tau[end],
+        "normalized_growth_rate": growth,
+        "normalized_angular_frequency": frequency,
+        "log_amplitude_R_squared": r_squared,
+        "maximum_Bperp_mode_over_B0": max(amplitudes[start : end + 1]),
+        "fit_window_freeze_authorized": False,
+        "scientific_claim_authorized": False,
+    }
 
 
 def select_plateau_window(

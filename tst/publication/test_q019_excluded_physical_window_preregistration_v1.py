@@ -28,6 +28,12 @@ class Q019ExcludedPhysicalWindowPreregistrationTests(unittest.TestCase):
             value["resource_boundary"]["maximum_attempts_per_case"], 1
         )
         self.assertEqual(value["resource_boundary"]["maximum_retries_per_case"], 0)
+        self.assertEqual(
+            len(value["paired_comparison_rules"]["stage_2_pairs"]), 5
+        )
+        self.assertEqual(
+            len(value["paired_comparison_rules"]["stage_3_small_large_pairs"]), 2
+        )
         pilot_field = {row["field_seed"] for row in value["case_bindings"]}
         pilot_particle = {row["particle_seed"] for row in value["case_bindings"]}
         qualifying = value["qualifying_seed_inventory"]
@@ -68,6 +74,36 @@ class Q019ExcludedPhysicalWindowPreregistrationTests(unittest.TestCase):
             selected["plateau_end_tau"],
         )
         self.assertFalse(selected["production_freeze_authorized"])
+
+    def test_early_time_fit_selects_earliest_linear_complex_mode_window(self) -> None:
+        k0 = 2.0 * math.pi
+        times = [0.1 * index for index in range(16)]
+        tau = [k0 * value for value in times]
+        mode = [
+            1.0e-7
+            * math.exp(0.8 * value)
+            * complex(math.cos(-0.2 * value), math.sin(-0.2 * value))
+            for value in tau
+        ]
+        selected = gate.select_early_time_fit_window(
+            times, mode, k0=k0, u_a=1.0, b0=1.0
+        )
+        self.assertEqual(selected["fit_start_index"], 0)
+        self.assertAlmostEqual(selected["normalized_growth_rate"], 0.8)
+        self.assertAlmostEqual(selected["normalized_angular_frequency"], -0.2)
+        self.assertAlmostEqual(selected["log_amplitude_R_squared"], 1.0)
+        self.assertFalse(selected["fit_window_freeze_authorized"])
+
+    def test_early_time_fit_rejects_non_linear_or_nongrowing_trace(self) -> None:
+        times = [0.1 * index for index in range(16)]
+        with self.assertRaisesRegex(gate.PreregistrationError, "fit window"):
+            gate.select_early_time_fit_window(
+                times,
+                [complex(math.exp(-value), 0.0) for value in times],
+                k0=2.0 * math.pi,
+                u_a=1.0,
+                b0=1.0,
+            )
 
     def test_plateau_selection_fails_without_onset_or_plateau(self) -> None:
         times = [0.1 * index for index in range(80)]
