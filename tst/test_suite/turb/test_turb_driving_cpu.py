@@ -263,3 +263,29 @@ def test_removed_parameter_and_degenerate_spectrum_are_rejected(tmp_path):
     assert "parabolic spectrum requires nhigh greater than nlow" in (
         spectrum.stdout + spectrum.stderr
     )
+
+
+def test_zero_force_normalization_reports_replay_context(tmp_path):
+    """A finite zero force fails with enough state to diagnose an exact replay."""
+    result = run_athena(
+        tmp_path / "zero_force",
+        "turb_driving_tiled_include.athinput",
+        "turb_driving/sigma_x1=1.0e-100",
+        "turb_driving/sigma_x2=1.0e-100",
+        "turb_driving/sigma_x3=1.0e-100",
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "cannot impose non-zero accel_rms with a zero forcing field" in output
+    for field in (
+        "time=",
+        "cycle=",
+        "update=",
+        "mode_count=",
+        "t0=",
+        "t1=",
+        "totvol=",
+        "m0=",
+        "m1=",
+    ):
+        assert field in output
