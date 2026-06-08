@@ -1001,6 +1001,115 @@ def compressive_velocity_spectrum(
     }
 
 
+def integrated_spectrum_power(spectrum: dict[str, object]) -> float:
+    """Integrate one shell spectrum using its declared uniform spacing."""
+
+    dk = float(spectrum["dk"])
+    power = np.asarray(spectrum["power_per_dk"], dtype=float)
+    if (
+        not math.isfinite(dk)
+        or dk <= 0.0
+        or power.ndim != 1
+        or not np.isfinite(power).all()
+        or np.any(power < 0.0)
+    ):
+        raise ValueError("spectrum is not a finite nonnegative uniform-shell record")
+    return float(dk * np.sum(power))
+
+
+def compressive_velocity_power_fraction(
+    velocity_spectrum: dict[str, object],
+    compressive_spectrum: dict[str, object],
+) -> dict[str, object]:
+    """Return the integrated longitudinal fraction of velocity Fourier power."""
+
+    velocity_power = integrated_spectrum_power(velocity_spectrum)
+    compressive_power = integrated_spectrum_power(compressive_spectrum)
+    available = bool(
+        velocity_power > np.finfo(float).tiny
+        and compressive_power >= 0.0
+        and compressive_power <= velocity_power * (1.0 + 1.0e-12)
+    )
+    return {
+        "available": available,
+        "definition": (
+            "sum_k |khat dot u_k|^2 divided by sum_k |u_k|^2, with the "
+            "zero mode removed and both powers integrated over k_perp shells"
+        ),
+        "scope": (
+            "density-unweighted velocity Fourier power; descriptive compressive "
+            "fraction, not a density-weighted kinetic-energy fraction"
+        ),
+        "compressive_velocity_power": compressive_power,
+        "total_velocity_power": velocity_power,
+        "fraction": (
+            float(compressive_power / velocity_power) if available else None
+        ),
+        **({
+            "reason": "total velocity fluctuation power is zero or projection closure failed"
+        } if not available else {}),
+    }
+
+
+def pressure_balance_diagnostics(
+    p_perp: np.ndarray, magnetic_pressure: np.ndarray
+) -> dict[str, object]:
+    """Measure signed perpendicular-thermal/magnetic pressure compensation."""
+
+    if (
+        p_perp.shape != magnetic_pressure.shape
+        or not np.isfinite(p_perp).all()
+        or not np.isfinite(magnetic_pressure).all()
+    ):
+        raise ValueError("pressure-balance fields are incompatible or nonfinite")
+    delta_p_perp = p_perp - np.mean(p_perp)
+    delta_p_magnetic = magnetic_pressure - np.mean(magnetic_pressure)
+    variance_perp = float(np.mean(delta_p_perp * delta_p_perp))
+    variance_magnetic = float(np.mean(delta_p_magnetic * delta_p_magnetic))
+    covariance = float(np.mean(delta_p_perp * delta_p_magnetic))
+    variance_sum = variance_perp + variance_magnetic
+    correlation_denominator = math.sqrt(variance_perp * variance_magnetic)
+    residual = delta_p_perp + delta_p_magnetic
+    residual_variance = float(np.mean(residual * residual))
+    available = bool(
+        variance_sum > np.finfo(float).tiny
+        and correlation_denominator > np.finfo(float).tiny
+    )
+    result: dict[str, object] = {
+        "available": available,
+        "definition": (
+            "fluctuation compensation between delta p_perp and delta(B^2/2)"
+        ),
+        "sign_convention": (
+            "pressure balance gives negative correlation; exact equal-amplitude "
+            "compensation gives normalized residual variance zero"
+        ),
+        "scope": (
+            "cell-centered equal-volume descriptive diagnostic from one retained "
+            "snapshot"
+        ),
+        "perpendicular_pressure_variance": variance_perp,
+        "magnetic_pressure_variance": variance_magnetic,
+        "covariance": covariance,
+        "residual_variance": residual_variance,
+        "normalized_residual_variance": (
+            float(residual_variance / variance_sum) if variance_sum > 0.0 else None
+        ),
+        "correlation": (
+            float(covariance / correlation_denominator) if available else None
+        ),
+        "perpendicular_on_magnetic_regression_slope": (
+            float(covariance / variance_magnetic)
+            if variance_magnetic > np.finfo(float).tiny else None
+        ),
+    }
+    if not available:
+        result["reason"] = (
+            "one or both pressure fluctuations have zero resolved variance"
+        )
+    return result
+
+
 def pdf(values: np.ndarray, bins: int, value_range: tuple[float, float] | None = None
         ) -> dict[str, object]:
     """Return a density-normalized histogram."""
@@ -2356,6 +2465,13 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
         )
         for name, values in velocity_products.items()
     })
+    spectral_scalar_diagnostics = {
+        "compressive_velocity_power_fraction": (
+            compressive_velocity_power_fraction(
+                spectra["velocity"], spectra["compressive_velocity"]
+            )
+        ),
+    }
     return {
         "time": time,
         "shape_z_y_x": list(rho.shape),
@@ -2385,6 +2501,10 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
             },
         },
         "spectra": spectra,
+        "spectral_scalar_diagnostics": spectral_scalar_diagnostics,
+        "pressure_balance": pressure_balance_diagnostics(
+            pperp, 0.5 * bsqr
+        ),
         "pressure_transfer": transfer,
         "mechanism_diagnostics": mechanism_diagnostic_index(
             normalized_transfer_available=transfer["normalization_available"]
@@ -2639,6 +2759,51 @@ def mean_spectrum(
         result["uncertainty"] = descriptive_snapshot_block_uncertainty(
             powers, snapshot_times
         )
+    return result
+
+
+def mean_scalar_diagnostics(
+    records: list[dict[str, object]],
+    snapshot_times: list[float] | np.ndarray,
+) -> dict[str, object]:
+    """Average compatible available scalar diagnostic records."""
+
+    if not records:
+        return {"available": False, "reason": "no scalar diagnostic records"}
+    available = [record for record in records if record.get("available") is True]
+    result: dict[str, object] = {
+        "available": bool(available),
+        "snapshot_count": len(records),
+        "available_snapshot_count": len(available),
+        "definition": records[0].get("definition"),
+        "scope": records[0].get("scope"),
+    }
+    for key in ("sign_convention",):
+        if key in records[0]:
+            result[key] = records[0][key]
+    if not available:
+        result["reason"] = "diagnostic is unavailable in every retained snapshot"
+        return result
+    indices = [
+        index for index, record in enumerate(records) if record.get("available") is True
+    ]
+    times = np.asarray(snapshot_times, dtype=float)[indices]
+    scalar_names = sorted(
+        key for key, value in available[0].items()
+        if key not in {
+            "available", "definition", "scope", "sign_convention", "reason"
+        }
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value is not None
+    )
+    for name in scalar_names:
+        values = [float(record[name]) for record in available]
+        if all(math.isfinite(value) for value in values):
+            result[f"{name}_mean"] = float(np.mean(values))
+            result.setdefault("uncertainty", {})[name] = (
+                descriptive_snapshot_block_uncertainty(values, times)
+            )
     return result
 
 
@@ -2976,6 +3141,7 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
     ]
     joint_names = ("parallel", "perpendicular")
     spectrum_names = samples[0]["spectra"].keys()
+    scalar_diagnostic_names = samples[0]["spectral_scalar_diagnostics"].keys()
     alignment_names = set(samples[0]["alignment"].keys())
     for sample in samples[1:]:
         alignment_names.intersection_update(sample["alignment"].keys())
@@ -3120,6 +3286,16 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
         )
         for name in spectrum_names
     }
+    spectral_scalar_ensemble = {
+        name: mean_scalar_diagnostics(
+            [sample["spectral_scalar_diagnostics"][name] for sample in samples],
+            times,
+        )
+        for name in scalar_diagnostic_names
+    }
+    pressure_balance_ensemble = mean_scalar_diagnostics(
+        [sample["pressure_balance"] for sample in samples], times
+    )
     transfer_values = [
         np.asarray(item["transfer"], dtype=float) for item in transfer
     ]
@@ -3263,6 +3439,8 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
             },
         },
         "spectra": spectra_ensemble,
+        "spectral_scalar_diagnostics": spectral_scalar_ensemble,
+        "pressure_balance": pressure_balance_ensemble,
         "pressure_transfer": pressure_transfer_ensemble,
         **mechanism_ensemble,
         "pressure_work_decomposition": pressure_work_ensemble,
@@ -3622,6 +3800,12 @@ def synthetic_test() -> dict[str, object]:
     transverse_compressive_power = np.asarray(
         transverse_record["spectra"]["compressive_velocity"]["power_per_dk"]
     )
+    longitudinal_fraction = record["spectral_scalar_diagnostics"][
+        "compressive_velocity_power_fraction"
+    ]
+    transverse_fraction = transverse_record["spectral_scalar_diagnostics"][
+        "compressive_velocity_power_fraction"
+    ]
     derivative = periodic_gradient(fields["p_perp"] - fields["eint"], lengths)[2]
     exact = 0.1 * math.pi * np.cos(math.pi * zz)
     relative_gradient_error = float(
@@ -3662,6 +3846,15 @@ def synthetic_test() -> dict[str, object]:
     )
     correlated = correlated_record["pressure_work_decomposition"]
     correlated_transfer = correlated_record["pressure_transfer"]
+    balance_fields = {
+        name: np.array(values, copy=True) for name, values in fields.items()
+    }
+    balance_wave = 0.1 * np.sin(math.pi * zz)
+    balance_fields["p_perp"] = 1.0 + balance_wave
+    balance_fields["bcc3"] = np.sqrt(2.0 * (1.0 - balance_wave))
+    pressure_balance = analyze_fields(
+        balance_fields, lengths, 0.0, 16, [2], model_choices=model
+    )["pressure_balance"]
     passive_model = dict(model)
     passive_model["passive_delta"] = "true"
     passive_work = analyze_fields(
@@ -3709,6 +3902,15 @@ def synthetic_test() -> dict[str, object]:
         peak == 2
         and float(np.max(compressive_power)) > 0.0
         and float(np.max(np.abs(transverse_compressive_power))) < 1.0e-28
+        and longitudinal_fraction["available"]
+        and abs(float(longitudinal_fraction["fraction"]) - 1.0) < 1.0e-14
+        and transverse_fraction["available"]
+        and abs(float(transverse_fraction["fraction"])) < 1.0e-14
+        and pressure_balance["available"]
+        and abs(float(pressure_balance["correlation"]) + 1.0) < 1.0e-14
+        and abs(float(
+            pressure_balance["normalized_residual_variance"]
+        )) < 1.0e-14
         and relative_gradient_error < 7.0e-3
         and abs(float(transfer["direct_real_space"])) < 1.0e-14
         and abs(float(transfer["closure_error"])) < 1.0e-14
@@ -3744,6 +3946,16 @@ def synthetic_test() -> dict[str, object]:
         ),
         "zero_transverse_compressive_spectrum": float(
             np.max(np.abs(transverse_compressive_power))
+        ),
+        "longitudinal_compressive_velocity_power_fraction": (
+            longitudinal_fraction["fraction"]
+        ),
+        "transverse_compressive_velocity_power_fraction": (
+            transverse_fraction["fraction"]
+        ),
+        "pressure_balance_correlation": pressure_balance["correlation"],
+        "pressure_balance_normalized_residual_variance": (
+            pressure_balance["normalized_residual_variance"]
         ),
         "parallel_gradient_relative_error": relative_gradient_error,
         "zero_transfer": transfer["direct_real_space"],
