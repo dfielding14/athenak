@@ -302,6 +302,7 @@ ANALYSIS_BINDING_PATHS = (
     "tst/publication/q019_registered_raw_reduction_v1.py",
     "tst/publication/q019_hardened_installed_control_plane_registered_admission_v1.py",
     "tst/publication/q019_hardened_provenance_boundary_v2.py",
+    "tst/publication/q019_excluded_physical_window_preregistration_v1.py",
 )
 
 
