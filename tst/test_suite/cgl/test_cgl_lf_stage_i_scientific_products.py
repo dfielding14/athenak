@@ -19,6 +19,9 @@ UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_products.py"
 ACCEPTANCE_UTILITY = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py"
 PAPER_ANALYZER = REPOSITORY / "scripts/analyze_cgl_lf_paper.py"
 BINARY_PARSER = REPOSITORY / "vis/python/bin_convert.py"
+CRITERIA_REVIEW = REPOSITORY / (
+    "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.review.json"
+)
 
 
 def load_utility(path: Path = UTILITY, name: str = "cgl_lf_stage_i_scientific_products"):
@@ -370,6 +373,108 @@ def test_history_products_reference_residuals_and_deferred_products(tmp_path):
     assert evidence["result"] == "inconclusive"
 
 
+def test_volume_two_history_metrics_use_canonical_means_fractions_and_totals(tmp_path):
+    """Volume integrals become means/fractions while energies and power remain totals."""
+
+    evidence, _, _ = retained_evidence(tmp_path)
+    metrics = evidence["scientific_acceptance_metrics"]
+    assert metrics["abs_dp"]["time_weighted_mean"] == pytest.approx(0.125)
+    assert metrics["beta"]["time_weighted_mean"] == pytest.approx(10.0)
+    assert metrics["nu_eff"]["time_weighted_mean"] == pytest.approx(10.0)
+    assert metrics["mirror_occupancy"]["time_weighted_mean"] == pytest.approx(0.001)
+    assert metrics["firehose_occupancy"]["time_weighted_mean"] == pytest.approx(0.002)
+    assert metrics["unstable_occupancy"]["time_weighted_mean"] == pytest.approx(0.003)
+    for name in ("abs_dp", "beta", "nu_eff"):
+        assert metrics[name]["quantity_kind"] == "volume_mean"
+        assert metrics[name]["source_columns"][-1] == "volume"
+        assert metrics[name]["normalization"].endswith(" / volume")
+    for name in (
+        "mirror_occupancy",
+        "firehose_occupancy",
+        "hard_occupancy",
+        "unstable_occupancy",
+    ):
+        assert metrics[name]["quantity_kind"] == "volume_fraction"
+        assert "volume" in metrics[name]["source_columns"]
+    assert metrics["kinetic"]["time_weighted_mean"] == pytest.approx(2.0)
+    assert metrics["magnetic"]["time_weighted_mean"] == pytest.approx(3.0)
+    assert metrics["force_power"]["time_weighted_mean"] == pytest.approx(0.64)
+    for name in ("kinetic", "magnetic", "force_power"):
+        assert metrics[name]["quantity_kind"].startswith("domain_integrated_")
+        assert metrics[name]["normalization"] == (
+            "none; retained Athena history value is a domain total"
+        )
+
+
+def test_robust_alignment_scalar_is_available_with_honest_snapshot_spread(tmp_path):
+    """The scalar exposes descriptive spread and exact consumer statistics."""
+
+    def alignment(density: list[float]) -> dict[str, object]:
+        return {
+            str(shell): {"edges": [0.0, 0.5, 1.0], "density": density}
+            for shell in (4, 8, 16)
+        }
+
+    low = products.inertial_range_alignment_scalar(alignment([1.5, 0.5]), math.pi)
+    middle = products.inertial_range_alignment_scalar(alignment([1.0, 1.0]), math.pi)
+    high = products.inertial_range_alignment_scalar(alignment([0.5, 1.5]), math.pi)
+    assert low["value"] == pytest.approx(0.375)
+    assert high["value"] == pytest.approx(0.625)
+    assert low["shell_statistic"] == "PDF expectation, not histogram-bin mode"
+    summary = products.mean_inertial_range_alignment([
+        {"time": 4.0, "alignment_inertial_scalar": low},
+        {"time": 7.0, "alignment_inertial_scalar": middle},
+        {"time": 10.0, "alignment_inertial_scalar": high},
+    ])
+    assert summary["available"] is True
+    assert summary["metric_contract_key"] == "peak_alignment"
+    assert summary["mean"] == pytest.approx(0.5)
+    assert summary["descriptive_snapshot_standard_deviation"] == pytest.approx(0.125)
+    assert "not asserted independent" in summary["uncertainty_status"]
+
+    _, _, mhd, user = fixture_histories(tmp_path)
+    context = products.BundleContext.__new__(products.BundleContext)
+    context.mhd = mhd
+    context.user = user
+    context.model_choices = {"forcing_tcorr": "2.0"}
+    metrics, _ = products.scientific_metrics(
+        context, 4.0, 10.0, {"alignment_inertial_scalar": summary}
+    )
+    scalar = metrics["peak_alignment"]
+    assert scalar["source_product"] == "selected-shell stretching-eigenvector alignment PDFs"
+    assert scalar["source_record"] == "snapshot_ensemble.alignment_inertial_scalar"
+    assert scalar["sample_times"] == [4.0, 7.0, 10.0]
+    assert scalar["sample_values"] == pytest.approx([0.375, 0.5, 0.625])
+    assert scalar["mean"] == pytest.approx(0.5)
+    assert scalar["standard_deviation"] >= 0.0
+    assert scalar["standard_error"] >= 0.0
+    assert scalar["acceptance_consumer_ready"] is True
+    assert scalar["acceptance_statistics_scope"] == (
+        "descriptive within-realization full-window statistics; no population inference"
+    )
+
+    criteria_path = products.SCIENTIFIC_ACCEPTANCE_CRITERIA_PATH
+    policy = {
+        "criteria": json.loads(criteria_path.read_text(encoding="utf-8")),
+        "criteria_binding": {"sha256": sha256(criteria_path)},
+    }
+    diagnostics = {
+        "cases": {
+            "fixture_case": {
+                "scientific_acceptance_metrics": {"peak_alignment": scalar},
+            }
+        }
+    }
+    consumed = acceptance.analyzer_metrics(
+        diagnostics, "fixture_case", policy, 2.0
+    )
+    assert consumed["peak_alignment"] == pytest.approx({
+        "mean": scalar["mean"],
+        "standard_deviation": scalar["standard_deviation"],
+        "standard_error": scalar["standard_error"],
+    })
+
+
 def test_generated_evidence_emits_nested_schema_two_acceptance_contract(tmp_path):
     """Generated products directly expose the contract and case shape acceptance consumes."""
 
@@ -400,12 +505,51 @@ def test_generated_evidence_emits_nested_schema_two_acceptance_contract(tmp_path
     }
     selected = evidence["cases"]["fixture_case"]
     assert selected["analysis_window"] == contract["analysis_window"]
+    assert selected["scientific_acceptance_metrics"] == {
+        name: value
+        for name, value in evidence["scientific_acceptance_metrics"].items()
+        if value.get("acceptance_consumer_ready") is True
+    }
     assert selected["lf_counter_increments"] == evidence["lf_counter_increments"]
     assert selected["snapshot_ensemble"] == evidence["snapshot_ensemble"]
     assert (
         selected["scientific_acceptance_convergence"]
         == evidence["scientific_acceptance_convergence"]
     )
+
+
+def test_review_artifact_preserves_historical_product_approval_scope():
+    """Exact current-byte bindings do not expand scoped historical approvals."""
+
+    review = json.loads(CRITERIA_REVIEW.read_text(encoding="utf-8"))
+    limitation = review["current_science_scope_limitation"]
+    assert limitation[
+        "independent_reviewer_identity_claimed_for_current_corrections"
+    ] is False
+    assert limitation["full_scope_independent_review_complete"] is False
+    assert limitation["disposition"] == (
+        "accepted_reviewed_production_science_corrections_without_new_independent_"
+        "plasma_or_statistical_approval"
+    )
+    assert any(
+        "robust inertial-range alignment scalar" in value
+        for value in limitation["current_reviewed_production_science_corrections"]
+    )
+    assert any(
+        "Aggressive family-gate revisions" in value
+        for value in limitation["current_reviewed_production_science_corrections"]
+    )
+    for approval in review["scientific_products_method_review"]["approvals"][:2]:
+        scope = " ".join(approval["scope"]).lower()
+        assert "alignment scalar" not in scope
+        assert "history total" not in scope
+
+
+def test_non_authorizing_wording_is_explicitly_scope_limited(tmp_path):
+    evidence, _, _ = retained_evidence(tmp_path)
+    statement = evidence["non_authorizing_statement"]
+    assert "exact scope-limited reviewed production-science policy" in statement
+    assert "no full-current-scope independent approval is implied" in statement
 
 
 def test_replay_is_byte_identical_and_deterministic(tmp_path):
@@ -1018,9 +1162,11 @@ def test_snapshot_analysis_derives_products_for_admitted_case_roles(monkeypatch)
     monkeypatch.setattr(products, "EDDY_SAMPLES", 200_000)
     monkeypatch.setattr(products, "EDDY_BINS", 10)
     ensemble, bindings, declared = products.analyze_snapshots(
-        context, 8.0, 10.0, 16, [1, 2, 4], 1_000_000, "auto"
+        context, 8.0, 10.0, 16, [4, 8, 12], 1_000_000, "auto"
     )
     assert ensemble["result"] == "pass"
+    assert ensemble["alignment_inertial_scalar"]["available"] is True
+    assert ensemble["alignment_inertial_scalar"]["snapshot_count"] == 1
     assert ensemble["pressure_transfer"]["normalization_available"] is True
     assert ensemble["eddy_anisotropy"]["velocity_perp"]["available"] is True
     assert ensemble["admitted_curve_products"] == [

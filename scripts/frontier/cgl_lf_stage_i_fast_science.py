@@ -4,7 +4,7 @@
 This downstream-only utility combines the direct-fast report inventory, case
 diagnostics and snapshot products with direct-fast acceptance evidence.  It
 uses the reviewed scientific-acceptance kernels for scalar extraction, active
-/ passive Holm contrasts, convergence distances, and MKS24 residual checks.
+/ passive descriptive contrasts, convergence distances, and MKS24 residual checks.
 
 Partial campaigns remain useful but cannot silently become claim-grade:
 observations are retained when available, while a gate can pass only when all
@@ -67,7 +67,6 @@ CONTRAST_FAMILIES = {
     "tcorr": (("R05", "R11"),),
     "lf_strength": (
         ("R12", "R02"),
-        ("R06", "R02"),
         ("R13", "R02"),
     ),
     "limiter": (
@@ -440,6 +439,45 @@ def verify_policy_provenance(
     )
 
 
+def exact_science_scope_records(
+    reviewed: object, policy: dict[str, object]
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Return the exact current review limitation and total-intervention scope."""
+
+    limitation = policy.get("current_science_scope_limitation")
+    if (
+        not isinstance(limitation, dict)
+        or limitation != reviewed.CURRENT_SCIENCE_SCOPE_LIMITATION
+    ):
+        raise ScienceError("current science scope limitation differs")
+    try:
+        intervention = policy["criteria"]["family_gates"]["active_passive"][
+            "intervention_scope"
+        ]
+    except (KeyError, TypeError) as error:
+        raise ScienceError("active/passive intervention scope is unavailable") from error
+    if (
+        not isinstance(intervention, dict)
+        or intervention != reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    ):
+        raise ScienceError("active/passive intervention scope differs")
+    return limitation, intervention
+
+
+def require_exact_science_scope_records(
+    value: dict[str, object],
+    limitation: dict[str, object],
+    intervention: dict[str, object],
+    label: str,
+) -> None:
+    """Require one downstream record to retain both exact scope declarations."""
+
+    if value.get("current_science_scope_limitation") != limitation:
+        raise ScienceError(f"{label} current science scope limitation differs")
+    if value.get("active_passive_intervention_scope") != intervention:
+        raise ScienceError(f"{label} active/passive intervention scope differs")
+
+
 def validate_acceptance_root(
     acceptance_root: Path,
     inventory_path: Path,
@@ -483,6 +521,7 @@ def validate_acceptance_root(
     require_same_binding(campaign_binding, binding(campaign_path), "campaign evidence output")
     campaign = load_json(campaign_path, "direct-fast campaign evidence")
     reviewed = load_reviewed_module()
+    limitation, intervention = exact_science_scope_records(reviewed, policy)
     try:
         reviewed.verify_evidence_digest(campaign, "direct-fast campaign evidence")
     except Exception as error:
@@ -497,6 +536,9 @@ def validate_acceptance_root(
         policy,
         "direct-fast campaign evidence",
         "reviewed_acceptance_utility",
+    )
+    require_exact_science_scope_records(
+        campaign, limitation, intervention, "direct-fast campaign evidence"
     )
 
     output_cases = outputs.get("case_acceptance")
@@ -530,6 +572,9 @@ def validate_acceptance_root(
             or record.get("result") != case_results[case_id]
         ):
             raise ScienceError(f"{case_id} direct-fast acceptance identity differs")
+        require_exact_science_scope_records(
+            record, limitation, intervention, f"{case_id} direct-fast acceptance"
+        )
         cases[str(case_id)] = record
         case_bindings[str(case_id)] = current
     return cases, campaign, provenance, case_bindings
@@ -850,6 +895,7 @@ def build_case_science(
             diagnostics, snapshot_ready, case_name
         ),
         "panel_products": [],
+        "gates": [],
     }
     if isinstance(reviewed_evidence, dict):
         for key in (
@@ -857,11 +903,12 @@ def build_case_science(
             "analyzer_metrics",
             "convergence_products",
             "panel_products",
+            "gates",
         ):
             value = reviewed_evidence.get(key)
-            if isinstance(value, dict) and key != "panel_products":
+            if isinstance(value, dict) and key not in ("panel_products", "gates"):
                 evidence[key] = value
-            elif isinstance(value, list) and key == "panel_products":
+            elif isinstance(value, list) and key in ("panel_products", "gates"):
                 evidence[key] = value
     return evidence
 
@@ -912,7 +959,6 @@ def generic_contrast(
                 + float(right["standard_deviation"]) ** 2
             )
         )
-        z_score = reviewed.finite_ratio(difference, combined_se)
         records.append({
             "metric": metric,
             "available": True,
@@ -920,10 +966,11 @@ def generic_contrast(
             "right_mean": float(right["mean"]),
             "difference_left_minus_right": difference,
             "combined_standard_error": combined_se,
-            "z_score": z_score,
-            "two_sided_p": reviewed.normal_two_sided_p(z_score),
+            "pooled_within_realization_standard_deviation": pooled,
             "standardized_effect": reviewed.finite_ratio(difference, pooled),
-            "holm_correction": "not_preregistered_for_this_family",
+            "standardized_effect_scope": "descriptive_within_realization",
+            "claim_scope": "descriptive_within_realization",
+            "population_inference": reviewed.POPULATION_INFERENCE_LIMITATION,
         })
     both_eligible = eligible.get(left_id, False) and eligible.get(right_id, False)
     return {
@@ -931,6 +978,7 @@ def generic_contrast(
         "right": right_id,
         "result": "available" if any(record["available"] for record in records) else "inconclusive",
         "claim_eligible": both_eligible,
+        "population_inference": reviewed.POPULATION_INFERENCE_LIMITATION,
         "reason": (
             "descriptive exact-window contrast; no preregistered family pass threshold"
             if both_eligible
@@ -946,10 +994,18 @@ def active_passive_contrasts(
     cases: dict[str, dict[str, object]],
     eligible: dict[str, bool],
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
-    """Evaluate preregistered active/passive pairs with reviewed Holm correction."""
+    """Evaluate active/passive pairs with reviewed descriptive-direction criteria."""
 
     records: dict[str, object] = {}
     gates: list[dict[str, object]] = []
+    intervention_scope = policy["criteria"]["family_gates"]["active_passive"].get(
+        "intervention_scope"
+    )
+    if (
+        not isinstance(intervention_scope, dict)
+        or intervention_scope != reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    ):
+        raise ScienceError("active/passive intervention scope differs")
     for active, passive in ACTIVE_PASSIVE_PAIRS:
         try:
             contrast = reviewed.pair_contrast(
@@ -960,7 +1016,11 @@ def active_passive_contrasts(
                 "result": "inconclusive",
                 "reason": f"reviewed pair contrast unavailable: {error}",
                 "metrics": [],
+                "intervention_scope": intervention_scope,
+                "population_inference": reviewed.POPULATION_INFERENCE_LIMITATION,
             }
+        if contrast.get("intervention_scope") != intervention_scope:
+            raise ScienceError("reviewed pair contrast intervention scope differs")
         claim_eligible = eligible.get(active, False) and eligible.get(passive, False)
         provisional = str(contrast.get("result", "inconclusive"))
         if not claim_eligible:
@@ -976,7 +1036,7 @@ def active_passive_contrasts(
             f"active_passive_pair:{active}:{passive}",
             str(contrast["result"]),
             reason=str(contrast["reason"]),
-            observations=contrast.get("metrics"),
+            observations=contrast,
         ))
     return records, gates
 
@@ -1009,73 +1069,40 @@ def limiter_ordering_gate(
             reason="late-window R14/R15 nu_eff estimates are unavailable",
         )
     difference = float(upper["mean"]) - float(lower["mean"])
-    lower_95 = difference - 1.96 * math.hypot(
+    descriptive_block_lower_95 = difference - 1.96 * math.hypot(
         float(upper["standard_error"]), float(lower["standard_error"])
     )
     return reviewed.gate(
         "finite_limiter_ordering:R15_gt_R14",
-        "pass" if lower_95 > 0.0 else "fail",
+        "pass" if descriptive_block_lower_95 > 0.0 else "fail",
         reason=(
-            "R15 effective collisionality exceeds R14 with 95% confidence"
-            if lower_95 > 0.0
-            else "finite-limiter ordering is not resolved"
+            "descriptive within-trajectory block bound supports R15 greater than R14"
+            if descriptive_block_lower_95 > 0.0
+            else "finite-limiter descriptive ordering is unsupported"
         ),
-        observations={"R15_minus_R14": difference, "lower_95": lower_95},
+        observations={
+            "R15_minus_R14": difference,
+            "descriptive_block_lower_95": descriptive_block_lower_95,
+            "claim_scope": "descriptive_within_trajectory",
+        },
     )
 
 
 def lf_strength_gate(
     reviewed: object,
+    policy: dict[str, object],
     cases: dict[str, dict[str, object]],
     eligible: dict[str, bool],
 ) -> dict[str, object]:
-    """Evaluate the preregistered LF-strength peak-alignment response."""
+    """Report active LF-strength activity and descriptive response."""
 
-    records: list[dict[str, object]] = []
-    for case_id in ("R12", "R06", "R13"):
-        if not eligible.get(case_id, False) or not eligible.get("R02", False):
-            records.append({
-                "pair": [case_id, "R02"],
-                "available": False,
-                "reason": "one or both cases have not passed fast acceptance",
-            })
-            continue
-        left = reviewed.scalar_from_case(cases[case_id], "peak_alignment")
-        right = reviewed.scalar_from_case(cases["R02"], "peak_alignment")
-        if left is None or right is None:
-            records.append({
-                "pair": [case_id, "R02"],
-                "available": False,
-                "reason": "reviewed peak-alignment scalar is unavailable",
-            })
-            continue
-        difference = abs(float(left["mean"]) - float(right["mean"]))
-        lower_95 = difference - 1.96 * math.hypot(
-            float(left["standard_error"]), float(right["standard_error"])
-        )
-        records.append({
-            "pair": [case_id, "R02"],
-            "available": True,
-            "absolute_difference": difference,
-            "lower_95": lower_95,
-            "resolved": lower_95 > 0.0,
-        })
-    result = (
-        "pass"
-        if records and all(record.get("resolved") is True for record in records)
-        else "inconclusive"
-        if any(record.get("available") is not True for record in records)
-        else "fail"
-    )
+    assessment = reviewed.lf_strength_assessment(policy, cases, eligible)
     return reviewed.gate(
-        "lf_strength_resolved_response",
-        result,
-        reason=(
-            "R12/R02/R06/R13 peak-alignment responses are resolved"
-            if result == "pass"
-            else "LF-strength response is unavailable or unresolved"
-        ),
-        observations=records,
+        "lf_strength_descriptive_response_activity",
+        str(assessment["result"]),
+        reason=str(assessment["reason"]),
+        observations=assessment["observations"],
+        limits=assessment["limits"],
     )
 
 
@@ -1435,6 +1462,7 @@ def aggregate_science(
         policy = reviewed.load_validated_policy(criteria, criteria_review)
     except Exception as error:
         raise ScienceError(f"cannot load reviewed scientific policy: {error}") from error
+    limitation, intervention = exact_science_scope_records(reviewed, policy)
     required = [str(value) for value in policy["criteria"]["required_cases"]]
     selected = parse_case_selection(selected_values, required)
     inventory, report_root, lineages, lineage_bindings = validate_inventory(
@@ -1504,7 +1532,7 @@ def aggregate_science(
             for left, right in pairs
         }
     limiter_gate = limiter_ordering_gate(reviewed, case_science, eligible, summaries)
-    lf_gate = lf_strength_gate(reviewed, case_science, eligible)
+    lf_gate = lf_strength_gate(reviewed, policy, case_science, eligible)
     convergence = resolution_gate(reviewed, policy, case_science, eligible)
     mks24, mks24_gates = mks24_assessment(
         reviewed, policy, case_science, diagnostics, snapshot_ready, eligible
@@ -1525,6 +1553,8 @@ def aggregate_science(
         "result": result,
         "selected_cases": selected,
         "case_dispositions": case_dispositions,
+        "active_passive_intervention_scope": intervention,
+        "current_science_scope_limitation": limitation,
         "families": {
             "active_passive": active_passive,
             **descriptive_families,
@@ -1640,6 +1670,19 @@ def contrast_rows(science: dict[str, object]) -> list[dict[str, object]]:
                 continue
             left = contrast.get("active", contrast.get("left"))
             right = contrast.get("passive", contrast.get("right"))
+            intervention_scope = contrast.get("intervention_scope")
+            if not isinstance(intervention_scope, dict):
+                intervention_scope = {}
+            intervention_fields = {
+                "intervention_estimand": intervention_scope.get("estimand"),
+                "intervention_enabled_components": intervention_scope.get(
+                    "enabled_components"
+                ),
+                "excluded_interpretation": intervention_scope.get(
+                    "excluded_interpretation"
+                ),
+                "intervention_declaration": intervention_scope.get("declaration"),
+            }
             metrics = contrast.get("metrics")
             if not isinstance(metrics, list) or not metrics:
                 rows.append({
@@ -1650,6 +1693,7 @@ def contrast_rows(science: dict[str, object]) -> list[dict[str, object]]:
                     "result": contrast.get("result"),
                     "claim_eligible": contrast.get("claim_eligible"),
                     "reason": contrast.get("reason"),
+                    **intervention_fields,
                 })
                 continue
             for metric in metrics:
@@ -1670,12 +1714,18 @@ def contrast_rows(science: dict[str, object]) -> list[dict[str, object]]:
                         "difference", metric.get("difference_left_minus_right")
                     ),
                     "combined_standard_error": metric.get("combined_standard_error"),
-                    "z_score": metric.get("z_score"),
-                    "two_sided_p": metric.get("two_sided_p"),
                     "standardized_effect": metric.get("standardized_effect"),
-                    "holm_threshold": metric.get("holm_threshold"),
-                    "holm_significant": metric.get("holm_significant"),
+                    "pooled_within_realization_standard_deviation": metric.get(
+                        "pooled_within_realization_standard_deviation"
+                    ),
+                    "expected_direction": metric.get("expected_direction"),
+                    "direction_coherent": metric.get("direction_coherent"),
+                    "large_direction_coherent_effect": metric.get(
+                        "large_direction_coherent_effect"
+                    ),
+                    "claim_scope": metric.get("claim_scope"),
                     "reason": metric.get("reason", contrast.get("reason")),
+                    **intervention_fields,
                 })
     return rows
 
@@ -1786,8 +1836,12 @@ def write_tables(
             [
                 "family", "contrast", "left", "right", "result", "claim_eligible",
                 "metric", "available", "left_mean", "right_mean", "difference",
-                "combined_standard_error", "z_score", "two_sided_p",
-                "standardized_effect", "holm_threshold", "holm_significant", "reason",
+                "combined_standard_error", "pooled_within_realization_standard_deviation",
+                "standardized_effect", "expected_direction", "direction_coherent",
+                "large_direction_coherent_effect", "claim_scope",
+                "intervention_estimand", "intervention_enabled_components",
+                "excluded_interpretation", "intervention_declaration",
+                "reason",
             ],
             contrast_rows(science),
         ),

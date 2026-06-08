@@ -71,11 +71,21 @@ def scalar(mean: float, *, deviation: float = 0.1, error: float = 0.01) -> dict[
         "mean": mean,
         "standard_deviation": deviation,
         "standard_error": error,
-        "confidence_interval_95": [mean - 1.96 * error, mean + 1.96 * error],
+        "block_bootstrap_interval_95": [mean - 1.96 * error, mean + 1.96 * error],
         "effective_sample_count": 4.0,
         "independent_time_block_count": 3,
         "gap_adequacy": "pass",
         "sample_count": 5,
+    }
+
+
+def analyzer_scalar(
+    mean: float, *, deviation: float = 0.1, error: float = 0.01
+) -> dict[str, object]:
+    return {
+        "mean": mean,
+        "standard_deviation": deviation,
+        "standard_error": error,
     }
 
 
@@ -98,6 +108,7 @@ def reviewed_metrics(active_mean: float) -> dict[str, object]:
         "abs_dp": active_mean,
         "mirror_occupancy": active_mean,
         "firehose_occupancy": 0.0,
+        "unstable_occupancy": active_mean,
         "kinetic": 1.0,
         "magnetic": 1.0,
         "beta": 10.0,
@@ -137,9 +148,21 @@ def reviewed_case_evidence(
                 "diagnostics": {},
             },
             "metrics": reviewed_metrics(active_mean),
-            "analyzer_metrics": {},
+            "analyzer_metrics": {"peak_alignment": analyzer_scalar(active_mean)},
             "convergence_products": {},
             "panel_products": [],
+            "gates": (
+                [
+                    reviewed.gate(
+                        "landau_fluid_activity",
+                        "pass",
+                        reason="fixture active LF transport",
+                        observations={"lf_qface_increment": 1.0},
+                    )
+                ]
+                if case_id in ("R12", "R02", "R13")
+                else []
+            ),
             "provenance": {
                 "criteria": policy["criteria_binding"],
                 "criteria_review": policy["review_binding"],
@@ -239,7 +262,7 @@ def build_fixture(
     reviewed_bindings: dict[str, object] = {}
     for case_id, result in case_results.items():
         lineage_path, mhd, user = case_inputs[case_id]
-        active_mean = 1.0 if case_id == "R02" else 0.0
+        active_mean = 0.0 if case_id in ("R02", "R03", "R04", "R05") else 1.0
         reviewed_path = (
             reviewed_case_evidence(
                 reviewed,
@@ -261,6 +284,12 @@ def build_fixture(
             "case_name": manifest_cases[case_id]["name"],
             "result": result,
             "reason": f"fixture {result}",
+            "active_passive_intervention_scope": (
+                reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+            ),
+            "current_science_scope_limitation": (
+                reviewed.CURRENT_SCIENCE_SCOPE_LIMITATION
+            ),
             "health": {"result": "pass", "complete_to_target": True},
             "scope": {
                 "classification": "standard_claim_scope",
@@ -276,6 +305,7 @@ def build_fixture(
                 "abs_dp": metric_record(active_mean),
                 "mirror_occupancy": metric_record(active_mean),
                 "firehose_occupancy": metric_record(0.0),
+                "unstable_occupancy": metric_record(active_mean),
                 "kinetic": metric_record(1.0),
                 "magnetic": metric_record(1.0),
                 "beta": metric_record(10.0),
@@ -302,6 +332,12 @@ def build_fixture(
                 else "inconclusive"
             ),
             "case_results": case_results,
+            "active_passive_intervention_scope": (
+                reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+            ),
+            "current_science_scope_limitation": (
+                reviewed.CURRENT_SCIENCE_SCOPE_LIMITATION
+            ),
             "provenance": {
                 "criteria": policy["criteria_binding"],
                 "criteria_review": policy["review_binding"],
@@ -361,11 +397,18 @@ def test_partial_campaign_is_honest_and_cannot_pass(science, reviewed, tmp_path)
     pair = result["families"]["active_passive"]["R02_R06"]
     assert pair["result"] == "inconclusive"
     assert pair["claim_eligible"] is False
+    assert pair["intervention_scope"] == reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    assert result["active_passive_intervention_scope"] == (
+        reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert result["current_science_scope_limitation"] == (
+        reviewed.CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
     assert (tmp_path / "science/tables/contrasts.csv").is_file()
     assert (tmp_path / "science/tables/mks24.md").is_file()
 
 
-def test_passing_pair_uses_reviewed_holm_and_standardized_effect(
+def test_passing_pair_uses_descriptive_coherent_standardized_effect(
     science, reviewed, tmp_path
 ):
     fixture = build_fixture(
@@ -380,9 +423,31 @@ def test_passing_pair_uses_reviewed_holm_and_standardized_effect(
     pair = result["families"]["active_passive"]["R02_R06"]
     assert pair["claim_eligible"] is True
     assert pair["result"] == "pass"
+    assert pair["intervention_scope"] == reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
     available = [item for item in pair["metrics"] if item.get("available")]
-    assert any(item.get("holm_significant") is True for item in available)
+    assert all(item.get("direction_coherent") is True for item in available)
     assert any(abs(float(item["standardized_effect"])) >= 0.5 for item in available)
+    assert all(
+        item.get("claim_scope") == "descriptive_within_realization"
+        for item in available
+    )
+    assert all(
+        item.get("intervention_scope") == reviewed.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+        for item in available
+    )
+    assert all("two_sided_p" not in item and "holm_significant" not in item for item in available)
+    assert pair["population_inference"] == reviewed.POPULATION_INFERENCE_LIMITATION
+    contrasts_csv = (tmp_path / "science/tables/contrasts.csv").read_text(
+        encoding="utf-8"
+    )
+    contrasts_md = (tmp_path / "science/tables/contrasts.md").read_text(
+        encoding="utf-8"
+    )
+    for table in (contrasts_csv, contrasts_md):
+        assert "intervention_estimand" in table
+        assert "total_effect_of_enabling_active_cgl" in table
+        assert "anisotropic_stress_alone" in table
+        assert "realized_forcing_after_trajectory_divergence" in table
 
 
 def test_forged_campaign_evidence_digest_fails_closed(science, reviewed, tmp_path):
@@ -399,6 +464,53 @@ def test_forged_campaign_evidence_digest_fails_closed(science, reviewed, tmp_pat
     write_json(provenance, declared)
 
     with pytest.raises(science.ScienceError, match="forged"):
+        aggregate(science, fixture, tmp_path / "science", ["R02"])
+
+
+def test_campaign_current_science_scope_limitation_must_be_exact(
+    science, reviewed, tmp_path
+):
+    fixture = build_fixture(
+        science, reviewed, tmp_path, case_results={"R02": "inconclusive"}
+    )
+    campaign = fixture["acceptance"] / "campaign_evidence.json"
+    value = json.loads(campaign.read_text(encoding="utf-8"))
+    value.pop("evidence_digest")
+    value["current_science_scope_limitation"][
+        "full_scope_independent_review_complete"
+    ] = True
+    write_json(campaign, reviewed.seal_evidence(value))
+    provenance = fixture["acceptance"] / "provenance.json"
+    declared = json.loads(provenance.read_text(encoding="utf-8"))
+    declared["outputs"]["campaign_evidence"] = binding(campaign)
+    write_json(provenance, declared)
+
+    with pytest.raises(
+        science.ScienceError,
+        match="campaign evidence current science scope limitation differs",
+    ):
+        aggregate(science, fixture, tmp_path / "science", ["R02"])
+
+
+def test_case_active_passive_intervention_scope_must_be_exact(
+    science, reviewed, tmp_path
+):
+    fixture = build_fixture(
+        science, reviewed, tmp_path, case_results={"R02": "inconclusive"}
+    )
+    summary = fixture["acceptance"] / "cases/R02/case_acceptance.json"
+    value = json.loads(summary.read_text(encoding="utf-8"))
+    value["active_passive_intervention_scope"]["excluded_interpretation"] = "none"
+    write_json(summary, value)
+    provenance = fixture["acceptance"] / "provenance.json"
+    declared = json.loads(provenance.read_text(encoding="utf-8"))
+    declared["outputs"]["case_acceptance"]["R02"] = binding(summary)
+    write_json(provenance, declared)
+
+    with pytest.raises(
+        science.ScienceError,
+        match="R02 direct-fast acceptance active/passive intervention scope differs",
+    ):
         aggregate(science, fixture, tmp_path / "science", ["R02"])
 
 
@@ -454,7 +566,73 @@ def test_claim_grade_metrics_come_from_sealed_reviewed_evidence(
     pair = result["families"]["active_passive"]["R02_R06"]
     abs_dp = next(item for item in pair["metrics"] if item.get("metric") == "abs_dp")
     assert pair["result"] == "pass"
-    assert abs_dp["difference"] == 1.0
+    assert abs_dp["difference"] == -1.0
+
+
+def test_lf_strength_gate_excludes_r06_and_accepts_near_insensitivity(
+    science, reviewed,
+):
+    policy = reviewed.load_validated_policy(
+        science.DEFAULT_CRITERIA, science.DEFAULT_CRITERIA_REVIEW
+    )
+
+    def case(value: float) -> dict[str, object]:
+        return {
+            "analyzer_metrics": {"peak_alignment": analyzer_scalar(value)},
+            "gates": [
+                reviewed.gate(
+                    "landau_fluid_activity",
+                    "pass",
+                    reason="fixture active LF transport",
+                    observations={"lf_qface_increment": 1.0},
+                )
+            ],
+        }
+
+    cases = {
+        "R12": case(0.5),
+        "R02": case(0.5),
+        "R13": case(0.5),
+        "R06": case(0.1),
+    }
+    gate = science.lf_strength_gate(
+        reviewed,
+        policy,
+        cases,
+        {case_id: True for case_id in cases},
+    )
+
+    assert gate["result"] == "pass"
+    responses = gate["observations"]["responses"]
+    assert [record["pair"] for record in responses] == [
+        ["R12", "R02"], ["R13", "R02"]
+    ]
+    assert all(record["response_classification"] == "near_insensitive" for record in responses)
+    assert all("R06" not in record["pair"] for record in responses)
+
+
+def test_finite_limiter_gate_is_descriptive_and_claim_scoped(
+    science, reviewed,
+):
+    cases = {
+        "R14": {"metrics": {"nu_eff": reviewed_metrics(1.0)["nu_eff"]}},
+        "R15": {"metrics": {"nu_eff": reviewed_metrics(2.0)["nu_eff"]}},
+    }
+    gate = science.limiter_ordering_gate(
+        reviewed,
+        cases,
+        {"R14": True, "R15": True},
+        {
+            "R14": {"scope": {"classification": "scoped_nonfatal_hard_bound_variant"}},
+            "R15": {"scope": {"classification": "scoped_nonfatal_hard_bound_variant"}},
+        },
+    )
+
+    assert gate["observations"]["claim_scope"] == "descriptive_within_trajectory"
+    assert "descriptive_block_lower_95" in gate["observations"]
+    assert "confidence" not in gate["reason"].lower()
+    assert "signific" not in gate["reason"].lower()
+    assert "population" not in str(gate).lower()
 
 
 def test_stale_reviewed_evaluation_input_fails_closed(science, reviewed, tmp_path):

@@ -14,6 +14,18 @@ import pytest
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 TOOL = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_fast_corrected_release.py"
+CRITERIA = REPOSITORY / (
+    "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json"
+)
+CRITERIA_REVIEW = REPOSITORY / (
+    "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.review.json"
+)
+CURRENT_SCIENCE_SCOPE_LIMITATION = json.loads(
+    CRITERIA_REVIEW.read_text(encoding="utf-8")
+)["current_science_scope_limitation"]
+ACTIVE_PASSIVE_INTERVENTION_SCOPE = json.loads(
+    CRITERIA.read_text(encoding="utf-8")
+)["family_gates"]["active_passive"]["intervention_scope"]
 
 
 def load_tool():
@@ -128,6 +140,8 @@ def fixture_tree(
         {
             "record_type": "cgl-lf-stage-i-direct-fast-acceptance-summary",
             "selected_cases": list(gate.ALL_CASES),
+            "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+            "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
         },
     )
     acceptance_campaign = write_json(
@@ -135,6 +149,8 @@ def fixture_tree(
         {
             "record_type": "cgl-lf-stage-i-direct-fast-campaign-evidence",
             "result": "inconclusive",
+            "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+            "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
         },
     )
 
@@ -145,6 +161,8 @@ def fixture_tree(
             "record_type": gate.DIRECT_SCIENCE_RECORD_TYPE,
             "result": science_result,
             "selected_cases": list(gate.ALL_CASES),
+            "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+            "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
         },
     )
     science_provenance = write_json(
@@ -159,6 +177,8 @@ def fixture_tree(
         "status": "complete",
         "result": science_result,
         "campaign_kind": "corrected-composite",
+        "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
         "campaign_identity": context["identity_binding"],
         "inventory": context["inventory_binding"],
         "case_classification": gate.expected_science_classification(),
@@ -372,6 +392,10 @@ def install_dependencies(gate, monkeypatch, fixture: dict[str, object]) -> None:
         validate_products=lambda *_args: json.loads(
             fixture["corrected_science"].read_text(encoding="utf-8")
         ),
+        validated_scope_records=lambda *_args: (
+            CURRENT_SCIENCE_SCOPE_LIMITATION,
+            ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        ),
     )
     downstream = SimpleNamespace(validate_completion=lambda *_args: fixture["pointer"])
     monkeypatch.setattr(
@@ -431,6 +455,18 @@ def test_run_only_writes_immutable_manuscript_marker(gate, tmp_path, monkeypatch
     assert record["gate_policy"]["marker_is_final_initiative_release"] is False
     assert record["gate_policy"]["required_publication_product_count"] == 52
     assert record["ct_numerical_result"] == "pass"
+    assert record["active_passive_intervention_scope"] == (
+        ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert record["current_science_scope_limitation"] == (
+        CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
+    assert record["reviewed_science"]["active_passive_intervention_scope"] == (
+        ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert record["reviewed_science"]["current_science_scope_limitation"] == (
+        CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
     assert set(record["tools"]) == {
         "adapter",
         "corrected_report",
@@ -439,6 +475,56 @@ def test_run_only_writes_immutable_manuscript_marker(gate, tmp_path, monkeypatch
         "publication",
     }
     assert gate.validate_marker(fixture["args"]) == path
+
+
+@pytest.mark.parametrize(
+    ("source", "field", "message"),
+    [
+        (
+            "corrected",
+            "current_science_scope_limitation",
+            "corrected/composite reviewed science current science scope limitation differs",
+        ),
+        (
+            "corrected",
+            "active_passive_intervention_scope",
+            "corrected/composite reviewed science active/passive intervention scope differs",
+        ),
+        (
+            "direct",
+            "current_science_scope_limitation",
+            "direct reviewed science current science scope limitation differs",
+        ),
+        (
+            "direct",
+            "active_passive_intervention_scope",
+            "direct reviewed science active/passive intervention scope differs",
+        ),
+    ],
+)
+def test_release_requires_exact_scope_records(
+    gate, tmp_path, monkeypatch, source, field, message
+):
+    fixture = fixture_tree(gate, tmp_path)
+    install_dependencies(gate, monkeypatch, fixture)
+    direct = fixture["args"].science_output / "science.json"
+    path = fixture["corrected_science"] if source == "corrected" else direct
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if field == "current_science_scope_limitation":
+        value[field]["full_scope_independent_review_complete"] = True
+    else:
+        value[field]["excluded_interpretation"] = "none"
+    write_json(path, value)
+    if source == "direct":
+        corrected = json.loads(
+            fixture["corrected_science"].read_text(encoding="utf-8")
+        )
+        corrected["science"]["record"] = binding(direct)
+        write_json(fixture["corrected_science"], corrected)
+    science = gate.load_module("_test_science", gate.CORRECTED_SCIENCE_TOOL)
+
+    with pytest.raises(gate.ManuscriptReadyError, match=message):
+        gate.validate_reviewed_science(fixture["args"], science, fixture["context"])
 
 
 def test_existing_marker_refuses_before_any_validation(gate, tmp_path, monkeypatch):

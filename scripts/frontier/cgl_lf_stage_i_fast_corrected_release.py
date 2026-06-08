@@ -181,6 +181,20 @@ def require_text(value: object, label: str) -> str:
     return value
 
 
+def require_exact_scope_records(
+    value: dict[str, object],
+    limitation: dict[str, object],
+    intervention: dict[str, object],
+    label: str,
+) -> None:
+    """Require one release input to carry both exact reviewed-science scopes."""
+
+    if value.get("current_science_scope_limitation") != limitation:
+        raise ManuscriptReadyError(f"{label} current science scope limitation differs")
+    if value.get("active_passive_intervention_scope") != intervention:
+        raise ManuscriptReadyError(f"{label} active/passive intervention scope differs")
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -428,6 +442,7 @@ def validate_reviewed_science(
         expected = science.validate_products(
             context, acceptance, science_root, criteria, review
         )
+        limitation, intervention = science.validated_scope_records(criteria, review)
     except Exception as error:
         raise ManuscriptReadyError(
             f"corrected/composite reviewed science validation failed: {error}"
@@ -452,6 +467,9 @@ def validate_reviewed_science(
         raise ManuscriptReadyError(
             "corrected/composite reviewed-science identity or coverage differs"
         )
+    require_exact_scope_records(
+        record, limitation, intervention, "corrected/composite reviewed science"
+    )
     require_same_binding(
         record.get("campaign_identity"), context["identity_binding"], "science identity"
     )
@@ -476,9 +494,14 @@ def validate_reviewed_science(
         or direct.get("result") != record["result"]
     ):
         raise ManuscriptReadyError("direct reviewed-science record differs")
+    require_exact_scope_records(
+        direct, limitation, intervention, "direct reviewed science"
+    )
     return {
         "root": str(science_root),
         "acceptance_root": str(acceptance),
+        "active_passive_intervention_scope": intervention,
+        "current_science_scope_limitation": limitation,
         "record": record,
         "record_binding": record_binding,
         "direct_record": direct_binding,
@@ -879,6 +902,12 @@ def build_marker(args: argparse.Namespace) -> dict[str, object]:
         "marker_path": str(marker),
         "campaign_kind": "corrected-composite",
         "reviewed_science_result": science["record"]["result"],
+        "active_passive_intervention_scope": science[
+            "active_passive_intervention_scope"
+        ],
+        "current_science_scope_limitation": science[
+            "current_science_scope_limitation"
+        ],
         "ct_numerical_result": downstream["ct_record"]["result"],
         "ct_authentication_complete": True,
         "ct_coverage_complete": True,
@@ -898,6 +927,12 @@ def build_marker(args: argparse.Namespace) -> dict[str, object]:
             "record": science["record_binding"],
             "direct_record": science["direct_record"],
             "result": science["record"]["result"],
+            "active_passive_intervention_scope": science[
+                "active_passive_intervention_scope"
+            ],
+            "current_science_scope_limitation": science[
+                "current_science_scope_limitation"
+            ],
         },
         "downstream": {
             "root": downstream["root"],

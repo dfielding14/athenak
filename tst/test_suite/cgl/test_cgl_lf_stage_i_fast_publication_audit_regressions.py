@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import threading
@@ -74,7 +75,7 @@ def seal_ct(record: dict[str, object]) -> dict[str, object]:
     return body
 
 
-def write_science_record(root: Path, analysis: Path) -> Path:
+def write_science_record(root: Path, analysis: Path, publication_module) -> Path:
     inventory = analysis / "inventory.json"
     support = root / "support.txt"
     support.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +101,12 @@ def write_science_record(root: Path, analysis: Path) -> Path:
         "release_authorizing": False,
         "result": "inconclusive",
         "selected_cases": ["R02", "R04"],
+        "current_science_scope_limitation": (
+            publication_module.CURRENT_SCIENCE_SCOPE_LIMITATION
+        ),
+        "active_passive_intervention_scope": (
+            publication_module.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+        ),
         "case_dispositions": {
             "R02": {"claim_eligible": True, "acceptance_result": "pass"},
             "R04": {"claim_eligible": True, "acceptance_result": "pass"},
@@ -118,11 +125,7 @@ def write_science_record(root: Path, analysis: Path) -> Path:
                         "right_mean": 1.4,
                         "difference": -0.4,
                         "combined_standard_error": 0.1,
-                        "z_score": -4.0,
-                        "two_sided_p": 0.001,
                         "standardized_effect": -1.25,
-                        "holm_threshold": 0.01,
-                        "holm_significant": True,
                     }],
                 }
             }
@@ -157,8 +160,8 @@ def write_science_record(root: Path, analysis: Path) -> Path:
             "name": "forcing:R02:R04",
             "result": "pass",
             "reason": "reviewed contrast passes",
-            "observations": [{"metric": "kinetic", "holm_significant": True}],
-            "limits": {"alpha": 0.05},
+            "observations": [{"metric": "kinetic", "descriptive_direction": "left_lt_right"}],
+            "limits": {"inference_scope": "descriptive_within_realization"},
         }, {
             "name": "R16_R02_R17_resolution_convergence",
             "result": "inconclusive",
@@ -465,10 +468,10 @@ def test_interrupted_promotion_withdraws_manifest_and_rerun_recovers(
     real_promote_file = publication.promote_file
     product_promotions = 0
 
-    def interrupt_after_first_product(staged, canonical):
+    def interrupt_after_first_product(staged, relative, output_descriptor):
         nonlocal product_promotions
-        real_promote_file(staged, canonical)
-        if canonical.name != "manifest.json":
+        real_promote_file(staged, relative, output_descriptor)
+        if relative.name != "manifest.json":
             product_promotions += 1
             if product_promotions == 1:
                 assert not (output / "manifest.json").exists()
@@ -505,6 +508,378 @@ def test_interrupted_promotion_withdraws_manifest_and_rerun_recovers(
         assert publication.source_binding(path) == product
 
 
+def test_post_manifest_failure_withdraws_authenticated_authority(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    staging = tmp_path / ".publication.staging-post-manifest-failure"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "post-manifest-failure",
+        {"a.txt": "new a\n", "b.txt": "new b\n"},
+    )
+    real_promote_file = publication.promote_file
+
+    def corrupt_product_after_manifest(staged, relative, output_descriptor):
+        real_promote_file(staged, relative, output_descriptor)
+        if relative == Path("manifest.json"):
+            publication.write_text(output / "a.txt", "tampered after manifest\n")
+
+    monkeypatch.setattr(
+        publication, "promote_file", corrupt_product_after_manifest
+    )
+
+    with pytest.raises(
+        publication.PublicationError, match="differs from staged binding"
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert publication.valid_publication_ownership(output)
+    assert not (output / "manifest.json").exists()
+    assert (output / "a.txt").read_text(encoding="utf-8") == (
+        "tampered after manifest\n"
+    )
+    assert (output / "b.txt").read_text(encoding="utf-8") == "new b\n"
+
+
+def test_post_manifest_failure_preserves_unrecognized_replacement(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    staging = tmp_path / ".publication.staging-unrecognized-manifest"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "unrecognized-manifest",
+        {"a.txt": "new a\n"},
+    )
+    real_promote_file = publication.promote_file
+    replacement = b'{"authority":"unrecognized replacement"}\n'
+
+    def replace_manifest_then_fail(staged, relative, output_descriptor):
+        real_promote_file(staged, relative, output_descriptor)
+        if relative == Path("manifest.json"):
+            (output / "manifest.json").write_bytes(replacement)
+            raise RuntimeError("failure after unrecognized manifest replacement")
+
+    monkeypatch.setattr(publication, "promote_file", replace_manifest_then_fail)
+
+    with pytest.raises(
+        RuntimeError, match="failure after unrecognized manifest replacement"
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert (output / "manifest.json").read_bytes() == replacement
+    assert publication.valid_publication_ownership(output)
+
+
+def test_authenticated_withdrawal_preserves_replacement_after_quarantine_rename(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    output.mkdir()
+    expected = b'{"authority":"authenticated"}\n'
+    replacement = b'{"authority":"replacement-after-quarantine"}\n'
+    (output / "manifest.json").write_bytes(expected)
+    output_descriptor = publication.open_output_directory(output)
+    real_read_regular_file_at = publication.read_regular_file_at
+    replacement_installed = False
+
+    def replace_after_quarantine(output_descriptor_value, relative):
+        nonlocal replacement_installed
+        payload = real_read_regular_file_at(output_descriptor_value, relative)
+        if (
+            output_descriptor_value != output_descriptor
+            and relative == Path("manifest.json")
+            and not replacement_installed
+        ):
+            staged_replacement = output / ".replacement-manifest"
+            staged_replacement.write_bytes(replacement)
+            os.replace(staged_replacement, output / "manifest.json")
+            replacement_installed = True
+        return payload
+
+    monkeypatch.setattr(
+        publication, "read_regular_file_at", replace_after_quarantine
+    )
+    try:
+        assert publication.withdraw_authenticated_canonical_manifest(
+            output_descriptor, expected
+        )
+    finally:
+        os.close(output_descriptor)
+
+    assert replacement_installed
+    assert (output / "manifest.json").read_bytes() == replacement
+    quarantines = list(
+        tmp_path.glob(
+            f".publication{publication.PUBLICATION_MANIFEST_QUARANTINE_PREFIX}*"
+        )
+    )
+    assert len(quarantines) == 1
+    assert (quarantines[0] / "manifest.json").read_bytes() == expected
+
+
+def test_quarantine_name_collision_preserves_unknown_directory(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    output.mkdir()
+    expected = b'{"authority":"authenticated"}\n'
+    (output / "manifest.json").write_bytes(expected)
+    existing = (
+        tmp_path
+        / f".publication{publication.PUBLICATION_MANIFEST_QUARANTINE_PREFIX}collision"
+    )
+    existing.mkdir()
+    (existing / "unknown.txt").write_text("preserve\n", encoding="utf-8")
+    tokens = iter(("collision", "unique"))
+    monkeypatch.setattr(publication.secrets, "token_hex", lambda _size: next(tokens))
+    output_descriptor = publication.open_output_directory(output)
+
+    try:
+        assert publication.withdraw_authenticated_canonical_manifest(
+            output_descriptor, expected
+        )
+    finally:
+        os.close(output_descriptor)
+
+    assert (existing / "unknown.txt").read_text(encoding="utf-8") == "preserve\n"
+    assert not (output / "manifest.json").exists()
+    unique = (
+        tmp_path
+        / f".publication{publication.PUBLICATION_MANIFEST_QUARANTINE_PREFIX}unique"
+    )
+    assert (unique / "manifest.json").read_bytes() == expected
+
+
+def test_authenticated_withdrawal_never_deletes_quarantine_replacement(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    output.mkdir()
+    expected = b'{"authority":"authenticated"}\n'
+    replacement = b'{"authority":"unknown-quarantine-replacement"}\n'
+    (output / "manifest.json").write_bytes(expected)
+    output_descriptor = publication.open_output_directory(output)
+    real_read_regular_file_at = publication.read_regular_file_at
+    replacement_installed = False
+
+    def replace_quarantined_manifest(descriptor, relative):
+        nonlocal replacement_installed
+        payload = real_read_regular_file_at(descriptor, relative)
+        if (
+            descriptor != output_descriptor
+            and relative == Path("manifest.json")
+            and not replacement_installed
+        ):
+            staged = ".unknown-replacement"
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            replacement_descriptor = os.open(staged, flags, 0o600, dir_fd=descriptor)
+            try:
+                os.write(replacement_descriptor, replacement)
+            finally:
+                os.close(replacement_descriptor)
+            os.replace(
+                staged,
+                "manifest.json",
+                src_dir_fd=descriptor,
+                dst_dir_fd=descriptor,
+            )
+            replacement_installed = True
+        return payload
+
+    monkeypatch.setattr(
+        publication, "read_regular_file_at", replace_quarantined_manifest
+    )
+    try:
+        assert publication.withdraw_authenticated_canonical_manifest(
+            output_descriptor, expected
+        )
+    finally:
+        os.close(output_descriptor)
+
+    quarantines = list(
+        tmp_path.glob(
+            f".publication{publication.PUBLICATION_MANIFEST_QUARANTINE_PREFIX}*"
+        )
+    )
+    assert replacement_installed
+    assert len(quarantines) == 1
+    assert (quarantines[0] / "manifest.json").read_bytes() == replacement
+    assert not (output / "manifest.json").exists()
+
+
+def test_all_staged_products_are_fsynced_before_first_promotion(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    staging = tmp_path / ".publication.staging-fsync-products"
+    staging.mkdir()
+    text = staging / "tables/result.txt"
+    publication.write_text(text, "result\n")
+    pdf = staging / "figures/result.pdf"
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF-1.4\nfixture\n")
+    products = [text, pdf]
+    manifest = {
+        "record_type": "cgl_lf_stage_i_fast_publication_products",
+        "publisher": "fsync-products",
+        "normalized_invocation": ["renderer", "--output", str(output.absolute())],
+        "products": publication.canonical_product_bindings(
+            products, staging, output
+        ),
+    }
+    real_fsync_regular_file = publication.fsync_regular_file
+    real_promote_file = publication.promote_file
+    synced: list[Path] = []
+
+    def observed_fsync(path):
+        real_fsync_regular_file(path)
+        synced.append(path.absolute())
+
+    def observed_promote(staged, relative, output_descriptor):
+        expected = {
+            text.absolute(),
+            pdf.absolute(),
+            (staging / "manifest.json").absolute(),
+        }
+        assert expected <= set(synced)
+        real_promote_file(staged, relative, output_descriptor)
+
+    monkeypatch.setattr(publication, "fsync_regular_file", observed_fsync)
+    monkeypatch.setattr(publication, "promote_file", observed_promote)
+
+    publication.promote_staged_publication(
+        staging,
+        output,
+        products,
+        manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+
+    assert pdf.absolute() in synced
+    assert json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    ) == manifest
+
+
+def test_semantically_equivalent_unfsynced_manifest_replacement_is_rejected(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    staging = tmp_path / ".publication.staging-manifest-exact-bytes"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "manifest-exact-bytes",
+        {"a.txt": "new a\n"},
+    )
+    real_fsync_regular_file = publication.fsync_regular_file
+    replaced = False
+
+    def replace_after_fsync(path):
+        nonlocal replaced
+        real_fsync_regular_file(path)
+        if path == staging / "manifest.json" and not replaced:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            path.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
+            replaced = True
+
+    monkeypatch.setattr(publication, "fsync_regular_file", replace_after_fsync)
+
+    with pytest.raises(
+        publication.PublicationError,
+        match="staged publication manifest differs from exact expected bytes",
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert replaced
+    assert not (output / "manifest.json").exists()
+
+
+def test_staged_pdf_fsync_failure_preserves_previous_canonical_authority(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    initial_staging = tmp_path / ".publication.staging-fsync-initial"
+    initial_products, initial_manifest = staged_publication(
+        publication,
+        initial_staging,
+        output,
+        "fsync-initial",
+        {"figures/result.pdf": "%PDF-1.4\nold\n"},
+    )
+    publication.promote_staged_publication(
+        initial_staging,
+        output,
+        initial_products,
+        initial_manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+    previous = tree_bytes(output)
+    staging = tmp_path / ".publication.staging-fsync-failure"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "fsync-failure",
+        {"figures/result.pdf": "%PDF-1.4\nnew\n"},
+    )
+    real_fsync_regular_file = publication.fsync_regular_file
+
+    def fail_pdf_fsync(path):
+        if path.suffix == ".pdf":
+            raise publication.PublicationError("simulated staged PDF fsync failure")
+        real_fsync_regular_file(path)
+
+    monkeypatch.setattr(publication, "fsync_regular_file", fail_pdf_fsync)
+
+    with pytest.raises(
+        publication.PublicationError, match="simulated staged PDF fsync failure"
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert tree_bytes(output) == previous
+    assert json.loads(
+        (output / "manifest.json").read_text(encoding="utf-8")
+    ) == initial_manifest
+
+
 def test_main_commit_is_idempotent_and_uses_canonical_paths(
     publication, tmp_path, monkeypatch
 ):
@@ -534,6 +909,10 @@ def test_main_commit_is_idempotent_and_uses_canonical_paths(
 
     assert manifest["normalized_invocation"] == publication.normalized_invocation(
         analysis.absolute(), output.absolute(), [acceptance]
+    )
+    assert manifest["publication_commit_contract"]["stable_parent_boundary"] == (
+        "the output parent pathname must continue to name the held locked directory "
+        "through commit return"
     )
     assert ".staging-" not in json.dumps(manifest)
     for product in manifest["products"]:
@@ -604,7 +983,7 @@ def test_explicit_empty_acceptance_root_equal_or_contains_output_is_rejected(
 
     with pytest.raises(
         publication.PublicationError,
-        match="overlaps an explicit acceptance root",
+        match="overlaps an acceptance root",
     ):
         publication.main([
             str(analysis),
@@ -621,13 +1000,37 @@ def test_explicit_empty_acceptance_root_equal_or_contains_output_is_rejected(
         assert not output.exists()
 
 
+@pytest.mark.parametrize(
+    "root_name",
+    ["scientific-acceptance", "acceptance", "audits", "scientific-audits"],
+)
+@pytest.mark.parametrize("nested_output", [False, True], ids=["equal", "contains"])
+def test_builtin_acceptance_root_equal_or_containing_output_is_rejected(
+    publication, tmp_path, root_name, nested_output
+):
+    analysis = tmp_path / "analysis"
+    root = analysis / root_name
+    root.mkdir(parents=True)
+    output = root / "publication" if nested_output else root
+
+    with pytest.raises(
+        publication.PublicationError, match="overlaps an acceptance root"
+    ):
+        publication.main([str(analysis), "--output", str(output)])
+
+    assert tree_bytes(root) == {}
+    assert output.exists() is not nested_output
+    assert not publication.publication_ownership_path(output).exists()
+    assert not publication.publication_lock_path(output).exists()
+
+
 def test_arbitrary_nonempty_unowned_output_is_rejected(
     publication, tmp_path, monkeypatch
 ):
     analysis = tmp_path / "analysis"
     analysis.mkdir()
     output = tmp_path / "publication"
-    publication.write_text(output / "unrelated.txt", "do not delete\n")
+    publication.write_text(output / "new.txt", "do not delete\n")
     previous = tree_bytes(output)
 
     monkeypatch.setattr(
@@ -643,9 +1046,7 @@ def test_arbitrary_nonempty_unowned_output_is_rejected(
 
     monkeypatch.setattr(publication, "render_products", fixed_render)
 
-    with pytest.raises(
-        publication.PublicationError, match="nonempty unowned output"
-    ):
+    with pytest.raises(publication.PublicationError, match="nonempty unowned output"):
         publication.main([str(analysis), "--output", str(output)])
 
     assert tree_bytes(output) == previous
@@ -698,8 +1099,9 @@ def test_valid_existing_manifest_migrates_ownership_before_interruption(
     publication, tmp_path, monkeypatch
 ):
     output = tmp_path / "publication"
-    old_product = output / "old.txt"
-    publication.write_text(old_product, "old publication\n")
+    old_products = [output / "a.txt", output / "b.txt"]
+    for product in old_products:
+        publication.write_text(product, f"old {product.stem}\n")
     publication.write_json(
         output / "manifest.json",
         {
@@ -709,11 +1111,23 @@ def test_valid_existing_manifest_migrates_ownership_before_interruption(
                 "--output",
                 str(output.absolute()),
             ],
-            "products": [publication.source_binding(old_product)],
+            "products": [
+                publication.source_binding(product) for product in old_products
+            ],
         },
     )
     assert publication.valid_existing_publication_manifest(output)
-    assert not publication.publication_ownership_path(output).exists()
+    ownership = publication.publication_ownership_path(output)
+    write_json(ownership, {
+        "schema_version": 2,
+        "record_type": publication.PUBLICATION_OWNERSHIP_RECORD_TYPE,
+        "output": str(output.absolute()),
+        "directory_identity": {
+            "device": output.stat().st_dev,
+            "inode": output.stat().st_ino,
+        },
+    })
+    assert not publication.valid_publication_ownership(output)
     staging = tmp_path / ".publication.staging-existing-manifest"
     products, manifest = staged_publication(
         publication,
@@ -725,13 +1139,22 @@ def test_valid_existing_manifest_migrates_ownership_before_interruption(
     real_promote_file = publication.promote_file
     product_promotions = 0
 
-    def interrupt_after_migrated_ownership(staged_path, canonical):
+    def interrupt_after_migrated_ownership(
+        staged_path, relative, output_descriptor
+    ):
         nonlocal product_promotions
-        real_promote_file(staged_path, canonical)
-        if canonical.name != "manifest.json":
+        real_promote_file(staged_path, relative, output_descriptor)
+        if relative.name != "manifest.json":
             product_promotions += 1
             if product_promotions == 1:
                 assert publication.valid_publication_ownership(output)
+                token = (
+                    output / publication.PUBLICATION_AUTHORITY_TOKEN_NAME
+                ).read_bytes()
+                owner = json.loads(ownership.read_text(encoding="utf-8"))
+                assert owner["schema_version"] == 3
+                assert owner["token_sha256"] == hashlib.sha256(token).hexdigest()
+                assert "directory_identity" not in owner
                 assert not (output / "manifest.json").exists()
                 raise RuntimeError("interrupted migrated publication")
 
@@ -749,13 +1172,11 @@ def test_valid_existing_manifest_migrates_ownership_before_interruption(
             evidence_paths=[],
         )
 
-    assert not old_product.exists()
     assert publication.valid_publication_ownership(output)
-    ownership = publication.publication_ownership_path(output)
     ownership_bytes = ownership.read_bytes()
     assert not (output / "manifest.json").exists()
     assert (output / "a.txt").read_text(encoding="utf-8") == "new a\n"
-    assert not (output / "b.txt").exists()
+    assert (output / "b.txt").read_text(encoding="utf-8") == "old b\n"
 
     monkeypatch.setattr(publication, "promote_file", real_promote_file)
     recovery_staging = tmp_path / ".publication.staging-existing-manifest-recovery"
@@ -784,7 +1205,7 @@ def test_valid_existing_manifest_migrates_ownership_before_interruption(
     ) == recovery_manifest
 
 
-def test_owned_output_replacement_does_not_authorize_cleanup(
+def test_deleted_recreated_output_cannot_reuse_persistent_authority(
     publication, tmp_path
 ):
     output = tmp_path / "publication"
@@ -804,16 +1225,19 @@ def test_owned_output_replacement_does_not_authorize_cleanup(
         analysis=tmp_path / "analysis",
         evidence_paths=[],
     )
-    owned_identity = publication.publication_output_identity(output)
     assert publication.valid_publication_ownership(output)
+    ownership = json.loads(
+        publication.publication_ownership_path(output).read_text(encoding="utf-8")
+    )
+    assert ownership["schema_version"] == 3
+    assert "token_sha256" in ownership
+    assert "directory_identity" not in ownership
 
     displaced = tmp_path / "displaced-publication"
     output.rename(displaced)
     output.mkdir()
-    publication.write_text(output / "unrelated.txt", "do not delete\n")
     replacement = tree_bytes(output)
 
-    assert publication.publication_output_identity(output) != owned_identity
     assert not publication.valid_publication_ownership(output)
     replacement_staging = tmp_path / ".publication.staging-replacement"
     replacement_products, replacement_manifest = staged_publication(
@@ -826,7 +1250,7 @@ def test_owned_output_replacement_does_not_authorize_cleanup(
 
     with pytest.raises(
         publication.PublicationError,
-        match="does not bind the current nonempty output directory instance",
+        match="does not bind the current output directory instance",
     ):
         publication.promote_staged_publication(
             replacement_staging,
@@ -843,7 +1267,199 @@ def test_owned_output_replacement_does_not_authorize_cleanup(
     )
 
 
-def test_concurrent_promotions_are_serialized_by_sibling_lock(
+def test_rerender_preserves_unrecognized_preexisting_regular_manifest(
+    publication, tmp_path
+):
+    output = tmp_path / "publication"
+    initial_staging = tmp_path / ".publication.staging-recognized-manifest"
+    initial_products, initial_manifest = staged_publication(
+        publication,
+        initial_staging,
+        output,
+        "recognized-manifest",
+        {"a.txt": "old a\n"},
+    )
+    publication.promote_staged_publication(
+        initial_staging,
+        output,
+        initial_products,
+        initial_manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+    unknown_manifest = b'{"authority":"unrecognized-preexisting"}\n'
+    replacement = output / ".replacement-manifest"
+    replacement.write_bytes(unknown_manifest)
+    os.replace(replacement, output / "manifest.json")
+    previous = tree_bytes(output)
+    staging = tmp_path / ".publication.staging-rerender-unrecognized-manifest"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "rerender-unrecognized-manifest",
+        {"a.txt": "new a\n"},
+    )
+
+    with pytest.raises(
+        publication.PublicationError,
+        match="manifest is unrecognized; refusing to replace it",
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert tree_bytes(output) == previous
+    assert (output / "manifest.json").read_bytes() == unknown_manifest
+
+
+def test_rerender_preserves_manifest_replaced_after_recognition_before_withdrawal(
+    publication, tmp_path, monkeypatch
+):
+    output = tmp_path / "publication"
+    initial_staging = tmp_path / ".publication.staging-recognition-race-initial"
+    initial_products, initial_manifest = staged_publication(
+        publication,
+        initial_staging,
+        output,
+        "recognition-race-initial",
+        {"a.txt": "old a\n"},
+    )
+    publication.promote_staged_publication(
+        initial_staging,
+        output,
+        initial_products,
+        initial_manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+    staging = tmp_path / ".publication.staging-recognition-race-rerender"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "recognition-race-rerender",
+        {"a.txt": "new a\n"},
+    )
+    unknown_manifest = b'{"authority":"replacement-after-recognition"}\n'
+    real_fsync_regular_file = publication.fsync_regular_file
+    replacement_installed = False
+
+    def replace_after_recognition(path):
+        nonlocal replacement_installed
+        real_fsync_regular_file(path)
+        if path == staging / "manifest.json" and not replacement_installed:
+            replacement = output / ".replacement-manifest"
+            replacement.write_bytes(unknown_manifest)
+            os.replace(replacement, output / "manifest.json")
+            replacement_installed = True
+
+    monkeypatch.setattr(
+        publication, "fsync_regular_file", replace_after_recognition
+    )
+
+    with pytest.raises(
+        publication.PublicationError,
+        match="changed before authority withdrawal",
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert replacement_installed
+    assert (output / "manifest.json").read_bytes() == unknown_manifest
+    assert (output / "a.txt").read_text(encoding="utf-8") == "old a\n"
+    assert not any(
+        path.name.startswith(publication.PUBLICATION_MANIFEST_QUARANTINE_PREFIX)
+        for path in output.iterdir()
+    )
+
+
+@pytest.mark.parametrize(
+    ("replace_after", "expected_error"),
+    [
+        ("a.txt", "changed during product promotion"),
+        ("manifest.json", "changed before commit return"),
+    ],
+)
+def test_canonical_replacement_during_promotion_never_blesses_replacement(
+    publication, tmp_path, monkeypatch, replace_after, expected_error,
+):
+    output = tmp_path / "publication"
+    initial_staging = tmp_path / ".publication.staging-race-initial"
+    initial_products, initial_manifest = staged_publication(
+        publication,
+        initial_staging,
+        output,
+        "race-initial",
+        {"a.txt": "old a\n", "b.txt": "old b\n"},
+    )
+    publication.promote_staged_publication(
+        initial_staging,
+        output,
+        initial_products,
+        initial_manifest,
+        analysis=tmp_path / "analysis",
+        evidence_paths=[],
+    )
+    staging = tmp_path / ".publication.staging-race-replacement"
+    products, manifest = staged_publication(
+        publication,
+        staging,
+        output,
+        "race-replacement",
+        {"a.txt": "new a\n", "b.txt": "new b\n"},
+    )
+    real_promote_file = publication.promote_file
+    displaced = tmp_path / "displaced-during-promotion"
+    replaced = False
+
+    def replace_canonical_after_first_product(
+        staged, relative, output_descriptor
+    ):
+        nonlocal replaced
+        real_promote_file(staged, relative, output_descriptor)
+        if relative.name == replace_after and not replaced:
+            output.rename(displaced)
+            output.mkdir()
+            publication.write_text(output / "unrelated.txt", "replacement\n")
+            replaced = True
+
+    monkeypatch.setattr(
+        publication, "promote_file", replace_canonical_after_first_product
+    )
+
+    with pytest.raises(
+        publication.PublicationError,
+        match=expected_error,
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
+
+    assert tree_bytes(output) == {"unrelated.txt": b"replacement\n"}
+    assert not (output / "manifest.json").exists()
+    assert not (displaced / "manifest.json").exists()
+    assert (displaced / "a.txt").read_text(encoding="utf-8") == "new a\n"
+    assert (displaced / "b.txt").read_text(encoding="utf-8") == "new b\n"
+
+
+def test_concurrent_promotions_survive_sibling_lock_path_replacement(
     publication, tmp_path, monkeypatch
 ):
     output = tmp_path / "publication"
@@ -872,13 +1488,13 @@ def test_concurrent_promotions_are_serialized_by_sibling_lock(
     order = []
     errors = []
 
-    def observed_promote(staged, canonical):
+    def observed_promote(staged, relative, output_descriptor):
         publisher = (
             "first" if staged.is_relative_to(first_staging) else "second"
         )
-        order.append((publisher, canonical.name))
-        real_promote_file(staged, canonical)
-        if publisher == "first" and canonical.name == "a.txt":
+        order.append((publisher, relative.name))
+        real_promote_file(staged, relative, output_descriptor)
+        if publisher == "first" and relative.name == "a.txt":
             first_paused.set()
             assert release_first.wait(10)
 
@@ -918,6 +1534,10 @@ def test_concurrent_promotions_are_serialized_by_sibling_lock(
 
     first.start()
     assert first_paused.wait(10)
+    lock_path = publication.publication_lock_path(output)
+    displaced_lock = tmp_path / "displaced-publication.lock"
+    lock_path.rename(displaced_lock)
+    publication.write_text(lock_path, "replacement lock pathname\n")
     second.start()
     assert second_started.wait(10)
     try:
@@ -933,6 +1553,8 @@ def test_concurrent_promotions_are_serialized_by_sibling_lock(
     assert errors == []
     assert publication.publication_lock_path(output).is_file()
     assert not publication.publication_lock_path(output).is_symlink()
+    assert displaced_lock.is_file()
+    assert lock_path.read_text(encoding="utf-8") == "replacement lock pathname\n"
     assert [publisher for publisher, _ in order] == [
         "first",
         "first",
@@ -948,6 +1570,79 @@ def test_concurrent_promotions_are_serialized_by_sibling_lock(
     assert (output / "b.txt").read_text(encoding="utf-8") == "second b\n"
     for product in second_manifest["products"]:
         assert publication.source_binding(Path(product["path"])) == product
+
+
+def test_parent_directory_replacement_invalidates_trusted_lock_boundary(
+    publication, tmp_path
+):
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    output = parent / "publication"
+
+    with publication.exclusive_publication_lock(output) as parent_descriptor:
+        assert publication.canonical_parent_resolves_to_held_parent(
+            output, parent_descriptor
+        )
+        displaced = tmp_path / "displaced-parent"
+        parent.rename(displaced)
+        parent.mkdir()
+
+        assert not publication.canonical_parent_resolves_to_held_parent(
+            output, parent_descriptor
+        )
+        with pytest.raises(
+            publication.PublicationError,
+            match="held trusted stable parent boundary",
+        ):
+            publication.require_stable_publication_parent(
+                output, parent_descriptor, "during adversarial test"
+            )
+
+
+def test_parent_replacement_cannot_redirect_ownership_write(
+    publication, tmp_path, monkeypatch
+):
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    output = parent / "publication"
+    output.mkdir()
+    output_descriptor = publication.open_output_directory(output)
+    token = publication.create_publication_authority_token(output_descriptor)
+    real_write = publication.write_durable_regular_file_at
+    replacement_sentinel = b'{"authority":"unrelated-sentinel"}\n'
+    displaced = tmp_path / "displaced-parent"
+    replaced = False
+
+    def replace_parent_then_write(parent_descriptor, name, payload):
+        nonlocal replaced
+        parent.rename(displaced)
+        parent.mkdir()
+        (parent / name).write_bytes(replacement_sentinel)
+        replaced = True
+        real_write(parent_descriptor, name, payload)
+
+    monkeypatch.setattr(
+        publication, "write_durable_regular_file_at", replace_parent_then_write
+    )
+    parent_descriptor = os.open(parent, publication.directory_open_flags())
+    try:
+        with pytest.raises(
+            publication.PublicationError,
+            match="held trusted stable parent boundary",
+        ):
+            publication.write_durable_publication_ownership(
+                output, parent_descriptor, output_descriptor, token
+            )
+    finally:
+        os.close(parent_descriptor)
+        os.close(output_descriptor)
+
+    assert replaced
+    ownership_name = publication.publication_ownership_path(output).name
+    assert (parent / ownership_name).read_bytes() == replacement_sentinel
+    assert json.loads((displaced / ownership_name).read_text(encoding="utf-8")) == (
+        publication.publication_ownership_record(output, token)
+    )
 
 
 def test_output_root_symlink_escape_is_rejected(publication, tmp_path):
@@ -1046,8 +1741,8 @@ def test_output_descendant_file_symlink_is_rejected(publication, tmp_path):
     assert outside.read_text(encoding="utf-8") == "outside\n"
 
 
-def test_successful_rerender_removes_obsolete_canonical_paths(
-    publication, tmp_path, monkeypatch
+def test_rerender_fails_closed_and_preserves_stale_canonical_paths(
+    publication, tmp_path
 ):
     output = tmp_path / "publication"
     initial_staging = tmp_path / ".publication.staging-initial-tree"
@@ -1078,38 +1773,25 @@ def test_successful_rerender_removes_obsolete_canonical_paths(
         "exact-tree",
         {"tables/current.csv": "new current\n"},
     )
-    real_promote_file = publication.promote_file
-    observed_manifest_withdrawn_cleanup = False
+    previous = tree_bytes(output)
 
-    def observe_cleanup_before_promotion(staged, canonical):
-        nonlocal observed_manifest_withdrawn_cleanup
-        if canonical.name != "manifest.json":
-            assert not (output / "manifest.json").exists()
-            assert not (output / "tables/obsolete.csv").exists()
-            assert not (output / "obsolete").exists()
-            observed_manifest_withdrawn_cleanup = True
-        real_promote_file(staged, canonical)
+    with pytest.raises(
+        publication.PublicationError, match="stale or unrecognized paths"
+    ):
+        publication.promote_staged_publication(
+            staging,
+            output,
+            products,
+            manifest,
+            analysis=tmp_path / "analysis",
+            evidence_paths=[],
+        )
 
-    monkeypatch.setattr(publication, "promote_file", observe_cleanup_before_promotion)
-    publication.promote_staged_publication(
-        staging,
-        output,
-        products,
-        manifest,
-        analysis=tmp_path / "analysis",
-        evidence_paths=[],
+    assert tree_bytes(output) == previous
+    assert (output / "tables/obsolete.csv").read_text(encoding="utf-8") == (
+        "obsolete\n"
     )
-
-    assert observed_manifest_withdrawn_cleanup
-    assert set(tree_bytes(output)) == {"manifest.json", "tables/current.csv"}
-    assert (output / "tables/current.csv").read_text(encoding="utf-8") == (
-        "new current\n"
-    )
-    assert not (output / "tables/obsolete.csv").exists()
-    assert not (output / "obsolete").exists()
-    assert json.loads(
-        (output / "manifest.json").read_text(encoding="utf-8")
-    ) == manifest
+    assert (output / "obsolete/old.txt").read_text(encoding="utf-8") == "obsolete\n"
 
 
 def test_stale_native_pass_cannot_override_current_direct_inconclusive(
@@ -1338,7 +2020,9 @@ def test_r14_scope_prioritizes_hard_bound_and_never_invents_variant(
     observed, status = publication.scope_observed_diagnostic(data, "R14")
     rows = {row["case_id"]: row for row in publication.scope_rows(data)}
 
-    assert publication.hyperbolicity_status(data, "R14") == "hyperbolic"
+    assert publication.hyperbolicity_status(data, "R14") == (
+        "nonnegative_discriminant"
+    )
     assert observed == "hard-bound=2.77e+11"
     assert status == "warning"
     assert rows["R14"]["observed_diagnostic"] == observed
@@ -1352,7 +2036,7 @@ def test_authenticated_science_and_ct_are_integrated_but_non_authorizing(
 ):
     analysis = tmp_path / "analysis"
     write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
-    science = write_science_record(tmp_path / "science", analysis)
+    science = write_science_record(tmp_path / "science", analysis, publication)
     ct = write_ct_record(tmp_path / "ct", analysis)
 
     data = publication.discover_data(analysis, [science, ct])
@@ -1366,7 +2050,8 @@ def test_authenticated_science_and_ct_are_integrated_but_non_authorizing(
     assert data.science_record is not None
     assert data.ct_audit_record is not None
     assert contrast["standardized_effect"] == pytest.approx(-1.25)
-    assert contrast["holm_significant"] is True
+    assert contrast["inference_scope"] == "descriptive_within_realization"
+    assert contrast["full_scope_independent_review_complete"] is False
     assert contrast["release_authorizing"] is False
     assert resolution["available"] is False
     assert resolution["passed"] is None
@@ -1383,12 +2068,43 @@ def test_authenticated_science_and_ct_are_integrated_but_non_authorizing(
     assert "campaign_authority_eligible=false" in report
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing_current_scope",
+        "missing_intervention_scope",
+        "deprecated_inference",
+    ),
+)
+def test_publication_rejects_unscoped_or_inferential_science(
+    publication, tmp_path, mutation
+):
+    analysis = tmp_path / "analysis"
+    write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
+    science = write_science_record(tmp_path / "science", analysis, publication)
+    record = json.loads(science.read_text(encoding="utf-8"))
+    if mutation == "missing_current_scope":
+        record.pop("current_science_scope_limitation")
+    elif mutation == "missing_intervention_scope":
+        record.pop("active_passive_intervention_scope")
+    else:
+        record["families"]["forcing"]["R02_R04"]["metrics"][0]["two_sided_p"] = 0.01
+    rewrite_science_record(science, record)
+
+    data = publication.discover_data(analysis, [science])
+
+    assert data.science_record is None
+    assert any(
+        "reviewed science aggregate" in warning for warning in data.ingestion_warnings
+    )
+
+
 def test_science_pass_allows_explicit_ineligible_r10_and_preserves_available_contrast(
     publication, tmp_path
 ):
     analysis = tmp_path / "analysis"
     write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
-    science = write_science_record(tmp_path / "science", analysis)
+    science = write_science_record(tmp_path / "science", analysis, publication)
     record = json.loads(science.read_text(encoding="utf-8"))
     record["result"] = "pass"
     record["selected_cases"] = list(publication.CASE_IDS)
@@ -1432,7 +2148,7 @@ def test_rendered_products_expose_authenticated_science_and_ct(
 ):
     analysis = tmp_path / "analysis"
     write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
-    science = write_science_record(tmp_path / "science", analysis)
+    science = write_science_record(tmp_path / "science", analysis, publication)
     ct = write_ct_record(tmp_path / "ct", analysis)
     data = publication.discover_data(analysis, [science, ct])
     output = tmp_path / "publication"
@@ -1456,7 +2172,7 @@ def test_forged_or_stale_science_and_ct_records_are_rejected(
 ):
     analysis = tmp_path / "analysis"
     write_json(analysis / "inventory.json", {"record_type": "fixture-inventory"})
-    science = write_science_record(tmp_path / "science", analysis)
+    science = write_science_record(tmp_path / "science", analysis, publication)
     science_record = json.loads(science.read_text(encoding="utf-8"))
     science_record["result"] = "pass"
     write_json(science, science_record)
@@ -1844,6 +2560,8 @@ def install_material_science(publication, data, bindings: dict[str, dict]) -> No
         "_publication_evidence_validated": True,
         "result": "pass",
         "selected_cases": selected,
+        "current_science_scope_limitation": publication.CURRENT_SCIENCE_SCOPE_LIMITATION,
+        "active_passive_intervention_scope": publication.ACTIVE_PASSIVE_INTERVENTION_SCOPE,
         "case_dispositions": {
             case_id: {"claim_eligible": True, "acceptance_result": "pass"}
             for case_id in selected
@@ -1855,11 +2573,11 @@ def install_material_science(publication, data, bindings: dict[str, dict]) -> No
                     "passive": "R06",
                     "result": "pass",
                     "claim_eligible": True,
+                    "intervention_scope": publication.ACTIVE_PASSIVE_INTERVENTION_SCOPE,
                     "metrics": [{
                         "metric": "abs_dp",
                         "available": True,
                         "standardized_effect": -1.5,
-                        "holm_significant": True,
                     }],
                 }
             }
@@ -2143,6 +2861,8 @@ def test_material_figures_and_tables_are_integrated(publication, tmp_path):
     assert "strict_hyperbolic_claim_status" in hyperbolicity_header
     assert "strict_hyperbolic_claim_eligible" in hyperbolicity_header
     assert "strict_hyperbolic_claim_reason" in hyperbolicity_header
+    assert "audit_state_scope" in hyperbolicity_header
+    assert "audit_direction_scope" in hyperbolicity_header
     assert "claim_scope" not in hyperbolicity_header
 
 
@@ -2232,7 +2952,9 @@ def test_all_snapshot_hyperbolicity_requires_authenticated_exact_coverage(
     assert stale["result_provenance"] == "inconclusive"
 
 
-def test_hyperbolicity_dispositions_and_claim_status_remain_physical(publication):
+def test_directional_discriminant_dispositions_never_overclaim_strict_hyperbolicity(
+    publication,
+):
     hyperbolic = publication.snapshot_hyperbolicity_summary([{
         "aggregate": {
             "evaluated": 10,
@@ -2250,27 +2972,30 @@ def test_hyperbolicity_dispositions_and_claim_status_remain_physical(publication
         }
     }])
 
-    assert hyperbolic["result"] == "hyperbolic"
+    assert hyperbolic["result"] == "nonnegative_discriminant"
     assert nonfinite["result"] == "nonfinite"
     assert publication.strict_hyperbolic_claim_summary(
         "standard",
         "pass",
-        "hyperbolic",
+        "nonnegative_discriminant",
         "literature-correct",
         "authenticated",
         "compatible",
     ) == {
-        "status": "eligible",
-        "eligible": True,
+        "status": "inconclusive_retained_coordinate_discriminant_scope",
+        "eligible": None,
         "reason": (
-            "standard-scope case has compatible authenticated literature-correct "
-            "hyperbolic all-snapshot coverage"
+            "compatible authenticated literature-correct discriminants are "
+            "nonnegative only for retained cell-centered snapshots in the three "
+            "coordinate-normal directions; this does not test reconstructed faces, "
+            "intermediate states, oblique directions, full or strict hyperbolicity, "
+            "or absence of sqrt(|D|) fallback"
         ),
     }
     restricted = publication.strict_hyperbolic_claim_summary(
         "restricted",
         "pass",
-        "hyperbolic",
+        "nonnegative_discriminant",
         "literature-correct",
         "authenticated",
         "compatible",
@@ -2290,7 +3015,7 @@ def test_hyperbolicity_dispositions_and_claim_status_remain_physical(publication
     incompatible = publication.strict_hyperbolic_claim_summary(
         "standard",
         "pass",
-        "hyperbolic",
+        "nonnegative_discriminant",
         "literature-correct",
         "authenticated",
         "incompatible",
@@ -2300,7 +3025,7 @@ def test_hyperbolicity_dispositions_and_claim_status_remain_physical(publication
     no_compatibility = publication.strict_hyperbolic_claim_summary(
         "standard",
         "pass",
-        "hyperbolic",
+        "nonnegative_discriminant",
         "literature-correct",
         "authenticated",
         "inconclusive",
@@ -2326,21 +3051,32 @@ def test_formula_identity_routes_dispositions_and_gates_strict_claim(
     )
 
     data = publication.discover_data(analysis, [tmp_path / "literature"])
+    rows = publication.hyperbolicity_coverage_rows(data)
     row = {
         value["case_id"]: value
-        for value in publication.hyperbolicity_coverage_rows(data)
+        for value in rows
     }["R02"]
 
-    assert row["numerical_result"] == "hyperbolic"
+    assert row["numerical_result"] == "nonnegative_discriminant"
     assert row["legacy_implementation_disposition"] == "inconclusive"
-    assert row["literature_correct_disposition"] == "hyperbolic"
+    assert row["literature_correct_disposition"] == "nonnegative_discriminant"
     assert row["formula_executable_compatibility"] == "compatible"
     assert (
         row["formula_executable_compatibility_provenance"]
         == "derived_from_authenticated_formula_ids"
     )
-    assert row["strict_hyperbolic_claim_status"] == "eligible"
-    assert row["strict_hyperbolic_claim_eligible"] is True
+    assert (
+        row["strict_hyperbolic_claim_status"]
+        == "inconclusive_retained_coordinate_discriminant_scope"
+    )
+    assert row["strict_hyperbolic_claim_eligible"] is None
+    assert row["audit_state_scope"] == "retained_cell_centered_snapshots"
+    assert row["audit_direction_scope"] == "three_coordinate_normal_directions"
+    assert "reconstructed faces" in row["strict_hyperbolic_claim_reason"]
+    assert "sqrt(|D|) fallback" in row["strict_hyperbolic_claim_reason"]
+    assert all(
+        value["strict_hyperbolic_claim_eligible"] is not True for value in rows
+    )
 
     incompatible_analysis = tmp_path / "incompatible-analysis"
     write_all_snapshot_hyperbolicity_evidence(
@@ -2358,8 +3094,11 @@ def test_formula_identity_routes_dispositions_and_gates_strict_claim(
         value["case_id"]: value
         for value in publication.hyperbolicity_coverage_rows(incompatible_data)
     }["R02"]
-    assert incompatible_row["numerical_result"] == "hyperbolic"
-    assert incompatible_row["literature_correct_disposition"] == "hyperbolic"
+    assert incompatible_row["numerical_result"] == "nonnegative_discriminant"
+    assert (
+        incompatible_row["literature_correct_disposition"]
+        == "nonnegative_discriminant"
+    )
     assert incompatible_row["formula_executable_compatibility"] == "incompatible"
     assert (
         incompatible_row["strict_hyperbolic_claim_status"]

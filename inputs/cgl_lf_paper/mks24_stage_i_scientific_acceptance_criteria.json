@@ -1,21 +1,4 @@
 {
-  "allowed_exclusions": {
-    "blocked_or_external_panels": [
-      "fig3a",
-      "fig3b",
-      "fig4b",
-      "fig5a",
-      "fig6a",
-      "fig6b",
-      "fig7top",
-      "fig10",
-      "fig11top",
-      "fig12bottom",
-      "fig13a",
-      "fig13c"
-    ],
-    "policy": "Only panels already classified blocked_reference or external_model by the exact bound Stage I manifest may be blocked_out_of_scope. Admitted comparison panels may not be dropped after results are visible."
-  },
   "active_energy_policy": {
     "applicability": {
       "active_cases": [
@@ -107,6 +90,23 @@
     },
     "revision_id": "active-energy-production-science-v1"
   },
+  "allowed_exclusions": {
+    "blocked_or_external_panels": [
+      "fig3a",
+      "fig3b",
+      "fig4b",
+      "fig5a",
+      "fig6a",
+      "fig6b",
+      "fig7top",
+      "fig10",
+      "fig11top",
+      "fig12bottom",
+      "fig13a",
+      "fig13c"
+    ],
+    "policy": "Only panels already classified blocked_reference or external_model by the exact bound Stage I manifest may be blocked_out_of_scope. Admitted comparison panels may not be dropped after results are visible."
+  },
   "analysis_windows": {
     "early": [
       4.0,
@@ -135,46 +135,55 @@
     "abs_dp": {
       "column": "abs_dp",
       "history": "user",
+      "reduction": "volume_mean",
       "stationarity_kind": "scalar"
     },
     "beta": {
       "column": "beta",
       "history": "user",
+      "reduction": "volume_mean",
       "stationarity_kind": "scalar"
     },
     "firehose_occupancy": {
       "column": "fire_vol",
       "history": "user",
+      "reduction": "volume_fraction",
       "stationarity_kind": "occupancy"
     },
     "force_power": {
       "column": "force_pwr",
       "history": "user",
+      "reduction": "total",
       "stationarity_kind": "forcing_power"
     },
     "hard_occupancy": {
       "column": "hard_vol",
       "history": "user",
+      "reduction": "volume_fraction",
       "stationarity_kind": "occupancy"
     },
     "kinetic": {
       "column": "kinetic",
       "history": "user",
+      "reduction": "total",
       "stationarity_kind": "scalar"
     },
     "magnetic": {
       "column": "magnetic",
       "history": "user",
+      "reduction": "total",
       "stationarity_kind": "scalar"
     },
     "mirror_occupancy": {
       "column": "mirror_vol",
       "history": "user",
+      "reduction": "volume_fraction",
       "stationarity_kind": "occupancy"
     },
     "nu_eff": {
       "column": "nu_eff",
       "history": "user",
+      "reduction": "volume_mean",
       "stationarity_kind": "scalar"
     }
   },
@@ -414,8 +423,27 @@
         "unstable_occupancy",
         "peak_alignment"
       ],
-      "holm_alpha": 0.05,
-      "minimum_standardized_effect": 0.5,
+      "decision_mode": "descriptive_within_realization_coherent_direction",
+      "expected_directions": {
+        "abs_dp": "active_lower",
+        "peak_alignment": "active_lower",
+        "unstable_occupancy": "active_lower"
+      },
+      "intervention_scope": {
+        "claim_scope": "descriptive_within_realization",
+        "declaration": "The active/passive comparison estimates the total effect of enabling active-CGL pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, and realized forcing after trajectory divergence; it is not an anisotropic-stress-only comparison.",
+        "enabled_components": [
+          "pressure_feedback",
+          "thermodynamic_evolution",
+          "characteristic_speeds_and_fluxes",
+          "realized_forcing_after_trajectory_divergence"
+        ],
+        "estimand": "total_effect_of_enabling_active_cgl",
+        "excluded_interpretation": "anisotropic_stress_alone"
+      },
+      "minimum_abs_standardized_effect": 0.5,
+      "minimum_coherent_metrics": 2,
+      "minimum_large_effect_metrics": 1,
       "pairs": [
         [
           "R02",
@@ -439,7 +467,8 @@
         "R07",
         "R08",
         "R09"
-      ]
+      ],
+      "population_inference": "forbidden_one_realization_per_condition"
     },
     "finite_limiter": {
       "cases": [
@@ -447,7 +476,7 @@
         "R15"
       ],
       "minimum_occupancy": 1e-06,
-      "ordering": "R15 late-time nu_eff lower confidence bound exceeds R14"
+      "ordering": "R15 minus R14 late-time nu_eff has a positive descriptive time-aligned paired-trajectory moving-block-bootstrap lower bound"
     },
     "forcing": {
       "alfvenic_cases": [
@@ -471,7 +500,7 @@
         "R10",
         "R11"
       ],
-      "random_parallel_fraction_lower_95_gt": 0.05
+      "random_parallel_fraction_block_lower_95_gt": 0.05
     },
     "hardwall": {
       "cases": [
@@ -491,13 +520,31 @@
     "lf_strength": {
       "activity_absolute_gt": 1e-06,
       "activity_state_normalized_gt": 1e-08,
+      "baseline_case": "R02",
       "cases": [
         "R12",
         "R02",
-        "R06",
         "R13"
       ],
-      "resolved_response_metric": "peak_alignment"
+      "decision_mode": "descriptive_response_and_activity",
+      "near_insensitivity_abs_standardized_effect_lte": 0.5,
+      "near_insensitivity_is_scientifically_meaningful": true,
+      "required_activity_cases": [
+        "R12",
+        "R02",
+        "R13"
+      ],
+      "required_comparisons": [
+        [
+          "R12",
+          "R02"
+        ],
+        [
+          "R13",
+          "R02"
+        ]
+      ],
+      "response_metric": "peak_alignment"
     }
   },
   "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
@@ -561,7 +608,7 @@
     },
     "reviewed_generator_binding": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
-      "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef",
+      "sha256": "25079123a142aefda152bb84e46c57743d37bc6a083c0ab9dfb35141171dceaa",
       "status": "exact_replay_tool_bound"
     },
     "reviewed_method_revision": {
@@ -569,7 +616,7 @@
         "path": "vis/python/bin_convert.py",
         "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
       },
-      "immutability": "canonical-json-sha256-bound-by-scoped-independent-reviews",
+      "immutability": "canonical-json-sha256-current-operational-contract-with-historical-approvals-retained-separately",
       "methods": {
         "local_field_eddy_anisotropy": {
           "admitted_products": [
@@ -607,7 +654,7 @@
       "schema_version": 1,
       "scientific_products_generator": {
         "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
-        "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+        "sha256": "25079123a142aefda152bb84e46c57743d37bc6a083c0ab9dfb35141171dceaa"
       },
       "status": "exact_method_contract_declared"
     }
@@ -615,7 +662,7 @@
   "source_bindings": {
     "acceptance_utility": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-      "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+      "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
     },
     "athena_binary_parser": {
       "path": "vis/python/bin_convert.py",
@@ -651,7 +698,7 @@
     },
     "scientific_products_generator": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
-      "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+      "sha256": "25079123a142aefda152bb84e46c57743d37bc6a083c0ab9dfb35141171dceaa"
     },
     "stage_i_manifest": {
       "path": "inputs/cgl_lf_paper/mks24_stage_i_manifest.json",

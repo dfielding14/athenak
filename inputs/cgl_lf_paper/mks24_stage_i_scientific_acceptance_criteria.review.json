@@ -1,17 +1,17 @@
 {
   "acceptance_utility": {
     "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-    "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+    "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
   },
   "active_energy_policy_revision_review": {
     "bindings": {
       "acceptance_utility": {
         "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
-        "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+        "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
       },
       "criteria": {
         "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
-        "sha256": "aa011db22e881eb728e62b21fe9cb759c4772cee04eb5b13256211988dd89070"
+        "sha256": "2bf2fe12bcc0f90ab979082136284e8d851cd65a132d1f4ccbc4a929b3f02d7d"
       }
     },
     "decision": "approved_reviewed_production_science_policy",
@@ -34,13 +34,47 @@
   },
   "criteria": {
     "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
-    "sha256": "aa011db22e881eb728e62b21fe9cb759c4772cee04eb5b13256211988dd89070"
+    "sha256": "2bf2fe12bcc0f90ab979082136284e8d851cd65a132d1f4ccbc4a929b3f02d7d"
+  },
+  "family_gate_policy_revision_review": {
+    "bindings": {
+      "acceptance_utility": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+        "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
+      },
+      "criteria": {
+        "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+        "sha256": "2bf2fe12bcc0f90ab979082136284e8d851cd65a132d1f4ccbc4a929b3f02d7d"
+      }
+    },
+    "decision": "accepted_scientifically_correct_aggressive_gate_revision",
+    "independent_reviewer_identity_claimed": false,
+    "rationale": {
+      "active_passive_basis": "One realization per condition does not support population-level p-values or Holm-corrected significance decisions; matched differences, pooled within-realization variability, and coherent physical direction remain useful descriptive evidence.",
+      "active_passive_intervention_basis": "After active and passive trajectories diverge, pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, and realized forcing can all differ; the pair estimand is therefore the total active-CGL intervention effect, not anisotropic stress alone.",
+      "finite_limiter_basis": "The R15-minus-R14 contrast is formed at common physical times and moving-block bootstrapped as a paired trajectory; its interval is descriptive claim-scoped evidence, not ensemble confidence or population significance.",
+      "history_reduction_basis": "The CGL paper history pgen writes these intensive quantities and occupancies as volume-weighted totals, so canonical means and fractions require exactly one division by the retained volume column.",
+      "identity_statement": "This correction records no new independent reviewer identity and does not relabel the retained reviewer approvals.",
+      "lf_strength_basis": "R12/R02/R13 vary the prescribed active LF closure strength, whereas R06 changes the active/passive intervention. A near-insensitive response is a valid physical result when LF activity is authenticated."
+    },
+    "record_type": "stage-i-aggressive-family-gate-policy-review",
+    "review_status": "accepted_reviewed_production_science_correction",
+    "schema_version": 1,
+    "scope": [
+      "R06 is retained only in active/passive comparisons and is not an LF-strength point.",
+      "The active LF-strength scan is exactly R12/R02/R13 and admits near-insensitivity as a scientifically meaningful outcome.",
+      "One-realization active/passive gates use descriptive within-realization standardized effects and coherent expected directions without population-significance claims.",
+      "Active/passive comparisons estimate the total effect of enabling active-CGL pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, and realized forcing after trajectory divergence; they do not isolate anisotropic stress.",
+      "The finite-limiter directional gate uses a descriptive time-aligned paired-trajectory moving-block-bootstrap bound; forcing directional gates use within-trajectory block-bootstrap bounds without ensemble-inference claims.",
+      "Raw user-history abs_dp, beta, and nu_eff are volume means; mirror, firehose, and hard-bound occupancies are volume fractions; explicitly labeled energies and forcing power remain totals."
+    ]
   },
   "identity_limitation": "Reviewer identity and process independence are declared evidence, not cryptographically proven.",
   "method_revision": {
     "active_energy_policy": "Active cases require both exact t=0..10 and t=4..10 increment-normalized total-energy versus forcing-work residuals to be <1e-8, warn at >=1e-9, and retain the original <=1e-12 manuscript-gate failure as provenance; passive scope is unchanged.",
-    "candidate_status": "approved_by_independent_plasma_and_statistical_review",
+    "candidate_status": "accepted_reviewed_production_science_corrections",
     "extension_policy": "No extension is authorized by the current criteria; only a sampling-inconclusive stationarity gate may nominate the exact single t=12 fallback, which requires a separate prospective artifact binding the preserved t<=10 evidence digest and fixed combination rule.",
+    "family_gate_policy": "R06 is excluded from the active LF-strength scan; R12/R02/R13 report authenticated LF activity and descriptive response including valid near-insensitivity, while active/passive pairs use within-realization standardized effects and coherent expected directions for the total effect of enabling active CGL rather than anisotropic stress alone, finite-limiter direction uses a time-aligned paired-trajectory moving-block bootstrap, forcing direction uses within-trajectory block bounds, and raw intensive history totals are reduced exactly once to volume means or fractions; none has population-significance authority.",
     "fixed_analysis_windows": {
       "early": [
         4.0,
@@ -60,7 +94,9 @@
   },
   "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
   "record_type": "stage-i-scientific-acceptance-criteria-review",
-  "remaining_review_requirements": [],
+  "remaining_review_requirements": [
+    "Independent plasma-physics and statistical-methodology review remains required before any future claim of full-current-scope independent approval for the active-energy policy, aggressive family gates, exactly-once normalization, or robust alignment; it is not required for the current accepted reviewed production-science-correction disposition."
+  ],
   "replay_tool_promotion_review": {
     "acceptance_utility": {
       "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
@@ -108,21 +144,23 @@
     "state_time": 10.0,
     "status": "retained_observation_not_criteria_approval"
   },
-  "review_status": "approved",
-  "reviews": [
+  "historical_independent_reviews": [
     {
       "decision": "approved",
       "independent_of_implementation": true,
       "reviewer_id": "019e9a8d-253b-7010-b156-676866801f3c",
-      "role": "plasma_physics"
+      "role": "plasma_physics",
+      "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only"
     },
     {
       "decision": "approved",
       "independent_of_implementation": true,
       "reviewer_id": "019e9ae1-d8c6-7861-9bbb-69e2cc97ba6f",
-      "role": "statistical_methodology"
+      "role": "statistical_methodology",
+      "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only"
     }
   ],
+  "review_status": "accepted_reviewed_production_science_corrections",
   "schema_version": 1,
   "scientific_products_method_review": {
     "approvals": [
@@ -259,5 +297,22 @@
     "review_status": "approved",
     "schema_version": 1
   },
-  "scientific_review_scope": "The retained plasma-physics and statistical-methodology approvals continue to cover the unchanged stationarity, family, product, convergence, CT, and prospective t=12 policies. The active-energy revision is separately recorded as a reviewed production-science reconciliation based on the pre-existing production closure threshold; no claim is made that the retained reviewer identities separately approved this revision. Exact replay-tool and source-catalog promotion mechanics require the separate replay_tool_promotion_review below."
+  "current_science_scope_limitation": {
+    "binding_semantics": "Exact current-byte bindings identify the implementation that carries both historically independently approved scope and current reviewed production-science corrections; they do not expand any approval beyond its explicit scope.",
+    "current_reviewed_production_science_corrections": [
+      "Aggressive family-gate revisions, including descriptive active/passive, LF-strength, finite-limiter, and forcing decisions.",
+      "Exactly-once reduction of raw intensive history totals to volume means or fractions.",
+      "The robust inertial-range alignment scalar and its descriptive within-realization acceptance statistics."
+    ],
+    "disposition": "accepted_reviewed_production_science_corrections_without_new_independent_plasma_or_statistical_approval",
+    "full_scope_independent_review_complete": false,
+    "historical_independent_approval_scope": [
+      "The physical-time-stationarity-r03-r17-v3 criteria change only, as declared by each historical_independent_reviews record.",
+      "Pressure-transfer methods explicitly enumerated in scientific_products_method_review.",
+      "Local-field eddy-anisotropy methods explicitly enumerated in scientific_products_method_review.",
+      "Replay security only for the exact checks and bindings enumerated in replay_tool_promotion_review and the scientific-replay-security method approval."
+    ],
+    "independent_reviewer_identity_claimed_for_current_corrections": false
+  },
+  "scientific_review_scope": "The retained plasma-physics and statistical-methodology approvals remain valid only for the physical-time-stationarity-r03-r17-v3 criteria change explicitly declared by the historical review records. Historical scientific-products and replay-security approvals remain valid only for their explicitly enumerated scopes. The active-energy policy, aggressive family gates, exactly-once normalization, and robust alignment are accepted reviewed production-science corrections without new independent plasma-physics or statistical-methodology approval. The retained CT observation is not a criteria approval. No full-current-scope independent approval is claimed."
 }

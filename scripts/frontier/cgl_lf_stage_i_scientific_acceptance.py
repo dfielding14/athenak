@@ -74,6 +74,30 @@ SCIENTIFIC_METHOD_REVISION_ID = (
     "pressure-transfer-and-local-field-eddy-anisotropy-v1"
 )
 SCIENTIFIC_METHOD_REVISION_DIGEST_METHOD = "sha256-canonical-json-v1"
+HISTORICAL_APPROVED_BINDINGS = {
+    "criteria": {
+        "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+        "sha256": "aa011db22e881eb728e62b21fe9cb759c4772cee04eb5b13256211988dd89070",
+    },
+    "acceptance_utility": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+        "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255",
+    },
+    "scientific_products_generator": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+        "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef",
+    },
+    "athena_binary_parser": {
+        "path": "vis/python/bin_convert.py",
+        "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c",
+    },
+    "method_revision": {
+        "digest_method": "sha256-canonical-json-v1",
+        "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+        "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34",
+    },
+}
+POPULATION_INFERENCE_LIMITATION = "forbidden_one_realization_per_condition"
 SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES = [
     "plasma_physics",
     "statistical_methodology",
@@ -136,6 +160,68 @@ ACTIVE_ENERGY_ACTIVE_CASES = [
     "R17",
 ]
 ACTIVE_ENERGY_PASSIVE_CASES = ["R06", "R07", "R08", "R09"]
+ACTIVE_PASSIVE_INTERVENTION_SCOPE = {
+    "estimand": "total_effect_of_enabling_active_cgl",
+    "enabled_components": [
+        "pressure_feedback",
+        "thermodynamic_evolution",
+        "characteristic_speeds_and_fluxes",
+        "realized_forcing_after_trajectory_divergence",
+    ],
+    "excluded_interpretation": "anisotropic_stress_alone",
+    "declaration": (
+        "The active/passive comparison estimates the total effect of enabling active-CGL "
+        "pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, "
+        "and realized forcing after trajectory divergence; it is not an "
+        "anisotropic-stress-only comparison."
+    ),
+    "claim_scope": "descriptive_within_realization",
+}
+CURRENT_SCIENCE_SCOPE_LIMITATION = {
+    "binding_semantics": (
+        "Exact current-byte bindings identify the implementation that carries both "
+        "historically independently approved scope and current reviewed production-"
+        "science corrections; they do not expand any approval beyond its explicit scope."
+    ),
+    "current_reviewed_production_science_corrections": [
+        "Aggressive family-gate revisions, including descriptive active/passive, LF-strength, finite-limiter, and forcing decisions.",
+        "Exactly-once reduction of raw intensive history totals to volume means or fractions.",
+        "The robust inertial-range alignment scalar and its descriptive within-realization acceptance statistics.",
+    ],
+    "disposition": (
+        "accepted_reviewed_production_science_corrections_without_new_independent_"
+        "plasma_or_statistical_approval"
+    ),
+    "historical_independent_approval_scope": [
+        "The physical-time-stationarity-r03-r17-v3 criteria change only, as declared by each historical_independent_reviews record.",
+        "Pressure-transfer methods explicitly enumerated in scientific_products_method_review.",
+        "Local-field eddy-anisotropy methods explicitly enumerated in scientific_products_method_review.",
+        "Replay security only for the exact checks and bindings enumerated in replay_tool_promotion_review and the scientific-replay-security method approval.",
+    ],
+    "full_scope_independent_review_complete": False,
+    "independent_reviewer_identity_claimed_for_current_corrections": False,
+}
+SCIENTIFIC_REVIEW_SCOPE = (
+    "The retained plasma-physics and statistical-methodology approvals remain valid only "
+    "for the physical-time-stationarity-r03-r17-v3 criteria change explicitly declared "
+    "by the historical review records. Historical scientific-products and replay-security "
+    "approvals remain valid only for their explicitly enumerated scopes. The active-energy "
+    "policy, aggressive family gates, exactly-once normalization, and robust alignment are "
+    "accepted reviewed production-science corrections without new independent plasma-"
+    "physics or statistical-methodology approval. The retained CT observation is not a "
+    "criteria approval. No full-current-scope independent approval is claimed."
+)
+CURRENT_REVIEW_STATUS = "accepted_reviewed_production_science_corrections"
+CURRENT_CANDIDATE_STATUS = "accepted_reviewed_production_science_corrections"
+CURRENT_REMAINING_REVIEW_REQUIREMENTS = [
+    (
+        "Independent plasma-physics and statistical-methodology review remains required "
+        "before any future claim of full-current-scope independent approval for the "
+        "active-energy policy, aggressive family gates, exactly-once normalization, or "
+        "robust alignment; it is not required for the current accepted reviewed "
+        "production-science-correction disposition."
+    )
+]
 VALID_RESULTS = frozenset(("pass", "fail", "inconclusive", "blocked_out_of_scope"))
 MAX_FINITE_FLOAT = sys.float_info.max
 MAX_JSON_BYTES = 512 * 1024 * 1024
@@ -396,14 +482,15 @@ def expected_scientific_products_method_revision(
     generator_binding: dict[str, object],
     parser_binding: dict[str, object],
 ) -> dict[str, object]:
-    """Return the exact reviewed contract for newly admitted product methods."""
+    """Return the exact current operational contract for admitted product methods."""
 
     return {
         "schema_version": 1,
         "revision_id": SCIENTIFIC_METHOD_REVISION_ID,
         "status": "exact_method_contract_declared",
         "immutability": (
-            "canonical-json-sha256-bound-by-scoped-independent-reviews"
+            "canonical-json-sha256-current-operational-contract-with-historical-"
+            "approvals-retained-separately"
         ),
         "scientific_products_generator": {
             "path": generator_binding["path"],
@@ -962,6 +1049,65 @@ def validate_criteria_payload(
     if windows != expected_windows:
         raise AcceptanceError("criteria analysis windows differ from the preregistration")
 
+    expected_case_metrics = {
+        "abs_dp": {
+            "column": "abs_dp",
+            "history": "user",
+            "reduction": "volume_mean",
+            "stationarity_kind": "scalar",
+        },
+        "beta": {
+            "column": "beta",
+            "history": "user",
+            "reduction": "volume_mean",
+            "stationarity_kind": "scalar",
+        },
+        "firehose_occupancy": {
+            "column": "fire_vol",
+            "history": "user",
+            "reduction": "volume_fraction",
+            "stationarity_kind": "occupancy",
+        },
+        "force_power": {
+            "column": "force_pwr",
+            "history": "user",
+            "reduction": "total",
+            "stationarity_kind": "forcing_power",
+        },
+        "hard_occupancy": {
+            "column": "hard_vol",
+            "history": "user",
+            "reduction": "volume_fraction",
+            "stationarity_kind": "occupancy",
+        },
+        "kinetic": {
+            "column": "kinetic",
+            "history": "user",
+            "reduction": "total",
+            "stationarity_kind": "scalar",
+        },
+        "magnetic": {
+            "column": "magnetic",
+            "history": "user",
+            "reduction": "total",
+            "stationarity_kind": "scalar",
+        },
+        "mirror_occupancy": {
+            "column": "mirror_vol",
+            "history": "user",
+            "reduction": "volume_fraction",
+            "stationarity_kind": "occupancy",
+        },
+        "nu_eff": {
+            "column": "nu_eff",
+            "history": "user",
+            "reduction": "volume_mean",
+            "stationarity_kind": "scalar",
+        },
+    }
+    if criteria.get("case_metrics") != expected_case_metrics:
+        raise AcceptanceError("criteria case-metric reduction semantics differ")
+
     criteria_change = require_dict(
         criteria.get("criteria_change_record"), "criteria_change_record"
     )
@@ -1305,9 +1451,66 @@ def validate_criteria_payload(
 
     family = require_dict(criteria.get("family_gates"), "family_gates")
     lf_strength = require_dict(family.get("lf_strength"), "lf_strength")
-    if lf_strength.get("cases") != ["R12", "R02", "R06", "R13"]:
-        raise AcceptanceError("criteria LF-strength cases differ from the preregistration")
+    if lf_strength != {
+        "activity_absolute_gt": 1.0e-6,
+        "activity_state_normalized_gt": 1.0e-8,
+        "baseline_case": "R02",
+        "cases": ["R12", "R02", "R13"],
+        "decision_mode": "descriptive_response_and_activity",
+        "near_insensitivity_abs_standardized_effect_lte": 0.5,
+        "near_insensitivity_is_scientifically_meaningful": True,
+        "required_activity_cases": ["R12", "R02", "R13"],
+        "required_comparisons": [["R12", "R02"], ["R13", "R02"]],
+        "response_metric": "peak_alignment",
+    }:
+        raise AcceptanceError("criteria LF-strength policy differs")
     active_passive = require_dict(family.get("active_passive"), "active_passive")
+    if active_passive != {
+        "active_cases": ACTIVE_ENERGY_ACTIVE_CASES,
+        "activity_absolute_gt": 1.0e-6,
+        "contrast_metrics": ["abs_dp", "unstable_occupancy", "peak_alignment"],
+        "decision_mode": "descriptive_within_realization_coherent_direction",
+        "expected_directions": {
+            "abs_dp": "active_lower",
+            "peak_alignment": "active_lower",
+            "unstable_occupancy": "active_lower",
+        },
+        "minimum_abs_standardized_effect": 0.5,
+        "minimum_coherent_metrics": 2,
+        "minimum_large_effect_metrics": 1,
+        "pairs": [
+            ["R02", "R06"],
+            ["R03", "R07"],
+            ["R04", "R08"],
+            ["R05", "R09"],
+        ],
+        "passive_cases": ACTIVE_ENERGY_PASSIVE_CASES,
+        "population_inference": "forbidden_one_realization_per_condition",
+        "intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+    }:
+        raise AcceptanceError("criteria active/passive policy differs")
+    finite_limiter = require_dict(family.get("finite_limiter"), "finite_limiter")
+    if finite_limiter != {
+        "cases": ["R14", "R15"],
+        "minimum_occupancy": 1.0e-6,
+        "ordering": (
+            "R15 minus R14 late-time nu_eff has a positive descriptive "
+            "time-aligned paired-trajectory moving-block-bootstrap lower bound"
+        ),
+    }:
+        raise AcceptanceError("criteria finite-limiter policy differs")
+    forcing = require_dict(family.get("forcing"), "forcing")
+    if (
+        set(forcing)
+        != {
+            "alfvenic_cases",
+            "alfvenic_parallel_fraction_lte",
+            "random_cases",
+            "random_parallel_fraction_block_lower_95_gt",
+        }
+        or forcing.get("random_parallel_fraction_block_lower_95_gt") != 0.05
+    ):
+        raise AcceptanceError("criteria forcing block-bound policy differs")
     active_energy = require_dict(
         criteria.get("active_energy_policy"), "active energy policy"
     )
@@ -1353,7 +1556,7 @@ def validate_replay_tool_promotion_review(
     criteria: dict[str, object],
     utility_binding: dict[str, object],
 ) -> tuple[bool, str]:
-    """Validate the separate exact replay-tool implementation review."""
+    """Validate the immutable historical replay-tool implementation review."""
 
     promotion = require_exact_keys(
         review.get("replay_tool_promotion_review"),
@@ -1371,18 +1574,13 @@ def validate_replay_tool_promotion_review(
     )
     sources = require_dict(criteria.get("source_bindings"), "criteria source bindings")
     expected_bindings = {
-        "acceptance_utility": {
-            "path": str(UTILITY_RELATIVE_PATH),
-            "sha256": utility_binding["sha256"],
-        },
-        "scientific_products_generator": require_dict(
-            sources.get("scientific_products_generator"),
-            "scientific products generator source binding",
-        ),
-        "athena_binary_parser": require_dict(
-            sources.get("athena_binary_parser"),
-            "Athena binary parser source binding",
-        ),
+        "acceptance_utility": HISTORICAL_APPROVED_BINDINGS["acceptance_utility"],
+        "scientific_products_generator": HISTORICAL_APPROVED_BINDINGS[
+            "scientific_products_generator"
+        ],
+        "athena_binary_parser": HISTORICAL_APPROVED_BINDINGS[
+            "athena_binary_parser"
+        ],
         "ct_inventory_builder": require_dict(
             sources.get("ct_inventory_builder"), "CT inventory builder source binding"
         ),
@@ -1431,7 +1629,7 @@ def validate_scientific_products_method_review(
     criteria_binding: dict[str, object],
     utility_binding: dict[str, object],
 ) -> dict[str, object]:
-    """Require exact scoped approvals of the newly admitted product methods."""
+    """Require exact historical approvals for their explicitly scoped methods."""
 
     method_review = require_exact_keys(
         review.get("scientific_products_method_review"),
@@ -1457,43 +1655,15 @@ def validate_scientific_products_method_review(
     if method_review.get("required_review_roles") != SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES:
         raise AcceptanceError("scientific-products method review required roles differ")
 
-    products = require_dict(
-        criteria.get("scientific_products_policy"), "scientific products policy"
-    )
-    method_revision = require_dict(
-        products.get("reviewed_method_revision"), "scientific-products method revision"
-    )
-    declared_criteria = require_dict(review.get("criteria"), "criteria review binding")
-    declared_utility = require_dict(
-        review.get("acceptance_utility"), "criteria review acceptance utility"
-    )
-    sources = require_dict(criteria.get("source_bindings"), "criteria source bindings")
-    generator = require_dict(
-        sources.get("scientific_products_generator"),
-        "scientific products generator source binding",
-    )
-    parser = require_dict(
-        sources.get("athena_binary_parser"),
-        "Athena binary parser source binding",
-    )
     expected_bindings = {
-        "method_revision": scientific_products_method_revision_binding(method_revision),
-        "criteria": {
-            "path": declared_criteria["path"],
-            "sha256": criteria_binding["sha256"],
-        },
-        "acceptance_utility": {
-            "path": declared_utility["path"],
-            "sha256": utility_binding["sha256"],
-        },
-        "scientific_products_generator": {
-            "path": generator["path"],
-            "sha256": generator["sha256"],
-        },
-        "athena_binary_parser": {
-            "path": parser["path"],
-            "sha256": parser["sha256"],
-        },
+        key: dict(HISTORICAL_APPROVED_BINDINGS[key])
+        for key in (
+            "method_revision",
+            "criteria",
+            "acceptance_utility",
+            "scientific_products_generator",
+            "athena_binary_parser",
+        )
     }
     bindings = require_exact_keys(
         method_review.get("bindings"),
@@ -1561,8 +1731,8 @@ def validate_scientific_products_method_review(
         )
     return {
         "scientific_products_method_review": method_review,
-        "scientific_products_method_review_status": "approved",
-        "scientific_products_method_review_approved": True,
+        "scientific_products_historical_method_review_status": "approved",
+        "scientific_products_historical_method_scope_approved": True,
     }
 
 
@@ -1573,7 +1743,7 @@ def validate_criteria_review(
     criteria_binding: dict[str, object],
     utility_binding: dict[str, object],
 ) -> dict[str, object]:
-    """Validate a pending or independently approved criteria review."""
+    """Validate a pending or accepted scope-limited criteria disposition."""
 
     if review.get("schema_version") != 1:
         raise AcceptanceError("criteria review schema_version must be 1")
@@ -1583,17 +1753,15 @@ def validate_criteria_review(
         raise AcceptanceError("criteria review identity limitation differs")
     if review.get("non_authorizing_statement") != NON_AUTHORIZING_STATEMENT:
         raise AcceptanceError("criteria review non-authorizing statement differs")
-    if review.get("scientific_review_scope") != (
-        "The retained plasma-physics and statistical-methodology approvals continue to "
-        "cover the unchanged stationarity, family, product, convergence, CT, and "
-        "prospective t=12 policies. The active-energy revision is separately recorded "
-        "as a reviewed production-science reconciliation based on the pre-existing "
-        "production closure threshold; no claim is made that the retained reviewer "
-        "identities separately approved this revision. Exact replay-tool and "
-        "source-catalog promotion mechanics require the separate "
-        "replay_tool_promotion_review below."
-    ):
+    if review.get("scientific_review_scope") != SCIENTIFIC_REVIEW_SCOPE:
         raise AcceptanceError("criteria review scientific scope differs")
+    scope_limitation = require_exact_keys(
+        review.get("current_science_scope_limitation"),
+        set(CURRENT_SCIENCE_SCOPE_LIMITATION),
+        "criteria review current science scope limitation",
+    )
+    if scope_limitation != CURRENT_SCIENCE_SCOPE_LIMITATION:
+        raise AcceptanceError("criteria review current science scope limitation differs")
     declared = require_dict(review.get("criteria"), "criteria review binding")
     if (
         require_sha256(declared.get("sha256"), "criteria review criteria sha256")
@@ -1623,7 +1791,10 @@ def validate_criteria_review(
     ]:
         raise AcceptanceError("criteria review required roles differ")
     status_value = review.get("review_status")
-    reviewers = require_list(review.get("reviews"), "criteria review reviews")
+    historical_reviews = require_list(
+        review.get("historical_independent_reviews"),
+        "criteria review historical independent reviews",
+    )
     criteria_change = require_dict(
         criteria.get("criteria_change_record"), "criteria change record"
     )
@@ -1638,18 +1809,20 @@ def validate_criteria_review(
             "and digest-bound frozen extension handling."
         ),
     ]
-    approved_reviewers = [
+    approved_historical_reviews = [
         {
             "role": "plasma_physics",
             "reviewer_id": "019e9a8d-253b-7010-b156-676866801f3c",
             "decision": "approved",
             "independent_of_implementation": True,
+            "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only",
         },
         {
             "role": "statistical_methodology",
             "reviewer_id": "019e9ae1-d8c6-7861-9bbb-69e2cc97ba6f",
             "decision": "approved",
             "independent_of_implementation": True,
+            "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only",
         },
     ]
     if status_value in ("pending_independent_review", "changes_required"):
@@ -1658,22 +1831,24 @@ def validate_criteria_review(
             "changes_required_pending_independent_plasma_and_statistical_review"
         )
         expected_requirements = pending_requirements
-        expected_reviewers: list[dict[str, object]] = []
-        approved = False
-    elif status_value == "approved":
-        expected_candidate_status = (
-            "approved_by_independent_plasma_and_statistical_review"
-        )
+        expected_historical_reviews: list[dict[str, object]] = []
+        current_science_disposition_accepted = False
+        historical_independent_review_scope_approved = False
+    elif status_value == CURRENT_REVIEW_STATUS:
+        expected_candidate_status = CURRENT_CANDIDATE_STATUS
         expected_disposition = "approved_by_independent_plasma_and_statistical_review"
-        expected_requirements = []
-        expected_reviewers = approved_reviewers
-        approved = True
+        expected_requirements = CURRENT_REMAINING_REVIEW_REQUIREMENTS
+        expected_historical_reviews = approved_historical_reviews
+        current_science_disposition_accepted = True
+        historical_independent_review_scope_approved = True
     else:
         raise AcceptanceError("criteria review status is invalid")
     if criteria_change.get("review_disposition") != expected_disposition:
         raise AcceptanceError("criteria review status and criteria disposition are incoherent")
-    if reviewers != expected_reviewers:
-        raise AcceptanceError("criteria review status and reviewer records are incoherent")
+    if historical_reviews != expected_historical_reviews:
+        raise AcceptanceError(
+            "criteria review status and historical reviewer records are incoherent"
+        )
     active_energy_review = require_exact_keys(
         review.get("active_energy_policy_revision_review"),
         {
@@ -1737,6 +1912,81 @@ def validate_criteria_review(
     }
     if active_energy_review != expected_active_energy_review:
         raise AcceptanceError("active-energy policy revision review differs")
+    family_gate_review = require_exact_keys(
+        review.get("family_gate_policy_revision_review"),
+        {
+            "schema_version",
+            "record_type",
+            "review_status",
+            "decision",
+            "independent_reviewer_identity_claimed",
+            "scope",
+            "rationale",
+            "bindings",
+        },
+        "family-gate policy revision review",
+    )
+    expected_family_gate_review = {
+        "schema_version": 1,
+        "record_type": "stage-i-aggressive-family-gate-policy-review",
+        "review_status": "accepted_reviewed_production_science_correction",
+        "decision": "accepted_scientifically_correct_aggressive_gate_revision",
+        "independent_reviewer_identity_claimed": False,
+        "scope": [
+            "R06 is retained only in active/passive comparisons and is not an LF-strength point.",
+            "The active LF-strength scan is exactly R12/R02/R13 and admits near-insensitivity as a scientifically meaningful outcome.",
+            "One-realization active/passive gates use descriptive within-realization standardized effects and coherent expected directions without population-significance claims.",
+            "Active/passive comparisons estimate the total effect of enabling active-CGL pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, and realized forcing after trajectory divergence; they do not isolate anisotropic stress.",
+            "The finite-limiter directional gate uses a descriptive time-aligned paired-trajectory moving-block-bootstrap bound; forcing directional gates use within-trajectory block-bootstrap bounds without ensemble-inference claims.",
+            "Raw user-history abs_dp, beta, and nu_eff are volume means; mirror, firehose, and hard-bound occupancies are volume fractions; explicitly labeled energies and forcing power remain totals.",
+        ],
+        "rationale": {
+            "active_passive_basis": (
+                "One realization per condition does not support population-level "
+                "p-values or Holm-corrected significance decisions; matched differences, "
+                "pooled within-realization variability, and coherent physical direction "
+                "remain useful descriptive evidence."
+            ),
+            "active_passive_intervention_basis": (
+                "After active and passive trajectories diverge, pressure feedback, "
+                "thermodynamic evolution, characteristic speeds and fluxes, and realized "
+                "forcing can all differ; the pair estimand is therefore the total active-"
+                "CGL intervention effect, not anisotropic stress alone."
+            ),
+            "lf_strength_basis": (
+                "R12/R02/R13 vary the prescribed active LF closure strength, whereas R06 "
+                "changes the active/passive intervention. A near-insensitive response is "
+                "a valid physical result when LF activity is authenticated."
+            ),
+            "finite_limiter_basis": (
+                "The R15-minus-R14 contrast is formed at common physical times and "
+                "moving-block bootstrapped as a paired trajectory; its interval is "
+                "descriptive claim-scoped evidence, not ensemble confidence or "
+                "population significance."
+            ),
+            "history_reduction_basis": (
+                "The CGL paper history pgen writes these intensive quantities and "
+                "occupancies as volume-weighted totals, so canonical means and fractions "
+                "require exactly one division by the retained volume column."
+            ),
+            "identity_statement": (
+                "This correction records no new independent reviewer identity and does "
+                "not relabel the retained reviewer approvals."
+            ),
+        },
+        "bindings": {
+            "criteria": {
+                "path": declared["path"],
+                "sha256": criteria_binding["sha256"],
+            },
+            "acceptance_utility": {
+                "path": declared_utility["path"],
+                "sha256": utility_binding["sha256"],
+            },
+        },
+    }
+    if family_gate_review != expected_family_gate_review:
+        raise AcceptanceError("family-gate policy revision review differs")
     retained_ct = require_dict(
         review.get("retained_ct_observation"), "criteria review retained CT observation"
     )
@@ -1784,13 +2034,24 @@ def validate_criteria_review(
             "and retain the original <=1e-12 manuscript-gate failure as provenance; "
             "passive scope is unchanged."
         ),
+        "family_gate_policy": (
+            "R06 is excluded from the active LF-strength scan; R12/R02/R13 report "
+            "authenticated LF activity and descriptive response including valid "
+            "near-insensitivity, while active/passive pairs use within-realization "
+            "standardized effects and coherent expected directions for the total effect "
+            "of enabling active CGL rather than anisotropic stress alone, finite-limiter "
+            "direction uses a time-aligned paired-trajectory moving-block bootstrap, "
+            "forcing direction uses within-trajectory block bounds, and raw "
+            "intensive history totals are reduced exactly once to volume means or "
+            "fractions; none has population-significance authority."
+        ),
     }:
         raise AcceptanceError("criteria review method revision differs")
     if review.get("remaining_review_requirements") != expected_requirements:
         raise AcceptanceError(
             "criteria review status and remaining requirements are incoherent"
         )
-    replay_tools_approved, replay_tools_review_status = (
+    historical_replay_tools_approved, historical_replay_tools_review_status = (
         validate_replay_tool_promotion_review(review, criteria, utility_binding)
     )
     method_review = validate_scientific_products_method_review(
@@ -1799,12 +2060,24 @@ def validate_criteria_review(
     return {
         "review": review,
         "review_binding": review_binding,
-        "approved": approved,
+        "current_science_disposition_accepted": current_science_disposition_accepted,
+        "historical_independent_review_scope_approved": (
+            historical_independent_review_scope_approved
+        ),
+        "full_scope_independent_review_complete": False,
+        "current_science_scope_limitation": scope_limitation,
         "review_status": status_value,
-        "replay_tools_approved": replay_tools_approved,
-        "replay_tools_review_status": replay_tools_review_status,
+        "historical_replay_tool_scope_approved": historical_replay_tools_approved,
+        "historical_replay_tool_review_status": (
+            historical_replay_tools_review_status
+        ),
+        "current_operational_replay_available": True,
         "active_energy_policy_revision_review": active_energy_review,
         "active_energy_policy_revision_review_status": active_energy_review[
+            "review_status"
+        ],
+        "family_gate_policy_revision_review": family_gate_review,
+        "family_gate_policy_revision_review_status": family_gate_review[
             "review_status"
         ],
         **method_review,
@@ -2235,7 +2508,7 @@ def paired_window_contrast(
         "signed_early_minus_late": observed,
         "absolute_change": abs(observed),
         "standard_error": math.sqrt(max(0.0, variance)),
-        "confidence_interval_95": [
+        "block_bootstrap_interval_95": [
             quantile(bootstraps, 0.025),
             quantile(bootstraps, 0.975),
         ],
@@ -2344,7 +2617,7 @@ def window_statistics(
         "maximum_allowed_gap": maximum_allowed_gap,
         "integrated_autocorrelation_duration": estimated_autocorrelation_duration,
         "standard_error": math.sqrt(max(0.0, bootstrap_variance)),
-        "confidence_interval_95": [
+        "block_bootstrap_interval_95": [
             quantile(bootstraps, 0.025),
             quantile(bootstraps, 0.975),
         ],
@@ -2373,14 +2646,41 @@ def window_statistics(
 
 
 def combine_occupancy_series(user: dict[str, list[float]]) -> list[float]:
-    """Return mirror-plus-firehose volume occupancy."""
+    """Return mirror-plus-firehose volume fraction from raw history totals."""
 
-    for column in ("mirror_vol", "fire_vol"):
+    for column in ("volume", "mirror_vol", "fire_vol"):
         if column not in user:
             raise AcceptanceError(f"user history lacks required column: {column}")
     return [
-        mirror + fire for mirror, fire in zip(user["mirror_vol"], user["fire_vol"])
+        finite_ratio(mirror + fire, volume)
+        for mirror, fire, volume in zip(
+            user["mirror_vol"], user["fire_vol"], user["volume"]
+        )
     ]
+
+
+def metric_values_from_history(
+    history: dict[str, list[float]],
+    spec: dict[str, object],
+    metric: str,
+) -> list[float]:
+    """Apply the reviewed reduction semantics to one raw history metric."""
+
+    column = str(spec.get("column"))
+    if column not in history:
+        raise AcceptanceError(f"metric {metric} source column is unavailable")
+    reduction = str(spec.get("reduction"))
+    if reduction == "total":
+        return [require_finite(value, f"metric {metric} total") for value in history[column]]
+    if reduction not in ("volume_mean", "volume_fraction"):
+        raise AcceptanceError(f"metric {metric} reduction semantics are invalid")
+    if "volume" not in history or len(history["volume"]) != len(history[column]):
+        raise AcceptanceError(f"metric {metric} requires a matching volume column")
+    values: list[float] = []
+    for raw, volume in zip(history[column], history["volume"]):
+        denominator = require_positive(volume, f"metric {metric} volume")
+        values.append(require_finite(raw, f"metric {metric} raw total") / denominator)
+    return values
 
 
 def stationarity_result(
@@ -2406,7 +2706,7 @@ def stationarity_result(
     paired_se = require_nonnegative(
         paired_contrast.get("standard_error"), "paired stationarity standard error"
     )
-    z_score = finite_ratio(difference, paired_se)
+    difference_over_block_standard_error = finite_ratio(difference, paired_se)
     relative = finite_ratio(difference, abs(float(full["mean"])))
     decision_authority = policy.get("decision_authority")
     if decision_authority != (
@@ -2442,9 +2742,13 @@ def stationarity_result(
         "relative_change": relative,
         "decision_authority": "preregistered-paired-physical-effect-size-threshold-only",
         "descriptive_bootstrap": {
-            "z_score": z_score,
+            "difference_over_block_standard_error": (
+                difference_over_block_standard_error
+            ),
             "standard_error": paired_se,
-            "confidence_interval_95": paired_contrast["confidence_interval_95"],
+            "block_bootstrap_interval_95": paired_contrast[
+                "block_bootstrap_interval_95"
+            ],
             "inferential_authority": False,
         },
         "paired_contrast_method": paired_contrast["method"],
@@ -3844,8 +4148,8 @@ def authenticate_case_bundle(
     )
 
 
-def reviewed_scientific_products_available(policy: dict[str, object]) -> bool:
-    """Return whether criteria bind an independently reviewed replayable generator."""
+def accepted_scientific_products_available(policy: dict[str, object]) -> bool:
+    """Return whether the exact current product pipeline is accepted and replayable."""
 
     products = require_dict(
         policy["criteria"].get("scientific_products_policy"),
@@ -3855,8 +4159,10 @@ def reviewed_scientific_products_available(policy: dict[str, object]) -> bool:
         products.get("reviewed_generator_binding"), "reviewed generator binding"
     )
     return (
-        policy.get("replay_tools_approved") is True
-        and policy.get("scientific_products_method_review_approved") is True
+        policy.get("current_operational_replay_available") is True
+        and policy.get("scientific_products_historical_method_scope_approved") is True
+        and policy.get("current_science_disposition_accepted") is True
+        and policy.get("full_scope_independent_review_complete") is False
         and generator.get("status") == "exact_replay_tool_bound"
         and isinstance(generator.get("path"), str)
         and isinstance(generator.get("sha256"), str)
@@ -3864,7 +4170,7 @@ def reviewed_scientific_products_available(policy: dict[str, object]) -> bool:
 
 
 def reviewed_ct_inventory_builder_available(policy: dict[str, object]) -> bool:
-    """Return whether the exact CT inventory builder passed independent review."""
+    """Return whether the exact current CT inventory builder is replayable."""
 
     ct_policy = require_dict(policy["criteria"].get("ct_divb_policy"), "ct_divb_policy")
     builder = require_dict(
@@ -3872,7 +4178,7 @@ def reviewed_ct_inventory_builder_available(policy: dict[str, object]) -> bool:
         "reviewed CT inventory builder binding",
     )
     return (
-        policy.get("replay_tools_approved") is True
+        policy.get("current_operational_replay_available") is True
         and builder.get("status") == "exact_replay_tool_bound"
         and isinstance(builder.get("path"), str)
         and isinstance(builder.get("sha256"), str)
@@ -3961,13 +4267,14 @@ def validate_diagnostics_contract(
     """Authenticate one exact-window replayed scientific-products artifact."""
 
     gate_name = f"scientific_products_contract:{window_name}"
-    if not reviewed_scientific_products_available(policy):
+    if not accepted_scientific_products_available(policy):
         return None, gate(
             gate_name,
             "inconclusive",
             reason=(
-                "the exact reviewed scientific-products generator and deterministic "
-                "replay verifier are unavailable; hand-authored products cannot pass"
+                "the accepted scope-limited scientific-products pipeline and "
+                "deterministic replay verifier are unavailable; hand-authored products "
+                "cannot pass"
             ),
         )
     if diagnostics is None:
@@ -4382,7 +4689,7 @@ def panel_product_assessments(
     name = case_name(policy, case_id)
     criteria = policy["criteria"]
     panels = require_list(criteria.get("comparison_panels"), "comparison_panels")
-    products_reviewed = reviewed_scientific_products_available(policy)
+    products_available = accepted_scientific_products_available(policy)
     full = reference_comparison_records(
         diagnostics["full"] if isinstance(diagnostics.get("full"), dict) else {}
     )
@@ -4417,7 +4724,7 @@ def panel_product_assessments(
                 "reason": "no bound reference product maps to this required case",
             })
             continue
-        if not products_reviewed:
+        if not products_available:
             results.extend({
                 "panel_id": panel_id,
                 "product_id": product_id,
@@ -4544,16 +4851,17 @@ def analyzer_metrics(
 
     if diagnostics is None:
         return {}
+    criteria = require_dict(policy.get("criteria"), "criteria")
     record = diagnostics_case_record(diagnostics, name)
     if record is None:
         return {}
     metrics = record.get("scientific_acceptance_metrics")
     if not isinstance(metrics, dict):
         return {}
-    windows = require_dict(policy["criteria"].get("analysis_windows"), "analysis windows")
+    windows = require_dict(criteria.get("analysis_windows"), "analysis windows")
     full = require_list(windows.get("full"), "full analysis window")
     statistics = require_dict(
-        policy["criteria"].get("statistics_policy"), "statistics policy"
+        criteria.get("statistics_policy"), "statistics policy"
     )
     gap_policy = require_dict(statistics.get("gap_policy"), "statistics gap policy")
     replicates = require_int(
@@ -4561,6 +4869,11 @@ def analyzer_metrics(
     )
     result: dict[str, dict[str, float]] = {}
     for metric, value in metrics.items():
+        if metric in criteria["case_metrics"] or metric == "unstable_occupancy":
+            # Raw-history quantities are reduced exactly once by the reviewed
+            # case-metric path. Scientific products remain authority for
+            # derived snapshot/analyzer metrics, not duplicate history totals.
+            continue
         label = f"analyzer metric {metric}"
         metric_record = require_dict(value, label)
         if (
@@ -4788,14 +5101,16 @@ def evaluate_case(
         history = user if source == "user" else mhd if source == "mhd" else None
         if history is None or not isinstance(column, str) or column not in history:
             raise AcceptanceError(f"metric {metric} source or column is unavailable")
+        values = metric_values_from_history(history, spec, str(metric))
         record = metric_statistics(
             history,
-            history[column],
+            values,
             str(metric),
             policy,
             kind=kind,
             minimum_block_duration=minimum_block_duration,
         )
+        record["reduction"] = spec["reduction"]
         metrics[str(metric)] = record
         sampling = str(record["sampling_adequacy"])
         stationarity = str(require_dict(record["stationarity"], "stationarity")["result"])
@@ -4818,6 +5133,18 @@ def evaluate_case(
             ),
             observations=record,
         ))
+    unstable_values = combine_occupancy_series(user)
+    metrics["unstable_occupancy"] = metric_statistics(
+        user,
+        unstable_values,
+        "unstable_occupancy",
+        policy,
+        kind="occupancy",
+        minimum_block_duration=minimum_block_duration,
+    )
+    metrics["unstable_occupancy"]["reduction"] = (
+        "(mirror_vol + fire_vol) / volume"
+    )
 
     family = require_dict(criteria.get("family_gates"), "family_gates")
     full_start, full_end = (float(value) for value in windows["full"])
@@ -4861,7 +5188,7 @@ def evaluate_case(
         )
         passed = (
             hw_zero
-            and float(nu_late["confidence_interval_95"][0]) > 0.0
+            and float(nu_late["block_bootstrap_interval_95"][0]) > 0.0
             and both_comparisons
         )
         family_gates.append(gate(
@@ -4870,7 +5197,10 @@ def evaluate_case(
             reason="finite limiter semantic gates passed" if passed else "finite limiter semantic gate failed",
             observations={
                 "hardwall_projection_exact_zero": hw_zero,
-                "late_nu_eff_lower_95": nu_late["confidence_interval_95"][0],
+                "late_nu_eff_block_lower_95": nu_late[
+                    "block_bootstrap_interval_95"
+                ][0],
+                "claim_scope": "descriptive_within_trajectory",
                 "occupancy": occupancy_stats,
                 "occupancy_active_both_comparison_windows": both_comparisons,
             },
@@ -4988,18 +5318,25 @@ def evaluate_case(
             passed = float(full_fraction["mean"]) <= float(forcing["alfvenic_parallel_fraction_lte"])
             reason = "Alfvenic forcing remained effectively perpendicular"
         else:
-            passed = float(full_fraction["confidence_interval_95"][0]) > float(
-                forcing["random_parallel_fraction_lower_95_gt"]
+            passed = float(full_fraction["block_bootstrap_interval_95"][0]) > float(
+                forcing["random_parallel_fraction_block_lower_95_gt"]
             )
-            reason = "random forcing retained a resolved parallel component"
+            reason = (
+                "random forcing retained a positive within-trajectory block lower bound"
+            )
         family_gates.append(gate(
             "forcing_geometry",
             "pass" if passed else "fail",
             reason=reason if passed else "forcing geometry gate failed",
-            observations=fraction_stats,
+            observations={
+                **fraction_stats,
+                "claim_scope": "descriptive_within_trajectory",
+            },
             limits={
                 "alfvenic_parallel_fraction_lte": forcing["alfvenic_parallel_fraction_lte"],
-                "random_parallel_fraction_lower_95_gt": forcing["random_parallel_fraction_lower_95_gt"],
+                "random_parallel_fraction_block_lower_95_gt": forcing[
+                    "random_parallel_fraction_block_lower_95_gt"
+                ],
             },
         ))
 
@@ -5123,21 +5460,11 @@ def evaluate_case(
     return seal_evidence(evidence)
 
 
-def normal_two_sided_p(z_score: float) -> float:
-    """Return the two-sided standard-normal tail probability."""
-
-    if not math.isfinite(z_score):
-        return 0.0 if z_score > 0.0 else 1.0
-    return math.erfc(abs(z_score) / math.sqrt(2.0))
-
-
 def scalar_from_case(
     case: dict[str, object], metric: str, window: str = "full"
 ) -> dict[str, float] | None:
     """Return one exact-window scalar estimate from case evidence."""
 
-    if metric == "unstable_occupancy":
-        return occupancy_from_case(case, window)
     metrics = case.get("metrics")
     if isinstance(metrics, dict) and metric in metrics:
         full = require_dict(
@@ -5161,19 +5488,115 @@ def scalar_from_case(
 def occupancy_from_case(
     case: dict[str, object], window: str = "full"
 ) -> dict[str, float] | None:
-    """Combine mirror and firehose occupancy estimates."""
+    """Return joint mirror-plus-firehose statistics from the raw summed series."""
 
-    mirror = scalar_from_case(case, "mirror_occupancy", window)
-    fire = scalar_from_case(case, "firehose_occupancy", window)
-    if mirror is None or fire is None:
-        return None
-    return {
-        "mean": mirror["mean"] + fire["mean"],
-        "standard_error": math.hypot(mirror["standard_error"], fire["standard_error"]),
-        "standard_deviation": math.hypot(
-            mirror["standard_deviation"], fire["standard_deviation"]
+    return scalar_from_case(case, "unstable_occupancy", window)
+
+
+def case_metric_history_series(
+    case: dict[str, object],
+    metric: str,
+    policy: dict[str, object],
+) -> tuple[list[float], list[float]]:
+    """Reload one authenticated raw-history metric series from case evidence."""
+
+    spec = require_dict(
+        require_dict(policy["criteria"].get("case_metrics"), "case metrics").get(metric),
+        f"case metric {metric}",
+    )
+    history_kind = str(spec.get("history"))
+    if history_kind not in ("mhd", "user"):
+        raise AcceptanceError(f"case metric {metric} history kind is invalid")
+    inputs = require_dict(case.get("evaluation_inputs"), "case evaluation inputs")
+    binding_key = f"{history_kind}_history"
+    path = path_from_evidence_binding(
+        inputs.get(binding_key), f"case {metric} {history_kind} history"
+    )
+    history, _ = load_history(path, f"case {metric} {history_kind} history")
+    return history["time"], metric_values_from_history(history, spec, metric)
+
+
+def case_forcing_tcorr(case: dict[str, object]) -> float:
+    """Return the authenticated forcing correlation time for one case."""
+
+    inputs = require_dict(case.get("evaluation_inputs"), "case evaluation inputs")
+    path = path_from_evidence_binding(
+        inputs.get("accepted_bundle_manifest"), "accepted bundle manifest"
+    )
+    manifest, _ = load_json(path, "accepted bundle manifest")
+    return require_positive(manifest.get("forcing_tcorr"), "forcing correlation time")
+
+
+def paired_case_difference_statistics(
+    left: dict[str, object],
+    right: dict[str, object],
+    metric: str,
+    window_name: str,
+    policy: dict[str, object],
+) -> dict[str, object]:
+    """Block-bootstrap a time-aligned difference between two retained trajectories."""
+
+    left_times, left_values = case_metric_history_series(left, metric, policy)
+    right_times, right_values = case_metric_history_series(right, metric, policy)
+    window = require_list(
+        require_dict(policy["criteria"].get("analysis_windows"), "analysis windows").get(
+            window_name
         ),
-    }
+        f"{window_name} analysis window",
+    )
+    start = require_finite(window[0], f"{window_name} start")
+    end = require_finite(window[1], f"{window_name} end")
+    aligned_times = sorted({
+        start,
+        end,
+        *(value for value in left_times if start < value < end),
+        *(value for value in right_times if start < value < end),
+    })
+    differences = [
+        interpolate_at(left_times, left_values, time)
+        - interpolate_at(right_times, right_values, time)
+        for time in aligned_times
+    ]
+    statistics = require_dict(
+        policy["criteria"].get("statistics_policy"), "statistics policy"
+    )
+    gap_policy = require_dict(statistics.get("gap_policy"), "statistics gap policy")
+    result = window_statistics(
+        aligned_times,
+        differences,
+        start,
+        end,
+        replicates=require_int(
+            statistics.get("bootstrap_replicates"),
+            "bootstrap replicates",
+            minimum=1,
+        ),
+        seed_text=(
+            f"paired-case:{metric}:{window_name}:"
+            f"{left.get('case_id')}:{right.get('case_id')}:"
+            f"{policy['criteria_binding']['sha256']}"
+        ),
+        minimum_block_duration=max(
+            case_forcing_tcorr(left), case_forcing_tcorr(right)
+        ),
+        expected_cadence=require_positive(
+            gap_policy.get("expected_history_cadence"), "expected history cadence"
+        ),
+        maximum_gap_expected_cadence_multiplier=require_positive(
+            gap_policy.get("maximum_gap_expected_cadence_multiplier"),
+            "maximum gap expected-cadence multiplier",
+        ),
+        maximum_gap_minimum_block_duration_fraction=require_nonnegative(
+            gap_policy.get("maximum_gap_forcing_tcorr_fraction"),
+            "maximum gap forcing-tcorr fraction",
+        ),
+    )
+    result["difference_definition"] = (
+        f"{left.get('case_id')} minus {right.get('case_id')} at common physical time"
+    )
+    result["claim_scope"] = "descriptive_paired_trajectories"
+    result["population_inference"] = POPULATION_INFERENCE_LIMITATION
+    return result
 
 
 def pair_contrast(
@@ -5181,7 +5604,7 @@ def pair_contrast(
     passive: dict[str, object],
     policy: dict[str, object],
 ) -> dict[str, object]:
-    """Evaluate one active/passive pair with Holm-corrected scalar contrasts."""
+    """Evaluate one active/passive pair as descriptive within-realization evidence."""
 
     family = require_dict(
         require_dict(policy["criteria"].get("family_gates"), "family_gates").get(
@@ -5189,57 +5612,267 @@ def pair_contrast(
         ),
         "active_passive",
     )
+    intervention_scope = require_dict(
+        family.get("intervention_scope"), "active/passive intervention scope"
+    )
+    if intervention_scope != ACTIVE_PASSIVE_INTERVENTION_SCOPE:
+        raise AcceptanceError("active/passive intervention scope differs")
     metrics = [str(value) for value in family["contrast_metrics"]]
+    expected_directions = require_dict(
+        family.get("expected_directions"), "active/passive expected directions"
+    )
     records: list[dict[str, object]] = []
     for metric in metrics:
         left = occupancy_from_case(active) if metric == "unstable_occupancy" else scalar_from_case(active, metric)
         right = occupancy_from_case(passive) if metric == "unstable_occupancy" else scalar_from_case(passive, metric)
         if left is None or right is None:
-            records.append({"metric": metric, "available": False})
+            records.append({
+                "metric": metric,
+                "available": False,
+                "intervention_scope": intervention_scope,
+            })
             continue
         difference = left["mean"] - right["mean"]
         se = math.hypot(left["standard_error"], right["standard_error"])
-        z_score = finite_ratio(difference, se)
         pooled = math.sqrt(
             0.5 * (left["standard_deviation"] ** 2 + right["standard_deviation"] ** 2)
         )
         effect = finite_ratio(difference, pooled)
+        expected_direction = str(expected_directions[metric])
+        if expected_direction == "active_lower":
+            coherent = difference < 0.0
+        elif expected_direction == "active_higher":
+            coherent = difference > 0.0
+        else:
+            raise AcceptanceError(
+                f"active/passive expected direction is invalid for {metric}"
+            )
+        large_effect = (
+            coherent
+            and abs(effect) >= float(family["minimum_abs_standardized_effect"])
+        )
         records.append({
             "metric": metric,
             "available": True,
+            "active_mean": left["mean"],
+            "passive_mean": right["mean"],
             "difference": difference,
             "combined_standard_error": se,
-            "z_score": z_score,
-            "two_sided_p": normal_two_sided_p(z_score),
+            "pooled_within_realization_standard_deviation": pooled,
             "standardized_effect": effect,
+            "standardized_effect_scope": "descriptive_within_realization",
+            "expected_direction": expected_direction,
+            "direction_coherent": coherent,
+            "large_direction_coherent_effect": large_effect,
+            "claim_scope": "descriptive_within_realization",
+            "population_inference": POPULATION_INFERENCE_LIMITATION,
+            "intervention_scope": intervention_scope,
         })
     available = [record for record in records if record.get("available")]
-    ordered = sorted(available, key=lambda record: float(record["two_sided_p"]))
-    alpha = float(family["holm_alpha"])
-    continuing = True
-    for index, record in enumerate(ordered):
-        threshold = alpha / (len(ordered) - index)
-        record["holm_threshold"] = threshold
-        significant = continuing and float(record["two_sided_p"]) <= threshold
-        record["holm_significant"] = significant
-        if not significant:
-            continuing = False
-    passed = any(
-        record.get("holm_significant")
-        and float(record["standardized_effect"]) >= float(family["minimum_standardized_effect"])
-        for record in available
+    coherent_count = sum(record.get("direction_coherent") is True for record in available)
+    large_count = sum(
+        record.get("large_direction_coherent_effect") is True for record in available
     )
-    result = "pass" if passed else ("inconclusive" if len(available) < len(metrics) else "fail")
+    complete = len(available) == len(metrics)
+    passed = (
+        complete
+        and coherent_count >= int(family["minimum_coherent_metrics"])
+        and large_count >= int(family["minimum_large_effect_metrics"])
+    )
+    result = "pass" if passed else ("inconclusive" if not complete else "fail")
     return {
         "result": result,
         "reason": (
-            "at least one preregistered active/passive contrast is resolved"
+            "within-realization total-intervention effects meet the coherent-direction criteria"
             if passed
-            else "one or more preregistered contrast metrics are unavailable"
+            else "one or more active/passive contrast metrics are unavailable"
             if result == "inconclusive"
-            else "no preregistered active/passive contrast passed"
+            else "within-realization total-intervention effects do not meet the coherent-direction criteria"
         ),
+        "intervention_scope": intervention_scope,
+        "population_inference": POPULATION_INFERENCE_LIMITATION,
         "metrics": records,
+        "decision_summary": {
+            "available_metrics": len(available),
+            "required_metrics": len(metrics),
+            "coherent_metrics": coherent_count,
+            "minimum_coherent_metrics": int(family["minimum_coherent_metrics"]),
+            "large_direction_coherent_effects": large_count,
+            "minimum_large_effect_metrics": int(
+                family["minimum_large_effect_metrics"]
+            ),
+            "minimum_abs_standardized_effect": float(
+                family["minimum_abs_standardized_effect"]
+            ),
+            "claim_scope": "descriptive_within_realization",
+            "population_inference": POPULATION_INFERENCE_LIMITATION,
+            "intervention_scope": intervention_scope,
+        },
+    }
+
+
+def named_case_gate(
+    case: dict[str, object], name: str
+) -> dict[str, object] | None:
+    """Return one named case gate when it is present."""
+
+    gates = case.get("gates")
+    if not isinstance(gates, list):
+        return None
+    matches = [
+        value
+        for value in gates
+        if isinstance(value, dict) and value.get("name") == name
+    ]
+    if len(matches) > 1:
+        raise AcceptanceError(f"case evidence duplicates gate: {name}")
+    return matches[0] if matches else None
+
+
+def lf_strength_assessment(
+    policy: dict[str, object],
+    cases: dict[str, dict[str, object]],
+    eligible: dict[str, bool] | None = None,
+) -> dict[str, object]:
+    """Report active LF-strength activity and descriptive response."""
+
+    lf_policy = require_dict(
+        require_dict(
+            policy["criteria"].get("family_gates"), "family_gates"
+        ).get("lf_strength"),
+        "lf_strength",
+    )
+    activity: list[dict[str, object]] = []
+    for case_id in require_list(
+        lf_policy.get("required_activity_cases"), "LF required activity cases"
+    ):
+        case_id = str(case_id)
+        if case_id not in cases or (
+            eligible is not None and not eligible.get(case_id, False)
+        ):
+            activity.append({
+                "case_id": case_id,
+                "available": False,
+                "reason": "eligible case evidence is unavailable",
+            })
+            continue
+        activity_gate = named_case_gate(cases[case_id], "landau_fluid_activity")
+        if activity_gate is None:
+            activity.append({
+                "case_id": case_id,
+                "available": False,
+                "reason": "landau-fluid activity gate is unavailable",
+            })
+            continue
+        activity.append({
+            "case_id": case_id,
+            "available": True,
+            "result": activity_gate.get("result"),
+            "observations": activity_gate.get("observations"),
+            "limits": activity_gate.get("limits"),
+        })
+
+    metric = str(lf_policy["response_metric"])
+    near_limit = float(lf_policy["near_insensitivity_abs_standardized_effect_lte"])
+    responses: list[dict[str, object]] = []
+    for pair in require_list(
+        lf_policy.get("required_comparisons"), "LF required comparisons"
+    ):
+        pair_values = require_list(pair, "LF comparison")
+        if len(pair_values) != 2:
+            raise AcceptanceError("LF comparison must contain exactly two cases")
+        left_id, right_id = (str(value) for value in pair_values)
+        if (
+            left_id not in cases
+            or right_id not in cases
+            or (
+                eligible is not None
+                and (
+                    not eligible.get(left_id, False)
+                    or not eligible.get(right_id, False)
+                )
+            )
+        ):
+            responses.append({
+                "pair": [left_id, right_id],
+                "available": False,
+                "reason": "eligible case evidence is unavailable",
+            })
+            continue
+        left = scalar_from_case(cases[left_id], metric)
+        right = scalar_from_case(cases[right_id], metric)
+        if left is None or right is None:
+            responses.append({
+                "pair": [left_id, right_id],
+                "available": False,
+                "reason": f"descriptive response metric {metric} is unavailable",
+            })
+            continue
+        difference = left["mean"] - right["mean"]
+        pooled = math.sqrt(
+            0.5 * (left["standard_deviation"] ** 2 + right["standard_deviation"] ** 2)
+        )
+        standardized = finite_ratio(difference, pooled)
+        responses.append({
+            "pair": [left_id, right_id],
+            "metric": metric,
+            "available": True,
+            "left_mean": left["mean"],
+            "right_mean": right["mean"],
+            "difference_left_minus_right": difference,
+            "absolute_difference": abs(difference),
+            "combined_standard_error": math.hypot(
+                left["standard_error"], right["standard_error"]
+            ),
+            "pooled_within_realization_standard_deviation": pooled,
+            "standardized_effect": standardized,
+            "standardized_effect_scope": "descriptive_within_realization",
+            "response_classification": (
+                "near_insensitive"
+                if abs(standardized) <= near_limit
+                else "descriptive_response"
+            ),
+            "claim_scope": "descriptive_within_realization",
+            "population_inference": POPULATION_INFERENCE_LIMITATION,
+        })
+
+    activity_failed = any(
+        record.get("available") is True and record.get("result") == "fail"
+        for record in activity
+    )
+    complete = all(record.get("available") is True for record in activity) and all(
+        record.get("available") is True for record in responses
+    )
+    activity_passed = all(record.get("result") == "pass" for record in activity)
+    result = (
+        "fail"
+        if activity_failed
+        else "pass"
+        if complete and activity_passed
+        else "inconclusive"
+    )
+    return {
+        "result": result,
+        "reason": (
+            "active LF-strength activity and descriptive response are available"
+            if result == "pass"
+            else "one or more active LF-strength activity gates failed"
+            if result == "fail"
+            else "active LF-strength activity or descriptive response is unavailable"
+        ),
+        "population_inference": POPULATION_INFERENCE_LIMITATION,
+        "observations": {
+            "activity": activity,
+            "responses": responses,
+            "near_insensitivity_is_scientifically_meaningful": bool(
+                lf_policy["near_insensitivity_is_scientifically_meaningful"]
+            ),
+            "claim_scope": "descriptive_within_realization",
+            "population_inference": POPULATION_INFERENCE_LIMITATION,
+        },
+        "limits": {
+            "near_insensitivity_abs_standardized_effect_lte": near_limit,
+        },
     }
 
 
@@ -5515,29 +6148,57 @@ def evaluate_campaign(
     required_cases = [str(value) for value in policy["criteria"]["required_cases"]]
     campaign_gates: list[dict[str, object]] = []
     campaign_gates.append(gate(
-        "approved_independent_criteria_review",
-        "pass" if policy["approved"] else "inconclusive",
+        "reviewed_production_science_criteria_disposition",
+        "pass" if policy["current_science_disposition_accepted"] else "inconclusive",
         reason=(
-            "independent criteria review approved exact criteria and final utility"
-            if policy["approved"]
-            else "independent criteria review remains changes-required or pending"
+            "current criteria and utility are accepted as reviewed production-science "
+            "corrections; no full-current-scope independent approval is claimed"
+            if policy["current_science_disposition_accepted"]
+            else "current criteria disposition remains changes-required or pending"
         ),
         observations={
             "review_status": policy["review_status"],
+            "current_science_disposition_accepted": policy[
+                "current_science_disposition_accepted"
+            ],
+            "historical_independent_review_scope_approved": policy[
+                "historical_independent_review_scope_approved"
+            ],
+            "full_scope_independent_review_complete": policy[
+                "full_scope_independent_review_complete"
+            ],
+            "current_science_scope_limitation": policy[
+                "current_science_scope_limitation"
+            ],
             "criteria_sha256": policy["criteria_binding"]["sha256"],
             "acceptance_utility_sha256": policy["verified_sources"]["acceptance_utility"]["sha256"],
         },
     ))
-    products_available = reviewed_scientific_products_available(policy)
+    products_available = accepted_scientific_products_available(policy)
     campaign_gates.append(gate(
-        "reviewed_scientific_products_generator",
+        "accepted_scope_limited_scientific_products_pipeline",
         "pass" if products_available else "inconclusive",
         reason=(
-            "exact reviewed generator and deterministic replay contract are available"
+            "historically approved method scopes, accepted production-science "
+            "corrections, exact bindings, and deterministic replay are available; no "
+            "full-scope independent approval is claimed"
             if products_available
-            else "exact replay tools remain pending independent promotion review"
+            else "the accepted scope-limited product pipeline is unavailable"
         ),
-        observations=policy["criteria"]["scientific_products_policy"],
+        observations={
+            "scientific_products_policy": policy["criteria"][
+                "scientific_products_policy"
+            ],
+            "scientific_products_historical_method_review_status": policy[
+                "scientific_products_historical_method_review_status"
+            ],
+            "scientific_products_historical_method_scope_approved": policy[
+                "scientific_products_historical_method_scope_approved"
+            ],
+            "current_science_scope_limitation": policy[
+                "current_science_scope_limitation"
+            ],
+        },
     ))
     missing = sorted(set(required_cases) - set(cases))
     campaign_gates.append(gate(
@@ -5677,34 +6338,44 @@ def evaluate_campaign(
         ))
 
     active_passive = policy["criteria"]["family_gates"]["active_passive"]
+    intervention_scope = active_passive["intervention_scope"]
     for active, passive in active_passive["pairs"]:
         if active not in cases or passive not in cases:
-            contrast = {"result": "inconclusive", "reason": "pair case evidence is missing"}
+            contrast = {
+                "result": "inconclusive",
+                "reason": "pair case evidence is missing",
+                "intervention_scope": intervention_scope,
+                "metrics": None,
+            }
         else:
             contrast = pair_contrast(cases[active], cases[passive], policy)
         campaign_gates.append(gate(
             f"active_passive_pair:{active}:{passive}",
             str(contrast["result"]),
             reason=str(contrast["reason"]),
-            observations=contrast.get("metrics"),
+            observations=contrast,
         ))
 
-    if "R14" in cases and "R15" in cases:
-        lower = scalar_from_case(cases["R14"], "nu_eff", "late")
-        upper = scalar_from_case(cases["R15"], "nu_eff", "late")
-        if lower is None or upper is None:
-            ordering_result = "inconclusive"
-            ordering_observation = None
-        else:
-            difference = upper["mean"] - lower["mean"]
-            lower_95 = difference - 1.96 * math.hypot(
-                upper["standard_error"], lower["standard_error"]
-            )
-            ordering_result = "pass" if lower_95 > 0.0 else "fail"
-            ordering_observation = {
-                "R15_minus_R14": difference,
-                "lower_95": lower_95,
-            }
+    case_eligibility = {
+        case_id: case_evidence_is_complete(value)
+        for case_id, value in cases.items()
+    }
+    if (
+        "R14" in cases
+        and "R15" in cases
+        and case_eligibility.get("R14") is True
+        and case_eligibility.get("R15") is True
+    ):
+        ordering_observation = paired_case_difference_statistics(
+            cases["R15"], cases["R14"], "nu_eff", "late", policy
+        )
+        descriptive_block_lower_95 = float(
+            require_list(
+                ordering_observation["block_bootstrap_interval_95"],
+                "finite-limiter paired bootstrap interval",
+            )[0]
+        )
+        ordering_result = "pass" if descriptive_block_lower_95 > 0.0 else "fail"
     else:
         ordering_result = "inconclusive"
         ordering_observation = None
@@ -5712,58 +6383,20 @@ def evaluate_campaign(
         "finite_limiter_ordering:R15_gt_R14",
         ordering_result,
         reason=(
-            "R15 effective collisionality exceeds R14 with 95% confidence"
+            "paired-trajectory moving-block bootstrap supports R15 greater than R14"
             if ordering_result == "pass"
-            else "finite-limiter ordering is unavailable or unresolved"
+            else "finite-limiter descriptive ordering is unavailable or unsupported"
         ),
         observations=ordering_observation,
     ))
 
-    lf_policy = require_dict(
-        require_dict(
-            policy["criteria"].get("family_gates"), "family_gates"
-        ).get("lf_strength"),
-        "lf_strength",
-    )
-    lf_cases = [str(value) for value in require_list(lf_policy.get("cases"), "LF cases")]
-    lf_resolved: list[dict[str, object]] = []
-    for case_id in (value for value in lf_cases if value != "R02"):
-        left = scalar_from_case(cases[case_id], "peak_alignment") if case_id in cases else None
-        right = scalar_from_case(cases["R02"], "peak_alignment") if "R02" in cases else None
-        if left is None or right is None:
-            lf_resolved.append({
-                "pair": [case_id, "R02"],
-                "available": False,
-                "missing_dependency": "immutable analyzer metric peak_alignment",
-            })
-            continue
-        difference = abs(left["mean"] - right["mean"])
-        lower_95 = difference - 1.96 * math.hypot(
-            left["standard_error"], right["standard_error"]
-        )
-        lf_resolved.append({
-            "pair": [case_id, "R02"],
-            "available": True,
-            "absolute_difference": difference,
-            "lower_95": lower_95,
-            "resolved": lower_95 > 0.0,
-        })
-    lf_result = (
-        "pass"
-        if all(record.get("resolved") for record in lf_resolved)
-        else "inconclusive"
-        if any(not record.get("available") for record in lf_resolved)
-        else "fail"
-    )
+    lf_assessment = lf_strength_assessment(policy, cases, case_eligibility)
     campaign_gates.append(gate(
-        "lf_strength_resolved_response",
-        lf_result,
-        reason=(
-            "R12/R02/R06/R13 peak-alignment responses are resolved"
-            if lf_result == "pass"
-            else "LF-strength response is unavailable or unresolved"
-        ),
-        observations=lf_resolved,
+        "lf_strength_descriptive_response_activity",
+        str(lf_assessment["result"]),
+        reason=str(lf_assessment["reason"]),
+        observations=lf_assessment["observations"],
+        limits=lf_assessment["limits"],
     ))
 
     convergence_policy = require_dict(
@@ -7022,14 +7655,32 @@ def validate_criteria_evidence(policy: dict[str, object]) -> dict[str, object]:
         "valid": True,
         "release_authorizing": False,
         "criteria_review_status": policy["review_status"],
-        "independent_review_complete": bool(policy["approved"]),
-        "replay_tool_promotion_review_status": policy["replay_tools_review_status"],
-        "replay_tools_approved": bool(policy["replay_tools_approved"]),
-        "scientific_products_method_review_status": policy[
-            "scientific_products_method_review_status"
+        "current_science_disposition_accepted": bool(
+            policy["current_science_disposition_accepted"]
+        ),
+        "historical_independent_review_scope_approved": bool(
+            policy["historical_independent_review_scope_approved"]
+        ),
+        "full_scope_independent_review_complete": bool(
+            policy["full_scope_independent_review_complete"]
+        ),
+        "current_science_scope_limitation": policy[
+            "current_science_scope_limitation"
         ],
-        "scientific_products_method_review_approved": bool(
-            policy["scientific_products_method_review_approved"]
+        "historical_replay_tool_review_status": policy[
+            "historical_replay_tool_review_status"
+        ],
+        "historical_replay_tool_scope_approved": bool(
+            policy["historical_replay_tool_scope_approved"]
+        ),
+        "current_operational_replay_available": bool(
+            policy["current_operational_replay_available"]
+        ),
+        "scientific_products_historical_method_review_status": policy[
+            "scientific_products_historical_method_review_status"
+        ],
+        "scientific_products_historical_method_scope_approved": bool(
+            policy["scientific_products_historical_method_scope_approved"]
         ),
         "scientific_products_method_revision": policy["method_revision_binding"],
         "active_energy_policy_revision_id": policy["criteria"][

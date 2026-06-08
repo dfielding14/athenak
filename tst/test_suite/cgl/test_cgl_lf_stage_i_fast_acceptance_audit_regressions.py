@@ -17,7 +17,30 @@ ADAPTER = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_fast_acceptance.py"
 PUBLICATION = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_fast_publication.py"
 WORKFLOW = REPOSITORY / "scripts/cgl_lf_workflow.py"
 MATRIX = REPOSITORY / "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
+CRITERIA_REVIEW = REPOSITORY / (
+    "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.review.json"
+)
 HISTORY_LABEL = re.compile(r"\[(\d+)\]=(\S+)")
+TEST_CURRENT_SCIENCE_SCOPE_LIMITATION = json.loads(
+    CRITERIA_REVIEW.read_text(encoding="utf-8")
+)["current_science_scope_limitation"]
+TEST_ACTIVE_PASSIVE_INTERVENTION_SCOPE = {
+    "estimand": "total_effect_of_enabling_active_cgl",
+    "enabled_components": [
+        "pressure_feedback",
+        "thermodynamic_evolution",
+        "characteristic_speeds_and_fluxes",
+        "realized_forcing_after_trajectory_divergence",
+    ],
+    "excluded_interpretation": "anisotropic_stress_alone",
+    "declaration": (
+        "The active/passive comparison estimates the total effect of enabling active-CGL "
+        "pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, "
+        "and realized forcing after trajectory divergence; it is not an "
+        "anisotropic-stress-only comparison."
+    ),
+    "claim_scope": "descriptive_within_realization",
+}
 
 
 def load_module(name: str, path: Path):
@@ -185,6 +208,7 @@ def policy_fixture(
     policy = {
         "criteria_binding": {"path": "criteria.json", "sha256": "c" * 64},
         "review_binding": {"path": "review.json", "sha256": "d" * 64},
+        "current_science_scope_limitation": TEST_CURRENT_SCIENCE_SCOPE_LIMITATION,
         "manifest": json.loads(MATRIX.read_text(encoding="utf-8")),
         "verified_sources": {
             "stage_i_manifest": {
@@ -212,11 +236,15 @@ def policy_fixture(
                 "kinetic": {
                     "history": "user",
                     "column": "kinetic",
+                    "reduction": "total",
                     "stationarity_kind": "energy",
                 },
             },
             "family_gates": {
-                "active_passive": {"pairs": []},
+                "active_passive": {
+                    "pairs": [],
+                    "intervention_scope": TEST_ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+                },
             },
         },
     }
@@ -247,6 +275,8 @@ class FakeAcceptance:
     """Small reviewed-acceptance API stub for adapter contract tests."""
 
     AcceptanceError = FakeAcceptanceError
+    ACTIVE_PASSIVE_INTERVENTION_SCOPE = TEST_ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    CURRENT_SCIENCE_SCOPE_LIMITATION = TEST_CURRENT_SCIENCE_SCOPE_LIMITATION
 
     def __init__(self, policy: dict[str, object]):
         self.policy = policy
@@ -354,7 +384,7 @@ class FakeAcceptance:
             "mean": 1.0,
             "standard_deviation": 0.1,
             "standard_error": 0.05,
-            "confidence_interval_95": [0.9, 1.1],
+            "block_bootstrap_interval_95": [0.9, 1.1],
             "effective_sample_count": 4.0,
             "independent_time_block_count": 2,
             "gap_adequacy": "pass",
@@ -376,6 +406,20 @@ class FakeAcceptance:
         **_kwargs,
     ) -> dict[str, object]:
         return self._statistics(minimum_block_duration)
+
+    @staticmethod
+    def metric_values_from_history(
+        history: dict[str, list[float]],
+        spec: dict[str, object],
+        _metric: str,
+    ) -> list[float]:
+        values = list(history[str(spec["column"])])
+        if spec.get("reduction") == "total":
+            return values
+        return [
+            value / volume
+            for value, volume in zip(values, history["volume"])
+        ]
 
     def metric_statistics(
         self,
@@ -474,9 +518,16 @@ class FakeAcceptance:
     def pair_contrast(
         _active: dict[str, object],
         _passive: dict[str, object],
-        _policy: dict[str, object],
+        policy: dict[str, object],
     ) -> dict[str, object]:
-        return {"result": "pass", "reason": "fixture pair passed", "metrics": {}}
+        return {
+            "result": "pass",
+            "reason": "fixture pair passed",
+            "metrics": {},
+            "intervention_scope": policy["criteria"]["family_gates"]["active_passive"][
+                "intervention_scope"
+            ],
+        }
 
     @staticmethod
     def scalar_from_case(
@@ -1170,7 +1221,42 @@ def test_comparison_gates_require_pass_case_comparison_evidence(fast_acceptance)
     gates = {gate["name"]: gate for gate in campaign["gates"]}
 
     assert gates["active_passive_pair:R02:R06"]["result"] == "inconclusive"
+    assert gates["active_passive_pair:R02:R06"]["observations"][
+        "intervention_scope"
+    ] == TEST_ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    assert campaign["active_passive_intervention_scope"] == (
+        TEST_ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert campaign["current_science_scope_limitation"] == (
+        TEST_CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
     assert gates["finite_limiter_ordering:R15_gt_R14"]["result"] == "inconclusive"
+
+
+def test_scope_records_fail_closed_on_any_nonexact_policy_value(fast_acceptance):
+    policy = policy_fixture(["R02"])
+    acceptance = FakeAcceptance(policy)
+    policy["current_science_scope_limitation"] = {
+        **TEST_CURRENT_SCIENCE_SCOPE_LIMITATION,
+        "full_scope_independent_review_complete": True,
+    }
+    with pytest.raises(
+        fast_acceptance.FastAcceptanceError,
+        match="current science scope limitation differs",
+    ):
+        fast_acceptance.current_science_scope_limitation(acceptance, policy)
+
+    policy = policy_fixture(["R02"])
+    acceptance = FakeAcceptance(policy)
+    policy["criteria"]["family_gates"]["active_passive"]["intervention_scope"] = {
+        **TEST_ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        "excluded_interpretation": "none",
+    }
+    with pytest.raises(
+        fast_acceptance.FastAcceptanceError,
+        match="active/passive intervention scope differs",
+    ):
+        fast_acceptance.active_passive_intervention_scope(acceptance, policy)
 
 
 def test_complete_case_statistics_use_authenticated_forcing_tcorr(
@@ -1186,6 +1272,235 @@ def test_complete_case_statistics_use_authenticated_forcing_tcorr(
         "statistics"
     ]
     assert statistics["method"]["required_block_duration"] == pytest.approx(2.0)
+
+
+def test_partial_fast_acceptance_reduces_v2_history_totals_exactly_once(
+    fast_acceptance, tmp_path
+):
+    acceptance = fast_acceptance.load_acceptance_module()
+    lineage = lineage_fixture(tmp_path / "lineage")
+    policy = policy_fixture()
+    policy["criteria"]["case_metrics"] = {
+        "abs_dp": {
+            "history": "user",
+            "column": "abs_dp",
+            "reduction": "volume_mean",
+            "stationarity_kind": "scalar",
+        },
+        "beta": {
+            "history": "user",
+            "column": "beta",
+            "reduction": "volume_mean",
+            "stationarity_kind": "scalar",
+        },
+        "nu_eff": {
+            "history": "user",
+            "column": "nu_eff",
+            "reduction": "volume_mean",
+            "stationarity_kind": "scalar",
+        },
+        "mirror_occupancy": {
+            "history": "user",
+            "column": "mirror_vol",
+            "reduction": "volume_fraction",
+            "stationarity_kind": "occupancy",
+        },
+        "firehose_occupancy": {
+            "history": "user",
+            "column": "fire_vol",
+            "reduction": "volume_fraction",
+            "stationarity_kind": "occupancy",
+        },
+        "hard_occupancy": {
+            "history": "user",
+            "column": "hard_vol",
+            "reduction": "volume_fraction",
+            "stationarity_kind": "occupancy",
+        },
+        "kinetic": {
+            "history": "user",
+            "column": "kinetic",
+            "reduction": "total",
+            "stationarity_kind": "scalar",
+        },
+    }
+    times = [0.0, 4.0, 6.0, 8.0, 10.0]
+    user = {
+        "time": times,
+        "volume": [2.0] * len(times),
+        "abs_dp": [0.4] * len(times),
+        "beta": [20.0] * len(times),
+        "nu_eff": [40.0] * len(times),
+        "mirror_vol": [0.2] * len(times),
+        "fire_vol": [0.1] * len(times),
+        "hard_vol": [0.02] * len(times),
+        "kinetic": [3.0] * len(times),
+    }
+
+    metrics, errors = fast_acceptance.available_history_statistics(
+        acceptance,
+        policy,
+        "R02",
+        lineage,
+        {"user": user},
+    )
+
+    assert errors == []
+    means = {
+        metric: record["windows"]["full"]["statistics"]["mean"]
+        for metric, record in metrics.items()
+    }
+    assert means == pytest.approx({
+        "abs_dp": 0.2,
+        "beta": 10.0,
+        "nu_eff": 20.0,
+        "mirror_occupancy": 0.1,
+        "firehose_occupancy": 0.05,
+        "hard_occupancy": 0.01,
+        "kinetic": 3.0,
+    })
+    assert metrics["kinetic"]["reduction"] == "total"
+    assert metrics["abs_dp"]["reduction"] == "volume_mean"
+    rows = fast_acceptance.statistics_table_rows(
+        {"R02": {"history_statistics": metrics}}
+    )
+    abs_dp_full = next(
+        row
+        for row in rows
+        if row["metric"] == "abs_dp" and row["window"] == "full"
+    )
+    assert abs_dp_full["mean"] == pytest.approx(0.2)
+    assert abs_dp_full["reduction"] == "volume_mean"
+
+
+def test_complete_direct_fast_reduces_v2_history_totals_exactly_once(
+    fast_acceptance, tmp_path, monkeypatch
+):
+    class RecordingAcceptance(FakeAcceptance):
+        def __init__(self, policy):
+            super().__init__(policy)
+            self.metric_inputs: dict[str, list[float]] = {}
+
+        def metric_statistics(
+            self,
+            history,
+            values,
+            metric,
+            policy,
+            *,
+            kind,
+            minimum_block_duration,
+        ):
+            self.metric_inputs[str(metric)] = list(values)
+            return super().metric_statistics(
+                history,
+                values,
+                metric,
+                policy,
+                kind=kind,
+                minimum_block_duration=minimum_block_duration,
+            )
+
+    lineage = lineage_fixture(tmp_path / "lineage")
+    policy = policy_fixture()
+    policy["criteria"]["case_metrics"] = {
+        "abs_dp": {
+            "history": "user",
+            "column": "abs_dp",
+            "reduction": "volume_mean",
+            "stationarity_kind": "scalar",
+        },
+        "kinetic": {
+            "history": "user",
+            "column": "kinetic",
+            "reduction": "total",
+            "stationarity_kind": "scalar",
+        },
+    }
+    times = [0.0, 4.0, 6.0, 8.0, 10.0]
+    histories = {
+        "mhd": {"time": times},
+        "user": {
+            "time": times,
+            "volume": [2.0] * len(times),
+            "abs_dp": [0.4] * len(times),
+            "kinetic": [3.0] * len(times),
+        },
+    }
+    bindings = {
+        kind: {
+            "path": f"/fixture/{kind}.hst",
+            "size_bytes": 1,
+            "sha256": kind[0] * 64,
+        }
+        for kind in ("mhd", "user")
+    }
+    acceptance = RecordingAcceptance(policy)
+    monkeypatch.setattr(
+        fast_acceptance,
+        "direct_fast_execution_lineage_evidence",
+        lambda *_args, **_kwargs: {"kind": "fixture"},
+    )
+    monkeypatch.setattr(
+        fast_acceptance,
+        "authenticated_complete_diagnostics",
+        lambda *_args, **_kwargs: (
+            {"fixture": "complete diagnostics"},
+            {
+                "path": "/fixture/diagnostics.json",
+                "size_bytes": 1,
+                "sha256": "d" * 64,
+            },
+            None,
+        ),
+    )
+
+    evidence, error = fast_acceptance.reviewed_complete_case_evidence(
+        acceptance,
+        policy,
+        "R02",
+        lineage,
+        {"result": "pass"},
+        lineage_binding={
+            "path": "/fixture/lineage.json",
+            "size_bytes": 1,
+            "sha256": "l" * 64,
+        },
+        scope={
+            "classification": "standard_claim_scope",
+            "campaign_interpretation_eligible": True,
+        },
+        histories=histories,
+        history_bindings=bindings,
+    )
+
+    assert error is None
+    assert evidence is not None
+    assert acceptance.metric_inputs["abs_dp"] == pytest.approx([0.2] * len(times))
+    assert acceptance.metric_inputs["kinetic"] == pytest.approx([3.0] * len(times))
+    assert evidence["metrics"]["abs_dp"]["reduction"] == "volume_mean"
+    assert evidence["metrics"]["kinetic"]["reduction"] == "total"
+
+
+def test_finite_limiter_campaign_gate_is_descriptive_and_claim_scoped(
+    fast_acceptance,
+):
+    acceptance = FakeAcceptance(policy_fixture(["R14", "R15"]))
+    scope = {
+        "classification": "scoped_nonfatal_hard_bound_variant",
+        "campaign_interpretation_eligible": True,
+    }
+    gate = fast_acceptance.finite_limiter_gate(
+        acceptance,
+        {"R14": {"result": "pass"}, "R15": {"result": "pass"}},
+        {"R14": {"scope": scope}, "R15": {"scope": scope}},
+    )
+
+    assert gate["observations"]["claim_scope"] == "descriptive_within_trajectory"
+    assert "descriptive_block_lower_95" in gate["observations"]
+    assert "confidence" not in gate["reason"].lower()
+    assert "signific" not in gate["reason"].lower()
+    assert "population" not in str(gate).lower()
 
 
 def test_complete_direct_fast_science_is_claim_grade_without_canonical_package(
@@ -1210,6 +1525,24 @@ def test_complete_direct_fast_science_is_claim_grade_without_canonical_package(
     )
     assert summary["result"] == "pass"
     assert comparison is not None and comparison["result"] == "pass"
+    assert comparison["active_passive_intervention_scope"] == (
+        fast_acceptance.load_acceptance_module().ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert comparison["current_science_scope_limitation"] == (
+        fast_acceptance.load_acceptance_module().CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
+    assert summary["active_passive_intervention_scope"] == (
+        fast_acceptance.load_acceptance_module().ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert summary["current_science_scope_limitation"] == (
+        fast_acceptance.load_acceptance_module().CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
+    assert summary["comparison_evidence"]["active_passive_intervention_scope"] == (
+        fast_acceptance.load_acceptance_module().ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert summary["comparison_evidence"]["current_science_scope_limitation"] == (
+        fast_acceptance.load_acceptance_module().CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
     assert evidence["result"] == "pass"
     assert evidence["authority"] == "non-authorizing-direct-fast-scientific-assessment"
     assert evidence["release_authorizing"] is False

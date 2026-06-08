@@ -11,8 +11,8 @@ with the retained evidence.
 The implementation supports the products needed for scalar scientific-
 acceptance inputs, density/anisotropy PDFs, pressure-density surfaces,
 pressure-anisotropy transfer, local-field eddy anisotropy, selected-shell
-alignment PDFs, peak-alignment curves, and R16/R02/R17 velocity/magnetic
-spectral-shape convergence.
+alignment PDFs, peak-alignment curves, a robust inertial-range alignment
+scalar, and R16/R02/R17 velocity/magnetic spectral-shape convergence.
 """
 
 from __future__ import annotations
@@ -38,6 +38,18 @@ import numpy as np
 REPOSITORY = Path(__file__).resolve().parents[2]
 BIN_CONVERT_RELATIVE_PATH = Path("vis/python/bin_convert.py")
 BIN_CONVERT_PATH = REPOSITORY / BIN_CONVERT_RELATIVE_PATH
+SCIENTIFIC_ACCEPTANCE_CRITERIA_RELATIVE_PATH = Path(
+    "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json"
+)
+SCIENTIFIC_ACCEPTANCE_CRITERIA_PATH = (
+    REPOSITORY / SCIENTIFIC_ACCEPTANCE_CRITERIA_RELATIVE_PATH
+)
+SCIENTIFIC_ACCEPTANCE_UTILITY_RELATIVE_PATH = Path(
+    "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py"
+)
+SCIENTIFIC_ACCEPTANCE_UTILITY_PATH = (
+    REPOSITORY / SCIENTIFIC_ACCEPTANCE_UTILITY_RELATIVE_PATH
+)
 BIN_CONVERT_AUTHORITY_SHA256 = (
     "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
 )
@@ -58,6 +70,8 @@ EDDY_ANGLE_DEGREES = 15.0
 EDDY_SAMPLES = 2_000_000
 EDDY_BINS = 24
 EDDY_SEED = 731
+ALIGNMENT_INERTIAL_K_OVER_PI_MIN = 4.0
+ALIGNMENT_INERTIAL_K_OVER_PI_MAX = 24.0
 REPLAY_REQUEST_KEYS = frozenset({
     "authority_mode",
     "bundle_manifest",
@@ -82,15 +96,15 @@ REQUIRED_FIELDS = (
     "bcc3",
 )
 HISTORY_METRICS = {
-    "abs_dp": ("user", "abs_dp"),
-    "beta": ("user", "beta"),
-    "firehose_occupancy": ("user", "fire_vol"),
-    "force_power": ("user", "force_pwr"),
-    "hard_occupancy": ("user", "hard_vol"),
-    "kinetic": ("user", "kinetic"),
-    "magnetic": ("user", "magnetic"),
-    "mirror_occupancy": ("user", "mirror_vol"),
-    "nu_eff": ("user", "nu_eff"),
+    "abs_dp": ("user", "abs_dp", "volume_mean"),
+    "beta": ("user", "beta", "volume_mean"),
+    "firehose_occupancy": ("user", "fire_vol", "volume_fraction"),
+    "force_power": ("user", "force_pwr", "domain_integrated_power"),
+    "hard_occupancy": ("user", "hard_vol", "volume_fraction"),
+    "kinetic": ("user", "kinetic", "domain_integrated_energy"),
+    "magnetic": ("user", "magnetic", "domain_integrated_energy"),
+    "mirror_occupancy": ("user", "mirror_vol", "volume_fraction"),
+    "nu_eff": ("user", "nu_eff", "volume_mean"),
 }
 LF_COUNTERS = (
     "lf_hwproj",
@@ -407,6 +421,63 @@ def load_json(
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ScientificProductsError(f"{label} is invalid JSON") from error
     return require_dict(value, label), binding
+
+
+def load_reviewed_acceptance_statistics_kernel() -> tuple[
+    dict[str, object], dict[str, object], object, dict[str, object]
+]:
+    """Load the exact criteria-bound acceptance statistics implementation."""
+
+    criteria, criteria_binding = load_json(
+        SCIENTIFIC_ACCEPTANCE_CRITERIA_PATH,
+        "scientific acceptance criteria",
+    )
+    sources = require_dict(
+        criteria.get("source_bindings"), "scientific acceptance source bindings"
+    )
+    declared = require_dict(
+        sources.get("acceptance_utility"),
+        "scientific acceptance utility binding",
+    )
+    if declared.get("path") != str(SCIENTIFIC_ACCEPTANCE_UTILITY_RELATIVE_PATH):
+        raise ScientificProductsError(
+            "scientific acceptance utility path differs from its criteria authority"
+        )
+    expected_sha256 = require_sha256(
+        declared.get("sha256"), "scientific acceptance utility SHA-256"
+    )
+    payload, utility_binding = read_regular_bytes(
+        SCIENTIFIC_ACCEPTANCE_UTILITY_PATH,
+        "scientific acceptance utility",
+        expected_sha256=expected_sha256,
+    )
+    spec = importlib.util.spec_from_file_location(
+        "_cgl_lf_stage_i_scientific_acceptance_statistics",
+        SCIENTIFIC_ACCEPTANCE_UTILITY_PATH,
+    )
+    if spec is None:
+        raise ScientificProductsError("cannot load scientific acceptance statistics")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        code = compile(payload, str(SCIENTIFIC_ACCEPTANCE_UTILITY_PATH), "exec")
+        exec(code, module.__dict__)
+    except Exception as error:
+        raise ScientificProductsError(
+            f"scientific acceptance statistics failed to load: {error}"
+        ) from error
+    if regular_file_binding(
+        SCIENTIFIC_ACCEPTANCE_UTILITY_PATH,
+        "scientific acceptance utility",
+        expected_sha256=expected_sha256,
+    ) != utility_binding:
+        raise ScientificProductsError(
+            "scientific acceptance utility changed while it was loaded"
+        )
+    if not callable(getattr(module, "window_statistics", None)):
+        raise ScientificProductsError(
+            "scientific acceptance utility lacks window_statistics"
+        )
+    return criteria, criteria_binding, module, utility_binding
 
 
 def evidence_digest(value: dict[str, object]) -> str:
@@ -2012,6 +2083,15 @@ def analyze_snapshots(
                 },
                 "alignment": alignment_histograms(fields, lengths, shells, bins),
             }
+            try:
+                record["alignment_inertial_scalar"] = inertial_range_alignment_scalar(
+                    record["alignment"], dk
+                )
+            except UnsupportedProduct as error:
+                record["alignment_inertial_scalar"] = {
+                    "available": False,
+                    "reason": str(error),
+                }
             if pressure_transfer_required:
                 record["pressure_transfer"] = pressure_transfer(
                     fields["dens"],
@@ -2066,6 +2146,7 @@ def analyze_snapshots(
             ])
             if eddy_anisotropy_required else None
         )
+        alignment_inertial_scalar = mean_inertial_range_alignment(records)
     except (UnsupportedProduct, MemoryError, ValueError, np.linalg.LinAlgError) as error:
         return {
             "result": "inconclusive",
@@ -2121,6 +2202,7 @@ def analyze_snapshots(
             }
             for name in sorted(alignment_names, key=int)
         },
+        "alignment_inertial_scalar": alignment_inertial_scalar,
         **(
             {"pressure_transfer": pressure_transfer_ensemble}
             if pressure_transfer_required else {}
@@ -2230,6 +2312,182 @@ def alignment_peak_curve(ensemble: dict[str, object]) -> tuple[np.ndarray, np.nd
         np.asarray([value[0] for value in peaks]),
         np.asarray([value[1] for value in peaks]),
     )
+
+
+def alignment_pdf_mean(value: object, label: str) -> float:
+    """Return the expectation of absolute alignment from one normalized PDF."""
+
+    record = require_dict(value, label)
+    edges = np.asarray(record.get("edges"), dtype=np.float64)
+    density = np.asarray(record.get("density"), dtype=np.float64)
+    if (
+        edges.ndim != 1
+        or density.ndim != 1
+        or edges.size != density.size + 1
+        or density.size < 2
+        or not np.isfinite(edges).all()
+        or not np.isfinite(density).all()
+        or np.any(density < 0.0)
+        or np.any(np.diff(edges) <= 0.0)
+    ):
+        raise UnsupportedProduct(f"{label} PDF is invalid")
+    widths = np.diff(edges)
+    mass = float(np.sum(density * widths))
+    if not math.isfinite(mass) or mass <= 0.0:
+        raise UnsupportedProduct(f"{label} PDF mass is nonpositive")
+    centers = 0.5 * (edges[1:] + edges[:-1])
+    mean = float(np.sum(centers * density * widths) / mass)
+    if not math.isfinite(mean) or mean < 0.0 or mean > 1.0:
+        raise UnsupportedProduct(f"{label} PDF mean lies outside absolute-cosine bounds")
+    return mean
+
+
+def alignment_mean_curve(
+    alignment: object, dk: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return shellwise mean absolute stretching-eigenvector alignment."""
+
+    records = require_dict(alignment, "alignment")
+    dk = require_finite(dk, "alignment dk")
+    if dk <= 0.0:
+        raise UnsupportedProduct("alignment dk must be positive")
+    values: list[tuple[float, float]] = []
+    for shell, value in sorted(records.items(), key=lambda item: int(item[0])):
+        shell_index = int(shell)
+        if shell_index <= 0:
+            raise UnsupportedProduct("alignment shell index must be positive")
+        values.append((
+            shell_index * dk,
+            alignment_pdf_mean(value, f"alignment shell {shell}"),
+        ))
+    if len(values) < 2:
+        raise UnsupportedProduct("alignment mean curve requires at least two shells")
+    return (
+        np.asarray([value[0] for value in values], dtype=np.float64),
+        np.asarray([value[1] for value in values], dtype=np.float64),
+    )
+
+
+def inertial_range_alignment_scalar(alignment: object, dk: float) -> dict[str, object]:
+    """Return a robust log-k mean of shellwise alignment-PDF expectations."""
+
+    k_perp, shell_means = alignment_mean_curve(alignment, dk)
+    k_over_pi = k_perp / math.pi
+    selected = (
+        (k_over_pi >= ALIGNMENT_INERTIAL_K_OVER_PI_MIN)
+        & (k_over_pi <= ALIGNMENT_INERTIAL_K_OVER_PI_MAX)
+    )
+    if np.count_nonzero(selected) < 2:
+        raise UnsupportedProduct(
+            "inertial-range alignment scalar requires at least two shells on "
+            f"{ALIGNMENT_INERTIAL_K_OVER_PI_MIN:g} <= k_perp/pi <= "
+            f"{ALIGNMENT_INERTIAL_K_OVER_PI_MAX:g}"
+        )
+    selected_k = k_over_pi[selected]
+    selected_means = shell_means[selected]
+    log_k = np.log(selected_k)
+    scalar = float(np.sum(
+        0.5 * (selected_means[1:] + selected_means[:-1]) * np.diff(log_k)
+    ) / (log_k[-1] - log_k[0]))
+    if not math.isfinite(scalar) or scalar < 0.0 or scalar > 1.0:
+        raise UnsupportedProduct("inertial-range alignment scalar is invalid")
+    return {
+        "available": True,
+        "definition": (
+            "log-k_perp average of the shellwise PDF expectation of "
+            "|bhat dot e_stretch|"
+        ),
+        "source_product": "selected-shell stretching-eigenvector alignment PDFs",
+        "shell_statistic": "PDF expectation, not histogram-bin mode",
+        "inertial_range_k_perp_over_pi": [
+            ALIGNMENT_INERTIAL_K_OVER_PI_MIN,
+            ALIGNMENT_INERTIAL_K_OVER_PI_MAX,
+        ],
+        "aggregation": "trapezoidal mean in ln(k_perp/pi)",
+        "selected_shell_count": int(np.count_nonzero(selected)),
+        "selected_k_perp_over_pi": selected_k.tolist(),
+        "selected_shell_mean_abs_cosine": selected_means.tolist(),
+        "value": scalar,
+    }
+
+
+def mean_inertial_range_alignment(
+    records: list[dict[str, object]],
+) -> dict[str, object]:
+    """Summarize per-snapshot inertial-range alignment without inferential claims."""
+
+    available: list[tuple[float, dict[str, object]]] = []
+    unavailable: list[dict[str, object]] = []
+    for record in records:
+        time = require_finite(record.get("time"), "alignment snapshot time")
+        scalar = require_dict(
+            record.get("alignment_inertial_scalar"), "alignment inertial scalar"
+        )
+        if scalar.get("available") is True:
+            available.append((time, scalar))
+        else:
+            unavailable.append({
+                "time": time,
+                "reason": require_text(
+                    scalar.get("reason"), "unavailable alignment scalar reason"
+                ),
+            })
+    if unavailable or not available:
+        return {
+            "available": False,
+            "reason": (
+                "one or more selected snapshots lack a robust inertial-range "
+                "alignment scalar"
+            ),
+            "unavailable_snapshots": unavailable,
+        }
+    first = available[0][1]
+    metadata = (
+        "definition",
+        "source_product",
+        "shell_statistic",
+        "inertial_range_k_perp_over_pi",
+        "aggregation",
+        "selected_shell_count",
+        "selected_k_perp_over_pi",
+    )
+    if any(
+        any(scalar.get(key) != first.get(key) for key in metadata)
+        for _, scalar in available[1:]
+    ):
+        raise UnsupportedProduct("alignment scalar snapshot contracts differ")
+    times = [time for time, _ in available]
+    values = [
+        require_finite(scalar.get("value"), "alignment scalar value")
+        for _, scalar in available
+    ]
+    mean = float(np.mean(values))
+    deviation = (
+        float(np.std(values, ddof=1))
+        if len(values) > 1 else None
+    )
+    return {
+        "available": True,
+        "metric_contract_key": "peak_alignment",
+        "contract_key_note": (
+            "The stable contract key is retained for downstream compatibility; "
+            "the scalar is an inertial-range PDF-mean statistic, not a peak."
+        ),
+        **{key: first[key] for key in metadata},
+        "sample_times": times,
+        "sample_values": values,
+        "snapshot_count": len(values),
+        "mean": mean,
+        "descriptive_snapshot_mean": mean,
+        "descriptive_snapshot_standard_deviation": deviation,
+        "descriptive_snapshot_minimum": min(values),
+        "descriptive_snapshot_maximum": max(values),
+        "uncertainty_available": deviation is not None,
+        "uncertainty_status": (
+            "descriptive snapshot-to-snapshot spread only; retained snapshots "
+            "are not asserted independent and this is not realization uncertainty"
+        ),
+    }
 
 
 def surface_from_product(
@@ -2500,33 +2758,209 @@ def reference_products_for_case(
     return comparisons, bindings, deferred
 
 
+def history_metric_series(
+    history: dict[str, list[float]],
+    column: str,
+    quantity_kind: str,
+    label: str,
+) -> tuple[list[float], dict[str, object]]:
+    """Return one canonically normalized history series and explicit semantics."""
+
+    values = history[column]
+    if quantity_kind in ("volume_mean", "volume_fraction"):
+        volume = history.get("volume")
+        if volume is None:
+            raise ScientificProductsError(f"{label} normalization requires domain volume")
+        if len(volume) != len(values) or any(
+            not math.isfinite(value) or value <= 0.0 for value in volume
+        ):
+            raise ScientificProductsError(f"{label} domain volume is invalid")
+        return (
+            [value / domain_volume for value, domain_volume in zip(values, volume)],
+            {
+                "source_columns": [column, "volume"],
+                "quantity_kind": quantity_kind,
+                "normalization": f"{column} / volume",
+            },
+        )
+    if quantity_kind not in ("domain_integrated_energy", "domain_integrated_power"):
+        raise ScientificProductsError(f"{label} quantity kind is unsupported")
+    return values, {
+        "source_columns": [column],
+        "quantity_kind": quantity_kind,
+        "normalization": "none; retained Athena history value is a domain total",
+    }
+
+
+def reviewed_alignment_statistics(
+    context: BundleContext,
+    times: list[float],
+    values: list[float],
+    start: float,
+    end: float,
+) -> dict[str, object] | None:
+    """Return exact acceptance-consumer statistics for the full-window scalar."""
+
+    criteria, criteria_binding, acceptance, utility_binding = (
+        load_reviewed_acceptance_statistics_kernel()
+    )
+    windows = require_dict(criteria.get("analysis_windows"), "analysis windows")
+    full = require_list(windows.get("full"), "full analysis window")
+    full_start = require_finite(full[0], "full analysis start")
+    full_end = require_finite(full[1], "full analysis end")
+    if not (
+        math.isclose(start, full_start, rel_tol=0.0, abs_tol=1.0e-12)
+        and math.isclose(end, full_end, rel_tol=0.0, abs_tol=1.0e-12)
+    ):
+        return None
+    statistics = require_dict(
+        criteria.get("statistics_policy"), "statistics policy"
+    )
+    gap_policy = require_dict(statistics.get("gap_policy"), "statistics gap policy")
+    try:
+        minimum_block_duration = float(context.model_choices["forcing_tcorr"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ScientificProductsError(
+            "alignment statistics require finite forcing_tcorr"
+        ) from error
+    if not math.isfinite(minimum_block_duration) or minimum_block_duration <= 0.0:
+        raise ScientificProductsError(
+            "alignment statistics require positive forcing_tcorr"
+        )
+    try:
+        result = acceptance.window_statistics(
+            times,
+            values,
+            full_start,
+            full_end,
+            replicates=require_int(
+                statistics.get("bootstrap_replicates"),
+                "bootstrap_replicates",
+                1,
+            ),
+            seed_text=(
+                f"analyzer:peak_alignment:full:{criteria_binding['sha256']}"
+            ),
+            minimum_block_duration=minimum_block_duration,
+            expected_cadence=require_finite(
+                gap_policy.get("expected_history_cadence"),
+                "expected history cadence",
+            ),
+            maximum_gap_expected_cadence_multiplier=require_finite(
+                gap_policy.get("maximum_gap_expected_cadence_multiplier"),
+                "maximum gap expected-cadence multiplier",
+            ),
+            maximum_gap_minimum_block_duration_fraction=require_finite(
+                gap_policy.get("maximum_gap_forcing_tcorr_fraction"),
+                "maximum gap forcing-tcorr fraction",
+            ),
+        )
+    except Exception as error:
+        raise UnsupportedProduct(
+            f"reviewed full-window alignment statistics are unavailable: {error}"
+        ) from error
+    return {
+        "mean": require_finite(result.get("mean"), "alignment mean"),
+        "standard_deviation": require_finite(
+            result.get("standard_deviation"), "alignment standard deviation"
+        ),
+        "standard_error": require_finite(
+            result.get("standard_error"), "alignment standard error"
+        ),
+        "acceptance_statistics_scope": (
+            "descriptive within-realization full-window statistics; no population "
+            "inference"
+        ),
+        "acceptance_statistics_method": require_dict(
+            result.get("method"), "alignment statistics method"
+        ),
+        "acceptance_statistics_bindings": [
+            criteria_binding,
+            utility_binding,
+        ],
+    }
+
+
+def alignment_scientific_metric(
+    ensemble: dict[str, object],
+    context: BundleContext,
+    start: float,
+    end: float,
+) -> dict[str, object] | None:
+    """Return a robust scalar with exact acceptance-consumer statistics."""
+
+    value = ensemble.get("alignment_inertial_scalar")
+    if not isinstance(value, dict) or value.get("available") is not True:
+        return None
+    times = [
+        require_finite(item, "alignment sample time")
+        for item in require_list(value.get("sample_times"), "alignment sample times")
+    ]
+    values = [
+        require_finite(item, "alignment sample value")
+        for item in require_list(value.get("sample_values"), "alignment sample values")
+    ]
+    if len(times) != len(values):
+        raise UnsupportedProduct("alignment sample times and values differ")
+    statistics = reviewed_alignment_statistics(context, times, values, start, end)
+    if statistics is None:
+        return None
+    return {
+        **value,
+        **statistics,
+        "acceptance_consumer_ready": True,
+        "acceptance_consumer_contract": (
+            "exact reviewed full-window statistics recomputed from retained raw samples"
+        ),
+        "source_kind": "authenticated_snapshot_product",
+        "source_record": "snapshot_ensemble.alignment_inertial_scalar",
+        "source_binding_scope": (
+            "verified snapshot rank files listed in input_bindings and "
+            "declared_snapshot_inventory"
+        ),
+    }
+
+
 def scientific_metrics(
-    context: BundleContext, start: float, end: float
+    context: BundleContext,
+    start: float,
+    end: float,
+    ensemble: dict[str, object] | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    """Derive raw scientific-acceptance metrics and LF increments."""
+    """Derive canonically normalized scientific metrics and LF increments."""
 
     metrics: dict[str, object] = {}
-    for metric, (source, column) in HISTORY_METRICS.items():
+    for metric, (source, column, quantity_kind) in HISTORY_METRICS.items():
         history = context.user if source == "user" else context.mhd
         if column not in history:
             raise ScientificProductsError(f"{source} history lacks required column {column}")
+        values, semantics = history_metric_series(
+            history, column, quantity_kind, metric
+        )
         metrics[metric] = {
             "source_history": source,
             "source_column": column,
-            **metric_record(history["time"], history[column], start, end),
+            **semantics,
+            **metric_record(history["time"], values, start, end),
         }
     if all(name in context.user for name in ("mirror_vol", "fire_vol", "volume")):
+        volume = context.user["volume"]
+        if (
+            len(volume) != len(context.user["mirror_vol"])
+            or len(volume) != len(context.user["fire_vol"])
+            or any(not math.isfinite(value) or value <= 0.0 for value in volume)
+        ):
+            raise ScientificProductsError("unstable occupancy domain volume is invalid")
         unstable = [
-            (mirror + fire) / volume
-            for mirror, fire, volume in zip(
-                context.user["mirror_vol"],
-                context.user["fire_vol"],
-                context.user["volume"],
+            (mirror + fire) / domain_volume
+            for mirror, fire, domain_volume in zip(
+                context.user["mirror_vol"], context.user["fire_vol"], volume
             )
         ]
         metrics["unstable_occupancy"] = {
             "source_history": "user",
             "source_columns": ["mirror_vol", "fire_vol", "volume"],
+            "quantity_kind": "volume_fraction",
             "normalization": "(mirror_vol + fire_vol) / volume",
             **metric_record(context.user["time"], unstable, start, end),
         }
@@ -2540,8 +2974,14 @@ def scientific_metrics(
         metrics["parallel_forcing_fraction"] = {
             "source_history": "user",
             "source_columns": ["force_prp2", "force_prl2"],
+            "quantity_kind": "dimensionless_ratio",
+            "normalization": "force_prl2 / (force_prl2 + force_prp2)",
             **metric_record(context.user["time"], parallel_fraction, start, end),
         }
+    if ensemble is not None:
+        alignment_metric = alignment_scientific_metric(ensemble, context, start, end)
+        if alignment_metric is not None:
+            metrics["peak_alignment"] = alignment_metric
     increments: dict[str, object] = {}
     for column in LF_COUNTERS:
         if column not in context.mhd:
@@ -2653,14 +3093,21 @@ def scientific_acceptance_contract(
 def scientific_acceptance_case_record(
     start: float,
     end: float,
+    metrics: dict[str, object],
     increments: dict[str, object],
     ensemble: dict[str, object],
     convergence: dict[str, object],
 ) -> dict[str, object]:
     """Return one analyzer-compatible case record from deterministic products."""
 
+    consumer_metrics = {
+        str(name): value
+        for name, value in metrics.items()
+        if isinstance(value, dict) and value.get("acceptance_consumer_ready") is True
+    }
     return {
         "analysis_window": {"time_start": start, "time_end": end},
+        "scientific_acceptance_metrics": consumer_metrics,
         "lf_counter_increments": increments,
         "snapshot_ensemble": ensemble,
         "scientific_acceptance_convergence": convergence,
@@ -2690,7 +3137,6 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
     for history, label in ((context.mhd, "MHD"), (context.user, "user")):
         interpolate_at(history["time"], history["time"], start)
         interpolate_at(history["time"], history["time"], end)
-    metrics, increments = scientific_metrics(context, start, end)
     ensemble, snapshot_bindings, declared_snapshots = analyze_snapshots(
         context,
         start,
@@ -2700,6 +3146,7 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
         max_cells,
         require_text(request.get("snapshot_mode"), "snapshot_mode"),
     )
+    metrics, increments = scientific_metrics(context, start, end, ensemble)
     references, reference_bindings, reference_deferred = reference_products_for_case(
         context, ensemble
     )
@@ -2708,6 +3155,18 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
         *reference_deferred,
         *convergence_deferred,
     ]
+    alignment_statistics_bindings: list[dict[str, object]] = []
+    alignment_metric = metrics.get("peak_alignment")
+    if isinstance(alignment_metric, dict):
+        for index, value in enumerate(
+            require_list(
+                alignment_metric.get("acceptance_statistics_bindings"),
+                "alignment acceptance-statistics bindings",
+            )
+        ):
+            alignment_statistics_bindings.append(
+                require_dict(value, f"alignment acceptance-statistics binding {index}")
+            )
     inputs = deduplicate_bindings([
         context.bundle_binding,
         context.stage_manifest_binding,
@@ -2717,6 +3176,7 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
         context.user_binding,
         *snapshot_bindings,
         *reference_bindings,
+        *alignment_statistics_bindings,
     ])
     generator_binding = regular_file_binding(Path(__file__), "scientific products generator")
     if verify_athena_binary_parser_authority() != parser_binding:
@@ -2753,7 +3213,7 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
         ),
         "cases": {
             context.case_name: scientific_acceptance_case_record(
-                start, end, increments, ensemble, convergence
+                start, end, metrics, increments, ensemble, convergence
             )
         },
         "scientific_acceptance_metrics": metrics,
@@ -2789,6 +3249,27 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
                         "seed": EDDY_SEED,
                     },
                 },
+                {
+                    "product": "peak_alignment scalar contract",
+                    "definition": (
+                        "log-k_perp inertial-range average of shellwise "
+                        "stretching-eigenvector alignment-PDF expectations"
+                    ),
+                    "selection": (
+                        f"{ALIGNMENT_INERTIAL_K_OVER_PI_MIN:g} <= k_perp/pi <= "
+                        f"{ALIGNMENT_INERTIAL_K_OVER_PI_MAX:g}"
+                    ),
+                    "uncertainty": (
+                        "descriptive snapshot-to-snapshot spread only; no "
+                        "independent-realization inference"
+                    ),
+                    "review_scope": (
+                        "descriptive production-science extension without a newly "
+                        "claimed independent method-review identity; retained independent "
+                        "product-method approvals remain limited to pressure transfer and "
+                        "local-field eddy anisotropy"
+                    ),
+                },
             ],
             "deferred_product_families": [],
             "status_effect": (
@@ -2799,8 +3280,9 @@ def build_evidence(request: dict[str, object]) -> dict[str, object]:
         "input_bindings": inputs,
         "non_authorizing_statement": (
             "This deterministic product evidence is non-authorizing until bound "
-            "to independently reviewed scientific-acceptance policy and canonical "
-            "campaign authority."
+            "to the exact scope-limited reviewed production-science policy and "
+            "canonical campaign authority; no full-current-scope independent "
+            "approval is implied."
         ),
     }
     return seal_evidence(evidence)

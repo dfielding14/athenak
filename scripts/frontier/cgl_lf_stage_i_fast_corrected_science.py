@@ -144,6 +144,62 @@ def require_text(value: object, label: str) -> str:
     return value
 
 
+def exact_scope_records(
+    reviewed: object, policy: dict[str, object]
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Return exact validated current-review and total-intervention scopes."""
+
+    limitation = policy.get("current_science_scope_limitation")
+    if (
+        not isinstance(limitation, dict)
+        or limitation != getattr(reviewed, "CURRENT_SCIENCE_SCOPE_LIMITATION", None)
+    ):
+        raise CorrectedScienceError("current science scope limitation differs")
+    try:
+        intervention = policy["criteria"]["family_gates"]["active_passive"][
+            "intervention_scope"
+        ]
+    except (KeyError, TypeError) as error:
+        raise CorrectedScienceError(
+            "active/passive intervention scope is unavailable"
+        ) from error
+    if (
+        not isinstance(intervention, dict)
+        or intervention != getattr(reviewed, "ACTIVE_PASSIVE_INTERVENTION_SCOPE", None)
+    ):
+        raise CorrectedScienceError("active/passive intervention scope differs")
+    return limitation, intervention
+
+
+def require_exact_scope_records(
+    value: dict[str, object],
+    limitation: dict[str, object],
+    intervention: dict[str, object],
+    label: str,
+) -> None:
+    """Require one retained product to carry both exact science scopes."""
+
+    if value.get("current_science_scope_limitation") != limitation:
+        raise CorrectedScienceError(f"{label} current science scope limitation differs")
+    if value.get("active_passive_intervention_scope") != intervention:
+        raise CorrectedScienceError(f"{label} active/passive intervention scope differs")
+
+
+def validated_scope_records(
+    criteria: Path, criteria_review: Path
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Load and return the exact scopes for independent downstream validation."""
+
+    reviewed = load_module("_cgl_corrected_science_reviewed", REVIEWED_ACCEPTANCE_TOOL)
+    try:
+        policy = reviewed.load_validated_policy(criteria, criteria_review)
+    except Exception as error:
+        raise CorrectedScienceError(
+            f"cannot load reviewed scientific policy: {error}"
+        ) from error
+    return exact_scope_records(reviewed, policy)
+
+
 def verify_binding(value: object, label: str) -> dict[str, object]:
     """Verify and normalize one path/SHA/size binding."""
 
@@ -379,6 +435,7 @@ def validate_products(
     reviewed = load_module("_cgl_corrected_science_reviewed", REVIEWED_ACCEPTANCE_TOOL)
     try:
         policy = reviewed.load_validated_policy(criteria, criteria_review)
+        limitation, intervention = exact_scope_records(reviewed, policy)
         fast_science.validate_inventory(inventory_path, policy, list(ALL_CASES))
         summaries, campaign, acceptance_provenance, _ = (
             fast_science.validate_acceptance_root(
@@ -393,6 +450,9 @@ def validate_products(
         raise CorrectedScienceError("acceptance evidence does not cover exact R02-R17")
     if campaign.get("result") not in VALID_RESULTS:
         raise CorrectedScienceError("acceptance campaign result is malformed")
+    require_exact_scope_records(
+        campaign, limitation, intervention, "acceptance campaign"
+    )
 
     acceptance_summary = load_json(
         acceptance_root / "summary.json", "acceptance summary"
@@ -410,6 +470,9 @@ def validate_products(
         != set(ALL_CASES)
     ):
         raise CorrectedScienceError("acceptance summary coverage differs from R02-R17")
+    require_exact_scope_records(
+        acceptance_summary, limitation, intervention, "acceptance summary"
+    )
     acceptance_outputs = require_dict(
         acceptance_provenance.get("outputs"), "acceptance provenance outputs"
     )
@@ -447,6 +510,9 @@ def validate_products(
         or science_record.get("result") not in VALID_RESULTS
     ):
         raise CorrectedScienceError("reviewed science identity or coverage differs")
+    require_exact_scope_records(
+        science_record, limitation, intervention, "direct reviewed science"
+    )
     dispositions = require_dict(
         science_record.get("case_dispositions"), "reviewed science case dispositions"
     )
@@ -542,6 +608,8 @@ def validate_products(
         "status": "complete",
         "result": science_record["result"],
         "campaign_kind": "corrected-composite",
+        "active_passive_intervention_scope": intervention,
+        "current_science_scope_limitation": limitation,
         "campaign_identity": context["identity_binding"],
         "inventory": inventory,
         "case_classification": {

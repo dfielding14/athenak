@@ -55,7 +55,7 @@ def sha256(path: Path) -> str:
 
 
 def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
-    """Build temporary exact bindings for the not-yet-published method transition."""
+    """Build current operational bindings while preserving historical approvals."""
 
     criteria = json.loads(acceptance.DEFAULT_CRITERIA.read_text())
     review = json.loads(acceptance.DEFAULT_CRITERIA_REVIEW.read_text())
@@ -91,53 +91,13 @@ def transitioned_policy_documents(root: Path) -> tuple[Path, Path]:
         "criteria": deepcopy(review["criteria"]),
         "acceptance_utility": deepcopy(review["acceptance_utility"]),
     }
-    review["replay_tool_promotion_review"]["acceptance_utility"]["sha256"] = utility_sha
-    review["replay_tool_promotion_review"]["scientific_products_generator"][
-        "sha256"
-    ] = generator_sha
-    review["replay_tool_promotion_review"]["athena_binary_parser"] = deepcopy(parser)
+    review["family_gate_policy_revision_review"]["bindings"] = {
+        "criteria": deepcopy(review["criteria"]),
+        "acceptance_utility": deepcopy(review["acceptance_utility"]),
+    }
     review["replay_tool_promotion_review"]["required_checks"] = list(
         acceptance.REPLAY_TOOL_PROMOTION_REQUIRED_CHECKS
     )
-    bindings = {
-        "method_revision": acceptance.scientific_products_method_revision_binding(
-            method_revision
-        ),
-        "criteria": deepcopy(review["criteria"]),
-        "acceptance_utility": deepcopy(review["acceptance_utility"]),
-        "scientific_products_generator": deepcopy(
-            criteria["source_bindings"]["scientific_products_generator"]
-        ),
-        "athena_binary_parser": deepcopy(parser),
-    }
-    reviewer_ids = {
-        "plasma_physics": "fixture-plasma-method-reviewer",
-        "statistical_methodology": "fixture-statistical-method-reviewer",
-        "scientific_replay_security": review["replay_tool_promotion_review"]["reviewer"][
-            "reviewer_id"
-        ],
-    }
-    review["scientific_products_method_review"] = {
-        "schema_version": 1,
-        "record_type": "stage-i-scientific-products-method-review",
-        "review_status": "approved",
-        "decision": "approved",
-        "required_review_roles": list(
-            acceptance.SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES
-        ),
-        "bindings": deepcopy(bindings),
-        "approvals": [
-            {
-                "role": role,
-                "reviewer_id": reviewer_ids[role],
-                "decision": "approved",
-                "independent_of_implementation": True,
-                "scope": deepcopy(acceptance.SCIENTIFIC_METHOD_REVIEW_SCOPES[role]),
-                "bindings": deepcopy(bindings),
-            }
-            for role in acceptance.SCIENTIFIC_METHOD_REVIEW_REQUIRED_ROLES
-        ],
-    }
     review_path = root / "mks24_stage_i_scientific_acceptance_criteria.review.json"
     write_json(review_path, review)
     return criteria_path, review_path
@@ -174,14 +134,15 @@ def histories(root: Path, *, passive: bool = False) -> tuple[Path, Path]:
     }
     user = {
         "time": times,
+        "volume": [2.0] * count,
         "kinetic": [1.0] * count,
         "magnetic": [1.5] * count,
-        "beta": [100.0] * count,
-        "abs_dp": [0.2] * count,
-        "mirror_vol": [1.0e-3] * count,
-        "fire_vol": [2.0e-3] * count,
+        "beta": [200.0] * count,
+        "abs_dp": [0.4] * count,
+        "mirror_vol": [2.0e-3] * count,
+        "fire_vol": [4.0e-3] * count,
         "hard_vol": [0.0] * count,
-        "nu_eff": [20.0] * count,
+        "nu_eff": [40.0] * count,
         "force_pwr": [0.32] * count,
         "force_prp2": [1.0] * count,
         "force_prl2": [0.0] * count,
@@ -279,27 +240,63 @@ def build_case_bundle(
     return bundle_path
 
 
+def test_default_policy_loads_with_current_bindings_and_historical_approvals():
+    policy = acceptance.load_validated_policy(
+        acceptance.DEFAULT_CRITERIA,
+        acceptance.DEFAULT_CRITERIA_REVIEW,
+    )
+    assert policy["current_operational_replay_available"] is True
+    assert policy["historical_replay_tool_scope_approved"] is True
+    assert policy["scientific_products_historical_method_scope_approved"] is True
+    historical = {
+        key: acceptance.HISTORICAL_APPROVED_BINDINGS[key]
+        for key in (
+            "method_revision",
+            "criteria",
+            "acceptance_utility",
+            "scientific_products_generator",
+            "athena_binary_parser",
+        )
+    }
+    method_review = policy["review"]["scientific_products_method_review"]
+    assert method_review["bindings"] == historical
+    assert all(
+        approval["bindings"] == historical
+        for approval in method_review["approvals"]
+    )
+
+
 def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy):
-    assert policy["review_status"] == "approved"
-    assert policy["approved"] is True
-    assert policy["review"]["reviews"] == [
+    assert policy["review_status"] == acceptance.CURRENT_REVIEW_STATUS
+    assert policy["current_science_disposition_accepted"] is True
+    assert policy["historical_independent_review_scope_approved"] is True
+    assert policy["full_scope_independent_review_complete"] is False
+    assert "approved" not in policy
+    assert policy["review"]["historical_independent_reviews"] == [
         {
             "role": "plasma_physics",
             "reviewer_id": "019e9a8d-253b-7010-b156-676866801f3c",
             "decision": "approved",
             "independent_of_implementation": True,
+            "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only",
         },
         {
             "role": "statistical_methodology",
             "reviewer_id": "019e9ae1-d8c6-7861-9bbb-69e2cc97ba6f",
             "decision": "approved",
             "independent_of_implementation": True,
+            "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only",
         },
     ]
     assert policy["review"]["method_revision"]["candidate_status"] == (
-        "approved_by_independent_plasma_and_statistical_review"
+        acceptance.CURRENT_CANDIDATE_STATUS
     )
-    assert policy["review"]["remaining_review_requirements"] == []
+    assert policy["review"]["remaining_review_requirements"] == (
+        acceptance.CURRENT_REMAINING_REVIEW_REQUIREMENTS
+    )
+    assert policy["current_science_scope_limitation"] == (
+        acceptance.CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
     utility_sha = acceptance.regular_file_binding(UTILITY, "utility")["sha256"]
     assert policy["criteria"]["source_bindings"]["acceptance_utility"]["sha256"] == utility_sha
     assert policy["review"]["acceptance_utility"]["sha256"] == utility_sha
@@ -324,8 +321,15 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
         "acceptance_utility"
     ]
     assert policy["criteria"]["family_gates"]["lf_strength"]["cases"] == [
-        "R12", "R02", "R06", "R13"
+        "R12", "R02", "R13"
     ]
+    assert policy["family_gate_policy_revision_review_status"] == (
+        "accepted_reviewed_production_science_correction"
+    )
+    assert policy["criteria"]["case_metrics"]["abs_dp"]["reduction"] == "volume_mean"
+    assert policy["criteria"]["case_metrics"]["mirror_occupancy"]["reduction"] == (
+        "volume_fraction"
+    )
     assert policy["criteria"]["statistics_policy"]["minimum_independent_time_blocks"] == {
         "full": 3.0,
         "comparison": 2.0,
@@ -382,16 +386,17 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     assert policy["criteria"]["scientific_products_policy"]["reviewed_method_revision"][
         "athena_binary_parser"
     ] == policy["criteria"]["source_bindings"]["athena_binary_parser"]
-    assert policy["replay_tools_approved"] is True
-    assert policy["replay_tools_review_status"] == "approved"
-    assert policy["scientific_products_method_review_status"] == "approved"
-    assert policy["scientific_products_method_review_approved"] is True
+    assert policy["historical_replay_tool_scope_approved"] is True
+    assert policy["historical_replay_tool_review_status"] == "approved"
+    assert policy["current_operational_replay_available"] is True
+    assert policy["scientific_products_historical_method_review_status"] == "approved"
+    assert policy["scientific_products_historical_method_scope_approved"] is True
     assert policy["method_revision_binding"] == (
         acceptance.scientific_products_method_revision_binding(
             policy["criteria"]["scientific_products_policy"]["reviewed_method_revision"]
         )
     )
-    assert acceptance.reviewed_scientific_products_available(policy) is True
+    assert acceptance.accepted_scientific_products_available(policy) is True
     assert policy["review"]["replay_tool_promotion_review"]["reviewer"] == {
         "role": "scientific_replay_security",
         "reviewer_id": (
@@ -409,11 +414,19 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
     evidence = acceptance.validate_criteria_evidence(policy)
     acceptance.verify_evidence_digest(evidence, "criteria validation")
     assert evidence["valid"] is True
-    assert evidence["independent_review_complete"] is True
-    assert evidence["replay_tool_promotion_review_status"] == "approved"
-    assert evidence["replay_tools_approved"] is True
-    assert evidence["scientific_products_method_review_status"] == "approved"
-    assert evidence["scientific_products_method_review_approved"] is True
+    assert evidence["current_science_disposition_accepted"] is True
+    assert evidence["historical_independent_review_scope_approved"] is True
+    assert evidence["full_scope_independent_review_complete"] is False
+    assert "independent_review_complete" not in evidence
+    assert evidence["current_science_scope_limitation"] == (
+        acceptance.CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
+    assert evidence["historical_replay_tool_review_status"] == "approved"
+    assert evidence["historical_replay_tool_scope_approved"] is True
+    assert evidence["current_operational_replay_available"] is True
+    assert evidence["scientific_products_historical_method_review_status"] == "approved"
+    assert evidence["scientific_products_historical_method_scope_approved"] is True
+    assert "scientific_products_method_review_approved" not in evidence
     assert evidence["active_energy_policy_revision_id"] == (
         acceptance.ACTIVE_ENERGY_POLICY_REVISION_ID
     )
@@ -427,8 +440,10 @@ def test_preregistered_criteria_bind_final_utility_and_completed_reviews(policy)
 
 def test_approved_review_schema_requires_exact_completed_reviews(policy):
     review = deepcopy(policy["review"])
-    review["reviews"][0]["independent_of_implementation"] = False
-    with pytest.raises(acceptance.AcceptanceError, match="reviewer records are incoherent"):
+    review["historical_independent_reviews"][0]["independent_of_implementation"] = False
+    with pytest.raises(
+        acceptance.AcceptanceError, match="historical reviewer records are incoherent"
+    ):
         acceptance.validate_criteria_review(
             review,
             policy["review_binding"],
@@ -440,8 +455,12 @@ def test_approved_review_schema_requires_exact_completed_reviews(policy):
 
 def test_approved_review_schema_rejects_nonminimal_reviewer_record(policy):
     review = deepcopy(policy["review"])
-    review["reviews"][0]["review_note"] = "not part of the approved minimal record"
-    with pytest.raises(acceptance.AcceptanceError, match="reviewer records are incoherent"):
+    review["historical_independent_reviews"][0]["review_note"] = (
+        "not part of the approved minimal record"
+    )
+    with pytest.raises(
+        acceptance.AcceptanceError, match="historical reviewer records are incoherent"
+    ):
         acceptance.validate_criteria_review(
             review,
             policy["review_binding"],
@@ -449,6 +468,34 @@ def test_approved_review_schema_rejects_nonminimal_reviewer_record(policy):
             policy["criteria_binding"],
             policy["verified_sources"]["acceptance_utility"],
         )
+
+
+@pytest.mark.parametrize("mutation", ["missing", "full_scope_claim"])
+def test_current_science_scope_limitation_is_required_and_exact(policy, mutation):
+    review = deepcopy(policy["review"])
+    if mutation == "missing":
+        review.pop("current_science_scope_limitation")
+    else:
+        review["current_science_scope_limitation"][
+            "full_scope_independent_review_complete"
+        ] = True
+    with pytest.raises(acceptance.AcceptanceError, match="science scope limitation"):
+        acceptance.validate_criteria_review(
+            review,
+            policy["review_binding"],
+            policy["criteria"],
+            policy["criteria_binding"],
+            policy["verified_sources"]["acceptance_utility"],
+        )
+
+
+def test_active_passive_intervention_scope_is_required_and_exact(policy):
+    criteria = deepcopy(policy["criteria"])
+    criteria["family_gates"]["active_passive"]["intervention_scope"][
+        "excluded_interpretation"
+    ] = "anisotropic_stress_only"
+    with pytest.raises(acceptance.AcceptanceError, match="active/passive policy differs"):
+        acceptance.validate_criteria_payload(criteria, policy["criteria_binding"])
 
 
 def test_replay_tool_promotion_requires_exact_independent_approval(policy):
@@ -471,8 +518,10 @@ def test_replay_tool_promotion_requires_exact_independent_approval(policy):
         policy["criteria_binding"],
         policy["verified_sources"]["acceptance_utility"],
     )
-    assert validated["approved"] is True
-    assert validated["replay_tools_approved"] is True
+    assert validated["current_science_disposition_accepted"] is True
+    assert validated["full_scope_independent_review_complete"] is False
+    assert validated["historical_replay_tool_scope_approved"] is True
+    assert validated["current_operational_replay_available"] is True
 
     promotion["scientific_products_generator"]["sha256"] = "0" * 64
     with pytest.raises(acceptance.AcceptanceError, match="generator binding differs"):
@@ -678,10 +727,10 @@ def test_scientific_method_review_requires_distinct_independent_security_bound_r
         )
 
 
-def test_scientific_products_fail_closed_without_approved_method_review(policy):
+def test_scientific_products_fail_closed_without_historical_scoped_method_review(policy):
     unreviewed = deepcopy(policy)
-    unreviewed["scientific_products_method_review_approved"] = False
-    assert acceptance.reviewed_scientific_products_available(unreviewed) is False
+    unreviewed["scientific_products_historical_method_scope_approved"] = False
+    assert acceptance.accepted_scientific_products_available(unreviewed) is False
 
 
 @pytest.mark.parametrize(
@@ -959,18 +1008,21 @@ def test_stationarity_fails_large_resolved_half_window_drift():
         {
             "signed_early_minus_late": -1.0,
             "standard_error": 0.01,
-            "confidence_interval_95": [-1.02, -0.98],
+            "block_bootstrap_interval_95": [-1.02, -0.98],
             "method": {"contrast": "fixture-paired"},
         },
         "scalar",
         policy,
     )
     assert result["result"] == "fail"
-    assert result["descriptive_bootstrap"]["z_score"] > 3.0
+    assert (
+        result["descriptive_bootstrap"]["difference_over_block_standard_error"]
+        > 3.0
+    )
     assert result["descriptive_bootstrap"]["inferential_authority"] is False
 
 
-def test_forcing_power_stationarity_ignores_descriptive_bootstrap_significance():
+def test_forcing_power_stationarity_uses_only_descriptive_block_spread():
     policy = {
         "decision_authority": (
             "paired physical-time early-minus-late effect size only; moving-block "
@@ -987,14 +1039,17 @@ def test_forcing_power_stationarity_ignores_descriptive_bootstrap_significance()
         {
             "signed_early_minus_late": -0.05,
             "standard_error": 0.001,
-            "confidence_interval_95": [-0.052, -0.048],
+            "block_bootstrap_interval_95": [-0.052, -0.048],
             "method": {"contrast": "fixture-paired"},
         },
         "forcing_power",
         policy,
     )
     assert result["relative_change"] < 0.1
-    assert result["descriptive_bootstrap"]["z_score"] > 3.0
+    assert (
+        result["descriptive_bootstrap"]["difference_over_block_standard_error"]
+        > 3.0
+    )
     assert result["result"] == "pass"
 
     failed = acceptance.stationarity_result(
@@ -1004,13 +1059,16 @@ def test_forcing_power_stationarity_ignores_descriptive_bootstrap_significance()
         {
             "signed_early_minus_late": -0.2,
             "standard_error": 10.0,
-            "confidence_interval_95": [-20.0, 20.0],
+            "block_bootstrap_interval_95": [-20.0, 20.0],
             "method": {"contrast": "fixture-paired"},
         },
         "forcing_power",
         policy,
     )
-    assert failed["descriptive_bootstrap"]["z_score"] < 3.0
+    assert (
+        failed["descriptive_bootstrap"]["difference_over_block_standard_error"]
+        < 3.0
+    )
     assert failed["result"] == "fail"
 
 
@@ -1344,7 +1402,7 @@ def test_passive_lf_case_enforces_exact_zero_pressure_work(fast_policy, tmp_path
     )
     gates = {item["name"]: item for item in evidence["gates"]}
     assert gates["passive_pressure_work_exact_zero"]["result"] == "pass"
-    assert gates["landau_fluid_activity"]["result"] == "pass"
+    assert "landau_fluid_activity" not in gates
     assert "active_energy_closure" not in gates
 
 
@@ -1928,11 +1986,20 @@ def test_analyzer_scalar_metrics_are_recomputed_from_raw_samples(fast_policy):
     }
     diagnostics = {
         "cases": {
-            name: {"scientific_acceptance_metrics": {"peak_alignment": metric}}
+            name: {
+                "scientific_acceptance_metrics": {
+                    "peak_alignment": metric,
+                    "abs_dp": {
+                        "sample_times": times,
+                        "sample_values": [999.0] * len(times),
+                    },
+                }
+            }
         }
     }
     observed = acceptance.analyzer_metrics(diagnostics, name, fast_policy, 2.0)
     assert observed["peak_alignment"]["mean"] == pytest.approx(stats["mean"])
+    assert "abs_dp" not in observed
     forged = deepcopy(diagnostics)
     forged["cases"][name]["scientific_acceptance_metrics"]["peak_alignment"]["mean"] = 99.0
     with pytest.raises(acceptance.AcceptanceError, match="differs from raw samples"):
@@ -1946,44 +2013,138 @@ def case_scalar(mean: float, se: float = 0.01, deviation: float = 0.1):
     }
 
 
-def test_holm_step_down_stops_after_first_failure(fast_policy, monkeypatch):
+def test_active_passive_uses_descriptive_coherent_direction_without_p_values(
+    fast_policy,
+):
     active = {
-        "metrics": {
-            "abs_dp": case_scalar(1.0, se=0.1),
-            "mirror_occupancy": case_scalar(2.0, se=0.1),
-            "firehose_occupancy": case_scalar(0.0, se=0.0),
+            "metrics": {
+                "abs_dp": case_scalar(0.0, se=0.1),
+                "unstable_occupancy": case_scalar(0.0, se=0.1),
         },
         "analyzer_metrics": {
             "peak_alignment": {
-                "mean": 3.0,
+                "mean": 0.0,
                 "standard_error": 0.1,
                 "standard_deviation": 0.1,
             }
         },
     }
     passive = {
-        "metrics": {
-            "abs_dp": case_scalar(0.0, se=0.0),
-            "mirror_occupancy": case_scalar(0.0, se=0.0),
-            "firehose_occupancy": case_scalar(0.0, se=0.0),
+            "metrics": {
+                "abs_dp": case_scalar(1.0, se=0.0),
+                "unstable_occupancy": case_scalar(2.0, se=0.0),
         },
         "analyzer_metrics": {
             "peak_alignment": {
-                "mean": 0.0,
+                "mean": 3.0,
                 "standard_error": 0.0,
                 "standard_deviation": 0.1,
             }
         },
     }
-    p_values = {10.0: 0.001, 20.0: 0.03, 30.0: 0.031}
-    monkeypatch.setattr(
-        acceptance,
-        "normal_two_sided_p",
-        lambda z_score: p_values[round(z_score, 6)],
-    )
     result = acceptance.pair_contrast(active, passive, fast_policy)
-    ordered = sorted(result["metrics"], key=lambda item: item["two_sided_p"])
-    assert [item["holm_significant"] for item in ordered] == [True, False, False]
+    assert result["result"] == "pass"
+    assert result["decision_summary"]["coherent_metrics"] == 3
+    assert result["decision_summary"]["claim_scope"] == "descriptive_within_realization"
+    assert result["intervention_scope"] == acceptance.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    assert result["decision_summary"]["intervention_scope"] == (
+        acceptance.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert all(item["direction_coherent"] is True for item in result["metrics"])
+    assert all(
+        item["claim_scope"] == "descriptive_within_realization"
+        for item in result["metrics"]
+    )
+    assert all(
+        item["intervention_scope"] == acceptance.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+        for item in result["metrics"]
+    )
+    assert all("two_sided_p" not in item for item in result["metrics"])
+    assert all("holm_significant" not in item for item in result["metrics"])
+    assert result["population_inference"] == (
+        acceptance.POPULATION_INFERENCE_LIMITATION
+    )
+    assert result["decision_summary"]["population_inference"] == (
+        acceptance.POPULATION_INFERENCE_LIMITATION
+    )
+
+
+def test_v2_history_totals_reduce_once_to_canonical_means_and_fractions(policy):
+    user = {
+        "time": [0.0, 1.0],
+        "volume": [2.0, 2.0],
+        "abs_dp": [0.4, 0.4],
+        "beta": [20.0, 20.0],
+        "nu_eff": [40.0, 40.0],
+        "mirror_vol": [0.2, 0.2],
+        "fire_vol": [0.1, 0.1],
+        "hard_vol": [0.02, 0.02],
+        "kinetic": [3.0, 3.0],
+    }
+    metrics = policy["criteria"]["case_metrics"]
+    assert acceptance.metric_values_from_history(user, metrics["abs_dp"], "abs_dp") == [
+        0.2,
+        0.2,
+    ]
+    assert acceptance.metric_values_from_history(user, metrics["beta"], "beta") == [
+        10.0,
+        10.0,
+    ]
+    assert acceptance.metric_values_from_history(user, metrics["nu_eff"], "nu_eff") == [
+        20.0,
+        20.0,
+    ]
+    assert acceptance.metric_values_from_history(
+        user, metrics["mirror_occupancy"], "mirror_occupancy"
+    ) == [0.1, 0.1]
+    assert acceptance.metric_values_from_history(user, metrics["kinetic"], "kinetic") == [
+        3.0,
+        3.0,
+    ]
+    assert acceptance.combine_occupancy_series(user) == pytest.approx([0.15, 0.15])
+
+
+def test_lf_strength_near_insensitivity_is_a_passing_descriptive_outcome(
+    fast_policy,
+):
+    def lf_case(value: float) -> dict[str, object]:
+        return {
+            "analyzer_metrics": {
+                "peak_alignment": {
+                    "mean": value,
+                    "standard_error": 0.01,
+                    "standard_deviation": 0.1,
+                }
+            },
+            "gates": [
+                acceptance.gate(
+                    "landau_fluid_activity",
+                    "pass",
+                    reason="fixture active LF transport",
+                    observations={"lf_qface_increment": 1.0},
+                )
+            ],
+        }
+
+    result = acceptance.lf_strength_assessment(
+        fast_policy,
+        {"R12": lf_case(0.5), "R02": lf_case(0.5), "R13": lf_case(0.5)},
+    )
+
+    assert result["result"] == "pass"
+    responses = result["observations"]["responses"]
+    assert [record["pair"] for record in responses] == [
+        ["R12", "R02"], ["R13", "R02"]
+    ]
+    assert all(record["response_classification"] == "near_insensitive" for record in responses)
+    assert all("R06" not in record["pair"] for record in responses)
+    assert result["observations"]["claim_scope"] == "descriptive_within_realization"
+    assert result["population_inference"] == (
+        acceptance.POPULATION_INFERENCE_LIMITATION
+    )
+    assert result["observations"]["population_inference"] == (
+        acceptance.POPULATION_INFERENCE_LIMITATION
+    )
 
 
 def test_late_window_scalar_and_exact_convergence_support_are_enforced():
@@ -2038,6 +2199,8 @@ def complete_case(case_id: str) -> dict[str, object]:
     ]
     if case_id in acceptance.ACTIVE_ENERGY_ACTIVE_CASES:
         mandatory.append("active_energy_closure")
+    if case_id in ("R12", "R02", "R13"):
+        mandatory.append("landau_fluid_activity")
     return {
         "case_id": case_id,
         "result": "pass",
@@ -2094,19 +2257,34 @@ def test_campaign_approved_review_passes_but_other_authorities_still_block(
     campaign = acceptance.evaluate_campaign(fast_policy, paths)
     review_gate = next(
         gate for gate in campaign["gates"]
-        if gate["name"] == "approved_independent_criteria_review"
+        if gate["name"] == "reviewed_production_science_criteria_disposition"
     )
     lf_gate = next(
         gate for gate in campaign["gates"]
-        if gate["name"] == "lf_strength_resolved_response"
+        if gate["name"] == "lf_strength_descriptive_response_activity"
     )
     assert review_gate["result"] == "pass"
-    assert ["R06", "R02"] in [record["pair"] for record in lf_gate["observations"]]
+    assert review_gate["observations"]["full_scope_independent_review_complete"] is False
+    assert review_gate["observations"]["current_science_disposition_accepted"] is True
     assert all(
-        "missing_dependency" in record
-        for record in lf_gate["observations"]
-        if not record["available"]
+        gate["name"] != "approved_independent_criteria_review"
+        for gate in campaign["gates"]
     )
+    pair_gate = next(
+        gate
+        for gate in campaign["gates"]
+        if gate["name"] == "active_passive_pair:R02:R06"
+    )
+    assert pair_gate["observations"]["intervention_scope"] == (
+        acceptance.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert [record["case_id"] for record in lf_gate["observations"]["activity"]] == [
+        "R12", "R02", "R13"
+    ]
+    assert [record["pair"] for record in lf_gate["observations"]["responses"]] == [
+        ["R12", "R02"], ["R13", "R02"]
+    ]
+    assert all("R06" not in record["pair"] for record in lf_gate["observations"]["responses"])
     assert campaign["result"] != "pass"
     canonical_gate = next(
         gate for gate in campaign["gates"]
@@ -2115,13 +2293,23 @@ def test_campaign_approved_review_passes_but_other_authorities_still_block(
     assert canonical_gate["result"] == "inconclusive"
     products_gate = next(
         gate for gate in campaign["gates"]
-        if gate["name"] == "reviewed_scientific_products_generator"
+        if gate["name"] == "accepted_scope_limited_scientific_products_pipeline"
     )
     convergence_gate = next(
         gate for gate in campaign["gates"]
         if gate["name"] == "R16_R02_R17_resolution_convergence"
     )
     assert products_gate["result"] == "pass"
+    assert products_gate["observations"][
+        "scientific_products_historical_method_scope_approved"
+    ] is True
+    assert products_gate["observations"]["current_science_scope_limitation"][
+        "full_scope_independent_review_complete"
+    ] is False
+    assert all(
+        gate["name"] != "reviewed_scientific_products_generator"
+        for gate in campaign["gates"]
+    )
     assert convergence_gate["result"] == "inconclusive"
     assert campaign["release_authorizing"] is False
     assert campaign["authority"] == "non-authorizing-scientific-assessment"

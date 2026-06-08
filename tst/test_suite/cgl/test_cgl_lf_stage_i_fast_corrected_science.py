@@ -14,6 +14,18 @@ import pytest
 
 REPOSITORY = Path(__file__).resolve().parents[3]
 TOOL = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_fast_corrected_science.py"
+CRITERIA = REPOSITORY / (
+    "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json"
+)
+CRITERIA_REVIEW = REPOSITORY / (
+    "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.review.json"
+)
+CURRENT_SCIENCE_SCOPE_LIMITATION = json.loads(
+    CRITERIA_REVIEW.read_text(encoding="utf-8")
+)["current_science_scope_limitation"]
+ACTIVE_PASSIVE_INTERVENTION_SCOPE = json.loads(
+    CRITERIA.read_text(encoding="utf-8")
+)["family_gates"]["active_passive"]["intervention_scope"]
 
 
 def load_tool():
@@ -203,13 +215,22 @@ def product_fixture(tool, tmp_path: Path, *, complete: bool = True):
         reviewed_case_evidence[case_id] = binding(reviewed_path)
     campaign = acceptance / "campaign_evidence.json"
     summary = acceptance / "summary.json"
-    write_json(campaign, {"result": "pass"})
+    write_json(
+        campaign,
+        {
+            "result": "pass",
+            "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+            "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
+        },
+    )
     write_json(
         summary,
         {
             "record_type": "cgl-lf-stage-i-direct-fast-acceptance-summary",
             "selected_cases": list(tool.ALL_CASES),
             "case_results": {case_id: "pass" for case_id in tool.ALL_CASES},
+            "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+            "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
         },
     )
     acceptance_provenance = {
@@ -226,6 +247,8 @@ def product_fixture(tool, tmp_path: Path, *, complete: bool = True):
         "record_type": "cgl-lf-stage-i-direct-fast-reviewed-science-comparisons",
         "selected_cases": list(tool.ALL_CASES),
         "result": "pass",
+        "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
         "case_dispositions": {
             case_id: {
                 "inventory_status": "complete",
@@ -279,18 +302,35 @@ def install_science_modules(
     tool,
     monkeypatch,
     acceptance_provenance: dict[str, object],
+    campaign: dict[str, object] | None = None,
 ):
+    campaign_record = campaign or {
+        "result": "pass",
+        "active_passive_intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
+    }
     fast_science = SimpleNamespace(
         validate_inventory=lambda *_args: ({}, None, {}, {}),
         validate_acceptance_root=lambda *_args: (
             {case_id: {"result": "pass"} for case_id in tool.ALL_CASES},
-            {"result": "pass"},
+            campaign_record,
             acceptance_provenance,
             {},
         ),
     )
     reviewed = SimpleNamespace(
-        load_validated_policy=lambda *_args: {"policy": True},
+        CURRENT_SCIENCE_SCOPE_LIMITATION=CURRENT_SCIENCE_SCOPE_LIMITATION,
+        ACTIVE_PASSIVE_INTERVENTION_SCOPE=ACTIVE_PASSIVE_INTERVENTION_SCOPE,
+        load_validated_policy=lambda *_args: {
+            "current_science_scope_limitation": CURRENT_SCIENCE_SCOPE_LIMITATION,
+            "criteria": {
+                "family_gates": {
+                    "active_passive": {
+                        "intervention_scope": ACTIVE_PASSIVE_INTERVENTION_SCOPE
+                    }
+                }
+            },
+        },
         verify_evidence_digest=lambda *_args: None,
     )
     original = tool.load_module
@@ -323,7 +363,80 @@ def test_final_product_validation_binds_existing_tools_and_exact_coverage(
     assert record["case_classification"]["authenticated_legacy_passive"] == list(
         tool.PASSIVE_CASES
     )
+    assert record["active_passive_intervention_scope"] == (
+        ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    )
+    assert record["current_science_scope_limitation"] == (
+        CURRENT_SCIENCE_SCOPE_LIMITATION
+    )
     assert set(record["science"]["tables"]) == set(tool.EXPECTED_SCIENCE_TABLES)
+
+
+@pytest.mark.parametrize(
+    ("source", "field", "message"),
+    [
+        (
+            "campaign",
+            "current_science_scope_limitation",
+            "acceptance campaign current science scope limitation differs",
+        ),
+        (
+            "campaign",
+            "active_passive_intervention_scope",
+            "acceptance campaign active/passive intervention scope differs",
+        ),
+        (
+            "summary",
+            "current_science_scope_limitation",
+            "acceptance summary current science scope limitation differs",
+        ),
+        (
+            "summary",
+            "active_passive_intervention_scope",
+            "acceptance summary active/passive intervention scope differs",
+        ),
+        (
+            "science",
+            "current_science_scope_limitation",
+            "direct reviewed science current science scope limitation differs",
+        ),
+        (
+            "science",
+            "active_passive_intervention_scope",
+            "direct reviewed science active/passive intervention scope differs",
+        ),
+    ],
+)
+def test_final_product_validation_requires_exact_scope_records(
+    tool, tmp_path, monkeypatch, source, field, message
+):
+    context, acceptance, science, criteria, review, provenance = product_fixture(
+        tool, tmp_path
+    )
+    campaign = {
+        "result": "pass",
+        "active_passive_intervention_scope": json.loads(
+            json.dumps(ACTIVE_PASSIVE_INTERVENTION_SCOPE)
+        ),
+        "current_science_scope_limitation": json.loads(
+            json.dumps(CURRENT_SCIENCE_SCOPE_LIMITATION)
+        ),
+    }
+    if source == "campaign":
+        value = campaign
+    else:
+        path = acceptance / "summary.json" if source == "summary" else science / "science.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+    if field == "current_science_scope_limitation":
+        value[field]["full_scope_independent_review_complete"] = True
+    else:
+        value[field]["excluded_interpretation"] = "none"
+    if source != "campaign":
+        write_json(path, value)
+    install_science_modules(tool, monkeypatch, provenance, campaign)
+
+    with pytest.raises(tool.CorrectedScienceError, match=message):
+        tool.validate_products(context, acceptance, science, criteria, review)
 
 
 def test_incomplete_downstream_science_products_cannot_be_finalized(

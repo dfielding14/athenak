@@ -24,6 +24,8 @@ import os
 import platform
 from pathlib import Path
 import re
+import secrets
+import stat
 import sys
 import tempfile
 import textwrap
@@ -89,6 +91,64 @@ HYPERBOLICITY_FORMULA_FAMILIES = {
     "qualified-legacy": "legacy_implementation",
     "literature-correct": "literature_correct",
 }
+PUBLICATION_AUTHORITY_TOKEN_NAME = ".cgl-lf-publication-authority-token"
+PUBLICATION_MANIFEST_QUARANTINE_PREFIX = (
+    ".cgl-lf-publication-manifest-quarantine-"
+)
+PUBLICATION_OWNERSHIP_RECORD_TYPE = (
+    "cgl_lf_stage_i_fast_publication_output_ownership"
+)
+ACTIVE_PASSIVE_INTERVENTION_SCOPE = {
+    "estimand": "total_effect_of_enabling_active_cgl",
+    "enabled_components": [
+        "pressure_feedback",
+        "thermodynamic_evolution",
+        "characteristic_speeds_and_fluxes",
+        "realized_forcing_after_trajectory_divergence",
+    ],
+    "excluded_interpretation": "anisotropic_stress_alone",
+    "declaration": (
+        "The active/passive comparison estimates the total effect of enabling active-CGL "
+        "pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, "
+        "and realized forcing after trajectory divergence; it is not an "
+        "anisotropic-stress-only comparison."
+    ),
+    "claim_scope": "descriptive_within_realization",
+}
+CURRENT_SCIENCE_SCOPE_LIMITATION = {
+    "binding_semantics": (
+        "Exact current-byte bindings identify the implementation that carries both "
+        "historically independently approved scope and current reviewed production-"
+        "science corrections; they do not expand any approval beyond its explicit scope."
+    ),
+    "current_reviewed_production_science_corrections": [
+        "Aggressive family-gate revisions, including descriptive active/passive, LF-strength, finite-limiter, and forcing decisions.",
+        "Exactly-once reduction of raw intensive history totals to volume means or fractions.",
+        "The robust inertial-range alignment scalar and its descriptive within-realization acceptance statistics.",
+    ],
+    "disposition": (
+        "accepted_reviewed_production_science_corrections_without_new_independent_"
+        "plasma_or_statistical_approval"
+    ),
+    "historical_independent_approval_scope": [
+        "The physical-time-stationarity-r03-r17-v3 criteria change only, as declared by each historical_independent_reviews record.",
+        "Pressure-transfer methods explicitly enumerated in scientific_products_method_review.",
+        "Local-field eddy-anisotropy methods explicitly enumerated in scientific_products_method_review.",
+        "Replay security only for the exact checks and bindings enumerated in replay_tool_promotion_review and the scientific-replay-security method approval.",
+    ],
+    "full_scope_independent_review_complete": False,
+    "independent_reviewer_identity_claimed_for_current_corrections": False,
+}
+DEPRECATED_INFERENTIAL_SCIENCE_FIELDS = frozenset({
+    "holm_significant",
+    "holm_threshold",
+    "p_value",
+    "pvalue",
+    "two_sided_p",
+    "z_score",
+})
+RETAINED_DISCRIMINANT_STATE_SCOPE = "retained_cell_centered_snapshots"
+RETAINED_DISCRIMINANT_DIRECTION_SCOPE = "three_coordinate_normal_directions"
 # This exact authenticated audit-script identity evaluates the frozen defective
 # implementation formula.  It predates explicit formula_id result provenance.
 KNOWN_LEGACY_HYPERBOLICITY_AUDIT_SCRIPTS = frozenset({
@@ -111,6 +171,7 @@ STATUS_COLORS = {
     "pass": "#3a923a",
     "clean": "#3a923a",
     "hyperbolic": "#3a923a",
+    "nonnegative_discriminant": "#3a923a",
     "warning": "#e6a83a",
     "warnings": "#e6a83a",
     "restricted": "#8c6bb1",
@@ -800,6 +861,20 @@ def validated_science_contrast_result(value: object) -> str:
     return str(value) if value in SCIENCE_CONTRAST_RESULTS else "inconclusive"
 
 
+def deprecated_inferential_science_fields(value: object) -> set[str]:
+    """Return deprecated population-inference fields found in reviewed science."""
+
+    found: set[str] = set()
+    if isinstance(value, dict):
+        found.update(set(value) & DEPRECATED_INFERENTIAL_SCIENCE_FIELDS)
+        for nested_value in value.values():
+            found.update(deprecated_inferential_science_fields(nested_value))
+    elif isinstance(value, list):
+        for nested_value in value:
+            found.update(deprecated_inferential_science_fields(nested_value))
+    return found
+
+
 def science_record_errors(
     path: Path, record: dict[str, Any], analysis: Path
 ) -> list[str]:
@@ -817,6 +892,16 @@ def science_record_errors(
         errors.append(f"{label} must be explicitly non-release-authorizing")
     if record.get("result") not in EVIDENCE_RESULTS:
         errors.append(f"{label} has an invalid aggregate result")
+    if record.get("current_science_scope_limitation") != CURRENT_SCIENCE_SCOPE_LIMITATION:
+        errors.append(f"{label} lacks the exact current science scope limitation")
+    if record.get("active_passive_intervention_scope") != ACTIVE_PASSIVE_INTERVENTION_SCOPE:
+        errors.append(f"{label} lacks the exact active/passive intervention scope")
+    deprecated_fields = deprecated_inferential_science_fields(record)
+    if deprecated_fields:
+        errors.append(
+            f"{label} contains deprecated population-inference fields: "
+            + ", ".join(sorted(deprecated_fields))
+        )
     errors.extend(verify_self_digest(record, label))
 
     selected = record.get("selected_cases")
@@ -928,6 +1013,15 @@ def science_record_errors(
                 if not isinstance(contrast, dict):
                     errors.append(f"{label} contrast {family}.{name} is not an object")
                     continue
+                if (
+                    family == "active_passive"
+                    and contrast.get("intervention_scope")
+                    != ACTIVE_PASSIVE_INTERVENTION_SCOPE
+                ):
+                    errors.append(
+                        f"{label} contrast {family}.{name} lacks the exact "
+                        "active/passive intervention scope"
+                    )
                 result = contrast.get("result")
                 if result not in SCIENCE_CONTRAST_RESULTS:
                     errors.append(
@@ -966,17 +1060,6 @@ def science_record_errors(
                 metrics = contrast.get("metrics")
                 if not isinstance(metrics, list):
                     errors.append(f"{label} contrast {family}.{name} lacks metrics")
-                else:
-                    for metric in metrics:
-                        if (
-                            isinstance(metric, dict)
-                            and metric.get("holm_significant") is True
-                            and metric.get("available") is not True
-                        ):
-                            errors.append(
-                                f"{label} contrast {family}.{name} has a Holm result "
-                                "without an available metric"
-                            )
     gates = record.get("gates")
     if not isinstance(gates, list) or not gates:
         errors.append(f"{label} lacks required science gates")
@@ -1159,16 +1242,18 @@ def atomic_write(path: Path, payload: bytes) -> None:
             staged.unlink(missing_ok=True)
 
 
+def json_payload(value: object) -> bytes:
+    """Return canonical human-readable JSON bytes."""
+
+    return (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+
+
 def write_json(path: Path, value: object) -> None:
     """Write canonical human-readable JSON."""
 
-    atomic_write(
-        path,
-        (
-            json.dumps(value, indent=2, sort_keys=True, allow_nan=False)
-            + "\n"
-        ).encode("utf-8"),
-    )
+    atomic_write(path, json_payload(value))
 
 
 def write_text(path: Path, value: str) -> None:
@@ -1251,17 +1336,22 @@ def history_path(
     return matches[0] if matches else None
 
 
-def discover_acceptance_paths(analysis: Path, extras: Iterable[Path]) -> list[Path]:
-    """Return deterministic candidate acceptance and audit JSON paths."""
+def builtin_acceptance_roots(analysis: Path) -> tuple[Path, ...]:
+    """Return built-in acceptance roots that publication output may not overlap."""
 
-    candidates: set[Path] = set()
-    roots = [
+    return (
         analysis / "scientific-acceptance",
         analysis / "acceptance",
         analysis / "audits",
         analysis / "scientific-audits",
-        *extras,
-    ]
+    )
+
+
+def discover_acceptance_paths(analysis: Path, extras: Iterable[Path]) -> list[Path]:
+    """Return deterministic candidate acceptance and audit JSON paths."""
+
+    candidates: set[Path] = set()
+    roots = [*builtin_acceptance_roots(analysis), *extras]
     for root in roots:
         if root.is_file():
             candidates.add(root.absolute())
@@ -2143,6 +2233,7 @@ def display_status(status: str) -> str:
         "pass": "pass",
         "clean": "clean",
         "hyperbolic": "hyperbolic",
+        "nonnegative_discriminant": "D >= 0",
         "warnings": "warn",
         "warning": "warn",
         "restricted": "restricted",
@@ -2302,7 +2393,7 @@ def status_matrix_figure(
         STATUS_COLORS["unknown"],
     ]
     categories = {
-        "pass": 0, "clean": 0, "hyperbolic": 0,
+        "pass": 0, "clean": 0, "hyperbolic": 0, "nonnegative_discriminant": 0,
         "warning": 1, "warnings": 1,
         "restricted": 2,
         "configuration": 3,
@@ -2370,7 +2461,7 @@ def status_matrix_figure(
 
 
 def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
-    """Flatten authenticated reviewed-science contrasts, including Holm results."""
+    """Flatten authenticated descriptive reviewed-science contrasts."""
 
     rows: list[dict[str, object]] = []
     families = (
@@ -2387,6 +2478,11 @@ def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
                 continue
             left = contrast.get("active", contrast.get("left"))
             right = contrast.get("passive", contrast.get("right"))
+            intervention_scope = (
+                contrast.get("intervention_scope")
+                if family == "active_passive"
+                else None
+            )
             metrics = contrast.get("metrics")
             if not isinstance(metrics, list) or not metrics:
                 metrics = [{}]
@@ -2410,16 +2506,34 @@ def science_contrast_rows(data: PublicationData) -> list[dict[str, object]]:
                         "difference", metric.get("difference_left_minus_right")
                     ),
                     "combined_standard_error": metric.get("combined_standard_error"),
-                    "z_score": metric.get("z_score"),
-                    "two_sided_p": metric.get("two_sided_p"),
                     "standardized_effect": metric.get("standardized_effect"),
-                    "holm_threshold": metric.get("holm_threshold"),
-                    "holm_significant": (
-                        metric.get("holm_significant")
-                        if metric.get("available") is True else None
+                    "intervention_estimand": (
+                        intervention_scope.get("estimand")
+                        if isinstance(intervention_scope, dict) else None
+                    ),
+                    "intervention_enabled_components": (
+                        intervention_scope.get("enabled_components")
+                        if isinstance(intervention_scope, dict) else None
+                    ),
+                    "excluded_interpretation": (
+                        intervention_scope.get("excluded_interpretation")
+                        if isinstance(intervention_scope, dict) else None
+                    ),
+                    "intervention_declaration": (
+                        intervention_scope.get("declaration")
+                        if isinstance(intervention_scope, dict) else None
                     ),
                     "reason": metric.get("reason", contrast.get("reason")),
                     "claim_scope": r15_science_scope(data, name, left, right),
+                    "inference_scope": (
+                        intervention_scope.get("claim_scope")
+                        if isinstance(intervention_scope, dict) else
+                        "descriptive_within_realization"
+                    ),
+                    "current_science_scope_disposition": (
+                        CURRENT_SCIENCE_SCOPE_LIMITATION["disposition"]
+                    ),
+                    "full_scope_independent_review_complete": False,
                     "authority": SCIENCE_AUTHORITY,
                     "release_authorizing": False,
                 })
@@ -2944,7 +3058,7 @@ def exact_nonnegative_integer(value: object) -> int | None:
 def snapshot_hyperbolicity_summary(
     snapshots: object,
 ) -> dict[str, object] | None:
-    """Aggregate retained snapshots while preserving physical dispositions."""
+    """Aggregate retained coordinate-direction discriminant dispositions."""
 
     if not isinstance(snapshots, list) or not snapshots:
         return None
@@ -2986,7 +3100,7 @@ def snapshot_hyperbolicity_summary(
         if nonfinite > 0
         else "negative"
         if negative > 0 or (minimum is not None and minimum < 0.0)
-        else "hyperbolic"
+        else "nonnegative_discriminant"
     )
     return {
         "result": disposition,
@@ -3157,7 +3271,7 @@ def strict_hyperbolic_claim_summary(
     formula_provenance_status: str = "inconclusive",
     formula_executable_compatibility: str = "inconclusive",
 ) -> dict[str, object]:
-    """Return literature-correct strict-claim eligibility without hiding its cause."""
+    """Gate strict claims without overextending retained directional audits."""
 
     formula_family = HYPERBOLICITY_FORMULA_FAMILIES.get(str(formula_id))
     if experiment_scope == "passive_delta":
@@ -3231,27 +3345,33 @@ def strict_hyperbolic_claim_summary(
                 "authenticated all-snapshot audit contains nonfinite discriminants"
             ),
         }
-    if numerical_result != "hyperbolic":
+    if numerical_result not in {"nonnegative_discriminant", "hyperbolic"}:
         return {
             "status": "inconclusive",
             "eligible": None,
-            "reason": "authenticated physical numerical disposition is unavailable",
+            "reason": (
+                "authenticated coordinate-direction discriminant disposition is "
+                "unavailable"
+            ),
         }
     if experiment_scope == "restricted":
         return {
             "status": "excluded_experiment_scope",
             "eligible": False,
             "reason": (
-                "all retained snapshots are hyperbolic, but experiment scope is "
-                "restricted"
+                "retained cell-centered coordinate-direction discriminants are "
+                "nonnegative, but experiment scope is restricted"
             ),
         }
     return {
-        "status": "eligible",
-        "eligible": True,
+        "status": "inconclusive_retained_coordinate_discriminant_scope",
+        "eligible": None,
         "reason": (
-            "standard-scope case has compatible authenticated literature-correct "
-            "hyperbolic all-snapshot coverage"
+            "compatible authenticated literature-correct discriminants are "
+            "nonnegative only for retained cell-centered snapshots in the three "
+            "coordinate-normal directions; this does not test reconstructed faces, "
+            "intermediate states, oblique directions, full or strict hyperbolicity, "
+            "or absence of sqrt(|D|) fallback"
         ),
     }
 
@@ -3306,7 +3426,7 @@ def authenticated_hyperbolicity_manifest(
 
 
 def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]]:
-    """Return authenticated all-retained-snapshot coverage and numerical results."""
+    """Return authenticated retained coordinate-direction discriminant coverage."""
 
     rows: list[dict[str, object]] = []
     for case_id in CASE_IDS:
@@ -3339,6 +3459,8 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
                 "strict_hyperbolic_claim_status": claim["status"],
                 "strict_hyperbolic_claim_eligible": claim["eligible"],
                 "strict_hyperbolic_claim_reason": claim["reason"],
+                "audit_state_scope": "not_applicable",
+                "audit_direction_scope": "not_applicable",
                 "selection_provenance": "not_applicable",
                 "result_provenance": "not_applicable",
             })
@@ -3400,9 +3522,10 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
             str(formula["formula_executable_compatibility"]),
         )
         coverage_reason = (
-            "authenticated all-snapshot result covers every complete retained snapshot"
+            "authenticated result covers every complete retained cell-centered "
+            "snapshot in the three coordinate-normal directions"
             if coverage_pass
-            else "no authenticated current hyperbolicity selection"
+            else "no authenticated current directional-discriminant selection"
             if not isinstance(manifest, dict)
             else "authenticated manifest lacks all-snapshot coverage metadata"
             if not isinstance(coverage, dict)
@@ -3443,6 +3566,8 @@ def hyperbolicity_coverage_rows(data: PublicationData) -> list[dict[str, object]
             "strict_hyperbolic_claim_status": claim["status"],
             "strict_hyperbolic_claim_eligible": claim["eligible"],
             "strict_hyperbolic_claim_reason": claim["reason"],
+            "audit_state_scope": RETAINED_DISCRIMINANT_STATE_SCOPE,
+            "audit_direction_scope": RETAINED_DISCRIMINANT_DIRECTION_SCOPE,
             "selection_provenance": (
                 "authenticated" if isinstance(manifest, dict) else "inconclusive"
             ),
@@ -4181,22 +4306,13 @@ def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None
             effect_axis.barh(
                 list(range(len(effects))),
                 [float(row["standardized_effect"]) for row in effects],
-                color=[
-                    STATUS_COLORS["pass"]
-                    if row.get("holm_significant") is True else "#9e9e9e"
-                    for row in effects
-                ],
+                color=CASE_COLORS[active],
                 edgecolor="black",
                 linewidth=0.35,
             )
             effect_axis.set_yticks(
                 list(range(len(effects))),
-                [
-                    str(row.get("metric")) + (
-                        " *" if row.get("holm_significant") is True else ""
-                    )
-                    for row in effects
-                ],
+                [str(row.get("metric")) for row in effects],
             )
             effect_axis.axvline(0.0, color="black", linewidth=0.8, linestyle=":")
         else:
@@ -4219,8 +4335,8 @@ def render_causal_mechanism(data: PublicationData, plt: Any, path: Path) -> None
     )
     fig.text(
         0.5, 0.006,
-        "Asterisks mark Holm-significant reviewed effects. Missing evidence is "
-        "reported as inconclusive and is never plotted as zero.",
+        "Effects are descriptive within-realization active-minus-passive contrasts; "
+        "missing evidence is reported as inconclusive and is never plotted as zero.",
         ha="center", va="bottom", fontsize=6.8,
     )
     fig.tight_layout(rect=(0.0, 0.02, 1.0, 0.985))
@@ -4937,7 +5053,7 @@ def first_evidence_value(
 def hyperbolicity_diagnostics(
     data: PublicationData, case_id: str
 ) -> dict[str, object]:
-    """Return normalized retained-state hyperbolicity diagnostics when available."""
+    """Return normalized retained-state directional-discriminant diagnostics."""
 
     roots = case_evidence_roots(data, case_id)
     snapshot_records: list[dict[str, object]] = []
@@ -4946,7 +5062,10 @@ def hyperbolicity_diagnostics(
         if summary is not None:
             snapshot_records.append(summary)
     if snapshot_records:
-        severity = {"hyperbolic": 0, "negative": 1, "nonfinite": 2}
+        severity = {
+            "nonnegative_discriminant": 0, "hyperbolic": 0,
+            "negative": 1, "nonfinite": 2,
+        }
         return max(
             snapshot_records,
             key=lambda record: (
@@ -4963,9 +5082,11 @@ def hyperbolicity_diagnostics(
         ),
     )
     normalized_status = (
-        "hyperbolic" if status == "pass"
+        "nonnegative_discriminant" if status in {"pass", "hyperbolic"}
         else str(status)
-        if status in {"hyperbolic", "negative", "nonfinite", "inconclusive"}
+        if status in {
+            "nonnegative_discriminant", "negative", "nonfinite", "inconclusive",
+        }
         else None
     )
     negative_fraction = as_float(first_evidence_value(
@@ -5044,7 +5165,7 @@ def hyperbolicity_diagnostics(
         and evaluation_count is not None
         and evaluation_count > 0
     ):
-        normalized_status = "hyperbolic"
+        normalized_status = "nonnegative_discriminant"
     elif normalized_status is None:
         normalized_status = "inconclusive"
     return {
@@ -5058,7 +5179,7 @@ def hyperbolicity_diagnostics(
 
 
 def hyperbolicity_status(data: PublicationData, case_id: str) -> str:
-    """Return the normalized retained-state hyperbolicity disposition."""
+    """Return the normalized retained-state directional-discriminant disposition."""
 
     return str(hyperbolicity_diagnostics(data, case_id)["result"])
 
@@ -5163,7 +5284,7 @@ def scope_rows(data: PublicationData) -> list[dict[str, object]]:
             "strict_run_disposition": (
                 r15_strict_failure_disposition(data) if case_id == "R15" else None
             ),
-            "retained_state_hyperbolicity": hyper["result"],
+            "retained_state_coordinate_discriminant": hyper["result"],
             "negative_discriminant_fraction": hyper["negative_discriminant_fraction"],
             "negative_discriminant_count": hyper["negative_discriminant_count"],
             "cell_direction_evaluations": hyper["cell_direction_evaluations"],
@@ -5220,7 +5341,7 @@ def render_scope(
         plt, colors, patches, ["R10", "R14", "R15"],
         [
             "Completion", "Acceptance", "Strict policy",
-            "Retained-state\nhyperbolicity", "Observed\ndiagnostic", "Claim scope",
+            "Retained coordinate\nD coverage", "Observed\ndiagnostic", "Claim scope",
         ],
         statuses, labels, "Explicit scope restrictions for R10, R14, and R15", path,
         (
@@ -5236,7 +5357,7 @@ def render_scope(
 def render_hyperbolicity_coverage(
     data: PublicationData, plt: Any, colors: Any, patches: Any, path: Path
 ) -> None:
-    """Render compact authenticated all-retained-snapshot coverage."""
+    """Render compact retained coordinate-direction discriminant coverage."""
 
     rows = [
         row for row in hyperbolicity_coverage_rows(data)
@@ -5270,6 +5391,9 @@ def render_hyperbolicity_coverage(
             "excluded_negative": "negative",
             "excluded_nonfinite": "nonfinite",
             "excluded_experiment_scope": "restricted",
+            "inconclusive_retained_coordinate_discriminant_scope": (
+                "retained coordinate directions only"
+            ),
             "not_applicable": "not applicable",
             "inconclusive": "inconclusive",
         }.get(claim, claim)
@@ -5314,15 +5438,17 @@ def render_hyperbolicity_coverage(
         ],
         statuses,
         labels,
-        "Authenticated all-snapshot active-CGL hyperbolicity coverage",
+        "Authenticated retained-snapshot directional-discriminant coverage",
         path,
         (
             "Coverage passes only when an authenticated snapshot_policy=all manifest "
             "and completed result cover every complete retained snapshot exactly once. "
-            "Physical dispositions are assigned only to the authenticated audit formula. "
-            "Literature-correct strict-claim eligibility additionally requires compatible "
-            "authenticated formula/executable provenance. Experiment scope remains "
-            "separate; passive-delta cases are not applicable."
+            "Dispositions are assigned only to the authenticated audit formula. "
+            "Nonnegative values cover retained cell-centered states in three "
+            "coordinate-normal directions only; they do not establish face, "
+            "intermediate, oblique, full, or strict hyperbolicity and do not exclude "
+            "sqrt(|D|) fallback. Experiment scope remains separate; passive-delta "
+            "cases are not applicable."
         ),
     )
 
@@ -5449,9 +5575,17 @@ def canonical_product_records(
             raise PublicationError(
                 f"staged publication product escapes staging root: {staged}"
             )
-        if relative.parts[0] == "manifest.json":
+        if (
+            relative.parts[0] in {
+                "manifest.json", PUBLICATION_AUTHORITY_TOKEN_NAME,
+            }
+            or relative.parts[0].startswith(
+                PUBLICATION_MANIFEST_QUARANTINE_PREFIX
+            )
+        ):
             raise PublicationError(
-                "manifest.json may not be promoted as a product or product directory"
+                "reserved publication authority paths may not be promoted as products "
+                "or product directories"
             )
         if staged.is_symlink() or not staged.is_file():
             raise PublicationError(
@@ -5493,15 +5627,170 @@ def canonical_product_bindings(
     ]
 
 
-def promote_file(staged: Path, canonical: Path) -> None:
-    """Atomically replace one canonical file with its staged sibling-FS file."""
+def fsync_regular_file(path: Path) -> None:
+    """Durably flush one no-follow regular file."""
 
-    if canonical.parent.is_symlink() or not canonical.parent.is_dir():
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
         raise PublicationError(
-            f"canonical publication parent is missing, invalid, or a symlink: "
-            f"{canonical.parent}"
+            f"cannot open staged publication regular file for fsync: {path}"
+        ) from error
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise PublicationError(
+                f"staged publication path is not a regular file: {path}"
+            )
+        os.fsync(descriptor)
+    except OSError as error:
+        raise PublicationError(
+            f"cannot fsync staged publication regular file: {path}"
+        ) from error
+    finally:
+        os.close(descriptor)
+
+
+def directory_open_flags() -> int:
+    """Return no-follow flags for a directory capability."""
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    return flags
+
+
+def open_output_directory(output: Path) -> int:
+    """Open one canonical output root without following its final component."""
+
+    try:
+        return os.open(output, directory_open_flags())
+    except OSError as error:
+        raise PublicationError(
+            f"cannot open publication output directory without following symlinks: "
+            f"{output}"
+        ) from error
+
+
+def open_output_directory_at(parent_descriptor: int, output_name: str) -> int:
+    """Open one output root relative to its held, locked parent capability."""
+
+    try:
+        return os.open(output_name, directory_open_flags(), dir_fd=parent_descriptor)
+    except OSError as error:
+        raise PublicationError(
+            "cannot open publication output directory relative to its held parent: "
+            f"{output_name}"
+        ) from error
+
+
+@contextmanager
+def relative_parent_directory(
+    output_descriptor: int, relative: Path, *, create: bool
+) -> Iterator[tuple[int, str]]:
+    """Yield the no-follow parent capability and basename for one relative path."""
+
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise PublicationError(
+            f"canonical publication product escapes output root: {relative}"
         )
-    os.replace(staged, canonical)
+    current = os.dup(output_descriptor)
+    try:
+        for part in relative.parent.parts:
+            if part in {"", "."}:
+                continue
+            if create:
+                try:
+                    os.mkdir(part, mode=0o755, dir_fd=current)
+                    os.fsync(current)
+                except FileExistsError:
+                    pass
+                except OSError as error:
+                    raise PublicationError(
+                        f"cannot create canonical publication directory: "
+                        f"{relative.parent}"
+                    ) from error
+            try:
+                child = os.open(part, directory_open_flags(), dir_fd=current)
+            except OSError as error:
+                raise PublicationError(
+                    f"canonical publication parent is missing, invalid, or a symlink: "
+                    f"{relative.parent}"
+                ) from error
+            os.close(current)
+            current = child
+        yield current, relative.name
+    finally:
+        os.close(current)
+
+
+def promote_file(staged: Path, relative: Path, output_descriptor: int) -> None:
+    """Atomically replace one product relative to the held output capability."""
+
+    with relative_parent_directory(
+        output_descriptor, relative, create=True
+    ) as (parent_descriptor, name):
+        try:
+            os.replace(staged, name, dst_dir_fd=parent_descriptor)
+            os.fsync(parent_descriptor)
+        except OSError as error:
+            raise PublicationError(
+                f"cannot promote canonical publication product: {relative}"
+            ) from error
+
+
+def write_durable_regular_file_at(
+    parent_descriptor: int, name: str, payload: bytes
+) -> None:
+    """Durably replace one regular file through a held parent capability."""
+
+    if not name or name in {".", ".."} or Path(name).name != name:
+        raise PublicationError(f"invalid publication sibling filename: {name}")
+    staged_name = f".{name}.staging-{secrets.token_hex(32)}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(staged_name, flags, 0o600, dir_fd=parent_descriptor)
+    except OSError as error:
+        raise PublicationError(
+            f"cannot create staged publication sibling file: {staged_name}"
+        ) from error
+    try:
+        offset = 0
+        while offset < len(payload):
+            offset += os.write(descriptor, payload[offset:])
+        os.fsync(descriptor)
+    except OSError as error:
+        raise PublicationError(
+            f"cannot durably write staged publication sibling file: {staged_name}"
+        ) from error
+    finally:
+        os.close(descriptor)
+    try:
+        os.replace(
+            staged_name,
+            name,
+            src_dir_fd=parent_descriptor,
+            dst_dir_fd=parent_descriptor,
+        )
+        os.fsync(parent_descriptor)
+    except OSError as error:
+        # Failures intentionally preserve the unique staged path. Removing it after
+        # a pathname race could delete bytes not created by this publisher.
+        raise PublicationError(
+            f"cannot promote durable publication sibling file: {name}"
+        ) from error
 
 
 def publication_lock_path(output: Path) -> Path:
@@ -5552,7 +5841,7 @@ def validate_publication_output_overlap(
     })
     if overlapping_roots:
         raise PublicationError(
-            "publication output overlaps an explicit acceptance root: "
+            "publication output overlaps an acceptance root: "
             + ", ".join(str(path) for path in overlapping_roots)
         )
     overlapping = sorted({
@@ -5567,56 +5856,245 @@ def validate_publication_output_overlap(
         )
 
 
-def publication_output_identity(output: Path) -> dict[str, int]:
-    """Return stable identity and ownership fields for one output directory."""
+def read_regular_file_at(output_descriptor: int, relative: Path) -> bytes:
+    """Read one regular file relative to a held output capability."""
 
-    flags = os.O_RDONLY
+    with relative_parent_directory(
+        output_descriptor, relative, create=False
+    ) as (parent_descriptor, name):
+        flags = os.O_RDONLY
+        if hasattr(os, "O_CLOEXEC"):
+            flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(name, flags, dir_fd=parent_descriptor)
+        except OSError as error:
+            raise PublicationError(
+                f"cannot open canonical publication regular file: {relative}"
+            ) from error
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise PublicationError(
+                    f"canonical publication path is not a regular file: {relative}"
+                )
+            chunks = []
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    return b"".join(chunks)
+                chunks.append(chunk)
+        finally:
+            os.close(descriptor)
+
+
+def fsync_exact_regular_file_at(
+    output_descriptor: int, relative: Path, expected_payload: bytes
+) -> None:
+    """Require and durably flush exact bytes through a held output capability."""
+
+    with relative_parent_directory(
+        output_descriptor, relative, create=False
+    ) as (parent_descriptor, name):
+        flags = os.O_RDONLY
+        if hasattr(os, "O_CLOEXEC"):
+            flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(name, flags, dir_fd=parent_descriptor)
+        except OSError as error:
+            raise PublicationError(
+                f"cannot open exact publication regular file for fsync: {relative}"
+            ) from error
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise PublicationError(
+                    f"exact publication path is not a regular file: {relative}"
+                )
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            if not secrets.compare_digest(b"".join(chunks), expected_payload):
+                raise PublicationError(
+                    f"publication regular file differs from exact expected bytes: "
+                    f"{relative}"
+                )
+            os.fsync(descriptor)
+        except OSError as error:
+            raise PublicationError(
+                f"cannot fsync exact publication regular file: {relative}"
+            ) from error
+        finally:
+            os.close(descriptor)
+        try:
+            observed = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        except OSError as error:
+            raise PublicationError(
+                f"cannot revalidate exact publication regular file: {relative}"
+            ) from error
+        if not stat.S_ISREG(observed.st_mode):
+            raise PublicationError(
+                f"exact publication path changed during fsync: {relative}"
+            )
+    if not secrets.compare_digest(
+        read_regular_file_at(output_descriptor, relative), expected_payload
+    ):
+        raise PublicationError(
+            f"publication regular file changed after exact fsync: {relative}"
+        )
+
+
+def publication_authority_token(output_descriptor: int) -> bytes | None:
+    """Return and validate the persistent random token inside output."""
+
+    try:
+        token = read_regular_file_at(
+            output_descriptor, Path(PUBLICATION_AUTHORITY_TOKEN_NAME)
+        )
+    except PublicationError as error:
+        try:
+            os.stat(
+                PUBLICATION_AUTHORITY_TOKEN_NAME,
+                dir_fd=output_descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            return None
+        raise error
+    try:
+        text = token.decode("ascii")
+    except UnicodeDecodeError as error:
+        raise PublicationError("publication authority token is malformed") from error
+    if (
+        len(token) != 65
+        or not text.endswith("\n")
+        or SHA256_PATTERN.fullmatch(text[:-1]) is None
+    ):
+        raise PublicationError("publication authority token is malformed")
+    return token
+
+
+def create_publication_authority_token(output_descriptor: int) -> bytes:
+    """Create one cryptographically random persistent token inside output."""
+
+    token = (secrets.token_hex(32) + "\n").encode("ascii")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(output, flags)
+        descriptor = os.open(
+            PUBLICATION_AUTHORITY_TOKEN_NAME,
+            flags,
+            0o600,
+            dir_fd=output_descriptor,
+        )
     except OSError as error:
-        raise PublicationError(
-            f"cannot bind publication output directory identity: {output}"
-        ) from error
+        raise PublicationError("cannot create publication authority token") from error
     try:
-        observed = os.fstat(descriptor)
+        offset = 0
+        while offset < len(token):
+            offset += os.write(descriptor, token[offset:])
+        os.fsync(descriptor)
     finally:
         os.close(descriptor)
-    return {
-        "device": int(observed.st_dev),
-        "inode": int(observed.st_ino),
-        "owner_uid": int(observed.st_uid),
-        "owner_gid": int(observed.st_gid),
-    }
+    os.fsync(output_descriptor)
+    return token
 
 
-def publication_ownership_record(output: Path) -> dict[str, object]:
-    """Return the persistent ownership proof for one canonical output root."""
+def publication_ownership_record(
+    output: Path, token: bytes
+) -> dict[str, object]:
+    """Return token-bound persistent ownership proof for one canonical output."""
 
     return {
-        "schema_version": 2,
-        "record_type": "cgl_lf_stage_i_fast_publication_output_ownership",
+        "schema_version": 3,
+        "record_type": PUBLICATION_OWNERSHIP_RECORD_TYPE,
         "output": str(normalized_filesystem_path(output)),
-        "directory_identity": publication_output_identity(output),
+        "token_file": PUBLICATION_AUTHORITY_TOKEN_NAME,
+        "token_sha256": hashlib.sha256(token).hexdigest(),
         "authority": "cgl_lf_stage_i_fast_publication.py",
     }
 
 
-def valid_publication_ownership(output: Path) -> bool:
-    """Return whether the persistent sibling ownership record binds output."""
+def load_publication_ownership(output: Path) -> dict[str, Any] | None:
+    """Load a regular sibling ownership record, if present."""
 
     path = publication_ownership_path(output)
     if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        return load_json(path)
+    except (OSError, json.JSONDecodeError, PublicationError):
+        return None
+
+
+def load_publication_ownership_at(
+    output: Path, parent_descriptor: int
+) -> dict[str, Any] | None:
+    """Load a regular sibling ownership record through a held parent capability."""
+
+    name = publication_ownership_path(output).name
+    try:
+        observed = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise PublicationError("cannot inspect publication ownership record") from error
+    if not stat.S_ISREG(observed.st_mode):
+        return None
+    try:
+        value = json.loads(read_regular_file_at(parent_descriptor, Path(name)))
+    except (UnicodeDecodeError, json.JSONDecodeError, PublicationError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def valid_publication_ownership_at(
+    output: Path,
+    output_descriptor: int,
+    token: bytes | None = None,
+    parent_descriptor: int | None = None,
+) -> bool:
+    """Return whether the sibling record binds the token in held output."""
+
+    try:
+        observed_token = (
+            token
+            if token is not None
+            else publication_authority_token(output_descriptor)
+        )
+    except PublicationError:
+        return False
+    return (
+        observed_token is not None
+        and (
+            load_publication_ownership_at(output, parent_descriptor)
+            if parent_descriptor is not None
+            else load_publication_ownership(output)
+        )
+        == publication_ownership_record(output, observed_token)
+    )
+
+
+def valid_publication_ownership(output: Path) -> bool:
+    """Return whether token-backed persistent ownership binds canonical output."""
+
+    if output.is_symlink() or not output.is_dir():
         return False
     try:
-        return load_json(path) == publication_ownership_record(output)
-    except (OSError, json.JSONDecodeError, PublicationError):
+        descriptor = open_output_directory(output)
+    except PublicationError:
         return False
+    try:
+        return valid_publication_ownership_at(output, descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def fsync_directory(path: Path) -> None:
@@ -5641,26 +6119,115 @@ def fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def write_durable_publication_ownership(output: Path) -> None:
-    """Atomically and durably bind ownership to the current output directory."""
+def canonical_path_resolves_to_held_output(
+    output: Path,
+    output_descriptor: int,
+    token: bytes | None = None,
+    *,
+    require_ownership: bool,
+    parent_descriptor: int | None = None,
+) -> bool:
+    """Return whether canonical path still names the held token-bearing instance."""
 
-    path = publication_ownership_path(output)
-    write_json(path, publication_ownership_record(output))
-    fsync_directory(path.parent)
-    if not valid_publication_ownership(output):
+    try:
+        observed_descriptor = open_output_directory(output)
+    except PublicationError:
+        return False
+    try:
+        # This is only a live held-descriptor race check. Persistent authority is
+        # the random token, never a stored device/inode tuple.
+        if not os.path.samestat(
+            os.fstat(output_descriptor), os.fstat(observed_descriptor)
+        ):
+            return False
+        if token is not None and publication_authority_token(
+            observed_descriptor
+        ) != token:
+            return False
+        return (
+            not require_ownership
+            or token is not None
+            and valid_publication_ownership_at(
+                output, observed_descriptor, token, parent_descriptor
+            )
+        )
+    except (OSError, PublicationError):
+        return False
+    finally:
+        os.close(observed_descriptor)
+
+
+def canonical_parent_resolves_to_held_parent(
+    output: Path, parent_descriptor: int
+) -> bool:
+    """Return whether the parent pathname still names the held locked directory."""
+
+    try:
+        observed_descriptor = os.open(
+            normalized_filesystem_path(output.parent), directory_open_flags()
+        )
+    except OSError:
+        return False
+    try:
+        return os.path.samestat(
+            os.fstat(parent_descriptor), os.fstat(observed_descriptor)
+        )
+    except OSError:
+        return False
+    finally:
+        os.close(observed_descriptor)
+
+
+def require_stable_publication_parent(
+    output: Path, parent_descriptor: int, phase: str
+) -> None:
+    """Require the trusted locked parent pathname to remain stable."""
+
+    if not canonical_parent_resolves_to_held_parent(output, parent_descriptor):
         raise PublicationError(
-            f"publication ownership record failed post-write validation: {path}"
+            "publication output parent no longer resolves to the held trusted "
+            f"stable parent boundary {phase}: {output.parent}"
         )
 
 
-def output_is_empty(output: Path) -> bool:
-    """Return whether canonical output is absent or an empty directory."""
+def write_durable_publication_ownership(
+    output: Path, parent_descriptor: int, output_descriptor: int, token: bytes
+) -> None:
+    """Durably bind sibling ownership to the token in the held output."""
 
-    if not output.exists():
-        return True
-    if not output.is_dir():
-        return False
-    return next(output.iterdir(), None) is None
+    if not canonical_path_resolves_to_held_output(
+        output,
+        output_descriptor,
+        token,
+        require_ownership=False,
+        parent_descriptor=parent_descriptor,
+    ):
+        raise PublicationError(
+            "canonical publication path no longer resolves to the authorized "
+            f"output directory instance: {output}"
+        )
+    path = publication_ownership_path(output)
+    require_stable_publication_parent(
+        output, parent_descriptor, "before publication ownership write"
+    )
+    write_durable_regular_file_at(
+        parent_descriptor,
+        path.name,
+        json_payload(publication_ownership_record(output, token)),
+    )
+    require_stable_publication_parent(
+        output, parent_descriptor, "after publication ownership write"
+    )
+    if not canonical_path_resolves_to_held_output(
+        output,
+        output_descriptor,
+        token,
+        require_ownership=True,
+        parent_descriptor=parent_descriptor,
+    ):
+        raise PublicationError(
+            f"publication ownership record failed post-write validation: {path}"
+        )
 
 
 def manifest_output_path(record: dict[str, Any]) -> Path | None:
@@ -5715,66 +6282,144 @@ def valid_existing_publication_manifest(output: Path) -> bool:
     return True
 
 
-def require_or_create_publication_ownership(output: Path) -> None:
-    """Require instance-bound proof, creating or migrating it before cleanup."""
+def valid_existing_publication_manifest_at(
+    output: Path, output_descriptor: int
+) -> bool:
+    """Validate a legacy manifest while proving canonical path still names held output."""
 
-    ownership_path = publication_ownership_path(output)
-    if ownership_path.is_symlink():
-        raise PublicationError(
-            f"publication ownership record may not be a symlink: {ownership_path}"
+    return (
+        canonical_path_resolves_to_held_output(
+            output, output_descriptor, require_ownership=False
         )
-    if not output.exists():
-        output.mkdir()
-        write_durable_publication_ownership(output)
-        return
-    if valid_publication_ownership(output):
-        return
-    if output_is_empty(output):
-        write_durable_publication_ownership(output)
-        return
-    if valid_existing_publication_manifest(output):
-        write_durable_publication_ownership(output)
-        return
-    if ownership_path.exists():
-        raise PublicationError(
-            "publication ownership record does not bind the current nonempty "
-            f"output directory instance: {ownership_path}"
+        and valid_existing_publication_manifest(output)
+        and canonical_path_resolves_to_held_output(
+            output, output_descriptor, require_ownership=False
         )
-    raise PublicationError(
-        "refusing destructive publication cleanup of nonempty unowned output: "
-        f"{output}"
     )
 
 
+def require_or_create_publication_ownership(
+    output: Path, parent_descriptor: int, output_descriptor: int
+) -> bytes:
+    """Require token authority, safely creating or migrating it before withdrawal."""
+
+    ownership_path = publication_ownership_path(output)
+    try:
+        ownership_stat = os.stat(
+            ownership_path.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        ownership_stat = None
+    except OSError as error:
+        raise PublicationError(
+            f"cannot inspect publication ownership record: {ownership_path}"
+        ) from error
+    if ownership_stat is not None and stat.S_ISLNK(ownership_stat.st_mode):
+        raise PublicationError(
+            f"publication ownership record may not be a symlink: {ownership_path}"
+        )
+    token = publication_authority_token(output_descriptor)
+    if (
+        token is not None
+        and valid_publication_ownership_at(
+            output, output_descriptor, token, parent_descriptor
+        )
+        and canonical_path_resolves_to_held_output(
+            output,
+            output_descriptor,
+            token,
+            require_ownership=True,
+            parent_descriptor=parent_descriptor,
+        )
+    ):
+        return token
+
+    legacy_manifest = valid_existing_publication_manifest_at(
+        output, output_descriptor
+    )
+    names = set(os.listdir(output_descriptor))
+    token_only = names == {PUBLICATION_AUTHORITY_TOKEN_NAME}
+    if ownership_stat is not None and not legacy_manifest:
+        raise PublicationError(
+            "publication ownership record does not bind the current "
+            f"output directory instance: {ownership_path}"
+        )
+    if token is None:
+        if names and not legacy_manifest:
+            raise PublicationError(
+                "refusing publication commit to nonempty unowned output: "
+                f"{output}"
+            )
+        token = create_publication_authority_token(output_descriptor)
+    elif not token_only and not legacy_manifest:
+        raise PublicationError(
+            "refusing publication commit to nonempty unowned output containing "
+            f"an unbound authority token: {output}"
+        )
+    write_durable_publication_ownership(
+        output, parent_descriptor, output_descriptor, token
+    )
+    return token
+
+
 @contextmanager
-def exclusive_publication_lock(output: Path) -> Iterator[Path]:
-    """Hold the exclusive sibling lock for one canonical publication commit."""
+def exclusive_publication_lock(output: Path) -> Iterator[int]:
+    """Hold parent-bound and legacy locks for one publication commit."""
 
     lock_path = publication_lock_path(output)
-    if lock_path.is_symlink():
-        raise PublicationError(
-            f"publication sibling lock may not be a symlink: {lock_path}"
+    try:
+        parent_descriptor = os.open(
+            normalized_filesystem_path(output.parent), directory_open_flags()
         )
+    except OSError as error:
+        raise PublicationError(
+            f"cannot open publication parent directory for locking: {output.parent}"
+        ) from error
+    parent_locked = False
+    descriptor: int | None = None
+    locked = False
     flags = os.O_CREAT | os.O_RDWR
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(lock_path, flags, 0o600)
-    except OSError as error:
-        raise PublicationError(
-            f"cannot open publication sibling lock without following symlinks: {lock_path}"
-        ) from error
-    locked = False
-    try:
+        # Locking the held parent directory makes replacement of the legacy sibling
+        # lock pathname irrelevant to publishers using this implementation.
+        fcntl.flock(parent_descriptor, fcntl.LOCK_EX)
+        parent_locked = True
+        require_stable_publication_parent(
+            output, parent_descriptor, "after acquiring the parent lock"
+        )
+        try:
+            descriptor = os.open(
+                lock_path.name, flags, 0o600, dir_fd=parent_descriptor
+            )
+        except OSError as error:
+            raise PublicationError(
+                "cannot open publication sibling lock without following symlinks: "
+                f"{lock_path}"
+            ) from error
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise PublicationError(
+                f"publication sibling lock is not a regular file: {lock_path}"
+            )
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         locked = True
-        yield lock_path
+        require_stable_publication_parent(
+            output, parent_descriptor, "before entering the publication commit"
+        )
+        yield parent_descriptor
     finally:
-        if locked:
+        if locked and descriptor is not None:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
+        if descriptor is not None:
+            os.close(descriptor)
+        if parent_locked:
+            fcntl.flock(parent_descriptor, fcntl.LOCK_UN)
+        os.close(parent_descriptor)
 
 
 def validate_canonical_output_tree(output: Path) -> None:
@@ -5798,96 +6443,326 @@ def validate_canonical_output_tree(output: Path) -> None:
                 )
 
 
-def expected_canonical_directories(
-    output: Path, products: Iterable[Path]
-) -> set[Path]:
-    """Return the exact canonical directories required by the products."""
+def canonical_tree_entries(
+    output_descriptor: int,
+) -> tuple[set[Path], set[Path]]:
+    """Return regular files and directories beneath held output without symlinks."""
 
-    expected = {output}
-    for product in products:
-        parent = product.parent
-        while parent != output:
+    files: set[Path] = set()
+    directories: set[Path] = {Path(".")}
+
+    def visit(descriptor: int, prefix: Path) -> None:
+        try:
+            names = sorted(os.listdir(descriptor))
+        except OSError as error:
+            raise PublicationError("cannot enumerate canonical publication tree") from error
+        for name in names:
+            relative = Path(name) if prefix == Path(".") else prefix / name
             try:
-                parent.relative_to(output)
-            except ValueError as error:
+                observed = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+            except OSError as error:
                 raise PublicationError(
-                    f"canonical publication product escapes output root: {product}"
+                    f"cannot inspect canonical publication descendant: {relative}"
                 ) from error
+            if stat.S_ISLNK(observed.st_mode):
+                raise PublicationError(
+                    f"canonical publication descendant may not be a symlink: {relative}"
+                )
+            if stat.S_ISREG(observed.st_mode):
+                files.add(relative)
+                continue
+            if not stat.S_ISDIR(observed.st_mode):
+                raise PublicationError(
+                    f"canonical publication descendant has unsupported type: {relative}"
+                )
+            directories.add(relative)
+            try:
+                child = os.open(name, directory_open_flags(), dir_fd=descriptor)
+            except OSError as error:
+                raise PublicationError(
+                    f"cannot open canonical publication directory: {relative}"
+                ) from error
+            try:
+                visit(child, relative)
+            finally:
+                os.close(child)
+
+    visit(output_descriptor, Path("."))
+    return files, directories
+
+
+def expected_relative_directories(products: Iterable[Path]) -> set[Path]:
+    """Return exact relative directories required by canonical products."""
+
+    expected = {Path(".")}
+    for relative in products:
+        if relative.is_absolute() or ".." in relative.parts:
+            raise PublicationError(
+                f"canonical publication product escapes output root: {relative}"
+            )
+        parent = relative.parent
+        while parent != Path("."):
             expected.add(parent)
             parent = parent.parent
     return expected
 
 
-def remove_obsolete_canonical_paths(
-    output: Path, products: Iterable[Path], directories: set[Path]
+def require_recognized_canonical_tree(
+    output_descriptor: int,
+    products: Iterable[Path],
+    directories: set[Path],
 ) -> None:
-    """Remove every canonical file and directory not in the staged publication."""
+    """Fail closed if canonical output contains stale or unrecognized paths."""
 
-    expected_products = set(products)
-    for root, child_directories, files in os.walk(
-        output, topdown=False, followlinks=False
-    ):
-        root_path = Path(root)
-        for name in sorted(files):
-            path = root_path / name
-            if path not in expected_products:
-                path.unlink()
-        for name in sorted(child_directories):
-            path = root_path / name
-            if path not in directories:
-                path.rmdir()
+    product_paths = set(products)
+    allowed_files = {
+        *product_paths,
+        Path("manifest.json"),
+        Path(PUBLICATION_AUTHORITY_TOKEN_NAME),
+    }
+    files, actual_directories = canonical_tree_entries(output_descriptor)
+    unexpected = sorted(
+        [path.as_posix() for path in files - allowed_files]
+        + [path.as_posix() + "/" for path in actual_directories - directories]
+    )
+    if unexpected:
+        raise PublicationError(
+            "canonical publication tree contains stale or unrecognized paths; "
+            "refusing to delete them: " + ", ".join(unexpected)
+        )
 
 
-def prepare_canonical_parent(output: Path, canonical: Path) -> None:
-    """Create a canonical parent path without following output-tree symlinks."""
+def withdraw_authenticated_canonical_manifest(
+    output_descriptor: int,
+    expected_payload: bytes,
+    *,
+    parent_descriptor: int | None = None,
+    output_name: str = "publication",
+) -> bool:
+    """Quarantine and authenticate authority without deleting raced pathnames."""
 
     try:
-        relative_parent = canonical.parent.relative_to(output)
-    except ValueError as error:
-        raise PublicationError(
-            f"canonical publication product escapes output root: {canonical}"
-        ) from error
-    current = output
-    for part in relative_parent.parts:
-        current = current / part
-        if current.is_symlink():
+        observed = os.stat(
+            "manifest.json", dir_fd=output_descriptor, follow_symlinks=False
+        )
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise PublicationError("cannot inspect canonical publication manifest") from error
+    if not stat.S_ISREG(observed.st_mode):
+        return False
+
+    owned_parent_descriptor = parent_descriptor is None
+    if parent_descriptor is None:
+        try:
+            parent_descriptor = os.open("..", directory_open_flags(), dir_fd=output_descriptor)
+        except OSError as error:
             raise PublicationError(
-                f"canonical publication descendant may not be a symlink: {current}"
+                "cannot open publication parent for manifest quarantine"
+            ) from error
+
+    quarantine_name: str | None = None
+    for _ in range(16):
+        candidate = (
+            f".{output_name}{PUBLICATION_MANIFEST_QUARANTINE_PREFIX}"
+            f"{secrets.token_hex(32)}"
+        )
+        try:
+            os.mkdir(candidate, mode=0o700, dir_fd=parent_descriptor)
+            os.fsync(parent_descriptor)
+            quarantine_name = candidate
+            break
+        except FileExistsError:
+            continue
+        except OSError as error:
+            raise PublicationError(
+                "cannot create publication-manifest quarantine directory"
+            ) from error
+    if quarantine_name is None:
+        raise PublicationError(
+            "cannot allocate a unique publication-manifest quarantine directory"
+        )
+    try:
+        quarantine_descriptor = os.open(
+            quarantine_name, directory_open_flags(), dir_fd=parent_descriptor
+        )
+    except OSError as error:
+        raise PublicationError(
+            "cannot open publication-manifest quarantine directory"
+        ) from error
+
+    try:
+        try:
+            os.rename(
+                "manifest.json",
+                "manifest.json",
+                src_dir_fd=output_descriptor,
+                dst_dir_fd=quarantine_descriptor,
             )
-        if current.exists():
-            if not current.is_dir():
-                raise PublicationError(
-                    f"canonical publication parent is not a directory: {current}"
+            os.fsync(quarantine_descriptor)
+            os.fsync(output_descriptor)
+            os.fsync(parent_descriptor)
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            raise PublicationError(
+                "cannot quarantine canonical publication manifest"
+            ) from error
+
+        try:
+            quarantined_payload = read_regular_file_at(
+                quarantine_descriptor, Path("manifest.json")
+            )
+        except PublicationError:
+            return False
+        if not secrets.compare_digest(quarantined_payload, expected_payload):
+            try:
+                # Restore an unrecognized manifest without overwriting a canonical
+                # replacement and without deleting either pathname afterward.
+                os.link(
+                    "manifest.json",
+                    "manifest.json",
+                    src_dir_fd=quarantine_descriptor,
+                    dst_dir_fd=output_descriptor,
+                    follow_symlinks=False,
                 )
-        else:
-            current.mkdir()
+                os.fsync(output_descriptor)
+            except FileExistsError:
+                pass
+            except OSError as error:
+                raise PublicationError(
+                    "cannot restore unrecognized quarantined publication manifest"
+                ) from error
+            return False
+        # The authenticated prior authority remains as non-canonical sibling evidence.
+        # POSIX has no compare-and-unlink primitive; deleting its mutable pathname after
+        # authentication could delete an unknown same-user replacement.
+        return True
+    finally:
+        os.close(quarantine_descriptor)
+        if owned_parent_descriptor:
+            os.close(parent_descriptor)
+
+
+def source_binding_at(
+    output: Path, output_descriptor: int, relative: Path
+) -> dict[str, object]:
+    """Return a canonical binding read through the held output capability."""
+
+    payload = read_regular_file_at(output_descriptor, relative)
+    return {
+        "path": str(output / relative),
+        "size_bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+
+
+def recognized_canonical_manifest_payload_at(
+    output: Path, output_descriptor: int
+) -> bytes | None:
+    """Return exact recognized canonical manifest bytes or fail closed."""
+
+    try:
+        payload = read_regular_file_at(output_descriptor, Path("manifest.json"))
+    except PublicationError as error:
+        try:
+            os.stat(
+                "manifest.json", dir_fd=output_descriptor, follow_symlinks=False
+            )
+        except FileNotFoundError:
+            return None
+        raise PublicationError(
+            "canonical publication manifest is unrecognized; refusing to replace it"
+        ) from error
+    try:
+        manifest = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise PublicationError(
+            "canonical publication manifest is unrecognized; refusing to replace it"
+        ) from error
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("record_type")
+        != "cgl_lf_stage_i_fast_publication_products"
+        or manifest_output_path(manifest) != normalized_filesystem_path(output)
+    ):
+        raise PublicationError(
+            "canonical publication manifest is unrecognized; refusing to replace it"
+        )
+    products = manifest.get("products")
+    if not isinstance(products, list) or not products:
+        raise PublicationError(
+            "canonical publication manifest is unrecognized; refusing to replace it"
+        )
+    seen: set[Path] = set()
+    for binding in products:
+        canonical = binding_path(binding)
+        if canonical is None or canonical.is_symlink() or ".." in canonical.parts:
+            raise PublicationError(
+                "canonical publication manifest is unrecognized; refusing to replace it"
+            )
+        try:
+            relative = canonical.relative_to(output)
+        except ValueError as error:
+            raise PublicationError(
+                "canonical publication manifest is unrecognized; refusing to replace it"
+            ) from error
+        if (
+            not relative.parts
+            or relative in seen
+            or relative == Path("manifest.json")
+            or relative == Path(PUBLICATION_AUTHORITY_TOKEN_NAME)
+            or relative.parts[0].startswith(PUBLICATION_MANIFEST_QUARANTINE_PREFIX)
+        ):
+            raise PublicationError(
+                "canonical publication manifest is unrecognized; refusing to replace it"
+            )
+        seen.add(relative)
+        try:
+            observed = source_binding_at(output, output_descriptor, relative)
+        except PublicationError as error:
+            raise PublicationError(
+                "canonical publication manifest is unrecognized; refusing to replace it"
+            ) from error
+        if observed != binding:
+            raise PublicationError(
+                "canonical publication manifest is unrecognized; refusing to replace it"
+            )
+    return payload
 
 
 def verify_exact_canonical_products(
     output: Path,
+    output_descriptor: int,
     products: Iterable[Path],
     directories: set[Path],
     bindings: Iterable[dict[str, object]],
+    *,
+    manifest_published: bool,
 ) -> None:
-    """Verify the manifest-withdrawn tree exactly matches staged products."""
+    """Verify the exact token-bearing canonical tree through held output."""
 
-    validate_canonical_output_tree(output)
     expected_products = set(products)
-    actual_products: set[Path] = set()
-    actual_directories = {output}
-    for root, child_directories, files in os.walk(
-        output, topdown=True, followlinks=False
-    ):
-        root_path = Path(root)
-        actual_directories.update(root_path / name for name in child_directories)
-        actual_products.update(root_path / name for name in files)
-    if actual_products != expected_products or actual_directories != directories:
+    expected_files = {
+        *expected_products,
+        Path(PUBLICATION_AUTHORITY_TOKEN_NAME),
+    }
+    if manifest_published:
+        expected_files.add(Path("manifest.json"))
+    actual_files, actual_directories = canonical_tree_entries(output_descriptor)
+    if actual_files != expected_files or actual_directories != directories:
         raise PublicationError(
             "canonical publication tree differs from the staged publication"
         )
     for binding in bindings:
         canonical = Path(str(binding["path"]))
-        if source_binding(canonical) != binding:
+        try:
+            relative = canonical.relative_to(output)
+        except ValueError as error:
+            raise PublicationError(
+                f"promoted publication product escapes output root: {canonical}"
+            ) from error
+        if source_binding_at(output, output_descriptor, relative) != binding:
             raise PublicationError(
                 f"promoted publication product differs from staged binding: {canonical}"
             )
@@ -5909,7 +6784,10 @@ def promote_staged_publication(
     output = output.absolute()
     analysis = analysis.absolute()
     evidence_paths = tuple(path.absolute() for path in evidence_paths)
-    acceptance_roots = tuple(path.absolute() for path in acceptance_roots)
+    acceptance_roots = (
+        *builtin_acceptance_roots(analysis),
+        *(path.absolute() for path in acceptance_roots),
+    )
     validate_publication_output_overlap(
         analysis, output, evidence_paths, acceptance_roots
     )
@@ -5923,39 +6801,178 @@ def promote_staged_publication(
         )
 
     staged_manifest = staging / "manifest.json"
-    write_json(staged_manifest, manifest)
+    staged_manifest_payload = json_payload(manifest)
+    atomic_write(staged_manifest, staged_manifest_payload)
     canonical_products = [canonical for _, canonical, _ in records]
-    canonical_directories = expected_canonical_directories(output, canonical_products)
+    relative_products = [
+        canonical.relative_to(output) for canonical in canonical_products
+    ]
+    canonical_directories = expected_relative_directories(relative_products)
     canonical_manifest = output / "manifest.json"
 
-    with exclusive_publication_lock(output):
+    with exclusive_publication_lock(output) as parent_descriptor:
+        require_stable_publication_parent(
+            output, parent_descriptor, "before canonical output validation"
+        )
         validate_publication_output_overlap(
             analysis, output, evidence_paths, acceptance_roots
         )
         validate_canonical_output_tree(output)
-        require_or_create_publication_ownership(output)
-        validate_canonical_output_tree(output)
-        if not valid_publication_ownership(output):
-            raise PublicationError(
-                "publication ownership no longer binds the current output "
-                f"directory instance: {output}"
+        if not output.exists():
+            if publication_ownership_path(output).exists():
+                raise PublicationError(
+                    "publication ownership record exists while canonical output is "
+                    f"absent: {publication_ownership_path(output)}"
+                )
+            try:
+                os.mkdir(output.name, mode=0o755, dir_fd=parent_descriptor)
+                os.fsync(parent_descriptor)
+            except OSError as error:
+                raise PublicationError(
+                    f"cannot create publication output under held parent: {output}"
+                ) from error
+        require_stable_publication_parent(
+            output, parent_descriptor, "before opening canonical output"
+        )
+        output_descriptor = open_output_directory_at(parent_descriptor, output.name)
+        manifest_promotion_attempted = False
+        try:
+            require_recognized_canonical_tree(
+                output_descriptor, relative_products, canonical_directories
             )
+            prior_manifest_payload = recognized_canonical_manifest_payload_at(
+                output, output_descriptor
+            )
+            token = require_or_create_publication_ownership(
+                output, parent_descriptor, output_descriptor
+            )
+            require_recognized_canonical_tree(
+                output_descriptor, relative_products, canonical_directories
+            )
+            if not canonical_path_resolves_to_held_output(
+                output,
+                output_descriptor,
+                token,
+                require_ownership=True,
+                parent_descriptor=parent_descriptor,
+            ):
+                raise PublicationError(
+                    "publication ownership no longer binds the canonical output "
+                    f"directory instance: {output}"
+                )
+            if recognized_canonical_manifest_payload_at(
+                output, output_descriptor
+            ) != prior_manifest_payload:
+                raise PublicationError(
+                    "canonical publication manifest changed while establishing "
+                    "publication ownership; unrecognized manifest bytes were preserved"
+                )
 
-        # Withdraw the previous authority before any canonical path is changed.
-        # Cleanup and product promotion happen under the sibling lock, so an
-        # interrupted or concurrent publisher can never bless a mixed tree.
-        if canonical_manifest.exists() and not canonical_manifest.is_dir():
-            canonical_manifest.unlink()
-        remove_obsolete_canonical_paths(
-            output, canonical_products, canonical_directories
-        )
-        for staged, canonical, _ in records:
-            prepare_canonical_parent(output, canonical)
-            promote_file(staged, canonical)
-        verify_exact_canonical_products(
-            output, canonical_products, canonical_directories, expected_bindings
-        )
-        promote_file(staged_manifest, canonical_manifest)
+            # Flush every staged product, including PDFs, before withdrawing prior
+            # authority or mutating any canonical product.
+            for staged, _, _ in records:
+                fsync_regular_file(staged)
+            fsync_regular_file(staged_manifest)
+
+            # Withdraw authority before replacing recognized products. No stale or
+            # unrecognized path is ever removed.
+            require_stable_publication_parent(
+                output, parent_descriptor, "before prior-authority withdrawal"
+            )
+            if (
+                prior_manifest_payload is not None
+                and not withdraw_authenticated_canonical_manifest(
+                    output_descriptor,
+                    prior_manifest_payload,
+                    parent_descriptor=parent_descriptor,
+                    output_name=output.name,
+                )
+            ):
+                raise PublicationError(
+                    "canonical publication manifest changed before authority "
+                    "withdrawal; unrecognized manifest bytes were preserved"
+                )
+            for (staged, _, _), relative in zip(records, relative_products):
+                require_stable_publication_parent(
+                    output, parent_descriptor, "before product promotion"
+                )
+                promote_file(staged, relative, output_descriptor)
+            verify_exact_canonical_products(
+                output,
+                output_descriptor,
+                relative_products,
+                canonical_directories,
+                expected_bindings,
+                manifest_published=False,
+            )
+            if not canonical_path_resolves_to_held_output(
+                output,
+                output_descriptor,
+                token,
+                require_ownership=True,
+                parent_descriptor=parent_descriptor,
+            ):
+                raise PublicationError(
+                    "canonical publication path changed during product promotion"
+                )
+            require_stable_publication_parent(
+                output, parent_descriptor, "before manifest promotion"
+            )
+            if not secrets.compare_digest(
+                staged_manifest.read_bytes(), staged_manifest_payload
+            ):
+                raise PublicationError(
+                    "staged publication manifest differs from exact expected bytes"
+                )
+            manifest_promotion_attempted = True
+            promote_file(staged_manifest, Path("manifest.json"), output_descriptor)
+            verify_exact_canonical_products(
+                output,
+                output_descriptor,
+                relative_products,
+                canonical_directories,
+                expected_bindings,
+                manifest_published=True,
+            )
+            fsync_exact_regular_file_at(
+                output_descriptor, Path("manifest.json"), staged_manifest_payload
+            )
+            if not canonical_path_resolves_to_held_output(
+                output,
+                output_descriptor,
+                token,
+                require_ownership=True,
+                parent_descriptor=parent_descriptor,
+            ):
+                raise PublicationError(
+                    "canonical publication path changed before commit return"
+                )
+            require_stable_publication_parent(
+                output, parent_descriptor, "before publication commit return"
+            )
+        except BaseException as error:
+            if manifest_promotion_attempted:
+                try:
+                    withdrawn = withdraw_authenticated_canonical_manifest(
+                        output_descriptor,
+                        staged_manifest_payload,
+                        parent_descriptor=parent_descriptor,
+                        output_name=output.name,
+                    )
+                    if not withdrawn and hasattr(error, "add_note"):
+                        error.add_note(
+                            "canonical manifest was absent or no longer matched this "
+                            "commit; no unrecognized path was deleted"
+                        )
+                except BaseException as withdrawal_error:
+                    if hasattr(error, "add_note"):
+                        error.add_note(
+                            "failed to withdraw authenticated canonical manifest: "
+                            f"{withdrawal_error}"
+                        )
+            raise
+        finally:
+            os.close(output_descriptor)
     return canonical_manifest
 
 
@@ -6088,13 +7105,15 @@ def report_markdown(data: PublicationData, products: list[Path], output: Path) -
         "evidence remains inconclusive.",
         "- Primary full-window scalar rows reproduce authenticated direct-acceptance "
         "source-history statistics without additional publication-layer normalization.",
-        "- All-snapshot hyperbolicity coverage passes only for an authenticated "
+        "- All-snapshot directional-discriminant coverage passes only for an authenticated "
         "snapshot_policy=all selection with an exactly once completed result. "
-        "Physical dispositions remain hyperbolic, negative, or nonfinite and are "
+        "Dispositions remain nonnegative-discriminant, negative, or nonfinite and are "
         "assigned separately to legacy-implementation or literature-correct formula "
         "evidence. Latest-only, missing, stale, or unidentified-formula results remain "
         "inconclusive. Static experiment scope, formula/executable compatibility, and "
-        "strict-hyperbolic claim eligibility are reported separately.",
+        "strict-hyperbolic claim eligibility are reported separately. Retained "
+        "cell-centered coordinate-normal coverage cannot establish face, intermediate, "
+        "oblique, full, or strict hyperbolicity or absence of sqrt(|D|) fallback.",
         "- Signed LF applied-stage ledgers remain distinct from sparse retained-"
         "snapshot pressure-work and heat-flux reconstructions; signs are preserved.",
         "- MKS24 panel and lineage disposition tables report authenticated admitted, "
@@ -6205,7 +7224,8 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
                 "literature_correct_disposition",
                 "strict_hyperbolic_claim_status",
                 "strict_hyperbolic_claim_eligible",
-                "strict_hyperbolic_claim_reason", "selection_provenance",
+                "strict_hyperbolic_claim_reason", "audit_state_scope",
+                "audit_direction_scope", "selection_provenance",
                 "result_provenance",
             ],
             hyperbolicity_coverage_rows(data),
@@ -6320,7 +7340,7 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
             [
                 "case_id", "variant", "completion", "fast_health", "acceptance",
                 "strict_admissibility", "strict_run_disposition",
-                "retained_state_hyperbolicity",
+                "retained_state_coordinate_discriminant",
                 "negative_discriminant_fraction", "negative_discriminant_count",
                 "cell_direction_evaluations", "minimum_discriminant",
                 "hard_bound_maximum", "hard_bound_volume_maximum",
@@ -6343,10 +7363,13 @@ def render_products(data: PublicationData, output: Path) -> list[Path]:
             [
                 "family", "contrast", "left", "right", "result",
                 "claim_eligible", "metric", "available", "left_mean",
-                "right_mean", "difference", "combined_standard_error", "z_score",
-                "two_sided_p", "standardized_effect", "holm_threshold",
-                "holm_significant", "reason", "authority", "release_authorizing",
-                "claim_scope",
+                "right_mean", "difference", "combined_standard_error",
+                "standardized_effect", "intervention_estimand",
+                "intervention_enabled_components", "excluded_interpretation",
+                "intervention_declaration", "inference_scope",
+                "current_science_scope_disposition",
+                "full_scope_independent_review_complete", "reason", "authority",
+                "release_authorizing", "claim_scope",
             ],
             science_contrast_rows(data),
         ),
@@ -6428,13 +7451,15 @@ exclude failed, incomplete, and numerically inconclusive cases.
    spectra and peak-alignment curves over the preregistered common range, accompanied
    by the reviewed convergence decisions and limits. All three authenticated curves
    are required in each panel.
-10. **All-snapshot hyperbolicity coverage.** Authenticated active-CGL retained-state
-    coverage, physical numerical disposition by authenticated formula identity,
-    static experiment scope, formula/executable compatibility, and resulting
-    literature-correct strict-hyperbolic claim eligibility. Coverage passes only when
+10. **All-snapshot coordinate-direction discriminant coverage.** Authenticated
+    active-CGL retained cell-centered coverage in the three coordinate-normal
+    directions, numerical disposition by authenticated formula identity, static
+    experiment scope, and formula/executable compatibility. Coverage passes only when
     every complete retained snapshot is represented exactly once in a completed bound
-    result. Negative or nonfinite evidence excludes strict-claim support only when the
-    literature-correct audit is authenticated and compatible with the executable.
+    result. Negative or nonfinite compatible literature-correct evidence can exclude a
+    strict claim. Nonnegative retained-state coordinate-direction evidence cannot
+    establish face, intermediate, oblique, full, or strict hyperbolicity or absence of
+    sqrt(|D|) fallback.
 """
     captions_path = output / "captions.md"
     write_text(captions_path, captions)
@@ -6476,6 +7501,17 @@ def build_publication_manifest(
             "No wall-clock fields; sorted inputs and rows; fixed figure definitions; "
             "PDF creation/modification dates suppressed."
         ),
+        "publication_commit_contract": {
+            "authority": "manifest.json is published last and exact bytes are withdrawn",
+            "manifest_withdrawal": (
+                "rename-to-random-quarantine then authenticate; unknown bytes are "
+                "restored or preserved without overwrite"
+            ),
+            "stable_parent_boundary": (
+                "the output parent pathname must continue to name the held locked "
+                "directory through commit return"
+            ),
+        },
         "source_identity_summary": source_identity_summary(data),
         "case_ids": list(CASE_IDS),
         "acceptance_record_types": sorted({
@@ -6544,7 +7580,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output is not None
         else analysis / "publication-products"
     )
-    acceptance_roots = tuple(path.absolute() for path in args.acceptance)
+    acceptance_roots = (
+        *builtin_acceptance_roots(analysis),
+        *(path.absolute() for path in args.acceptance),
+    )
     validate_publication_output_overlap(
         analysis, output, (), acceptance_roots
     )

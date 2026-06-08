@@ -1546,6 +1546,11 @@ def available_history_statistics(
         if history is None or column not in history:
             errors.append(f"{metric}: source {source}/{column} is unavailable")
             continue
+        try:
+            values = acceptance.metric_values_from_history(history, spec, str(metric))
+        except acceptance.AcceptanceError as error:
+            errors.append(f"{metric}: {type(error).__name__}: {error}")
+            continue
         metric_windows: dict[str, object] = {}
         for window_name, limits in sorted(windows.items()):
             start, end = (float(value) for value in limits)
@@ -1561,7 +1566,7 @@ def available_history_statistics(
                     "result": "available",
                     "statistics": acceptance.window_statistics(
                         history["time"],
-                        history[column],
+                        values,
                         start,
                         end,
                         replicates=int(statistics_policy["bootstrap_replicates"]),
@@ -1588,6 +1593,7 @@ def available_history_statistics(
         metrics[str(metric)] = {
             "history": source,
             "column": column,
+            "reduction": spec["reduction"],
             "windows": metric_windows,
         }
     return metrics, errors
@@ -1911,7 +1917,7 @@ def direct_fast_family_gates(
         )
         passed = (
             hardwall_zero
-            and float(nu_late["confidence_interval_95"][0]) > 0.0
+            and float(nu_late["block_bootstrap_interval_95"][0]) > 0.0
             and occupied
         )
         gates.append(acceptance.gate(
@@ -1924,7 +1930,10 @@ def direct_fast_family_gates(
             ),
             observations={
                 "hardwall_projection_exact_zero": hardwall_zero,
-                "late_nu_eff_lower_95": nu_late["confidence_interval_95"][0],
+                "late_nu_eff_block_lower_95": nu_late[
+                    "block_bootstrap_interval_95"
+                ][0],
+                "claim_scope": "descriptive_within_trajectory",
                 "occupancy": occupancy_stats,
                 "occupancy_active_both_comparison_windows": occupied,
             },
@@ -2097,21 +2106,26 @@ def direct_fast_family_gates(
             )
             reason = "Alfvenic forcing remained effectively perpendicular"
         else:
-            passed = float(full_fraction["confidence_interval_95"][0]) > float(
-                forcing["random_parallel_fraction_lower_95_gt"]
+            passed = float(full_fraction["block_bootstrap_interval_95"][0]) > float(
+                forcing["random_parallel_fraction_block_lower_95_gt"]
             )
-            reason = "random forcing retained a resolved parallel component"
+            reason = (
+                "random forcing retained a positive within-trajectory block lower bound"
+            )
         gates.append(acceptance.gate(
             "forcing_geometry",
             "pass" if passed else "fail",
             reason=reason if passed else "forcing geometry gate failed",
-            observations=fraction_stats,
+            observations={
+                **fraction_stats,
+                "claim_scope": "descriptive_within_trajectory",
+            },
             limits={
                 "alfvenic_parallel_fraction_lte": forcing[
                     "alfvenic_parallel_fraction_lte"
                 ],
-                "random_parallel_fraction_lower_95_gt": forcing[
-                    "random_parallel_fraction_lower_95_gt"
+                "random_parallel_fraction_block_lower_95_gt": forcing[
+                    "random_parallel_fraction_block_lower_95_gt"
                 ],
             },
         ))
@@ -2261,14 +2275,18 @@ def reviewed_complete_case_evidence(
                 raise FastAcceptanceError(
                     f"{metric}: required authenticated history column is unavailable"
                 )
+            values = acceptance.metric_values_from_history(
+                history, spec, str(metric)
+            )
             record = acceptance.metric_statistics(
                 history,
-                history[column],
+                values,
                 str(metric),
                 policy,
                 kind=str(spec["stationarity_kind"]),
                 minimum_block_duration=tcorr,
             )
+            record["reduction"] = spec["reduction"]
             metrics[str(metric)] = record
             sampling = record.get("sampling_adequacy")
             stationarity = (
@@ -2421,6 +2439,41 @@ def reviewed_complete_case_evidence(
     return acceptance.seal_evidence(evidence), None
 
 
+def active_passive_intervention_scope(
+    acceptance: object, policy: dict[str, object]
+) -> dict[str, object]:
+    """Return the exact validated total-intervention declaration."""
+
+    try:
+        scope = policy["criteria"]["family_gates"]["active_passive"][
+            "intervention_scope"
+        ]
+    except (KeyError, TypeError) as error:
+        raise FastAcceptanceError(
+            "active/passive intervention scope is unavailable"
+        ) from error
+    if (
+        not isinstance(scope, dict)
+        or scope != acceptance.ACTIVE_PASSIVE_INTERVENTION_SCOPE
+    ):
+        raise FastAcceptanceError("active/passive intervention scope differs")
+    return scope
+
+
+def current_science_scope_limitation(
+    acceptance: object, policy: dict[str, object]
+) -> dict[str, object]:
+    """Return the exact validated current-science review limitation."""
+
+    scope = policy.get("current_science_scope_limitation")
+    if (
+        not isinstance(scope, dict)
+        or scope != acceptance.CURRENT_SCIENCE_SCOPE_LIMITATION
+    ):
+        raise FastAcceptanceError("current science scope limitation differs")
+    return scope
+
+
 def comparison_case_evidence(
     acceptance: object,
     policy: dict[str, object],
@@ -2450,7 +2503,9 @@ def comparison_case_evidence(
         and record["stationarity"].get("result") == "pass"
         for record in metrics.values()
     )
-    return {
+    intervention_scope = active_passive_intervention_scope(acceptance, policy)
+    scope_limitation = current_science_scope_limitation(acceptance, policy)
+    evidence = {
         "schema_version": 1,
         "record_type": "cgl-lf-stage-i-direct-fast-comparison-evidence",
         "authority": "non-authorizing-direct-fast-scientific-assessment",
@@ -2465,7 +2520,10 @@ def comparison_case_evidence(
         "minimum_block_duration": tcorr,
         "metrics": metrics,
         "analyzer_metrics": reviewed.get("analyzer_metrics", {}),
-    }, None
+        "active_passive_intervention_scope": intervention_scope,
+        "current_science_scope_limitation": scope_limitation,
+    }
+    return evidence, None
 
 
 def history_statistics_from_reviewed(
@@ -2493,6 +2551,7 @@ def history_statistics_from_reviewed(
         result[str(metric)] = {
             "history": spec["history"],
             "column": spec["column"],
+            "reduction": spec["reduction"],
             "windows": windows,
             "sampling_adequacy": record.get("sampling_adequacy"),
             "stationarity": record.get("stationarity"),
@@ -2540,6 +2599,8 @@ def summarize_case(
 
     reviewed_path = case_output / "reviewed_case_evidence.json"
     reviewed_path.unlink(missing_ok=True)
+    intervention_scope = active_passive_intervention_scope(acceptance, policy)
+    scope_limitation = current_science_scope_limitation(acceptance, policy)
     if lineage is None:
         summary = {
             "schema_version": 1,
@@ -2549,6 +2610,8 @@ def summarize_case(
             "case_name": None,
             "result": "inconclusive",
             "reason": "case is absent from the fast-report inventory and case directory",
+            "active_passive_intervention_scope": intervention_scope,
+            "current_science_scope_limitation": scope_limitation,
             "source": source,
             "scope": {
                 "classification": (
@@ -2611,6 +2674,8 @@ def summarize_case(
         "case_name": lineage.get("case_name"),
         "result": result,
         "reason": reason,
+        "active_passive_intervention_scope": intervention_scope,
+        "current_science_scope_limitation": scope_limitation,
         "source": source,
         "scope": scope,
         "health": health,
@@ -2632,6 +2697,12 @@ def summarize_case(
             {
                 "result": comparison.get("result"),
                 "minimum_block_duration": comparison.get("minimum_block_duration"),
+                "active_passive_intervention_scope": comparison.get(
+                    "active_passive_intervention_scope"
+                ),
+                "current_science_scope_limitation": comparison.get(
+                    "current_science_scope_limitation"
+                ),
             }
             if comparison is not None
             else {
@@ -2676,7 +2747,9 @@ def reviewed_pair_gates(
     """Build reviewed-kernel active/passive gates from scoped comparison evidence."""
 
     result: list[dict[str, object]] = []
-    pairs = policy["criteria"]["family_gates"]["active_passive"]["pairs"]
+    active_passive = policy["criteria"]["family_gates"]["active_passive"]
+    pairs = active_passive["pairs"]
+    intervention_scope = active_passive_intervention_scope(acceptance, policy)
     for active, passive in pairs:
         active_evidence = comparison_cases.get(active)
         passive_evidence = comparison_cases.get(passive)
@@ -2697,13 +2770,14 @@ def reviewed_pair_gates(
                     "or do not pass"
                 ),
                 "metrics": None,
+                "intervention_scope": intervention_scope,
             }
         result.append(campaign_gate(
             acceptance,
             f"active_passive_pair:{active}:{passive}",
             str(contrast["result"]),
             str(contrast["reason"]),
-            contrast.get("metrics"),
+            contrast,
         ))
     return result
 
@@ -2753,21 +2827,22 @@ def finite_limiter_gate(
             "late-time R14 or R15 effective-collisionality statistics are unavailable",
         )
     difference = upper["mean"] - lower["mean"]
-    lower_95 = difference - 1.96 * math.hypot(
+    descriptive_block_lower_95 = difference - 1.96 * math.hypot(
         upper["standard_error"], lower["standard_error"]
     )
     return campaign_gate(
         acceptance,
         "finite_limiter_ordering:R15_gt_R14",
-        "pass" if lower_95 > 0.0 else "fail",
+        "pass" if descriptive_block_lower_95 > 0.0 else "fail",
         (
-            "R15 effective collisionality exceeds R14 with 95% confidence"
-            if lower_95 > 0.0
-            else "finite-limiter ordering is not resolved"
+            "descriptive within-trajectory block bound supports R15 greater than R14"
+            if descriptive_block_lower_95 > 0.0
+            else "finite-limiter descriptive ordering is unsupported"
         ),
         {
             "R15_minus_R14": difference,
-            "lower_95": lower_95,
+            "descriptive_block_lower_95": descriptive_block_lower_95,
+            "claim_scope": "descriptive_within_trajectory",
             "R14_scope": r14_scope,
             "R15_scope": r15_scope,
         },
@@ -2937,6 +3012,12 @@ def build_campaign_evidence(
             "R14": case_summaries.get("R14", {}).get("scope"),
             "R15": case_summaries.get("R15", {}).get("scope"),
         },
+        "active_passive_intervention_scope": active_passive_intervention_scope(
+            acceptance, policy
+        ),
+        "current_science_scope_limitation": current_science_scope_limitation(
+            acceptance, policy
+        ),
         "gates": gates,
         "provenance": {
             "criteria": policy["criteria_binding"],
@@ -3074,27 +3155,28 @@ def statistics_table_rows(
                         "reason": window_record.get("reason"),
                     })
                     continue
-                confidence = stats.get("confidence_interval_95")
+                block_interval = stats.get("block_bootstrap_interval_95")
                 lower = (
-                    confidence[0]
-                    if isinstance(confidence, list) and confidence
+                    block_interval[0]
+                    if isinstance(block_interval, list) and block_interval
                     else None
                 )
                 upper = (
-                    confidence[1]
-                    if isinstance(confidence, list) and len(confidence) > 1
+                    block_interval[1]
+                    if isinstance(block_interval, list) and len(block_interval) > 1
                     else None
                 )
                 rows.append({
                     "case_id": case_id,
                     "metric": metric,
+                    "reduction": metric_record.get("reduction"),
                     "window": window,
                     "availability": "available",
                     "mean": stats.get("mean"),
                     "standard_deviation": stats.get("standard_deviation"),
                     "standard_error": stats.get("standard_error"),
-                    "ci95_lower": lower,
-                    "ci95_upper": upper,
+                    "block95_lower": lower,
+                    "block95_upper": upper,
                     "effective_sample_count": stats.get("effective_sample_count"),
                     "independent_time_block_count": stats.get(
                         "independent_time_block_count"
@@ -3156,13 +3238,14 @@ def write_tables(
     statistics_fields = [
         "case_id",
         "metric",
+        "reduction",
         "window",
         "availability",
         "mean",
         "standard_deviation",
         "standard_error",
-        "ci95_lower",
-        "ci95_upper",
+        "block95_lower",
+        "block95_upper",
         "effective_sample_count",
         "independent_time_block_count",
         "gap_adequacy",
@@ -3313,6 +3396,12 @@ def main(argv: list[str] | None = None) -> int:
                 case_id: value["result"]
                 for case_id, value in sorted(case_summaries.items())
             },
+            "active_passive_intervention_scope": campaign[
+                "active_passive_intervention_scope"
+            ],
+            "current_science_scope_limitation": campaign[
+                "current_science_scope_limitation"
+            ],
             "campaign_evidence": binding(campaign_path),
             "tables": [binding(path) for path in table_paths],
         }
