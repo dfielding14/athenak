@@ -732,7 +732,7 @@ def reduce_streams(streams: Iterable[EscapeStream]) -> dict[str, Any]:
     all_tags: set[int] = set()
     segment_results: list[dict[str, Any]] = []
     seen_start_slots: set[tuple[int, float]] = set()
-    for group in ordered_groups:
+    for group_index, group in enumerate(ordered_groups):
         representative = group[0].header
         slot = (
             representative["segment_start_cycle"],
@@ -768,6 +768,15 @@ def reduce_streams(streams: Iterable[EscapeStream]) -> dict[str, Any]:
         ):
             raise EscapeEvidenceError("segment start audit time is inconsistent")
         start = _starting_ledger(representative)
+        if group_index == 0:
+            if slot != (0, 0.0):
+                raise EscapeEvidenceError(
+                    "escape evidence chain does not begin at cycle/time zero"
+                )
+            if not _ledgers_agree(start, {key: 0.0 for key in start}):
+                raise EscapeEvidenceError(
+                    "escape evidence chain begins with a nonzero ledger"
+                )
         if previous_final is not None and not _ledgers_agree(start, previous_final):
             raise EscapeEvidenceError("continuation ledger does not join prior segment")
         events = [event for stream in group for event in stream.events]

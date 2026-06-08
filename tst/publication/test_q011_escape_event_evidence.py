@@ -301,6 +301,23 @@ def test_continuation_must_join_prior_derived_ledger():
         evidence.reduce_streams([first, second])
 
 
+def test_chain_must_begin_at_zero_cycle_time_and_ledger():
+    late = evidence.parse_stream_bytes(
+        _stream(_header(basename="late", cycle=1), [_event(cycle=1)])
+    )
+    with pytest.raises(evidence.EscapeEvidenceError, match="cycle/time zero"):
+        evidence.reduce_streams([late])
+
+    nonzero = _header()
+    prior = evidence._event_increment([_event()])
+    for header_name, ledger_name in evidence._START_TO_LEDGER.items():
+        nonzero[header_name] = prior[ledger_name]
+    with pytest.raises(evidence.EscapeEvidenceError, match="nonzero ledger"):
+        evidence.reduce_streams(
+            [evidence.parse_stream_bytes(_stream(nonzero, [_event()]))]
+        )
+
+
 def test_restart_ledger_comparison_is_fail_closed():
     reduction = evidence.reduce_streams([evidence.parse_stream_bytes(_stream())])
     ledger = {
