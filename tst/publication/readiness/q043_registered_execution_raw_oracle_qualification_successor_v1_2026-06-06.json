@@ -19,7 +19,7 @@
     },
     "trusted_launch_trampoline": {
       "path": "tst/publication/frontier_control_plane/launch_trampoline.py",
-      "sha256": "020f1a7e41503a6a10399be644222445d9912d8733adb324d042d01c4d170cb9"
+      "sha256": "84427c1b5f2359b9152b9c9033d16ecc6b34853922ee7ed00fac71d9bc4772ee"
     },
     "trusted_profile_launcher": {
       "path": "tst/publication/frontier_control_plane/launch_with_frontier_profile.sh",
@@ -31,11 +31,11 @@
     },
     "control_plane_inventory_registration": {
       "path": "tst/publication/frontier_control_plane/control_plane_common.py",
-      "sha256": "04d78ad62ae16f77e523e693a506860bd3315cd60c743ea7fe50d17eb7511304"
+      "sha256": "db4e06856a964368a0583dc4fbff3b1fc0c473ff7db3bd49b192f826ace5189b"
     },
     "installed_runner_registration": {
       "path": "tst/publication/frontier_control_plane/run_control_plane.py",
-      "sha256": "fe2a2b89b34c5a830df82025a157c6d99fc5a02a58982dcf42d274571b8d7bb9"
+      "sha256": "a066cb0b9e4857dbd95bfdcbd7584c775a1ffccda3e1d21d02fd0932e217a4e1"
     },
     "generic_reconciliation_exit_code": {
       "path": "tst/publication/frontier_control_plane/reconcile_frontier_job.py",
@@ -51,7 +51,7 @@
     },
     "shared_control_plane_tests": {
       "path": "tst/publication/frontier_control_plane/test_control_plane.py",
-      "sha256": "b26063ebab6c48eb834a933dd65487faff0305efb1160a53f4058eb0cca92cf5"
+      "sha256": "f1d36b25a8b9bd96191bcf508786f19898dcb045f4c87c2077797dabae93f17c"
     },
     "shared_ledger_tests": {
       "path": "tst/publication/frontier_control_plane/test_ledger.py",
@@ -59,7 +59,7 @@
     },
     "q043_launch_policy_materializer": {
       "path": "tst/publication/q043_registered_launch_policy_preparation_successor_v1.py",
-      "sha256": "1254fac04811be8a9cc065b8a303a278462f74d98f2797cd9910f84d13debcd3"
+      "sha256": "8ce516dee61ea825482736510812636d36b11fec4cd5f67e3bc15ba40cd17faf"
     },
     "q043_reservation_gate": {
       "path": "tst/publication/frontier_control_plane/validate_and_reserve_frontier_job.py",
@@ -71,7 +71,7 @@
     },
     "prepared_artifact_inventory": {
       "path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
-      "sha256": "09db81f147d336154891c955d20da0f1b9d13e41199e795a7e63db3023cffade"
+      "sha256": "be8fc34e2ea0433f2c5d869b030852a7cfd9b10b19f84bb8a0da4c9dc1d390d9"
     }
   },
   "foundation_bindings": {

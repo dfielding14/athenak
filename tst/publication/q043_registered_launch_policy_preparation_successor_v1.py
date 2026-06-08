@@ -1322,6 +1322,107 @@ def materialize_q043_promotable_policy(
     return successor
 
 
+def materialize_q043_retired_policy(
+    *,
+    active_policy: Mapping[str, object],
+    registered_matrix: Mapping[str, object],
+    successor_control_plane_version: str,
+    storage_preflight_binding: Path,
+) -> dict[str, object]:
+    """Retire admitted Q043 slices into a fresh installed-controller generation."""
+    from tst.publication import (
+        q043_registered_execution_raw_oracle_qualification_successor_v1
+        as admission,
+    )
+    from tst.publication import q011_section54_pressure_pilot_execution as execution
+
+    try:
+        matrix = admission.validate_downstream_q023_q019_prerequisite(
+            registered_matrix
+        )
+    except admission.AdmissionError as error:
+        raise PreparationError(
+            "Q043 policy retirement requires the complete passing registered matrix"
+        ) from error
+    _require(
+        isinstance(active_policy, Mapping),
+        "Q043 active policy must be an object",
+    )
+    policy = copy.deepcopy(dict(active_policy))
+    storage = policy.get("olcf_side_storage")
+    _require(
+        type(storage) is dict
+        and type(storage.get("installed_control_plane_version")) is str,
+        "Q043 active policy lacks one installed controller binding",
+    )
+    predecessor_version = str(storage["installed_control_plane_version"])
+    try:
+        validate_storage_policy(
+            copy.deepcopy(policy),
+            control_plane_version=predecessor_version,
+            authorized_pic_root=AUTHORIZED_ORION_ROOT,
+            authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
+        )
+    except ValueError as error:
+        raise PreparationError("Q043 active policy failed validation") from error
+    slices = policy.get("registered_science_slices")
+    _require(
+        type(slices) is list and len(slices) == EXPECTED_CASE_COUNT,
+        "Q043 retirement requires the exact nonempty 132-slice allowlist",
+    )
+    expected_pairs = [
+        (_case_identity(case, index)["authorization_id"], case["case_id"])
+        for index, case in enumerate(oracle.expected_cases(), 1)
+    ]
+    observed_pairs = [
+        (item.get("authorization_id"), item.get("test_id"))
+        if type(item) is dict
+        else (None, None)
+        for item in slices
+    ]
+    matrix_pairs = [
+        (
+            item["execution_binding"]["registered_execution_identity"][
+                "registered_science_authorization_id"
+            ],
+            item["case_id"],
+        )
+        for item in matrix["case_admissions"]
+    ]
+    _require(
+        observed_pairs == expected_pairs == matrix_pairs
+        and all(
+            item.get("campaign") == CAMPAIGN and item.get("status") == "authorized"
+            for item in slices
+        ),
+        "Q043 active policy slices differ from the admitted registered matrix",
+    )
+    successor = copy.deepcopy(policy)
+    successor["registered_science_slices"] = []
+    try:
+        successor = execution._advance_control_plane_fields(
+            successor,
+            control_plane_version=successor_control_plane_version,
+            storage_preflight_binding=storage_preflight_binding,
+            require_fresh_preflight=True,
+            require_new_control_plane=True,
+        )
+    except (OSError, ValueError) as error:
+        raise PreparationError(
+            "Q043 retired policy requires a new controller and fresh storage preflight"
+        ) from error
+    try:
+        validate_storage_policy(
+            copy.deepcopy(successor),
+            control_plane_version=successor_control_plane_version,
+            authorized_pic_root=AUTHORIZED_ORION_ROOT,
+            authorized_project_home_root=CANONICAL_PROJECT_HOME_ROOT,
+        )
+    except ValueError as error:
+        raise PreparationError("Q043 retired policy failed validation") from error
+    return successor
+
+
 def build_materialization(
     final_bindings: Mapping[str, object] | None = None,
 ) -> tuple[dict[str, object], dict[str, bytes]]:

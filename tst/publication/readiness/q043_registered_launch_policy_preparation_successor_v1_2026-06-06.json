@@ -9,11 +9,11 @@
   "source_bindings": {
     "materializer": {
       "path": "tst/publication/q043_registered_launch_policy_preparation_successor_v1.py",
-      "sha256": "1254fac04811be8a9cc065b8a303a278462f74d98f2797cd9910f84d13debcd3"
+      "sha256": "8ce516dee61ea825482736510812636d36b11fec4cd5f67e3bc15ba40cd17faf"
     },
     "focused_tests": {
       "path": "tst/publication/test_q043_registered_launch_policy_preparation_successor_v1.py",
-      "sha256": "02d9584272d1e480290738e45c0ce6470990903d7667a85abcc384df8437ac9d"
+      "sha256": "749f2bbe4675a4ba71f784868c8191b1419e7b91c6f2230ac8d8b220443d23da"
     },
     "checked_in_deck_manifest": {
       "path": "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json",
@@ -21,11 +21,11 @@
     },
     "checked_in_launch_contract_schema_source": {
       "path": "tst/publication/frontier_control_plane/control_plane_common.py",
-      "sha256": "04d78ad62ae16f77e523e693a506860bd3315cd60c743ea7fe50d17eb7511304"
+      "sha256": "db4e06856a964368a0583dc4fbff3b1fc0c473ff7db3bd49b192f826ace5189b"
     },
     "installed_control_plane_inventory": {
       "path": "tst/publication/frontier_control_plane/run_control_plane.py",
-      "sha256": "fe2a2b89b34c5a830df82025a157c6d99fc5a02a58982dcf42d274571b8d7bb9"
+      "sha256": "a066cb0b9e4857dbd95bfdcbd7584c775a1ffccda3e1d21d02fd0932e217a4e1"
     },
     "installed_frontier_job_template": {
       "path": "tst/publication/frontier_control_plane/frontier_job.sh",
@@ -37,7 +37,7 @@
     },
     "trusted_launch_trampoline": {
       "path": "tst/publication/frontier_control_plane/launch_trampoline.py",
-      "sha256": "020f1a7e41503a6a10399be644222445d9912d8733adb324d042d01c4d170cb9"
+      "sha256": "84427c1b5f2359b9152b9c9033d16ecc6b34853922ee7ed00fac71d9bc4772ee"
     },
     "trusted_profile_launcher": {
       "path": "tst/publication/frontier_control_plane/launch_with_frontier_profile.sh",
@@ -49,11 +49,11 @@
     },
     "prepared_artifact_inventory_generator": {
       "path": "tst/publication/frontier_control_plane/generate_prepared_pic_artifact_inventory.py",
-      "sha256": "6277274d84d30e6bbf163af26700e83b8bc9af10a7d2265bf5387c774e0857b6"
+      "sha256": "15c2e4f82a59eaa5dcce3a008457c292123977f782aedc4383da4b33435a5fe8"
     },
     "prepared_artifact_inventory": {
       "path": "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json",
-      "sha256": "09db81f147d336154891c955d20da0f1b9d13e41199e795a7e63db3023cffade"
+      "sha256": "be8fc34e2ea0433f2c5d869b030852a7cfd9b10b19f84bb8a0da4c9dc1d390d9"
     },
     "real_controller_to_admission_e2e": {
       "path": "tst/publication/test_q043_registered_execution_raw_oracle_qualification_successor_v1.py",
@@ -61,7 +61,7 @@
     },
     "shared_control_plane_tests": {
       "path": "tst/publication/frontier_control_plane/test_control_plane.py",
-      "sha256": "b26063ebab6c48eb834a933dd65487faff0305efb1160a53f4058eb0cca92cf5"
+      "sha256": "f1d36b25a8b9bd96191bcf508786f19898dcb045f4c87c2077797dabae93f17c"
     }
   },
   "exact_matrix": {

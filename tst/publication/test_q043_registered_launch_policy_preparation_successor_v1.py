@@ -11,11 +11,15 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from tst.publication import (
     q043_registered_launch_policy_preparation_successor_v1 as preparation,
 )
+from tst.publication import (
+    q043_registered_execution_raw_oracle_qualification_successor_v1 as admission,
+)
+from tst.publication import q011_section54_pressure_pilot_execution as execution
 
 
 def _json(payload: bytes) -> dict[str, object]:
@@ -469,6 +473,88 @@ class Q043RegisteredLaunchPolicyPreparationTests(unittest.TestCase):
             queue.chmod(0o444)
             with self.assertRaisesRegex(preparation.PreparationError, "not empty"):
                 preparation._validate_empty_queue_snapshot(queue)
+
+    def test_retirement_requires_exact_admitted_q043_slice_matrix(self) -> None:
+        cases = list(preparation.oracle.expected_cases())
+        slices = [
+            {
+                "authorization_id": preparation._case_identity(case, index)[
+                    "authorization_id"
+                ],
+                "test_id": case["case_id"],
+                "campaign": preparation.CAMPAIGN,
+                "status": "authorized",
+            }
+            for index, case in enumerate(cases, 1)
+        ]
+        active = _baseline_policy()
+        active["science_submission_freeze"] = {
+            "status": "authorized",
+            "manifest_path": "/registered/candidate/manifest.json",
+            "manifest_sha256": "b" * 64,
+            "build_profile_control_plane_version": "a" * 64,
+        }
+        active["registered_science_slices"] = slices
+        matrix = {
+            "case_admissions": [
+                {
+                    "case_id": case["case_id"],
+                    "execution_binding": {
+                        "registered_execution_identity": {
+                            "registered_science_authorization_id": (
+                                preparation._case_identity(case, index)[
+                                    "authorization_id"
+                                ]
+                            )
+                        }
+                    },
+                }
+                for index, case in enumerate(cases, 1)
+            ]
+        }
+        with (
+            patch.object(
+                admission,
+                "validate_downstream_q023_q019_prerequisite",
+                return_value=matrix,
+            ),
+            patch.object(preparation, "validate_storage_policy"),
+            patch.object(
+                execution,
+                "_advance_control_plane_fields",
+                side_effect=lambda successor, **_kwargs: successor,
+            ) as advance,
+        ):
+            retired = preparation.materialize_q043_retired_policy(
+                active_policy=active,
+                registered_matrix=matrix,
+                successor_control_plane_version="c" * 64,
+                storage_preflight_binding=Path("/reviewed/storage-preflight.json"),
+            )
+            self.assertEqual(retired["registered_science_slices"], [])
+            self.assertEqual(
+                {**retired, "registered_science_slices": slices}, active
+            )
+            advance.assert_called_once_with(
+                ANY,
+                control_plane_version="c" * 64,
+                storage_preflight_binding=Path("/reviewed/storage-preflight.json"),
+                require_fresh_preflight=True,
+                require_new_control_plane=True,
+            )
+            drifted = copy.deepcopy(active)
+            drifted["registered_science_slices"][0]["authorization_id"] = "wrong"
+            with self.assertRaisesRegex(
+                preparation.PreparationError, "differ from the admitted"
+            ):
+                preparation.materialize_q043_retired_policy(
+                    active_policy=drifted,
+                    registered_matrix=matrix,
+                    successor_control_plane_version="c" * 64,
+                    storage_preflight_binding=Path(
+                        "/reviewed/storage-preflight.json"
+                    ),
+                )
 
     def test_materialized_bundle_is_read_only_and_non_authorizing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

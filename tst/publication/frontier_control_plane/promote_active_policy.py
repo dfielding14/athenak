@@ -1597,6 +1597,9 @@ def promote(
     retire_historical_storage_preflight_predecessor: bool = False,
     migrate_exact_reviewed_storage_preflight_predecessor: bool = False,
     replace_exact_authorized_clean_candidate_freeze: bool = False,
+    retire_completed_q043_registered_slices: bool = False,
+    q043_registered_matrix: Path | None = None,
+    q043_registered_matrix_sha256: str | None = None,
     expected_active_policy_sha256: str | None = None,
     expected_active_promotion_sha256: str | None = None,
     control_plane_dir: Path = SCRIPT_DIR,
@@ -1610,6 +1613,7 @@ def promote(
                 retire_historical_storage_preflight_predecessor,
                 migrate_exact_reviewed_storage_preflight_predecessor,
                 replace_exact_authorized_clean_candidate_freeze,
+                retire_completed_q043_registered_slices,
             ]
         )
         > 1
@@ -1717,6 +1721,10 @@ def promote(
             "Exact authorized clean-candidate freeze replacement requires one "
             "empty-allowlist replacement"
         )
+    if retire_completed_q043_registered_slices and registered_science_slices != []:
+        raise ValueError(
+            "Completed Q043 retirement requires one empty-allowlist replacement"
+        )
     mirror_policy_parent = Path(os.path.abspath(authorized_project_home_root)) / "policy"
     durable_mkdir_parents(mirror_policy_parent, root=authorized_project_home_root)
     with _promotion_lock(authorized_pic_root) as policy_descriptor, (
@@ -1753,6 +1761,11 @@ def promote(
                 permit_exact_authorized_clean_candidate_freeze_replacement=(
                     replace_exact_authorized_clean_candidate_freeze
                 ),
+                permit_completed_q043_registered_slice_retirement=(
+                    retire_completed_q043_registered_slices
+                ),
+                q043_registered_matrix_path=q043_registered_matrix,
+                q043_registered_matrix_sha256=q043_registered_matrix_sha256,
                 expected_active_policy_sha256=expected_active_policy_sha256,
                 expected_active_promotion_sha256=expected_active_promotion_sha256,
                 authorized_pic_root=authorized_pic_root,
@@ -1836,6 +1849,7 @@ def promote(
         if (
             migrate_exact_reviewed_storage_preflight_predecessor
             or replace_exact_authorized_clean_candidate_freeze
+            or retire_completed_q043_registered_slices
         ):
             science_freeze = policy["science_submission_freeze"]
             assert isinstance(science_freeze, dict)
@@ -1976,6 +1990,12 @@ def _parser() -> argparse.ArgumentParser:
         "--replace-exact-authorized-clean-candidate-freeze",
         action="store_true",
     )
+    parser.add_argument(
+        "--retire-completed-q043-registered-slices",
+        action="store_true",
+    )
+    parser.add_argument("--q043-registered-matrix", type=Path)
+    parser.add_argument("--q043-registered-matrix-sha256")
     parser.add_argument("--expected-active-policy-sha256")
     parser.add_argument("--expected-active-promotion-sha256")
     parser.add_argument("--expected-control-plane-version")
@@ -1994,12 +2014,15 @@ def main() -> None:
             for value in (
                 args.pre_policy_promotion_attestation,
                 args.pre_policy_promotion_authorization_id,
+                args.q043_registered_matrix,
+                args.q043_registered_matrix_sha256,
             )
         ) or any(
             (
                 args.retire_historical_storage_preflight_predecessor,
                 args.migrate_exact_reviewed_storage_preflight_predecessor,
                 args.replace_exact_authorized_clean_candidate_freeze,
+                args.retire_completed_q043_registered_slices,
             )
         ):
             parser.error("Active-generation verification does not accept promotion flags")
@@ -2059,6 +2082,11 @@ def main() -> None:
         replace_exact_authorized_clean_candidate_freeze=(
             args.replace_exact_authorized_clean_candidate_freeze
         ),
+        retire_completed_q043_registered_slices=(
+            args.retire_completed_q043_registered_slices
+        ),
+        q043_registered_matrix=args.q043_registered_matrix,
+        q043_registered_matrix_sha256=args.q043_registered_matrix_sha256,
         expected_active_policy_sha256=args.expected_active_policy_sha256,
         expected_active_promotion_sha256=args.expected_active_promotion_sha256,
     )

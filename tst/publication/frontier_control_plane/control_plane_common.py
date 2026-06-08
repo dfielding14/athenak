@@ -96,6 +96,19 @@ AUTHORIZED_STORAGE_PREFLIGHT_OPERATIONS = [
     "fsync_parent",
     "verify_absent",
 ]
+Q043_REGISTERED_MATRIX_RELATIVE = Path(
+    "analysis/q043_registered_execution_raw_oracle_successor_v1/"
+    "q043_registered_matrix_qualification.json"
+)
+Q043_REGISTERED_MATRIX_RECORD_TYPE = (
+    "q043_registered_execution_raw_oracle_matrix_qualification"
+)
+Q043_REGISTERED_MATRIX_STATUS = (
+    "complete_registered_Q043_matrix_prerequisite_non_authorizing"
+)
+Q043_REGISTERED_CASE_STATUS = "registered_case_evidence_admitted_non_authorizing"
+Q043_REGISTERED_CAMPAIGN = "q043_registered_execution_raw_oracle_successor_v1"
+Q043_REGISTERED_CASE_COUNT = 132
 # The capture helper authenticates a clean tracked HEAD before and after probing.
 # Pin the cycle-free reviewed blob closure here; its common-module digest is
 # checked against this executing controller below.
@@ -5632,6 +5645,9 @@ def require_policy_predecessor_snapshot_for_promotion(
     permit_historical_retirement_predecessor: bool = False,
     permit_exact_reviewed_storage_preflight_predecessor: bool = False,
     permit_exact_authorized_clean_candidate_freeze_replacement: bool = False,
+    permit_completed_q043_registered_slice_retirement: bool = False,
+    q043_registered_matrix_path: Path | None = None,
+    q043_registered_matrix_sha256: str | None = None,
     expected_active_policy_sha256: str | None = None,
     expected_active_promotion_sha256: str | None = None,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
@@ -5668,24 +5684,47 @@ def require_policy_predecessor_snapshot_for_promotion(
         permit_historical_retirement_predecessor,
         permit_exact_reviewed_storage_preflight_predecessor,
         permit_exact_authorized_clean_candidate_freeze_replacement,
+        permit_completed_q043_registered_slice_retirement,
     ]
     if sum(transition_modes) > 1:
         raise ValueError("Policy predecessor transition modes are exclusive")
-    if permit_exact_authorized_clean_candidate_freeze_replacement:
+    exact_predecessor_mode = (
+        permit_exact_authorized_clean_candidate_freeze_replacement
+        or permit_completed_q043_registered_slice_retirement
+    )
+    if exact_predecessor_mode:
         if not _is_lowercase_sha256(
             expected_active_policy_sha256
         ) or not _is_lowercase_sha256(expected_active_promotion_sha256):
+            if permit_exact_authorized_clean_candidate_freeze_replacement:
+                raise ValueError(
+                    "Exact authorized clean-candidate freeze replacement requires "
+                    "both exact active predecessor hashes"
+                )
             raise ValueError(
-                "Exact authorized clean-candidate freeze replacement requires both "
-                "exact active predecessor hashes"
+                "Completed Q043 retirement requires both exact active predecessor "
+                "hashes"
             )
     elif (
         expected_active_policy_sha256 is not None
         or expected_active_promotion_sha256 is not None
     ):
         raise ValueError(
-            "Exact active predecessor hashes require authorized clean-candidate "
-            "freeze replacement mode"
+            "Exact active predecessor hashes require an exact policy transition mode"
+        )
+    if permit_completed_q043_registered_slice_retirement:
+        if not isinstance(q043_registered_matrix_path, Path) or not _is_lowercase_sha256(
+            q043_registered_matrix_sha256
+        ):
+            raise ValueError(
+                "Completed Q043 retirement requires the immutable matrix path and digest"
+            )
+    elif (
+        q043_registered_matrix_path is not None
+        or q043_registered_matrix_sha256 is not None
+    ):
+        raise ValueError(
+            "Q043 registered matrix bindings require completed Q043 retirement mode"
         )
     policy_path = canonical_policy_path(authorized_pic_root)
     mirror_policy_path = canonical_policy_path(authorized_project_home_root)
@@ -5709,6 +5748,7 @@ def require_policy_predecessor_snapshot_for_promotion(
                 permit_historical_retirement_predecessor
                 or permit_exact_reviewed_storage_preflight_predecessor
                 or permit_exact_authorized_clean_candidate_freeze_replacement
+                or permit_completed_q043_registered_slice_retirement
             ):
                 raise ValueError(
                     "Policy predecessor transition requires an active predecessor"
@@ -5736,13 +5776,12 @@ def require_policy_predecessor_snapshot_for_promotion(
         if policy_bytes != artifacts[mirror_policy_path]:
             raise ValueError("Orion and Project Home predecessor policy bytes differ")
     promotion = read_json_bytes(promotion_bytes, label=str(promotion_path))
-    if permit_exact_authorized_clean_candidate_freeze_replacement and (
+    if exact_predecessor_mode and (
         sha256_bytes(policy_bytes) != expected_active_policy_sha256
         or sha256_bytes(promotion_bytes) != expected_active_promotion_sha256
     ):
         raise ValueError(
-            "Exact authorized clean-candidate freeze replacement active predecessor "
-            "hashes changed"
+            "Exact policy transition active predecessor hashes changed"
         )
     predecessor_version = promotion.get("control_plane_version")
     if not _is_lowercase_sha256(predecessor_version):
@@ -5945,6 +5984,179 @@ def require_policy_predecessor_snapshot_for_promotion(
                 "authenticated storage preflight"
             )
         profile = _EXACT_REVIEWED_STORAGE_PREFLIGHT_PREDECESSOR_PROFILE
+    if permit_completed_q043_registered_slice_retirement:
+        if not isinstance(storage, dict):
+            raise ValueError(
+                "Completed Q043 retirement predecessor storage is malformed"
+            )
+        if predecessor_version == successor_control_plane_version:
+            raise ValueError(
+                "Completed Q043 retirement requires a new control plane"
+            )
+        predecessor_slices = policy.get("registered_science_slices")
+        if (
+            not isinstance(predecessor_slices, list)
+            or len(predecessor_slices) != Q043_REGISTERED_CASE_COUNT
+            or successor_policy.get("registered_science_slices") != []
+        ):
+            raise ValueError(
+                "Completed Q043 retirement requires the exact nonempty Q043 "
+                "predecessor and one empty-allowlist successor"
+            )
+        assert q043_registered_matrix_path is not None
+        expected_matrix_path = (
+            Path(os.path.abspath(authorized_pic_root))
+            / Q043_REGISTERED_MATRIX_RELATIVE
+        )
+        if Path(os.path.abspath(q043_registered_matrix_path)) != expected_matrix_path:
+            raise ValueError(
+                "Completed Q043 retirement matrix path is not the canonical artifact"
+            )
+        matrix_bytes = read_stable_regular_file_below(
+            q043_registered_matrix_path,
+            authorized_pic_root,
+            require_read_only_mode=True,
+        )
+        if sha256_bytes(matrix_bytes) != q043_registered_matrix_sha256:
+            raise ValueError(
+                "Completed Q043 retirement matrix digest changed"
+            )
+        matrix = read_json_bytes(
+            matrix_bytes, label=str(q043_registered_matrix_path)
+        )
+        admissions = matrix.get("case_admissions")
+        authorization = matrix.get("authorization")
+        if (
+            matrix.get("record_type") != Q043_REGISTERED_MATRIX_RECORD_TYPE
+            or matrix.get("status") != Q043_REGISTERED_MATRIX_STATUS
+            or matrix.get("campaign_id") != Q043_REGISTERED_CAMPAIGN
+            or matrix.get("registered_execution_qualification_check_pass") is not True
+            or matrix.get(
+                "source_local_matrix_result_sufficient_for_downstream_qualification"
+            )
+            is not False
+            or matrix.get("case_count") != Q043_REGISTERED_CASE_COUNT
+            or not isinstance(admissions, list)
+            or len(admissions) != Q043_REGISTERED_CASE_COUNT
+            or not isinstance(authorization, dict)
+            or not authorization
+            or any(
+                value is not False
+                for key, value in authorization.items()
+                if key.endswith("_authorized")
+            )
+        ):
+            raise ValueError(
+                "Completed Q043 retirement matrix qualification boundary drifted"
+            )
+        policy_pairs = []
+        for index, item in enumerate(predecessor_slices, 1):
+            expected_authorization = f"q043-re-{index:03d}-v1"
+            if (
+                not isinstance(item, dict)
+                or item.get("authorization_id") != expected_authorization
+                or item.get("status") != AUTHORIZED_REGISTERED_SCIENCE_SLICE_STATUS
+                or item.get("campaign") != Q043_REGISTERED_CAMPAIGN
+                or not isinstance(item.get("test_id"), str)
+            ):
+                raise ValueError(
+                    "Completed Q043 retirement predecessor slice matrix drifted"
+                )
+            policy_pairs.append((expected_authorization, item["test_id"]))
+        matrix_pairs = []
+        for item in admissions:
+            execution = item.get("execution_binding") if isinstance(item, dict) else None
+            identity = (
+                execution.get("registered_execution_identity")
+                if isinstance(execution, dict)
+                else None
+            )
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("case_id"), str)
+                or item.get("campaign_id") != Q043_REGISTERED_CAMPAIGN
+                or item.get("status") != Q043_REGISTERED_CASE_STATUS
+                or not isinstance(identity, dict)
+                or not isinstance(
+                    identity.get("registered_science_authorization_id"), str
+                )
+            ):
+                raise ValueError(
+                    "Completed Q043 retirement matrix case binding is malformed"
+                )
+            matrix_pairs.append(
+                (
+                    identity["registered_science_authorization_id"],
+                    item["case_id"],
+                )
+            )
+        if (
+            matrix_pairs != policy_pairs
+            or len(set(policy_pairs)) != Q043_REGISTERED_CASE_COUNT
+        ):
+            raise ValueError(
+                "Completed Q043 retirement matrix differs from active authorizations"
+            )
+        successor_storage = successor_policy.get("olcf_side_storage")
+        if not isinstance(successor_storage, dict):
+            raise ValueError("Completed Q043 retirement successor storage is malformed")
+        predecessor_comparable = {
+            **policy,
+            "registered_science_slices": [],
+            "olcf_side_storage": {
+                **storage,
+                "installed_control_plane_version": None,
+                "staged_control_plane_candidate_version": None,
+                "last_preflight_utc": None,
+                "storage_preflight_evidence": None,
+            },
+        }
+        successor_comparable = {
+            **successor_policy,
+            "olcf_side_storage": {
+                **successor_storage,
+                "installed_control_plane_version": None,
+                "staged_control_plane_candidate_version": None,
+                "last_preflight_utc": None,
+                "storage_preflight_evidence": None,
+            },
+        }
+        if not _exact_json_equal(successor_comparable, predecessor_comparable):
+            raise ValueError(
+                "Completed Q043 retirement changed unrelated policy fields"
+            )
+        predecessor_binding = storage.get("storage_preflight_evidence")
+        successor_binding = successor_storage.get("storage_preflight_evidence")
+        if (
+            not isinstance(predecessor_binding, dict)
+            or not isinstance(successor_binding, dict)
+            or successor_binding == predecessor_binding
+            or successor_binding.get("probe_id") == predecessor_binding.get("probe_id")
+            or successor_binding.get("sha256") == predecessor_binding.get("sha256")
+            or utc_datetime(
+                successor_storage.get("last_preflight_utc"),
+                field="successor.olcf_side_storage.last_preflight_utc",
+            )
+            <= utc_datetime(
+                storage.get("last_preflight_utc"),
+                field="predecessor.olcf_side_storage.last_preflight_utc",
+            )
+        ):
+            raise ValueError(
+                "Completed Q043 retirement requires newer authenticated storage evidence"
+            )
+    predecessor_slices = policy.get("registered_science_slices")
+    successor_slices = successor_policy.get("registered_science_slices")
+    if (
+        isinstance(predecessor_slices, list)
+        and predecessor_slices
+        and not _exact_json_equal(predecessor_slices, successor_slices)
+        and not permit_completed_q043_registered_slice_retirement
+    ):
+        raise ValueError(
+            "A nonempty registered-science allowlist can change only through an "
+            "evidence-bound retirement transition"
+        )
     predecessor_freeze = policy.get("science_submission_freeze")
     successor_freeze = successor_policy.get("science_submission_freeze")
     predecessor_has_authorized_freeze = (
