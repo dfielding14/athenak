@@ -12,6 +12,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,6 +37,17 @@ namespace {
 void FatalTurbulenceError(const std::string& message) {
   std::cout << "### FATAL ERROR in turbulence driver: " << message << std::endl;
   std::exit(EXIT_FAILURE);
+}
+
+std::string ForcingNormalizationContext(Real time, int cycle, int update,
+                                        int mode_count, Real t0, Real t1,
+                                        Real totvol, Real m0, Real m1) {
+  std::ostringstream msg;
+  msg.precision(std::numeric_limits<Real>::max_digits10);
+  msg << "time=" << time << " cycle=" << cycle << " update=" << update
+      << " mode_count=" << mode_count << " t0=" << t0 << " t1=" << t1
+      << " totvol=" << totvol << " m0=" << m0 << " m1=" << m1;
+  return msg.str();
 }
 
 }  // namespace
@@ -1036,8 +1048,21 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
     t3 = gm[3];
 #endif
 
+    if (!std::isfinite(t0) || !std::isfinite(t1) || !std::isfinite(t2) ||
+        !std::isfinite(t3)) {
+      FatalTurbulenceError(
+          "nonfinite density-weighted forcing moments before net-acceleration "
+          "removal: " +
+          ForcingNormalizationContext(current_time, pm->ncycle,
+                                      n_turb_updates_yet, mode_count, t0, t1,
+                                      0.0, t2, t3));
+    }
     if (t0 <= 0.0) {
-      FatalTurbulenceError("mass integral is not positive while normalizing forcing");
+      FatalTurbulenceError(
+          "mass integral is not positive while normalizing forcing: " +
+          ForcingNormalizationContext(current_time, pm->ncycle,
+                                      n_turb_updates_yet, mode_count, t0, t1,
+                                      0.0, t2, t3));
     }
     par_for(
         "force_remove_net_mom", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
@@ -1098,11 +1123,25 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
     totvol = gm[2];
 #endif
 
-    if (totvol <= 0.0) {
-      FatalTurbulenceError("volume integral is not positive while normalizing forcing");
+    Real m0 = std::numeric_limits<Real>::quiet_NaN();
+    Real m1 = std::numeric_limits<Real>::quiet_NaN();
+    if (std::isfinite(totvol) && totvol > 0.0) {
+      m0 = t0 / totvol;
+      m1 = t1 / totvol;
     }
-    Real m0 = t0 / totvol;
-    Real m1 = t1 / totvol;
+    const std::string normalization_context = ForcingNormalizationContext(
+        current_time, pm->ncycle, n_turb_updates_yet, mode_count, t0, t1,
+        totvol, m0, m1);
+    if (!std::isfinite(totvol) || totvol <= 0.0) {
+      FatalTurbulenceError(
+          "volume integral is not finite and positive while normalizing forcing: " +
+          normalization_context);
+    }
+    if (!std::isfinite(t0) || !std::isfinite(t1) || !std::isfinite(m0) ||
+        !std::isfinite(m1)) {
+      FatalTurbulenceError(
+          "nonfinite forcing normalization moments: " + normalization_context);
+    }
 
     Real s = 0.0;
     if (normalization == TurbNormalization::edot) {
@@ -1110,7 +1149,9 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
       if (m0 > 1.0e-30) {
         s = (-m1 + sqrt(m1 * m1 + 4.0 * m0 * dedt)) / (2.0 * m0);
       } else if (dedt > 0.0) {
-        FatalTurbulenceError("cannot inject non-zero dedt with a zero forcing field");
+        FatalTurbulenceError(
+            "cannot inject non-zero dedt with a zero forcing field: " +
+            normalization_context);
       }
     } else {
       // Match the volume-weighted RMS acceleration independently of AMR layout.
@@ -1118,8 +1159,13 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
         s = accel_rms / sqrt(m0);
       } else if (accel_rms > 0.0) {
         FatalTurbulenceError(
-            "cannot impose non-zero accel_rms with a zero forcing field");
+            "cannot impose non-zero accel_rms with a zero forcing field: " +
+            normalization_context);
       }
+    }
+    if (!std::isfinite(s)) {
+      FatalTurbulenceError(
+          "forcing normalization scale is nonfinite: " + normalization_context);
     }
     par_for(
         "force_norm", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
