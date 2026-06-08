@@ -1038,6 +1038,22 @@ def prepared_artifact_manifest_from_source_archive(
                     ) :
                 ]
             ),
+            *(
+                path
+                for path in source_files
+                if path.startswith(
+                    "inputs/publication/"
+                    "q019_physics_first_nonlinear_bell_successor_v2/"
+                )
+                and path.endswith(".athinput")
+                and "/"
+                not in path[
+                    len(
+                        "inputs/publication/"
+                        "q019_physics_first_nonlinear_bell_successor_v2/"
+                    ) :
+                ]
+            ),
             *PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS,
         ]
     )
@@ -1051,8 +1067,8 @@ def prepared_artifact_manifest_from_source_archive(
     if [record["path"] for record in paper_decks] != expected_paper_decks:
         raise ValueError(
             "Prepared paper-deck inventory must exactly cover archived "
-            "inputs/tests/pic*.athinput, the nested Q043 matrix, and required "
-            "publication decks"
+            "inputs/tests/pic*.athinput, the nested Q043 and Q019 matrices, "
+            "and required publication decks"
         )
     if [record["path"] for record in analyzers] != expected_analyzers:
         raise ValueError(
