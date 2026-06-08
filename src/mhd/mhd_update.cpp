@@ -122,18 +122,29 @@ void MHD::DiagnoseNonfiniteRKState(int stage, const char *phase,
     const int i = first_bad - m * nkji - k * nji - j * nx1 + is;
     k += ks;
     j += js;
-    auto cell = Kokkos::subview(state_, m, Kokkos::ALL, k, j, i);
-    auto host_cell = Kokkos::create_mirror_view_and_copy(HostMemSpace(), cell);
+    Real host_cell[6];
+    Kokkos::deep_copy(host_cell[0],
+                      Kokkos::subview(state_, m, static_cast<int>(IDN), k, j, i));
+    Kokkos::deep_copy(host_cell[1],
+                      Kokkos::subview(state_, m, static_cast<int>(IM1), k, j, i));
+    Kokkos::deep_copy(host_cell[2],
+                      Kokkos::subview(state_, m, static_cast<int>(IM2), k, j, i));
+    Kokkos::deep_copy(host_cell[3],
+                      Kokkos::subview(state_, m, static_cast<int>(IM3), k, j, i));
+    Kokkos::deep_copy(host_cell[4],
+                      Kokkos::subview(state_, m, static_cast<int>(IEN), k, j, i));
+    Kokkos::deep_copy(host_cell[5],
+                      Kokkos::subview(state_, m, static_cast<int>(IAN), k, j, i));
     std::cout.precision(std::numeric_limits<Real>::max_digits10);
     std::cout << "CGL RK state first nonfinite cell: phase=" << phase
               << " rank=" << first_rank
               << " m=" << m << " k=" << k << " j=" << j << " i=" << i
-              << " state={density:" << host_cell(IDN)
-              << ",momentum1:" << host_cell(IM1)
-              << ",momentum2:" << host_cell(IM2)
-              << ",momentum3:" << host_cell(IM3)
-              << ",energy:" << host_cell(IEN)
-              << ",anisotropy:" << host_cell(IAN) << "}" << std::endl;
+              << " state={density:" << host_cell[0]
+              << ",momentum1:" << host_cell[1]
+              << ",momentum2:" << host_cell[2]
+              << ",momentum3:" << host_cell[3]
+              << ",energy:" << host_cell[4]
+              << ",anisotropy:" << host_cell[5] << "}" << std::endl;
   }
 #if MPI_PARALLEL_ENABLED
   MPI_Barrier(MPI_COMM_WORLD);
@@ -314,19 +325,29 @@ TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
         const int i = first_bad - m * nkji - k * nji - j * nx1 + is;
         k += ks;
         j += js;
-        auto cell = Kokkos::subview(u0_, m, Kokkos::ALL, k, j, i);
-        auto host_cell =
-            Kokkos::create_mirror_view_and_copy(HostMemSpace(), cell);
+        Real host_cell[6];
+        Kokkos::deep_copy(host_cell[0],
+                          Kokkos::subview(u0_, m, static_cast<int>(IDN), k, j, i));
+        Kokkos::deep_copy(host_cell[1],
+                          Kokkos::subview(u0_, m, static_cast<int>(IM1), k, j, i));
+        Kokkos::deep_copy(host_cell[2],
+                          Kokkos::subview(u0_, m, static_cast<int>(IM2), k, j, i));
+        Kokkos::deep_copy(host_cell[3],
+                          Kokkos::subview(u0_, m, static_cast<int>(IM3), k, j, i));
+        Kokkos::deep_copy(host_cell[4],
+                          Kokkos::subview(u0_, m, static_cast<int>(IEN), k, j, i));
+        Kokkos::deep_copy(host_cell[5],
+                          Kokkos::subview(u0_, m, static_cast<int>(IAN), k, j, i));
         std::cout.precision(std::numeric_limits<Real>::max_digits10);
         std::cout << "CGL RK update first nonfinite cell: phase=post-u0 rank="
                   << first_rank << " m=" << m << " k=" << k
                   << " j=" << j << " i=" << i
-                  << " state={density:" << host_cell(IDN)
-                  << ",momentum1:" << host_cell(IM1)
-                  << ",momentum2:" << host_cell(IM2)
-                  << ",momentum3:" << host_cell(IM3)
-                  << ",energy:" << host_cell(IEN)
-                  << ",anisotropy:" << host_cell(IAN) << "}" << std::endl;
+                  << " state={density:" << host_cell[0]
+                  << ",momentum1:" << host_cell[1]
+                  << ",momentum2:" << host_cell[2]
+                  << ",momentum3:" << host_cell[3]
+                  << ",energy:" << host_cell[4]
+                  << ",anisotropy:" << host_cell[5] << "}" << std::endl;
       }
 #if MPI_PARALLEL_ENABLED
       MPI_Barrier(MPI_COMM_WORLD);
