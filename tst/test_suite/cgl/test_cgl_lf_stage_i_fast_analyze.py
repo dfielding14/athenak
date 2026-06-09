@@ -367,6 +367,8 @@ def test_retry_reuses_prepared_then_preserves_failed_attempt_options(
     first = jobs / "R02/attempt-000"
     (first / "exit_code.txt").write_text("9\n", encoding="utf-8")
     inherited = command_args(analysis, jobs, cases=["R02"])
+    inherited.account = None
+    inherited.partition = None
     inherited.walltime = None
     inherited.cpus_per_task = None
     fast_analyze.retry(inherited)
@@ -378,11 +380,15 @@ def test_retry_reuses_prepared_then_preserves_failed_attempt_options(
     assert second_manifest["report_options"] == first_manifest["report_options"]
     assert "--eddy-samples" in second_manifest["report_options"]
     assert "9876" in second_manifest["report_options"]
+    assert second_manifest["account"] == first_manifest["account"]
+    assert second_manifest["partition"] == first_manifest["partition"]
     assert second_manifest["walltime"] == first_manifest["walltime"]
     assert second_manifest["cpus_per_task"] == first_manifest["cpus_per_task"]
 
     (second / "exit_code.txt").write_text("9\n", encoding="utf-8")
     overridden = command_args(analysis, jobs, cases=["R02"])
+    overridden.account = "ast999"
+    overridden.partition = "extended"
     overridden.walltime = "05:30:00"
     overridden.cpus_per_task = 32
     fast_analyze.retry(overridden)
@@ -390,6 +396,8 @@ def test_retry_reuses_prepared_then_preserves_failed_attempt_options(
         jobs / "R02/attempt-002/manifest.json"
     )
     assert third_manifest["report_options"] == first_manifest["report_options"]
+    assert third_manifest["account"] == "ast999"
+    assert third_manifest["partition"] == "extended"
     assert third_manifest["walltime"] == "05:30:00"
     assert third_manifest["cpus_per_task"] == 32
 
@@ -401,6 +409,8 @@ def test_retry_explicit_resources_update_unsubmitted_attempt(
     jobs = tmp_path / "jobs"
     args = command_args(analysis, jobs, cases=["R02"])
     fast_analyze.launch(args)
+    args.account = "ast999"
+    args.partition = "extended"
     args.walltime = "04:00:00"
     args.cpus_per_task = 24
 
@@ -409,8 +419,12 @@ def test_retry_explicit_resources_update_unsubmitted_attempt(
     attempt = jobs / "R02/attempt-000"
     manifest = fast_analyze.load_json(attempt / "manifest.json")
     script = (attempt / "run.sbatch").read_text(encoding="utf-8")
+    assert manifest["account"] == "ast999"
+    assert manifest["partition"] == "extended"
     assert manifest["walltime"] == "04:00:00"
     assert manifest["cpus_per_task"] == 24
+    assert "#SBATCH --account=ast999" in script
+    assert "#SBATCH --partition=extended" in script
     assert "#SBATCH --time=04:00:00" in script
     assert "#SBATCH --cpus-per-task=24" in script
 
@@ -504,6 +518,8 @@ def test_retry_parser_distinguishes_omitted_resource_overrides(
 
     assert args.walltime is None
     assert args.cpus_per_task is None
+    assert args.account is None
+    assert args.partition is None
 
 
 @pytest.mark.parametrize(

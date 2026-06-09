@@ -588,11 +588,22 @@ def submit_attempt(attempt_dir: Path) -> str:
 def update_prepared_resources(
     attempt_dir: Path,
     manifest: dict[str, object],
+    account: str | None,
+    partition: str | None,
     walltime: str | None,
     cpus_per_task: int | None,
 ) -> None:
-    if walltime is None and cpus_per_task is None:
+    if (
+        account is None
+        and partition is None
+        and walltime is None
+        and cpus_per_task is None
+    ):
         return
+    if account is not None:
+        manifest["account"] = account
+    if partition is not None:
+        manifest["partition"] = partition
     if walltime is not None:
         manifest["walltime"] = walltime
     if cpus_per_task is not None:
@@ -718,8 +729,12 @@ def retry(args: argparse.Namespace) -> int:
                 jobs=jobs,
                 case_id=case_id,
                 report_options=[],
-                account=args.account,
-                partition=args.partition,
+                account=(
+                    DEFAULT_ACCOUNT if args.account is None else args.account
+                ),
+                partition=(
+                    DEFAULT_PARTITION if args.partition is None else args.partition
+                ),
                 walltime=(
                     DEFAULT_WALLTIME if args.walltime is None else args.walltime
                 ),
@@ -737,7 +752,12 @@ def retry(args: argparse.Namespace) -> int:
             if state == "PREPARED":
                 attempt = latest
                 update_prepared_resources(
-                    attempt, manifest, args.walltime, args.cpus_per_task
+                    attempt,
+                    manifest,
+                    args.account,
+                    args.partition,
+                    args.walltime,
+                    args.cpus_per_task,
                 )
             elif (
                 state.startswith("FAILED_EXIT_")
@@ -757,8 +777,16 @@ def retry(args: argparse.Namespace) -> int:
                     jobs=jobs,
                     case_id=case_id,
                     report_options=options,
-                    account=str(manifest.get("account", args.account)),
-                    partition=str(manifest.get("partition", args.partition)),
+                    account=(
+                        args.account
+                        if args.account is not None
+                        else str(manifest.get("account", DEFAULT_ACCOUNT))
+                    ),
+                    partition=(
+                        args.partition
+                        if args.partition is not None
+                        else str(manifest.get("partition", DEFAULT_PARTITION))
+                    ),
                     walltime=(
                         args.walltime
                         if args.walltime is not None
@@ -798,8 +826,12 @@ def add_selection_options(parser: argparse.ArgumentParser) -> None:
 def add_slurm_options(
     parser: argparse.ArgumentParser, *, retry_overrides: bool = False
 ) -> None:
-    parser.add_argument("--account", default=DEFAULT_ACCOUNT)
-    parser.add_argument("--partition", default=DEFAULT_PARTITION)
+    parser.add_argument(
+        "--account", default=None if retry_overrides else DEFAULT_ACCOUNT
+    )
+    parser.add_argument(
+        "--partition", default=None if retry_overrides else DEFAULT_PARTITION
+    )
     parser.add_argument(
         "--walltime", default=None if retry_overrides else DEFAULT_WALLTIME
     )

@@ -759,6 +759,7 @@ def workflow_commands(
     partition: str,
     walltime: str,
     cpus_per_task: int,
+    snapshot_workers: int,
 ) -> dict[str, object]:
     inventory = Path(str(context["inventory_binding"]["path"]))
     inventory_sha = str(context["inventory_binding"]["sha256"])
@@ -809,6 +810,8 @@ def workflow_commands(
         "4.0",
         "--snapshot-time-end",
         "10.0",
+        "--snapshot-workers",
+        str(snapshot_workers),
         "--account",
         account,
         "--partition",
@@ -1229,6 +1232,7 @@ def prepare_workflow(args: argparse.Namespace) -> Path:
         args.partition,
         args.walltime,
         args.cpus_per_task,
+        args.snapshot_workers,
     )
     run_checked(list(require_dict(commands["hyperbolicity"], "hyper stage")["command"]))
     run_checked(list(require_dict(commands["analysis"], "analysis stage")["command"]))
@@ -2654,6 +2658,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--partition", default="batch")
     prepare.add_argument("--walltime", default="02:00:00")
     prepare.add_argument("--cpus-per-task", type=int, default=56)
+    prepare.add_argument("--snapshot-workers", type=int, default=4)
 
     for name, help_text in (
         ("submit", "explicitly submit a previously prepared workflow"),
@@ -2686,6 +2691,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "prepare":
             if args.cpus_per_task < 1:
                 raise CorrectedDownstreamError("--cpus-per-task must be positive")
+            if args.snapshot_workers < 1:
+                raise CorrectedDownstreamError("--snapshot-workers must be positive")
             prepare_workflow(args)
         elif args.command == "submit":
             submit_workflow(args.workflow_root)

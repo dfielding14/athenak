@@ -814,6 +814,7 @@ def test_commands_are_all_snapshot_literature_correct_and_never_mix_passive_hype
         "batch",
         "02:00:00",
         56,
+        16,
     )
     hyper = commands["hyperbolicity"]["command"]
     analysis = commands["analysis"]["command"]
@@ -830,6 +831,7 @@ def test_commands_are_all_snapshot_literature_correct_and_never_mix_passive_hype
     assert set(downstream.ALL_CASES) <= set(analysis)
     assert analysis[analysis.index("--snapshot-time-start") + 1] == "4.0"
     assert analysis[analysis.index("--snapshot-time-end") + 1] == "10.0"
+    assert analysis[analysis.index("--snapshot-workers") + 1] == "16"
     assert ct[ct.index("--snapshot-policy") + 1] == "all"
     assert ",".join(sorted(downstream.ALL_CASES)) in ct
     assert "--acceptance" in publication
@@ -996,6 +998,7 @@ def test_prepare_writes_jobs_and_workflow_without_submitting(
         partition="batch",
         walltime="02:00:00",
         cpus_per_task=56,
+        snapshot_workers=16,
     )
 
     path = downstream.prepare_workflow(args)
@@ -1003,6 +1006,10 @@ def test_prepare_writes_jobs_and_workflow_without_submitting(
     workflow = json.loads(path.read_text(encoding="utf-8"))
     assert len(observed) == 2
     assert all("--submit" not in command for command in observed)
+    analysis = next(
+        command for command in observed if "cgl_lf_stage_i_fast_analyze.py" in command[1]
+    )
+    assert analysis[analysis.index("--snapshot-workers") + 1] == "16"
     assert workflow["formula_binding"] == downstream.exact_formula_binding(context)
     assert workflow["formula_binding"]["audit_script"] == binding(
         fixture["artifacts"]["audit"]
