@@ -1926,7 +1926,8 @@ def snapshot_range_record(
     fields, lengths, _ = read_selected_snapshot(analyzer, path, exact_rank_set)
     extrema: dict[str, list[float]] = {}
     joint_extrema: dict[str, list[list[float]]] = {}
-    for name, values in analyzer.pdf_fields(fields, lengths).items():
+    scalar_fields = analyzer.pdf_fields(fields, lengths)
+    for name, values in scalar_fields.items():
         finite = values[analyzer.np.isfinite(values)]
         if finite.size == 0:
             continue
@@ -1934,7 +1935,11 @@ def snapshot_range_record(
             float(analyzer.np.min(finite)),
             float(analyzer.np.max(finite)),
         ]
-    for name, (x_values, y_values) in analyzer.pressure_density_fields(fields).items():
+    joint_coordinates = {
+        **analyzer.pressure_density_fields(fields),
+        **analyzer.mechanism_joint_coordinates(scalar_fields),
+    }
+    for name, (x_values, y_values) in joint_coordinates.items():
         joint_extrema[name] = [
             [float(analyzer.np.min(values)), float(analyzer.np.max(values))]
             for values in (x_values, y_values)

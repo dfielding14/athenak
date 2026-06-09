@@ -699,6 +699,14 @@ class FakeSnapshotAnalyzer:
     def pressure_density_fields(self, fields):
         return {"joint": (fields["values"], 2.0 * fields["values"])}
 
+    def mechanism_joint_coordinates(self, scalar_fields):
+        return {
+            "mechanism": (
+                scalar_fields["value"],
+                -3.0 * scalar_fields["value"],
+            )
+        }
+
     def average_snapshot_records(self, records):
         return {"snapshot_count": len(records), "ordered_paths": list(records)}
 
@@ -792,7 +800,8 @@ def test_parallel_snapshot_orchestration_preserves_order_ranges_and_provenance(
     assert digest == hashlib.sha256(source).hexdigest()
     assert captured["tasks"][0]["ranges"] == {"value": (8.0, 10.0)}
     assert captured["tasks"][0]["joint_ranges"] == {
-        "joint": ((8.0, 10.0), (16.0, 20.0))
+        "joint": ((8.0, 10.0), (16.0, 20.0)),
+        "mechanism": ((8.0, 10.0), (-30.0, -24.0)),
     }
     assert list(records) == [str(path) for path in snapshots]
     assert ensemble["ordered_paths"] == [str(path) for path in snapshots]
