@@ -1168,7 +1168,7 @@ def select_fast_lineage(
                 if all(bool(item.get("restart_link_valid")) for item in lineage)
                 else "invalid_restart_linked_lineage"
             ),
-            "selection_score": list(lineage_score(lineage)),
+            "selection_score": json_safe(list(lineage_score(lineage))),
             "terminal": fast_candidate_summary(lineage[-1]),
             "segments": [fast_candidate_summary(item) for item in lineage],
         })

@@ -217,6 +217,39 @@ def test_running_race_outranks_unsubmitted_partial_continuation(
     )
 
 
+def test_unselected_prepared_lineage_score_is_strict_json(report, tmp_path):
+    write_fast_segment(
+        report,
+        tmp_path,
+        segment_name="fast_s000_t0_to_t10",
+        sequence=0,
+        final_time=10.0,
+    )
+    prepared = write_fast_segment(
+        report,
+        tmp_path,
+        segment_name="fast_s001_t0_to_t10",
+        sequence=1,
+        final_time=0.0,
+        run_exit_code=None,
+    )
+    for history in (prepared / "output").glob("*.hst"):
+        history.unlink()
+
+    _selected, unselected, _warnings = report.select_fast_lineage(
+        tmp_path, CASE_ID, CASE_NAME
+    )
+    prepared_record = next(
+        record
+        for record in unselected
+        if isinstance(record.get("terminal"), dict)
+        and Path(record["terminal"]["segment"]) == prepared
+    )
+
+    assert prepared_record["selection_score"][5] is None
+    json.dumps(unselected, allow_nan=False)
+
+
 def test_restart_link_allows_gap_for_retained_failed_attempt(report, tmp_path):
     parent = write_fast_segment(
         report,
