@@ -448,6 +448,54 @@ def analysis_arguments(args: argparse.Namespace) -> list[str]:
     return options
 
 
+def validate_retry_analysis_overrides(args: argparse.Namespace) -> None:
+    if args.snapshot_workers is not None and args.snapshot_workers < 1:
+        raise AnalysisLaunchError("--snapshot-workers must be positive")
+    if args.snapshot_memory_budget_gib is not None and (
+        not math.isfinite(args.snapshot_memory_budget_gib)
+        or args.snapshot_memory_budget_gib <= 0.0
+    ):
+        raise AnalysisLaunchError(
+            "--snapshot-memory-budget-gib must be positive and finite"
+        )
+
+
+def retry_report_options(
+    inherited: list[str], args: argparse.Namespace
+) -> list[str]:
+    validate_retry_analysis_overrides(args)
+    updated = list(inherited)
+    overrides = (
+        ("--snapshot-workers", args.snapshot_workers),
+        ("--snapshot-memory-budget-gib", args.snapshot_memory_budget_gib),
+    )
+    for option, value in overrides:
+        if value is None:
+            continue
+        positions = [
+            index for index, token in enumerate(updated) if token == option
+        ]
+        if len(positions) != 1 or positions[0] + 1 >= len(updated):
+            raise AnalysisLaunchError(
+                f"inherited report options must contain exactly one {option} value"
+            )
+        updated[positions[0] + 1] = str(value)
+    return updated
+
+
+def initial_retry_report_options(args: argparse.Namespace) -> list[str]:
+    validate_retry_analysis_overrides(args)
+    options: list[str] = []
+    if args.snapshot_workers is not None:
+        options.extend(["--snapshot-workers", str(args.snapshot_workers)])
+    if args.snapshot_memory_budget_gib is not None:
+        options.extend([
+            "--snapshot-memory-budget-gib",
+            str(args.snapshot_memory_budget_gib),
+        ])
+    return options
+
+
 def attempt_directories(jobs: Path, case_id: str) -> list[Path]:
     parent = jobs / case_id
     if not parent.is_dir():
@@ -585,19 +633,21 @@ def submit_attempt(attempt_dir: Path) -> str:
     return job_id
 
 
-def update_prepared_resources(
+def update_prepared_attempt(
     attempt_dir: Path,
     manifest: dict[str, object],
     account: str | None,
     partition: str | None,
     walltime: str | None,
     cpus_per_task: int | None,
+    report_options: list[str] | None,
 ) -> None:
     if (
         account is None
         and partition is None
         and walltime is None
         and cpus_per_task is None
+        and report_options is None
     ):
         return
     if account is not None:
@@ -610,6 +660,29 @@ def update_prepared_resources(
         if cpus_per_task < 1:
             raise AnalysisLaunchError("--cpus-per-task must be positive")
         manifest["cpus_per_task"] = cpus_per_task
+    if report_options is not None:
+        reporter = manifest.get("reporter")
+        if not isinstance(reporter, dict) or not isinstance(
+            reporter.get("path"), str
+        ):
+            raise AnalysisLaunchError("prepared manifest reporter is malformed")
+        required_strings = {
+            key: manifest.get(key)
+            for key in ("python", "analysis_output", "case_id")
+        }
+        if not all(isinstance(value, str) for value in required_strings.values()):
+            raise AnalysisLaunchError("prepared manifest command fields are malformed")
+        manifest["report_options"] = report_options
+        manifest["command"] = [
+            str(required_strings["python"]),
+            str(reporter["path"]),
+            "--output",
+            str(required_strings["analysis_output"]),
+            "analyze-case",
+            str(required_strings["case_id"]),
+            *report_options,
+        ]
+        manifest["launcher"] = artifact_binding(Path(__file__))
     write_json(attempt_dir / "manifest.json", manifest)
     script = attempt_dir / "run.sbatch"
     script.write_text(batch_script(manifest), encoding="utf-8")
@@ -720,6 +793,7 @@ def retry(args: argparse.Namespace) -> int:
     )
     cases = eligible_cases(inventory, args.cases, args.all, terminal_cases)
     python = args.python.expanduser().absolute()
+    validate_retry_analysis_overrides(args)
     for case_id in cases:
         attempts = attempt_directories(jobs, case_id)
         if not attempts:
@@ -728,7 +802,7 @@ def retry(args: argparse.Namespace) -> int:
                 inventory_path=inventory_path,
                 jobs=jobs,
                 case_id=case_id,
-                report_options=[],
+                report_options=initial_retry_report_options(args),
                 account=(
                     DEFAULT_ACCOUNT if args.account is None else args.account
                 ),
@@ -750,14 +824,27 @@ def retry(args: argparse.Namespace) -> int:
             manifest = load_json(latest / "manifest.json")
             state = attempt_state(latest, manifest)
             if state == "PREPARED":
+                options = manifest.get("report_options")
+                if not isinstance(options, list) or not all(
+                    isinstance(item, str) for item in options
+                ):
+                    raise AnalysisLaunchError(
+                        f"malformed report options in {latest / 'manifest.json'}"
+                    )
+                overridden_options = retry_report_options(options, args)
                 attempt = latest
-                update_prepared_resources(
+                update_prepared_attempt(
                     attempt,
                     manifest,
                     args.account,
                     args.partition,
                     args.walltime,
                     args.cpus_per_task,
+                    (
+                        overridden_options
+                        if overridden_options != options
+                        else None
+                    ),
                 )
             elif (
                 state.startswith("FAILED_EXIT_")
@@ -771,6 +858,7 @@ def retry(args: argparse.Namespace) -> int:
                     raise AnalysisLaunchError(
                         f"malformed report options in {latest / 'manifest.json'}"
                     )
+                options = retry_report_options(options, args)
                 attempt = prepare_attempt(
                     analysis=analysis,
                     inventory_path=inventory_path,
@@ -878,6 +966,21 @@ def add_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--eddy-seed", type=int, default=731)
 
 
+def add_retry_analysis_overrides(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--snapshot-workers",
+        type=int,
+        default=None,
+        help="override inherited maximum snapshot-analysis processes",
+    )
+    parser.add_argument(
+        "--snapshot-memory-budget-gib",
+        type=float,
+        default=None,
+        help="override inherited aggregate snapshot-analysis memory budget",
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     command = argparse.ArgumentParser(description=__doc__)
     command.add_argument(
@@ -912,6 +1015,7 @@ def parser() -> argparse.ArgumentParser:
     )
     add_selection_options(retry_command)
     add_slurm_options(retry_command, retry_overrides=True)
+    add_retry_analysis_overrides(retry_command)
     return command
 
 

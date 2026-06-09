@@ -402,6 +402,38 @@ def test_retry_reuses_prepared_then_preserves_failed_attempt_options(
     assert third_manifest["cpus_per_task"] == 32
 
 
+def test_retry_overrides_parallel_snapshot_limits_only(
+    fast_analyze, tmp_path
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    args = command_args(analysis, jobs, cases=["R02"], eddy_samples=9876)
+    fast_analyze.launch(args)
+    first = jobs / "R02/attempt-000"
+    (first / "exit_code.txt").write_text("9\n", encoding="utf-8")
+    retry_args = command_args(analysis, jobs, cases=["R02"])
+    retry_args.account = None
+    retry_args.partition = None
+    retry_args.walltime = None
+    retry_args.cpus_per_task = None
+    retry_args.snapshot_workers = 16
+    retry_args.snapshot_memory_budget_gib = 470.0
+
+    fast_analyze.retry(retry_args)
+
+    first_manifest = fast_analyze.load_json(first / "manifest.json")
+    second_manifest = fast_analyze.load_json(
+        jobs / "R02/attempt-001/manifest.json"
+    )
+    expected = list(first_manifest["report_options"])
+    expected[expected.index("--snapshot-workers") + 1] = "16"
+    expected[expected.index("--snapshot-memory-budget-gib") + 1] = "470.0"
+    assert second_manifest["report_options"] == expected
+    assert "--eddy-samples" in second_manifest["report_options"]
+    assert "9876" in second_manifest["report_options"]
+    assert second_manifest["command"][-len(expected):] == expected
+
+
 def test_retry_explicit_resources_update_unsubmitted_attempt(
     fast_analyze, tmp_path
 ):
@@ -520,6 +552,55 @@ def test_retry_parser_distinguishes_omitted_resource_overrides(
     assert args.cpus_per_task is None
     assert args.account is None
     assert args.partition is None
+    assert args.snapshot_workers is None
+    assert args.snapshot_memory_budget_gib is None
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value", "message"),
+    [
+        ("snapshot_workers", 0, "snapshot-workers"),
+        ("snapshot_memory_budget_gib", 0.0, "snapshot-memory-budget-gib"),
+        ("snapshot_memory_budget_gib", float("nan"), "snapshot-memory-budget-gib"),
+    ],
+)
+def test_invalid_retry_snapshot_limits_fail_before_new_attempt(
+    fast_analyze, tmp_path, attribute, value, message
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    args = command_args(analysis, jobs, cases=["R02"])
+    fast_analyze.launch(args)
+    first = jobs / "R02/attempt-000"
+    (first / "exit_code.txt").write_text("9\n", encoding="utf-8")
+    setattr(args, attribute, value)
+
+    with pytest.raises(fast_analyze.AnalysisLaunchError, match=message):
+        fast_analyze.retry(args)
+
+    assert len(fast_analyze.attempt_directories(jobs.resolve(), "R02")) == 1
+
+
+def test_retry_override_rejects_missing_inherited_option_before_new_attempt(
+    fast_analyze, tmp_path
+):
+    _root, analysis, _inventory = inventory_fixture(tmp_path)
+    jobs = tmp_path / "jobs"
+    args = command_args(analysis, jobs, cases=["R02"])
+    fast_analyze.launch(args)
+    first = jobs / "R02/attempt-000"
+    manifest = fast_analyze.load_json(first / "manifest.json")
+    index = manifest["report_options"].index("--snapshot-workers")
+    del manifest["report_options"][index:index + 2]
+    fast_analyze.write_json(first / "manifest.json", manifest)
+    (first / "exit_code.txt").write_text("9\n", encoding="utf-8")
+    args.snapshot_workers = 16
+    args.snapshot_memory_budget_gib = None
+
+    with pytest.raises(fast_analyze.AnalysisLaunchError, match="exactly one"):
+        fast_analyze.retry(args)
+
+    assert len(fast_analyze.attempt_directories(jobs.resolve(), "R02")) == 1
 
 
 @pytest.mark.parametrize(
