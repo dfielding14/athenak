@@ -248,6 +248,35 @@ def test_corrected_composite_validator_authorizes_terminal_partial(
     assert (jobs / "R14/attempt-000/manifest.json").is_file()
 
 
+def test_corrected_composite_bindings_accept_authenticated_mtime_metadata(
+    fast_analyze, tmp_path, monkeypatch
+):
+    _root, analysis, inventory_path = inventory_fixture(tmp_path)
+    inventory = fast_analyze.load_json(inventory_path)
+    inventory["record_type"] = "cgl_lf_stage_i_corrected_composite_report"
+    inventory["composite_adapter"] = {
+        **fast_analyze.artifact_binding(fast_analyze.CORRECTED_REPORTER),
+        "mtime_ns": fast_analyze.CORRECTED_REPORTER.stat().st_mtime_ns,
+    }
+    write_json(inventory_path, inventory)
+    inventory_binding = {
+        **fast_analyze.artifact_binding(inventory_path),
+        "mtime_ns": inventory_path.stat().st_mtime_ns,
+    }
+    corrected = SimpleNamespace(
+        DEFAULT_CONFIG=object(),
+        validate_composite_inventory=lambda _config, _output: {
+            "inventory": inventory_binding,
+            "terminal_dispositions": {"R14": {"case_id": "R14"}},
+        },
+    )
+    monkeypatch.setattr(fast_analyze, "load_corrected_reporter", lambda: corrected)
+
+    assert fast_analyze.authenticated_terminal_cases(
+        inventory_path, inventory
+    ) == {"R14"}
+
+
 def test_forged_or_wrong_case_partial_disposition_is_not_eligible(
     fast_analyze, tmp_path
 ):

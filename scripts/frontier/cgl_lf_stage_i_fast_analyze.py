@@ -170,13 +170,23 @@ def authenticated_terminal_cases(
     try:
         corrected = load_corrected_reporter()
         expected_adapter = artifact_binding(CORRECTED_REPORTER)
-        if inventory.get("composite_adapter") != expected_adapter:
-            raise AnalysisLaunchError("corrected composite adapter binding differs")
+        adapter_errors = binding_match_errors(
+            inventory.get("composite_adapter"),
+            expected_adapter,
+            "corrected composite adapter",
+        )
+        if adapter_errors:
+            raise AnalysisLaunchError("; ".join(adapter_errors))
         validation = corrected.validate_composite_inventory(
             corrected.DEFAULT_CONFIG, inventory_path.parent
         )
-        if validation.get("inventory") != artifact_binding(inventory_path):
-            raise AnalysisLaunchError("corrected composite validation binding differs")
+        validation_errors = binding_match_errors(
+            validation.get("inventory"),
+            artifact_binding(inventory_path),
+            "corrected composite validation",
+        )
+        if validation_errors:
+            raise AnalysisLaunchError("; ".join(validation_errors))
         dispositions = validation.get("terminal_dispositions")
         if not isinstance(dispositions, dict):
             raise AnalysisLaunchError("corrected terminal dispositions are malformed")
