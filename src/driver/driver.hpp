@@ -60,6 +60,8 @@ class Driver {
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
+  std::uint64_t last_diag_nmb_updated_; // MB updates at previous stdout diagnostic
+  double last_diag_time_;       // wall time at previous stdout diagnostic
   float lb_efficiency_;         // measure of how efficient was load balancing
   void OutputCycleDiagnostics(Mesh *pm);
   Real UpdateWallClock();

@@ -61,6 +61,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   ndiag(1),
   nmb_updated_(0),
   npart_updated_(0),
+  last_diag_nmb_updated_(0),
+  last_diag_time_(0.0),
   lb_efficiency_(0),
   pwall_clock_(ptimer),
   wall_time(wtlim),
@@ -400,6 +402,8 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   if (time_evolution == TimeEvolution::tstatic) {
     // TODO(@user): add work for time static problems here
   } else {
+    last_diag_time_ = pwall_clock_->seconds();
+    last_diag_nmb_updated_ = nmb_updated_;
     Real elapsed_time = -1.;
     if (wall_time > 0.) {
       elapsed_time = UpdateWallClock();
@@ -544,10 +548,19 @@ void Driver::OutputCycleDiagnostics(Mesh *pm) {
 //  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
   const int dtprcsn = 6;
   if (pm->ncycle % ndiag == 0) {
-    Real elapsed = pwall_clock_->seconds();
+    double elapsed = pwall_clock_->seconds();
+    double diag_interval = elapsed - last_diag_time_;
+    std::uint64_t mb_updates = nmb_updated_ - last_diag_nmb_updated_;
+    std::uint64_t zonecycles =
+        mb_updates * static_cast<std::uint64_t>(pm->NumberOfMeshBlockCells());
+    double zcps = (diag_interval > 0.0) ?
+        static_cast<double>(zonecycles)/diag_interval : 0.0;
     std::cout << "elapsed=" << std::scientific << std::setprecision(dtprcsn) << elapsed
               << " cycle=" << pm->ncycle
-              << " time=" << pm->time << " dt=" << pm->dt << std::endl;
+              << " time=" << pm->time << " dt=" << pm->dt
+              << " zone-cycles/s=" << zcps << std::endl;
+    last_diag_time_ = elapsed;
+    last_diag_nmb_updated_ = nmb_updated_;
   }
   return;
 }
