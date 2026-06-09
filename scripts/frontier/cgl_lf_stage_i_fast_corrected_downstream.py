@@ -56,6 +56,13 @@ COMPLETION_SCHEMA = "athenak-cgl-corrected-downstream-completion"
 POINTER_SCHEMA = "athenak-cgl-corrected-downstream-pointer"
 FORMULA_ID = "literature-correct"
 EXECUTABLE_FORMULA_ID = "literature-correct"
+HISTORICAL_FORMULA_BINDER_SIZES = {
+    # Pre-exact-state-CT orchestrator.  Commit d3a34d49a changed only CT replay
+    # plumbing in this file, so its formula/executable attestation is equivalent.
+    "5443435dc5adc233a3c3c9a02f27e9d7ffe2548b3075ac27f759ea8f962de06f": 104981,
+    # Exact-state-CT orchestrator before historical-binder compatibility.
+    "8401184add71dfe266303bc0323c059850c2a18d6274d6adcbf5082342d829c3": 107211,
+}
 ACTIVE_CASES = (
     "R02",
     "R03",
@@ -974,6 +981,58 @@ def formula_executable_evidence(context: dict[str, object]) -> dict[str, object]
     }
 
 
+def validate_compatible_formula_executable_evidence(
+    actual_value: object,
+    expected: dict[str, object],
+    label: str,
+) -> None:
+    actual = require_dict(actual_value, label)
+    for key in (
+        "executable_formula_id",
+        "formula_executable_compatibility",
+        "formula_executable_compatibility_reason",
+    ):
+        if actual.get(key) != expected[key]:
+            raise CorrectedDownstreamError(f"{label} {key} differs")
+
+    actual_binding = require_dict(
+        actual.get("formula_executable_binding"),
+        f"{label} formula/executable binding",
+    )
+    expected_binding = require_dict(
+        expected["formula_executable_binding"],
+        "expected formula/executable binding",
+    )
+    for key in ("campaign_identity", "corrected_executable", "corrected_eos"):
+        if actual_binding.get(key) != expected_binding[key]:
+            raise CorrectedDownstreamError(f"{label} {key} binding differs")
+
+    actual_binder = require_dict(
+        actual_binding.get("binder"), f"{label} binder binding"
+    )
+    expected_binder = require_dict(
+        expected_binding["binder"], "expected binder binding"
+    )
+    if actual_binder == expected_binder:
+        return
+    binder_path = Path(
+        require_text(actual_binder.get("path"), f"{label} binder path")
+    ).resolve()
+    if binder_path != SCRIPT_PATH:
+        raise CorrectedDownstreamError(f"{label} binder path differs")
+    binder_sha = require_sha256(
+        actual_binder.get("sha256"), f"{label} binder SHA-256"
+    )
+    binder_size = actual_binder.get("size_bytes")
+    if (
+        binder_sha not in HISTORICAL_FORMULA_BINDER_SIZES
+        or binder_size != HISTORICAL_FORMULA_BINDER_SIZES[binder_sha]
+    ):
+        raise CorrectedDownstreamError(
+            f"{label} binder is not an explicitly compatible revision"
+        )
+
+
 def validate_formula_executable_evidence(
     manifest: dict[str, object],
     result: dict[str, object],
@@ -981,15 +1040,23 @@ def validate_formula_executable_evidence(
     case_id: str,
 ) -> None:
     expected = formula_executable_evidence(context)
-    if manifest.get("formula_executable_evidence") != expected:
-        raise CorrectedDownstreamError(
-            f"{case_id} hyperbolicity manifest lacks exact formula/executable binding"
-        )
+    validate_compatible_formula_executable_evidence(
+        manifest.get("formula_executable_evidence"),
+        expected,
+        f"{case_id} hyperbolicity manifest",
+    )
     provenance = require_dict(result.get("provenance"), f"{case_id} result provenance")
-    for key, value in expected.items():
-        if provenance.get(key) != value:
+    validate_compatible_formula_executable_evidence(
+        provenance, expected, f"{case_id} result provenance"
+    )
+    manifest_evidence = require_dict(
+        manifest.get("formula_executable_evidence"),
+        f"{case_id} hyperbolicity manifest evidence",
+    )
+    for key in expected:
+        if provenance.get(key) != manifest_evidence.get(key):
             raise CorrectedDownstreamError(
-                f"{case_id} result {key} differs from corrected formula binding"
+                f"{case_id} result {key} differs from its manifest binding"
             )
 
 
@@ -1033,19 +1100,32 @@ def enrich_hyper_result(identity_path: Path, manifest_path: Path) -> Path:
     result, _ = load_bound_json(result_path, f"{case_id} hyperbolicity result")
     provenance = require_dict(result.get("provenance"), f"{case_id} result provenance")
     evidence = formula_executable_evidence(context)
-    for key, value in evidence.items():
-        existing = provenance.get(key)
-        if existing is not None and existing != value:
-            raise CorrectedDownstreamError(
-                f"{case_id} result retains conflicting {key}"
-            )
-        provenance[key] = value
-    result["provenance"] = provenance
-    write_json(result_path, result)
-    atomic_write(
-        result_sha_path,
-        f"{sha256_file(result_path)}  {result_path.name}\n".encode("ascii"),
+    manifest_evidence = require_dict(
+        manifest.get("formula_executable_evidence"),
+        f"{case_id} hyperbolicity manifest evidence",
     )
+    validate_compatible_formula_executable_evidence(
+        manifest_evidence, evidence, f"{case_id} hyperbolicity manifest"
+    )
+    retained_keys = [key in provenance for key in evidence]
+    if any(retained_keys) and not all(retained_keys):
+        raise CorrectedDownstreamError(
+            f"{case_id} result retains partial formula/executable evidence"
+        )
+    if all(retained_keys):
+        validate_formula_executable_evidence(manifest, result, context, case_id)
+    else:
+        if manifest_evidence != evidence:
+            raise CorrectedDownstreamError(
+                f"{case_id} historical manifest cannot bind a new result"
+            )
+        provenance.update(manifest_evidence)
+        result["provenance"] = provenance
+        write_json(result_path, result)
+        atomic_write(
+            result_sha_path,
+            f"{sha256_file(result_path)}  {result_path.name}\n".encode("ascii"),
+        )
     retained, _ = load_bound_json(result_path, f"{case_id} enriched result")
     validate_formula_executable_evidence(manifest, retained, context, case_id)
     validation_error = hyper.validate_result(attempt, manifest)
@@ -1062,9 +1142,9 @@ def patch_hyper_attempt(attempt: Path, context: dict[str, object]) -> None:
     case_id = require_text(manifest.get("case_id"), "hyperbolicity case ID")
     evidence = formula_executable_evidence(context)
     existing = manifest.get("formula_executable_evidence")
-    if existing is not None and existing != evidence:
-        raise CorrectedDownstreamError(
-            f"{case_id} hyperbolicity manifest has conflicting formula binding"
+    if existing is not None:
+        validate_compatible_formula_executable_evidence(
+            existing, evidence, f"{case_id} hyperbolicity manifest"
         )
     if existing is None:
         if manifest.get("job_id") is not None or (attempt / "exit_code.txt").exists():

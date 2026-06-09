@@ -66,6 +66,32 @@ def write_artifact(path: Path, text: str) -> Path:
     return path
 
 
+def formula_evidence_fixture(
+    downstream, tmp_path: Path
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    identity = write_artifact(tmp_path / "formula/identity.json", "{}\n")
+    executable = write_artifact(tmp_path / "formula/athena", "corrected\n")
+    eos = write_artifact(tmp_path / "formula/eos.hpp", "ppar squared\n")
+    context = {
+        "identity_binding": binding(identity),
+        "identity_artifacts": {
+            "executable": binding(executable),
+            "eos": binding(eos),
+        },
+    }
+    current = downstream.formula_executable_evidence(context)
+    historical = json.loads(json.dumps(current))
+    historical_sha, historical_size = next(
+        iter(downstream.HISTORICAL_FORMULA_BINDER_SIZES.items())
+    )
+    historical["formula_executable_binding"]["binder"] = {
+        "path": str(TOOL.resolve()),
+        "size_bytes": historical_size,
+        "sha256": historical_sha,
+    }
+    return context, current, historical
+
+
 def publication_workflow_fixture(downstream, tmp_path: Path) -> dict[str, object]:
     authority = tmp_path / "publication-authority"
     identity = write_artifact(authority / "identity.json", "{}\n")
@@ -692,6 +718,82 @@ def test_immutable_json_rejects_concurrent_publication_without_replacement(
 
     assert target.read_bytes() == concurrent
     assert list(target.parent.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_historical_formula_binder_is_accepted_without_weakening_physics_bindings(
+    downstream, tmp_path
+) -> None:
+    context, _current, historical = formula_evidence_fixture(
+        downstream, tmp_path
+    )
+    manifest = {"formula_executable_evidence": historical}
+    result = {"provenance": historical}
+
+    downstream.validate_formula_executable_evidence(
+        manifest, result, context, "R02"
+    )
+
+    changed = json.loads(json.dumps(historical))
+    changed["formula_executable_binding"]["corrected_eos"]["sha256"] = "0" * 64
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="corrected_eos binding differs",
+    ):
+        downstream.validate_formula_executable_evidence(
+            {"formula_executable_evidence": changed},
+            {"provenance": changed},
+            context,
+            "R02",
+        )
+
+
+def test_unknown_historical_formula_binder_is_rejected(
+    downstream, tmp_path
+) -> None:
+    _context, current, historical = formula_evidence_fixture(
+        downstream, tmp_path
+    )
+    historical["formula_executable_binding"]["binder"]["sha256"] = "0" * 64
+
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="not an explicitly compatible revision",
+    ):
+        downstream.validate_compatible_formula_executable_evidence(
+            historical, current, "R02 hyperbolicity manifest"
+        )
+
+
+def test_executed_compatible_hyper_attempt_is_not_rewritten(
+    downstream, tmp_path
+) -> None:
+    context, _current, historical = formula_evidence_fixture(
+        downstream, tmp_path
+    )
+    attempt = tmp_path / "hyper/R02/attempt-000"
+    manifest_path = attempt / "manifest.json"
+    script_path = attempt / "run.sbatch"
+    write_json(
+        manifest_path,
+        {
+            "case_id": "R02",
+            "formula_executable_evidence": historical,
+            "job_id": "123",
+            "python": sys.executable,
+        },
+    )
+    write_artifact(
+        script_path,
+        "#!/bin/bash\n# corrected formula/executable binding\n",
+    )
+    write_artifact(attempt / "exit_code.txt", "0\n")
+    before_manifest = manifest_path.read_bytes()
+    before_script = script_path.read_bytes()
+
+    downstream.patch_hyper_attempt(attempt, context)
+
+    assert manifest_path.read_bytes() == before_manifest
+    assert script_path.read_bytes() == before_script
 
 
 def test_composite_inventory_allows_legacy_passive_but_binds_every_active_corrected(
