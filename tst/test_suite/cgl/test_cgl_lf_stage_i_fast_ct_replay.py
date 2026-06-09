@@ -112,3 +112,36 @@ def test_terminal_failures_are_excluded_from_default_replay_set(replay) -> None:
     assert selected == [
         case_id for case_id in sorted(present) if case_id not in {"R14", "R15"}
     ]
+
+
+def test_parent_checksum_manifest_and_runtime_verification_are_exact(
+    replay, tmp_path
+) -> None:
+    rank_files = []
+    for rank in range(2):
+        path = tmp_path / f"rank_{rank:08d}.rst"
+        path.write_bytes(f"rank {rank}\n".encode("ascii"))
+        rank_files.append({**binding(path), "rank": rank})
+    checksum_path = tmp_path / "parent_restart.sha256"
+    checksum_path.write_bytes(replay.parent_checksum_payload(rank_files))
+    verification_path = tmp_path / "parent_restart_verification.txt"
+    verification_path.write_text(
+        "".join(f"{item['path']}: OK\n" for item in rank_files),
+        encoding="utf-8",
+    )
+    manifest = {
+        "parent_restart": {"rank_files": rank_files},
+        "parent_restart_checksum_manifest": binding(checksum_path),
+    }
+
+    authenticated = replay.authenticate_parent_verification(manifest, tmp_path)
+
+    assert authenticated["verified_rank_count"] == 2
+    assert authenticated["checksum_manifest"]["sha256"] == sha256(checksum_path)
+    assert authenticated["verification_output"]["sha256"] == sha256(
+        verification_path
+    )
+
+    verification_path.write_text(f"{rank_files[0]['path']}: OK\n", encoding="utf-8")
+    with pytest.raises(replay.CtReplayError, match="verification output differs"):
+        replay.authenticate_parent_verification(manifest, tmp_path)

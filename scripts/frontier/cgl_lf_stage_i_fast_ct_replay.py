@@ -252,6 +252,56 @@ def rank_group(root: Path, name: str, rank_count: int, label: str) -> list[dict[
     ]
 
 
+def parent_checksum_payload(rank_files: object) -> bytes:
+    lines: list[str] = []
+    for expected_rank, value in enumerate(
+        require_list(rank_files, "parent restart rank files")
+    ):
+        item = require_dict(value, f"parent restart rank {expected_rank}")
+        if require_int(item.get("rank"), "parent restart rank") != expected_rank:
+            raise CtReplayError("parent restart ranks are not contiguous")
+        path = require_text(item.get("path"), "parent restart rank path")
+        if any(character in path for character in ("\n", "\r", "\\")):
+            raise CtReplayError("parent restart rank path is not checksum-safe")
+        digest = require_sha256(
+            item.get("sha256"), "parent restart rank SHA-256"
+        )
+        lines.append(f"{digest}  {path}\n")
+    if not lines:
+        raise CtReplayError("parent restart rank files must not be empty")
+    return "".join(lines).encode("utf-8")
+
+
+def authenticate_parent_verification(
+    manifest: dict[str, object], run_dir: Path
+) -> dict[str, object]:
+    parent = require_dict(manifest.get("parent_restart"), "parent restart")
+    rank_files = require_list(parent.get("rank_files"), "parent restart rank files")
+    expected_checksums = parent_checksum_payload(rank_files)
+    checksum_binding = verify_binding(
+        manifest.get("parent_restart_checksum_manifest"),
+        "parent restart checksum manifest",
+    )
+    checksum_path = Path(str(checksum_binding["path"]))
+    if checksum_path.read_bytes() != expected_checksums:
+        raise CtReplayError("parent restart checksum manifest content differs")
+    expected_verification = "".join(
+        f"{require_text(require_dict(value, 'parent rank').get('path'), 'parent rank path')}: OK\n"
+        for value in rank_files
+    ).encode("utf-8")
+    verification_path = run_dir / "parent_restart_verification.txt"
+    verification_binding = binding(
+        verification_path, "parent restart runtime verification"
+    )
+    if verification_path.read_bytes() != expected_verification:
+        raise CtReplayError("parent restart runtime verification output differs")
+    return {
+        "checksum_manifest": checksum_binding,
+        "verification_output": verification_binding,
+        "verified_rank_count": len(rank_files),
+    }
+
+
 def candidate_parent_groups(
     case_id: str, case: dict[str, object], matrix_sha256: str
 ) -> list[dict[str, object]]:
@@ -357,6 +407,10 @@ def batch_script_text(manifest: dict[str, object]) -> str:
     tools = require_dict(manifest["tools"], "tools")
     rank_files = require_list(parent["rank_files"], "parent rank files")
     representative = require_dict(rank_files[0], "parent rank zero")
+    parent_checksums = require_dict(
+        manifest["parent_restart_checksum_manifest"],
+        "parent restart checksum manifest",
+    )
     job = require_dict(manifest["job"], "job")
     return f"""#!/bin/bash
 #SBATCH -J cglct9_{manifest['case_id']}
@@ -374,8 +428,10 @@ INPUT={shlex.quote(str(require_dict(identity['input'], 'input')['path']))}
 PRIMARY={shlex.quote(str(require_dict(manifest['primary_inventory'], 'primary inventory')['path']))}
 REPLAY_TOOL={shlex.quote(str(require_dict(tools['replay_tool'], 'replay tool')['path']))}
 RESTART={shlex.quote(str(representative['path']))}
+PARENT_SUMS={shlex.quote(str(parent_checksums['path']))}
 RUN_DIR={shlex.quote(str(paths['run_dir']))}
 OUT_DIR={shlex.quote(str(paths['output_dir']))}
+PARENT_VERIFY="$RUN_DIR/parent_restart_verification.txt"
 NNODES="${{SLURM_NNODES:?Missing SLURM_NNODES}}"
 NRANKS="$((NNODES * 8))"
 
@@ -391,8 +447,11 @@ require_sha {require_dict(identity['input'], 'input')['sha256']} "$INPUT" input
 require_sha {require_dict(manifest['primary_inventory'], 'primary inventory')['sha256']} "$PRIMARY" primary_inventory
 require_sha {require_dict(tools['replay_tool'], 'replay tool')['sha256']} "$REPLAY_TOOL" replay_tool
 require_sha {representative['sha256']} "$RESTART" parent_restart_rank_zero
+require_sha {parent_checksums['sha256']} "$PARENT_SUMS" parent_restart_checksum_manifest
 test "$NNODES" -eq {allocation['nodes']}
 test "$NRANKS" -eq {allocation['ranks']}
+test "$(wc -l < "$PARENT_SUMS")" -eq "$NRANKS"
+LC_ALL=C sha256sum --check --strict "$PARENT_SUMS" > "$PARENT_VERIFY"
 mkdir "$OUT_DIR"
 
 module restore
@@ -449,6 +508,8 @@ def prepare_case(
         raise CtReplayError(f"{case_id} replay rank count is not divisible by 8")
     run_dir = output_root / "cases" / case_id / "t9"
     run_dir.mkdir(parents=True, exist_ok=False)
+    checksum_path = run_dir / "parent_restart.sha256"
+    atomic_write(checksum_path, parent_checksum_payload(parent["rank_files"]))
     output_dir = run_dir / "output"
     lineage_path = Path(str(inventory["output"])) / "cases" / case_id / "lineage.json"
     lineage_binding = binding(lineage_path, f"{case_id} lineage")
@@ -471,6 +532,9 @@ def prepare_case(
             "ranks": rank_count,
         },
         "parent_restart": parent,
+        "parent_restart_checksum_manifest": binding(
+            checksum_path, f"{case_id} parent restart checksum manifest"
+        ),
         "target_time": TARGET_TIME,
         "command_line_overrides": ["time/tlim=9.0"],
         "run_basename": run_basename,
@@ -695,6 +759,7 @@ def finalize(args: argparse.Namespace) -> Path:
         if exit_path.read_text(encoding="utf-8").strip() != "0":
             raise CtReplayError(f"{manifest['case_id']} replay exit artifact is nonzero")
         sanity = replay_sanity(manifest)
+        parent_verification = authenticate_parent_verification(manifest, run_dir)
         completion_body = {
             "schema_version": SCHEMA_VERSION,
             "record_type": COMPLETION_RECORD_TYPE,
@@ -722,6 +787,7 @@ def finalize(args: argparse.Namespace) -> Path:
             },
             "allocation": manifest.get("allocation"),
             "parent_restart": manifest.get("parent_restart"),
+            "parent_restart_runtime_verification": parent_verification,
             "scheduler": {"job_id": job_id, **observation},
             "run_exit_code": binding(exit_path, "replay exit code"),
             "run_environment": binding(
