@@ -50,6 +50,7 @@ CELL_CENTERED_MAGNETIC_FIELDS = ("bcc1", "bcc2", "bcc3")
 NATIVE_CT_ACCEPTANCE_PATH = Path(__file__).with_name(
     "cgl_lf_stage_i_scientific_acceptance.py"
 )
+CT_REPLAY_PATH = Path(__file__).with_name("cgl_lf_stage_i_fast_ct_replay.py")
 CT_ABSENCE_REASON = (
     "Authenticated AthenaK rank-local .bin snapshots expose cell-centered "
     "bcc1/bcc2/bcc3, not the staggered face-centered magnetic state advanced "
@@ -75,6 +76,11 @@ ACCEPTED_R02_RESTART_INDEX = (
     "The selected accepted R02 whole-case bundle names the exact accepted production "
     "segment manifests; their scientific inspections declare the exact retained "
     "t=9,t=10 rank-local native restart groups."
+)
+EXACT_STATE_REPLAY_LIMITATION = (
+    "The supplemental exact-state replay changes only time/tlim to terminate at t=9, "
+    "is excluded from accepted science histories, and supports only the sampled native "
+    "restart CT-divB claim."
 )
 F118_F116_AUDIT_DIGEST_KEYS = {
     "evidence_sha256": "evidence",
@@ -287,6 +293,21 @@ def verify_declared_binding(value: object, label: str) -> dict[str, object]:
         label,
         expected_sha256=expected_sha,
         expected_size=expected_size,
+    )
+
+
+def binding_identity(value: object, label: str) -> tuple[str, int, str]:
+    record = require_dict(value, f"{label} binding")
+    return (
+        str(Path(require_text(record.get("path"), f"{label} path")).resolve()),
+        require_int(record.get("size_bytes"), f"{label} size"),
+        require_sha256(record.get("sha256"), f"{label} SHA-256"),
+    )
+
+
+def same_binding(first: object, second: object, label: str) -> bool:
+    return binding_identity(first, f"{label} first") == binding_identity(
+        second, f"{label} second"
     )
 
 
@@ -857,6 +878,348 @@ def authenticate_accepted_r02_bundle(
     }, candidates
 
 
+def load_exact_state_replay_inventory(
+    path: Path,
+    expected_sha256: str,
+    primary_inventory: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Authenticate the optional CT-only exact-state replay inventory."""
+
+    replay, replay_binding = read_bound_json(
+        path,
+        "exact-state replay inventory",
+        expected_sha256=require_sha256(
+            expected_sha256, "expected exact-state replay inventory SHA-256"
+        ),
+    )
+    if (
+        replay.get("schema_version") != 1
+        or replay.get("record_type")
+        != "stage-i-direct-fast-ct-exact-state-replay-inventory"
+        or require_finite(replay.get("target_time"), "replay target time") != 9.0
+        or replay.get("purpose") != "supplemental CT-only exact-t=9 evidence"
+        or not same_binding(
+            replay.get("primary_inventory"),
+            primary_inventory,
+            "replay primary inventory",
+        )
+    ):
+        raise FastCtAuditError("exact-state replay inventory identity differs")
+    producer = verify_declared_binding(
+        replay.get("replay_tool"), "exact-state replay tool"
+    )
+    if Path(str(producer["path"])).resolve() != CT_REPLAY_PATH.resolve():
+        raise FastCtAuditError("exact-state replay tool path differs")
+    verify_declared_binding(replay.get("plan"), "exact-state replay plan")
+    require_dict(replay.get("cases"), "exact-state replay cases")
+    return replay, replay_binding
+
+
+def exact_rank_bindings(
+    value: object,
+    rank_count: int,
+    root: Path,
+    name: str,
+    label: str,
+) -> list[dict[str, object]]:
+    """Verify one declared contiguous rank-local file group."""
+
+    declared = require_list(value, f"{label} ranks")
+    if len(declared) != rank_count:
+        raise CaseAuthenticationError(f"{label} rank count differs")
+    bindings: list[dict[str, object]] = []
+    for rank, item_value in enumerate(declared):
+        item = require_dict(item_value, f"{label} rank {rank}")
+        if item.get("rank") != rank:
+            raise CaseAuthenticationError(f"{label} rank identity differs")
+        expected = root / f"rank_{rank:08d}" / name
+        declared_path = Path(
+            require_text(item.get("path"), f"{label} rank {rank} path")
+        ).absolute()
+        if declared_path != expected.absolute():
+            raise CaseAuthenticationError(f"{label} rank {rank} path differs")
+        bindings.append(verify_declared_binding(item, f"{label} rank {rank}"))
+    return bindings
+
+
+def authenticate_exact_state_replay(
+    acceptance: object,
+    case_id: str,
+    case: dict[str, object],
+    matrix_sha256: str,
+    replay_inventory: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Authenticate one supplemental exact-t=9 selected-lineage replay."""
+
+    replay_cases = require_dict(replay_inventory.get("cases"), "exact-state replay cases")
+    completion_record = replay_cases.get(case_id)
+    if completion_record is None:
+        raise CaseAuthenticationError(f"{case_id} exact-state replay is absent")
+    completion_binding = verify_declared_binding(
+        completion_record, f"{case_id} exact-state replay completion"
+    )
+    completion, _ = read_bound_json(
+        Path(str(completion_binding["path"])),
+        f"{case_id} exact-state replay completion",
+        expected_sha256=str(completion_binding["sha256"]),
+    )
+    if (
+        completion.get("schema_version") != 1
+        or completion.get("record_type")
+        != "stage-i-direct-fast-ct-exact-state-replay-completion"
+        or completion.get("case_id") != case_id
+        or completion.get("case_name") != case.get("case_name")
+        or completion.get("purpose")
+        != "CT-only exact-state replay; excluded from accepted science histories"
+        or require_finite(completion.get("target_time"), "replay completion target")
+        != 9.0
+        or completion.get("command_line_overrides") != ["time/tlim=9.0"]
+        or not same_binding(
+            completion.get("primary_inventory"),
+            replay_inventory.get("primary_inventory"),
+            f"{case_id} replay primary inventory",
+        )
+    ):
+        raise CaseAuthenticationError(f"{case_id} exact-state replay identity differs")
+
+    lineage_binding = verify_declared_binding(
+        completion.get("primary_case_lineage"), f"{case_id} replay source lineage"
+    )
+    lineage, _ = read_bound_json(
+        Path(str(lineage_binding["path"])),
+        f"{case_id} replay source lineage",
+        expected_sha256=str(lineage_binding["sha256"]),
+    )
+    if lineage != case:
+        raise CaseAuthenticationError(f"{case_id} replay source lineage differs")
+
+    selected_segments: list[tuple[dict[str, object], dict[str, object]]] = []
+    for order, value in enumerate(require_list(case.get("lineage"), f"{case_id} lineage")):
+        segment = require_dict(value, f"{case_id} lineage segment {order}")
+        if segment.get("kind") != "fast" or segment.get("order") != order:
+            continue
+        selected_segments.append(
+            (
+                segment,
+                verify_declared_binding(
+                    segment.get("manifest"), f"{case_id} selected segment {order}"
+                ),
+            )
+        )
+    source_binding = verify_declared_binding(
+        completion.get("source_segment_manifest"), f"{case_id} replay source segment"
+    )
+    matches = [
+        (segment, manifest)
+        for segment, manifest in selected_segments
+        if same_binding(manifest, source_binding, f"{case_id} replay source segment")
+    ]
+    if len(matches) != 1:
+        raise CaseAuthenticationError(
+            f"{case_id} replay source is not one selected lineage segment"
+        )
+    source_segment, _ = matches[0]
+
+    execution = require_dict(
+        completion.get("execution_identity"), f"{case_id} replay execution identity"
+    )
+    matrix = verify_declared_binding(execution.get("matrix"), f"{case_id} replay matrix")
+    executable = verify_declared_binding(
+        execution.get("executable"), f"{case_id} replay executable"
+    )
+    input_binding = verify_declared_binding(
+        execution.get("input"), f"{case_id} replay input"
+    )
+    identities = require_dict(
+        case.get("lineage_identities"), f"{case_id} lineage identities"
+    )
+    if (
+        matrix["sha256"] != matrix_sha256
+        or identities.get("matrix_sha256") != [matrix["sha256"]]
+        or identities.get("executable_sha256") != [executable["sha256"]]
+        or identities.get("input_sha256") != [input_binding["sha256"]]
+    ):
+        raise CaseAuthenticationError(f"{case_id} replay execution identity differs")
+
+    allocation = require_dict(completion.get("allocation"), f"{case_id} allocation")
+    rank_count = require_int(allocation.get("ranks"), f"{case_id} replay ranks", 1)
+    if (
+        require_int(allocation.get("nodes"), f"{case_id} replay nodes", 1)
+        * require_int(
+            allocation.get("ranks_per_node"), f"{case_id} replay ranks per node", 1
+        )
+        != rank_count
+        or require_int(source_segment.get("ranks"), f"{case_id} source ranks", 1)
+        != rank_count
+    ):
+        raise CaseAuthenticationError(f"{case_id} replay allocation differs")
+
+    parent = require_dict(completion.get("parent_restart"), f"{case_id} parent restart")
+    if (
+        not same_binding(
+            parent.get("source_segment_manifest"),
+            source_binding,
+            f"{case_id} replay parent source",
+        )
+        or parent.get("source_lineage_order") != source_segment.get("order")
+        or parent.get("source_segment") != source_segment.get("segment")
+        or require_int(parent.get("rank_count"), f"{case_id} parent ranks", 1)
+        != rank_count
+        or require_finite(parent.get("time"), f"{case_id} parent time") >= 9.0
+    ):
+        raise CaseAuthenticationError(f"{case_id} replay parent identity differs")
+    parent_name = require_text(parent.get("name"), f"{case_id} parent name")
+    parent_root = Path(
+        require_text(parent.get("root"), f"{case_id} parent root")
+    ).absolute()
+    source_output = Path(
+        require_text(source_segment.get("output"), f"{case_id} source output")
+    ).absolute()
+    if parent_root != source_output / "rst":
+        raise CaseAuthenticationError(f"{case_id} replay parent root differs")
+    parent_bindings = exact_rank_bindings(
+        parent.get("rank_files"),
+        rank_count,
+        parent_root,
+        parent_name,
+        f"{case_id} replay parent",
+    )
+    parent_time = native_restart_time(acceptance, Path(str(parent_bindings[0]["path"])))
+    if parent_time != float(parent["time"]):
+        raise CaseAuthenticationError(f"{case_id} replay parent time differs")
+
+    run_binding = verify_declared_binding(
+        completion.get("run_manifest"), f"{case_id} replay run manifest"
+    )
+    run, _ = read_bound_json(
+        Path(str(run_binding["path"])),
+        f"{case_id} replay run manifest",
+        expected_sha256=str(run_binding["sha256"]),
+    )
+    run_execution = require_dict(
+        run.get("execution_identity"), f"{case_id} run execution identity"
+    )
+    run_parent = require_dict(run.get("parent_restart"), f"{case_id} run parent")
+    if (
+        run.get("schema_version") != 1
+        or run.get("record_type")
+        != "stage-i-direct-fast-ct-exact-state-replay-run"
+        or run.get("case_id") != case_id
+        or run.get("case_name") != case.get("case_name")
+        or run.get("purpose") != completion.get("purpose")
+        or require_finite(run.get("target_time"), f"{case_id} run target") != 9.0
+        or run.get("command_line_overrides") != ["time/tlim=9.0"]
+        or run.get("allocation") != allocation
+        or run_parent != parent
+        or any(
+            not same_binding(
+                run_execution.get(key), execution.get(key), f"{case_id} run {key}"
+            )
+            for key in ("matrix", "executable", "input")
+        )
+    ):
+        raise CaseAuthenticationError(f"{case_id} replay run manifest differs")
+    tools = require_dict(run.get("tools"), f"{case_id} replay tools")
+    replay_tool = verify_declared_binding(
+        tools.get("replay_tool"), f"{case_id} replay tool"
+    )
+    if Path(str(replay_tool["path"])).resolve() != CT_REPLAY_PATH.resolve():
+        raise CaseAuthenticationError(f"{case_id} replay tool path differs")
+    verify_declared_binding(tools.get("restart_parser"), f"{case_id} restart parser")
+
+    scheduler = require_dict(completion.get("scheduler"), f"{case_id} scheduler")
+    if (
+        not isinstance(scheduler.get("job_id"), str)
+        or scheduler.get("state") != "COMPLETED"
+        or scheduler.get("exit_code") != "0:0"
+    ):
+        raise CaseAuthenticationError(f"{case_id} replay scheduler evidence differs")
+    exit_binding = verify_declared_binding(
+        completion.get("run_exit_code"), f"{case_id} replay exit code"
+    )
+    if Path(str(exit_binding["path"])).read_text(encoding="utf-8").strip() != "0":
+        raise CaseAuthenticationError(f"{case_id} replay exit code is nonzero")
+    verify_declared_binding(
+        completion.get("run_environment"), f"{case_id} replay environment"
+    )
+
+    sanity = require_dict(
+        completion.get("scientific_sanity"), f"{case_id} replay sanity"
+    )
+    strict = require_dict(
+        sanity.get("strict_lf_failure_maxima"), f"{case_id} strict counters"
+    )
+    if (
+        require_finite(sanity.get("final_time"), f"{case_id} replay final time") != 9.0
+        or any(
+            require_finite(value, f"{case_id} strict counter") != 0.0
+            for value in strict.values()
+        )
+        or require_finite(
+            sanity.get("mass_relative_drift"), f"{case_id} replay mass drift"
+        )
+        > 1.0e-8
+        or require_finite(
+            sanity.get("mhd_user_mass_relative_mismatch"),
+            f"{case_id} replay mass mismatch",
+        )
+        > 1.0e-8
+    ):
+        raise CaseAuthenticationError(f"{case_id} replay scientific sanity differs")
+    verify_declared_binding(sanity.get("mhd_history"), f"{case_id} replay MHD history")
+    verify_declared_binding(sanity.get("user_history"), f"{case_id} replay user history")
+
+    terminal = require_dict(
+        sanity.get("terminal_restart"), f"{case_id} replay terminal restart"
+    )
+    terminal_name = require_text(terminal.get("name"), f"{case_id} terminal name")
+    run_paths = require_dict(run.get("paths"), f"{case_id} replay paths")
+    terminal_root = Path(
+        require_text(run_paths.get("output_dir"), f"{case_id} replay output")
+    ).absolute() / "rst"
+    if (
+        require_finite(terminal.get("time"), f"{case_id} terminal time") != 9.0
+        or require_int(terminal.get("rank_count"), f"{case_id} terminal ranks", 1)
+        != rank_count
+    ):
+        raise CaseAuthenticationError(f"{case_id} replay terminal identity differs")
+    terminal_bindings = exact_rank_bindings(
+        terminal.get("rank_files"),
+        rank_count,
+        terminal_root,
+        terminal_name,
+        f"{case_id} replay terminal",
+    )
+    if native_restart_time(acceptance, Path(str(terminal_bindings[0]["path"]))) != 9.0:
+        raise CaseAuthenticationError(f"{case_id} replay terminal time differs")
+
+    authenticated = {
+        "source_kind": "exact_state_replay",
+        "completion": completion_binding,
+        "run_manifest": run_binding,
+        "source_segment_manifest": source_binding,
+        "source_lineage_order": source_segment.get("order"),
+        "parent_time": parent_time,
+        "parent_rank_count": len(parent_bindings),
+        "target_time": 9.0,
+        "terminal_rank_count": len(terminal_bindings),
+        "purpose": completion.get("purpose"),
+        "command_line_overrides": completion.get("command_line_overrides"),
+    }
+    candidate = {
+        "source_kind": "exact_state_replay",
+        "lineage_order": source_segment.get("order"),
+        "segment": "supplemental_exact_t9",
+        "name": terminal_name,
+        "rank_count": rank_count,
+        "time": 9.0,
+        "declared_rank_files": terminal_bindings,
+        "replay_completion": completion_binding,
+        "source_segment_manifest": source_binding,
+    }
+    return authenticated, candidate
+
+
 def compact_native_state(
     state: dict[str, object], source: dict[str, object]
 ) -> dict[str, object]:
@@ -908,6 +1271,7 @@ def audit_selected_lineage_restarts(
     matrix_sha256: str,
     required_times: list[float],
     threshold: float,
+    replay_inventory: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Audit exact required native restart states from authenticated selected lineage."""
 
@@ -918,6 +1282,8 @@ def audit_selected_lineage_restarts(
     fast_segments: list[dict[str, object]] = []
     accepted_bundles: list[dict[str, object]] = []
     accepted_candidates: list[dict[str, object]] = []
+    exact_state_replays: list[dict[str, object]] = []
+    replay_candidates: list[dict[str, object]] = []
     authority_chain: dict[str, object] = {
         "status": "not_applicable",
         "campaign_authority_eligible": False,
@@ -947,6 +1313,21 @@ def audit_selected_lineage_restarts(
                 accepted_candidates.extend(states)
         except (FastCtAuditError, OSError) as error:
             source_errors.append(str(error))
+    if replay_inventory is not None and case_id in require_dict(
+        replay_inventory.get("cases"), "exact-state replay cases"
+    ):
+        try:
+            replay, candidate = authenticate_exact_state_replay(
+                acceptance,
+                case_id,
+                case,
+                matrix_sha256,
+                replay_inventory,
+            )
+            exact_state_replays.append(replay)
+            replay_candidates.append(candidate)
+        except (FastCtAuditError, OSError) as error:
+            source_errors.append(str(error))
     if accepted_bundles:
         authority_chain = r02_authority_chain_record(acceptance, policy)
     if not fast_segments and not accepted_bundles:
@@ -955,12 +1336,17 @@ def audit_selected_lineage_restarts(
             "accepted-R02 source that can supply native restart state"
         )
 
-    discovered: list[dict[str, object]] = list(accepted_candidates)
+    discovered: list[dict[str, object]] = [
+        *accepted_candidates,
+        *replay_candidates,
+    ]
     incomplete: list[dict[str, object]] = []
     candidates: dict[float, list[dict[str, object]]] = {
         value: [] for value in required_times
     }
     for record in accepted_candidates:
+        candidates[float(record["time"])].append(record)
+    for record in replay_candidates:
         candidates[float(record["time"])].append(record)
     for segment in fast_segments:
         rank_count = int(segment["rank_count"])
@@ -1062,7 +1448,12 @@ def audit_selected_lineage_restarts(
                 "source_kind", "lineage_order", "segment", "name", "rank_count", "time"
             )
         }
-        for key in ("accepted_bundle_manifest", "accepted_segment_manifest"):
+        for key in (
+            "accepted_bundle_manifest",
+            "accepted_segment_manifest",
+            "replay_completion",
+            "source_segment_manifest",
+        ):
             if key in selected:
                 selected_source[key] = selected[key]
         try:
@@ -1180,13 +1571,17 @@ def audit_selected_lineage_restarts(
         "authority_blockers": authority_blockers,
         "authority_limitation": (
             ACCEPTED_R02_AUTHORITY_LIMITATION
-            if accepted_source else DIRECT_FAST_AUTHORITY_LIMITATION
+            if accepted_source
+            else f"{DIRECT_FAST_AUTHORITY_LIMITATION} {EXACT_STATE_REPLAY_LIMITATION}"
+            if exact_state_replays
+            else DIRECT_FAST_AUTHORITY_LIMITATION
         ),
         "restart_inventory_limitation": (
             ACCEPTED_R02_RESTART_INDEX if accepted_source else RESTART_INDEX_LIMITATION
         ),
         "authenticated_fast_segments": fast_segments,
         "authenticated_accepted_bundles": accepted_bundles,
+        "authenticated_exact_state_replays": exact_state_replays,
         "discovered_state_times": sorted({
             float(record["time"]) for record in discovered
         }),
@@ -1537,6 +1932,7 @@ def empty_native_restart_record(
         "authority_blockers": [],
         "authenticated_fast_segments": [],
         "authenticated_accepted_bundles": [],
+        "authenticated_exact_state_replays": [],
         "discovered_state_times": [],
         "discovered_complete_group_count": 0,
         "incomplete_groups": [],
@@ -1592,6 +1988,7 @@ def audit_case(
     snapshot_policy: str,
     required_times: list[float],
     threshold: float,
+    replay_inventory: dict[str, object] | None,
 ) -> dict[str, object]:
     case = require_dict(value, f"{case_id} assembled case")
     base: dict[str, object] = {
@@ -1639,6 +2036,7 @@ def audit_case(
             matrix_sha256,
             required_times,
             threshold,
+            replay_inventory,
         )
         native_status = str(native["status"])
         ct_result = str(native["result"])
@@ -1723,6 +2121,8 @@ def build_audit(
     expected_inventory_sha256: str,
     requested_cases: Iterable[str],
     snapshot_policy: str,
+    replay_inventory_path: Path | None = None,
+    expected_replay_inventory_sha256: str | None = None,
 ) -> dict[str, object]:
     """Build one deterministic accelerated-lineage CT audit."""
 
@@ -1733,6 +2133,21 @@ def build_audit(
     inventory, inventory_binding = read_bound_json(
         inventory_path, "direct-fast assembled inventory", expected_sha256=expected_sha
     )
+    if (replay_inventory_path is None) != (
+        expected_replay_inventory_sha256 is None
+    ):
+        raise FastCtAuditError(
+            "exact-state replay inventory path and SHA-256 must be supplied together"
+        )
+    replay_inventory: dict[str, object] | None = None
+    replay_inventory_binding: dict[str, object] | None = None
+    if replay_inventory_path is not None:
+        assert expected_replay_inventory_sha256 is not None
+        replay_inventory, replay_inventory_binding = load_exact_state_replay_inventory(
+            replay_inventory_path,
+            expected_replay_inventory_sha256,
+            inventory_binding,
+        )
     if inventory.get("schema_version") != 1:
         raise FastCtAuditError("direct-fast assembled inventory schema differs")
     output_root = Path(require_text(inventory.get("output"), "assembled output")).absolute()
@@ -1757,6 +2172,7 @@ def build_audit(
                 snapshot_policy,
                 required_times,
                 threshold,
+                replay_inventory,
             )
             if case_id in cases
             else missing_case_record(case_id, required_times, threshold)
@@ -1810,6 +2226,7 @@ def build_audit(
             "matrix": matrix_binding,
             "direct_fast_reporter": reporter_binding,
             "native_restart_ct": native_sources,
+            "exact_state_replay_inventory": replay_inventory_binding,
         },
         "selection": {
             "cases": selected,
@@ -1825,7 +2242,9 @@ def build_audit(
             "required_for_sampled_ct_divb": (
                 "exact complete rank-local native restart groups at t=9 and t=10 "
                 "from authenticated selected direct-fast roots or the exact selected "
-                "accepted-R02 bundle and accepted segment declarations"
+                "accepted-R02 bundle and accepted segment declarations; a separately "
+                "bound CT-only replay may supply exact t=9 when it branches from the "
+                "authenticated selected lineage and changes only time/tlim"
             ),
             "snapshot_reason": CT_ABSENCE_REASON,
             "authority_limitation": (
@@ -1954,6 +2373,7 @@ def render_markdown(audit: dict[str, object]) -> str:
         f"- {CT_ABSENCE_REASON}",
         f"- {DIRECT_FAST_AUTHORITY_LIMITATION}",
         f"- {ACCEPTED_R02_AUTHORITY_LIMITATION}",
+        f"- {EXACT_STATE_REPLAY_LIMITATION}",
         "- A CT pass is never inferred from snapshot availability, finite cell-centered "
         "magnetic values, or incomplete/non-exact-time restart groups.",
         "",
@@ -2018,6 +2438,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=Path, required=True)
     parser.add_argument("--expected-inventory-sha256", required=True)
+    parser.add_argument("--exact-state-replay-inventory", type=Path)
+    parser.add_argument("--expected-exact-state-replay-inventory-sha256")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--cases",
@@ -2045,6 +2467,8 @@ def main(argv: list[str] | None = None) -> int:
             args.expected_inventory_sha256,
             args.cases,
             args.snapshot_policy,
+            args.exact_state_replay_inventory,
+            args.expected_exact_state_replay_inventory_sha256,
         )
         write_outputs(args.output, audit)
     except (FastCtAuditError, OSError) as error:

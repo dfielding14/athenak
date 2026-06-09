@@ -437,6 +437,157 @@ def build_accepted_r02_campaign(tmp_path: Path) -> tuple[Path, dict[float, Path]
     return inventory_path, restart_paths
 
 
+def attach_exact_t9_replay(
+    adapter, inventory_path: Path
+) -> Path:
+    """Attach one fully bound supplemental exact-t=9 replay to the fixture."""
+
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    case = inventory["cases"]["R03"]
+    segment = case["lineage"][0]
+    segment_manifest_path = Path(segment["manifest"]["path"])
+    segment_manifest = json.loads(segment_manifest_path.read_text(encoding="utf-8"))
+    executable = inventory_path.parent.parent / "athena"
+    executable.write_bytes(b"qualified executable fixture\n")
+    executable_binding = binding(executable)
+    segment_manifest["executable_sha256"] = executable_binding["sha256"]
+    write_json(segment_manifest_path, segment_manifest)
+    segment["manifest"] = binding(segment_manifest_path)
+    segment["executable_sha256"] = executable_binding["sha256"]
+    case["lineage_identities"]["executable_sha256"] = [executable_binding["sha256"]]
+    case["status"] = "complete"
+    lineage_path = inventory_path.parent / "cases/R03/lineage.json"
+    write_json(lineage_path, case)
+    inventory["cases"]["R03"] = case
+    write_json(inventory_path, inventory)
+    primary_binding = binding(inventory_path)
+    lineage_binding = binding(lineage_path)
+
+    output = Path(segment["output"])
+    parent_path = output / "rst/rank_00000000/case.00000.rst"
+    parent_rank = {**binding(parent_path), "rank": 0}
+    parent = {
+        "time": 8.5,
+        "name": parent_path.name,
+        "rank_count": 1,
+        "root": str((output / "rst").resolve()),
+        "source_segment_manifest": segment["manifest"],
+        "source_lineage_order": 0,
+        "source_segment": segment["segment"],
+        "rank_files": [parent_rank],
+    }
+
+    replay_root = inventory_path.parent.parent / "ct-replay"
+    run_dir = replay_root / "cases/R03/t9"
+    replay_output = run_dir / "output"
+    terminal_path = replay_output / "rst/rank_00000000/case.t9.rst"
+    write_native_restart(terminal_path, 9.0)
+    terminal = {
+        "time": 9.0,
+        "name": terminal_path.name,
+        "rank_count": 1,
+        "rank_files": [{**binding(terminal_path), "rank": 0}],
+    }
+    mhd = replay_output / "case.mhd.hst"
+    user = replay_output / "case.user.hst"
+    mhd.parent.mkdir(parents=True, exist_ok=True)
+    mhd.write_text("# [1]=time [2]=mass\n8.5 1\n9 1\n", encoding="utf-8")
+    user.write_text("# [1]=time [2]=mass\n8.5 1\n9 1\n", encoding="utf-8")
+    exit_path = run_dir / "run_exit_code"
+    environment_path = run_dir / "run_environment.txt"
+    exit_path.write_text("0\n", encoding="utf-8")
+    environment_path.write_text("fixture\n", encoding="utf-8")
+
+    execution = {
+        "matrix": inventory["matrix"],
+        "executable": executable_binding,
+        "input": case["input"],
+    }
+    allocation = {"nodes": 1, "ranks_per_node": 1, "ranks": 1}
+    run_manifest_path = run_dir / "replay_run.json"
+    write_json(run_manifest_path, {
+        "schema_version": 1,
+        "record_type": "stage-i-direct-fast-ct-exact-state-replay-run",
+        "case_id": "R03",
+        "case_name": case["case_name"],
+        "purpose": "CT-only exact-state replay; excluded from accepted science histories",
+        "primary_inventory": primary_binding,
+        "primary_case_lineage": lineage_binding,
+        "execution_identity": execution,
+        "allocation": allocation,
+        "parent_restart": parent,
+        "target_time": 9.0,
+        "command_line_overrides": ["time/tlim=9.0"],
+        "run_basename": "fixture",
+        "paths": {
+            "run_dir": str(run_dir.resolve()),
+            "output_dir": str(replay_output.resolve()),
+            "slurm_log": str((run_dir / "fixture.%j.log").resolve()),
+        },
+        "tools": {
+            "replay_tool": binding(adapter.CT_REPLAY_PATH),
+            "restart_parser": binding(
+                adapter.CT_REPLAY_PATH.with_name("cgl_lf_stage_i_fast.py")
+            ),
+        },
+        "job": {
+            "account": "AST207",
+            "partition": "extended",
+            "walltime": "04:00:00",
+            "job_id": "12345",
+        },
+    })
+    completion_path = run_dir / "completion.json"
+    write_json(completion_path, {
+        "schema_version": 1,
+        "record_type": "stage-i-direct-fast-ct-exact-state-replay-completion",
+        "case_id": "R03",
+        "case_name": case["case_name"],
+        "purpose": "CT-only exact-state replay; excluded from accepted science histories",
+        "target_time": 9.0,
+        "command_line_overrides": ["time/tlim=9.0"],
+        "primary_inventory": primary_binding,
+        "primary_case_lineage": lineage_binding,
+        "run_manifest": binding(run_manifest_path),
+        "source_segment_manifest": segment["manifest"],
+        "execution_identity": execution,
+        "allocation": allocation,
+        "parent_restart": parent,
+        "scheduler": {
+            "job_id": "12345",
+            "state": "COMPLETED",
+            "exit_code": "0:0",
+            "start": "2026-06-09T00:00:00",
+            "end": "2026-06-09T00:01:00",
+        },
+        "run_exit_code": binding(exit_path),
+        "run_environment": binding(environment_path),
+        "scientific_sanity": {
+            "final_time": 9.0,
+            "strict_lf_failure_maxima": {"lf_nonfin": 0.0},
+            "mass_relative_drift": 0.0,
+            "mhd_user_mass_relative_mismatch": 0.0,
+            "mhd_history": binding(mhd),
+            "user_history": binding(user),
+            "terminal_restart": terminal,
+        },
+    })
+    plan_path = replay_root / "plan.json"
+    write_json(plan_path, {"fixture": True})
+    replay_inventory_path = replay_root / "inventory.json"
+    write_json(replay_inventory_path, {
+        "schema_version": 1,
+        "record_type": "stage-i-direct-fast-ct-exact-state-replay-inventory",
+        "purpose": "supplemental CT-only exact-t=9 evidence",
+        "target_time": 9.0,
+        "primary_inventory": primary_binding,
+        "plan": binding(plan_path),
+        "replay_tool": binding(adapter.CT_REPLAY_PATH),
+        "cases": {"R03": binding(completion_path)},
+    })
+    return replay_inventory_path
+
+
 def test_authenticated_bcc_snapshot_is_inconclusive_and_deterministic(adapter, tmp_path):
     inventory = build_campaign(tmp_path)
     observed = adapter.build_audit(inventory, sha256(inventory), [], "all")
@@ -520,6 +671,30 @@ def test_nonexact_restart_time_documents_exact_state_blocker(adapter, tmp_path):
     assert native["missing_required_state_times"] == [9.0]
     assert native["discovered_state_times"] == [9.0001, 10.0]
     assert any("exact required native restart state t=9" in item for item in native["blockers"])
+
+
+def test_exact_t9_replay_supplements_selected_lineage_t10(adapter, tmp_path):
+    inventory = build_campaign(tmp_path, restart_times=(8.5, 10.0))
+    replay_inventory = attach_exact_t9_replay(adapter, inventory)
+
+    observed = adapter.build_audit(
+        inventory,
+        sha256(inventory),
+        ["R03"],
+        "all",
+        replay_inventory,
+        sha256(replay_inventory),
+    )
+    native = observed["cases"]["R03"]["native_restart_ct"]
+
+    assert observed["result"] == "pass"
+    assert native["audited_state_times"] == [9.0, 10.0]
+    assert native["coverage_complete"] is True
+    assert len(native["authenticated_exact_state_replays"]) == 1
+    assert [state["source"]["source_kind"] for state in native["state_audits"]] == [
+        "exact_state_replay",
+        "direct_fast",
+    ]
 
 
 def test_native_face_field_divergence_is_reported_as_failure(adapter, tmp_path):

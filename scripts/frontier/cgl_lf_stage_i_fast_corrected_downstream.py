@@ -760,6 +760,7 @@ def workflow_commands(
     walltime: str,
     cpus_per_task: int,
     snapshot_workers: int,
+    ct_replay_inventory: dict[str, object] | None = None,
 ) -> dict[str, object]:
     inventory = Path(str(context["inventory_binding"]["path"]))
     inventory_sha = str(context["inventory_binding"]["sha256"])
@@ -837,6 +838,18 @@ def workflow_commands(
         "--snapshot-policy",
         "all",
     ]
+    if ct_replay_inventory is not None:
+        ct.extend([
+            "--exact-state-replay-inventory",
+            require_text(
+                ct_replay_inventory.get("path"), "CT replay inventory path"
+            ),
+            "--expected-exact-state-replay-inventory-sha256",
+            require_sha256(
+                ct_replay_inventory.get("sha256"),
+                "CT replay inventory SHA-256",
+            ),
+        ])
     publication = [
         str(python),
         str(PUBLICATION_TOOL),
@@ -1221,6 +1234,19 @@ def prepare_generic_job(manifest: dict[str, object]) -> None:
 
 def prepare_workflow(args: argparse.Namespace) -> Path:
     context = validate_inventory(args.identity, args.inventory, args.inventory_sha256)
+    replay_path = getattr(args, "ct_replay_inventory", None)
+    replay_sha256 = getattr(args, "ct_replay_inventory_sha256", None)
+    if (replay_path is None) != (replay_sha256 is None):
+        raise CorrectedDownstreamError(
+            "CT replay inventory path and SHA-256 must be supplied together"
+        )
+    ct_replay_inventory = None
+    if replay_path is not None:
+        ct_replay_inventory = artifact_binding(replay_path)
+        if ct_replay_inventory["sha256"] != require_sha256(
+            replay_sha256, "CT replay inventory SHA-256"
+        ):
+            raise CorrectedDownstreamError("CT replay inventory SHA-256 differs")
     workflow_root = require_workflow_root(args.workflow_root, context)
     python = args.python.expanduser().resolve(strict=True)
     tools = tool_bindings(context)
@@ -1233,6 +1259,7 @@ def prepare_workflow(args: argparse.Namespace) -> Path:
         args.walltime,
         args.cpus_per_task,
         args.snapshot_workers,
+        ct_replay_inventory,
     )
     run_checked(list(require_dict(commands["hyperbolicity"], "hyper stage")["command"]))
     run_checked(list(require_dict(commands["analysis"], "analysis stage")["command"]))
@@ -1260,6 +1287,7 @@ def prepare_workflow(args: argparse.Namespace) -> Path:
         "campaign_kind": "corrected-production",
         "campaign_identity": context["identity_binding"],
         "inventory": context["inventory_binding"],
+        "ct_exact_state_replay_inventory": ct_replay_inventory,
         "inventory_output": str(context["inventory_output"]),
         "workflow_root": str(workflow_root),
         "corrected_executable": executable,
@@ -1337,6 +1365,12 @@ def workflow_context(workflow: dict[str, object]) -> dict[str, object]:
         raise CorrectedDownstreamError(
             "workflow terminal dispositions differ from authenticated inventory"
         )
+    replay = workflow.get("ct_exact_state_replay_inventory")
+    context["ct_replay_inventory"] = (
+        verify_binding(replay, "workflow CT replay inventory")
+        if replay is not None
+        else None
+    )
     return context
 
 
@@ -2234,6 +2268,24 @@ def validated_ct_output(
     audit, binding = load_bound_json(audit_path, "CT audit")
     if not same_binding(audit.get("inventory"), context["inventory_binding"], "CT inventory"):
         raise CorrectedDownstreamError("CT audit inventory binding differs")
+    expected_replay = context.get("ct_replay_inventory")
+    source_bindings = audit.get("source_bindings")
+    replay_source = (
+        require_dict(source_bindings, "CT audit source bindings").get(
+            "exact_state_replay_inventory"
+        )
+        if source_bindings is not None
+        else None
+    )
+    if (replay_source is None) != (expected_replay is None) or (
+        replay_source is not None
+        and not same_binding(
+            replay_source, expected_replay, "CT exact-state replay inventory"
+        )
+    ):
+        raise CorrectedDownstreamError(
+            "CT audit exact-state replay inventory binding differs"
+        )
     selection = require_dict(audit.get("selection"), "CT selection")
     if (
         selection.get("cases") != context["selected_cases"]
@@ -2652,6 +2704,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--identity", type=Path, required=True)
     prepare.add_argument("--inventory", type=Path, required=True)
     prepare.add_argument("--inventory-sha256", required=True)
+    prepare.add_argument("--ct-replay-inventory", type=Path)
+    prepare.add_argument("--ct-replay-inventory-sha256")
     prepare.add_argument("--workflow-root", type=Path, required=True)
     prepare.add_argument("--python", type=Path, default=Path(sys.executable))
     prepare.add_argument("--account", default="ast207")
