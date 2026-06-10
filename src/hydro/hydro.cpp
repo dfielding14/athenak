@@ -37,7 +37,6 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     u1("cons1",1,1,1,1,1),
     u_sts0("u_sts0",1,1,1,1,1),
     u_sts1("u_sts1",1,1,1,1,1),
-    u_sts2("u_sts2",1,1,1,1,1),
     u_sts_rhs("u_sts_rhs",1,1,1,1,1),
     uflx("uflx",1,1,1,1,1),
     utest("utest",1,1,1,1,1),
@@ -365,7 +364,6 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       if (has_any_sts_diffusion) {
         Kokkos::realloc(u_sts0,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
         Kokkos::realloc(u_sts1,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
-        Kokkos::realloc(u_sts2,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
         Kokkos::realloc(u_sts_rhs, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       }
       Kokkos::realloc(uflx.x1f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);

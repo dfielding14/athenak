@@ -101,8 +101,7 @@ class Hydro {
   // following only used for time-evolving flow
   DvceArray5D<Real> u1;       // conserved variables at intermediate step
   DvceArray5D<Real> u_sts0;   // conserved variables at start of STS sweep
-  DvceArray5D<Real> u_sts1;   // previous STS stage state
-  DvceArray5D<Real> u_sts2;   // second previous STS stage state
+  DvceArray5D<Real> u_sts1;   // rolling previous STS stage state
   DvceArray5D<Real> u_sts_rhs;  // cached first-stage RKL2 operator contribution
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
   Real dtnew;
