@@ -417,8 +417,18 @@ def test_terminal_binary_group_rejects_meshblock_boundary_truncation(fast, tmp_p
         binary_payload(2.0, mesh_nx1=2, locations=(0,)),
     )
 
-    with pytest.raises(fast.FastRunError, match="logical coverage"):
+    with pytest.raises(fast.FastRunError, match="schema or logical coverage"):
         fast.terminal_product_group(directory, ".bin", 1)
+
+
+def test_terminal_binary_group_rejects_cross_rank_schema_mismatch(fast, tmp_path):
+    directory = tmp_path / "bin"
+    write_binary_rank_group(directory, "fixture.00001.bin", 2, 2.0)
+    rank_one = directory / "rank_00000001/fixture.00001.bin"
+    rank_one.write_bytes(rank_one.read_bytes().replace(b"  cycle=1\n", b"  cycle=2\n"))
+
+    with pytest.raises(fast.FastRunError, match="schema or logical coverage"):
+        fast.terminal_product_group(directory, ".bin", 2)
 
 
 def test_analyze_segment_accepts_complete_synchronized_clean_output(fast, tmp_path):

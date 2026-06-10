@@ -367,7 +367,7 @@ def binary_profile(path: Path) -> dict[str, object]:
                 indices[3] - indices[2] + 1,
                 indices[5] - indices[4] + 1,
             )
-            if any(extent <= 0 for extent in shape):
+            if shape != meshblock_shape:
                 raise FastRunError(f"binary product has invalid meshblock shape: {path}")
             location = tuple(indices[6:10])
             if location not in expected_locations or location in locations:
@@ -384,6 +384,15 @@ def binary_profile(path: Path) -> dict[str, object]:
         "physical_time": physical_time,
         "locations": tuple(locations),
         "expected_locations": expected_locations,
+        "schema": (
+            cycle,
+            location_size,
+            variable_size,
+            tuple(fields[1:]),
+            hashlib.sha256(parameter_header).hexdigest(),
+            mesh_shape,
+            meshblock_shape,
+        ),
     }
 
 
@@ -419,6 +428,7 @@ def terminal_product_group(directory: Path, suffix: str, rank_count: int) -> dic
             profiles = [binary_profile(path) for path in siblings]
             times = [float(profile["physical_time"]) for profile in profiles]
             expected_locations = profiles[0]["expected_locations"]
+            expected_schema = profiles[0]["schema"]
             locations = [
                 location
                 for profile in profiles
@@ -429,11 +439,13 @@ def terminal_product_group(directory: Path, suffix: str, rank_count: int) -> dic
                     profile["expected_locations"] != expected_locations
                     for profile in profiles
                 )
+                or any(profile["schema"] != expected_schema for profile in profiles)
                 or len(locations) != len(set(locations))
                 or frozenset(locations) != expected_locations
             ):
                 raise FastRunError(
-                    f"incomplete terminal {suffix} logical coverage: {terminal.name}"
+                    f"inconsistent terminal {suffix} schema or logical coverage: "
+                    f"{terminal.name}"
                 )
         if any(
             not math.isclose(
