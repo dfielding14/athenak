@@ -1,7 +1,9 @@
 """CPU regression coverage for RKL2 super time stepping."""
 
-from pathlib import Path
+import re
 import shutil
+import subprocess
+from pathlib import Path
 
 import numpy as np
 
@@ -24,6 +26,17 @@ def _scalar_errors(basename):
 
 def _tab(basename, variable):
     return testutils.athena_read.tab(f"tab/{basename}.{variable}.00001.tab")
+
+
+def _command(input_name, basename, *flags):
+    command = [
+        "./athena",
+        "-i",
+        f"{INPUT_ROOT}/{input_name}",
+        f"job/basename={basename}",
+        *flags,
+    ]
+    return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
 def _cleanup():
@@ -101,6 +114,90 @@ def test_sts_bounded_power_law_conduction_and_viscosity():
         shear_sts = _tab("sts_shear", "hydro_w")
         shear_explicit = _tab("explicit_shear", "hydro_w")
         assert np.max(np.abs(shear_sts["vely"] - shear_explicit["vely"])) < 1.0e-5
+    finally:
+        _cleanup()
+
+
+def test_conduction_model_activation_and_saturated_timestep():
+    """Model-only Spitzer conduction is active and retains its parabolic timestep."""
+    try:
+        _run(
+            "conduction_configuration.athinput",
+            "spitzer_model",
+        )
+        _run(
+            "conduction_configuration.athinput",
+            "no_conduction",
+            "hydro/conductivity_model=constant",
+        )
+        _run(
+            "conduction_configuration.athinput",
+            "capped_spitzer",
+            "hydro/cond_ceiling=0.01",
+        )
+        spitzer = _tab("spitzer_model", "hydro_w")
+        no_conduction = _tab("no_conduction", "hydro_w")
+        capped = _tab("capped_spitzer", "hydro_w")
+        spitzer_change = np.max(np.abs(spitzer["eint"] - no_conduction["eint"]))
+        capped_change = np.max(np.abs(capped["eint"] - no_conduction["eint"]))
+        assert spitzer_change > 1.0e-4
+        assert 0.0 < capped_change < spitzer_change
+
+        saturated = _command(
+            "conduction_configuration.athinput",
+            "saturated_spitzer",
+            "hydro/sat_hflux=true",
+        )
+        assert saturated.returncode == 0, saturated.stdout + saturated.stderr
+        match = re.search(r"time=.* cycle=(\d+)", saturated.stdout)
+        assert match is not None
+        assert int(match.group(1)) > 1
+    finally:
+        _cleanup()
+
+
+def test_conduction_rejects_invalid_configurations():
+    """Reject unsupported saturation and invalid Spitzer unit or ceiling choices."""
+    try:
+        no_units = _command(
+            "sts_thermal_front.athinput",
+            "spitzer_no_units",
+            "hydro/conductivity_model=spitzer",
+            "hydro/conductivity_integrator=explicit",
+            "time/sts_integrator=none",
+        )
+        assert no_units.returncode != 0
+        assert "requires a <units> block" in no_units.stdout + no_units.stderr
+
+        for model in ("constant", "power_law"):
+            unsupported = _command(
+                "conduction_configuration.athinput",
+                f"saturated_{model}",
+                f"hydro/conductivity_model={model}",
+                "hydro/sat_hflux=true",
+            )
+            assert unsupported.returncode != 0
+            assert "sat_hflux is implemented only" in unsupported.stdout + unsupported.stderr
+
+        negative_ceiling = _command(
+            "conduction_configuration.athinput",
+            "negative_conduction_ceiling",
+            "hydro/cond_ceiling=-1.0",
+        )
+        assert negative_ceiling.returncode != 0
+        assert "Invalid conductivity" in negative_ceiling.stdout + negative_ceiling.stderr
+
+        sts_saturation = _command(
+            "conduction_configuration.athinput",
+            "sts_saturated_spitzer",
+            "hydro/sat_hflux=true",
+            "hydro/conductivity_integrator=sts",
+            "time/sts_integrator=rkl2",
+        )
+        assert sts_saturation.returncode != 0
+        assert "sat_hflux is not compatible with STS" in (
+            sts_saturation.stdout + sts_saturation.stderr
+        )
     finally:
         _cleanup()
 

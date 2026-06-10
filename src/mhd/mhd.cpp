@@ -164,7 +164,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // Thermal conduction (only constructed if needed)
   if (pin->DoesParameterExist("mhd","conductivity") ||
-      pin->DoesParameterExist("mhd","tdep_conductivity")) {
+      pin->DoesParameterExist("mhd","tdep_conductivity") ||
+      pin->DoesParameterExist("mhd","conductivity_model")) {
     pcond = new Conduction("mhd", ppack, pin);
     const bool active = pcond->power_law_kappa ?
         (pcond->kappa > 0.0 || pcond->kappa_floor > 0.0) :

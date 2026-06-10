@@ -118,7 +118,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // Thermal conduction (if requested in input file)
   if (pin->DoesParameterExist("hydro","conductivity") ||
-      pin->DoesParameterExist("hydro","tdep_conductivity")) {
+      pin->DoesParameterExist("hydro","tdep_conductivity") ||
+      pin->DoesParameterExist("hydro","conductivity_model")) {
     pcond = new Conduction("hydro", ppack, pin);
     const bool active = pcond->power_law_kappa ?
         (pcond->kappa > 0.0 || pcond->kappa_floor > 0.0) :

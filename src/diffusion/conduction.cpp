@@ -64,11 +64,13 @@ Real VL4Limiter(const Real a, const Real b, const Real c, const Real d) {
 //! \brief Temperature-dependent conductivity given by Parker (1953) and Spitzer (1962)
 KOKKOS_INLINE_FUNCTION
 Real KappaTemp(Real temp, Real ceiling) {
+  Real kappa;
   if (temp < 6.5e4) {
-    return 2.5e3 * pow(temp, 0.5);
+    kappa = 2.5e3 * pow(temp, 0.5);
   } else {
-    return fmin(6e-7 * pow(temp, 2.5),ceiling);
+    kappa = 6e-7 * pow(temp, 2.5);
   }
+  return fmin(kappa, ceiling);
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -125,24 +127,36 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
               << "' must be 'constant', 'spitzer', or 'power_law'" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if (model == "spitzer" && pmy_pack->punit == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<" << block << ">/conductivity_model = 'spitzer' requires a "
+              << "<units> block" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (sat_hflux && model != "spitzer") {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<" << block << ">/sat_hflux is implemented only for "
+              << "conductivity_model = 'spitzer'" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   kappa_tref = pin->GetOrAddReal(block, "conductivity_tref", 1.0);
   kappa_exponent = pin->GetOrAddReal(block, "conductivity_exponent", 0.0);
   kappa_floor = pin->GetOrAddReal(block, "conductivity_floor", 0.0);
   power_law_kappa_ceiling = pin->GetOrAddReal(
       block, "conductivity_ceiling",
       static_cast<Real>(std::numeric_limits<float>::max()));
-  if (kappa < 0.0 || kappa_tref <= 0.0 || kappa_floor < 0.0 ||
+  if (kappa < 0.0 || kappa_ceiling < 0.0 || kappa_tref <= 0.0 || kappa_floor < 0.0 ||
       power_law_kappa_ceiling < kappa_floor) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "Invalid conductivity coefficient, reference temperature, or "
-              << "power-law saturation bounds in <" << block << ">" << std::endl;
+              << "conductivity bounds in <" << block << ">" << std::endl;
     std::exit(EXIT_FAILURE);
   }
   mode = ParseConductivityIntegrator(block, pin);
   if (sat_hflux && mode == parabolic::ParabolicIntegratorMode::sts) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "<" << block << ">/sat_hflux is not compatible with STS because "
-              << "the saturated flux does not provide a parabolic timestep bound"
+              << "the nonlinear saturated operator is not supported by RKL2"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -538,10 +552,6 @@ void Conduction::TempDependentHeatFlux(const DvceArray5D<Real> &w0, const EOS_Da
 //! \brief Compute new time step for thermal conduction.
 
 void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
-  if (sat_hflux == true) {
-    dtnew = static_cast<Real>(std::numeric_limits<float>::max());
-    return;
-  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;
@@ -582,7 +592,8 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
 
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 
-  // find smallest timestep for thermal conduction in each cell
+  // Saturation only reduces the Spitzer flux, so the unsaturated coefficient supplies
+  // a conservative bound and remains correct in the weak-gradient limit.
   Kokkos::parallel_reduce("cond_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
     // compute m,k,j,i indices of thread and call function
