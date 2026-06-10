@@ -58,6 +58,12 @@ runs a pre-cycle and post-cycle parabolic sweep, each of duration
 `dt_sweep = dt / 2`. This symmetric split keeps the STS contribution
 second-order compatible with the normal second-order evolution.
 
+For uniform-grid shearing-box runs, the pre-sweep applies
+shearing-periodic boundaries at time `t`, and the post-sweep applies
+them at `t + dt`. Boundary communication and shearing remap are repeated
+after every RKL2 stage. Orbital advection remains part of the ordinary
+hyperbolic step and is not repeated during STS stages.
+
 For each sweep, RKL2 chooses an odd stage count:
 
 $$
@@ -76,6 +82,10 @@ the current stage. The driver invokes:
 
 Cell-centered operators use the Hydro/MHD conserved-state STS arrays.
 Ohmic resistivity uses the constrained-transport magnetic-field STS arrays.
+In a shearing box, radial cell-centered diffusive fluxes are remapped and
+averaged with the opposite radial face before the divergence update.
+Resistive edge EMFs are similarly remapped and averaged before the
+constrained-transport update.
 MHD does not perform face-field STS communication for viscosity, conduction,
 or scalar diffusion unless resistivity is also assigned to STS.
 
@@ -124,9 +134,10 @@ splitting accuracy, rather than explicit stability, should limit large STS
 accelerations. A process cannot select `sts` when the global controller is
 `none`, and `rkl2` requires at least one process selecting `sts`.
 
-STS currently rejects Hydro/MHD configurations with ion-neutral evolution,
-shearing-box updates, or orbital advection. Those task graphs need explicit
-ordering and validation before they can use the STS controller.
+STS with shearing-periodic boundaries, including runs using orbital
+advection in the ordinary hyperbolic step, is currently supported on uniform
+grids. The combined STS/shearing-box path does not support SMR or AMR.
+Ion-neutral evolution remains unsupported with STS.
 
 ## Scalar Diffusivity
 
@@ -314,19 +325,24 @@ ohmic_resistivity_integrator = sts
 ```
 
 Resistive STS evolves the face-centered magnetic field through the
-constrained-transport update. Negative resistivity is rejected and zero
-resistivity does not impose a timestep bound.
+constrained-transport update. With shearing-periodic boundaries, the
+resistive EMFs are remapped and averaged before constrained transport.
+Negative resistivity is rejected and zero resistivity does not impose a
+timestep bound.
 
 ## Verification Suite
 
-Regression coverage is in
-`tst/test_suite/diffusion/test_sts_diffusion_cpu.py` and
-`tst/test_suite/diffusion/test_hyperviscosity_cpu.py`. Run it from `tst/`:
+Run the focused STS and shearing-box regression coverage from `tst/`:
 
 ```bash
 python run_test_suite.py --cpu --test test_suite/diffusion/test_sts_diffusion_cpu.py
 python run_test_suite.py --cpu --test test_suite/diffusion/test_hyperviscosity_cpu.py
+python run_test_suite.py --mpicpu --test test_suite/sbox/test_sbox_sts_mpicpu.py
 ```
+
+Together these commands cover the STS diffusion baseline and the Hydro/MHD
+shearing-box regression surfaces, including decomposition independence,
+resistive `div B`, explicit comparisons, and restart continuity.
 
 The suite performs the following checks:
 
@@ -342,6 +358,8 @@ The suite performs the following checks:
 | Hyperviscous MHD shear | `sts_mhd_hyperviscous_shear.athinput` | The cell-centered MHD path follows analytic damping without changing the CT update |
 | Viscosity plus hyperviscosity | `sts_viscosity_plus_hyperviscosity.athinput` | Measured decay matches `nu*k^2 + nu4*k^4` |
 | Hyperviscous energy transfer | `sts_hyperviscous_shear.athinput` | Periodic ideal-gas total energy is conserved while kinetic energy becomes internal energy |
+| Hydro shearing-box viscosity | `hydro_sts_sbox.athinput` | STS agrees with capped explicit integration and serial/MPI decompositions agree |
+| MHD shearing-box viscosity and resistivity | `mhd_sts_sbox.athinput` | Mixed cell/field STS agrees with capped explicit integration, preserves `div B`, matches serial/MPI results, and restarts consistently |
 | Unsupported inputs | `unsupported_hyperviscosity_smr.athinput` and runtime overrides | Negative coefficients, refinement, and relativistic modes fail clearly |
 
 MPI coverage in `test_hyperviscosity_mpicpu.py` compares a decomposed uniform

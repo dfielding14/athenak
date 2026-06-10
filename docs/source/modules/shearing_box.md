@@ -73,6 +73,22 @@ $$u(x=L_x, y) = u(x=0, y+\Delta y)$$
 3. Exchange via MPI
 4. Unpack with interpolation
 
+## Super Time Stepping
+
+RKL2 super time stepping is compatible with shearing-periodic boundaries on
+uniform grids. The pre-sweep uses the boundary displacement at time `t`,
+while the post-sweep uses the displacement at `t + dt`.
+After every STS stage, Hydro and MHD state is communicated and remapped
+across the radial shearing boundaries.
+
+Orbital advection remains in the ordinary hyperbolic step; it is not applied
+inside each STS stage. Cell-centered diffusive fluxes on the two radial
+faces are sheared and averaged before the STS divergence update. For MHD,
+edge EMFs on the two radial faces are likewise sheared and averaged before
+constrained transport updates the face-centered magnetic field, both in the
+ordinary update and for Ohmic-resistive STS stages. The combined STS and
+shearing-box path does not currently support SMR or AMR.
+
 ## Source Terms
 
 ### Coriolis Force
@@ -168,10 +184,16 @@ $$\int \rho_{\text{new}} \, dV = \int \rho_{\text{old}} \, dV$$
 
 ## Testing
 
-Standard tests:
-- Linear shear wave
-- MRI growth rate
-- Epicyclic motion
+Run the focused STS and shearing-box regressions from `tst/`:
+
+```bash
+python run_test_suite.py --mpicpu --test test_suite/sbox/test_sbox_sts_mpicpu.py
+```
+
+This compares STS against capped explicit integration, compares serial and
+MPI decompositions with remote shearing partners, verifies passive-scalar
+conservation and net magnetic fluxes, checks resistive `div B`, and exercises
+a two-rank restart.
 
 ## See Also
 - [MHD Module](mhd.md)

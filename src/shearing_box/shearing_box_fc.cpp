@@ -172,8 +172,8 @@ ShearingBoxFC::ShearingBoxFC(MeshBlockPack *pp, ParameterInput *pin) :
   int ncells3 = indcs.nx3 + 2*indcs.ng;
   int ncells2 = indcs.nx2 + 2*indcs.ng;
   int ncells1 = indcs.ng;
+  int nmb = std::max(1,std::max(nmb_x1bndry(0),nmb_x1bndry(1)));
   for (int n=0; n<2; ++n) {
-    int nmb = std::max(1,nmb_x1bndry(n));
     Kokkos::realloc(sendbuf[n].vars,nmb,ncells2,3,ncells3,ncells1);
     Kokkos::realloc(recvbuf[n].vars,nmb,ncells2,3,ncells3,ncells1);
     Kokkos::realloc(sendbuf[n].flux,nmb,ncells2+1,2,ncells3+1,1);
@@ -182,13 +182,11 @@ ShearingBoxFC::ShearingBoxFC(MeshBlockPack *pp, ParameterInput *pin) :
     int max_emf_msg_size = (ncells2 + 1)*(indcs.nx3 + 1);
     Kokkos::realloc(sendbuf[n].flux_mpi,sbox_emf_nreq*nmb,max_emf_msg_size);
     Kokkos::realloc(recvbuf[n].flux_mpi,sbox_emf_nreq*nmb,max_emf_msg_size);
-    if (nmb_x1bndry(n) > 0) {
-      sendbuf[n].flux_req = new MPI_Request[sbox_emf_nreq*nmb_x1bndry(n)];
-      recvbuf[n].flux_req = new MPI_Request[sbox_emf_nreq*nmb_x1bndry(n)];
-      for (int m=0; m<sbox_emf_nreq*nmb_x1bndry(n); ++m) {
-        sendbuf[n].flux_req[m] = MPI_REQUEST_NULL;
-        recvbuf[n].flux_req[m] = MPI_REQUEST_NULL;
-      }
+    sendbuf[n].flux_req = new MPI_Request[sbox_emf_nreq*nmb];
+    recvbuf[n].flux_req = new MPI_Request[sbox_emf_nreq*nmb];
+    for (int m=0; m<sbox_emf_nreq*nmb; ++m) {
+      sendbuf[n].flux_req[m] = MPI_REQUEST_NULL;
+      recvbuf[n].flux_req[m] = MPI_REQUEST_NULL;
     }
 #endif
   }
@@ -200,10 +198,8 @@ ShearingBoxFC::ShearingBoxFC(MeshBlockPack *pp, ParameterInput *pin) :
 ShearingBoxFC::~ShearingBoxFC() {
 #if MPI_PARALLEL_ENABLED
   for (int n=0; n<2; ++n) {
-    if (nmb_x1bndry(n) > 0) {
-      delete [] sendbuf[n].flux_req;
-      delete [] recvbuf[n].flux_req;
-    }
+    delete [] sendbuf[n].flux_req;
+    delete [] recvbuf[n].flux_req;
   }
 #endif
 }
@@ -359,7 +355,8 @@ TaskStatus ShearingBoxFC::PackAndSendFC(DvceFaceFld4D<Real> &b,
             using Kokkos::ALL;
             auto send_ptr = subview(sendbuf[n].vars,m,jsrc[l],ALL,ALL,ALL);
             // create tag using GID of *receiving* MeshBlock
-            int tag = CreateBvals_MPI_Tag(tgid, ((n<<2) | l));
+            int lid = tgid - pmy_pack->pmesh->gids_eachrank[trank];
+            int tag = CreateBvals_MPI_Tag(lid, ((n<<2) | l));
             int data_size = send_ptr.size();
             int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, trank, tag,
                                  comm_sbox, &(sendbuf[n].vars_req[3*m + l]));
@@ -398,7 +395,8 @@ TaskStatus ShearingBoxFC::PackAndSendFC(DvceFaceFld4D<Real> &b,
             using Kokkos::ALL;
             auto send_ptr = subview(sendbuf[n].vars,m,jsrc[l],ALL,ALL,ALL);
             // create tag using GID of *receiving* MeshBlock
-            int tag = CreateBvals_MPI_Tag(tgid, ((n<<2) | l));
+            int lid = tgid - pmy_pack->pmesh->gids_eachrank[trank];
+            int tag = CreateBvals_MPI_Tag(lid, ((n<<2) | l));
             int data_size = send_ptr.size();
             int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, trank, tag,
                                  comm_sbox, &(sendbuf[n].vars_req[3*m + l]));
@@ -441,7 +439,8 @@ TaskStatus ShearingBoxFC::PackAndSendFC(DvceFaceFld4D<Real> &b,
             using Kokkos::ALL;
             auto send_ptr = subview(sendbuf[n].vars,m,jsrc[l],ALL,ALL,ALL);
             // create tag using GID of *receiving* MeshBlock
-            int tag = CreateBvals_MPI_Tag(tgid, ((n<<2) | l));
+            int lid = tgid - pmy_pack->pmesh->gids_eachrank[trank];
+            int tag = CreateBvals_MPI_Tag(lid, ((n<<2) | l));
             int data_size = send_ptr.size();
             int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, trank, tag,
                                  comm_sbox, &(sendbuf[n].vars_req[3*m + l]));
@@ -601,7 +600,7 @@ TaskStatus ShearingBoxFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void ShearingBoxFC::InitEMFRecv()
+//! \fn TaskStatus ShearingBoxFC::InitEMFRecv()
 //! \brief With MPI, post receives for shearing-box EMF correction before constrained
 //! transport. Receives use the same shearing offsets as FC magnetic boundary data, but
 //! E2 and E3 are posted separately because their x2 edge extents differ.
@@ -632,10 +631,12 @@ TaskStatus ShearingBoxFC::InitEMFRecv() {
         for (int l=0; l<nbuff; ++l) {
           int jshift = RecvShearJShift(n,ji,l,scase);
           int sgid, srank;
-          FindTargetMB(gid,jshift,sgid,srank);
+          FindShearPartnerMB(gid,jshift,sgid,srank);
           if (srank != global_variable::my_rank) {
             int req = EMFReqIndex(m,l,c);
-            int tag = CreateBvals_MPI_Tag(gid, EMFTagBuffer(n,l,c));
+            int lid = gid -
+                      pmy_pack->pmesh->gids_eachrank[global_variable::my_rank];
+            int tag = CreateBvals_MPI_Tag(lid, EMFTagBuffer(n,l,c));
             int data_size = EMFMessageSize(jdst[l], krng);
             auto recv_ptr = subview(recvbuf[n].flux_mpi, req,
                                     std::make_pair(0,data_size));
@@ -657,7 +658,7 @@ TaskStatus ShearingBoxFC::InitEMFRecv() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void ShearingBoxFC::PackAndSendEMF()
+//! \fn TaskStatus ShearingBoxFC::PackAndSendEMF()
 //! \brief Pack, shift, and communicate E2/E3 on shearing x1 faces for EMF correction.
 
 TaskStatus ShearingBoxFC::PackAndSendEMF(DvceEdgeFld4D<Real> &efld) {
@@ -672,16 +673,17 @@ TaskStatus ShearingBoxFC::PackAndSendEMF(DvceEdgeFld4D<Real> &efld) {
   const auto &x1bndry_mbgid_ = x1bndry_mbgid;
   auto &sbuf = sendbuf;
   for (int n=0; n<2; ++n) {
-    int nmb1 = nmb_x1bndry(n) - 1;
-    int i = (n==0) ? is : (ie+1);
+    const int sn = 1-n;
+    int nmb1 = nmb_x1bndry(sn) - 1;
+    int i = (sn==0) ? is : (ie+1);
     par_for("shemf_pack_e2", DevExeSpace(), 0, nmb1, ks, ke+1, js, je,
     KOKKOS_LAMBDA(const int m, const int k, const int j) {
-      int mm = x1bndry_mbgid_.d_view(n,m) - gids_;
+      int mm = x1bndry_mbgid_.d_view(sn,m) - gids_;
       sbuf[n].flux(m,j,0,k,0) = efld.x2e(mm,k,j,i);
     });
     par_for("shemf_pack_e3", DevExeSpace(), 0, nmb1, ks, ke, js, je+1,
     KOKKOS_LAMBDA(const int m, const int k, const int j) {
-      int mm = x1bndry_mbgid_.d_view(n,m) - gids_;
+      int mm = x1bndry_mbgid_.d_view(sn,m) - gids_;
       sbuf[n].flux(m,j,1,k,0) = efld.x3e(mm,k,j,i);
     });
   }
@@ -692,8 +694,9 @@ TaskStatus ShearingBoxFC::PackAndSendEMF(DvceEdgeFld4D<Real> &efld) {
   bool no_errors=true;
 #endif
   for (int n=0; n<2; ++n) {
-    for (int m=0; m<nmb_x1bndry(n); ++m) {
-      int gid = x1bndry_mbgid.h_view(n,m);
+    const int sn = 1-n;
+    for (int m=0; m<nmb_x1bndry(sn); ++m) {
+      int gid = x1bndry_mbgid.h_view(sn,m);
       int mm = gid - pmy_pack->gids;
       int joffset  = static_cast<int>(yshear/(mbsize.h_view(mm).dx2));
       int ji = joffset/nx2;
@@ -710,7 +713,7 @@ TaskStatus ShearingBoxFC::PackAndSendEMF(DvceEdgeFld4D<Real> &efld) {
         for (int l=0; l<nbuff; ++l) {
           int jshift = SendShearJShift(n,ji,l,scase);
           int tgid, trank;
-          FindTargetMB(gid,jshift,tgid,trank);
+          FindShearPartnerMB(gid,jshift,tgid,trank);
           if (trank == global_variable::my_rank) {
             int tm = TargetIndex(n,tgid);
             using Kokkos::ALL;
@@ -730,8 +733,9 @@ TaskStatus ShearingBoxFC::PackAndSendEMF(DvceEdgeFld4D<Real> &efld) {
 #if MPI_PARALLEL_ENABLED
   Kokkos::fence();
   for (int n=0; n<2; ++n) {
-    for (int m=0; m<nmb_x1bndry(n); ++m) {
-      int gid = x1bndry_mbgid.h_view(n,m);
+    const int sn = 1-n;
+    for (int m=0; m<nmb_x1bndry(sn); ++m) {
+      int gid = x1bndry_mbgid.h_view(sn,m);
       int mm = gid - pmy_pack->gids;
       int joffset  = static_cast<int>(yshear/(mbsize.h_view(mm).dx2));
       int ji = joffset/nx2;
@@ -747,10 +751,11 @@ TaskStatus ShearingBoxFC::PackAndSendEMF(DvceEdgeFld4D<Real> &efld) {
         for (int l=0; l<nbuff; ++l) {
           int jshift = SendShearJShift(n,ji,l,scase);
           int tgid, trank;
-          FindTargetMB(gid,jshift,tgid,trank);
+          FindShearPartnerMB(gid,jshift,tgid,trank);
           if (trank != global_variable::my_rank) {
             int req = EMFReqIndex(m,l,c);
-            int tag = CreateBvals_MPI_Tag(tgid, EMFTagBuffer(n,l,c));
+            int lid = tgid - pmy_pack->pmesh->gids_eachrank[trank];
+            int tag = CreateBvals_MPI_Tag(lid, EMFTagBuffer(n,l,c));
             int data_size = EMFMessageSize(jsrc[l], krng);
             auto send_ptr = subview(sendbuf[n].flux_mpi, req,
                                     std::make_pair(0,data_size));
@@ -772,7 +777,7 @@ TaskStatus ShearingBoxFC::PackAndSendEMF(DvceEdgeFld4D<Real> &efld) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void ShearingBoxFC::RecvAndCorrectEMF()
+//! \fn TaskStatus ShearingBoxFC::RecvAndCorrectEMF()
 //! \brief Wait for shearing-box EMF buffers, remap them, and average into E2/E3.
 
 TaskStatus ShearingBoxFC::RecvAndCorrectEMF(DvceEdgeFld4D<Real> &efld,
@@ -799,7 +804,7 @@ TaskStatus ShearingBoxFC::RecvAndCorrectEMF(DvceEdgeFld4D<Real> &efld,
         for (int l=0; l<nbuff; ++l) {
           int jshift = RecvShearJShift(n,ji,l,scase);
           int sgid, srank;
-          FindTargetMB(gid,jshift,sgid,srank);
+          FindShearPartnerMB(gid,jshift,sgid,srank);
           if (srank != global_variable::my_rank) {
             int test;
             int ierr = MPI_Test(&(recvbuf[n].flux_req[EMFReqIndex(m,l,c)]),
@@ -835,7 +840,7 @@ TaskStatus ShearingBoxFC::RecvAndCorrectEMF(DvceEdgeFld4D<Real> &efld,
         for (int l=0; l<nbuff; ++l) {
           int jshift = RecvShearJShift(n,ji,l,scase);
           int sgid, srank;
-          FindTargetMB(gid,jshift,sgid,srank);
+          FindShearPartnerMB(gid,jshift,sgid,srank);
           if (srank != global_variable::my_rank) {
             UnpackEMFMPIBuffer(recvbuf[n].flux_mpi, recvbuf[n].flux,
                                EMFReqIndex(m,l,c), m, c, jdst[l], krng);
@@ -945,7 +950,7 @@ TaskStatus ShearingBoxFC::RecvAndCorrectEMF(DvceEdgeFld4D<Real> &efld,
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void ShearingBoxFC::ClearEMFRecv()
+//! \fn TaskStatus ShearingBoxFC::ClearEMFRecv()
 //! \brief Wait for all MPI receives associated with shearing-box EMF correction.
 
 TaskStatus ShearingBoxFC::ClearEMFRecv() {
@@ -967,7 +972,7 @@ TaskStatus ShearingBoxFC::ClearEMFRecv() {
         for (int l=0; l<nbuff; ++l) {
           int jshift = RecvShearJShift(n,ji,l,scase);
           int sgid, srank;
-          FindTargetMB(gid,jshift,sgid,srank);
+          FindShearPartnerMB(gid,jshift,sgid,srank);
           if (srank != global_variable::my_rank) {
             int ierr = MPI_Wait(&(recvbuf[n].flux_req[EMFReqIndex(m,l,c)]),
                                 MPI_STATUS_IGNORE);
@@ -987,7 +992,7 @@ TaskStatus ShearingBoxFC::ClearEMFRecv() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void ShearingBoxFC::ClearEMFSend()
+//! \fn TaskStatus ShearingBoxFC::ClearEMFSend()
 //! \brief Wait for all MPI sends associated with shearing-box EMF correction.
 
 TaskStatus ShearingBoxFC::ClearEMFSend() {
@@ -997,8 +1002,9 @@ TaskStatus ShearingBoxFC::ClearEMFSend() {
   const int &ng = indcs.ng;
   const int &nx2 = indcs.nx2;
   for (int n=0; n<2; ++n) {
-    for (int m=0; m<nmb_x1bndry(n); ++m) {
-      int gid = x1bndry_mbgid.h_view(n,m);
+    const int sn = 1-n;
+    for (int m=0; m<nmb_x1bndry(sn); ++m) {
+      int gid = x1bndry_mbgid.h_view(sn,m);
       int mm = gid - pmy_pack->gids;
       int joffset  = static_cast<int>(yshear/(pmy_pack->pmb->mb_size.h_view(mm).dx2));
       int ji = joffset/nx2;
@@ -1009,7 +1015,7 @@ TaskStatus ShearingBoxFC::ClearEMFSend() {
         for (int l=0; l<nbuff; ++l) {
           int jshift = SendShearJShift(n,ji,l,scase);
           int tgid, trank;
-          FindTargetMB(gid,jshift,tgid,trank);
+          FindShearPartnerMB(gid,jshift,tgid,trank);
           if (trank != global_variable::my_rank) {
             int ierr = MPI_Wait(&(sendbuf[n].flux_req[EMFReqIndex(m,l,c)]),
                                 MPI_STATUS_IGNORE);

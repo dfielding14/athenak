@@ -78,6 +78,8 @@ class ShearingBox {
   TaskStatus ClearSend();
   // function to find target MB offset by shear.  Returns GID and rank
   void FindTargetMB(const int igid, const int jshift, int &gid, int &rank);
+  // function to find target MB on the opposite x1 boundary, offset by shear
+  void FindShearPartnerMB(const int igid, const int jshift, int &gid, int &rank);
   // function to find index in x1bndry array of MB with input GID
   int TargetIndex(const int n, const int tgid) {
     for (int m=0; m<nmb_x1bndry(n); ++m) {
@@ -100,9 +102,17 @@ class ShearingBox {
 class ShearingBoxCC : public ShearingBox {
  public:
   ShearingBoxCC(MeshBlockPack *ppack, ParameterInput *pin, int nvar);
+  ~ShearingBoxCC();
   // functions to communicate CC data with shearing box BCs
   TaskStatus PackAndSendCC(DvceArray5D<Real> &a, ReconstructionMethod rcon);
   TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a);
+  // functions to reconcile radial fluxes before an STS cell-centered update
+  TaskStatus InitFluxRecv();
+  TaskStatus PackAndSendFluxCC(DvceFaceFld5D<Real> &flx);
+  TaskStatus RecvAndCorrectFluxCC(DvceFaceFld5D<Real> &flx,
+                                  ReconstructionMethod rcon);
+  TaskStatus ClearFluxRecv();
+  TaskStatus ClearFluxSend();
   // shearing box source terms for Hydro CC variables
   void SourceTermsCC(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
                      const Real bdt, DvceArray5D<Real> &u0);

@@ -188,6 +188,8 @@ class MHD {
   TaskStatus Fluxes(Driver *d, int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
+  TaskStatus SendFlux_Shr(Driver *d, int stage);
+  TaskStatus RecvFlux_Shr(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
   TaskStatus MHDSrcTerms(Driver *d, int stage);
   TaskStatus SendU_OA(Driver *d, int stage);
@@ -225,6 +227,8 @@ class MHD {
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
+  TaskStatus ClearSendParabolic(Driver *d, int stage);
+  TaskStatus ClearRecvParabolic(Driver *d, int stage);
 
   // CalculateFluxes function templated over Riemann Solvers
   template <MHD_RSolver T>
