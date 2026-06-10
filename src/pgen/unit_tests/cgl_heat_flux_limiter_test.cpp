@@ -40,6 +40,16 @@ void RequireClose(const std::string &label, const Real got, const Real expected)
   }
 }
 
+void RequireRelativeClose(const std::string &label, const Real got,
+                          const Real expected) {
+  if (!std::isfinite(got) || got == 0.0 || expected == 0.0 ||
+      std::abs((got - expected)/expected) > kTolerance) {
+    std::cout << "CGL heat-flux limiter test failed for " << label
+              << ": got=" << got << ", expected=" << expected << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
 void CheckModerateValues() {
   RequireClose("positive moderate value", cgl::LimitedHeatFlux(3.0, 2.0), 1.2);
   RequireClose("negative moderate value", cgl::LimitedHeatFlux(-3.0, 2.0), -1.2);
@@ -62,10 +72,23 @@ void CheckFiniteOverflowCases() {
   Require("unequal near-maximum scales positive", unequal_scales > 0.0);
   Require("unequal near-maximum scales capped", unequal_scales < half_maximum);
 
-  const Real tiny_cap = std::numeric_limits<Real>::min();
+  RequireRelativeClose("maximum equal scales",
+                       cgl::LimitedHeatFlux(maximum, maximum), half_maximum);
+  RequireRelativeClose("negative maximum equal scales",
+                       cgl::LimitedHeatFlux(-maximum, maximum), -half_maximum);
+
+  const Real scale = maximum/static_cast<Real>(16.0);
+  RequireRelativeClose("overflowing old numerator",
+                       cgl::LimitedHeatFlux(3.0*scale, 2.0*scale), 1.2*scale);
+  RequireRelativeClose("negative overflowing old numerator",
+                       cgl::LimitedHeatFlux(-3.0*scale, 2.0*scale), -1.2*scale);
+
+  const Real tiny_cap = std::numeric_limits<Real>::denorm_min();
   const Real capped = cgl::LimitedHeatFlux(maximum, tiny_cap);
   Require("maximum input with tiny cap finite", std::isfinite(capped));
-  RequireClose("maximum input with tiny cap", capped, tiny_cap);
+  Require("maximum input with tiny cap", capped == tiny_cap);
+  Require("tiny input with maximum cap",
+          cgl::LimitedHeatFlux(tiny_cap, maximum) == tiny_cap);
 }
 
 void CheckInfiniteAsymptotes() {
