@@ -1586,6 +1586,61 @@ def test_recorded_submission_failure_allows_fresh_publication_retry(
     assert records[0]["observation"]["result"] == "submission_failed"
 
 
+def test_submission_failure_accepts_only_listed_recovery_revision(
+    downstream, tmp_path
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    manifest_path = fixture["initial"] / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["job_id"] = None
+    write_json(manifest_path, manifest)
+    intent = downstream.submission_intent_value(
+        fixture["initial"], manifest, ["101", "102", "103"]
+    )
+    write_json(
+        fixture["initial"] / downstream.SUBMISSION_INTENT_NAME,
+        intent,
+    )
+    historical_sha, historical_size = next(
+        iter(downstream.HISTORICAL_RECOVERY_ORCHESTRATOR_SIZES.items())
+    )
+    failure = {
+        "schema_version": 1,
+        "record_type": downstream.SUBMISSION_FAILURE_TYPE,
+        "recorded_utc": "2026-06-10T01:05:35Z",
+        "job_dir": str(fixture["initial"].resolve()),
+        "submission_intent": binding(
+            fixture["initial"] / downstream.SUBMISSION_INTENT_NAME
+        ),
+        "historical_orchestrator_source": manifest["tools"]["orchestrator"],
+        "recovery_orchestrator": {
+            "path": str(TOOL.resolve()),
+            "size_bytes": historical_size,
+            "sha256": historical_sha,
+        },
+        "sbatch_command": intent["sbatch_command"],
+        "return_code": 1,
+        "error": "allocation failure: Job dependency problem",
+        "scheduler_audit": None,
+    }
+    failure_path = fixture["initial"] / downstream.SUBMISSION_FAILURE_NAME
+    write_json(failure_path, failure)
+
+    assert downstream.validate_submission_failure(
+        fixture["initial"], manifest, intent
+    ) == failure
+
+    failure["recovery_orchestrator"]["sha256"] = "f" * 64
+    write_json(failure_path, failure)
+    with pytest.raises(
+        downstream.CorrectedDownstreamError,
+        match="submission failure evidence differs",
+    ):
+        downstream.validate_submission_failure(
+            fixture["initial"], manifest, intent
+        )
+
+
 def test_schema_v1_initial_publication_falls_back_to_immutable_submission(
     downstream, tmp_path
 ) -> None:

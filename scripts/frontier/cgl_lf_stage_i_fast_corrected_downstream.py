@@ -73,6 +73,11 @@ HISTORICAL_WORKFLOW_CT_TOOL_SIZES = {
     # were reconciled with the full-precision native restart header.
     "af5987e0a080a98c02d80cfb03fcec072c7711467f4b298cbbdb8e1cc4caf6ef": 102546,
 }
+HISTORICAL_RECOVERY_ORCHESTRATOR_SIZES = {
+    # Recovery revision that recorded the immutable pre-allocation
+    # publication submission failure before CT retry hardening.
+    "0c2b2dc8cbc9e959889d811fd42435c425ff17d82176533431f8984670b12778": 122526,
+}
 ACTIVE_CASES = (
     "R02",
     "R03",
@@ -1585,7 +1590,9 @@ def validate_submission_failure(
             job_dir / SUBMISSION_INTENT_NAME
         )
         or failure.get("sbatch_command") != intent.get("sbatch_command")
-        or failure.get("recovery_orchestrator") != artifact_binding(SCRIPT_PATH)
+        or not compatible_recovery_orchestrator(
+            failure.get("recovery_orchestrator")
+        )
         or not isinstance(failure.get("return_code"), int)
         or isinstance(failure.get("return_code"), bool)
         or int(failure["return_code"]) == 0
@@ -1619,6 +1626,27 @@ def validate_submission_failure(
     if scheduler_audit is not None:
         verify_binding(scheduler_audit, "submission failure scheduler audit")
     return failure
+
+
+def compatible_recovery_orchestrator(value: object) -> bool:
+    """Accept the current recovery tool or one explicitly compatible revision."""
+
+    declared = require_dict(value, "submission failure recovery orchestrator")
+    if (
+        Path(
+            require_text(
+                declared.get("path"), "submission failure recovery orchestrator path"
+            )
+        ).resolve()
+        != SCRIPT_PATH
+    ):
+        return False
+    if declared == artifact_binding(SCRIPT_PATH):
+        return True
+    return (
+        HISTORICAL_RECOVERY_ORCHESTRATOR_SIZES.get(declared.get("sha256"))
+        == declared.get("size_bytes")
+    )
 
 
 def record_submission_failure(
