@@ -67,7 +67,9 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.efldsrc   = tl["stagen"]->AddTask(&MHD::EFieldSrc, this, id.efld);
   id.sende     = tl["stagen"]->AddTask(&MHD::SendE, this, id.efldsrc);
   id.recve     = tl["stagen"]->AddTask(&MHD::RecvE, this, id.sende);
-  id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve);
+  id.sende_shr = tl["stagen"]->AddTask(&MHD::SendE_Shr, this, id.recve);
+  id.recve_shr = tl["stagen"]->AddTask(&MHD::RecvE_Shr, this, id.sende_shr);
+  id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve_shr);
   id.sendb_oa  = tl["stagen"]->AddTask(&MHD::SendB_OA, this, id.ct);
   id.recvb_oa  = tl["stagen"]->AddTask(&MHD::RecvB_OA, this, id.sendb_oa);
   id.restb     = tl["stagen"]->AddTask(&MHD::RestrictB, this, id.recvb_oa);
@@ -104,13 +106,19 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
     TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
     TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
-    TaskID update_dependency = precvf;
+    TaskID psendf_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux_Shr, this,
+                                                       precvf);
+    TaskID update_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux_Shr, this,
+                                                              psendf_shr);
     if (has_any_parabolic_field_update) {
       TaskID pcleare = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSEField,
-                                                       this, precvf);
+                                                       this, update_dependency);
       TaskID pefld = tl["parabolic_stagen"]->AddTask(&MHD::STSEField, this, pcleare);
       TaskID psende = tl["parabolic_stagen"]->AddTask(&MHD::SendE, this, pefld);
-      update_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvE, this, psende);
+      TaskID precve = tl["parabolic_stagen"]->AddTask(&MHD::RecvE, this, psende);
+      TaskID psende_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendE_Shr, this, precve);
+      update_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvE_Shr, this,
+                                                         psende_shr);
     }
     TaskID pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this,
                                                    update_dependency);
@@ -122,11 +130,17 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
                                                     state_dependency);
     TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
     TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
-    TaskID boundary_dependency = precvu;
+    TaskID psendu_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendU_Shr, this, precvu);
+    TaskID boundary_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvU_Shr, this,
+                                                                psendu_shr);
     if (has_any_parabolic_field_update) {
-      TaskID prestb = tl["parabolic_stagen"]->AddTask(&MHD::RestrictB, this, precvu);
+      TaskID prestb = tl["parabolic_stagen"]->AddTask(&MHD::RestrictB, this,
+                                                      boundary_dependency);
       TaskID psendb = tl["parabolic_stagen"]->AddTask(&MHD::SendB, this, prestb);
-      boundary_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvB, this, psendb);
+      TaskID precvb = tl["parabolic_stagen"]->AddTask(&MHD::RecvB, this, psendb);
+      TaskID psendb_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendB_Shr, this, precvb);
+      boundary_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvB_Shr, this,
+                                                            psendb_shr);
     }
     TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this,
                                                   boundary_dependency);
@@ -146,8 +160,10 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     }
     (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pend);
 
-    TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSend, this, none);
-    (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecv, this, pcsend);
+    TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSendParabolic,
+                                                         this, none);
+    (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecvParabolic, this,
+                                                pcsend);
   }
 
   return;
@@ -223,6 +239,10 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
       if (tstat != TaskStatus::complete) return tstat;
       tstat = psbox_b->InitRecv(time);
       if (tstat != TaskStatus::complete) return tstat;
+      if (stage >= 0) {
+        tstat = psbox_b->InitEMFRecv();
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
   }
 
@@ -234,7 +254,6 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 //! \brief Post receive operations required for one STS parabolic stage.
 
 TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
-  (void) pdrive;
   (void) stage;
   TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
   if (tstat != TaskStatus::complete) return tstat;
@@ -246,6 +265,101 @@ TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
     tstat = pbval_b->InitRecv(3);
     if (tstat != TaskStatus::complete) return tstat;
     tstat = pbval_b->InitFluxRecv(3);
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    Real time = pmy_pack->pmesh->time;
+    if (pdrive->sts.sweep == Driver::STSSweep::post) {
+      time += pmy_pack->pmesh->dt;
+    }
+    tstat = psbox_u->InitRecv(time);
+    if (tstat != TaskStatus::complete) return tstat;
+    if (has_any_parabolic_cell_update) {
+      tstat = psbox_u->InitFluxRecv();
+      if (tstat != TaskStatus::complete) return tstat;
+    }
+    if (has_any_parabolic_field_update) {
+      tstat = psbox_b->InitRecv(time);
+      if (tstat != TaskStatus::complete) return tstat;
+      tstat = psbox_b->InitEMFRecv();
+    }
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ClearSendParabolic
+//! \brief Complete only the sends posted by one STS parabolic stage.
+
+TaskStatus MHD::ClearSendParabolic(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = pbval_u->ClearSend();
+  if (tstat != TaskStatus::complete) return tstat;
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearSend();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxSend();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearFluxSend();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->ClearSend();
+    if (tstat != TaskStatus::complete) return tstat;
+    if (has_any_parabolic_cell_update) {
+      tstat = psbox_u->ClearFluxSend();
+      if (tstat != TaskStatus::complete) return tstat;
+    }
+    if (has_any_parabolic_field_update) {
+      tstat = psbox_b->ClearSend();
+      if (tstat != TaskStatus::complete) return tstat;
+      tstat = psbox_b->ClearEMFSend();
+    }
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ClearRecvParabolic
+//! \brief Complete only the receives posted by one STS parabolic stage.
+
+TaskStatus MHD::ClearRecvParabolic(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = pbval_u->ClearRecv();
+  if (tstat != TaskStatus::complete) return tstat;
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearFluxRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->ClearRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+    if (has_any_parabolic_cell_update) {
+      tstat = psbox_u->ClearFluxRecv();
+      if (tstat != TaskStatus::complete) return tstat;
+    }
+    if (has_any_parabolic_field_update) {
+      tstat = psbox_b->ClearRecv();
+      if (tstat != TaskStatus::complete) return tstat;
+      tstat = psbox_b->ClearEMFRecv();
+    }
   }
   return tstat;
 }
@@ -423,6 +537,36 @@ TaskStatus MHD::CGLPressureWork(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::SendFlux_Shr
+//! \brief Send radial parabolic fluxes to the opposite shearing boundary.
+
+TaskStatus MHD::SendFlux_Shr(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = TaskStatus::complete;
+  if (has_any_parabolic_cell_update && psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->PackAndSendFluxCC(uflx);
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::RecvFlux_Shr
+//! \brief Remap and reconcile radial parabolic fluxes across the shearing boundary.
+
+TaskStatus MHD::RecvFlux_Shr(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = TaskStatus::complete;
+  if (has_any_parabolic_cell_update && psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->RecvAndCorrectFluxCC(uflx,recon_method);
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskList MHD::MHDSrcTerms
 //! \brief Wrapper task list function to apply source terms to conservative vars
 //! Note source terms must be computed using only primitives (w0), as the conserved
@@ -581,6 +725,40 @@ TaskStatus MHD::SendE(Driver *pdrive, int stage) {
 TaskStatus MHD::RecvE(Driver *pdrive, int stage) {
   TaskStatus tstat = TaskStatus::complete;
   tstat = pbval_b->RecvAndUnpackFluxFC(efld);
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::SendE_Shr
+//! \brief Wrapper task list function to pack/send shearing-box EMF correction buffers
+
+TaskStatus MHD::SendE_Shr(Driver *pdrive, int stage) {
+  TaskStatus tstat = TaskStatus::complete;
+  const bool apply_shearing_correction =
+      (pdrive->sts.sweep == Driver::STSSweep::none) || has_sts_resistivity;
+  if (apply_shearing_correction && psbox_b != nullptr) {
+    // only execute when (3D OR 2d_r_phi)
+    if (pmy_pack->pmesh->three_d || psbox_b->shearing_box_r_phi) {
+      tstat = psbox_b->PackAndSendEMF(efld);
+    }
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::RecvE_Shr
+//! \brief Wrapper task list function to receive and apply shearing-box EMF correction
+
+TaskStatus MHD::RecvE_Shr(Driver *pdrive, int stage) {
+  TaskStatus tstat = TaskStatus::complete;
+  const bool apply_shearing_correction =
+      (pdrive->sts.sweep == Driver::STSSweep::none) || has_sts_resistivity;
+  if (apply_shearing_correction && psbox_b != nullptr) {
+    // only execute when (3D OR 2d_r_phi)
+    if (pmy_pack->pmesh->three_d || psbox_b->shearing_box_r_phi) {
+      tstat = psbox_b->RecvAndCorrectEMF(efld, recon_method);
+    }
+  }
   return tstat;
 }
 
@@ -749,8 +927,8 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
 //! \fn TaskStatus MHD::ClearSend
 //! \brief Wrapper task list function that checks all MPI sends have completed. Used in
 //! TaskList and in Driver::InitBoundaryValuesAndPrimitives()
-//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, U_OA, B_OA, U_Shr, BShr
-//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B,             U_Shr, B_Shr
+//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, E_Shr, U_OA, B_OA, U_Shr, BShr
+//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B, E_Shr,             U_Shr, B_Shr
 //! If stage=(-1):              clears U, B
 //! If stage=(-4):              clears                                 U_Shr, B_Shr
 
@@ -799,6 +977,10 @@ TaskStatus MHD::ClearSend(Driver *pdrive, int stage) {
       if (tstat != TaskStatus::complete) return tstat;
       tstat = psbox_b->ClearSend();
       if (tstat != TaskStatus::complete) return tstat;
+      if (stage >= 0) {
+        tstat = psbox_b->ClearEMFSend();
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
   }
 
@@ -809,8 +991,8 @@ TaskStatus MHD::ClearSend(Driver *pdrive, int stage) {
 //! \fn TaskStatus MHD::ClearRecv
 //! \brief Wrapper task list function that checks all MPI receives have completed. Used in
 //! TaskList and in Driver::InitBoundaryValuesAndPrimitives()
-//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, U_OA, B_OA, U_Shr, BShr
-//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B,             U_Shr, B_Shr
+//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, E_Shr, U_OA, B_OA, U_Shr, BShr
+//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B, E_Shr,             U_Shr, B_Shr
 //! If stage=(-1):              clears U, B
 //! If stage=(-4):              clears                                 U_Shr, B_Shr
 
@@ -859,6 +1041,10 @@ TaskStatus MHD::ClearRecv(Driver *pdrive, int stage) {
       if (tstat != TaskStatus::complete) return tstat;
       tstat = psbox_b->ClearRecv();
       if (tstat != TaskStatus::complete) return tstat;
+      if (stage >= 0) {
+        tstat = psbox_b->ClearEMFRecv();
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
   }
 

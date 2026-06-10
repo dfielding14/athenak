@@ -957,6 +957,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     CGLLandauFluid(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_lf_paper") == 0) {
     CGLLFPaper(pin, is_restart);
+  } else if (pgen_fun_name.compare("cgl_lf_sbox") == 0) {
+    CGLLFSbox(pin, is_restart);
   } else if (pgen_fun_name.compare("divb_amr") == 0) {
     DivBAMR(pin, is_restart);
   } else if (pgen_fun_name.compare("linear_wave") == 0) {
@@ -989,6 +991,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     STSDiffusion(pin, is_restart);
   } else if (pgen_fun_name.compare("turb") == 0) {
     Turb(pin, is_restart);
+  } else if (pgen_fun_name.compare("hyperviscous_shear") == 0) {
+    HyperViscousShear(pin, is_restart);
   // else, name not set on command line or input file, print warning and quit
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl

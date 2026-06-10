@@ -33,6 +33,7 @@ add_executable(
 
         diffusion/conduction.cpp
         diffusion/cgl_landau_fluid.cpp
+        diffusion/hyperviscosity.cpp
         diffusion/resistivity.cpp
         diffusion/scalar_diffusion.cpp
         diffusion/sts_rkl2.cpp
@@ -123,9 +124,11 @@ add_executable(
         pgen/tests/cgl_fofc.cpp
         pgen/tests/cgl_landau_fluid.cpp
         pgen/tests/cgl_lf_paper.cpp
+        pgen/tests/cgl_lf_sbox.cpp
         pgen/tests/divb_amr.cpp
         pgen/tests/diffusion.cpp
         pgen/tests/sts_diffusion.cpp
+        pgen/tests/hyperviscous_shear.cpp
         pgen/tests/gr_bondi.cpp
         pgen/tests/gr_monopole.cpp
         pgen/tests/linear_wave.cpp

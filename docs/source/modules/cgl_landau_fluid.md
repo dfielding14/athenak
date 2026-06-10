@@ -124,9 +124,11 @@ active-cell occupancy statistic. It is expected to be nonzero in
 limiter-active hard-wall production intervals and is not a safety violation.
 `lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-applied owned-face
 contractions of the capped heat fluxes with their corresponding temperature
-jumps. On refined meshes, each coarse/fine interface uses the same fine-side
-ownership convention as the face-count columns because those fluxes are
-restricted into the coarse update.
+jumps. They characterize the closure-generated face fluxes; shearing-box
+radial flux reconciliation occurs afterward, so these two channel diagnostics
+are not exact seam-applied contractions. On refined meshes, each coarse/fine
+interface uses the same fine-side ownership convention as the face-count
+columns because those fluxes are restricted into the coarse update.
 These are signed operator contractions; they are not required to be positive,
 equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for
@@ -153,6 +155,12 @@ pressures are not applied to flow momentum.
   parabolic process.
 - CGL LF with mesh refinement currently requires conserved prolongation;
   `<mesh_refinement>/prolong_primitives = true` is rejected.
+- CGL LF STS is compatible with three-dimensional shearing-periodic
+  boundaries on uniform grids. Each parabolic stage reconciles radial heat
+  fluxes across the shearing seam, updates and remaps the conserved CGL state
+  while `IAN` stores magnetic moment, then refreshes CGL primitives before
+  the next stage. The pre-sweep uses the displacement at `t` and the
+  post-sweep uses `t + dt`.
 - Modal `<turb_driving>` forcing is supported with CGL LF. It is applied in
   the ordinary source-term task graph, outside the protected LF
   magnetic-moment sweep; the routine strict AMR/restart regression exercises
@@ -309,6 +317,18 @@ For developer regression execution, run
 `python run_tests.py cgl/cgl_landau_fluid` from `tst/`. The routine CPU tests
 compare the explicit split against STS capped with
 `time/sts_max_dt_ratio=1.0`.
+The focused shearing-box regression is:
+
+```bash
+cd tst
+python run_test_suite.py --mpicpu \
+  --test test_suite/cgl/test_cgl_lf_sbox_mpicpu.py
+```
+
+It compares serial and two-rank remote shearing partners and checks capped STS
+against the one-stage explicit LF split. It also requires both LF heat-flux
+channels to be active, verifies admissibility, checks magnetic fluxes and
+`div B`, and exercises an MPI restart.
 The routine CPU interaction regression uses
 `inputs/tests/cgl_lf_turb_driving_amr.athinput` to check strict LF
 admissibility, refinement, rendered forcing, and deterministic modal restart

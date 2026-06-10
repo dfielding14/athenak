@@ -1,0 +1,91 @@
+# CGL Landau-fluid heat flux with RKL2 STS and shearing-periodic boundaries.
+
+<job>
+basename = cgl_lf_sts_sbox
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.25
+x1max = 0.25
+ix1_bc = shear_periodic
+ox1_bc = shear_periodic
+nx2 = 16
+x2min = -0.25
+x2max = 0.25
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.25
+x3max = 0.25
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 0.30
+nlim = -1
+ndiag = 100000
+sts_integrator = rkl2
+sts_max_dt_ratio = -1.0
+
+<shearing_box>
+qshear = 1.5
+omega0 = 1.0
+
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+cgl_lf_strict_admissibility = true
+lf_k_parallel = 1.0
+lf_coefficient_mode = local
+nu_coll = 0.0
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+pgen_name = cgl_lf_sbox
+rho0 = 1.0
+ppar0 = 1.0
+pperp0 = 1.0
+amp = 0.02
+bx0 = 0.3
+by0 = 0.2
+bz0 = 0.1
+nwx = 1
+nwy = 1
+nwz = 1
+
+<output1>
+file_type = bin
+variable = mhd_w_bcc
+dt = 0.30
+
+<output2>
+file_type = bin
+variable = mhd_divb
+dt = 0.30
+
+<output3>
+file_type = rst
+dt = 0.28125
+
+<output4>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

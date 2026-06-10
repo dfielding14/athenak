@@ -37,6 +37,9 @@ struct ShearingBoxBoundaryBuffer {
   // Views that store buffer data and fluxes on device
   DvceArray5D<Real> vars, flux;
 #if MPI_PARALLEL_ENABLED
+  // Contiguous staging for EMF MPI messages.  The main flux view is indexed for
+  // correction kernels, but its per-component EMF subviews are not MPI-contiguous.
+  DvceArray2D<Real> flux_mpi;
   // vectors of length (number of MBs) to hold MPI requests
   // Using STL vector causes problems with some GPU compilers, so just use plain C array
   MPI_Request *vars_req, *flux_req;
@@ -75,6 +78,8 @@ class ShearingBox {
   TaskStatus ClearSend();
   // function to find target MB offset by shear.  Returns GID and rank
   void FindTargetMB(const int igid, const int jshift, int &gid, int &rank);
+  // function to find target MB on the opposite x1 boundary, offset by shear
+  void FindShearPartnerMB(const int igid, const int jshift, int &gid, int &rank);
   // function to find index in x1bndry array of MB with input GID
   int TargetIndex(const int n, const int tgid) {
     for (int m=0; m<nmb_x1bndry(n); ++m) {
@@ -97,9 +102,17 @@ class ShearingBox {
 class ShearingBoxCC : public ShearingBox {
  public:
   ShearingBoxCC(MeshBlockPack *ppack, ParameterInput *pin, int nvar);
+  ~ShearingBoxCC();
   // functions to communicate CC data with shearing box BCs
   TaskStatus PackAndSendCC(DvceArray5D<Real> &a, ReconstructionMethod rcon);
   TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a);
+  // functions to reconcile radial fluxes before an STS cell-centered update
+  TaskStatus InitFluxRecv();
+  TaskStatus PackAndSendFluxCC(DvceFaceFld5D<Real> &flx);
+  TaskStatus RecvAndCorrectFluxCC(DvceFaceFld5D<Real> &flx,
+                                  ReconstructionMethod rcon);
+  TaskStatus ClearFluxRecv();
+  TaskStatus ClearFluxSend();
   // shearing box source terms for Hydro CC variables
   void SourceTermsCC(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
                      const Real bdt, DvceArray5D<Real> &u0);
@@ -116,9 +129,16 @@ class ShearingBoxCC : public ShearingBox {
 class ShearingBoxFC : public ShearingBox {
  public:
   ShearingBoxFC(MeshBlockPack *ppack, ParameterInput *pin);
+  ~ShearingBoxFC();
   // functions to communicate CC data with shearing box BCs
   TaskStatus PackAndSendFC(DvceFaceFld4D<Real> &b, ReconstructionMethod rcon);
   TaskStatus RecvAndUnpackFC(DvceFaceFld4D<Real> &b);
+  // functions to communicate EMFs with shearing box BCs before CT
+  TaskStatus InitEMFRecv();
+  TaskStatus PackAndSendEMF(DvceEdgeFld4D<Real> &efld);
+  TaskStatus RecvAndCorrectEMF(DvceEdgeFld4D<Real> &efld, ReconstructionMethod rcon);
+  TaskStatus ClearEMFRecv();
+  TaskStatus ClearEMFSend();
   // shearing box source terms for FC variables
   void SourceTermsFC(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
 };

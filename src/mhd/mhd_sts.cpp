@@ -15,6 +15,7 @@
 #include "diffusion/resistivity.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "mhd.hpp"
 
 namespace {
@@ -51,6 +52,9 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
   const bool add_viscosity =
       (selection == DiffusionSelection::explicit_only) ? has_explicit_viscosity
                                                        : has_sts_viscosity;
+  const bool add_hyperviscosity =
+      (selection == DiffusionSelection::explicit_only) ? has_explicit_hyperviscosity
+                                                       : has_sts_hyperviscosity;
   const bool add_conduction =
       (selection == DiffusionSelection::explicit_only) ? has_explicit_conduction
                                                        : has_sts_conduction;
@@ -63,6 +67,9 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
 
   if (add_viscosity && pvisc != nullptr) {
     pvisc->IsotropicViscousFlux(w0, pvisc->nu_iso, peos->eos_data, uflx);
+  }
+  if (add_hyperviscosity && phypervisc != nullptr) {
+    phypervisc->AddHyperViscousFlux(w0, peos->eos_data, uflx);
   }
   if (add_resistivity && presist != nullptr && peos->eos_data.is_ideal) {
     presist->OhmicEnergyFlux(b0, uflx);
@@ -183,9 +190,10 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   Kokkos::deep_copy(DevExeSpace(), u_sts2, u_sts1);
   Kokkos::deep_copy(DevExeSpace(), u_sts1, u0);
 
-  const bool update_momentum = has_sts_viscosity;
+  const bool update_momentum = (has_sts_viscosity || has_sts_hyperviscosity);
   const bool update_energy = (has_sts_conduction || has_cgl_lf_split ||
-                              ((has_sts_viscosity || has_sts_resistivity) &&
+                              ((has_sts_viscosity || has_sts_hyperviscosity ||
+                                has_sts_resistivity) &&
                                peos->eos_data.is_ideal));
   const bool update_cgl_moment = has_cgl_lf_split;
   const bool update_scalars = has_sts_scalar_diffusion;

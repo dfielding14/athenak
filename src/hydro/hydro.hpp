@@ -21,6 +21,7 @@
 class EquationOfState;
 class Coordinates;
 class Viscosity;
+class HyperViscosity;
 class Conduction;
 class ScalarDiffusion;
 class SourceTerms;
@@ -92,6 +93,7 @@ class Hydro {
 
   // Object(s) for extra physics (viscosity, thermal/scalar diffusion, srcterms)
   Viscosity *pvisc = nullptr;
+  HyperViscosity *phypervisc = nullptr;
   Conduction *pcond = nullptr;
   ScalarDiffusion *pscalar_diff = nullptr;
   SourceTerms *psrc = nullptr;
@@ -106,9 +108,11 @@ class Hydro {
   Real dtnew;
 
   bool has_explicit_viscosity = false;
+  bool has_explicit_hyperviscosity = false;
   bool has_explicit_conduction = false;
   bool has_explicit_scalar_diffusion = false;
   bool has_sts_viscosity = false;
+  bool has_sts_hyperviscosity = false;
   bool has_sts_conduction = false;
   bool has_sts_scalar_diffusion = false;
   bool has_any_sts_diffusion = false;
@@ -131,6 +135,8 @@ class Hydro {
   TaskStatus Fluxes(Driver *d, int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
+  TaskStatus SendFlux_Shr(Driver *d, int stage);
+  TaskStatus RecvFlux_Shr(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
   TaskStatus HydroSrcTerms(Driver *d, int stage);
   TaskStatus SendU_OA(Driver *d, int stage);
@@ -151,6 +157,8 @@ class Hydro {
   // ...in "after_stagen_tl" list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
+  TaskStatus ClearSendParabolic(Driver *d, int stage);
+  TaskStatus ClearRecvParabolic(Driver *d, int stage);
 
   // CalculateFluxes function templated over Riemann Solvers
   template <Hydro_RSolver T>

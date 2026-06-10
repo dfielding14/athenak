@@ -1,9 +1,10 @@
 # Module: Diffusion
 
 ## Overview
-The Diffusion module implements physical diffusion processes including
-viscosity, thermal conduction, resistivity, and passive-scalar diffusion using
-ordinary explicit integration or second-order RKL2 super time stepping (STS).
+The Diffusion module implements thermal conduction, Navier-Stokes viscosity,
+Ohmic resistivity, passive-scalar diffusion, and fourth-derivative
+hyperviscosity using ordinary explicit integration or second-order RKL2 super
+time stepping (STS).
 For the STS algorithm, operator-selection inputs, variable-coefficient models,
 and verification plots, see [Super Time Stepping](super_time_stepping.md).
 
@@ -15,6 +16,7 @@ and verification plots, see [Super Time Stepping](super_time_stepping.md).
 | File | Purpose | Key Functions |
 |------|---------|---------------|
 | `viscosity.hpp/cpp` | Kinematic/dynamic viscosity | Momentum diffusion |
+| `hyperviscosity.hpp/cpp` | Constant fourth-derivative velocity damping | Cached Laplacian face fluxes |
 | `conduction.hpp/cpp` | Thermal conduction | Heat diffusion |
 | `resistivity.hpp/cpp` | Ohmic resistivity | Magnetic diffusion |
 | `scalar_diffusion.hpp/cpp` | Passive-scalar diffusivity | Per-scalar conservative flux |
@@ -34,6 +36,13 @@ viscosity = 0.01  # Kinematic viscosity coefficient
 <mhd>  # or <hydro>
 conductivity = 0.1  # Thermal conductivity coefficient
 cond_ceiling = 1.0e10  # Optional ceiling value
+```
+
+### Hyperviscosity
+```ini
+<mhd>  # or <hydro>
+hyperviscosity = 1.0e-5
+hyperviscosity_integrator = sts  # explicit or sts
 ```
 
 ### Resistivity
@@ -73,6 +82,30 @@ where the heat flux is:
 $$\mathbf{q} = -\kappa \nabla T$$
 
 Note: In the code, $\kappa$ represents thermal **conductivity** (not diffusivity), with units of energy/(length·time·temperature).
+
+### Fourth-Derivative Hyperviscosity
+
+Hyperviscosity is distinct from physical viscosity. For each velocity
+component AthenaK caches $L_i=\nabla_h^2v_i$ and adds the conservative face
+flux
+
+$$
+F^{\rm hv}_{\rho v_i,q}
+=\rho_f\nu_4\left(\partial_qL_i\right)_f .
+$$
+
+For constant density, the conservative update becomes
+
+$$
+\frac{\partial v_i}{\partial t}
+=-\nu_4\left(\nabla_h^2\right)^2v_i .
+$$
+
+For ideal-gas Hydro or MHD the energy flux is
+$F^{\rm hv}_{E,q}=\boldsymbol{v}_f\cdot
+\boldsymbol{F}^{\rm hv}_{\rho\boldsymbol{v},q}$; isothermal runs update
+momentum only. Although the operator uses a fourth spatial derivative, the
+centered discretization is second-order accurate.
 
 ### Resistivity (Magnetic Diffusion)
 
@@ -131,6 +164,17 @@ $$\Delta t < \frac{0.5 \Delta x^2}{D}$$
 
 Where $D = \max(\nu, \kappa, \eta)$
 
+For uniform-grid hyperviscosity, let
+$S=\sum_d\Delta x_d^{-2}$ over active dimensions. Its explicit forward-Euler
+limit is
+
+$$
+\Delta t_{\rm hv}=\frac{1}{8\nu_4S^2},
+$$
+
+which scales as $\Delta x^4/\nu_4$. RKL2 STS uses this registered explicit
+limit without changing its recurrence.
+
 ## Viscous Stress Tensor
 
 ### Definition
@@ -187,6 +231,13 @@ ohmic_resistivity = 0.001
 conductivity = 0.01
 ```
 
+### Numerical High-Wavenumber Damping
+```ini
+<hydro>
+hyperviscosity = 1.0e-5
+hyperviscosity_integrator = sts
+```
+
 ## Performance Considerations
 
 - Ordinary explicit diffusion restricts the cycle timestep by its parabolic
@@ -195,6 +246,12 @@ conductivity = 0.01
   timestep using a sequence of stable sub-stages.
 - Per-scalar diffusion stores coefficients in one device array and evaluates
   all scalar fluxes in one kernel pass.
+- Hyperviscosity allocates reusable storage for three cell-centered velocity
+  Laplacians, computes them once per diffusion evaluation or STS stage, and
+  uses a constant-coefficient block timestep calculation without a device
+  reduction.
+- Hyperviscosity currently requires `nghost >= 2`, a uniform Newtonian Hydro
+  or MHD mesh, and rejects active SMR/AMR or relativistic configurations.
 
 ## See Also
 - [MHD Module](mhd.md)

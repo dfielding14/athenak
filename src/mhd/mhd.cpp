@@ -15,6 +15,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
@@ -166,6 +167,25 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     pvisc = nullptr;
   }
 
+  // Fourth-derivative numerical viscosity (only constructed if needed)
+  if (pin->DoesParameterExist("mhd", "hyperviscosity")) {
+    phypervisc = new HyperViscosity("mhd", ppack, pin);
+    const bool active = (phypervisc->nu4 > 0.0);
+    has_sts_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/hyperviscosity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       phypervisc->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(phypervisc->dtnew)});
+    }
+  } else {
+    phypervisc = nullptr;
+  }
+
   // Resistivity (only constructed if needed)
   if (pin->DoesParameterExist("mhd","ohmic_resistivity")) {
     presist = new Resistivity(ppack, pin);
@@ -274,8 +294,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   if (has_sts_cgl_lf &&
-      (has_sts_viscosity || has_sts_conduction || has_sts_resistivity ||
-       has_sts_scalar_diffusion)) {
+      (has_sts_viscosity || has_sts_hyperviscosity || has_sts_conduction ||
+       has_sts_resistivity || has_sts_scalar_diffusion)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "CGL Landau-fluid STS cannot yet be combined with other MHD STS "
@@ -284,10 +304,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   if (has_explicit_cgl_lf &&
-      (has_sts_viscosity || has_sts_conduction || has_sts_resistivity ||
-       has_sts_scalar_diffusion || has_explicit_viscosity ||
-       has_explicit_conduction || has_explicit_resistivity ||
-       has_explicit_scalar_diffusion)) {
+      (has_sts_viscosity || has_sts_hyperviscosity || has_sts_conduction ||
+       has_sts_resistivity || has_sts_scalar_diffusion || has_explicit_viscosity ||
+       has_explicit_hyperviscosity || has_explicit_conduction ||
+       has_explicit_resistivity || has_explicit_scalar_diffusion)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "CGL Landau-fluid explicit reference integration cannot yet be "
@@ -295,8 +315,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
-  has_any_parabolic_cell_update = (has_sts_viscosity || has_sts_conduction ||
-                                    has_cgl_lf_split ||
+  has_any_parabolic_cell_update = (has_sts_viscosity || has_sts_hyperviscosity ||
+                                    has_sts_conduction || has_cgl_lf_split ||
                                     has_sts_scalar_diffusion ||
                                     (has_sts_resistivity && peos->eos_data.is_ideal));
   has_any_parabolic_field_update = has_sts_resistivity;
@@ -588,6 +608,7 @@ MHD::~MHD() {
   if (pcgl_lf != nullptr) {delete pcgl_lf;}
   if (pcond != nullptr) {delete pcond;}
   if (presist!= nullptr) {delete presist;}
+  if (phypervisc != nullptr) {delete phypervisc;}
   if (pvisc != nullptr) {delete pvisc;}
   delete peos;
 }
