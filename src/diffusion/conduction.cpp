@@ -573,14 +573,6 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   Real exponent = kappa_exponent;
   Real floor = kappa_floor;
   Real power_ceiling = power_law_kappa_ceiling;
-  Real fac;
-  if (pmy_pack->pmesh->three_d) {
-    fac = 1.0/6.0;
-  } else if (pmy_pack->pmesh->two_d) {
-    fac = 0.25;
-  } else {
-    fac = 0.5;
-  }
 
   Real temp_unit = 1.0;
   Real kappa_unit = 1.0;
@@ -604,33 +596,87 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
     k += ks;
     j += js;
 
-    Real kappa_ = kappa0;
+    Real kappa_c = kappa0;
+    Real kappa_im1 = kappa0;
+    Real kappa_ip1 = kappa0;
+    Real kappa_jm1 = kappa0;
+    Real kappa_jp1 = kappa0;
+    Real kappa_km1 = kappa0;
+    Real kappa_kp1 = kappa0;
     if (tdepkappa) {
-      Real temp = 1.0;
-      if (use_e) {
-        temp = w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)*gm1;
-      } else {
-        temp = w0(m,ITM,k,j,i);
-      }
-      if (powerlaw) {
-        kappa_ = PowerLawKappa(temp, kappa0, temp_ref, exponent, floor, power_ceiling);
-      } else {
-        kappa_ = KappaTemp(temp*temp_unit,kappaceil)/kappa_unit;
-      }
-    }
-
-    if (kappa_ > 0.0) {
-      min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+      const Real temp_c = use_e ? gm1*w0_(m,IEN,k,j,i)/w0_(m,IDN,k,j,i)
+                                : w0_(m,ITM,k,j,i);
+      const Real temp_im1 = use_e ? gm1*w0_(m,IEN,k,j,i-1)/w0_(m,IDN,k,j,i-1)
+                                  : w0_(m,ITM,k,j,i-1);
+      const Real temp_ip1 = use_e ? gm1*w0_(m,IEN,k,j,i+1)/w0_(m,IDN,k,j,i+1)
+                                  : w0_(m,ITM,k,j,i+1);
+      Real temp_jm1 = temp_c;
+      Real temp_jp1 = temp_c;
+      Real temp_km1 = temp_c;
+      Real temp_kp1 = temp_c;
       if (multi_d) {
-        min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+        temp_jm1 = use_e ? gm1*w0_(m,IEN,k,j-1,i)/w0_(m,IDN,k,j-1,i)
+                         : w0_(m,ITM,k,j-1,i);
+        temp_jp1 = use_e ? gm1*w0_(m,IEN,k,j+1,i)/w0_(m,IDN,k,j+1,i)
+                         : w0_(m,ITM,k,j+1,i);
       }
       if (three_d) {
-        min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+        temp_km1 = use_e ? gm1*w0_(m,IEN,k-1,j,i)/w0_(m,IDN,k-1,j,i)
+                         : w0_(m,ITM,k-1,j,i);
+        temp_kp1 = use_e ? gm1*w0_(m,IEN,k+1,j,i)/w0_(m,IDN,k+1,j,i)
+                         : w0_(m,ITM,k+1,j,i);
+      }
+
+      if (powerlaw) {
+        kappa_c = PowerLawKappa(temp_c, kappa0, temp_ref, exponent, floor,
+                                power_ceiling);
+        kappa_im1 = PowerLawKappa(temp_im1, kappa0, temp_ref, exponent, floor,
+                                  power_ceiling);
+        kappa_ip1 = PowerLawKappa(temp_ip1, kappa0, temp_ref, exponent, floor,
+                                  power_ceiling);
+        if (multi_d) {
+          kappa_jm1 = PowerLawKappa(temp_jm1, kappa0, temp_ref, exponent, floor,
+                                    power_ceiling);
+          kappa_jp1 = PowerLawKappa(temp_jp1, kappa0, temp_ref, exponent, floor,
+                                    power_ceiling);
+        }
+        if (three_d) {
+          kappa_km1 = PowerLawKappa(temp_km1, kappa0, temp_ref, exponent, floor,
+                                    power_ceiling);
+          kappa_kp1 = PowerLawKappa(temp_kp1, kappa0, temp_ref, exponent, floor,
+                                    power_ceiling);
+        }
+      } else {
+        kappa_c = KappaTemp(temp_c*temp_unit, kappaceil)/kappa_unit;
+        kappa_im1 = KappaTemp(temp_im1*temp_unit, kappaceil)/kappa_unit;
+        kappa_ip1 = KappaTemp(temp_ip1*temp_unit, kappaceil)/kappa_unit;
+        if (multi_d) {
+          kappa_jm1 = KappaTemp(temp_jm1*temp_unit, kappaceil)/kappa_unit;
+          kappa_jp1 = KappaTemp(temp_jp1*temp_unit, kappaceil)/kappa_unit;
+        }
+        if (three_d) {
+          kappa_km1 = KappaTemp(temp_km1*temp_unit, kappaceil)/kappa_unit;
+          kappa_kp1 = KappaTemp(temp_kp1*temp_unit, kappaceil)/kappa_unit;
+        }
       }
     }
-  }, Kokkos::Min<Real>(dtnew));
 
-  dtnew *= fac;
+    // Match the arithmetic face coefficients used by the flux kernels.
+    Real row_sum = (0.5*(kappa_im1 + kappa_c) +
+                    0.5*(kappa_c + kappa_ip1))/SQR(size.d_view(m).dx1);
+    if (multi_d) {
+      row_sum += (0.5*(kappa_jm1 + kappa_c) +
+                  0.5*(kappa_c + kappa_jp1))/SQR(size.d_view(m).dx2);
+    }
+    if (three_d) {
+      row_sum += (0.5*(kappa_km1 + kappa_c) +
+                  0.5*(kappa_c + kappa_kp1))/SQR(size.d_view(m).dx3);
+    }
+    const Real rate = gm1*row_sum/w0_(m,IDN,k,j,i);
+    if (rate > 0.0) {
+      min_dt = fmin(min_dt, 1.0/rate);
+    }
+  }, Kokkos::Min<Real>(dtnew));
 
   return;
 }

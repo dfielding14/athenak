@@ -1,0 +1,58 @@
+# Focused timestep test for face-centered thermal-conduction coefficients.
+
+<job>
+basename = conduction_timestep
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = 0.0
+x1max = 1.0
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 1.0
+nlim = 1
+ndiag = 1
+sts_integrator = none
+
+<hydro>
+eos = ideal
+gamma = 1.6666666666667
+reconstruct = plm
+rsolver = hllc
+conductivity = 1.0
+conductivity_model = power_law
+conductivity_tref = 1.0
+conductivity_exponent = 2.0
+conductivity_floor = 0.01
+conductivity_ceiling = 100.0
+conductivity_integrator = explicit
+
+<problem>
+pgen_name = sts_diffusion
+sts_case = thermal_front
+pressure = 1.0
+tcold = 1.0
+thot = 4.0
+xcenter = 0.02
+front_width = 0.001
