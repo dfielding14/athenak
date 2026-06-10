@@ -2,7 +2,8 @@
 
 ## Document Status
 
-- **Status:** Active
+- **Status:** Completed for the constant-coefficient two-node target; broader
+  variable-coefficient, AMR, and communication changes are explicitly deferred
 - **Branch:** `scaling-tests`
 - **Initial code baseline:** `eea1e448d`
 - **Created:** 2026-06-10
@@ -151,11 +152,11 @@ necessary.
 
 Before each implementation change:
 
-- [ ] State the single defect or measured cost being addressed.
-- [ ] List the exact files and functions expected to change.
-- [ ] Identify the existing local pattern that the implementation will follow.
-- [ ] State the behavior and interfaces that must remain unchanged.
-- [ ] Define the smallest test or benchmark that can validate the change.
+- [x] State the single defect or measured cost being addressed.
+- [x] List the exact files and functions expected to change.
+- [x] Identify the existing local pattern that the implementation will follow.
+- [x] State the behavior and interfaces that must remain unchanged.
+- [x] Define the smallest test or benchmark that can validate the change.
 
 If investigation shows that additional files, interfaces, or abstractions are
 required, stop and update this plan's decision log before expanding the scope.
@@ -216,16 +217,16 @@ numerical, synchronization, memory-layout, or conservation invariant.
 
 Before considering any implementation step complete:
 
-- [ ] Inspect `git diff --stat` and the full diff.
-- [ ] Justify every changed hunk as necessary for the stated objective.
-- [ ] Confirm no unrelated whitespace, formatting, renaming, or cleanup is
+- [x] Inspect `git diff --stat` and the full diff.
+- [x] Justify every changed hunk as necessary for the stated objective.
+- [x] Confirm no unrelated whitespace, formatting, renaming, or cleanup is
   present.
-- [ ] Confirm no pre-existing user changes were overwritten.
-- [ ] Confirm comments explain new non-obvious invariants without duplicating
+- [x] Confirm no pre-existing user changes were overwritten.
+- [x] Confirm comments explain new non-obvious invariants without duplicating
   the code.
-- [ ] Confirm documentation is updated only where behavior changed.
-- [ ] Confirm the patch can be reviewed independently from later phases.
-- [ ] Record any intentionally deferred cleanup rather than including it.
+- [x] Confirm documentation is updated only where behavior changed.
+- [x] Confirm the patch can be reviewed independently from later phases.
+- [x] Record any intentionally deferred cleanup rather than including it.
 
 ## Acceptance Policy
 
@@ -732,21 +733,31 @@ Report:
 
 Use surgical, independently reviewable commits in this order:
 
-1. [ ] Add missing correctness and regression tests.
-2. [ ] Correct explicit and STS stability bounds.
-3. [ ] Correct input validation and RKL2 controller edge cases.
-4. [ ] Add profiler regions and baseline scripts.
-5. [ ] Rewrite explicit viscosity without row scratch.
-6. [ ] Optimize constant conduction.
-7. [ ] Cache variable transport coefficients.
-8. [ ] Fuse compatible explicit directional kernels.
-9. [ ] Compact and rotate STS history storage.
-10. [ ] Reduce STS flux clearing and update-kernel traffic.
-11. [ ] Add component-selective STS communication and C2P.
-12. [ ] Evaluate uniform-grid direct RHS and task overlap.
-13. [ ] Perform Kokkos and software-stack tuning.
-14. [ ] Run the full correctness and performance matrix.
-15. [ ] Update user documentation and archive final benchmark data.
+1. [x] Add missing correctness and regression tests.
+2. [x] Correct explicit and STS stability bounds for the validated
+   constant-coefficient target.
+3. [x] Correct input validation and RKL2 controller edge cases.
+4. [x] Add profiler regions and baseline scripts.
+5. [x] Rewrite explicit viscosity without row scratch.
+6. [!] Optimize constant conduction.  Profiling showed only `5.5%`
+   incremental cycle cost, so no speculative kernel rewrite was retained.
+7. [!] Cache variable transport coefficients.  Deferred with the unproved
+   variable-density viscosity bound and in-sweep nonlinear STS policy.
+8. [!] Fuse compatible explicit directional kernels.  Rejected after the
+   operator-isolated profile because register pressure, not launch count,
+   limited viscosity.
+9. [!] Compact and rotate STS history storage.  History rotation is complete;
+   compact component storage requires broader boundary interfaces.
+10. [x] Reduce STS flux clearing and update-kernel traffic.
+11. [!] Add component-selective STS communication and C2P.  Deferred by the
+    surgical-diff gate.
+12. [!] Evaluate uniform-grid direct RHS and task overlap.  Rejected by the
+    surgical-diff gate for this pass.
+13. [!] Perform Kokkos and software-stack tuning.  Flat range policy was
+    adopted for the update kernel; broader stack and geometry sweeps were not
+    required for the target result.
+14. [x] Run the targeted correctness and two-node performance matrix.
+15. [x] Update documentation and archive final benchmark data.
 
 Each commit should include:
 
@@ -775,29 +786,36 @@ Targets are goals rather than correctness substitutes:
 
 ### Explicit
 
-- [ ] Reduce the incremental wall-time cost of constant viscosity plus
-  conduction by at least `30%` relative to the current overhead.
-- [ ] Stretch target: reduce the current approximately `34%` wall-time
+- [!] Reduce the incremental wall-time cost of constant viscosity plus
+  conduction by at least `30%` relative to the current overhead.  The final
+  whole-cycle improvement is `2.09%`; viscosity kernel time improved `9.57%`.
+- [!] Stretch target: reduce the current approximately `34%` wall-time
   increase to `20%` or less.
-- [ ] Avoid more than `1%` hydro-only regression.
+- [x] Avoid more than `1%` hydro-only regression.  The operator matrix measured
+  a `0.3%` hydro-only difference, and the final two changes are inactive when
+  viscosity and STS are disabled.
 
 ### STS
 
-- [ ] Reduce non-operator STS time, including copies, clears, full-state C2P,
-  and unnecessary communication, by at least `50%`.
-- [ ] Make conduction-only STS storage and communication scale with energy and
+- [!] Reduce non-operator STS time, including copies, clears, full-state C2P,
+  and unnecessary communication, by at least `50%`.  History copies and flux
+  clears were eliminated for the target, but C2P and communication are
+  unchanged because selective interfaces failed the surgical-diff gate.
+- [!] Make conduction-only STS storage and communication scale with energy and
   required thermodynamic fields rather than all conserved variables.
-- [ ] Make viscosity-only STS storage and communication scale with momentum,
+- [!] Make viscosity-only STS storage and communication scale with momentum,
   energy, and required density fields.
-- [ ] Demonstrate that measured per-cycle cost follows the expected number of
+- [x] Demonstrate that measured per-cycle cost follows the expected number of
   operator evaluations without dominant fixed full-state overhead.
 
 ### Accuracy
 
-- [ ] Retain second-order convergence for smooth problems.
-- [ ] Use stability bounds valid for longitudinal viscosity, saturation, face
-  coefficients, and strong density contrasts.
-- [ ] Preserve conservation to the tolerance of the existing flux-divergence
+- [x] Retain second-order convergence for smooth problems.
+- [!] Use stability bounds valid for longitudinal viscosity, saturation, face
+  coefficients, and strong density contrasts.  Constant viscosity,
+  face-aware conduction, and conservative saturation behavior are covered;
+  multidimensional variable-density viscosity remains unproved.
+- [x] Preserve conservation to the tolerance of the existing flux-divergence
   scheme when floors are not triggered.
 
 ## Risks and Mitigations
@@ -851,6 +869,61 @@ Mitigation:
 - Add bounded sub-sweeps or restart logic where required.
 - Test strong heating and large coefficient changes.
 
+## Final Two-Node Result
+
+The final confirmation was Slurm job `4792993` on two Frontier nodes, with
+eight MPI ranks and GPUs per node and one `512x256x256` MeshBlock per rank.
+Each entry is the median harmonic aggregate over cycles 6--20 from five
+interleaved repetitions.
+
+| Integrator | Baseline zone-cycles/s/node | Optimized zone-cycles/s/node | Speedup | Cycle-time reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Explicit RK2 | `1.628741e9` | `1.663459e9` | `1.0213x` | `2.09%` |
+| RKL2 STS | `5.174653e8` | `7.420152e8` | `1.4339x` | `30.26%` |
+
+Run-to-run coefficients of variation were below `0.05%` for all four cases.
+The exact optimized executable produced explicit and STS uniform-state outputs
+that agreed to a maximum absolute difference of `2.220446e-16`.
+
+The final executable is
+`/lustre/orion/ast207/proj-shared/dfielding/scaling/diffusion_optimization/athena_final`,
+SHA-256
+`31495fe4f257bfb5601bf6468f38d3965b7bba80178dce6e81ffdcfa45bcf033`.
+The frozen baseline executable SHA-256 is
+`f9385fb688529280a0bf421fe62f02ff3d1ec58f410a8d6e1b754ec767e9bb88`.
+
+The matching rank-zero rocprof traces show:
+
+- Explicit viscosity kernel time decreased from `222.251` to `200.985` ms,
+  accounting for the full `2.12%` reduction in profiled explicit kernel time.
+- STS profiled kernel time decreased from `3039.825` to `2093.324` ms.
+- Removed flux-clear and history-copy launches account for `331.366` ms of
+  STS savings.
+- `hydro_sts_update` decreased from `817.991` to `426.354` ms.
+- Viscosity kernels decreased from `666.273` to `441.911` ms.
+- Conduction, halo communication, and conserved-to-primitive time were
+  unchanged within profiler noise.
+
+Artifacts:
+
+```text
+/lustre/orion/ast207/proj-shared/dfielding/scaling/diffusion_optimization/
+  logs/diffusion_confirm_2n_4792993.log
+  results/final_4792993.csv
+  results/operator_matrix_4792663.csv
+  results/profile_kernels_4792993.csv
+  profiles/confirmation_4792993/
+  plots/diffusion_explicit_sts_before_after_4792993.png
+  plots/diffusion_explicit_sts_before_after_4792993.pdf
+```
+
+The implementation pass is closed at this boundary. Component-selective halo
+exchange, partial primitive recovery, direct-RHS updates, task overlap, and
+AMR/MHD-specific restructuring were rejected by the surgical-diff gate.
+Temperature-dependent STS remains excluded from the performance claim because
+a coefficient can grow within a sweep and the multidimensional
+variable-density viscosity bound is not yet proved.
+
 ## Decision Log
 
 | Date | Decision | Rationale |
@@ -860,6 +933,14 @@ Mitigation:
 | 2026-06-10 | Optimize individual explicit operators before fusing them. | Separate profiles are required to attribute gains and avoid hiding a slow implementation inside a larger fused kernel. |
 | 2026-06-10 | Prioritize STS data movement over stage-count policy. | The immediate objective is the cost of a single cycle, and current full-state copies, clears, exchange, and C2P are avoidable regardless of stiffness. |
 | 2026-06-10 | Require surgical, minimal diffs for every fix and optimization. | Small targeted patches reduce regression risk, preserve reviewability, and keep the implementation consistent with established AthenaK patterns. |
+| 2026-06-10 | Keep `u0` canonical and rotate Hydro STS history values inside the update kernel. | This removes full-state copies without changing state ownership assumed by boundary, EOS, task, or AMR code. |
+| 2026-06-10 | Eliminate STS flux clears only when single-level Hydro viscosity can initialize every enrolled momentum and energy flux. | The target viscosity-plus-conduction case avoids full-view fills while scalar-diffusion and multilevel cases retain the original conservative path. |
+| 2026-06-10 | Defer component-selective communication, partial C2P, direct-RHS updates, and task overlap. | These require coordinated boundary-buffer, EOS, task-graph, and AMR changes and therefore fail the surgical-diff gate for this optimization pass. |
+| 2026-06-10 | Defer multidimensional variable-density viscosity bounds. | The cross-derivative operator needs a proved spectral or row-sum bound; an arbitrary safety factor is not acceptable. |
+| 2026-06-10 | Defer time-dependent boundary-stage semantics. | The current user-boundary API exposes `Mesh::time`, and correcting this consistently is a driver-wide API change rather than an STS-local patch. |
+| 2026-06-10 | Specialize viscosity coefficient and flux-update branches at host dispatch. | The first GPU profile showed that the fused register-local kernel increased `visc3` register pressure; compile-time constant branches recover the constant-coefficient path without changing the stencil or public interface. |
+| 2026-06-10 | Replace the scratch-free Hydro STS team update with the existing flat range wrapper. | Every cell update is independent after history rotation, and AthenaK documents flat range policies as the preferred local pattern. |
+| 2026-06-10 | Close the optimization pass without communication or AMR restructuring. | The final constant-coefficient target is validated and measured; the remaining proposals require broader interfaces and tests than the mandatory surgical-diff policy permits. |
 
 ## Progress Log
 
@@ -876,5 +957,57 @@ Mitigation:
 - [x] Created this implementation and progress plan.
 - [x] Added mandatory surgical-diff, code-style, comment, and documentation
   gates to this plan.
-- [ ] Collect operator-isolated GPU profiles.
-- [ ] Begin Phase 1 correctness tests and fixes.
+- [x] Froze one same-source baseline executable for both explicit and STS:
+  SHA-256 `f9385fb688529280a0bf421fe62f02ff3d1ec58f410a8d6e1b754ec767e9bb88`.
+- [x] Completed the two-node same-binary baseline job `4792248`.
+  Cycles 6--20 give `1.627646e9` explicit and `5.175680e8` STS
+  zone-cycles/s/node using the harmonic window aggregate.
+- [x] Added `scripts/analyze_diffusion_benchmarks.py` to produce CSV summaries
+  and grouped baseline/optimized figures with min/max whiskers.
+- [x] Corrected exact-threshold RKL2 stage selection and overflow-prone
+  coefficient arithmetic in commit `6ddb8bc3a`.
+- [x] Removed viscosity row scratch and multipass stress construction while
+  preserving the three directional kernels in commit `64a641398`.
+- [x] Added Spitzer activation, units, ceiling, and saturation validation in
+  commit `8c706efd3`.
+- [x] Removed Hydro STS full-state history copies and one history allocation,
+  and removed update-kernel row scratch, in commit `5a312f18b`.
+- [x] Added a globally reduced post-RK STS parabolic-bound refresh in commit
+  `e7705ed81`.
+- [x] Corrected the constant-viscosity longitudinal stability bound in commit
+  `68cd36633`.
+- [x] Made conduction timestep estimates use the same arithmetic face
+  coefficients as the flux operator in commit `3b00ec548`.
+- [x] Eliminated full STS flux-array clears for the single-level Hydro
+  viscosity-first path in commit `4c52d3a91`; multilevel and scalar-diffusion
+  paths retain the original clear.
+- [x] Allowed a post-RK refresh to activate an STS sweep that was disabled by
+  the pre-RK bound in commit `0d6800fb7`.
+- [x] Added a combined constant viscosity-plus-conduction explicit/STS
+  regression in commit `7803ef2e5`.
+- [x] Added compile-time constant-viscosity and flux-update specialization in
+  commit `96f239992`.
+- [x] Replaced the scratch-free Hydro STS team update with a flat range kernel
+  in commit `ad9961996`.
+- [x] Passed all 22 focused CPU tests covering the RKL2 controller, Hydro STS,
+  conduction timestep bounds, and shared hyperviscosity.
+- [x] Built the final CCE 20.0.0, ROCm 6.4.2, Cray MPICH 9.0.1 HIP/MPI
+  executable with the repository Frontier configuration.
+- [x] Completed the operator-isolation matrix and baseline/optimized rocprof
+  traces in job `4792663`.
+- [x] Completed the final five-repetition interleaved two-node confirmation
+  and matching rocprof traces in job `4792993`.
+- [x] Validated explicit versus STS output using the exact final executable;
+  maximum absolute state difference was `2.220446e-16`.
+- [x] Produced the final CSV, PNG, and PDF comparison artifacts listed above.
+- [!] The existing shared-STS MPI CPU regression cannot run on the Frontier
+  login node because `mpirun` is unavailable there.  The completed two-node
+  `srun` jobs provide the MPI/HIP validation for this target.
+- [!] Temperature-dependent STS sweep-wide ceiling policy remains open.
+  Power-law and Spitzer conduction have configured hard ceilings, but using
+  those ceilings for every stage-selection bound is deferred to a dedicated
+  correctness patch.  Multidimensional variable-viscosity stability remains
+  unproved and is not broadened in this performance patch.
+- [!] A configurable practical RKL2 stage cap remains a driver-level policy
+  decision.  The numerical helper now rejects unrepresentable integer stage
+  counts without embedding an arbitrary operational limit.

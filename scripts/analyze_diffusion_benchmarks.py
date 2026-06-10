@@ -148,9 +148,10 @@ def plot_summary(summary, path):
         optimized = summary.get((method, "optimized"))
         if baseline and optimized:
             speedup = optimized["value"] / baseline["value"]
+            speedup_format = ".3f" if speedup < 1.01 else ".2f"
             top = max(baseline["maximum"], optimized["maximum"]) / 1.0e9
             ax.annotate(
-                f"{speedup:.2f}$\\times$",
+                f"{speedup:{speedup_format}}$\\times$",
                 (index, top),
                 xytext=(0, 5),
                 textcoords="offset points",
@@ -161,6 +162,7 @@ def plot_summary(summary, path):
 
     ax.set_xticks(range(len(methods)), ["Explicit", "STS"])
     ax.set_ylabel(r"$10^9 \times$ zone cycles s$^{-1}$ node$^{-1}$")
+    ax.margins(y=0.12)
     ax.grid(axis="y", color="0.88", linewidth=0.6)
     ax.legend(frameon=False, fontsize=8)
     ax.tick_params(direction="in", top=True, right=True)
