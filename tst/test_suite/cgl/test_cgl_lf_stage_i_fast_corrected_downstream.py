@@ -1445,12 +1445,18 @@ def test_retry_publication_submits_fresh_attempt_bound_to_current_upstream_jobs(
     assert attempt.name == "attempt-001"
     assert manifest["job_id"] == "900"
     assert manifest["dependency_job_ids"] == ["201", "202", "203"]
+    assert manifest["scheduler_dependency_job_ids"] == []
     assert calls == [[
         "/usr/bin/sbatch",
         "--parsable",
-        "--dependency=afterok:201:202:203",
         str(attempt / "run.sbatch"),
     ]]
+    intent = json.loads(
+        (attempt / downstream.SUBMISSION_INTENT_NAME).read_text(encoding="utf-8")
+    )
+    assert intent["schema_version"] == 2
+    assert intent["dependency_job_ids"] == ["201", "202", "203"]
+    assert intent["scheduler_dependency_job_ids"] == []
     assert json.loads(
         (fixture["initial"] / "manifest.json").read_text(encoding="utf-8")
     )["dependency_job_ids"] == ["101", "102", "103"]
@@ -1504,6 +1510,75 @@ def test_submit_manifest_job_fault_after_intent_never_resubmits(
     assert json.loads(
         (job / downstream.SUBMISSION_INTENT_NAME).read_text(encoding="utf-8")
     )["dependency_job_ids"] == ["201"]
+
+
+def test_active_scheduler_dependencies_omit_successful_and_keep_live(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    successful = tmp_path / "successful"
+    active = tmp_path / "active"
+    write_artifact(successful / "exit_code.txt", "0\n")
+    active.mkdir()
+
+    def query(command, _label, **_kwargs):
+        assert command[-3:] == ["202", "-o", "%i|%T"]
+        return "202|RUNNING"
+
+    monkeypatch.setattr(downstream, "scheduler_output", query)
+
+    assert downstream.active_scheduler_dependencies([
+        ("201", successful, "successful analysis"),
+        ("202", active, "active CT"),
+    ]) == ["202"]
+
+
+def test_recorded_submission_failure_allows_fresh_publication_retry(
+    downstream, tmp_path, monkeypatch
+) -> None:
+    fixture = publication_workflow_fixture(downstream, tmp_path)
+    upstream = completed_upstream_fixture(tmp_path)
+    initial_manifest_path = fixture["initial"] / "manifest.json"
+    initial_manifest = json.loads(
+        initial_manifest_path.read_text(encoding="utf-8")
+    )
+    initial_manifest["job_id"] = None
+    write_json(initial_manifest_path, initial_manifest)
+    write_json(
+        fixture["initial"] / downstream.SUBMISSION_INTENT_NAME,
+        downstream.submission_intent_value(
+            fixture["initial"],
+            initial_manifest,
+            ["101", "102", "103"],
+        ),
+    )
+    scheduler_audit = write_artifact(tmp_path / "scheduler-audit.txt", "")
+    downstream.record_submission_failure(
+        fixture["initial"],
+        1,
+        "allocation failure: Job dependency problem",
+        "2026-06-10T01:05:35Z",
+        scheduler_audit,
+        TOOL,
+    )
+    install_retry_context(downstream, monkeypatch, fixture, upstream)
+    monkeypatch.setattr(
+        downstream.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout="900\n"),
+    )
+
+    attempt = downstream.retry_publication(fixture["root"])
+
+    assert attempt.name == "attempt-001"
+    install_scheduler_observations(
+        downstream,
+        monkeypatch,
+        {"900": scheduler_observation("active", "PENDING")},
+    )
+    records = downstream.authenticated_publication_attempts(
+        fixture["workflow"], fixture["context"]
+    )
+    assert records[0]["observation"]["result"] == "submission_failed"
 
 
 def test_schema_v1_initial_publication_falls_back_to_immutable_submission(

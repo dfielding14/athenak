@@ -63,6 +63,11 @@ HISTORICAL_FORMULA_BINDER_SIZES = {
     # Exact-state-CT orchestrator before historical-binder compatibility.
     "8401184add71dfe266303bc0323c059850c2a18d6274d6adcbf5082342d829c3": 107211,
 }
+HISTORICAL_WORKFLOW_ORCHESTRATOR_SIZES = {
+    # Exact-state-CT workflow orchestrator before logical and scheduler
+    # publication dependencies were separated.
+    "779a649c8f85154b616636a54d474f28cfa38d8c6502adc46e85524d762b4541": 110317,
+}
 ACTIVE_CASES = (
     "R02",
     "R03",
@@ -86,6 +91,10 @@ SUBMITTED_JOB_ID_PATTERN = re.compile(r"[1-9]\d*")
 ATTEMPT_PATTERN = re.compile(r"attempt-([0-9]{3})")
 SUBMISSION_INTENT_NAME = "submission-intent.json"
 SUBMISSION_INTENT_TYPE = "cgl_lf_stage_i_corrected_downstream_submission_intent"
+SUBMISSION_FAILURE_NAME = "submission-failure.json"
+SUBMISSION_FAILURE_TYPE = (
+    "cgl_lf_stage_i_corrected_downstream_submission_failure"
+)
 ACTIVE_SCHEDULER_STATES = frozenset({
     "CONFIGURING",
     "COMPLETING",
@@ -1430,8 +1439,17 @@ def workflow_context(workflow: dict[str, object]) -> dict[str, object]:
         raise CorrectedDownstreamError("workflow formula/executable binding differs")
     if workflow.get("inventory_kind") != context["inventory_kind"]:
         raise CorrectedDownstreamError("workflow inventory kind differs")
-    for binding in require_dict(workflow.get("tools"), "workflow tools").values():
-        verify_binding(binding, "workflow tool")
+    for name, binding in require_dict(workflow.get("tools"), "workflow tools").items():
+        declared = require_dict(binding, f"workflow {name} tool")
+        if (
+            name == "orchestrator"
+            and HISTORICAL_WORKFLOW_ORCHESTRATOR_SIZES.get(
+                declared.get("sha256")
+            )
+            == declared.get("size_bytes")
+        ):
+            continue
+        verify_binding(declared, f"workflow {name} tool")
     expected = {
         "corrected_active": context["active_cases"],
         "reused_passive": context["passive_cases"],
@@ -1478,18 +1496,159 @@ def submission_command(job_dir: Path, dependencies: list[str]) -> list[str]:
 
 
 def submission_intent_value(
-    job_dir: Path, manifest: dict[str, object], dependencies: list[str]
+    job_dir: Path,
+    manifest: dict[str, object],
+    dependencies: list[str],
+    scheduler_dependencies: list[str] | None = None,
 ) -> dict[str, object]:
+    if scheduler_dependencies is None:
+        return {
+            "schema_version": 1,
+            "record_type": SUBMISSION_INTENT_TYPE,
+            "job_dir": str(job_dir.resolve()),
+            "job_manifest_path": str((job_dir / "manifest.json").resolve()),
+            "prepared_manifest": value_binding(prepared_manifest_value(manifest)),
+            "run_script": artifact_binding(job_dir / "run.sbatch"),
+            "dependency_job_ids": dependencies,
+            "sbatch_command": submission_command(job_dir, dependencies),
+        }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "record_type": SUBMISSION_INTENT_TYPE,
+        "orchestrator": artifact_binding(SCRIPT_PATH),
         "job_dir": str(job_dir.resolve()),
         "job_manifest_path": str((job_dir / "manifest.json").resolve()),
         "prepared_manifest": value_binding(prepared_manifest_value(manifest)),
         "run_script": artifact_binding(job_dir / "run.sbatch"),
         "dependency_job_ids": dependencies,
-        "sbatch_command": submission_command(job_dir, dependencies),
+        "scheduler_dependency_job_ids": scheduler_dependencies,
+        "sbatch_command": submission_command(job_dir, scheduler_dependencies),
     }
+
+
+def submission_scheduler_dependencies(
+    manifest: dict[str, object], dependencies: list[str]
+) -> list[str] | None:
+    declared = manifest.get("scheduler_dependency_job_ids")
+    if declared is None:
+        return None
+    scheduler_dependencies = require_job_ids(
+        declared, "job manifest scheduler dependency IDs"
+    )
+    if not set(scheduler_dependencies) <= set(dependencies):
+        raise CorrectedDownstreamError(
+            "scheduler dependencies are not a subset of logical dependencies"
+        )
+    return scheduler_dependencies
+
+
+def validate_submission_failure(
+    job_dir: Path, manifest: dict[str, object], intent: dict[str, object]
+) -> dict[str, object] | None:
+    path = job_dir / SUBMISSION_FAILURE_NAME
+    if not path.exists():
+        return None
+    failure, _ = load_bound_json(path, "submission failure")
+    if (
+        failure.get("schema_version") != 1
+        or failure.get("record_type") != SUBMISSION_FAILURE_TYPE
+        or failure.get("job_dir") != str(job_dir.resolve())
+        or failure.get("submission_intent") != artifact_binding(
+            job_dir / SUBMISSION_INTENT_NAME
+        )
+        or failure.get("sbatch_command") != intent.get("sbatch_command")
+        or failure.get("recovery_orchestrator") != artifact_binding(SCRIPT_PATH)
+        or not isinstance(failure.get("return_code"), int)
+        or isinstance(failure.get("return_code"), bool)
+        or int(failure["return_code"]) == 0
+        or not require_text(failure.get("error"), "submission failure error")
+        or manifest.get("job_id") is not None
+        or (job_dir / "exit_code.txt").exists()
+    ):
+        raise CorrectedDownstreamError(
+            f"submission failure evidence differs from current job state: {path}"
+        )
+    require_text(failure.get("recorded_utc"), "submission failure UTC")
+    workflow_orchestrator = require_dict(
+        require_dict(manifest.get("tools"), "job manifest tools").get(
+            "orchestrator"
+        ),
+        "job manifest orchestrator",
+    )
+    historical_source = verify_binding(
+        failure.get("historical_orchestrator_source"),
+        "historical workflow orchestrator source",
+    )
+    if (
+        historical_source.get("sha256") != workflow_orchestrator.get("sha256")
+        or historical_source.get("size_bytes")
+        != workflow_orchestrator.get("size_bytes")
+    ):
+        raise CorrectedDownstreamError(
+            "historical workflow orchestrator source differs"
+        )
+    scheduler_audit = failure.get("scheduler_audit")
+    if scheduler_audit is not None:
+        verify_binding(scheduler_audit, "submission failure scheduler audit")
+    return failure
+
+
+def record_submission_failure(
+    job_dir: Path,
+    return_code: int,
+    error: str,
+    recorded_utc: str,
+    scheduler_audit: Path | None,
+    historical_orchestrator_source: Path,
+) -> Path:
+    directory = job_dir.expanduser().resolve(strict=True)
+    manifest, _ = load_bound_json(directory / "manifest.json", "job manifest")
+    dependencies = require_job_ids(
+        manifest.get("dependency_job_ids"), "job manifest dependency IDs"
+    )
+    intent = validate_submission_intent(directory, manifest, dependencies)
+    if intent is None:
+        raise CorrectedDownstreamError("submission failure lacks a durable intent")
+    if return_code == 0:
+        raise CorrectedDownstreamError("submission failure return code must be nonzero")
+    workflow_orchestrator = require_dict(
+        require_dict(manifest.get("tools"), "job manifest tools").get(
+            "orchestrator"
+        ),
+        "job manifest orchestrator",
+    )
+    historical_source = artifact_binding(
+        historical_orchestrator_source.expanduser().resolve(strict=True)
+    )
+    if (
+        historical_source.get("sha256") != workflow_orchestrator.get("sha256")
+        or historical_source.get("size_bytes")
+        != workflow_orchestrator.get("size_bytes")
+    ):
+        raise CorrectedDownstreamError(
+            "historical orchestrator source does not reproduce workflow binding"
+        )
+    record = {
+        "schema_version": 1,
+        "record_type": SUBMISSION_FAILURE_TYPE,
+        "recorded_utc": require_text(recorded_utc, "submission failure UTC"),
+        "job_dir": str(directory),
+        "submission_intent": artifact_binding(directory / SUBMISSION_INTENT_NAME),
+        "historical_orchestrator_source": historical_source,
+        "recovery_orchestrator": artifact_binding(SCRIPT_PATH),
+        "sbatch_command": intent["sbatch_command"],
+        "return_code": return_code,
+        "error": require_text(error, "submission failure error"),
+        "scheduler_audit": (
+            artifact_binding(scheduler_audit.expanduser().resolve(strict=True))
+            if scheduler_audit is not None
+            else None
+        ),
+    }
+    path = directory / SUBMISSION_FAILURE_NAME
+    write_immutable_json(path, record)
+    print(f"recorded failed scheduler submission: {path}")
+    return path
 
 
 def validate_submission_intent(
@@ -1499,14 +1658,23 @@ def validate_submission_intent(
     if not path.exists():
         return None
     intent, _ = load_bound_json(path, "submission intent")
-    if intent != submission_intent_value(job_dir, manifest, dependencies):
+    scheduler_dependencies = submission_scheduler_dependencies(
+        manifest, dependencies
+    )
+    if intent != submission_intent_value(
+        job_dir, manifest, dependencies, scheduler_dependencies
+    ):
         raise CorrectedDownstreamError(
             f"submission intent differs from current job contract: {path}"
         )
     return intent
 
 
-def submit_manifest_job(job_dir: Path, dependency_ids: Iterable[str] = ()) -> str:
+def submit_manifest_job(
+    job_dir: Path,
+    dependency_ids: Iterable[str] = (),
+    scheduler_dependency_ids: Iterable[str] | None = None,
+) -> str:
     manifest_path = job_dir / "manifest.json"
     manifest, _ = load_bound_json(manifest_path, "job manifest")
     requested_dependencies = [
@@ -1516,6 +1684,29 @@ def submit_manifest_job(job_dir: Path, dependency_ids: Iterable[str] = ()) -> st
     if len(set(requested_dependencies)) != len(requested_dependencies):
         raise CorrectedDownstreamError("job submission contains duplicate dependencies")
     dependencies = sorted(requested_dependencies)
+    requested_scheduler_dependencies = (
+        None
+        if scheduler_dependency_ids is None
+        else sorted(
+            require_job_id(dependency, "scheduler job dependency")
+            for dependency in scheduler_dependency_ids
+        )
+    )
+    if (
+        requested_scheduler_dependencies is not None
+        and len(set(requested_scheduler_dependencies))
+        != len(requested_scheduler_dependencies)
+    ):
+        raise CorrectedDownstreamError(
+            "job submission contains duplicate scheduler dependencies"
+        )
+    if (
+        requested_scheduler_dependencies is not None
+        and not set(requested_scheduler_dependencies) <= set(dependencies)
+    ):
+        raise CorrectedDownstreamError(
+            "scheduler dependencies are not a subset of logical dependencies"
+        )
     declared_dependencies = manifest.get("dependency_job_ids")
     intent_path = job_dir / SUBMISSION_INTENT_NAME
     if declared_dependencies is not None:
@@ -1527,6 +1718,23 @@ def submit_manifest_job(job_dir: Path, dependency_ids: Iterable[str] = ()) -> st
             )
     elif dependencies and not intent_path.exists():
         manifest["dependency_job_ids"] = dependencies
+        write_json(manifest_path, manifest)
+    declared_scheduler_dependencies = manifest.get(
+        "scheduler_dependency_job_ids"
+    )
+    if declared_scheduler_dependencies is not None:
+        if require_job_ids(
+            declared_scheduler_dependencies,
+            "job manifest scheduler dependency IDs",
+        ) != requested_scheduler_dependencies:
+            raise CorrectedDownstreamError(
+                f"job manifest scheduler dependencies differ from "
+                f"submission request: {job_dir}"
+            )
+    elif requested_scheduler_dependencies is not None and not intent_path.exists():
+        manifest["scheduler_dependency_job_ids"] = (
+            requested_scheduler_dependencies
+        )
         write_json(manifest_path, manifest)
     job_id = manifest.get("job_id")
     intent = validate_submission_intent(job_dir, manifest, dependencies)
@@ -1541,9 +1749,22 @@ def submit_manifest_job(job_dir: Path, dependency_ids: Iterable[str] = ()) -> st
     if (job_dir / "exit_code.txt").is_file():
         raise CorrectedDownstreamError(f"cannot submit completed job again: {job_dir}")
     write_immutable_json(
-        intent_path, submission_intent_value(job_dir, manifest, dependencies)
+        intent_path,
+        submission_intent_value(
+            job_dir,
+            manifest,
+            dependencies,
+            requested_scheduler_dependencies,
+        ),
     )
-    command = submission_command(job_dir, dependencies)
+    command = submission_command(
+        job_dir,
+        (
+            dependencies
+            if requested_scheduler_dependencies is None
+            else requested_scheduler_dependencies
+        ),
+    )
     completed = subprocess.run(command, check=True, text=True, capture_output=True)
     response = completed.stdout.strip()
     if JOB_ID_PATTERN.fullmatch(response) is None:
@@ -1555,6 +1776,45 @@ def submit_manifest_job(job_dir: Path, dependency_ids: Iterable[str] = ()) -> st
     return job_id
 
 
+def active_scheduler_dependencies(
+    upstream: Iterable[tuple[str, Path, str]],
+) -> list[str]:
+    dependencies: list[str] = []
+    for job_id, attempt, label in upstream:
+        exit_path = attempt / "exit_code.txt"
+        if exit_path.is_file():
+            zero_exit(attempt, label)
+            continue
+        output = scheduler_output(
+            ["/usr/bin/squeue", "-h", "-j", job_id, "-o", "%i|%T"],
+            f"{label} queue",
+            missing_job_is_empty=True,
+        )
+        if not output:
+            raise CorrectedDownstreamError(
+                f"{label} job {job_id} is absent from the live scheduler "
+                "and lacks a successful exit marker"
+            )
+        records = [line for line in output.splitlines() if line.strip()]
+        if len(records) != 1:
+            raise CorrectedDownstreamError(
+                f"{label} job {job_id} has ambiguous queue records"
+            )
+        fields = records[0].split("|")
+        if len(fields) != 2 or fields[0] != job_id:
+            raise CorrectedDownstreamError(
+                f"{label} job {job_id} queue identity differs"
+            )
+        state = normalized_scheduler_state(fields[1])
+        if state not in ACTIVE_SCHEDULER_STATES:
+            raise CorrectedDownstreamError(
+                f"{label} job {job_id} is {state or 'UNKNOWN'} without "
+                "a successful exit marker"
+            )
+        dependencies.append(job_id)
+    return sorted(dependencies)
+
+
 def submit_workflow(workflow_root: Path) -> Path:
     workflow, workflow_binding = load_workflow(workflow_root)
     context = workflow_context(workflow)
@@ -1563,17 +1823,23 @@ def submit_workflow(workflow_root: Path) -> Path:
     )
     patch_hyper_attempts(attempts, context)
     upstream_ids: list[str] = []
+    upstream_attempts: list[tuple[str, Path, str]] = []
     jobs: dict[str, object] = {"hyperbolicity": {}, "analysis": {}}
     for stage in ("hyperbolicity", "analysis"):
         values = require_dict(attempts.get(stage), f"{stage} attempts")
         for case_id, attempt in sorted(values.items()):
-            job_id = submit_manifest_job(Path(require_text(attempt, f"{case_id} attempt")))
+            attempt_path = Path(require_text(attempt, f"{case_id} attempt"))
+            job_id = submit_manifest_job(attempt_path)
             require_dict(jobs[stage], f"{stage} submitted jobs")[case_id] = job_id
             upstream_ids.append(job_id)
+            upstream_attempts.append(
+                (job_id, attempt_path, f"{case_id} {stage}")
+            )
     commands = require_dict(workflow.get("commands"), "workflow commands")
     ct_dir = Path(require_text(require_dict(commands["ct"], "ct stage")["job_dir"], "CT job"))
     ct_id = submit_manifest_job(ct_dir)
     upstream_ids.append(ct_id)
+    upstream_attempts.append((ct_id, ct_dir, "CT"))
     if len(set(upstream_ids)) != len(upstream_ids):
         raise CorrectedDownstreamError("submitted upstream jobs contain duplicate IDs")
     publication_dependencies = sorted(upstream_ids)
@@ -1581,15 +1847,21 @@ def submit_workflow(workflow_root: Path) -> Path:
         require_dict(commands["publication"], "publication stage")["job_dir"],
         "publication job",
     ))
-    publication_id = submit_manifest_job(publication_dir, publication_dependencies)
+    scheduler_dependencies = active_scheduler_dependencies(upstream_attempts)
+    publication_id = submit_manifest_job(
+        publication_dir,
+        publication_dependencies,
+        scheduler_dependencies,
+    )
     jobs["ct"] = ct_id
     jobs["publication"] = publication_id
     submission = {
-        "schema_version": 1,
+        "schema_version": 2,
         "record_type": "cgl_lf_stage_i_corrected_downstream_submission",
         "workflow": workflow_binding,
         "jobs": jobs,
         "publication_dependency": publication_dependencies,
+        "publication_scheduler_dependency": scheduler_dependencies,
     }
     path = Path(str(workflow["workflow_root"])) / "submission.json"
     write_immutable_json(path, submission)
@@ -1790,7 +2062,7 @@ def initial_publication_dependencies(
     root = Path(require_text(workflow.get("workflow_root"), "workflow root"))
     submission, _ = load_bound_json(root / "submission.json", "workflow submission")
     if (
-        submission.get("schema_version") != 1
+        submission.get("schema_version") not in (1, 2)
         or submission.get("record_type")
         != "cgl_lf_stage_i_corrected_downstream_submission"
     ):
@@ -1805,6 +2077,15 @@ def initial_publication_dependencies(
     dependencies = require_job_ids(
         submission.get("publication_dependency"), "submission publication dependency"
     )
+    if submission.get("schema_version") == 2:
+        scheduler_dependencies = require_job_ids(
+            submission.get("publication_scheduler_dependency"),
+            "submission publication scheduler dependency",
+        )
+        if not set(scheduler_dependencies) <= set(dependencies):
+            raise CorrectedDownstreamError(
+                "submission scheduler dependencies differ"
+            )
     jobs = require_dict(submission.get("jobs"), "submitted jobs")
     if (
         require_job_id(jobs.get("publication"), "submitted publication job ID")
@@ -2188,16 +2469,29 @@ def authenticated_publication_attempts(
         )
         intent = validate_submission_intent(attempt, manifest, dependencies)
         if intent is not None and manifest.get("job_id") is None:
-            raise CorrectedDownstreamError(
-                f"submission intent exists without recorded job ID; "
-                f"publication state is ambiguous: {attempt}"
-            )
+            failure = validate_submission_failure(attempt, manifest, intent)
+            if failure is None:
+                raise CorrectedDownstreamError(
+                    f"submission intent exists without recorded job ID; "
+                    f"publication state is ambiguous: {attempt}"
+                )
+            observation = {
+                "disposition": "quiescent",
+                "result": "submission_failed",
+                "job_id": None,
+                "scheduler": None,
+                "submission_failure": artifact_binding(
+                    attempt / SUBMISSION_FAILURE_NAME
+                ),
+            }
+        else:
+            observation = publication_attempt_observation(attempt, manifest)
         authenticated.append({
             "attempt": attempt,
             "manifest": manifest,
             "manifest_binding": binding,
             "dependency_job_ids": dependencies,
-            "observation": publication_attempt_observation(attempt, manifest),
+            "observation": observation,
         })
     return authenticated
 
@@ -2589,7 +2883,7 @@ def retry_publication(workflow_root: Path) -> Path:
         )
     if prepared:
         attempt = Path(str(prepared[0]["attempt"]))
-        submit_manifest_job(attempt, dependencies)
+        submit_manifest_job(attempt, dependencies, [])
         print(f"submitted prepared publication retry: {attempt}")
         return attempt
 
@@ -2610,7 +2904,7 @@ def retry_publication(workflow_root: Path) -> Path:
     manifest = publication_contract_manifest(workflow, context, template, attempt)
     manifest["dependency_job_ids"] = dependencies
     prepare_generic_job(manifest)
-    submit_manifest_job(attempt, dependencies)
+    submit_manifest_job(attempt, dependencies, [])
     print(f"prepared and submitted fresh publication retry: {attempt}")
     return attempt
 
@@ -2816,6 +3110,18 @@ def build_parser() -> argparse.ArgumentParser:
     bind = subcommands.add_parser("bind-hyper-result", help=argparse.SUPPRESS)
     bind.add_argument("--identity", type=Path, required=True)
     bind.add_argument("--manifest", type=Path, required=True)
+    failed = subcommands.add_parser(
+        "record-submission-failure",
+        help="bind a proven pre-allocation scheduler submission failure",
+    )
+    failed.add_argument("--job-dir", type=Path, required=True)
+    failed.add_argument("--return-code", type=int, required=True)
+    failed.add_argument("--error", required=True)
+    failed.add_argument("--recorded-utc", required=True)
+    failed.add_argument("--scheduler-audit", type=Path)
+    failed.add_argument(
+        "--historical-orchestrator-source", type=Path, required=True
+    )
     return parser
 
 
@@ -2840,6 +3146,15 @@ def main(argv: list[str] | None = None) -> int:
             complete_workflow(args.workflow_root)
         elif args.command == "validate":
             validate_completion(args.workflow_root)
+        elif args.command == "record-submission-failure":
+            record_submission_failure(
+                args.job_dir,
+                args.return_code,
+                args.error,
+                args.recorded_utc,
+                args.scheduler_audit,
+                args.historical_orchestrator_source,
+            )
         else:
             enrich_hyper_result(args.identity, args.manifest)
     except (
