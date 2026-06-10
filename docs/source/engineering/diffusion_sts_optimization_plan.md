@@ -349,7 +349,7 @@ boundary pack/send/receive/unpack
 
 ### 0.4 Baseline Deliverable
 
-- [ ] Add a CSV containing the profile breakdown.
+- [x] Add a CSV containing the profile breakdown.
 - [x] Add a script that regenerates summary tables and plots.
 - [ ] Record the percentage of explicit overhead attributable to viscosity,
   conduction, timestep reductions, and other tasks.
@@ -788,7 +788,7 @@ Targets are goals rather than correctness substitutes:
 
 - [!] Reduce the incremental wall-time cost of constant viscosity plus
   conduction by at least `30%` relative to the current overhead.  The final
-  whole-cycle improvement is `2.09%`; viscosity kernel time improved `9.57%`.
+  whole-cycle improvement is `2.20%`; viscosity kernel time improved `10.14%`.
 - [!] Stretch target: reduce the current approximately `34%` wall-time
   increase to `20%` or less.
 - [x] Avoid more than `1%` hydro-only regression.  The operator matrix measured
@@ -871,17 +871,17 @@ Mitigation:
 
 ## Final Two-Node Result
 
-The final confirmation was Slurm job `4792993` on two Frontier nodes, with
+The final confirmation was Slurm job `4793081` on two Frontier nodes, with
 eight MPI ranks and GPUs per node and one `512x256x256` MeshBlock per rank.
 Each entry is the median harmonic aggregate over cycles 6--20 from five
 interleaved repetitions.
 
 | Integrator | Baseline zone-cycles/s/node | Optimized zone-cycles/s/node | Speedup | Cycle-time reduction |
 | --- | ---: | ---: | ---: | ---: |
-| Explicit RK2 | `1.628741e9` | `1.663459e9` | `1.0213x` | `2.09%` |
-| RKL2 STS | `5.174653e8` | `7.420152e8` | `1.4339x` | `30.26%` |
+| Explicit RK2 | `1.641942e9` | `1.678796e9` | `1.0224x` | `2.20%` |
+| RKL2 STS | `5.221557e8` | `7.523535e8` | `1.4409x` | `30.60%` |
 
-Run-to-run coefficients of variation were below `0.05%` for all four cases.
+Run-to-run coefficients of variation were below `0.18%` for all four cases.
 The exact optimized executable produced explicit and STS uniform-state outputs
 that agreed to a maximum absolute difference of `2.220446e-16`.
 
@@ -894,13 +894,16 @@ The frozen baseline executable SHA-256 is
 
 The matching rank-zero rocprof traces show:
 
-- Explicit viscosity kernel time decreased from `222.251` to `200.985` ms,
-  accounting for the full `2.12%` reduction in profiled explicit kernel time.
-- STS profiled kernel time decreased from `3039.825` to `2093.324` ms.
-- Removed flux-clear and history-copy launches account for `331.366` ms of
-  STS savings.
-- `hydro_sts_update` decreased from `817.991` to `426.354` ms.
-- Viscosity kernels decreased from `666.273` to `441.911` ms.
+- Explicit viscosity kernel time decreased from `218.057` to `195.939` ms,
+  accounting for the `2.13%` reduction in profiled explicit device time after
+  excluding initialization.
+- Total STS profiled device time decreased from `3007.568` to `2062.739` ms.
+- The generic Kokkos region containing the removed full-state copies and flux
+  fills decreased from 342 launches and `349.623` ms to 148 launches and
+  `13.997` ms.  The profiler labels this region
+  `Kokkos::Initialization Complete`, so it is not interpreted as startup time.
+- `hydro_sts_update` decreased from `812.929` to `414.740` ms.
+- Viscosity kernels decreased from `644.110` to `432.365` ms.
 - Conduction, halo communication, and conserved-to-primitive time were
   unchanged within profiler noise.
 
@@ -908,13 +911,13 @@ Artifacts:
 
 ```text
 /lustre/orion/ast207/proj-shared/dfielding/scaling/diffusion_optimization/
-  logs/diffusion_confirm_2n_4792993.log
-  results/final_4792993.csv
+  logs/diffusion_confirm_2n_4793081.log
+  results/final_4793081.csv
   results/operator_matrix_4792663.csv
-  results/profile_kernels_4792993.csv
-  profiles/confirmation_4792993/
-  plots/diffusion_explicit_sts_before_after_4792993.png
-  plots/diffusion_explicit_sts_before_after_4792993.pdf
+  results/profile_kernels_4793081.csv
+  profiles/confirmation_4793081/
+  plots/diffusion_explicit_sts_before_after_4793081.png
+  plots/diffusion_explicit_sts_before_after_4793081.pdf
 ```
 
 The implementation pass is closed at this boundary. Component-selective halo
@@ -996,7 +999,7 @@ variable-density viscosity bound is not yet proved.
 - [x] Completed the operator-isolation matrix and baseline/optimized rocprof
   traces in job `4792663`.
 - [x] Completed the final five-repetition interleaved two-node confirmation
-  and matching rocprof traces in job `4792993`.
+  and matching rocprof traces in job `4793081`.
 - [x] Validated explicit versus STS output using the exact final executable;
   maximum absolute state difference was `2.220446e-16`.
 - [x] Produced the final CSV, PNG, and PDF comparison artifacts listed above.
