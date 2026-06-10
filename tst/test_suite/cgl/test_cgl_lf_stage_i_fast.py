@@ -74,8 +74,44 @@ def write_history(path: Path, columns: dict[str, list[float]]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def restart_payload(time: float) -> bytes:
-    return f"<time>\ntime = {time:.17g}\n<par_end>\n".encode() + b"\0payload"
+def restart_payload(
+    time: float,
+    *,
+    mesh_nx1: int = 1,
+    local_blocks: int = 1,
+) -> bytes:
+    parameter_header = (
+        f"<mesh>\nnx1 = {mesh_nx1}\nnx2 = 1\nnx3 = 1\n"
+        "<meshblock>\nnx1 = 1\nnx2 = 1\nnx3 = 1\n"
+        f"<time>\nrestart_time = {time:.17g}\n"
+        "<par_end>\n"
+    ).encode()
+    mesh_header = bytearray(252)
+    struct.pack_into("<ii", mesh_header, 0, mesh_nx1, 0)
+    struct.pack_into("<d", mesh_header, 232, time)
+    struct.pack_into("<d", mesh_header, 240, 0.01)
+    struct.pack_into("<i", mesh_header, 248, 1)
+    locations = b"".join(
+        struct.pack("<4i", location, 0, 0, 0)
+        for location in range(mesh_nx1)
+    )
+    costs = struct.pack(f"<{mesh_nx1}f", *([1.0] * mesh_nx1))
+    metadata = bytearray(248)
+    struct.pack_into("<i", metadata, 4, 1)
+    data_size = 8
+    return (
+        parameter_header
+        + mesh_header
+        + locations
+        + costs
+        + metadata
+        + bytes(296)
+        + bytes(6 * 8)
+        + struct.pack("<d", 0.0)
+        + struct.pack("<18d", *([0.0] * 18))
+        + struct.pack("<Q", data_size)
+        + bytes(local_blocks * data_size)
+    )
 
 
 def binary_payload(
@@ -127,6 +163,22 @@ def write_binary_rank_group(
     return rank_zero
 
 
+def write_restart_rank_group(
+    directory: Path,
+    filename: str,
+    rank_count: int,
+    time: float,
+) -> Path:
+    rank_zero = directory / "rank_00000000" / filename
+    for rank in range(rank_count):
+        path = directory / f"rank_{rank:08d}" / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            restart_payload(time, mesh_nx1=rank_count, local_blocks=1)
+        )
+    return rank_zero
+
+
 def write_rank_group(
     directory: Path,
     filename: str,
@@ -164,12 +216,7 @@ def segment_fixture(
     user = {"time": [start_time, final_time], "mass": [1.0, 1.0]}
     write_history(output / "fixture.mhd.hst", mhd)
     write_history(output / "fixture.user.hst", user)
-    write_rank_group(
-        output / "rst",
-        "fixture.00001.rst",
-        2,
-        restart_payload(final_time),
-    )
+    write_restart_rank_group(output / "rst", "fixture.00001.rst", 2, final_time)
     write_binary_rank_group(output / "bin", "fixture.00001.bin", 2, final_time)
     write_json(
         segment / "manifest/fast_run.json",
@@ -359,6 +406,10 @@ def test_restart_time_requires_one_finite_physical_time(fast, tmp_path):
     with pytest.raises(fast.FastRunError, match="ambiguous"):
         fast.restart_time(path)
 
+    path.write_bytes(b"<time>\nrestart_time=0.5\n<par_end>\nX\n")
+    with pytest.raises(fast.FastRunError, match="mesh decomposition"):
+        fast.restart_time(path)
+
 
 def test_binary_time_requires_magic_and_finite_physical_time(fast, tmp_path):
     path = tmp_path / "fixture.bin"
@@ -380,7 +431,7 @@ def test_binary_time_requires_magic_and_finite_physical_time(fast, tmp_path):
 
 def test_terminal_product_group_requires_a_complete_rank_group(fast, tmp_path):
     directory = tmp_path / "rst"
-    terminal = write_rank_group(directory, "fixture.00002.rst", 3, restart_payload(2.0))
+    terminal = write_restart_rank_group(directory, "fixture.00002.rst", 3, 2.0)
 
     result = fast.terminal_product_group(directory, ".rst", 3)
 
@@ -391,6 +442,19 @@ def test_terminal_product_group_requires_a_complete_rank_group(fast, tmp_path):
     (directory / "rank_00000002/fixture.00002.rst").unlink()
     with pytest.raises(fast.FastRunError, match="incomplete terminal"):
         fast.terminal_product_group(directory, ".rst", 3)
+
+
+def test_terminal_restart_group_rejects_meshblock_boundary_truncation(fast, tmp_path):
+    directory = tmp_path / "rst"
+    write_rank_group(
+        directory,
+        "fixture.00001.rst",
+        1,
+        restart_payload(2.0, mesh_nx1=2, local_blocks=1),
+    )
+
+    with pytest.raises(fast.FastRunError, match="meshblock coverage"):
+        fast.terminal_product_group(directory, ".rst", 1)
 
 
 def test_terminal_binary_group_selects_latest_physical_time(fast, tmp_path):

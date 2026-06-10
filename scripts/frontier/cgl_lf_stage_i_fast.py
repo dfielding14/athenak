@@ -229,27 +229,163 @@ def parse_history(path: Path) -> dict[str, list[float]]:
     return columns
 
 
-def restart_time(path: Path) -> float:
-    with path.open("rb") as stream:
-        payload = stream.read(128 * 1024)
-    end = payload.find(b"<par_end>")
-    if end < 0:
-        raise FastRunError(f"restart lacks parameter terminator: {path}")
-    text = payload[:end].decode("utf-8")
+def parameter_values(payload: bytes, path: Path, label: str) -> dict[str, str]:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise FastRunError(f"{label} parameter header is not UTF-8: {path}") from error
     block = ""
-    values: list[float] = []
+    values: dict[str, str] = {}
     for raw in text.splitlines():
         line = raw.split("#", 1)[0].strip()
         if line.startswith("<") and line.endswith(">"):
             block = line[1:-1].strip()
-            continue
-        if block == "time" and "=" in line:
+        elif block and "=" in line:
             key, value = (item.strip() for item in line.split("=", 1))
-            if key in {"time", "restart_time"}:
-                values.append(float(value))
-    if len(values) != 1 or not math.isfinite(values[0]):
-        raise FastRunError(f"restart has ambiguous physical time: {path}")
-    return values[0]
+            values[f"{block}/{key}"] = value
+    return values
+
+
+def read_exact(stream, size: int, path: Path, label: str) -> bytes:
+    payload = stream.read(size)
+    if len(payload) != size:
+        raise FastRunError(f"{label} is truncated: {path}")
+    return payload
+
+
+def restart_profile(path: Path) -> dict[str, object]:
+    marker = b"<par_end>\n"
+    with path.open("rb") as stream:
+        file_size = os.fstat(stream.fileno()).st_size
+        prefix = stream.read(min(file_size, 128 * 1024))
+        end = prefix.find(marker)
+        if end < 0:
+            raise FastRunError(f"restart lacks parameter terminator: {path}")
+        parameter_header = prefix[:end]
+        stream.seek(end + len(marker))
+        parameters = parameter_values(parameter_header, path, "restart")
+        time_markers = [
+            float(value)
+            for key, value in parameters.items()
+            if key in {"time/time", "time/restart_time"}
+        ]
+        if len(time_markers) != 1 or not math.isfinite(time_markers[0]):
+            raise FastRunError(f"restart has ambiguous physical time: {path}")
+        try:
+            mesh_shape = tuple(int(parameters[f"mesh/nx{axis}"]) for axis in range(1, 4))
+            meshblock_shape = tuple(
+                int(parameters[f"meshblock/nx{axis}"]) for axis in range(1, 4)
+            )
+        except (KeyError, ValueError) as error:
+            raise FastRunError(f"restart lacks mesh decomposition: {path}") from error
+        if (
+            any(extent <= 0 for extent in mesh_shape + meshblock_shape)
+            or any(
+                mesh_extent % block_extent != 0
+                for mesh_extent, block_extent in zip(mesh_shape, meshblock_shape)
+            )
+        ):
+            raise FastRunError(f"restart has invalid mesh decomposition: {path}")
+        logical_shape = tuple(
+            mesh_extent // block_extent
+            for mesh_extent, block_extent in zip(mesh_shape, meshblock_shape)
+        )
+        expected_locations = frozenset(
+            (lx1, lx2, lx3, 0)
+            for lx3 in range(logical_shape[2])
+            for lx2 in range(logical_shape[1])
+            for lx1 in range(logical_shape[0])
+        )
+        mesh_header = read_exact(stream, 252, path, "restart mesh header")
+        meshblock_count, root_level = struct.unpack_from("<ii", mesh_header, 0)
+        physical_time = struct.unpack_from("<d", mesh_header, 232)[0]
+        dt = struct.unpack_from("<d", mesh_header, 240)[0]
+        cycle = struct.unpack_from("<i", mesh_header, 248)[0]
+        if (
+            meshblock_count != len(expected_locations)
+            or root_level < 0
+            or not math.isfinite(physical_time)
+            or not math.isclose(
+                physical_time, time_markers[0], rel_tol=0.0, abs_tol=1.0e-6
+            )
+            or not math.isfinite(dt)
+            or dt <= 0.0
+            or cycle < 0
+        ):
+            raise FastRunError(f"restart has invalid mesh header: {path}")
+        location_payload = read_exact(
+            stream, meshblock_count * 16, path, "restart logical inventory"
+        )
+        locations = tuple(
+            (
+                location[0],
+                location[1],
+                location[2],
+                location[3] - root_level,
+            )
+            for location in (
+                struct.unpack_from("<4i", location_payload, offset)
+                for offset in range(0, len(location_payload), 16)
+            )
+        )
+        if len(set(locations)) != meshblock_count or frozenset(locations) != expected_locations:
+            raise FastRunError(f"restart has invalid logical inventory: {path}")
+        cost_payload = read_exact(
+            stream, meshblock_count * 4, path, "restart cost inventory"
+        )
+        costs = struct.unpack(f"<{meshblock_count}f", cost_payload)
+        if any(not math.isfinite(value) or value < 0.0 for value in costs):
+            raise FastRunError(f"restart has invalid cost inventory: {path}")
+        metadata = read_exact(stream, 248, path, "restart turbulence metadata")
+        metadata_ints = struct.unpack_from("<24i", metadata)
+        mode_count = metadata_ints[1]
+        if mode_count <= 0 or metadata_ints[2] < 0:
+            raise FastRunError(f"restart has invalid turbulence metadata: {path}")
+        rng_state = read_exact(stream, 296, path, "restart RNG state")
+        amplitudes = read_exact(
+            stream, 6 * mode_count * 8, path, "restart turbulence amplitudes"
+        )
+        injected_work = struct.unpack(
+            "<d", read_exact(stream, 8, path, "restart injected work")
+        )[0]
+        lf_diagnostics = struct.unpack(
+            "<18d", read_exact(stream, 18 * 8, path, "restart LF diagnostics")
+        )
+        if (
+            not math.isfinite(injected_work)
+            or any(not math.isfinite(value) for value in lf_diagnostics)
+            or lf_diagnostics[3] != 0.0
+            or lf_diagnostics[4] != 0.0
+        ):
+            raise FastRunError(f"restart has invalid retained diagnostics: {path}")
+        data_size = struct.unpack(
+            "<Q", read_exact(stream, 8, path, "restart meshblock data size")
+        )[0]
+        remaining = file_size - stream.tell()
+        if data_size <= 0 or remaining <= 0 or remaining % data_size != 0:
+            raise FastRunError(f"restart has truncated meshblock payload: {path}")
+        local_blocks = remaining // data_size
+    return {
+        "physical_time": physical_time,
+        "local_blocks": local_blocks,
+        "expected_meshblocks": meshblock_count,
+        "schema": (
+            dt,
+            cycle,
+            hashlib.sha256(parameter_header).hexdigest(),
+            hashlib.sha256(location_payload).hexdigest(),
+            hashlib.sha256(cost_payload).hexdigest(),
+            hashlib.sha256(metadata).hexdigest(),
+            hashlib.sha256(amplitudes).hexdigest(),
+            data_size,
+            mesh_shape,
+            meshblock_shape,
+        ),
+    }
+
+
+def restart_time(path: Path) -> float:
+    return float(restart_profile(path)["physical_time"])
 
 
 def binary_assignment(stream, path: Path, key: str) -> str:
@@ -264,23 +400,6 @@ def binary_assignment(stream, path: Path, key: str) -> str:
     if not separator or observed_key.strip() != key or not value.strip():
         raise FastRunError(f"binary product lacks {key}: {path}")
     return value.strip()
-
-
-def binary_parameter_values(payload: bytes, path: Path) -> dict[str, str]:
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise FastRunError(f"binary product parameter header is not UTF-8: {path}") from error
-    block = ""
-    values: dict[str, str] = {}
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if line.startswith("<") and line.endswith(">"):
-            block = line[1:-1].strip()
-        elif block and "=" in line:
-            key, value = (item.strip() for item in line.split("=", 1))
-            values[f"{block}/{key}"] = value
-    return values
 
 
 def binary_profile(path: Path) -> dict[str, object]:
@@ -331,7 +450,7 @@ def binary_profile(path: Path) -> dict[str, object]:
         parameter_header = stream.read(header_size)
         if len(parameter_header) != header_size or b"<par_end>\n" not in parameter_header:
             raise FastRunError(f"binary product has invalid parameter header: {path}")
-        parameters = binary_parameter_values(parameter_header, path)
+        parameters = parameter_values(parameter_header, path, "binary product")
         try:
             mesh_shape = tuple(int(parameters[f"mesh/nx{axis}"]) for axis in range(1, 4))
             meshblock_shape = tuple(
@@ -423,7 +542,23 @@ def terminal_product_group(directory: Path, suffix: str, rank_count: int) -> dic
         raise FastRunError(f"incomplete terminal {suffix} rank group: {terminal.name}")
     if suffix in {".rst", ".bin"}:
         if suffix == ".rst":
-            times = [restart_time(path) for path in siblings]
+            profiles = [restart_profile(path) for path in siblings]
+            times = [float(profile["physical_time"]) for profile in profiles]
+            expected_schema = profiles[0]["schema"]
+            expected_meshblocks = int(profiles[0]["expected_meshblocks"])
+            if (
+                any(profile["schema"] != expected_schema for profile in profiles)
+                or any(
+                    int(profile["expected_meshblocks"]) != expected_meshblocks
+                    for profile in profiles
+                )
+                or sum(int(profile["local_blocks"]) for profile in profiles)
+                != expected_meshblocks
+            ):
+                raise FastRunError(
+                    f"inconsistent terminal {suffix} schema or meshblock coverage: "
+                    f"{terminal.name}"
+                )
         else:
             profiles = [binary_profile(path) for path in siblings]
             times = [float(profile["physical_time"]) for profile in profiles]

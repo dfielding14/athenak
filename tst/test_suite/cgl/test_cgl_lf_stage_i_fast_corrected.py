@@ -79,9 +79,39 @@ def write_history(path: Path, columns: dict[str, list[float]]) -> None:
 
 
 def write_restart_group(directory: Path, rank_count: int, time: float) -> Path:
-    payload = f"<time>\ntime = {time:.17g}\n<par_end>\n".encode() + b"\0payload"
     rank_zero = directory / "rank_00000000/fixture.00001.rst"
     for rank in range(rank_count):
+        parameter_header = (
+            f"<mesh>\nnx1 = {rank_count}\nnx2 = 1\nnx3 = 1\n"
+            "<meshblock>\nnx1 = 1\nnx2 = 1\nnx3 = 1\n"
+            f"<time>\nrestart_time = {time:.17g}\n"
+            "<par_end>\n"
+        ).encode()
+        mesh_header = bytearray(252)
+        struct.pack_into("<ii", mesh_header, 0, rank_count, 0)
+        struct.pack_into("<d", mesh_header, 232, time)
+        struct.pack_into("<d", mesh_header, 240, 0.01)
+        struct.pack_into("<i", mesh_header, 248, 1)
+        locations = b"".join(
+            struct.pack("<4i", location, 0, 0, 0)
+            for location in range(rank_count)
+        )
+        costs = struct.pack(f"<{rank_count}f", *([1.0] * rank_count))
+        metadata = bytearray(248)
+        struct.pack_into("<i", metadata, 4, 1)
+        payload = (
+            parameter_header
+            + mesh_header
+            + locations
+            + costs
+            + metadata
+            + bytes(296)
+            + bytes(6 * 8)
+            + struct.pack("<d", 0.0)
+            + struct.pack("<18d", *([0.0] * 18))
+            + struct.pack("<Q", 8)
+            + bytes(8)
+        )
         path = directory / f"rank_{rank:08d}/fixture.00001.rst"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
