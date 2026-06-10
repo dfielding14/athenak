@@ -10,6 +10,7 @@
 
 #include <float.h>
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <string>
 #include <iostream> // cout
@@ -23,6 +24,26 @@
 #include "eos/eos.hpp"
 #include "conduction.hpp"
 #include "units/units.hpp"
+
+namespace {
+
+parabolic::ParabolicIntegratorMode ParseConductivityIntegrator(std::string block,
+    ParameterInput *pin) {
+  std::string integrator = pin->GetOrAddString(block, "conductivity_integrator",
+                                               "explicit");
+  if (integrator == "explicit") {
+    return parabolic::ParabolicIntegratorMode::explicit_mode;
+  } else if (integrator == "sts") {
+    return parabolic::ParabolicIntegratorMode::sts;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<" << block << ">/conductivity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
 
 KOKKOS_INLINE_FUNCTION
 Real VanLeerLimiter(const Real a, const Real b) {
@@ -48,6 +69,13 @@ Real KappaTemp(Real temp, Real ceiling) {
   } else {
     return fmin(6e-7 * pow(temp, 2.5),ceiling);
   }
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PowerLawKappa(Real temp, Real kappa_ref, Real temp_ref, Real exponent,
+                   Real floor, Real ceiling) {
+  const Real ratio = fmax(temp/temp_ref, static_cast<Real>(1.0e-30));
+  return fmin(fmax(kappa_ref*pow(ratio, exponent), floor), ceiling);
 }
 
 //----------------------------------------------------------------------------------------
@@ -81,6 +109,44 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
   kappa_ceiling = pin->GetOrAddReal(block,"cond_ceiling",
                   static_cast<Real>(std::numeric_limits<float>::max()));
   sat_hflux = pin->GetOrAddBoolean(block,"sat_hflux",false);
+  const std::string default_model = tdep_kappa ? "spitzer" : "constant";
+  const std::string model = pin->GetOrAddString(block, "conductivity_model",
+                                                default_model);
+  if (model == "constant") {
+    tdep_kappa = false;
+  } else if (model == "spitzer") {
+    tdep_kappa = true;
+  } else if (model == "power_law") {
+    tdep_kappa = true;
+    power_law_kappa = true;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<" << block << ">/conductivity_model = '" << model
+              << "' must be 'constant', 'spitzer', or 'power_law'" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  kappa_tref = pin->GetOrAddReal(block, "conductivity_tref", 1.0);
+  kappa_exponent = pin->GetOrAddReal(block, "conductivity_exponent", 0.0);
+  kappa_floor = pin->GetOrAddReal(block, "conductivity_floor", 0.0);
+  power_law_kappa_ceiling = pin->GetOrAddReal(
+      block, "conductivity_ceiling",
+      static_cast<Real>(std::numeric_limits<float>::max()));
+  if (kappa < 0.0 || kappa_tref <= 0.0 || kappa_floor < 0.0 ||
+      power_law_kappa_ceiling < kappa_floor) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "Invalid conductivity coefficient, reference temperature, or "
+              << "power-law saturation bounds in <" << block << ">" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  mode = ParseConductivityIntegrator(block, pin);
+  if (sat_hflux && mode == parabolic::ParabolicIntegratorMode::sts) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<" << block << ">/sat_hflux is not compatible with STS because "
+              << "the saturated flux does not provide a parabolic timestep bound"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 }
 
 //----------------------------------------------------------------------------------------
@@ -95,7 +161,9 @@ Conduction::~Conduction() {
 
 void Conduction::AddHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &eos,
   DvceFaceFld5D<Real> &flx) {
-  if (tdep_kappa) {
+  if (power_law_kappa) {
+    PowerLawHeatFlux(w0, eos, flx);
+  } else if (tdep_kappa) {
     TempDependentHeatFlux(w0, eos, flx);
   } else if (kappa > 0.0) {
     IsotropicHeatFlux(w0, eos, flx);
@@ -177,6 +245,72 @@ void Conduction::IsotropicHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &
   });
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void PowerLawHeatFlux()
+//! \brief Add isotropic heat flux with kappa(T)=kappa_ref*(T/T_ref)^alpha, clamped
+//! between the configured floor and ceiling.
+
+void Conduction::PowerLawHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+  DvceFaceFld5D<Real> &flx) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto size = pmy_pack->pmb->mb_size;
+  const bool use_e = eos.use_e;
+  const Real gm1 = eos.gamma - 1.0;
+  const Real kappa_ref = kappa;
+  const Real temp_ref = kappa_tref;
+  const Real exponent = kappa_exponent;
+  const Real floor = kappa_floor;
+  const Real ceiling = power_law_kappa_ceiling;
+
+  auto &flx1 = flx.x1f;
+  par_for("conduct_power1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real tl = use_e ? gm1*w0(m,IEN,k,j,i-1)/w0(m,IDN,k,j,i-1)
+                          : w0(m,ITM,k,j,i-1);
+    const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
+                          : w0(m,ITM,k,j,i);
+    const Real kappaf = 0.5*(PowerLawKappa(tl, kappa_ref, temp_ref, exponent, floor,
+                                           ceiling) +
+                              PowerLawKappa(tr, kappa_ref, temp_ref, exponent, floor,
+                                           ceiling));
+    flx1(m,IEN,k,j,i) -= kappaf*(tr - tl)/size.d_view(m).dx1;
+  });
+  if (pmy_pack->pmesh->one_d) {return;}
+
+  auto &flx2 = flx.x2f;
+  par_for("conduct_power2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real tl = use_e ? gm1*w0(m,IEN,k,j-1,i)/w0(m,IDN,k,j-1,i)
+                          : w0(m,ITM,k,j-1,i);
+    const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
+                          : w0(m,ITM,k,j,i);
+    const Real kappaf = 0.5*(PowerLawKappa(tl, kappa_ref, temp_ref, exponent, floor,
+                                           ceiling) +
+                              PowerLawKappa(tr, kappa_ref, temp_ref, exponent, floor,
+                                           ceiling));
+    flx2(m,IEN,k,j,i) -= kappaf*(tr - tl)/size.d_view(m).dx2;
+  });
+  if (pmy_pack->pmesh->two_d) {return;}
+
+  auto &flx3 = flx.x3f;
+  par_for("conduct_power3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real tl = use_e ? gm1*w0(m,IEN,k-1,j,i)/w0(m,IDN,k-1,j,i)
+                          : w0(m,ITM,k-1,j,i);
+    const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
+                          : w0(m,ITM,k,j,i);
+    const Real kappaf = 0.5*(PowerLawKappa(tl, kappa_ref, temp_ref, exponent, floor,
+                                           ceiling) +
+                              PowerLawKappa(tr, kappa_ref, temp_ref, exponent, floor,
+                                           ceiling));
+    flx3(m,IEN,k,j,i) -= kappaf*(tr - tl)/size.d_view(m).dx3;
+  });
 }
 
 //----------------------------------------------------------------------------------------
@@ -423,7 +557,12 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   Real gm1 = eos_data.gamma-1.0;
   Real kappa0 = kappa;
   bool tdepkappa = tdep_kappa;
+  bool powerlaw = power_law_kappa;
   Real kappaceil = kappa_ceiling;
+  Real temp_ref = kappa_tref;
+  Real exponent = kappa_exponent;
+  Real floor = kappa_floor;
+  Real power_ceiling = power_law_kappa_ceiling;
   Real fac;
   if (pmy_pack->pmesh->three_d) {
     fac = 1.0/6.0;
@@ -433,9 +572,13 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
     fac = 0.5;
   }
 
-  Real temp_unit = pmy_pack->punit->temperature_cgs();
-  Real kappa_unit = pmy_pack->punit->pressure_cgs()*pmy_pack->punit->velocity_cgs()*
-                    pmy_pack->punit->length_cgs()/pmy_pack->punit->temperature_cgs();
+  Real temp_unit = 1.0;
+  Real kappa_unit = 1.0;
+  if (tdepkappa && !powerlaw) {
+    temp_unit = pmy_pack->punit->temperature_cgs();
+    kappa_unit = pmy_pack->punit->pressure_cgs()*pmy_pack->punit->velocity_cgs()*
+                 pmy_pack->punit->length_cgs()/pmy_pack->punit->temperature_cgs();
+  }
 
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 
@@ -458,15 +601,21 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
       } else {
         temp = w0(m,ITM,k,j,i);
       }
-      kappa_ = KappaTemp(temp*temp_unit,kappaceil)/kappa_unit;
+      if (powerlaw) {
+        kappa_ = PowerLawKappa(temp, kappa0, temp_ref, exponent, floor, power_ceiling);
+      } else {
+        kappa_ = KappaTemp(temp*temp_unit,kappaceil)/kappa_unit;
+      }
     }
 
-    min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/kappa_*w0_(m,IDN,k,j,i)/gm1);
-    if (multi_d) {
-      min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/kappa_*w0_(m,IDN,k,j,i)/gm1);
-    }
-    if (three_d) {
-      min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+    if (kappa_ > 0.0) {
+      min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+      if (multi_d) {
+        min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+      }
+      if (three_d) {
+        min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+      }
     }
   }, Kokkos::Min<Real>(dtnew));
 

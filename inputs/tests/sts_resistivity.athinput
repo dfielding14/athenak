@@ -1,0 +1,74 @@
+# Resistive current-sheet smoke test with field-centered STS updates.
+
+<job>
+basename = sts_resistivity
+
+<mesh>
+nghost = 2
+nx1 = 256
+x1min = -0.5
+x1max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 1
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 128
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = kinematic
+integrator = rk2
+cfl_number = 0.4
+tlim = 0.02
+nlim = -1
+ndiag = 100000
+sts_integrator = rkl2
+sts_max_dt_ratio = -1.0
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = plm
+rsolver = advect
+ohmic_resistivity = 0.001
+ohmic_resistivity_integrator = sts
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.0
+pl = 1.0
+ul = 0.0
+vl = 1.0
+wl = 1.0
+bxl = 0.0
+byl = 1.0
+bzl = 1.0
+dr = 1.0
+pr = 1.0
+ur = 0.0
+vr = -1.0
+wr = -1.0
+bxr = 0.0
+byr = -1.0
+bzr = -1.0
+
+<output1>
+file_type = tab
+variable = mhd_bcc
+data_format = %24.16e
+dt = 0.02
+slice_x2 = 0.0
+slice_x3 = 0.0

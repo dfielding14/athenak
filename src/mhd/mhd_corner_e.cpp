@@ -414,13 +414,8 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
     });
   }
 
-  // Add resistive electric field (if needed)
-  if (presist != nullptr) {
-    if (presist->eta_ohm > 0.0) {
-      presist->OhmicEField(b0, efld);
-    }
-    // TODO(@user): Add more resistive effects here
-  }
+  // Resistive terms enrolled in STS are applied only during parabolic sweeps.
+  AddSelectedDiffusionEMF(DiffusionSelection::explicit_only);
 
   return TaskStatus::complete;
 }
