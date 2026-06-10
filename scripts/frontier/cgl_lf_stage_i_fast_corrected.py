@@ -611,7 +611,12 @@ def analyze_finite_limiter_diagnostic(
         )
     )
     snapshot_complete = (
-        snapshot is not None and int(snapshot["rank_count"]) == rank_count
+        snapshot is not None
+        and int(snapshot["rank_count"]) == rank_count
+        and math.isclose(
+            float(snapshot["physical_time"]), final_time,
+            rel_tol=0.0, abs_tol=1.0e-12
+        )
     )
     fatal_counters_zero = all(value == 0.0 for value in fatal_maxima.values())
     base_strict_passed = (

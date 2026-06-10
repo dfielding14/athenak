@@ -22,8 +22,9 @@
 namespace mesh_timestep {
 
 inline bool IsFinitePositiveAndAdvancing(const Real time, const Real dt) {
-  return std::isfinite(time) && std::isfinite(dt) &&
-         dt > 0.0 && time + dt > time;
+  const Real next_time = time + dt;
+  return std::isfinite(time) && std::isfinite(dt) && std::isfinite(next_time) &&
+         dt > 0.0 && next_time > time;
 }
 
 } // namespace mesh_timestep

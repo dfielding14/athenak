@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import re
 import stat
+import struct
 from types import SimpleNamespace
 import sys
 
@@ -77,6 +78,55 @@ def restart_payload(time: float) -> bytes:
     return f"<time>\ntime = {time:.17g}\n<par_end>\n".encode() + b"\0payload"
 
 
+def binary_payload(
+    time: float,
+    *,
+    mesh_nx1: int = 1,
+    locations: tuple[int, ...] = (0,),
+) -> bytes:
+    parameter_header = (
+        f"<mesh>\nnx1 = {mesh_nx1}\nnx2 = 1\nnx3 = 1\n"
+        "<meshblock>\nnx1 = 1\nnx2 = 1\nnx3 = 1\n"
+        "<par_end>\n"
+    ).encode()
+    header = (
+        "Athena binary output version=1.1\n"
+        "  size of preheader=5\n"
+        f"  time={time:.17g}\n"
+        "  cycle=1\n"
+        "  size of location=8\n"
+        "  size of variable=4\n"
+        "  number of variables=1\n"
+        "  variables:  dens\n"
+        f"  header offset={len(parameter_header)}\n"
+    ).encode() + parameter_header
+    blocks = b"".join(
+        struct.pack("<10i", 0, 0, 0, 0, 0, 0, location, 0, 0, 0)
+        + struct.pack(
+            "<6d", float(location), float(location + 1), 0.0, 1.0, 0.0, 1.0
+        )
+        + struct.pack("<f", 1.0)
+        for location in locations
+    )
+    return header + blocks
+
+
+def write_binary_rank_group(
+    directory: Path,
+    filename: str,
+    rank_count: int,
+    time: float,
+) -> Path:
+    rank_zero = directory / "rank_00000000" / filename
+    for rank in range(rank_count):
+        path = directory / f"rank_{rank:08d}" / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            binary_payload(time, mesh_nx1=rank_count, locations=(rank,))
+        )
+    return rank_zero
+
+
 def write_rank_group(
     directory: Path,
     filename: str,
@@ -120,7 +170,7 @@ def segment_fixture(
         2,
         restart_payload(final_time),
     )
-    write_rank_group(output / "bin", "fixture.00001.bin", 2, b"snapshot")
+    write_binary_rank_group(output / "bin", "fixture.00001.bin", 2, final_time)
     write_json(
         segment / "manifest/fast_run.json",
         {
@@ -310,6 +360,24 @@ def test_restart_time_requires_one_finite_physical_time(fast, tmp_path):
         fast.restart_time(path)
 
 
+def test_binary_time_requires_magic_and_finite_physical_time(fast, tmp_path):
+    path = tmp_path / "fixture.bin"
+    path.write_bytes(binary_payload(0.625))
+    assert fast.binary_time(path) == 0.625
+
+    path.write_bytes(b"not an Athena binary\n")
+    with pytest.raises(fast.FastRunError, match="magic/version"):
+        fast.binary_time(path)
+
+    path.write_bytes(
+        b"Athena binary output version=1.1\n"
+        b"  size of preheader=5\n"
+        b"  time=0.625\n"
+    )
+    with pytest.raises(fast.FastRunError, match="truncated cycle"):
+        fast.binary_time(path)
+
+
 def test_terminal_product_group_requires_a_complete_rank_group(fast, tmp_path):
     directory = tmp_path / "rst"
     terminal = write_rank_group(directory, "fixture.00002.rst", 3, restart_payload(2.0))
@@ -323,6 +391,34 @@ def test_terminal_product_group_requires_a_complete_rank_group(fast, tmp_path):
     (directory / "rank_00000002/fixture.00002.rst").unlink()
     with pytest.raises(fast.FastRunError, match="incomplete terminal"):
         fast.terminal_product_group(directory, ".rst", 3)
+
+
+def test_terminal_binary_group_selects_latest_physical_time(fast, tmp_path):
+    directory = tmp_path / "bin"
+    terminal = write_binary_rank_group(directory, "fixture.00001.bin", 3, 2.0)
+    write_binary_rank_group(directory, "fixture.00002.bin", 3, 1.0)
+
+    result = fast.terminal_product_group(directory, ".bin", 3)
+
+    assert result["rank_zero"] == str(terminal.resolve())
+    assert result["physical_time"] == 2.0
+
+    (directory / "rank_00000002/fixture.00001.bin").write_bytes(b"corrupt")
+    with pytest.raises(fast.FastRunError, match="magic/version"):
+        fast.terminal_product_group(directory, ".bin", 3)
+
+
+def test_terminal_binary_group_rejects_meshblock_boundary_truncation(fast, tmp_path):
+    directory = tmp_path / "bin"
+    write_rank_group(
+        directory,
+        "fixture.00001.bin",
+        1,
+        binary_payload(2.0, mesh_nx1=2, locations=(0,)),
+    )
+
+    with pytest.raises(fast.FastRunError, match="logical coverage"):
+        fast.terminal_product_group(directory, ".bin", 1)
 
 
 def test_analyze_segment_accepts_complete_synchronized_clean_output(fast, tmp_path):

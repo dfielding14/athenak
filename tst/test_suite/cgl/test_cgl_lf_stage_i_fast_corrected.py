@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import struct
 from types import SimpleNamespace
 import sys
 
@@ -87,12 +88,36 @@ def write_restart_group(directory: Path, rank_count: int, time: float) -> Path:
     return rank_zero
 
 
-def write_binary_group(directory: Path, rank_count: int) -> Path:
+def write_binary_group(directory: Path, rank_count: int, time: float = 0.5) -> Path:
     rank_zero = directory / "rank_00000000/fixture.00001.bin"
     for rank in range(rank_count):
+        parameter_header = (
+            f"<mesh>\nnx1 = {rank_count}\nnx2 = 1\nnx3 = 1\n"
+            "<meshblock>\nnx1 = 1\nnx2 = 1\nnx3 = 1\n"
+            "<par_end>\n"
+        ).encode()
+        header = (
+            "Athena binary output version=1.1\n"
+            "  size of preheader=5\n"
+            f"  time={time:.17g}\n"
+            "  cycle=1\n"
+            "  size of location=8\n"
+            "  size of variable=4\n"
+            "  number of variables=1\n"
+            "  variables:  dens\n"
+            f"  header offset={len(parameter_header)}\n"
+        ).encode() + parameter_header
+        payload = (
+            header
+            + struct.pack("<10i", 0, 0, 0, 0, 0, 0, rank, 0, 0, 0)
+            + struct.pack(
+                "<6d", float(rank), float(rank + 1), 0.0, 1.0, 0.0, 1.0
+            )
+            + struct.pack("<f", 1.0)
+        )
         path = directory / f"rank_{rank:08d}/fixture.00001.bin"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"binary payload")
+        path.write_bytes(payload)
     return rank_zero
 
 
@@ -494,6 +519,44 @@ def test_diagnostic_analysis_rejects_missing_terminal_snapshot(
         {"time": [0.0, 0.5], "mass": [2.0, 2.0]},
     )
     write_restart_group(output / "rst", 8, 0.5)
+    monkeypatch.setattr(corrected, "validate_segment", lambda _segment: manifest)
+
+    result = corrected.analyze_segment(segment)
+
+    assert result["continuation_gate"]["complete_terminal_snapshot"] is False
+    assert result["passed"] is False
+
+
+def test_diagnostic_analysis_rejects_stale_terminal_snapshot(
+    corrected, tmp_path, monkeypatch
+):
+    segment = tmp_path / "campaign/stale-snapshot/R14/fast_s000"
+    output = segment / "output"
+    manifest = {
+        "case_id": "R14",
+        "ranks": 8,
+        "start_time": 0.0,
+        "target_time": 10.0,
+    }
+    write_history(
+        output / "fixture.mhd.hst",
+        {
+            "time": [0.0, 0.5],
+            "dt": [0.1, 0.1],
+            "mass": [2.0, 2.0],
+            "lf_dfloor": [0.0, 0.0],
+            "lf_pfloor": [0.0, 0.0],
+            "lf_nonfin": [0.0, 0.0],
+            "lf_nonpos": [0.0, 0.0],
+            "lf_hardbd": [0.0, 0.0],
+        },
+    )
+    write_history(
+        output / "fixture.user.hst",
+        {"time": [0.0, 0.5], "mass": [2.0, 2.0]},
+    )
+    write_restart_group(output / "rst", 8, 0.5)
+    write_binary_group(output / "bin", 8, 0.4)
     monkeypatch.setattr(corrected, "validate_segment", lambda _segment: manifest)
 
     result = corrected.analyze_segment(segment)

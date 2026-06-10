@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import struct
 import subprocess
 import sys
 import tempfile
@@ -251,6 +252,145 @@ def restart_time(path: Path) -> float:
     return values[0]
 
 
+def binary_assignment(stream, path: Path, key: str) -> str:
+    line = stream.readline(16 * 1024)
+    if not line.endswith(b"\n"):
+        raise FastRunError(f"binary product has truncated {key}: {path}")
+    try:
+        text = line.decode("ascii").strip()
+    except UnicodeDecodeError as error:
+        raise FastRunError(f"binary product has non-ASCII {key}: {path}") from error
+    observed_key, separator, value = text.partition("=")
+    if not separator or observed_key.strip() != key or not value.strip():
+        raise FastRunError(f"binary product lacks {key}: {path}")
+    return value.strip()
+
+
+def binary_parameter_values(payload: bytes, path: Path) -> dict[str, str]:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise FastRunError(f"binary product parameter header is not UTF-8: {path}") from error
+    block = ""
+    values: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line.startswith("<") and line.endswith(">"):
+            block = line[1:-1].strip()
+        elif block and "=" in line:
+            key, value = (item.strip() for item in line.split("=", 1))
+            values[f"{block}/{key}"] = value
+    return values
+
+
+def binary_profile(path: Path) -> dict[str, object]:
+    with path.open("rb") as stream:
+        file_size = os.fstat(stream.fileno()).st_size
+        if stream.readline(16 * 1024) != b"Athena binary output version=1.1\n":
+            raise FastRunError(f"binary product has invalid magic/version: {path}")
+        try:
+            preheader = int(binary_assignment(stream, path, "size of preheader"))
+            physical_time = float(binary_assignment(stream, path, "time"))
+            cycle = int(binary_assignment(stream, path, "cycle"))
+            location_size = int(binary_assignment(stream, path, "size of location"))
+            variable_size = int(binary_assignment(stream, path, "size of variable"))
+            variable_count = int(binary_assignment(stream, path, "number of variables"))
+        except ValueError as error:
+            raise FastRunError(f"binary product has invalid numeric header: {path}") from error
+        if (
+            preheader != 5
+            or not math.isfinite(physical_time)
+            or cycle < 0
+            or location_size not in (4, 8)
+            or variable_size not in (4, 8)
+            or not 0 < variable_count <= 4096
+        ):
+            raise FastRunError(f"binary product has invalid header values: {path}")
+        variable_line = stream.readline(64 * 1024)
+        if not variable_line.endswith(b"\n"):
+            raise FastRunError(f"binary product has truncated variable inventory: {path}")
+        try:
+            fields = variable_line.decode("ascii").strip().split()
+        except UnicodeDecodeError as error:
+            raise FastRunError(
+                f"binary product has non-ASCII variable inventory: {path}"
+            ) from error
+        if (
+            not fields
+            or fields[0] != "variables:"
+            or len(fields[1:]) != variable_count
+            or len(set(fields[1:])) != variable_count
+        ):
+            raise FastRunError(f"binary product has invalid variable inventory: {path}")
+        try:
+            header_size = int(binary_assignment(stream, path, "header offset"))
+        except ValueError as error:
+            raise FastRunError(f"binary product has invalid header offset: {path}") from error
+        if header_size <= 0 or stream.tell() + header_size >= file_size:
+            raise FastRunError(f"binary product has invalid parameter header size: {path}")
+        parameter_header = stream.read(header_size)
+        if len(parameter_header) != header_size or b"<par_end>\n" not in parameter_header:
+            raise FastRunError(f"binary product has invalid parameter header: {path}")
+        parameters = binary_parameter_values(parameter_header, path)
+        try:
+            mesh_shape = tuple(int(parameters[f"mesh/nx{axis}"]) for axis in range(1, 4))
+            meshblock_shape = tuple(
+                int(parameters[f"meshblock/nx{axis}"]) for axis in range(1, 4)
+            )
+        except (KeyError, ValueError) as error:
+            raise FastRunError(f"binary product lacks mesh decomposition: {path}") from error
+        if (
+            any(extent <= 0 for extent in mesh_shape + meshblock_shape)
+            or any(
+                mesh_extent % block_extent != 0
+                for mesh_extent, block_extent in zip(mesh_shape, meshblock_shape)
+            )
+        ):
+            raise FastRunError(f"binary product has invalid mesh decomposition: {path}")
+        logical_shape = tuple(
+            mesh_extent // block_extent
+            for mesh_extent, block_extent in zip(mesh_shape, meshblock_shape)
+        )
+        expected_locations = frozenset(
+            (lx1, lx2, lx3, 0)
+            for lx3 in range(logical_shape[2])
+            for lx2 in range(logical_shape[1])
+            for lx1 in range(logical_shape[0])
+        )
+        locations: list[tuple[int, int, int, int]] = []
+        while stream.tell() < file_size:
+            if stream.tell() + 40 + 6 * location_size > file_size:
+                raise FastRunError(f"binary product has truncated meshblock header: {path}")
+            indices = struct.unpack("<10i", stream.read(40))
+            shape = (
+                indices[1] - indices[0] + 1,
+                indices[3] - indices[2] + 1,
+                indices[5] - indices[4] + 1,
+            )
+            if any(extent <= 0 for extent in shape):
+                raise FastRunError(f"binary product has invalid meshblock shape: {path}")
+            location = tuple(indices[6:10])
+            if location not in expected_locations or location in locations:
+                raise FastRunError(f"binary product has invalid logical location: {path}")
+            locations.append(location)
+            stream.seek(6 * location_size, os.SEEK_CUR)
+            payload_size = math.prod(shape) * variable_count * variable_size
+            if payload_size <= 0 or stream.tell() + payload_size > file_size:
+                raise FastRunError(f"binary product has truncated meshblock payload: {path}")
+            stream.seek(payload_size, os.SEEK_CUR)
+        if stream.tell() != file_size or not locations:
+            raise FastRunError(f"binary product lacks a complete meshblock payload: {path}")
+    return {
+        "physical_time": physical_time,
+        "locations": tuple(locations),
+        "expected_locations": expected_locations,
+    }
+
+
+def binary_time(path: Path) -> float:
+    return float(binary_profile(path)["physical_time"])
+
+
 def terminal_product_group(directory: Path, suffix: str, rank_count: int) -> dict[str, object]:
     rank_zero = directory / "rank_00000000"
     if not rank_zero.is_dir():
@@ -261,6 +401,9 @@ def terminal_product_group(directory: Path, suffix: str, rank_count: int) -> dic
     if suffix == ".rst":
         terminal = max(candidates, key=restart_time)
         physical_time = restart_time(terminal)
+    elif suffix == ".bin":
+        terminal = max(candidates, key=binary_time)
+        physical_time = binary_time(terminal)
     else:
         terminal = candidates[-1]
         physical_time = None
@@ -269,6 +412,36 @@ def terminal_product_group(directory: Path, suffix: str, rank_count: int) -> dic
     actual_ranks = {path.parent.name for path in siblings}
     if actual_ranks != expected_ranks or any(not path.is_file() or path.stat().st_size == 0 for path in siblings):
         raise FastRunError(f"incomplete terminal {suffix} rank group: {terminal.name}")
+    if suffix in {".rst", ".bin"}:
+        if suffix == ".rst":
+            times = [restart_time(path) for path in siblings]
+        else:
+            profiles = [binary_profile(path) for path in siblings]
+            times = [float(profile["physical_time"]) for profile in profiles]
+            expected_locations = profiles[0]["expected_locations"]
+            locations = [
+                location
+                for profile in profiles
+                for location in profile["locations"]
+            ]
+            if (
+                any(
+                    profile["expected_locations"] != expected_locations
+                    for profile in profiles
+                )
+                or len(locations) != len(set(locations))
+                or frozenset(locations) != expected_locations
+            ):
+                raise FastRunError(
+                    f"incomplete terminal {suffix} logical coverage: {terminal.name}"
+                )
+        if any(
+            not math.isclose(
+                time, float(physical_time), rel_tol=0.0, abs_tol=1.0e-12
+            )
+            for time in times
+        ):
+            raise FastRunError(f"inconsistent terminal {suffix} rank times: {terminal.name}")
     return {
         "rank_zero": str(terminal.resolve()),
         "rank_count": len(siblings),
@@ -298,6 +471,10 @@ def analyze_segment(segment: Path, *, save: bool = True) -> dict[str, object]:
     snapshot = terminal_product_group(output / "bin", ".bin", rank_count)
     if not math.isclose(float(restart["physical_time"]), final_time, rel_tol=0.0, abs_tol=1.0e-12):
         raise FastRunError(f"terminal restart and history times differ: {output}")
+    if not math.isclose(
+        float(snapshot["physical_time"]), final_time, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        raise FastRunError(f"terminal snapshot and history times differ: {output}")
     strict_maxima = {
         name: max(abs(value) for value in mhd.get(name, [math.inf]))
         for name in STRICT_FAILURE_COLUMNS

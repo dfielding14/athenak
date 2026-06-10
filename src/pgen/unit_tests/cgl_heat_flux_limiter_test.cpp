@@ -158,6 +158,13 @@ void CheckPositiveProductEndpoints() {
       cgl::PositiveProduct4(static_cast<Real>(4.0)/maximum, maximum,
                             cgl::kSqrtEightOverPi, 1.0),
       static_cast<Real>(4.0)*cgl::kSqrtEightOverPi);
+  RequireRelativeClose(
+      "four-factor subnormal cancellation",
+      cgl::PositiveProduct4(tiny, maximum, cgl::kSqrtTwoOverPi, 1.0),
+      static_cast<Real>(
+          static_cast<long double>(tiny)*
+          static_cast<long double>(maximum)*
+          static_cast<long double>(cgl::kSqrtTwoOverPi)));
 }
 
 Real ReferencePerpendicularHeatFlux(
@@ -205,6 +212,20 @@ void CheckParallelClosureOrdinaryAgreement() {
 
 void CheckParallelClosureOverflowEndpoints() {
   const Real maximum = std::numeric_limits<Real>::max();
+
+  {
+    const Real tiny = std::numeric_limits<Real>::denorm_min();
+    Real ratio = 0.0;
+    const Real q = cgl::LimitedParallelHeatFlux(
+        maximum, 1.0, 1.0, 1.0, 0.0, -tiny, ratio);
+    const Real expected = static_cast<Real>(
+        static_cast<long double>(maximum)*
+        static_cast<long double>(cgl::kSqrtEightOverPi)*
+        static_cast<long double>(tiny));
+    RequireClose("parallel subnormal ratio", ratio, tiny);
+    Require("parallel subnormal-ratio flux finite", std::isfinite(q));
+    RequireRelativeClose("parallel subnormal-ratio flux", q, expected);
+  }
 
   {
     const Real small_ratio = static_cast<Real>(4.0)/maximum;
@@ -307,6 +328,21 @@ void CheckPerpendicularClosureOrdinaryAgreement() {
 
 void CheckPerpendicularClosureOverflowEndpoints() {
   const Real maximum = std::numeric_limits<Real>::max();
+
+  {
+    const Real tiny = std::numeric_limits<Real>::denorm_min();
+    Real ratio = 0.0;
+    const Real q = cgl::LimitedPerpendicularHeatFlux(
+        maximum, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+        -tiny, 0.0, ratio);
+    const Real expected = static_cast<Real>(
+        static_cast<long double>(maximum)*
+        static_cast<long double>(cgl::kSqrtTwoOverPi)*
+        static_cast<long double>(tiny));
+    RequireClose("perpendicular subnormal ratio", ratio, tiny);
+    Require("perpendicular subnormal-ratio flux finite", std::isfinite(q));
+    RequireRelativeClose("perpendicular subnormal-ratio flux", q, expected);
+  }
 
   {
     const Real small_ratio = static_cast<Real>(4.0)/maximum;

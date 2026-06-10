@@ -388,6 +388,9 @@ void CheckCycleTimestepAdvancementEndpoints() {
           mesh_timestep::IsFinitePositiveAndAdvancing(time, spacing));
   Require("cycle timestep rejects zero",
           !mesh_timestep::IsFinitePositiveAndAdvancing(time, 0.0));
+  const Real maximum = std::numeric_limits<Real>::max();
+  Require("cycle timestep rejects overflowing addition",
+          !mesh_timestep::IsFinitePositiveAndAdvancing(maximum, maximum));
 }
 
 MHDPrim1D MakeLocalState(const ObliqueState &state) {

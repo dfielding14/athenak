@@ -157,17 +157,41 @@ Real PositiveProduct3(const Real a, const Real b, const Real c) {
 
 KOKKOS_INLINE_FUNCTION
 Real PositiveProduct4(const Real a, const Real b, const Real c, const Real d) {
-  const Real direct = (a*c)*(b*d);
+  const Real direct_left = a*c;
+  const Real direct_right = b*d;
+  const Real direct = direct_left*direct_right;
+  const bool direct_intermediates_usable =
+      (direct_left == 0.0 ||
+       fabs(direct_left) >= std::numeric_limits<Real>::min()) &&
+      (direct_right == 0.0 ||
+       fabs(direct_right) >= std::numeric_limits<Real>::min());
   if (Kokkos::isfinite(direct) &&
+      direct_intermediates_usable &&
       (direct > 0.0 || a == 0.0 || b == 0.0 || c == 0.0 || d == 0.0)) {
     return direct;
   }
-  const Real alternate1 = (a*b)*(c*d);
-  if (Kokkos::isfinite(alternate1) && alternate1 > 0.0) {
+  const Real alternate1_left = a*b;
+  const Real alternate1_right = c*d;
+  const Real alternate1 = alternate1_left*alternate1_right;
+  const bool alternate1_intermediates_usable =
+      (alternate1_left == 0.0 ||
+       fabs(alternate1_left) >= std::numeric_limits<Real>::min()) &&
+      (alternate1_right == 0.0 ||
+       fabs(alternate1_right) >= std::numeric_limits<Real>::min());
+  if (Kokkos::isfinite(alternate1) &&
+      alternate1_intermediates_usable && alternate1 > 0.0) {
     return alternate1;
   }
-  const Real alternate2 = (a*d)*(b*c);
-  if (Kokkos::isfinite(alternate2) && alternate2 > 0.0) {
+  const Real alternate2_left = a*d;
+  const Real alternate2_right = b*c;
+  const Real alternate2 = alternate2_left*alternate2_right;
+  const bool alternate2_intermediates_usable =
+      (alternate2_left == 0.0 ||
+       fabs(alternate2_left) >= std::numeric_limits<Real>::min()) &&
+      (alternate2_right == 0.0 ||
+       fabs(alternate2_right) >= std::numeric_limits<Real>::min());
+  if (Kokkos::isfinite(alternate2) &&
+      alternate2_intermediates_usable && alternate2 > 0.0) {
     return alternate2;
   }
   if (!(a > 0.0) || !(b > 0.0) || !(c > 0.0) || !(d > 0.0) ||
