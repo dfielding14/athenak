@@ -181,7 +181,8 @@ contributing_docs
 
 Internal design dossiers and ongoing investigations live here:
 
-- AMR turbulence evolution, divergence control, particle merging, and more.
+- AMR turbulence evolution, divergence control, diffusion/STS optimization,
+  particle merging, and more.
 
 ```{toctree}
 :hidden:
@@ -189,6 +190,7 @@ Internal design dossiers and ongoing investigations live here:
 :caption: Engineering Notes
 
 engineering/amr_turbulence_implementation
+engineering/diffusion_sts_optimization_plan
 engineering/divb_amr_completion_plan
 engineering/divb_amr_final_status
 engineering/divb_amr_implementation_plan
