@@ -597,6 +597,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
 
       if (sts.enabled) {
+        pmesh->RefreshSTSParabolicTimeStep();
         BeginSTSSweep(pmesh, STSSweep::post);
         for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
           SetSTSStage(sts_stage);
