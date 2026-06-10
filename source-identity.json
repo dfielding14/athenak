@@ -1,9 +1,11 @@
 {
-  "repair": "cgl-c2p-log-space-pressure-recovery",
+  "repair": "cgl-c2p-and-heat-flux-stability",
   "scope": [
     "overflow-safe conserved-anisotropy construction",
     "overflow-safe pressure recovery from internal energy and anisotropy",
+    "overflow-safe finite heat-flux limiting across the floating-point range",
     "focused extreme-anisotropy and pressure-floor regression coverage",
+    "focused double- and single-precision heat-flux limiter regression coverage",
     "isolated R14/R15 successor launcher"
   ],
   "schema": "athenak-cgl-source-purpose",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch fresh R14/R15 C2P-stability successor lineages on Frontier."""
+"""Launch fresh R14/R15 C2P and heat-flux stability successors on Frontier."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ def configure_successor(root: Path):
     if (
         source_identity.get("schema") != "athenak-cgl-source-purpose"
         or source_identity.get("schema_version") != 1
-        or source_identity.get("repair") != "cgl-c2p-log-space-pressure-recovery"
+        or source_identity.get("repair") != "cgl-c2p-and-heat-flux-stability"
     ):
         raise RuntimeError("source-purpose identity differs")
     if (
@@ -192,7 +192,7 @@ def configure_successor(root: Path):
     corrected.ACTIVE_CASES = SUPPORTED_CASES
     corrected.FINITE_LIMITER_DIAGNOSTIC_CASES = frozenset(SUPPORTED_CASES)
     corrected.FINITE_LIMITER_VARIANT = (
-        "finite_limiter_c2p_stable_successor_nonfatal"
+        "finite_limiter_c2p_heat_flux_stable_successor_nonfatal"
     )
     corrected.DEFAULT_CASE_NODES = {"R14": 24, "R15": 24}
     corrected.MAX_USEFUL_NODES = {"R14": 27, "R15": 27}
@@ -225,7 +225,7 @@ def configure_successor(root: Path):
                 else "c2p_stable_successor_continuation",
                 "historical_campaign_identity": str(historical_path),
                 "historical_campaign_identity_sha256": historical_sha,
-                "repair": "cgl-c2p-log-space-pressure-recovery",
+                "repair": "cgl-c2p-and-heat-flux-stability",
             }
         )
         corrected.fast.write_json(manifest_path, manifest)
@@ -243,7 +243,7 @@ def configure_successor(root: Path):
             else "c2p_stable_successor_continuation",
             "historical_campaign_identity": str(historical_path),
             "historical_campaign_identity_sha256": historical_sha,
-            "repair": "cgl-c2p-log-space-pressure-recovery",
+            "repair": "cgl-c2p-and-heat-flux-stability",
         }
         for key, value in expected.items():
             if manifest.get(key) != value:

@@ -1,4 +1,4 @@
-"""Focused tests for the R14/R15 C2P-stability successor launcher."""
+"""Focused tests for the R14/R15 C2P and heat-flux stability launcher."""
 
 from __future__ import annotations
 
