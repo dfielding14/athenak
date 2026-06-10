@@ -109,6 +109,17 @@ def load_corrected_launcher():
     return module
 
 
+def restrict_validate_provenance(corrected) -> None:
+    base_validate_provenance = corrected.validate_provenance
+
+    def successor_validate_provenance(
+        root: Path, cases=SUPPORTED_CASES
+    ) -> dict[str, object]:
+        return base_validate_provenance(root, cases)
+
+    corrected.validate_provenance = successor_validate_provenance
+
+
 def configure_successor(root: Path):
     identity_path, identity = load_identity(root)
     source_path, _ = require_binding(identity, "source_identity")
@@ -189,6 +200,7 @@ def configure_successor(root: Path):
         "R14": r14_input_sha,
         "R15": r15_input_sha,
     }
+    restrict_validate_provenance(corrected)
 
     base_batch_script_text = corrected.batch_script_text
 
