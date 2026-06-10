@@ -92,7 +92,8 @@ void SingleP2C_IdealMHD(const MHDPrim1D &w, HydCons1D &u) {
 KOKKOS_INLINE_FUNCTION
 Real CGLConservedAnisotropy(const Real rho, const Real p_parallel,
                             const Real p_perp, const Real bmag) {
-  return rho*log(p_perp/p_parallel*SQR(rho)/(bmag*SQR(bmag)));
+  const Real log_isotropic_anisotropy = 2.0*log(rho) - 3.0*log(bmag);
+  return rho*(log(p_perp) - log(p_parallel) + log_isotropic_anisotropy);
 }
 
 //----------------------------------------------------------------------------------------
@@ -106,10 +107,23 @@ void CGLRecoverPressuresFromInternalEnergyAndAnisotropy(const Real rho,
                                                         const Real bmag,
                                                         Real &p_parallel,
                                                         Real &p_perp) {
-  const Real di = 1.0/rho;
-  const Real p_ratio = bmag*SQR(bmag)*SQR(di)*exp(anisotropy*di);
-  p_parallel = eint/(0.5 + p_ratio);
-  p_perp = p_parallel*p_ratio;
+  const Real log_isotropic_anisotropy = 2.0*log(rho) - 3.0*log(bmag);
+  Real log_p_ratio = anisotropy/rho - log_isotropic_anisotropy;
+  // Preserve exact round trips for isotropic states without a tolerance or limiter.
+  if (Kokkos::isfinite(anisotropy) &&
+      anisotropy == rho*log_isotropic_anisotropy) {
+    log_p_ratio = 0.0;
+  }
+  // Exponentiate only a nonpositive value and recover the smaller pressure by scaling.
+  if (log_p_ratio > 0.0) {
+    const Real inv_p_ratio = exp(-log_p_ratio);
+    p_perp = eint/(1.0 + 0.5*inv_p_ratio);
+    p_parallel = p_perp*inv_p_ratio;
+  } else {
+    const Real p_ratio = exp(log_p_ratio);
+    p_parallel = eint/(0.5 + p_ratio);
+    p_perp = p_parallel*p_ratio;
+  }
 }
 
 //----------------------------------------------------------------------------------------

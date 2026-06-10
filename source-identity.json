@@ -1,0 +1,11 @@
+{
+  "repair": "cgl-c2p-log-space-pressure-recovery",
+  "scope": [
+    "overflow-safe conserved-anisotropy construction",
+    "overflow-safe pressure recovery from internal energy and anisotropy",
+    "focused extreme-anisotropy and pressure-floor regression coverage",
+    "isolated R14/R15 successor launcher"
+  ],
+  "schema": "athenak-cgl-source-purpose",
+  "schema_version": 1
+}

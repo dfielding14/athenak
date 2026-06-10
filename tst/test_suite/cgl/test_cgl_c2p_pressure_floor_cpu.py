@@ -3,6 +3,8 @@
 from pathlib import Path
 import subprocess
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -23,9 +25,10 @@ def _cmake_cache_value(build_dir, key):
     raise AssertionError(f"{key} is absent from CMakeCache.txt")
 
 
-def test_cgl_c2p_pressure_floor_energy_consistency(tmp_path):
+@pytest.mark.parametrize("single_precision", [False, True])
+def test_cgl_c2p_pressure_floor_energy_consistency(tmp_path, single_precision):
     build_dir = tmp_path / "build"
-    _run([
+    configure = [
         "cmake",
         "-S",
         str(REPO_ROOT),
@@ -37,7 +40,10 @@ def test_cgl_c2p_pressure_floor_energy_consistency(tmp_path):
         "-DAthena_ENABLE_MPI=OFF",
         "-DKokkos_ENABLE_HIP=OFF",
         "-DKokkos_ENABLE_SERIAL=ON",
-    ])
+    ]
+    if single_precision:
+        configure.append("-DAthena_SINGLE_PRECISION=ON")
+    _run(configure)
     # Link the exported checker directly to keep this a single-state unit test.
     test_object_target = (
         "src/CMakeFiles/athena.dir/pgen/unit_tests/"
