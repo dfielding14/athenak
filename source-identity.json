@@ -4,8 +4,13 @@
     "overflow-safe conserved-anisotropy construction",
     "overflow-safe pressure recovery from internal energy and anisotropy",
     "overflow-safe finite heat-flux limiting across the floating-point range",
+    "direct ratio-limited parallel and perpendicular Landau-fluid closures",
+    "scaled CGL fast-mode characteristic speed evaluation",
+    "finite positive cycle-timestep enforcement before edot forcing",
     "focused extreme-anisotropy and pressure-floor regression coverage",
     "focused double- and single-precision heat-flux limiter regression coverage",
+    "focused double- and single-precision CGL fast-speed endpoint coverage",
+    "focused zero-field and collapsed-timestep turbulence-driver coverage",
     "isolated R14/R15 successor launcher"
   ],
   "schema": "athenak-cgl-source-purpose",
