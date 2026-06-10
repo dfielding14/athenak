@@ -46,6 +46,7 @@ class CGLLandauFluid {
   bool lf_coeff_local;
   Real lf_c_parallel0;
   bool strict_admissibility;
+  bool effective_backup_limiter;
   parabolic::ParabolicIntegratorMode mode;
   CGLLFDiagnostics diagnostics;
 

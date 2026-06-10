@@ -558,10 +558,14 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
   auto &lim_coll = eos_data.lim_coll;
   auto &flim = eos_data.flim;
   auto &mlim = eos_data.mlim;
-  auto &backup = eos_data.backup_lim;
   auto &hardwall = eos_data.hardwall_lim;
   auto &bfloor = eos_data.bfloor;
   auto &firehose_threshold = eos_data.firehose_threshold;
+  const auto *pcgl_lf = pmy_pack->pmhd->pcgl_lf;
+  const bool landau_fluid_active = (pcgl_lf != nullptr);
+  const bool backup = landau_fluid_active
+                          ? pcgl_lf->effective_backup_limiter
+                          : eos_data.backup_lim;
 
   // TODO(cgl-lf): If the limiter/collision closure becomes nonlocal or
   // gradient-dependent, store nu_eff on the grid here and reconstruct it to LF

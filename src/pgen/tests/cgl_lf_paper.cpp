@@ -17,6 +17,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "eos/cgl_physics.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen/pgen.hpp"
 #include "srcterms/turb_driver.hpp"
@@ -58,6 +59,9 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
   auto w0 = pmbp->pmhd->w0;
   auto bcc0 = pmbp->pmhd->bcc0;
   const auto eos = pmbp->pmhd->peos->eos_data;
+  const bool backup = (pmbp->pmhd->pcgl_lf != nullptr)
+                          ? pmbp->pmhd->pcgl_lf->effective_backup_limiter
+                          : eos.backup_lim;
   DvceArray5D<Real> force;
   const bool has_force = (pmbp->pturb != nullptr);
   if (has_force) force = pmbp->pturb->force;
@@ -92,7 +96,7 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
     const Real beta = 2.0*piso/fmax(bsqr, SQR(eos.bfloor));
     const Real nu_eff = eos.nu_coll +
         cgl::LimiterCollisionRate(ppar, pperp, bsqr, eos.lim_coll, eos.mlim,
-                                  eos.flim, eos.firehose_threshold, eos.backup_lim);
+                                  eos.flim, eos.firehose_threshold, backup);
     array_sum::GlobalSum cell;
     cell.the_array[0] = vol;
     cell.the_array[1] = vol*ppar;

@@ -73,3 +73,11 @@ limiter_suppression_max_ratio = 5.0e-2
 limiter_suppression_min_collisionless_ratio = 10.0
 validation_output = false
 validation_output_dir = docs/figures/data
+
+<output1>
+file_type = tab
+variable = mhd_w
+data_format = %24.16e
+dcycle = 1
+slice_x2 = 0.0
+slice_x3 = 0.0

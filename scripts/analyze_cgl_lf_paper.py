@@ -705,7 +705,17 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
     nu_limiter = np.zeros(rho.shape, dtype=float)
     paniso = pperp - ppar
     limiter_rate = max(model_float(model, "limiter_nu_coll", 0.0) or 0.0, 0.0)
-    backup = model_bool(model, "backup_limiters", False)
+    configured_backup = model_bool(model, "backup_limiters", False)
+    strict_admissibility = model_bool(
+        model, "cgl_lf_strict_admissibility", True
+    )
+    instability_limiter_active = (
+        model_bool(model, "mirror_limiter", False)
+        or model_bool(model, "firehose_limiter", False)
+    )
+    backup = configured_backup or (
+        instability_limiter_active and not strict_admissibility
+    )
     firehose_policy = str(model.get("cgl_firehose_threshold", "oblique"))
     if firehose_policy not in FIREHOSE_THRESHOLD_DEFINITIONS:
         raise ValueError(f"invalid cgl_firehose_threshold={firehose_policy}")
@@ -780,6 +790,10 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
     unlimited_perpendicular = integral(pperp_unlimited_work)
     choices_used = {name: model[name] for name in required_choices}
     choices_used["limiter_hardwall"] = model.get("limiter_hardwall", "false")
+    choices_used["cgl_lf_strict_admissibility"] = model.get(
+        "cgl_lf_strict_admissibility", "legacy_assumed_true"
+    )
+    choices_used["effective_backup_limiter"] = backup
     if coefficient_mode == "background":
         choices_used["lf_c_parallel0"] = model.get("lf_c_parallel0", "unspecified")
     return {
@@ -3777,6 +3791,7 @@ def synthetic_test() -> dict[str, object]:
         "cgl_firehose_threshold": "parallel",
         "limiter_nu_coll": "0.0",
         "backup_limiters": "false",
+        "cgl_lf_strict_admissibility": "true",
         "dfloor": "1.0e-12",
         "pfloor": "1.0e-12",
         "tfloor": "1.0e-12",

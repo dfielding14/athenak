@@ -13,6 +13,7 @@
 #include <string>
 
 #include "athena.hpp"
+#include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/nghbr_index.hpp"
@@ -75,7 +76,8 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                          const Real pperp_l, const Real pperp_r,
                          const Real bx, const Real by, const Real bz, const int dir,
                          const Real lf_k, const bool coeff_local, const Real cparallel0,
-                         const EOS_Data &eos, CGLLFFaceState &face) {
+                         const bool backup, const EOS_Data &eos,
+                         CGLLFFaceState &face) {
   const Real bscale = fmax(fabs(bx), fmax(fabs(by), fabs(bz)));
   if (bscale == 0.0 || lf_k <= 0.0) {
     return false;
@@ -110,7 +112,7 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
   const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0)) +
       cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
                                 eos.mlim, eos.flim, eos.firehose_threshold,
-                                eos.backup_lim);
+                                backup);
   face.lf_k = lf_k;
   face.nu = nu;
   return true;
@@ -204,6 +206,7 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
     lf_coeff_local(true),
     lf_c_parallel0(0.0),
     strict_admissibility(false),
+    effective_backup_limiter(false),
     mode(parabolic::ParabolicIntegratorMode::sts),
     pmy_pack(pp),
     tpar_("cgl_lf_tpar", 1, 1, 1, 1),
@@ -241,6 +244,20 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
   mode = ParseCGLHeatFluxIntegrator(pin);
   strict_admissibility =
       pin->GetOrAddBoolean("mhd", "cgl_lf_strict_admissibility", false);
+  const bool configured_backup =
+      pin->GetOrAddBoolean("mhd", "backup_limiters", false);
+  const bool instability_limiter_active =
+      pin->GetOrAddBoolean("mhd", "mirror_limiter", false) ||
+      pin->GetOrAddBoolean("mhd", "firehose_limiter", false);
+  effective_backup_limiter = cgl::EffectiveBackupLimiter(
+      configured_backup, true, instability_limiter_active,
+      strict_admissibility);
+  if (effective_backup_limiter && !configured_backup &&
+      global_variable::my_rank == 0) {
+    std::cout << "CGL Landau-fluid relaxed admissibility enables the emergency "
+              << "hard-bound backup limiter; configured backup_limiters remains false."
+              << std::endl;
+  }
 }
 
 void CGLLandauFluid::AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &stats) {
@@ -298,6 +315,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   const Real lf_k = lf_k_parallel;
   const bool local = lf_coeff_local;
   const Real cpar0 = lf_c_parallel0;
+  const bool backup = effective_backup_limiter;
   auto &f1 = f.x1f;
   const int ni1 = ie - is + 2;
   const int nj1 = je - js + 1;
@@ -343,7 +361,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
                             w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
                             w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
-                            bx, by, bz, 0, lf_k, local, cpar0, eos, face)) {
+                            bx, by, bz, 0, lf_k, local, cpar0, backup, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
                 dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
                 weighted_qperp_flux, qpar_ratio, qperp_ratio);
@@ -416,7 +434,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
                             w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
                             w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
-                            bx, by, bz, 1, lf_k, local, cpar0, eos, face)) {
+                            bx, by, bz, 1, lf_k, local, cpar0, backup, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
                 dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
                 weighted_qperp_flux, qpar_ratio, qperp_ratio);
@@ -486,7 +504,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
                             w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
                             w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
-                            bx, by, bz, 2, lf_k, local, cpar0, eos, face)) {
+                            bx, by, bz, 2, lf_k, local, cpar0, backup, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
                 dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
                 weighted_qperp_flux, qpar_ratio, qperp_ratio);

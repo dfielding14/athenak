@@ -28,6 +28,16 @@ constexpr Real kSqrtEightPi = 5.013256549262000;
 constexpr Real kThreePiMinusEight = 1.4247779607693793;
 
 KOKKOS_INLINE_FUNCTION
+bool EffectiveBackupLimiter(const bool configured_backup,
+                            const bool landau_fluid_active,
+                            const bool instability_limiter_active,
+                            const bool strict_admissibility) {
+  return configured_backup ||
+         (landau_fluid_active && instability_limiter_active &&
+          !strict_admissibility);
+}
+
+KOKKOS_INLINE_FUNCTION
 bool FirehoseLimiterActive(const Real paniso, const Real bsqr,
                            const Real firehose_threshold) {
   return paniso <= firehose_threshold*bsqr;

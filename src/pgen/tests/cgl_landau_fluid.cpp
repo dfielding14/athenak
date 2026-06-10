@@ -393,7 +393,9 @@ Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp
                           const Real bx, const Real by, const Real bz) {
   const bool mlim = GetBooleanOrFalse(pin, "mhd", "mirror_limiter");
   const bool flim = GetBooleanOrFalse(pin, "mhd", "firehose_limiter");
-  const bool backup_lim = GetBooleanOrFalse(pin, "mhd", "backup_limiters");
+  const bool backup_lim = cgl::EffectiveBackupLimiter(
+      GetBooleanOrFalse(pin, "mhd", "backup_limiters"), true, mlim || flim,
+      GetBooleanOrFalse(pin, "mhd", "cgl_lf_strict_admissibility"));
   const Real lim_coll = std::max(GetRealOrZero(pin, "mhd", "limiter_nu_coll"),
                                  static_cast<Real>(0.0));
   const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);

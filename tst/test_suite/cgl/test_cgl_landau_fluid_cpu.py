@@ -23,6 +23,7 @@ from test_suite.turb.test_turb_driving_cpu import read_force_blocks
 
 
 INPUT_ROOT = "../../../inputs/tests"
+UNIT_INPUT_ROOT = "../../../inputs/unit_tests"
 PAPER_INPUT = "../../../inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput"
 PAPER_PASSIVE_INPUT = (
     "../../../inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput"
@@ -37,6 +38,13 @@ PAPER_STAGE_I_TOOL = Path("../../../scripts/frontier/cgl_lf_stage_i.py")
 def _run(input_name, basename, *flags):
     testutils.run(
         f"{INPUT_ROOT}/{input_name}",
+        [f"job/basename={basename}", *flags],
+    )
+
+
+def _run_unit(input_name, basename, *flags):
+    testutils.run(
+        f"{UNIT_INPUT_ROOT}/{input_name}",
         [f"job/basename={basename}", *flags],
     )
 
@@ -317,12 +325,14 @@ def test_cgl_lf_hardwall_projects_to_selected_firehose_threshold():
         _cleanup()
 
 
-def test_cgl_lf_strict_hard_bound_is_reported_without_backup_correction():
+@pytest.mark.parametrize("backup", ("false", "true"))
+def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
     command = [
         "./athena",
         "-i",
         f"{INPUT_ROOT}/cgl_lf_firehose_policy.athinput",
         "mhd/cgl_firehose_threshold=parallel",
+        f"mhd/backup_limiters={backup}",
         "problem/ppar0=3.0",
         "problem/pperp0=1.0",
     ]
@@ -330,6 +340,93 @@ def test_cgl_lf_strict_hard_bound_is_reported_without_backup_correction():
     assert result.returncode != 0
     assert "strict admissibility failed" in result.stdout
     assert "hard_bound=" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("input_name", "basename", "flags"),
+    (
+        (
+            "cgl_lf_limiter.athinput",
+            "cgl_ci_relaxed_mirror_recovery",
+            ("mhd/backup_limiters=false", "problem/pperp0=2.25"),
+        ),
+        (
+            "cgl_lf_firehose_policy.athinput",
+            "cgl_ci_relaxed_firehose_recovery",
+            (
+                "mhd/cgl_firehose_threshold=parallel",
+                "mhd/backup_limiters=false",
+                "problem/ppar0=3.0",
+                "problem/pperp0=1.0",
+                "problem/backup_bound_tol=1.52",
+            ),
+        ),
+    ),
+)
+def test_cgl_lf_relaxed_mode_recovers_hard_bound_without_explicit_backup(
+    input_name, basename, flags
+):
+    try:
+        _run(
+            input_name,
+            basename,
+            "mhd/cgl_lf_strict_admissibility=false",
+            *flags,
+        )
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        assert history["lf_nonfin"][-1] == 0.0
+        assert history["lf_nonpos"][-1] == 0.0
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_relaxed_face_backup_matches_explicit_backup():
+    common = (
+        "mhd/cgl_lf_strict_admissibility=false",
+        "problem/pperp0=2.5",
+        "problem/amp=0.1",
+    )
+    try:
+        _run_unit(
+            "cgl_lf_limiter_heat_flux_suppression.athinput",
+            "cgl_ci_relaxed_face_backup",
+            *common,
+            "mhd/backup_limiters=false",
+        )
+        _run_unit(
+            "cgl_lf_limiter_heat_flux_suppression.athinput",
+            "cgl_ci_explicit_face_backup",
+            *common,
+            "mhd/backup_limiters=true",
+        )
+        relaxed = _final_tab("cgl_ci_relaxed_face_backup")
+        explicit = _final_tab("cgl_ci_explicit_face_backup")
+        assert set(relaxed) == set(explicit)
+        for field in relaxed:
+            assert np.array_equal(relaxed[field], explicit[field])
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_paper_history_reports_effective_relaxed_backup():
+    try:
+        _run_paper(
+            "cgl_ci_relaxed_effective_nu",
+            "time/nlim=1",
+            "mhd/cgl_lf_strict_admissibility=false",
+            "mhd/backup_limiters=false",
+            "problem/p_parallel0=1.0",
+            "problem/p_perp0=2.25",
+        )
+        history = testutils.athena_read.hst(
+            "cgl_ci_relaxed_effective_nu.user.hst"
+        )
+        mean_nu = history["nu_eff"][0] / history["volume"][0]
+        assert np.isclose(mean_nu, 1.0e10, rtol=1.0e-12)
+        assert history["hard_vol"][0] == history["volume"][0]
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
 
 
 def test_cgl_lf_explicit_reference_agrees_with_capped_sts():

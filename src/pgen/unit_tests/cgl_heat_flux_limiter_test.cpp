@@ -74,6 +74,49 @@ void CheckModerateValues() {
   Require("negative cap", cgl::LimitedHeatFlux(3.0, -2.0) == 0.0);
 }
 
+void CheckBackupLimiterPolicy() {
+  Require("configured backup remains enabled",
+          cgl::EffectiveBackupLimiter(true, false, false, true));
+  Require("strict LF does not imply backup",
+          !cgl::EffectiveBackupLimiter(false, true, true, true));
+  Require("relaxed LF enables backup",
+          cgl::EffectiveBackupLimiter(false, true, true, false));
+  Require("relaxed LF without instability limiters does not enable backup",
+          !cgl::EffectiveBackupLimiter(false, true, false, false));
+  Require("unrelated relaxed configuration does not enable backup",
+          !cgl::EffectiveBackupLimiter(false, false, true, false));
+
+  constexpr Real ppar = 1.0;
+  constexpr Real bsqr = 1.0;
+  constexpr Real limiter_rate = 20.0;
+  const bool relaxed_backup =
+      cgl::EffectiveBackupLimiter(false, true, true, false);
+  RequireClose(
+      "relaxed mirror ordinary limiter rate",
+      cgl::LimiterCollisionRate(
+          ppar, 1.75, bsqr, limiter_rate, true, false,
+          cgl::kFirehoseObliqueThreshold, relaxed_backup),
+      limiter_rate);
+  RequireClose(
+      "relaxed mirror hard-bound backup rate",
+      cgl::LimiterCollisionRate(
+          ppar, 2.25, bsqr, limiter_rate, true, false,
+          cgl::kFirehoseObliqueThreshold, relaxed_backup),
+      cgl::kBackupCollisionRate);
+  RequireClose(
+      "relaxed firehose hard-bound backup rate",
+      cgl::LimiterCollisionRate(
+          3.0, 1.0, bsqr, limiter_rate, false, true,
+          cgl::kFirehoseParallelThreshold, relaxed_backup),
+      cgl::kBackupCollisionRate);
+  RequireClose(
+      "strict unconfigured hard bound retains finite limiter rate",
+      cgl::LimiterCollisionRate(
+          ppar, 2.25, bsqr, limiter_rate, true, false,
+          cgl::kFirehoseObliqueThreshold, false),
+      limiter_rate);
+}
+
 void CheckFiniteOverflowCases() {
   const Real maximum = std::numeric_limits<Real>::max();
   const Real half_maximum = maximum/static_cast<Real>(2.0);
@@ -656,6 +699,7 @@ void CheckWeightedRKLCacheAlgebra() {
 
 void RunCglHeatFluxLimiterChecks() {
   CheckModerateValues();
+  CheckBackupLimiterPolicy();
   CheckFiniteOverflowCases();
   CheckInfiniteAsymptotes();
   CheckRatioLimiter();

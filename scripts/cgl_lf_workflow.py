@@ -345,6 +345,11 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "bfloor": choice("mhd", "bfloor", "unspecified"),
         "cgl_collision_split": "two_half_steps_after_lf_sweeps",
     }
+    strict_admissibility = choice(
+        "mhd", "cgl_lf_strict_admissibility", "false"
+    )
+    if strict_admissibility != "true":
+        choices["cgl_lf_strict_admissibility"] = strict_admissibility
     driving_type = input_block_value(source_text, "turb_driving", "driving_type")
     if driving_type is not None:
         driving_type = choice("turb_driving", "driving_type", driving_type)
