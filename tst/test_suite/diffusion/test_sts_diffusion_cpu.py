@@ -39,6 +39,15 @@ def _command(input_name, basename, *flags):
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
+def _diagnostic_dt(result, cycle=1):
+    matches = re.findall(
+        rf"cycle={cycle}\s+time=[0-9.eE+-]+\s+dt=([0-9.eE+-]+)",
+        result.stdout,
+    )
+    assert matches, result.stdout + result.stderr
+    return float(matches[0])
+
+
 def _cleanup():
     testutils.cleanup()
     shutil.rmtree("bin", ignore_errors=True)
@@ -114,6 +123,51 @@ def test_sts_bounded_power_law_conduction_and_viscosity():
         shear_sts = _tab("sts_shear", "hydro_w")
         shear_explicit = _tab("explicit_shear", "hydro_w")
         assert np.max(np.abs(shear_sts["vely"] - shear_explicit["vely"])) < 1.0e-5
+    finally:
+        _cleanup()
+
+
+def test_constant_viscosity_anisotropic_timestep_bound():
+    """The constant-viscosity limit includes every active mesh direction."""
+    try:
+        cases = (
+            (8, 1, 1, 2.0, 1.0, 1.0),
+            (8, 4, 1, 2.0, 2.0, 1.0),
+            (8, 4, 4, 2.0, 2.0, 4.0),
+        )
+        cfl = 0.4
+        nu = 1.0
+        for nx1, nx2, nx3, lx1, lx2, lx3 in cases:
+            result = _command(
+                "sts_viscous_shear.athinput",
+                f"constant_viscosity_{nx1}_{nx2}_{nx3}",
+                f"mesh/nx1={nx1}",
+                f"mesh/nx2={nx2}",
+                f"mesh/nx3={nx3}",
+                "meshblock/nx1=8",
+                f"meshblock/nx2={nx2}",
+                f"meshblock/nx3={nx3}",
+                f"mesh/x1max={lx1}",
+                f"mesh/x2max={lx2}",
+                f"mesh/x3max={lx3}",
+                "time/cfl_number=0.4",
+                "time/tlim=1.0",
+                "time/nlim=1",
+                "time/ndiag=1",
+                "time/sts_integrator=none",
+                "hydro/viscosity=1.0",
+                "hydro/tdep_viscosity=false",
+                "hydro/viscosity_integrator=explicit",
+            )
+            assert result.returncode == 0, result.stdout + result.stderr
+
+            inverse_dx2 = [(nx1/lx1) ** 2]
+            if nx2 > 1:
+                inverse_dx2.append((nx2/lx2) ** 2)
+            if nx3 > 1:
+                inverse_dx2.append((nx3/lx3) ** 2)
+            expected = cfl/(2.0*nu*(sum(inverse_dx2) + max(inverse_dx2)/3.0))
+            assert np.isclose(_diagnostic_dt(result), expected, rtol=2.0e-6)
     finally:
         _cleanup()
 

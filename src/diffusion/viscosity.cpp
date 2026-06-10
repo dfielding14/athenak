@@ -87,6 +87,29 @@ Viscosity::~Viscosity() {
 void Viscosity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
   dtnew = std::numeric_limits<float>::max();
   auto size = pmy_pack->pmb->mb_size;
+  if (!tdep_nu) {
+    if (nu_iso <= 0.0) return;
+    for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
+      Real inv_dx2_sum = 1.0/SQR(size.h_view(m).dx1);
+      Real inv_dx2_max = inv_dx2_sum;
+      if (pmy_pack->pmesh->multi_d) {
+        const Real inv_dx2 = 1.0/SQR(size.h_view(m).dx2);
+        inv_dx2_sum += inv_dx2;
+        inv_dx2_max = std::max(inv_dx2_max, inv_dx2);
+      }
+      if (pmy_pack->pmesh->three_d) {
+        const Real inv_dx2 = 1.0/SQR(size.h_view(m).dx3);
+        inv_dx2_sum += inv_dx2;
+        inv_dx2_max = std::max(inv_dx2_max, inv_dx2);
+      }
+      const Real rate = 2.0*nu_iso*(inv_dx2_sum + inv_dx2_max/3.0);
+      dtnew = std::min(dtnew, 1.0/rate);
+    }
+    return;
+  }
+
+  // The variable-coefficient, variable-density multidimensional operator includes
+  // cross derivatives and requires a separately derived stability bound.
   Real fac;
   if (pmy_pack->pmesh->three_d) {
     fac = 1.0/6.0;
@@ -95,20 +118,6 @@ void Viscosity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_dat
   } else {
     fac = 0.5;
   }
-  if (!tdep_nu) {
-    if (nu_iso <= 0.0) return;
-    for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
-      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/nu_iso);
-      if (pmy_pack->pmesh->multi_d) {
-        dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/nu_iso);
-      }
-      if (pmy_pack->pmesh->three_d) {
-        dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/nu_iso);
-      }
-    }
-    return;
-  }
-
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;
   const int js = indcs.js, nx2 = indcs.nx2;
