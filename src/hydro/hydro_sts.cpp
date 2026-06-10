@@ -18,6 +18,12 @@
 
 namespace {
 
+bool InitializeSTSFluxWithViscosity(const bool sts_only, const bool has_sts_viscosity,
+                                    const bool has_sts_scalar_diffusion,
+                                    const bool multilevel) {
+  return sts_only && has_sts_viscosity && !has_sts_scalar_diffusion && !multilevel;
+}
+
 KOKKOS_INLINE_FUNCTION
 bool UpdateSTSHydroVariable(const int n, const bool update_momentum,
                             const bool update_energy, const bool update_scalars,
@@ -55,9 +61,13 @@ void Hydro::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
   const bool add_scalar_diffusion =
       (selection == DiffusionSelection::explicit_only) ? has_explicit_scalar_diffusion
                                                        : has_sts_scalar_diffusion;
+  const bool initialize_flux = InitializeSTSFluxWithViscosity(
+      selection == DiffusionSelection::sts_only, has_sts_viscosity,
+      has_sts_scalar_diffusion, pmy_pack->pmesh->multilevel);
 
   if (add_viscosity && pvisc != nullptr) {
-    pvisc->IsotropicViscousFlux(w0, pvisc->nu_iso, peos->eos_data, uflx);
+    pvisc->IsotropicViscousFlux(w0, pvisc->nu_iso, peos->eos_data, uflx,
+                                initialize_flux);
   }
   if (add_hyperviscosity && phypervisc != nullptr) {
     phypervisc->AddHyperViscousFlux(w0, peos->eos_data, uflx);
@@ -77,6 +87,11 @@ void Hydro::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
 TaskStatus Hydro::ClearSTSFlux(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
+  if (InitializeSTSFluxWithViscosity(true, has_sts_viscosity,
+                                     has_sts_scalar_diffusion,
+                                     pmy_pack->pmesh->multilevel)) {
+    return TaskStatus::complete;
+  }
   Kokkos::deep_copy(DevExeSpace(), uflx.x1f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x2f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x3f, 0.0);
