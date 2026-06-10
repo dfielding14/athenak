@@ -127,6 +127,35 @@ def test_sts_bounded_power_law_conduction_and_viscosity():
         _cleanup()
 
 
+def test_sts_combined_constant_viscosity_and_conduction():
+    """The optimized combined STS flux path agrees with explicit integration."""
+    try:
+        common = (
+            "time/tlim=0.005",
+            "output1/dt=0.005",
+        )
+        _run(
+            "sts_combined_diffusion.athinput",
+            "sts_combined_diffusion",
+            *common,
+        )
+        _run(
+            "sts_combined_diffusion.athinput",
+            "explicit_combined_diffusion",
+            *common,
+            "hydro/viscosity_integrator=explicit",
+            "hydro/conductivity_integrator=explicit",
+            "time/sts_integrator=none",
+        )
+
+        sts = _tab("sts_combined_diffusion", "hydro_w")
+        explicit = _tab("explicit_combined_diffusion", "hydro_w")
+        for variable in ("dens", "velx", "vely", "velz", "eint"):
+            assert np.max(np.abs(sts[variable] - explicit[variable])) < 2.0e-5
+    finally:
+        _cleanup()
+
+
 def test_constant_viscosity_anisotropic_timestep_bound():
     """The constant-viscosity limit includes every active mesh direction."""
     try:
