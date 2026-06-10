@@ -286,10 +286,22 @@ Record:
 
 ### 0.1 Preserve Reference Executables and Inputs
 
-- [ ] Record hashes of the pre-optimization explicit and STS executables.
-- [ ] Preserve the current hydro-only, explicit diffusion, and STS inputs.
-- [ ] Record the exact configure command and loaded modules.
-- [ ] Confirm outputs are disabled and diagnostic intervals are identical.
+- [x] Record hashes of the pre-optimization explicit and STS executables.
+- [x] Preserve the current explicit diffusion and STS inputs.
+- [x] Record the exact configure command and loaded modules.
+- [x] Confirm outputs are disabled and diagnostic intervals are identical.
+
+The frozen reference executable is
+`diffusion_optimization/athena_baseline`, SHA-256
+`f9385fb688529280a0bf421fe62f02ff3d1ec58f410a8d6e1b754ec767e9bb88`.
+Both reference modes use that same executable.  It was built by the repository
+`configure.sh` with CPE 25.09, CCE 20.0.0, Cray MPICH 9.0.1, ROCm 6.4.2,
+gfx90a, MPI, and `PROBLEM=uniform_hydro`.
+
+The two-node reference job was Slurm job `4792248`.  It ran the explicit and
+STS inputs in the order explicit, STS, STS, explicit, with 20 cycles per run
+and cycles 6--20 retained.  The input files disable simulation outputs and use
+the same diagnostic interval.
 
 ### 0.2 Build an Operator-Isolation Matrix
 
@@ -337,7 +349,7 @@ boundary pack/send/receive/unpack
 ### 0.4 Baseline Deliverable
 
 - [ ] Add a CSV containing the profile breakdown.
-- [ ] Add a script that regenerates summary tables and plots.
+- [x] Add a script that regenerates summary tables and plots.
 - [ ] Record the percentage of explicit overhead attributable to viscosity,
   conduction, timestep reductions, and other tasks.
 - [ ] Record the percentage of STS cost attributable to physical operators,
