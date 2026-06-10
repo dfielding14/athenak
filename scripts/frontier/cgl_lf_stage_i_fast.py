@@ -253,6 +253,33 @@ def read_exact(stream, size: int, path: Path, label: str) -> bytes:
     return payload
 
 
+def float32(value: float) -> float:
+    return struct.unpack("<f", struct.pack("<f", value))[0]
+
+
+def load_balanced_block_counts(costs: tuple[float, ...], rank_count: int) -> list[int]:
+    if rank_count <= 0 or len(costs) < rank_count:
+        raise FastRunError("restart load balance has too few meshblocks")
+    total_cost = 0.0
+    for cost in costs:
+        total_cost = float32(total_cost + cost)
+    rank = rank_count - 1
+    target_cost = float32(total_cost / rank_count)
+    rank_cost = 0.0
+    assignments = [0] * len(costs)
+    for index in range(len(costs) - 1, -1, -1):
+        if target_cost == 0.0:
+            raise FastRunError("restart load balance has zero target cost")
+        rank_cost = float32(rank_cost + costs[index])
+        assignments[index] = rank
+        if rank_cost >= target_cost and rank > 0:
+            rank -= 1
+            total_cost = float32(total_cost - rank_cost)
+            rank_cost = 0.0
+            target_cost = float32(total_cost / (rank + 1))
+    return [assignments.count(rank) for rank in range(rank_count)]
+
+
 def restart_profile(path: Path) -> dict[str, object]:
     marker = b"<par_end>\n"
     with path.open("rb") as stream:
@@ -369,6 +396,7 @@ def restart_profile(path: Path) -> dict[str, object]:
         "physical_time": physical_time,
         "local_blocks": local_blocks,
         "expected_meshblocks": meshblock_count,
+        "costs": costs,
         "schema": (
             dt,
             cycle,
@@ -546,14 +574,19 @@ def terminal_product_group(directory: Path, suffix: str, rank_count: int) -> dic
             times = [float(profile["physical_time"]) for profile in profiles]
             expected_schema = profiles[0]["schema"]
             expected_meshblocks = int(profiles[0]["expected_meshblocks"])
+            expected_rank_blocks = load_balanced_block_counts(
+                tuple(float(value) for value in profiles[0]["costs"]), rank_count
+            )
             if (
                 any(profile["schema"] != expected_schema for profile in profiles)
                 or any(
                     int(profile["expected_meshblocks"]) != expected_meshblocks
                     for profile in profiles
                 )
-                or sum(int(profile["local_blocks"]) for profile in profiles)
-                != expected_meshblocks
+                or [
+                    int(profile["local_blocks"])
+                    for profile in profiles
+                ] != expected_rank_blocks
             ):
                 raise FastRunError(
                     f"inconsistent terminal {suffix} schema or meshblock coverage: "

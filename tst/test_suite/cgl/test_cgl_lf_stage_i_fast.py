@@ -457,6 +457,19 @@ def test_terminal_restart_group_rejects_meshblock_boundary_truncation(fast, tmp_
         fast.terminal_product_group(directory, ".rst", 1)
 
 
+def test_terminal_restart_group_rejects_swapped_rank_block_counts(fast, tmp_path):
+    directory = tmp_path / "rst"
+    for rank, local_blocks in enumerate((3, 2)):
+        path = directory / f"rank_{rank:08d}/fixture.00001.rst"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            restart_payload(2.0, mesh_nx1=5, local_blocks=local_blocks)
+        )
+
+    with pytest.raises(fast.FastRunError, match="meshblock coverage"):
+        fast.terminal_product_group(directory, ".rst", 2)
+
+
 def test_terminal_binary_group_selects_latest_physical_time(fast, tmp_path):
     directory = tmp_path / "bin"
     terminal = write_binary_rank_group(directory, "fixture.00001.bin", 3, 2.0)
