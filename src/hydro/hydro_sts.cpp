@@ -152,40 +152,38 @@ TaskStatus Hydro::STSUpdate(Driver *pdrive, int stage) {
   auto flx3 = uflx.x3f;
   auto &mbsize = pmy_pack->pmb->mb_size;
 
-  par_for_outer("hydro_sts_update", DevExeSpace(), 0, 0, 0, nmb1,
-                0, nvars - 1, ks, ke, js, je,
-  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int n, const int k, const int j) {
+  par_for("hydro_sts_update", DevExeSpace(), 0, nmb1, 0, nvars - 1,
+          ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int n, const int k, const int j, const int i) {
     if (!UpdateSTSHydroVariable(n, update_momentum, update_energy, update_scalars,
                                 nhydro_vars)) {
       return;
     }
 
-    par_for_inner(member, is, ie, [&](const int i) {
-      Real divf = (flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i))/mbsize.d_view(m).dx1;
-      if (multi_d) {
-        divf += (flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i))/mbsize.d_view(m).dx2;
-      }
-      if (three_d) {
-        divf += (flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i))/mbsize.d_view(m).dx3;
-      }
+    Real divf = (flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i))/mbsize.d_view(m).dx1;
+    if (multi_d) {
+      divf += (flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i))/mbsize.d_view(m).dx2;
+    }
+    if (three_d) {
+      divf += (flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i))/mbsize.d_view(m).dx3;
+    }
 
-      // Keep u0 canonical while rotating the two prior states cell by cell.
-      const Real u_prev = u0_(m,n,k,j,i);
-      const Real u_prevprev = (stage == 1) ? u_prev : u_sts1_(m,n,k,j,i);
-      const Real u_start = (stage == 1) ? u_prev : u_sts0_(m,n,k,j,i);
-      const Real delta_u = -dt_sweep*divf;
-      const Real u_new = coeffs.muj*u_prev
-                       + coeffs.nuj*u_prevprev
-                       + (1.0 - coeffs.muj - coeffs.nuj)*u_start
-                       + coeffs.gammaj_tilde*u_sts_rhs_(m,n,k,j,i)
-                       + coeffs.muj_tilde*delta_u;
-      if (stage == 1) {
-        u_sts0_(m,n,k,j,i) = u_prev;
-        u_sts_rhs_(m,n,k,j,i) = delta_u;
-      }
-      u_sts1_(m,n,k,j,i) = u_prev;
-      u0_(m,n,k,j,i) = u_new;
-    });
+    // Keep u0 canonical while rotating the two prior states cell by cell.
+    const Real u_prev = u0_(m,n,k,j,i);
+    const Real u_prevprev = (stage == 1) ? u_prev : u_sts1_(m,n,k,j,i);
+    const Real u_start = (stage == 1) ? u_prev : u_sts0_(m,n,k,j,i);
+    const Real delta_u = -dt_sweep*divf;
+    const Real u_new = coeffs.muj*u_prev
+                     + coeffs.nuj*u_prevprev
+                     + (1.0 - coeffs.muj - coeffs.nuj)*u_start
+                     + coeffs.gammaj_tilde*u_sts_rhs_(m,n,k,j,i)
+                     + coeffs.muj_tilde*delta_u;
+    if (stage == 1) {
+      u_sts0_(m,n,k,j,i) = u_prev;
+      u_sts_rhs_(m,n,k,j,i) = delta_u;
+    }
+    u_sts1_(m,n,k,j,i) = u_prev;
+    u0_(m,n,k,j,i) = u_new;
   });
 
   return TaskStatus::complete;
