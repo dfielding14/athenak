@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #include "athena.hpp"
@@ -21,7 +22,7 @@
 
 namespace {
 
-constexpr Real kTol = 2.0e-13;
+constexpr Real kTol = (sizeof(Real) == sizeof(float)) ? 2.0e-5 : 2.0e-13;
 constexpr Real kBx = 0.80622577482985496524;  // sqrt(0.65)
 constexpr Real kBy = 0.59160797830996160426;  // sqrt(0.35)
 constexpr Real kBz = 0.0;
@@ -51,6 +52,16 @@ void RequireClose(const std::string &label, const Real got, const Real expected)
   }
 }
 
+void RequireRelativeClose(const std::string &label, const Real got, const Real expected,
+                          const Real tolerance) {
+  const Real limit = std::max(
+      tolerance*std::abs(expected),
+      static_cast<Real>(4.0)*std::numeric_limits<Real>::denorm_min());
+  if (!std::isfinite(got) || std::abs(got - expected) > limit) {
+    Fail(label, got, expected);
+  }
+}
+
 void Require(const std::string &label, const bool condition) {
   if (!condition) {
     std::cout << "CGL fast-speed test failed for " << label << std::endl;
@@ -76,6 +87,19 @@ Real LiteratureFastSpeed(const Real density, const Real ppar, const Real pperp,
   const Real qsq = b2 + 2.0*pperp + (2.0*ppar - pperp)*mu2;
   return std::sqrt(0.5*(qsq + std::sqrt(LiteratureDiscriminant(
       ppar, pperp, bx, by, bz)))/density);
+}
+
+Real IsotropicFallbackFastSpeed(const Real gamma, const Real density,
+                                const Real ppar, const Real pperp,
+                                const Real bx, const Real by, const Real bz) {
+  const Real bperp2 = by*by + bz*bz;
+  const Real b2 = bx*bx + bperp2;
+  const Real pressure = ONE_3RD*ppar + TWO_3RDS*pperp;
+  const Real asq = gamma*pressure;
+  const Real qsq = b2 + asq;
+  const Real tmp = b2 - asq;
+  return std::sqrt(0.5*(qsq + std::sqrt(
+      tmp*tmp + 4.0*asq*bperp2))/density);
 }
 
 Real LegacyDiscriminant(const Real ppar, const Real pperp, const Real bx,
@@ -232,6 +256,126 @@ void CheckDirectionalLimits(const EOS_Data &eos) {
       LiteratureFastSpeed(density, ppar, pperp, bx, 0.0, 0.0));
 }
 
+void CheckOrdinaryValueAgreement(const EOS_Data &eos) {
+  const Real tolerance = 64.0*std::numeric_limits<Real>::epsilon();
+  const auto check = [&](const std::string &label, const Real density,
+                         const Real ppar, const Real pperp, const Real bx,
+                         const Real by, const Real bz) {
+    const Real expected = LiteratureFastSpeed(
+        density, ppar, pperp, bx, by, bz);
+    const Real got = eos.IdealMHDFastSpeed(
+        density, ppar, pperp, bx, by, bz, eos.bfloor);
+    RequireRelativeClose(label, got, expected, tolerance);
+  };
+
+  check("ordinary oblique agreement", 1.7, 0.9, 0.4, 0.8, -0.3, 0.2);
+  check("ordinary pressure-dominated agreement", 0.6, 4.0, 2.5, -0.2, 0.7, 0.4);
+  check("ordinary field-dominated agreement", 3.0, 0.2, 0.1, 2.0, -1.5, 0.5);
+
+  const Real density = 1.7;
+  const Real ppar = 0.9;
+  const Real pperp = 0.4;
+  const Real bx = 1.0e-12;
+  const Real by = -2.0e-12;
+  const Real bz = 0.5e-12;
+  RequireRelativeClose(
+      "ordinary isotropic-fallback agreement",
+      eos.IdealMHDFastSpeed(density, ppar, pperp, bx, by, bz, eos.bfloor),
+      IsotropicFallbackFastSpeed(
+          eos.gamma, density, ppar, pperp, bx, by, bz),
+      tolerance);
+}
+
+void CheckFactoredDiscriminant(const EOS_Data &eos) {
+  const Real speed = eos.IdealMHDFastSpeed(
+      0.028357895602985135, 15.477850480602994, 0.0011738216514541532,
+      7.8558368069177416, 0.2898591004703721, 0.010717435207303715,
+      eos.bfloor);
+  RequireRelativeClose(
+      "near-degenerate factored discriminant", speed, 40.43739054454261,
+      16.0*std::numeric_limits<Real>::epsilon());
+}
+
+void CheckEndpointRanges(const EOS_Data &eos) {
+  const Real tolerance = 16.0*std::numeric_limits<Real>::epsilon();
+  const Real maximum = std::numeric_limits<Real>::max();
+
+  // All linear intermediates in the old expression are representable, but its
+  // pressure-scale squares overflow in both single and double precision.
+  const Real old_speed = LiteratureFastSpeed(
+      maximum, maximum, maximum, 1.0, 0.0, 0.0);
+  Require("old pressure endpoint formula overflows", !std::isfinite(old_speed));
+  RequireRelativeClose(
+      "maximum pressure and density", eos.IdealMHDFastSpeed(
+          maximum, maximum, maximum, 1.0, 0.0, 0.0, eos.bfloor),
+      std::sqrt(static_cast<Real>(3.0)), tolerance);
+
+  RequireRelativeClose(
+      "irrelevant maximum parallel pressure", eos.IdealMHDFastSpeed(
+          1.0, maximum, 0.0, 0.0, 1.0, 0.0, eos.bfloor),
+      1.0, tolerance);
+
+  EOS_Data zero_floor = eos;
+  zero_floor.bfloor = 0.0;
+  RequireRelativeClose(
+      "zero field and zero floor", zero_floor.IdealMHDFastSpeed(
+          2.0, 1.2, 0.6, 0.0, 0.0, 0.0, zero_floor.bfloor),
+      std::sqrt(static_cast<Real>(2.0/3.0)), tolerance);
+  Require(
+      "zero field and pressure",
+      zero_floor.IdealMHDFastSpeed(
+          1.0, 0.0, 0.0, 0.0, 0.0, 0.0, zero_floor.bfloor) == 0.0);
+  RequireRelativeClose(
+      "maximum-pressure zero-field fallback", eos.IdealMHDFastSpeed(
+          maximum, maximum, maximum, 0.0, 0.0, 0.0, eos.bfloor),
+      std::sqrt(eos.gamma), tolerance);
+
+  const Real maximum_field_speed = maximum/std::sqrt(maximum);
+  RequireRelativeClose(
+      "maximum finite field", zero_floor.IdealMHDFastSpeed(
+          maximum, 0.0, 0.0, maximum, 0.0, 0.0, zero_floor.bfloor),
+      maximum_field_speed, tolerance);
+  Require(
+      "old maximum-field formula is nonfinite",
+      !std::isfinite(LiteratureFastSpeed(
+          maximum, 0.0, 0.0, maximum, 0.0, 0.0)));
+  RequireRelativeClose(
+      "three maximum finite field components", zero_floor.IdealMHDFastSpeed(
+          maximum, 0.0, 0.0, maximum, maximum, maximum, zero_floor.bfloor),
+      maximum_field_speed*std::sqrt(static_cast<Real>(3.0)), tolerance);
+
+  const Real denormal = std::numeric_limits<Real>::denorm_min();
+  const Real denormal_field = std::sqrt(denormal);
+  Require("denormal magnetic energy is retained",
+          denormal_field*denormal_field == denormal);
+  const Real denormal_speed = denormal_field/std::sqrt(maximum);
+  Require("denormal endpoint speed is representable", denormal_speed > 0.0);
+  RequireRelativeClose(
+      "denormal magnetic energy and maximum density",
+      zero_floor.IdealMHDFastSpeed(
+          maximum, 0.0, 0.0, denormal_field, 0.0, 0.0, zero_floor.bfloor),
+      denormal_speed, tolerance);
+  Require("minimum field square underflows",
+          denormal*denormal == 0.0);
+  RequireRelativeClose(
+      "minimum field component and density",
+      zero_floor.IdealMHDFastSpeed(
+          denormal, 0.0, 0.0, denormal, 0.0, 0.0, zero_floor.bfloor),
+      denormal/std::sqrt(denormal), tolerance);
+
+  const Real large_field = std::sqrt(maximum)/2.0;
+  const Real large_field2 = large_field*large_field;
+  Require(
+      "old magnetic discriminant formula overflows",
+      !std::isfinite(LiteratureFastSpeed(
+          large_field2, 0.0, 0.0, large_field, 0.0, 0.0)));
+  RequireRelativeClose(
+      "large finite magnetic discriminant",
+      zero_floor.IdealMHDFastSpeed(
+          large_field2, 0.0, 0.0, large_field, 0.0, 0.0, zero_floor.bfloor),
+      1.0, tolerance);
+}
+
 MHDPrim1D MakeLocalState(const ObliqueState &state) {
   MHDPrim1D w{};
   w.d = state.density;
@@ -318,6 +462,9 @@ void RunCglFastSpeedChecks() {
   eos.bfloor = 1.0e-10;
   CheckObliqueRegression(eos);
   CheckDirectionalLimits(eos);
+  CheckOrdinaryValueAgreement(eos);
+  CheckFactoredDiscriminant(eos);
+  CheckEndpointRanges(eos);
   CheckActiveReconstructedHlleRoute(eos);
   std::cout << "CGL fast-speed checks passed" << std::endl;
 }

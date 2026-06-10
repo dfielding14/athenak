@@ -3,6 +3,8 @@
 from pathlib import Path
 import subprocess
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -23,9 +25,12 @@ def _cmake_cache_value(build_dir, key):
     raise AssertionError(f"{key} is absent from CMakeCache.txt")
 
 
-def test_cgl_active_hlle_uses_literature_discriminant(tmp_path):
+@pytest.mark.parametrize("single_precision", [False, True])
+def test_cgl_active_hlle_uses_scaled_literature_discriminant(
+    tmp_path, single_precision
+):
     build_dir = tmp_path / "build"
-    _run([
+    configure = [
         "cmake",
         "-S",
         str(REPO_ROOT),
@@ -37,7 +42,10 @@ def test_cgl_active_hlle_uses_literature_discriminant(tmp_path):
         "-DAthena_ENABLE_MPI=OFF",
         "-DKokkos_ENABLE_HIP=OFF",
         "-DKokkos_ENABLE_SERIAL=ON",
-    ])
+    ]
+    if single_precision:
+        configure.append("-DAthena_SINGLE_PRECISION=ON")
+    _run(configure)
     object_target = (
         "src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o"
     )
@@ -51,9 +59,7 @@ def test_cgl_active_hlle_uses_literature_discriminant(tmp_path):
         str(build_dir),
         "--target",
         "kokkoscontainers",
-        "kokkosalgorithms",
         "kokkoscore",
-        "kokkossimd",
         "-j4",
     ])
 
@@ -66,9 +72,7 @@ def test_cgl_active_hlle_uses_literature_discriminant(tmp_path):
     compiler = _cmake_cache_value(build_dir, "CMAKE_CXX_COMPILER")
     kokkos_libs = [
         build_dir / "kokkos" / "containers" / "src" / "libkokkoscontainers.a",
-        build_dir / "kokkos" / "algorithms" / "src" / "libkokkosalgorithms.a",
         build_dir / "kokkos" / "core" / "src" / "libkokkoscore.a",
-        build_dir / "kokkos" / "simd" / "src" / "libkokkossimd.a",
     ]
     _run([
         compiler,
