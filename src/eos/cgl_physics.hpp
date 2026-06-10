@@ -95,7 +95,12 @@ Real LimiterCollisionRate(const Real ppar, const Real pperp, const Real bsqr,
 
 KOKKOS_INLINE_FUNCTION
 Real LimitedHeatFlux(const Real q, const Real qmax) {
-  return (qmax > 0.0) ? q*qmax/(qmax + fabs(q)) : 0.0;
+  if (!(qmax > 0.0)) return 0.0;
+  const Real qabs = fabs(q);
+  // Keep each ratio at most unity so neither a product nor a sum can overflow.
+  if (qabs <= qmax) return q/(1.0 + qabs/qmax);
+  const Real magnitude = qmax/(1.0 + qmax/qabs);
+  return (q < 0.0) ? -magnitude : magnitude;
 }
 
 } // namespace cgl
