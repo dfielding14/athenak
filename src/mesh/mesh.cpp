@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <cstdio> // fclose
@@ -653,9 +655,33 @@ void Mesh::NewTimeStep(const Real tlim) {
   } else {
     dt = dt_cycle_candidate;
   }
+  const Real dt_before_tlim = dt;
 
   // limit last time step to stop at tlim *exactly*
   if ( (time < tlim) && ((time + dt) > tlim) ) {dt = tlim - time;}
+
+  if (!std::isfinite(dt) || dt <= 0.0) {
+    std::cout << std::setprecision(std::numeric_limits<Real>::max_digits10)
+              << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Final cycle timestep must be finite and positive."
+              << std::endl
+              << "rank=" << global_variable::my_rank
+              << " cycle=" << ncycle
+              << " time=" << time
+              << " tlim=" << tlim
+              << " dt=" << dt
+              << " dt_before_tlim=" << dt_before_tlim
+              << " dtold=" << dtold
+              << " dt_legacy=" << dt_legacy
+              << " dt_cycle_candidate=" << dt_cycle_candidate
+              << " dt_parabolic_sts=" << dt_parabolic_sts
+              << " cfl_number=" << cfl_no
+              << " sts_integrator=" << static_cast<int>(sts_integrator)
+              << " sts_max_dt_ratio=" << sts_max_dt_ratio
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   return;
 }

@@ -282,10 +282,56 @@ def test_zero_force_normalization_reports_replay_context(tmp_path):
         "cycle=",
         "update=",
         "mode_count=",
+        "dt=",
         "t0=",
         "t1=",
         "totvol=",
         "m0=",
         "m1=",
+    ):
+        assert field in output
+
+
+def test_edot_zero_force_is_not_reported_as_zero_timestep(tmp_path):
+    """A zero edot field is diagnosed independently of its valid timestep."""
+    result = run_athena(
+        tmp_path / "zero_edot_force",
+        "turb_driving_edot.athinput",
+        "turb_driving/localization=include",
+        "turb_driving/sigma_x1=1.0e-100",
+        "turb_driving/sigma_x2=1.0e-100",
+        "turb_driving/sigma_x3=1.0e-100",
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "cannot inject non-zero dedt with a zero forcing field" in output
+    assert "edot forcing requires a finite positive timestep" not in output
+    assert "dt=" in output
+
+
+def test_nonpositive_final_cycle_timestep_is_rejected(tmp_path):
+    """The mesh rejects a final zero timestep with cycle-budget diagnostics."""
+    result = run_athena(
+        tmp_path / "zero_dt",
+        "turb_driving_edot.athinput",
+        "time/cfl_number=0.0",
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "Final cycle timestep must be finite and positive" in output
+    for field in (
+        "rank=",
+        "cycle=",
+        "time=",
+        "tlim=",
+        "dt=",
+        "dt_before_tlim=",
+        "dtold=",
+        "dt_legacy=",
+        "dt_cycle_candidate=",
+        "dt_parabolic_sts=",
+        "cfl_number=",
+        "sts_integrator=",
+        "sts_max_dt_ratio=",
     ):
         assert field in output

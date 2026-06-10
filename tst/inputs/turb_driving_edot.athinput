@@ -54,6 +54,10 @@ npeak          = 2
 spectrum       = parabolic
 sol_fraction   = 1.0
 rseed          = 2718
+localization   = none
+sigma_x1       = -1.0
+sigma_x2       = -1.0
+sigma_x3       = -1.0
 
 <output1>
 file_type = hst

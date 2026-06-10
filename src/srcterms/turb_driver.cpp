@@ -40,14 +40,42 @@ void FatalTurbulenceError(const std::string& message) {
 }
 
 std::string ForcingNormalizationContext(Real time, int cycle, int update,
-                                        int mode_count, Real t0, Real t1,
+                                        int mode_count, Real dt, Real t0, Real t1,
                                         Real totvol, Real m0, Real m1) {
   std::ostringstream msg;
   msg.precision(std::numeric_limits<Real>::max_digits10);
   msg << "time=" << time << " cycle=" << cycle << " update=" << update
-      << " mode_count=" << mode_count << " t0=" << t0 << " t1=" << t1
-      << " totvol=" << totvol << " m0=" << m0 << " m1=" << m1;
+      << " mode_count=" << mode_count << " dt=" << dt << " t0=" << t0
+      << " t1=" << t1 << " totvol=" << totvol << " m0=" << m0
+      << " m1=" << m1;
   return msg.str();
+}
+
+Real NonnegativeEdotRoot(Real dt, Real field_norm, Real linear_work, Real dedt) {
+  using Wide = long double;
+  Wide quadratic = static_cast<Wide>(dt) * static_cast<Wide>(field_norm);
+  Wide linear = static_cast<Wide>(linear_work);
+  Wide rhs = static_cast<Wide>(dedt);
+  Wide scale = std::max({quadratic, std::fabs(linear), rhs});
+  if (scale == 0.0L) {
+    return 0.0;
+  }
+
+  quadratic /= scale;
+  linear /= scale;
+  rhs /= scale;
+  Wide half_discriminant =
+      std::hypot(0.5L * linear, std::sqrt(quadratic) * std::sqrt(rhs));
+  Wide root = 0.0L;
+  if (linear >= 0.0L) {
+    Wide denominator = half_discriminant + 0.5L * linear;
+    if (denominator > 0.0L) {
+      root = rhs / denominator;
+    }
+  } else {
+    root = (half_discriminant - 0.5L * linear) / quadratic;
+  }
+  return static_cast<Real>(root);
 }
 
 std::string NonfiniteForcingStateContext(
@@ -995,6 +1023,18 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
 
   if ((pm->ncycle >= 1 || physical_k_shell) && (current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
+    if (normalization == TurbNormalization::edot &&
+        (!std::isfinite(dt) || dt <= 0.0)) {
+      FatalTurbulenceError(
+          "edot forcing requires a finite positive timestep: " +
+          ForcingNormalizationContext(
+              current_time, pm->ncycle, n_turb_updates_yet, mode_count, dt,
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN()));
+    }
     RenderForce();
 
     if (localization_ != TurbLocalization::none) {
@@ -1141,8 +1181,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
           "nonfinite density-weighted forcing moments before net-acceleration "
           "removal: " +
           ForcingNormalizationContext(current_time, pm->ncycle,
-                                      n_turb_updates_yet, mode_count, t0, t1,
-                                      0.0, t2, t3) +
+                                      n_turb_updates_yet, mode_count, dt, t0,
+                                      t1, 0.0, t2, t3) +
           NonfiniteForcingStateContext(
               bad_density, bad_momentum1, bad_momentum2, bad_momentum3,
               bad_energy, bad_anisotropy, bad_force1, bad_force2, bad_force3,
@@ -1152,8 +1192,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
       FatalTurbulenceError(
           "mass integral is not positive while normalizing forcing: " +
           ForcingNormalizationContext(current_time, pm->ncycle,
-                                      n_turb_updates_yet, mode_count, t0, t1,
-                                      0.0, t2, t3));
+                                      n_turb_updates_yet, mode_count, dt, t0,
+                                      t1, 0.0, t2, t3));
     }
     par_for(
         "force_remove_net_mom", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
@@ -1195,7 +1235,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
           Real a3 = force_(m, 2, k, j, i);
 
           if (normalize_edot) {
-            sum_t0 += den * 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * dt * vol;
+            sum_t0 += den * 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * vol;
             sum_t1 += (mom1 * a1 + mom2 * a2 + mom3 * a3) * vol;
           } else {
             sum_t0 += (a1 * a1 + a2 * a2 + a3 * a3) * vol;
@@ -1221,7 +1261,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
       m1 = t1 / totvol;
     }
     const std::string normalization_context = ForcingNormalizationContext(
-        current_time, pm->ncycle, n_turb_updates_yet, mode_count, t0, t1,
+        current_time, pm->ncycle, n_turb_updates_yet, mode_count, dt, t0, t1,
         totvol, m0, m1);
     if (!std::isfinite(totvol) || totvol <= 0.0) {
       FatalTurbulenceError(
@@ -1236,9 +1276,9 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
 
     Real s = 0.0;
     if (normalization == TurbNormalization::edot) {
-      // Solve m0*s^2 + m1*s = dedt using its non-negative root.
-      if (m0 > 1.0e-30) {
-        s = (-m1 + sqrt(m1 * m1 + 4.0 * m0 * dedt)) / (2.0 * m0);
+      // Solve dt*m0*s^2 + m1*s = dedt using its non-negative root.
+      if (m0 > 0.0) {
+        s = NonnegativeEdotRoot(dt, m0, m1, dedt);
       } else if (dedt > 0.0) {
         FatalTurbulenceError(
             "cannot inject non-zero dedt with a zero forcing field: " +
