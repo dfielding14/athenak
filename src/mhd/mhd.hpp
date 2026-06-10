@@ -264,7 +264,9 @@ class MHD {
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
 
  private:
-  void AddSelectedDiffusionFluxes(DiffusionSelection selection);
+  void AddSelectedDiffusionFluxes(DiffusionSelection selection,
+                                  Real cgl_dt_sweep = 0.0,
+                                  Real cgl_rkl_weight = 0.0);
   void AddSelectedDiffusionEMF(DiffusionSelection selection);
   void DiagnoseNonfiniteCGLState(int stage, const char *operation,
                                  const char *phase, const char *sweep,

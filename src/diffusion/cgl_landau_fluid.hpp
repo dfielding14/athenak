@@ -50,9 +50,9 @@ class CGLLandauFluid {
   CGLLFDiagnostics diagnostics;
 
   void AddHeatFluxes(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
-                     const EOS_Data &eos, DvceFaceFld5D<Real> &f);
-  void AdvanceHeatFluxWorkDiagnostics(Real dt_sweep,
-                                      const parabolic::RKL2Coefficients &coeffs,
+                     const EOS_Data &eos, Real dt_sweep, Real rkl_weight,
+                     DvceFaceFld5D<Real> &f);
+  void AdvanceHeatFluxWorkDiagnostics(const parabolic::RKL2Coefficients &coeffs,
                                       int stage, int nstages);
   void AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1, int stage,
                                       Real pressure_power, Real anisotropic_power);
@@ -67,8 +67,8 @@ class CGLLandauFluid {
 
   MeshBlockPack *pmy_pack;
   DvceArray4D<Real> tpar_, tperp_, bmag_;
-  Real stage_qpar_power_ = 0.0;
-  Real stage_qperp_power_ = 0.0;
+  Real stage_qpar_work_ = 0.0;
+  Real stage_qperp_work_ = 0.0;
   Real sweep_qpar_work_ = 0.0;
   Real sweep_qperp_work_ = 0.0;
   Real sweep_qpar_work1_ = 0.0;

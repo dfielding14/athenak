@@ -14,6 +14,8 @@
 #include <string>
 
 #include "athena.hpp"
+#include "diffusion/cgl_landau_fluid_arithmetic.hpp"
+#include "diffusion/sts_rkl2.hpp"
 #include "eos/cgl_physics.hpp"
 #include "mesh/mesh.hpp"
 #include "parameter_input.hpp"
@@ -44,6 +46,18 @@ void RequireRelativeClose(const std::string &label, const Real got,
                           const Real expected) {
   if (!std::isfinite(got) || got == 0.0 || expected == 0.0 ||
       std::abs((got - expected)/expected) > kTolerance) {
+    std::cout << "CGL heat-flux limiter test failed for " << label
+              << ": got=" << got << ", expected=" << expected << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+void RequireOverflowClose(const std::string &label, const Real got,
+                          const Real expected) {
+  constexpr Real overflow_tolerance =
+      static_cast<Real>(4096.0)*std::numeric_limits<Real>::epsilon();
+  if (!std::isfinite(got) || got == 0.0 || expected == 0.0 ||
+      std::abs((got - expected)/expected) > overflow_tolerance) {
     std::cout << "CGL heat-flux limiter test failed for " << label
               << ": got=" << got << ", expected=" << expected << std::endl;
     std::exit(EXIT_FAILURE);
@@ -477,6 +491,167 @@ void CheckPerpendicularClosureCancellationSigns() {
           zero_inverse_field_flux == 0.0);
 }
 
+void CheckWeightedFluxArithmetic() {
+  constexpr Real cparallel = 2.0;
+  constexpr Real ppar = 5.0;
+  constexpr Real pperp = 4.0;
+  constexpr Real qpar_ratio = 0.4;
+  constexpr Real qperp_ratio = -1.7;
+  constexpr Real bhdir = 0.6;
+  constexpr Real bmag_inv = 0.5;
+  constexpr Real dt_sweep = 0.1;
+  constexpr Real rkl_weight = 0.03;
+
+  const Real qpar = cgl::LimitedHeatFluxFromRatioAndScale(
+      qpar_ratio, cparallel, cgl::kSqrtEightOverPi, ppar);
+  const Real qperp = cgl::LimitedHeatFluxFromRatioAndScale(
+      qperp_ratio, cparallel, cgl::kSqrtTwoOverPi, pperp);
+  const Real stage_weight = dt_sweep*rkl_weight;
+
+  auto weighted_qpar = cgl_lf::LimitedHeatFlux(
+      qpar_ratio, cparallel, cgl::kSqrtEightOverPi, ppar);
+  weighted_qpar = cgl_lf::Multiply(weighted_qpar, bhdir);
+  weighted_qpar = cgl_lf::Multiply(weighted_qpar, dt_sweep);
+  weighted_qpar = cgl_lf::Multiply(weighted_qpar, rkl_weight);
+  auto weighted_qperp = cgl_lf::LimitedHeatFlux(
+      qperp_ratio, cparallel, cgl::kSqrtTwoOverPi, pperp);
+  weighted_qperp = cgl_lf::Multiply(weighted_qperp, bhdir);
+  weighted_qperp = cgl_lf::Multiply(weighted_qperp, dt_sweep);
+  weighted_qperp = cgl_lf::Multiply(weighted_qperp, rkl_weight);
+
+  const Real energy = cgl_lf::Materialize(cgl_lf::Add(
+      weighted_qperp,
+      cgl_lf::Multiply(weighted_qpar, static_cast<Real>(0.5))));
+  const Real moment = cgl_lf::Materialize(
+      cgl_lf::Multiply(weighted_qperp, bmag_inv));
+  RequireRelativeClose(
+      "weighted energy moderate equivalence", energy,
+      stage_weight*bhdir*(qperp + static_cast<Real>(0.5)*qpar));
+  RequireRelativeClose(
+      "weighted moment moderate equivalence", moment,
+      stage_weight*bhdir*qperp*bmag_inv);
+}
+
+void CheckWeightedFluxOverflowEndpoints() {
+  const Real maximum = std::numeric_limits<Real>::max();
+  const Real inverse_maximum = static_cast<Real>(1.0)/maximum;
+
+  auto physical_overflow = cgl_lf::LimitedHeatFlux(
+      1.0, maximum, cgl::kSqrtEightOverPi, 4.0);
+  Require("unweighted heat flux truly overflows",
+          std::isinf(cgl_lf::Materialize(physical_overflow)));
+  const Real weighted_flux = cgl_lf::Materialize(
+      cgl_lf::Multiply(physical_overflow, inverse_maximum));
+  RequireOverflowClose(
+      "overflowing heat flux becomes representable after stage weight",
+      weighted_flux, static_cast<Real>(2.0)*cgl::kSqrtEightOverPi);
+
+  auto weighted_moment = cgl_lf::LimitedHeatFlux(
+      1.0, maximum, cgl::kSqrtTwoOverPi, 1.0);
+  Require("raw qperp over B truly overflows",
+          std::isinf(cgl_lf::Materialize(weighted_moment)*maximum));
+  weighted_moment = cgl_lf::Multiply(weighted_moment, inverse_maximum);
+  weighted_moment = cgl_lf::Multiply(weighted_moment, inverse_maximum);
+  weighted_moment = cgl_lf::Multiply(weighted_moment, maximum);
+  RequireOverflowClose(
+      "qperp over B avoids overflowing intermediate",
+      cgl_lf::Materialize(weighted_moment),
+      static_cast<Real>(0.5)*cgl::kSqrtTwoOverPi);
+
+  const Real divf = maximum/static_cast<Real>(4.0);
+  Require("raw dt times divF truly overflows",
+          std::isinf(static_cast<Real>(8.0)*divf));
+  auto weighted_rhs = cgl_lf::Multiply(
+      cgl_lf::FromReal(divf), static_cast<Real>(8.0));
+  weighted_rhs = cgl_lf::Multiply(weighted_rhs, static_cast<Real>(0.125));
+  RequireOverflowClose(
+      "weighted dt times divF avoids overflowing intermediate",
+      cgl_lf::Materialize(weighted_rhs), divf);
+
+  auto weighted_work = cgl_lf::LimitedHeatFlux(
+      1.0, maximum, cgl::kSqrtTwoOverPi, 1.0);
+  weighted_work = cgl_lf::Multiply(weighted_work, inverse_maximum);
+  weighted_work = cgl_lf::Multiply(weighted_work, 4.0);
+  RequireOverflowClose(
+      "diagnostic work weights before physical power overflow",
+      cgl_lf::Materialize(weighted_work),
+      static_cast<Real>(2.0)*cgl::kSqrtTwoOverPi);
+
+  const auto true_overflow =
+      cgl_lf::Multiply(cgl_lf::FromReal(maximum), maximum);
+  Require("true weighted overflow remains visible",
+          std::isinf(cgl_lf::Materialize(true_overflow)));
+
+  auto endpoint_round_trip =
+      cgl_lf::Multiply(cgl_lf::FromReal(maximum), 2.0);
+  endpoint_round_trip = cgl_lf::Multiply(endpoint_round_trip, 0.5);
+  Require("near-maximum scaled round trip remains finite",
+          cgl_lf::Materialize(endpoint_round_trip) == maximum);
+
+  const auto positive = cgl_lf::Multiply(
+      cgl_lf::FromReal(maximum), static_cast<Real>(4.0));
+  const auto negative = cgl_lf::Multiply(
+      cgl_lf::FromReal(-maximum), static_cast<Real>(4.0));
+  Require("overflowing energy components cancel before materialization",
+          cgl_lf::Materialize(cgl_lf::Add(positive, negative)) == 0.0);
+
+  const Real minimum = std::numeric_limits<Real>::min();
+  const Real below_minimum = std::nextafter(
+      minimum, static_cast<Real>(0.0));
+  Require(
+      "close scaled cancellation retains subnormal residual",
+      cgl_lf::Materialize(cgl_lf::Add(
+          cgl_lf::FromReal(minimum), cgl_lf::FromReal(-below_minimum))) ==
+          std::numeric_limits<Real>::denorm_min());
+}
+
+void CheckWeightedRKLCacheAlgebra() {
+  constexpr Real first_rhs = 7.0;
+  constexpr Real current_rhs = -3.0;
+  for (const int nstages : {3, 5, 101}) {
+    const Real first_weight = cgl_lf::FirstStageRKLWeight(nstages);
+    const auto first_coeffs =
+        parabolic::ComputeRKL2Coefficients(1, nstages);
+    RequireRelativeClose(
+        "first-stage RKL weight matches controller",
+        first_weight, first_coeffs.muj_tilde);
+    const Real cached_rhs = first_weight*first_rhs;
+    for (int stage = 1; stage <= nstages; ++stage) {
+      const auto coeffs =
+          parabolic::ComputeRKL2Coefficients(stage, nstages);
+      const Real old_terms =
+          coeffs.gammaj_tilde*first_rhs +
+          coeffs.muj_tilde*current_rhs;
+      const Real new_terms =
+          cgl_lf::CachedRHSCoefficient(
+              coeffs.gammaj_tilde, nstages)*cached_rhs +
+          coeffs.muj_tilde*current_rhs;
+      RequireClose("weighted cached-RHS equivalence", new_terms, old_terms);
+    }
+  }
+
+  RequireClose("single-stage first weight",
+               cgl_lf::FirstStageRKLWeight(1), 1.0);
+  RequireClose("single-stage cached coefficient",
+               cgl_lf::CachedRHSCoefficient(0.0, 1), 0.0);
+  RequireClose("single-stage weighted RHS", 1.0*current_rhs, current_rhs);
+  constexpr Real synthetic_gamma = -0.375;
+  RequireClose(
+      "single-stage synthetic cached-RHS identity",
+      cgl_lf::CachedRHSCoefficient(synthetic_gamma, 1)*first_rhs,
+      synthetic_gamma*first_rhs);
+
+  const Real maximum = std::numeric_limits<Real>::max();
+  const Real state = static_cast<Real>(0.75)*maximum;
+  Require("raw RKL state term overflows before cancellation",
+          std::isinf(static_cast<Real>(1.5)*state));
+  RequireOverflowClose(
+      "scaled RKL state terms cancel to a finite state",
+      cgl_lf::WeightedRKL2Update(
+          1.5, state, -0.5, state, 0.0, 0.0, 0.0, 0.0, 0.0),
+      state);
+}
+
 } // namespace
 
 void RunCglHeatFluxLimiterChecks() {
@@ -490,6 +665,9 @@ void RunCglHeatFluxLimiterChecks() {
   CheckPerpendicularClosureOrdinaryAgreement();
   CheckPerpendicularClosureOverflowEndpoints();
   CheckPerpendicularClosureCancellationSigns();
+  CheckWeightedFluxArithmetic();
+  CheckWeightedFluxOverflowEndpoints();
+  CheckWeightedRKLCacheAlgebra();
   std::cout << "CGL heat-flux limiter checks passed" << std::endl;
 }
 

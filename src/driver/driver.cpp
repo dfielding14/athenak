@@ -603,8 +603,14 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       // Work after time integrator indicated by "1" in stage
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
 
-      if (pmesh->sts_integrator != parabolic::STSIntegrator::none) {
-        pmesh->RefreshSTSParabolicTimeStep();
+      const bool has_explicit_cgl_lf =
+          (pmesh->pmb_pack->pmhd != nullptr &&
+           pmesh->pmb_pack->pmhd->has_explicit_cgl_lf);
+      if (pmesh->sts_integrator != parabolic::STSIntegrator::none ||
+          has_explicit_cgl_lf) {
+        if (pmesh->sts_integrator != parabolic::STSIntegrator::none) {
+          pmesh->RefreshSTSParabolicTimeStep();
+        }
         BeginSTSSweep(pmesh, STSSweep::post);
         if (sts.enabled) {
           for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {

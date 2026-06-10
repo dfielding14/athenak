@@ -363,6 +363,26 @@ def test_cgl_lf_explicit_reference_agrees_with_capped_sts():
         _cleanup()
 
 
+def test_cgl_lf_explicit_reference_executes_both_half_sweeps():
+    try:
+        _run(
+            "cgl_lf_decay.athinput",
+            "cgl_ci_explicit_two_sweeps",
+            "mhd/cgl_heat_flux_integrator=explicit",
+            "time/sts_integrator=none",
+            "time/nlim=1",
+            "time/tlim=1.0e-5",
+        )
+        history = testutils.athena_read.hst(
+            "cgl_ci_explicit_two_sweeps.mhd.hst"
+        )
+        _assert_clean_lf_history(history)
+        assert history["lf_nstage"][-1] == 128.0
+        assert history["lf_qface"][-1] == 128.0
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_explicit_reference_finite_collision_split():
     try:
         common = ("time/nlim=-1", "mhd/nu_coll=1.0")

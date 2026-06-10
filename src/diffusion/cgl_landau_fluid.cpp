@@ -19,6 +19,7 @@
 #include "eos/eos.hpp"
 #include "eos/cgl_physics.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
+#include "diffusion/cgl_landau_fluid_arithmetic.hpp"
 
 namespace {
 
@@ -119,27 +120,44 @@ KOKKOS_INLINE_FUNCTION
 void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_y,
                const Real gtpar_z, const Real gtperp_x, const Real gtperp_y,
                const Real gtperp_z, const Real gb_x, const Real gb_y, const Real gb_z,
-               Real &eflux, Real &muflux, Real &qpar_flux, Real &qperp_flux,
-               Real &qpar_ratio, Real &qperp_ratio) {
+               const Real dt_sweep, const Real rkl_weight, Real &eflux,
+               Real &muflux, cgl_lf::ScaledValue &weighted_qpar_flux,
+               cgl_lf::ScaledValue &weighted_qperp_flux, Real &qpar_ratio,
+               Real &qperp_ratio) {
   const Real grad_tpar =
       face.bhx*gtpar_x + face.bhy*gtpar_y + face.bhz*gtpar_z;
   const Real grad_tperp =
       face.bhx*gtperp_x + face.bhy*gtperp_y + face.bhz*gtperp_z;
   const Real grad_b = face.bhx*gb_x + face.bhy*gb_y + face.bhz*gb_z;
   Real signed_qpar_ratio = 0.0;
-  const Real qpar = cgl::LimitedParallelHeatFlux(
-      face.cparallel, face.rho, face.ppar, face.lf_k, face.nu,
-      grad_tpar, signed_qpar_ratio);
+  signed_qpar_ratio = cgl::ParallelHeatFluxRatio(
+      face.cparallel, face.rho, face.ppar, face.lf_k, face.nu, grad_tpar);
   qpar_ratio = fabs(signed_qpar_ratio);
   Real signed_qperp_ratio = 0.0;
-  const Real qperp = cgl::LimitedPerpendicularHeatFlux(
+  signed_qperp_ratio = cgl::PerpendicularHeatFluxRatio(
       face.cparallel, face.rho, face.ppar, face.pperp, face.bmag_inv,
-      face.lf_k, face.nu, grad_tperp, grad_b, signed_qperp_ratio);
+      face.lf_k, face.nu, grad_tperp, grad_b);
   qperp_ratio = fabs(signed_qperp_ratio);
-  qpar_flux = face.bhdir*qpar;
-  qperp_flux = face.bhdir*qperp;
-  eflux = qperp_flux + static_cast<Real>(0.5)*qpar_flux;
-  muflux = qperp_flux*face.bmag_inv;
+
+  weighted_qpar_flux = cgl_lf::LimitedHeatFlux(
+      signed_qpar_ratio, face.cparallel, cgl::kSqrtEightOverPi, face.ppar);
+  weighted_qpar_flux = cgl_lf::Multiply(weighted_qpar_flux, face.bhdir);
+  weighted_qpar_flux = cgl_lf::Multiply(weighted_qpar_flux, dt_sweep);
+  weighted_qpar_flux = cgl_lf::Multiply(weighted_qpar_flux, rkl_weight);
+
+  weighted_qperp_flux = cgl_lf::LimitedHeatFlux(
+      signed_qperp_ratio, face.cparallel, cgl::kSqrtTwoOverPi, face.pperp);
+  weighted_qperp_flux = cgl_lf::Multiply(weighted_qperp_flux, face.bhdir);
+  weighted_qperp_flux = cgl_lf::Multiply(weighted_qperp_flux, dt_sweep);
+  weighted_qperp_flux = cgl_lf::Multiply(weighted_qperp_flux, rkl_weight);
+
+  // The common stage weight commutes with AMR restriction and remains attached
+  // until the final face values are representable.
+  eflux = cgl_lf::Materialize(cgl_lf::Add(
+      weighted_qperp_flux,
+      cgl_lf::Multiply(weighted_qpar_flux, static_cast<Real>(0.5))));
+  muflux = cgl_lf::Materialize(
+      cgl_lf::Multiply(weighted_qperp_flux, face.bmag_inv));
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -231,13 +249,14 @@ void CGLLandauFluid::AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &s
   diagnostics.qpar_cap10 += static_cast<std::uint64_t>(stats.the_array[2]);
   diagnostics.qperp_cap += static_cast<std::uint64_t>(stats.the_array[3]);
   diagnostics.qperp_cap10 += static_cast<std::uint64_t>(stats.the_array[4]);
-  stage_qpar_power_ += stats.the_array[5];
-  stage_qperp_power_ += stats.the_array[6];
+  stage_qpar_work_ += stats.the_array[5];
+  stage_qperp_work_ += stats.the_array[6];
 }
 
 void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                                    const DvceArray5D<Real> &bcc,
-                                   const EOS_Data &eos, DvceFaceFld5D<Real> &f) {
+                                   const EOS_Data &eos, Real dt_sweep,
+                                   Real rkl_weight, DvceFaceFld5D<Real> &f) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, ie = indcs.ie;
   const int js = indcs.js, je = indcs.je;
@@ -246,8 +265,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   const int ncells1 = indcs.nx1 + 2*indcs.ng;
   const int ncells2 = (indcs.nx2 > 1) ? indcs.nx2 + 2*indcs.ng : 1;
   const int ncells3 = (indcs.nx3 > 1) ? indcs.nx3 + 2*indcs.ng : 1;
-  stage_qpar_power_ = 0.0;
-  stage_qperp_power_ = 0.0;
+  stage_qpar_work_ = 0.0;
+  stage_qperp_work_ = 0.0;
   if (tpar_.extent(0) != static_cast<std::size_t>(pmy_pack->nmb_thispack) ||
       tpar_.extent(1) != static_cast<std::size_t>(ncells3) ||
       tpar_.extent(2) != static_cast<std::size_t>(ncells2) ||
@@ -318,14 +337,16 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
     const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
-    Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
+    Real eflux = 0.0, muflux = 0.0;
+    cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
                             w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
                             w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
                             bx, by, bz, 0, lf_k, local, cpar0, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
-                eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
+                dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                weighted_qperp_flux, qpar_ratio, qperp_ratio);
       if (OwnsHeatFluxDiagnosticFace(m, 0, i, is, ie, multilevel,
                                      mblev.d_view(m), nghbr)) {
         qstats.the_array[0] += 1.0;
@@ -334,8 +355,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
         if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
         if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
         const Real area = size.d_view(m).dx2*size.d_view(m).dx3;
-        qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j,i-1));
-        qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j,i-1));
+        auto qpar_work = cgl_lf::Multiply(weighted_qpar_flux, -area);
+        qpar_work = cgl_lf::Multiply(
+            qpar_work, tpar(m,k,j,i) - tpar(m,k,j,i-1));
+        auto qperp_work = cgl_lf::Multiply(weighted_qperp_flux, -area);
+        qperp_work = cgl_lf::Multiply(
+            qperp_work, tperp(m,k,j,i) - tperp(m,k,j,i-1));
+        qstats.the_array[5] += cgl_lf::Materialize(qpar_work);
+        qstats.the_array[6] += cgl_lf::Materialize(qperp_work);
       }
     }
     f1(m,IEN,k,j,i) = eflux;
@@ -383,14 +410,16 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
     const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
-    Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
+    Real eflux = 0.0, muflux = 0.0;
+    cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
                             w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
                             w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
                             bx, by, bz, 1, lf_k, local, cpar0, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
-                eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
+                dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                weighted_qperp_flux, qpar_ratio, qperp_ratio);
       if (OwnsHeatFluxDiagnosticFace(m, 1, j, js, je, multilevel,
                                      mblev.d_view(m), nghbr)) {
         qstats.the_array[0] += 1.0;
@@ -399,8 +428,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
         if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
         if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
         const Real area = size.d_view(m).dx1*size.d_view(m).dx3;
-        qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j-1,i));
-        qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j-1,i));
+        auto qpar_work = cgl_lf::Multiply(weighted_qpar_flux, -area);
+        qpar_work = cgl_lf::Multiply(
+            qpar_work, tpar(m,k,j,i) - tpar(m,k,j-1,i));
+        auto qperp_work = cgl_lf::Multiply(weighted_qperp_flux, -area);
+        qperp_work = cgl_lf::Multiply(
+            qperp_work, tperp(m,k,j,i) - tperp(m,k,j-1,i));
+        qstats.the_array[5] += cgl_lf::Materialize(qpar_work);
+        qstats.the_array[6] += cgl_lf::Materialize(qperp_work);
       }
     }
     f2(m,IEN,k,j,i) = eflux;
@@ -445,14 +480,16 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
     const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
-    Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
+    Real eflux = 0.0, muflux = 0.0;
+    cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
                             w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
                             w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
                             bx, by, bz, 2, lf_k, local, cpar0, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
-                eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
+                dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                weighted_qperp_flux, qpar_ratio, qperp_ratio);
       if (OwnsHeatFluxDiagnosticFace(m, 2, k, ks, ke, multilevel,
                                      mblev.d_view(m), nghbr)) {
         qstats.the_array[0] += 1.0;
@@ -461,8 +498,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
         if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
         if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
         const Real area = size.d_view(m).dx1*size.d_view(m).dx2;
-        qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k-1,j,i));
-        qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k-1,j,i));
+        auto qpar_work = cgl_lf::Multiply(weighted_qpar_flux, -area);
+        qpar_work = cgl_lf::Multiply(
+            qpar_work, tpar(m,k,j,i) - tpar(m,k-1,j,i));
+        auto qperp_work = cgl_lf::Multiply(weighted_qperp_flux, -area);
+        qperp_work = cgl_lf::Multiply(
+            qperp_work, tperp(m,k,j,i) - tperp(m,k-1,j,i));
+        qstats.the_array[5] += cgl_lf::Materialize(qpar_work);
+        qstats.the_array[6] += cgl_lf::Materialize(qperp_work);
       }
     }
     f3(m,IEN,k,j,i) = eflux;
@@ -472,7 +515,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
 }
 
 void CGLLandauFluid::AdvanceHeatFluxWorkDiagnostics(
-    Real dt_sweep, const parabolic::RKL2Coefficients &coeffs, int stage, int nstages) {
+    const parabolic::RKL2Coefficients &coeffs, int stage, int nstages) {
   if (stage == 1) {
     sweep_qpar_work_ = 0.0;
     sweep_qperp_work_ = 0.0;
@@ -484,19 +527,21 @@ void CGLLandauFluid::AdvanceHeatFluxWorkDiagnostics(
     sweep_qperp_rhs_ = 0.0;
   }
 
-  const Real qpar_rhs = dt_sweep*stage_qpar_power_;
-  const Real qperp_rhs = dt_sweep*stage_qperp_power_;
+  const Real qpar_rhs = stage_qpar_work_;
+  const Real qperp_rhs = stage_qperp_work_;
   sweep_qpar_work2_ = sweep_qpar_work1_;
   sweep_qperp_work2_ = sweep_qperp_work1_;
   sweep_qpar_work1_ = sweep_qpar_work_;
   sweep_qperp_work1_ = sweep_qperp_work_;
   // The per-sweep diagnostic starts at zero, so the RKL2 S0 term vanishes.
-  sweep_qpar_work_ = coeffs.muj*sweep_qpar_work1_ + coeffs.nuj*sweep_qpar_work2_
-                   + coeffs.gammaj_tilde*sweep_qpar_rhs_
-                   + coeffs.muj_tilde*qpar_rhs;
-  sweep_qperp_work_ = coeffs.muj*sweep_qperp_work1_ + coeffs.nuj*sweep_qperp_work2_
-                    + coeffs.gammaj_tilde*sweep_qperp_rhs_
-                    + coeffs.muj_tilde*qperp_rhs;
+  const Real first_rhs_coeff =
+      cgl_lf::CachedRHSCoefficient(coeffs.gammaj_tilde, nstages);
+  sweep_qpar_work_ = cgl_lf::WeightedRKL2Update(
+      coeffs.muj, sweep_qpar_work1_, coeffs.nuj, sweep_qpar_work2_,
+      0.0, 0.0, first_rhs_coeff, sweep_qpar_rhs_, qpar_rhs);
+  sweep_qperp_work_ = cgl_lf::WeightedRKL2Update(
+      coeffs.muj, sweep_qperp_work1_, coeffs.nuj, sweep_qperp_work2_,
+      0.0, 0.0, first_rhs_coeff, sweep_qperp_rhs_, qperp_rhs);
   if (stage == 1) {
     sweep_qpar_rhs_ = qpar_rhs;
     sweep_qperp_rhs_ = qperp_rhs;

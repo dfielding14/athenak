@@ -51,12 +51,20 @@ def test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints(
         configure.append("-DAthena_SINGLE_PRECISION=ON")
     _run(configure)
 
-    object_target = (
+    limiter_object = (
         "src/CMakeFiles/athena.dir/pgen/unit_tests/"
         "cgl_heat_flux_limiter_test.cpp.o"
     )
+    rkl_object = "src/CMakeFiles/athena.dir/diffusion/sts_rkl2.cpp.o"
     _run(
-        ["make", "-f", "src/CMakeFiles/athena.dir/build.make", object_target, "-j4"],
+        [
+            "make",
+            "-f",
+            "src/CMakeFiles/athena.dir/build.make",
+            limiter_object,
+            rkl_object,
+            "-j4",
+        ],
         cwd=build_dir,
     )
 
@@ -70,7 +78,8 @@ def test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints(
     _run([
         compiler,
         str(main_source),
-        str(build_dir / object_target),
+        str(build_dir / limiter_object),
+        str(build_dir / rkl_object),
         "-std=c++17",
         "-o",
         str(executable),

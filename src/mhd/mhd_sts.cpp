@@ -12,6 +12,7 @@
 #include "eos/eos.hpp"
 #include "diffusion/conduction.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
+#include "diffusion/cgl_landau_fluid_arithmetic.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
@@ -53,7 +54,8 @@ namespace mhd {
 //! \brief Add only the requested subset of MHD diffusion operators to the live flux
 //! scratch array.
 
-void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
+void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection,
+                                     Real cgl_dt_sweep, Real cgl_rkl_weight) {
   const bool add_viscosity =
       (selection == DiffusionSelection::explicit_only) ? has_explicit_viscosity
                                                        : has_sts_viscosity;
@@ -78,7 +80,8 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
   }
   if (selection == DiffusionSelection::sts_only && has_cgl_lf_split &&
       pcgl_lf != nullptr) {
-    pcgl_lf->AddHeatFluxes(w0, bcc0, peos->eos_data, uflx);
+    pcgl_lf->AddHeatFluxes(w0, bcc0, peos->eos_data, cgl_dt_sweep,
+                           cgl_rkl_weight, uflx);
   }
   if (add_scalar_diffusion && pscalar_diff != nullptr) {
     pscalar_diff->AddScalarDiffusionFlux(w0, nmhd, nscalars, uflx);
@@ -130,13 +133,14 @@ TaskStatus MHD::ClearSTSEField(Driver *pdrive, int stage) {
 //! \brief Accumulate only the STS-managed MHD diffusion operators that contribute to U.
 
 TaskStatus MHD::STSFluxes(Driver *pdrive, int stage) {
-  (void) pdrive;
   (void) stage;
   if (!has_any_parabolic_cell_update) {
     return TaskStatus::complete;
   }
 
-  AddSelectedDiffusionFluxes(DiffusionSelection::sts_only);
+  AddSelectedDiffusionFluxes(
+      DiffusionSelection::sts_only, pdrive->sts.dt_sweep,
+      pdrive->sts.coeffs.muj_tilde);
   return TaskStatus::complete;
 }
 
@@ -225,6 +229,11 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   int nmhd_vars = nmhd;
   Real dt_sweep = pdrive->sts.dt_sweep;
   auto coeffs = pdrive->sts.coeffs;
+  const bool cgl_lf_weighted_flux = has_cgl_lf_split;
+  const Real cgl_first_rkl_weight =
+      cgl_lf_weighted_flux
+          ? cgl_lf::FirstStageRKLWeight(pdrive->sts.nstages)
+          : static_cast<Real>(1.0);
   auto u0_ = u0;
   auto u_sts0_ = u_sts0;
   auto u_sts1_ = u_sts1;
@@ -268,21 +277,38 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
     }
 
     par_for_inner(member, is, ie, [&](const int i) {
-      const Real delta_u = -dt_sweep*divf(i);
-      u0_(m,n,k,j,i) = coeffs.muj*u_sts1_(m,n,k,j,i)
-                     + coeffs.nuj*u_sts2_(m,n,k,j,i)
-                     + (1.0 - coeffs.muj - coeffs.nuj)*u_sts0_(m,n,k,j,i)
-                     + coeffs.gammaj_tilde*u_sts_rhs_(m,n,k,j,i)
-                     + coeffs.muj_tilde*delta_u;
-      if (stage == 1) {
-        u_sts_rhs_(m,n,k,j,i) = delta_u;
+      const bool weighted_cgl_variable =
+          cgl_lf_weighted_flux && (n == IEN || n == IAN);
+      if (weighted_cgl_variable) {
+        // The CGL LF face flux already contains dt_sweep*muj_tilde.
+        const Real weighted_rhs = -divf(i);
+        const Real first_rhs_coeff =
+            coeffs.gammaj_tilde/cgl_first_rkl_weight;
+        u0_(m,n,k,j,i) = cgl_lf::WeightedRKL2Update(
+            coeffs.muj, u_sts1_(m,n,k,j,i),
+            coeffs.nuj, u_sts2_(m,n,k,j,i),
+            1.0 - coeffs.muj - coeffs.nuj, u_sts0_(m,n,k,j,i),
+            first_rhs_coeff, u_sts_rhs_(m,n,k,j,i), weighted_rhs);
+        if (stage == 1) {
+          u_sts_rhs_(m,n,k,j,i) = weighted_rhs;
+        }
+      } else {
+        const Real delta_u = -dt_sweep*divf(i);
+        u0_(m,n,k,j,i) = coeffs.muj*u_sts1_(m,n,k,j,i)
+                       + coeffs.nuj*u_sts2_(m,n,k,j,i)
+                       + (1.0 - coeffs.muj - coeffs.nuj)*u_sts0_(m,n,k,j,i)
+                       + coeffs.gammaj_tilde*u_sts_rhs_(m,n,k,j,i)
+                       + coeffs.muj_tilde*delta_u;
+        if (stage == 1) {
+          u_sts_rhs_(m,n,k,j,i) = delta_u;
+        }
       }
     });
   });
 
   if (has_cgl_lf_split && pcgl_lf != nullptr) {
-    pcgl_lf->AdvanceHeatFluxWorkDiagnostics(dt_sweep, coeffs, stage,
-                                            pdrive->sts.nstages);
+    pcgl_lf->AdvanceHeatFluxWorkDiagnostics(
+        coeffs, stage, pdrive->sts.nstages);
   }
   if (has_cgl_lf_split && stage == pdrive->sts.nstages) {
     DiagnoseNonfiniteCGLState(stage, "sts-update-u", "post", STSSweepName(pdrive),
