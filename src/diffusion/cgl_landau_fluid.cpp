@@ -42,15 +42,31 @@ struct CGLLFFaceState {
   Real rho;
   Real ppar;
   Real pperp;
-  Real bmag;
+  Real bmag_inv;
   Real bhx;
   Real bhy;
   Real bhz;
   Real bhdir;
-  Real chi_parallel;
-  Real chi_perp;
   Real cparallel;
+  Real lf_k;
+  Real nu;
 };
+
+KOKKOS_INLINE_FUNCTION
+Real ScaledMagneticMagnitude(const Real bx, const Real by, const Real bz) {
+  const Real scale = fmax(fabs(bx), fmax(fabs(by), fabs(bz)));
+  if (scale == 0.0) {
+    return 0.0;
+  }
+  const Real sx = bx/scale;
+  const Real sy = by/scale;
+  const Real sz = bz/scale;
+  const Real scaled_magnitude = sqrt(sx*sx + sy*sy + sz*sz);
+  const Real maximum = std::numeric_limits<Real>::max();
+  return (scaled_magnitude > maximum/scale)
+             ? maximum
+             : scale*scaled_magnitude;
+}
 
 KOKKOS_INLINE_FUNCTION
 bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
@@ -59,31 +75,43 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                          const Real bx, const Real by, const Real bz, const int dir,
                          const Real lf_k, const bool coeff_local, const Real cparallel0,
                          const EOS_Data &eos, CGLLFFaceState &face) {
-  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  const Real bmag = sqrt(bsqr);
+  const Real bscale = fmax(fabs(bx), fmax(fabs(by), fabs(bz)));
+  if (bscale == 0.0 || lf_k <= 0.0) {
+    return false;
+  }
+  const Real bsx = bx/bscale;
+  const Real bsy = by/bscale;
+  const Real bsz = bz/bscale;
+  const Real bscaled_mag = sqrt(bsx*bsx + bsy*bsy + bsz*bsz);
+  const Real maximum = std::numeric_limits<Real>::max();
+  const Real bmag = (bscaled_mag > maximum/bscale)
+                        ? maximum
+                        : bscale*bscaled_mag;
   if (bmag <= eos.bfloor || lf_k <= 0.0) {
     return false;
   }
-  face.rho = fmax(static_cast<Real>(0.5)*(rho_l + rho_r), eos.dfloor);
-  face.ppar = fmax(static_cast<Real>(0.5)*(ppar_l + ppar_r), eos.pfloor);
-  face.pperp = fmax(static_cast<Real>(0.5)*(pperp_l + pperp_r), eos.pfloor);
-  face.bmag = bmag;
-  face.bhx = bx/bmag;
-  face.bhy = by/bmag;
-  face.bhz = bz/bmag;
+  face.rho = fmax(static_cast<Real>(0.5)*rho_l +
+                  static_cast<Real>(0.5)*rho_r, eos.dfloor);
+  face.ppar = fmax(static_cast<Real>(0.5)*ppar_l +
+                   static_cast<Real>(0.5)*ppar_r, eos.pfloor);
+  face.pperp = fmax(static_cast<Real>(0.5)*pperp_l +
+                    static_cast<Real>(0.5)*pperp_r, eos.pfloor);
+  face.bmag_inv = (static_cast<Real>(1.0)/bscale)/bscaled_mag;
+  face.bhx = bsx/bscaled_mag;
+  face.bhy = bsy/bscaled_mag;
+  face.bhz = bsz/bscaled_mag;
   face.bhdir = (dir == 0) ? face.bhx : ((dir == 1) ? face.bhy : face.bhz);
   face.cparallel =
       coeff_local ? sqrt(fmax(face.ppar/face.rho, eos.tfloor)) : cparallel0;
+  const Real sqrt_max = sqrt(maximum);
+  const Real bsqr = (bmag <= sqrt_max) ? bmag*bmag
+                                       : maximum;
   const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0)) +
       cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
                                 eos.mlim, eos.flim, eos.firehose_threshold,
                                 eos.backup_lim);
-  const Real denom_perp = cgl::kSqrtTwoPi*face.cparallel*lf_k + nu;
-  const Real denom_parallel = cgl::kSqrtEightPi*face.cparallel*lf_k
-                            + cgl::kThreePiMinusEight*nu;
-  face.chi_perp = (denom_perp > 0.0) ? 2.0*SQR(face.cparallel)/denom_perp : 0.0;
-  face.chi_parallel =
-      (denom_parallel > 0.0) ? 8.0*SQR(face.cparallel)/denom_parallel : 0.0;
+  face.lf_k = lf_k;
+  face.nu = nu;
   return true;
 }
 
@@ -98,19 +126,20 @@ void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_
   const Real grad_tperp =
       face.bhx*gtperp_x + face.bhy*gtperp_y + face.bhz*gtperp_z;
   const Real grad_b = face.bhx*gb_x + face.bhy*gb_y + face.bhz*gb_z;
-  const Real qpar_l = -face.chi_parallel*face.rho*grad_tpar;
-  const Real qperp_l = -face.chi_perp*(face.rho*grad_tperp -
-      face.pperp*(1.0 - face.pperp/face.ppar)*grad_b/face.bmag);
-  const Real qpar_max = cgl::kSqrtEightOverPi*face.cparallel*face.ppar;
-  const Real qperp_max = cgl::kSqrtTwoOverPi*face.cparallel*face.pperp;
-  qpar_ratio = (qpar_max > 0.0) ? fabs(qpar_l)/qpar_max : 0.0;
-  qperp_ratio = (qperp_max > 0.0) ? fabs(qperp_l)/qperp_max : 0.0;
-  const Real qpar = cgl::LimitedHeatFlux(qpar_l, qpar_max);
-  const Real qperp = cgl::LimitedHeatFlux(qperp_l, qperp_max);
+  Real signed_qpar_ratio = 0.0;
+  const Real qpar = cgl::LimitedParallelHeatFlux(
+      face.cparallel, face.rho, face.ppar, face.lf_k, face.nu,
+      grad_tpar, signed_qpar_ratio);
+  qpar_ratio = fabs(signed_qpar_ratio);
+  Real signed_qperp_ratio = 0.0;
+  const Real qperp = cgl::LimitedPerpendicularHeatFlux(
+      face.cparallel, face.rho, face.ppar, face.pperp, face.bmag_inv,
+      face.lf_k, face.nu, grad_tperp, grad_b, signed_qperp_ratio);
+  qperp_ratio = fabs(signed_qperp_ratio);
   qpar_flux = face.bhdir*qpar;
   qperp_flux = face.bhdir*qperp;
   eflux = qperp_flux + static_cast<Real>(0.5)*qpar_flux;
-  muflux = qperp_flux/face.bmag;
+  muflux = qperp_flux*face.bmag_inv;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -237,8 +266,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
     tpar(m,k,j,i) = w(m,IPR,k,j,i)/rho;
     tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
-    bmag(m,k,j,i) = sqrt(SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i)) +
-                           SQR(bcc(m,IBZ,k,j,i)));
+    bmag(m,k,j,i) = ScaledMagneticMagnitude(
+        bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
   });
 
   const bool multi_d = pmy_pack->pmesh->multi_d;
@@ -285,9 +314,9 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
     }
-    const Real bx = 0.5*(bcc(m,IBX,k,j,i-1) + bcc(m,IBX,k,j,i));
-    const Real by = 0.5*(bcc(m,IBY,k,j,i-1) + bcc(m,IBY,k,j,i));
-    const Real bz = 0.5*(bcc(m,IBZ,k,j,i-1) + bcc(m,IBZ,k,j,i));
+    const Real bx = 0.5*bcc(m,IBX,k,j,i-1) + 0.5*bcc(m,IBX,k,j,i);
+    const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
+    const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
     Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
@@ -350,9 +379,9 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
     }
-    const Real bx = 0.5*(bcc(m,IBX,k,j-1,i) + bcc(m,IBX,k,j,i));
-    const Real by = 0.5*(bcc(m,IBY,k,j-1,i) + bcc(m,IBY,k,j,i));
-    const Real bz = 0.5*(bcc(m,IBZ,k,j-1,i) + bcc(m,IBZ,k,j,i));
+    const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
+    const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
+    const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
     Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
@@ -412,9 +441,9 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
     const Real pz = (tperp(m,k,j,i) - tperp(m,k-1,j,i))/size.d_view(m).dx3;
     const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
-    const Real bx = 0.5*(bcc(m,IBX,k-1,j,i) + bcc(m,IBX,k,j,i));
-    const Real by = 0.5*(bcc(m,IBY,k-1,j,i) + bcc(m,IBY,k,j,i));
-    const Real bz = 0.5*(bcc(m,IBZ,k-1,j,i) + bcc(m,IBZ,k,j,i));
+    const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
+    const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
+    const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
     Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;

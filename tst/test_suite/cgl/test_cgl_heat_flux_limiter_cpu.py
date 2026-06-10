@@ -25,8 +25,14 @@ def _cmake_cache_value(build_dir, key):
     raise AssertionError(f"{key} is absent from CMakeCache.txt")
 
 
-@pytest.mark.parametrize("single_precision", [False, True])
-def test_cgl_heat_flux_limiter_extreme_ranges(tmp_path, single_precision):
+@pytest.mark.parametrize(
+    "single_precision",
+    [False, True],
+    ids=["double", "single"],
+)
+def test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints(
+    tmp_path, single_precision
+):
     build_dir = tmp_path / "build"
     configure = [
         "cmake",
