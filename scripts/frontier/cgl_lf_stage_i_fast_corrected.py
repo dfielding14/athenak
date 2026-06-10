@@ -76,6 +76,12 @@ ACTIVE_CASES = (
 FINITE_LIMITER_DIAGNOSTIC_CASES = frozenset({"R14", "R15"})
 FINITE_LIMITER_OVERRIDE = "mhd/cgl_lf_strict_admissibility=false"
 FINITE_LIMITER_VARIANT = "finite_limiter_hard_bound_diagnostic_nonfatal"
+FINITE_LIMITER_CONTINUATION_POLICY = (
+    "finite_fatal-zero_mass-conserving_complete-terminal-products"
+)
+FINITE_LIMITER_FATAL_COLUMNS = ("lf_nonfin", "lf_nonpos")
+FINITE_LIMITER_EXPECTED_MASS = {"R14": 2.0, "R15": 2.0}
+FINITE_LIMITER_MASS_TOLERANCE = 1.0e-12
 
 # These defaults use the successful high-node campaign profiles while keeping
 # rank counts below each input's meshblock count.
@@ -358,7 +364,7 @@ def prepare_segment(
         command_line_overrides = [FINITE_LIMITER_OVERRIDE]
         strict_admissibility = False
         variant = FINITE_LIMITER_VARIANT
-        continuation_policy = "finite_progress_complete_terminal_products"
+        continuation_policy = FINITE_LIMITER_CONTINUATION_POLICY
 
     manifest_path = fast.segment_manifest(segment)
     manifest = fast.load_json(manifest_path)
@@ -415,7 +421,7 @@ def validate_segment(segment: Path) -> dict[str, object]:
             "variant": FINITE_LIMITER_VARIANT,
             "strict_admissibility": False,
             "command_line_overrides": [FINITE_LIMITER_OVERRIDE],
-            "continuation_policy": "finite_progress_complete_terminal_products",
+            "continuation_policy": FINITE_LIMITER_CONTINUATION_POLICY,
         }
         for key, expected in diagnostic_exact.items():
             if manifest.get(key) != expected:
@@ -538,7 +544,14 @@ def analyze_finite_limiter_diagnostic(
         raise CorrectedFastError(f"expected one MHD and one user history: {output}")
     mhd = fast.parse_history(mhd_paths[0])
     user = fast.parse_history(user_paths[0])
-    if "time" not in mhd or "time" not in user or "mass" not in mhd or "mass" not in user:
+    required_mhd = {
+        "time",
+        "dt",
+        "mass",
+        *fast.STRICT_FAILURE_COLUMNS,
+        *FINITE_LIMITER_FATAL_COLUMNS,
+    }
+    if not required_mhd.issubset(mhd) or not {"time", "mass"}.issubset(user):
         raise CorrectedFastError(f"histories lack required columns: {output}")
     if len(mhd["time"]) != len(user["time"]) or any(
         left != right for left, right in zip(mhd["time"], user["time"])
@@ -546,6 +559,10 @@ def analyze_finite_limiter_diagnostic(
         raise CorrectedFastError(f"history times are not synchronized: {output}")
 
     final_time = mhd["time"][-1]
+    times_strictly_increasing = all(
+        right > left for left, right in zip(mhd["time"], mhd["time"][1:])
+    )
+    timesteps_positive = all(value > 0.0 for value in mhd["dt"])
     restart = fast.terminal_product_group(output / "rst", ".rst", rank_count)
     if not math.isclose(
         float(restart["physical_time"]), final_time, rel_tol=0.0, abs_tol=1.0e-12
@@ -560,30 +577,49 @@ def analyze_finite_limiter_diagnostic(
         snapshot_error = str(error)
 
     strict_maxima = {
-        name: max(abs(value) for value in mhd.get(name, [math.inf]))
+        name: max(abs(value) for value in mhd[name])
         for name in fast.STRICT_FAILURE_COLUMNS
     }
-    initial_mass = mhd["mass"][0]
-    mass_drift = max(abs(value - initial_mass) for value in mhd["mass"]) / max(
-        abs(initial_mass), 1.0
-    )
+    fatal_maxima = {
+        name: max(abs(value) for value in mhd[name])
+        for name in FINITE_LIMITER_FATAL_COLUMNS
+    }
+    case_id = str(manifest["case_id"])
+    expected_mass = FINITE_LIMITER_EXPECTED_MASS[case_id]
+    mass_scale = max(abs(expected_mass), 1.0)
+    mass_drift = max(abs(value - expected_mass) for value in mhd["mass"]) / mass_scale
     mass_mismatch = max(
         abs(left - right) for left, right in zip(mhd["mass"], user["mass"])
-    ) / max(abs(initial_mass), 1.0)
+    ) / mass_scale
+    mass_conserved = (
+        mass_drift <= FINITE_LIMITER_MASS_TOLERANCE
+        and mass_mismatch <= FINITE_LIMITER_MASS_TOLERANCE
+    )
     start_time = float(manifest["start_time"])
     target_time = float(manifest["target_time"])
-    finite_progress = math.isfinite(final_time) and final_time > start_time
+    finite_progress = (
+        math.isfinite(final_time)
+        and final_time > start_time
+        and final_time <= target_time + 1.0e-12
+        and times_strictly_increasing
+        and timesteps_positive
+    )
     restart_complete = (
         int(restart["rank_count"]) == rank_count
         and math.isclose(
             float(restart["physical_time"]), final_time, rel_tol=0.0, abs_tol=1.0e-12
         )
     )
+    snapshot_complete = (
+        snapshot is not None and int(snapshot["rank_count"]) == rank_count
+    )
+    fatal_counters_zero = all(value == 0.0 for value in fatal_maxima.values())
     base_strict_passed = (
         all(value == 0.0 for value in strict_maxima.values())
-        and mass_drift <= 1.0e-8
-        and mass_mismatch <= 1.0e-8
+        and mass_conserved
         and finite_progress
+        and restart_complete
+        and snapshot_complete
     )
     return {
         "schema_version": 1,
@@ -593,17 +629,33 @@ def analyze_finite_limiter_diagnostic(
         "start_time": start_time,
         "target_time": target_time,
         "final_time": final_time,
-        "complete": final_time >= target_time - 1.0e-12,
-        "passed": finite_progress and restart_complete,
+        "complete": math.isclose(
+            final_time, target_time, rel_tol=0.0, abs_tol=1.0e-12
+        ),
+        "passed": (
+            fatal_counters_zero
+            and mass_conserved
+            and finite_progress
+            and restart_complete
+            and snapshot_complete
+        ),
         "base_strict_passed": base_strict_passed,
-        "continuation_policy": "finite_progress_complete_terminal_products",
+        "continuation_policy": FINITE_LIMITER_CONTINUATION_POLICY,
         "continuation_gate": {
+            "fatal_counters_zero": fatal_counters_zero,
             "finite_progress": finite_progress,
+            "mass_conserved": mass_conserved,
+            "mass_relative_tolerance": FINITE_LIMITER_MASS_TOLERANCE,
+            "positive_timesteps": timesteps_positive,
+            "strictly_increasing_time": times_strictly_increasing,
             "complete_terminal_restart": restart_complete,
             "hard_bound_zero_required": False,
-            "terminal_snapshot_required": False,
+            "terminal_snapshot_required": True,
+            "complete_terminal_snapshot": snapshot_complete,
         },
+        "fatal_lf_failure_maxima": fatal_maxima,
         "strict_lf_failure_maxima": strict_maxima,
+        "mass_reference": expected_mass,
         "mass_relative_drift": mass_drift,
         "mhd_user_mass_relative_mismatch": mass_mismatch,
         "terminal_restart": restart,

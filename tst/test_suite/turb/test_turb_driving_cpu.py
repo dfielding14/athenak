@@ -318,13 +318,14 @@ def test_nonpositive_final_cycle_timestep_is_rejected(tmp_path):
     )
     output = result.stdout + result.stderr
     assert result.returncode != 0
-    assert "Final cycle timestep must be finite and positive" in output
+    assert "Final cycle timestep must be finite, positive, and advance time" in output
     for field in (
         "rank=",
         "cycle=",
         "time=",
         "tlim=",
         "dt=",
+        "time_plus_dt=",
         "dt_before_tlim=",
         "dtold=",
         "dt_legacy=",

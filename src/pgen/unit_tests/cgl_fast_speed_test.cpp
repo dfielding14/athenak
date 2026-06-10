@@ -376,6 +376,20 @@ void CheckEndpointRanges(const EOS_Data &eos) {
       1.0, tolerance);
 }
 
+void CheckCycleTimestepAdvancementEndpoints() {
+  const Real time = static_cast<Real>(6.3332844255790155);
+  const Real next_time =
+      std::nextafter(time, std::numeric_limits<Real>::infinity());
+  const Real spacing = next_time - time;
+  Require("cycle timestep rejects positive sub-ulp increment",
+          !mesh_timestep::IsFinitePositiveAndAdvancing(
+              time, static_cast<Real>(0.25)*spacing));
+  Require("cycle timestep accepts one-ulp increment",
+          mesh_timestep::IsFinitePositiveAndAdvancing(time, spacing));
+  Require("cycle timestep rejects zero",
+          !mesh_timestep::IsFinitePositiveAndAdvancing(time, 0.0));
+}
+
 MHDPrim1D MakeLocalState(const ObliqueState &state) {
   MHDPrim1D w{};
   w.d = state.density;
@@ -465,6 +479,7 @@ void RunCglFastSpeedChecks() {
   CheckOrdinaryValueAgreement(eos);
   CheckFactoredDiscriminant(eos);
   CheckEndpointRanges(eos);
+  CheckCycleTimestepAdvancementEndpoints();
   CheckActiveReconstructedHlleRoute(eos);
   std::cout << "CGL fast-speed checks passed" << std::endl;
 }

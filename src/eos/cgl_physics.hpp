@@ -156,6 +156,56 @@ Real PositiveProduct3(const Real a, const Real b, const Real c) {
 }
 
 KOKKOS_INLINE_FUNCTION
+Real PositiveProduct4(const Real a, const Real b, const Real c, const Real d) {
+  const Real direct = (a*c)*(b*d);
+  if (Kokkos::isfinite(direct) &&
+      (direct > 0.0 || a == 0.0 || b == 0.0 || c == 0.0 || d == 0.0)) {
+    return direct;
+  }
+  const Real alternate1 = (a*b)*(c*d);
+  if (Kokkos::isfinite(alternate1) && alternate1 > 0.0) {
+    return alternate1;
+  }
+  const Real alternate2 = (a*d)*(b*c);
+  if (Kokkos::isfinite(alternate2) && alternate2 > 0.0) {
+    return alternate2;
+  }
+  if (!(a > 0.0) || !(b > 0.0) || !(c > 0.0) || !(d > 0.0) ||
+      !Kokkos::isfinite(a) || !Kokkos::isfinite(b) ||
+      !Kokkos::isfinite(c) || !Kokkos::isfinite(d)) {
+    return direct;
+  }
+
+  const Real log_product =
+      Kokkos::log2(a) + Kokkos::log2(b) +
+      Kokkos::log2(c) + Kokkos::log2(d);
+  const Real max_log = Kokkos::log2(std::numeric_limits<Real>::max());
+  if (log_product > max_log) {
+    return std::numeric_limits<Real>::infinity();
+  }
+  const Real min_log =
+      Kokkos::log2(std::numeric_limits<Real>::denorm_min());
+  if (log_product < min_log) {
+    return 0.0;
+  }
+  return Kokkos::exp2(log_product);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real LimitedHeatFluxFromRatioAndScale(const Real ratio, const Real a,
+                                      const Real b, const Real c) {
+  if (!(a > 0.0) || !(b > 0.0) || !(c > 0.0)) return 0.0;
+  if (ratio == 0.0) return ratio;
+  const Real ratio_abs = fabs(ratio);
+  const Real limited_ratio_abs =
+      (ratio_abs <= 1.0)
+          ? ratio_abs/(1.0 + ratio_abs)
+          : 1.0/(1.0 + 1.0/ratio_abs);
+  const Real magnitude = PositiveProduct4(limited_ratio_abs, a, b, c);
+  return copysign(magnitude, ratio);
+}
+
+KOKKOS_INLINE_FUNCTION
 Real ParallelHeatFluxRatio(const Real cparallel, const Real rho,
                            const Real ppar, const Real lf_k,
                            const Real nu, const Real grad_tpar) {
@@ -222,8 +272,8 @@ Real LimitedParallelHeatFlux(const Real cparallel, const Real rho,
                              Real &signed_ratio) {
   signed_ratio = ParallelHeatFluxRatio(
       cparallel, rho, ppar, lf_k, nu, grad_tpar);
-  const Real qmax = PositiveProduct3(cparallel, kSqrtEightOverPi, ppar);
-  return LimitedHeatFluxFromRatio(signed_ratio, qmax);
+  return LimitedHeatFluxFromRatioAndScale(
+      signed_ratio, cparallel, kSqrtEightOverPi, ppar);
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -334,8 +384,8 @@ Real LimitedPerpendicularHeatFlux(const Real cparallel, const Real rho,
                                   const Real grad_b, Real &signed_ratio) {
   signed_ratio = PerpendicularHeatFluxRatio(
       cparallel, rho, ppar, pperp, bmag_inv, lf_k, nu, grad_tperp, grad_b);
-  const Real qmax = PositiveProduct3(cparallel, kSqrtTwoOverPi, pperp);
-  return LimitedHeatFluxFromRatio(signed_ratio, qmax);
+  return LimitedHeatFluxFromRatioAndScale(
+      signed_ratio, cparallel, kSqrtTwoOverPi, pperp);
 }
 
 } // namespace cgl

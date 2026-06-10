@@ -87,6 +87,15 @@ def write_restart_group(directory: Path, rank_count: int, time: float) -> Path:
     return rank_zero
 
 
+def write_binary_group(directory: Path, rank_count: int) -> Path:
+    rank_zero = directory / "rank_00000000/fixture.00001.bin"
+    for rank in range(rank_count):
+        path = directory / f"rank_{rank:08d}/fixture.00001.bin"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"binary payload")
+    return rank_zero
+
+
 def test_corrected_defaults_are_exact_active_only_and_aggressive(corrected):
     assert corrected.CAMPAIGN_ROOT == EXPECTED_ROOT
     assert corrected.FROZEN_SOURCE == EXPECTED_SOURCE
@@ -297,7 +306,10 @@ def test_r14_r15_are_explicit_nonfatal_finite_limiter_diagnostics(
         assert manifest["variant"] == corrected.FINITE_LIMITER_VARIANT
         assert manifest["strict_admissibility"] is False
         assert manifest["command_line_overrides"] == [corrected.FINITE_LIMITER_OVERRIDE]
-        assert manifest["continuation_policy"] == "finite_progress_complete_terminal_products"
+        assert (
+            manifest["continuation_policy"]
+            == corrected.FINITE_LIMITER_CONTINUATION_POLICY
+        )
         assert text.count(corrected.FINITE_LIMITER_OVERRIDE) == 1
 
 
@@ -355,7 +367,7 @@ def test_validate_segment_rejects_legacy_or_nonfresh_initial_lineage(
         corrected.validate_segment(segment)
 
 
-def test_diagnostic_analysis_continues_on_finite_complete_products_not_hard_bound_zero(
+def test_diagnostic_analysis_requires_fatal_zero_mass_and_complete_products(
     corrected, tmp_path, monkeypatch
 ):
     segment = tmp_path / "campaign/runs/E03-forcing-policy/R14/fast_s000"
@@ -370,7 +382,8 @@ def test_diagnostic_analysis_continues_on_finite_complete_products_not_hard_boun
         output / "fixture.mhd.hst",
         {
             "time": [0.0, 0.5],
-            "mass": [1.0, 1.0],
+            "dt": [0.1, 0.1],
+            "mass": [2.0, 2.0],
             "lf_dfloor": [0.0, 0.0],
             "lf_pfloor": [0.0, 0.0],
             "lf_nonfin": [0.0, 0.0],
@@ -380,22 +393,113 @@ def test_diagnostic_analysis_continues_on_finite_complete_products_not_hard_boun
     )
     write_history(
         output / "fixture.user.hst",
-        {"time": [0.0, 0.5], "mass": [1.0, 1.0]},
+        {"time": [0.0, 0.5], "mass": [2.0, 2.0]},
     )
     write_restart_group(output / "rst", 8, 0.5)
+    write_binary_group(output / "bin", 8)
     monkeypatch.setattr(corrected, "validate_segment", lambda _segment: manifest)
 
     result = corrected.analyze_segment(segment)
 
     assert result["base_strict_passed"] is False
     assert result["strict_lf_failure_maxima"]["lf_hardbd"] == 42.0
+    assert result["fatal_lf_failure_maxima"] == {
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+    }
+    assert result["continuation_gate"]["fatal_counters_zero"] is True
+    assert result["continuation_gate"]["mass_conserved"] is True
+    assert result["continuation_gate"]["positive_timesteps"] is True
+    assert result["continuation_gate"]["strictly_increasing_time"] is True
     assert result["continuation_gate"]["hard_bound_zero_required"] is False
-    assert result["continuation_gate"]["terminal_snapshot_required"] is False
-    assert result["terminal_snapshot"] is None
-    assert result["terminal_snapshot_error"] is not None
+    assert result["continuation_gate"]["terminal_snapshot_required"] is True
+    assert result["continuation_gate"]["complete_terminal_snapshot"] is True
+    assert result["terminal_snapshot"] is not None
+    assert result["terminal_snapshot_error"] is None
     assert result["passed"] is True
     saved = corrected.fast.load_json(segment / "manifest/fast_analysis.json")
     assert saved["passed"] is True
+
+
+@pytest.mark.parametrize(
+    ("column", "values"),
+    (
+        ("lf_nonfin", [0.0, 1.0]),
+        ("mass", [2.0, 2.0 + 3.0e-12]),
+        ("dt", [0.1, 0.0]),
+    ),
+)
+def test_diagnostic_analysis_rejects_fatal_mass_or_timestep_failure(
+    corrected, tmp_path, monkeypatch, column, values
+):
+    segment = tmp_path / f"campaign/{column}/R14/fast_s000"
+    output = segment / "output"
+    manifest = {
+        "case_id": "R14",
+        "ranks": 8,
+        "start_time": 0.0,
+        "target_time": 10.0,
+    }
+    mhd_columns = {
+        "time": [0.0, 0.5],
+        "dt": [0.1, 0.1],
+        "mass": [2.0, 2.0],
+        "lf_dfloor": [0.0, 0.0],
+        "lf_pfloor": [0.0, 0.0],
+        "lf_nonfin": [0.0, 0.0],
+        "lf_nonpos": [0.0, 0.0],
+        "lf_hardbd": [0.0, 0.0],
+    }
+    mhd_columns[column] = values
+    write_history(output / "fixture.mhd.hst", mhd_columns)
+    write_history(
+        output / "fixture.user.hst",
+        {"time": [0.0, 0.5], "mass": mhd_columns["mass"]},
+    )
+    write_restart_group(output / "rst", 8, 0.5)
+    write_binary_group(output / "bin", 8)
+    monkeypatch.setattr(corrected, "validate_segment", lambda _segment: manifest)
+
+    result = corrected.analyze_segment(segment)
+
+    assert result["passed"] is False
+
+
+def test_diagnostic_analysis_rejects_missing_terminal_snapshot(
+    corrected, tmp_path, monkeypatch
+):
+    segment = tmp_path / "campaign/missing-snapshot/R14/fast_s000"
+    output = segment / "output"
+    manifest = {
+        "case_id": "R14",
+        "ranks": 8,
+        "start_time": 0.0,
+        "target_time": 10.0,
+    }
+    write_history(
+        output / "fixture.mhd.hst",
+        {
+            "time": [0.0, 0.5],
+            "dt": [0.1, 0.1],
+            "mass": [2.0, 2.0],
+            "lf_dfloor": [0.0, 0.0],
+            "lf_pfloor": [0.0, 0.0],
+            "lf_nonfin": [0.0, 0.0],
+            "lf_nonpos": [0.0, 0.0],
+            "lf_hardbd": [0.0, 0.0],
+        },
+    )
+    write_history(
+        output / "fixture.user.hst",
+        {"time": [0.0, 0.5], "mass": [2.0, 2.0]},
+    )
+    write_restart_group(output / "rst", 8, 0.5)
+    monkeypatch.setattr(corrected, "validate_segment", lambda _segment: manifest)
+
+    result = corrected.analyze_segment(segment)
+
+    assert result["continuation_gate"]["complete_terminal_snapshot"] is False
+    assert result["passed"] is False
 
 
 def test_preflight_authenticates_matrix_executable_and_every_selected_input(

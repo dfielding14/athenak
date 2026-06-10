@@ -153,6 +153,11 @@ void CheckPositiveProductEndpoints() {
           std::isinf(cgl::PositiveProduct3(maximum, maximum, maximum)));
   Require("positive product true underflow",
           cgl::PositiveProduct3(tiny, tiny, tiny) == 0.0);
+  RequireRelativeClose(
+      "four-factor overflow cancellation",
+      cgl::PositiveProduct4(static_cast<Real>(4.0)/maximum, maximum,
+                            cgl::kSqrtEightOverPi, 1.0),
+      static_cast<Real>(4.0)*cgl::kSqrtEightOverPi);
 }
 
 Real ReferencePerpendicularHeatFlux(
@@ -200,6 +205,18 @@ void CheckParallelClosureOrdinaryAgreement() {
 
 void CheckParallelClosureOverflowEndpoints() {
   const Real maximum = std::numeric_limits<Real>::max();
+
+  {
+    const Real small_ratio = static_cast<Real>(4.0)/maximum;
+    Real ratio = 0.0;
+    const Real q = cgl::LimitedParallelHeatFlux(
+        maximum, 1.0, 1.0, 1.0, 0.0, -small_ratio, ratio);
+    const Real expected =
+        static_cast<Real>(4.0)*cgl::kSqrtEightOverPi/(1.0 + small_ratio);
+    RequireRelativeClose("parallel overflowing cap small ratio", ratio, small_ratio);
+    Require("parallel overflowing cap finite flux", std::isfinite(q));
+    RequireRelativeClose("parallel overflowing cap representable flux", q, expected);
+  }
 
   {
     Real ratio = 0.0;
@@ -290,6 +307,21 @@ void CheckPerpendicularClosureOrdinaryAgreement() {
 
 void CheckPerpendicularClosureOverflowEndpoints() {
   const Real maximum = std::numeric_limits<Real>::max();
+
+  {
+    const Real small_ratio = static_cast<Real>(4.0)/maximum;
+    Real ratio = 0.0;
+    const Real q = cgl::LimitedPerpendicularHeatFlux(
+        maximum, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+        -small_ratio, 0.0, ratio);
+    const Real expected =
+        static_cast<Real>(4.0)*cgl::kSqrtTwoOverPi/(1.0 + small_ratio);
+    RequireRelativeClose(
+        "perpendicular overflowing cap small ratio", ratio, small_ratio);
+    Require("perpendicular overflowing cap finite flux", std::isfinite(q));
+    RequireRelativeClose(
+        "perpendicular overflowing cap representable flux", q, expected);
+  }
 
   {
     Real ratio = 0.0;

@@ -11,12 +11,22 @@
 //! MeshBlocks (potentially on different levels) that tile the entire domain.  MeshBlocks
 //! are grouped together into MeshBlockPacks for better performance on GPUs.
 
+#include <cmath>
 #include <cstdint>  // int32_t
 #include <memory>
 #include <string>
 
 #include "athena.hpp"
 #include "diffusion/sts_types.hpp"
+
+namespace mesh_timestep {
+
+inline bool IsFinitePositiveAndAdvancing(const Real time, const Real dt) {
+  return std::isfinite(time) && std::isfinite(dt) &&
+         dt > 0.0 && time + dt > time;
+}
+
+} // namespace mesh_timestep
 
 // Define following structure before other "include" files to resolve declarations
 //----------------------------------------------------------------------------------------

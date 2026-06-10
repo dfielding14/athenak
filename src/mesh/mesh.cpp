@@ -660,17 +660,19 @@ void Mesh::NewTimeStep(const Real tlim) {
   // limit last time step to stop at tlim *exactly*
   if ( (time < tlim) && ((time + dt) > tlim) ) {dt = tlim - time;}
 
-  if (!std::isfinite(dt) || dt <= 0.0) {
+  const Real time_plus_dt = time + dt;
+  if (!mesh_timestep::IsFinitePositiveAndAdvancing(time, dt)) {
     std::cout << std::setprecision(std::numeric_limits<Real>::max_digits10)
               << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Final cycle timestep must be finite and positive."
+              << "Final cycle timestep must be finite, positive, and advance time."
               << std::endl
               << "rank=" << global_variable::my_rank
               << " cycle=" << ncycle
               << " time=" << time
               << " tlim=" << tlim
               << " dt=" << dt
+              << " time_plus_dt=" << time_plus_dt
               << " dt_before_tlim=" << dt_before_tlim
               << " dtold=" << dtold
               << " dt_legacy=" << dt_legacy
