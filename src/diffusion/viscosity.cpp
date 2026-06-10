@@ -158,6 +158,26 @@ void Viscosity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_dat
 
 void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_iso,
   const EOS_Data &eos, DvceFaceFld5D<Real> &flx, const bool initialize_flux) {
+  // Dispatch once so coefficient and flux-update choices are compile-time constants
+  // inside every directional kernel.
+  if (tdep_nu) {
+    if (initialize_flux) {
+      IsotropicViscousFluxImpl<true, true>(w0, nu_iso, eos, flx);
+    } else {
+      IsotropicViscousFluxImpl<true, false>(w0, nu_iso, eos, flx);
+    }
+  } else {
+    if (initialize_flux) {
+      IsotropicViscousFluxImpl<false, true>(w0, nu_iso, eos, flx);
+    } else {
+      IsotropicViscousFluxImpl<false, false>(w0, nu_iso, eos, flx);
+    }
+  }
+}
+
+template <bool variable_nu, bool initialize_flux>
+void Viscosity::IsotropicViscousFluxImpl(const DvceArray5D<Real> &w0,
+  const Real nu_iso, const EOS_Data &eos, DvceFaceFld5D<Real> &flx) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -166,7 +186,6 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
   auto size = pmy_pack->pmb->mb_size;
   bool &multi_d = pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_pack->pmesh->three_d;
-  const bool variable_nu = tdep_nu;
   const bool use_e = eos.use_e;
   const Real gm1 = eos.gamma - 1.0;
   const Real nu_ref = nu_iso;
@@ -211,7 +230,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
       // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
       Real nu = nu_ref;
-      if (variable_nu) {
+      if constexpr (variable_nu) {
         const Real tl = use_e ? gm1*w0(m,IEN,k,j,i-1)/w0(m,IDN,k,j,i-1)
                               : w0(m,ITM,k,j,i-1);
         const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
@@ -220,7 +239,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
                   PowerLawNu(tr, nu_ref, temp_ref, exponent, floor, ceiling));
       }
       Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
-      if (initialize_flux) {
+      if constexpr (initialize_flux) {
         flx1(m,IVX,k,j,i) = -nud*fvx;
         flx1(m,IVY,k,j,i) = -nud*fvy;
         flx1(m,IVZ,k,j,i) = -nud*fvz;
@@ -230,7 +249,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
         flx1(m,IVZ,k,j,i) -= nud*fvz;
       }
       if (eos.is_ideal) {
-        if (initialize_flux) {
+        if constexpr (initialize_flux) {
           flx1(m,IEN,k,j,i) =
               -0.5*nud*((w0(m,IVX,k,j,i-1) + w0(m,IVX,k,j,i))*fvx +
                         (w0(m,IVY,k,j,i-1) + w0(m,IVY,k,j,i))*fvy +
@@ -278,7 +297,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
       // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
       Real nu = nu_ref;
-      if (variable_nu) {
+      if constexpr (variable_nu) {
         const Real tl = use_e ? gm1*w0(m,IEN,k,j-1,i)/w0(m,IDN,k,j-1,i)
                               : w0(m,ITM,k,j-1,i);
         const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
@@ -287,7 +306,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
                   PowerLawNu(tr, nu_ref, temp_ref, exponent, floor, ceiling));
       }
       Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
-      if (initialize_flux) {
+      if constexpr (initialize_flux) {
         flx2(m,IVX,k,j,i) = -nud*fvx;
         flx2(m,IVY,k,j,i) = -nud*fvy;
         flx2(m,IVZ,k,j,i) = -nud*fvz;
@@ -297,7 +316,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
         flx2(m,IVZ,k,j,i) -= nud*fvz;
       }
       if (eos.is_ideal) {
-        if (initialize_flux) {
+        if constexpr (initialize_flux) {
           flx2(m,IEN,k,j,i) =
               -0.5*nud*((w0(m,IVX,k,j-1,i) + w0(m,IVX,k,j,i))*fvx +
                         (w0(m,IVY,k,j-1,i) + w0(m,IVY,k,j,i))*fvy +
@@ -342,7 +361,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
       // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
       Real nu = nu_ref;
-      if (variable_nu) {
+      if constexpr (variable_nu) {
         const Real tl = use_e ? gm1*w0(m,IEN,k-1,j,i)/w0(m,IDN,k-1,j,i)
                               : w0(m,ITM,k-1,j,i);
         const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
@@ -351,7 +370,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
                   PowerLawNu(tr, nu_ref, temp_ref, exponent, floor, ceiling));
       }
       Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k-1,j,i));
-      if (initialize_flux) {
+      if constexpr (initialize_flux) {
         flx3(m,IVX,k,j,i) = -nud*fvx;
         flx3(m,IVY,k,j,i) = -nud*fvy;
         flx3(m,IVZ,k,j,i) = -nud*fvz;
@@ -361,7 +380,7 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
         flx3(m,IVZ,k,j,i) -= nud*fvz;
       }
       if (eos.is_ideal) {
-        if (initialize_flux) {
+        if constexpr (initialize_flux) {
           flx3(m,IEN,k,j,i) =
               -0.5*nud*((w0(m,IVX,k-1,j,i) + w0(m,IVX,k,j,i))*fvx +
                         (w0(m,IVY,k-1,j,i) + w0(m,IVY,k,j,i))*fvy +

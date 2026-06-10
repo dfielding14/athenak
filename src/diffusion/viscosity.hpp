@@ -44,6 +44,10 @@ class Viscosity {
   void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_data);
 
  private:
+  template <bool variable_nu, bool initialize_flux>
+  void IsotropicViscousFluxImpl(const DvceArray5D<Real> &w, const Real nu,
+                                const EOS_Data &eos, DvceFaceFld5D<Real> &f);
+
   MeshBlockPack* pmy_pack;
 };
 
