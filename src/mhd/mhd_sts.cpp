@@ -284,7 +284,7 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
     pcgl_lf->AdvanceHeatFluxWorkDiagnostics(dt_sweep, coeffs, stage,
                                             pdrive->sts.nstages);
   }
-  if (diagnose_nonfinite_rk_update && has_cgl_lf_split) {
+  if (has_cgl_lf_split && stage == pdrive->sts.nstages) {
     DiagnoseNonfiniteCGLState(stage, "sts-update-u", "post", STSSweepName(pdrive),
                               "magnetic-moment", u0);
   }

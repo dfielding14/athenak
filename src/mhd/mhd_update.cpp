@@ -247,7 +247,7 @@ TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
     });
   });
 
-  if (diagnose_nonfinite_rk_update) {
+  if (has_cgl_lf_split && stage == pdriver->nexp_stages) {
     const int nx1 = indcs.nx1;
     const int nx2 = indcs.nx2;
     const int nx3 = indcs.nx3;

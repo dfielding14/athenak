@@ -603,15 +603,18 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       // Work after time integrator indicated by "1" in stage
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
 
-      if (sts.enabled) {
+      if (pmesh->sts_integrator != parabolic::STSIntegrator::none) {
+        pmesh->RefreshSTSParabolicTimeStep();
         BeginSTSSweep(pmesh, STSSweep::post);
-        for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
-          SetSTSStage(sts_stage);
-          ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
-          ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
-          ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
+        if (sts.enabled) {
+          for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
+            SetSTSStage(sts_stage);
+            ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
+            ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
+            ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
+          }
+          EndSTSSweep();
         }
-        EndSTSSweep();
       }
 
       // Work outside of TaskLists:

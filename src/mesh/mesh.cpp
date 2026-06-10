@@ -689,6 +689,24 @@ void Mesh::NewTimeStep(const Real tlim) {
 }
 
 //----------------------------------------------------------------------------------------
+// \fn Mesh::RefreshSTSParabolicTimeStep()
+// \brief Refresh the globally minimum explicit timestep for STS processes.
+
+void Mesh::RefreshSTSParabolicTimeStep() {
+  dt_parabolic_sts = std::numeric_limits<float>::max();
+  for (const auto &process : pmb_pack->parabolic_processes) {
+    if (process.UsesSTS()) {
+      dt_parabolic_sts = std::min(dt_parabolic_sts, (cfl_no)*(process.ExplicitDt()));
+    }
+  }
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &dt_parabolic_sts, 1, MPI_ATHENA_REAL, MPI_MIN,
+                MPI_COMM_WORLD);
+#endif
+}
+
+//----------------------------------------------------------------------------------------
 // \fn Mesh::AddCoordinatesAndPhysics
 
 void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
