@@ -400,6 +400,7 @@ def restart_profile(path: Path) -> dict[str, object]:
         "schema": (
             dt,
             cycle,
+            hashlib.sha256(mesh_header[:120] + mesh_header[156:]).hexdigest(),
             hashlib.sha256(parameter_header).hexdigest(),
             hashlib.sha256(location_payload).hexdigest(),
             hashlib.sha256(cost_payload).hexdigest(),

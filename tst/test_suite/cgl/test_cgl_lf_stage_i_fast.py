@@ -470,6 +470,21 @@ def test_terminal_restart_group_rejects_swapped_rank_block_counts(fast, tmp_path
         fast.terminal_product_group(directory, ".rst", 2)
 
 
+def test_terminal_restart_group_rejects_cross_rank_mesh_header_mismatch(
+    fast, tmp_path
+):
+    directory = tmp_path / "rst"
+    write_restart_rank_group(directory, "fixture.00001.rst", 2, 2.0)
+    rank_one = directory / "rank_00000001/fixture.00001.rst"
+    payload = bytearray(rank_one.read_bytes())
+    mesh_header_offset = payload.index(b"<par_end>\n") + len(b"<par_end>\n")
+    payload[mesh_header_offset + 16] ^= 1
+    rank_one.write_bytes(payload)
+
+    with pytest.raises(fast.FastRunError, match="schema or meshblock coverage"):
+        fast.terminal_product_group(directory, ".rst", 2)
+
+
 def test_terminal_binary_group_selects_latest_physical_time(fast, tmp_path):
     directory = tmp_path / "bin"
     terminal = write_binary_rank_group(directory, "fixture.00001.bin", 3, 2.0)
