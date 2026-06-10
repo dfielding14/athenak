@@ -101,7 +101,13 @@ def region_indices(ng: int, nx1: int, nx2: int, nx3: int, *, coarse: bool) -> li
     ]
 
 
-def write_native_restart(path: Path, time_value: float, *, divergent: bool = False) -> None:
+def write_native_restart(
+    path: Path,
+    time_value: float,
+    *,
+    divergent: bool = False,
+    parameter_time: float | None = None,
+) -> None:
     """Write one minimal qualified uniform 3-D native restart for the reviewed parser."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +121,7 @@ def write_native_restart(path: Path, time_value: float, *, divergent: bool = Fal
         "<mhd>\neos = cgl\nnscalars = 0\nbfloor = 1e-10\n"
         "<output3>\nsingle_file_per_rank = true\n"
         "<time>\n"
-        f"restart_time = {time_value:.17g}\n"
+        f"restart_time = {(time_value if parameter_time is None else parameter_time):.17g}\n"
         "<par_end>\n"
     ).encode()
     dx = 0.5
@@ -695,6 +701,52 @@ def test_exact_t9_replay_supplements_selected_lineage_t10(adapter, tmp_path):
         "exact_state_replay",
         "direct_fast",
     ]
+
+
+def test_exact_t9_replay_accepts_legacy_rounded_parent_marker(adapter, tmp_path):
+    inventory = build_campaign(tmp_path, restart_times=(8.4999958, 10.0))
+    parent = (
+        tmp_path
+        / "fast_s000_t0_to_t10/output/rst/rank_00000000/case.00000.rst"
+    )
+    write_native_restart(parent, 8.4999958, parameter_time=8.5)
+    replay_inventory = attach_exact_t9_replay(adapter, inventory)
+
+    observed = adapter.build_audit(
+        inventory,
+        sha256(inventory),
+        ["R03"],
+        "all",
+        replay_inventory,
+        sha256(replay_inventory),
+    )
+
+    assert observed["result"] == "pass"
+    assert observed["cases"]["R03"]["provenance_authenticated"] is True
+
+
+def test_exact_t9_replay_rejects_parent_marker_outside_legacy_tolerance(
+    adapter, tmp_path
+):
+    inventory = build_campaign(tmp_path, restart_times=(8.4999949, 10.0))
+    parent = (
+        tmp_path
+        / "fast_s000_t0_to_t10/output/rst/rank_00000000/case.00000.rst"
+    )
+    write_native_restart(parent, 8.4999949, parameter_time=8.5)
+    replay_inventory = attach_exact_t9_replay(adapter, inventory)
+
+    observed = adapter.build_audit(
+        inventory,
+        sha256(inventory),
+        ["R03"],
+        "all",
+        replay_inventory,
+        sha256(replay_inventory),
+    )
+
+    assert observed["result"] == "authentication_failed"
+    assert observed["cases"]["R03"]["provenance_authenticated"] is False
 
 
 def test_native_face_field_divergence_is_reported_as_failure(adapter, tmp_path):

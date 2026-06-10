@@ -51,6 +51,7 @@ NATIVE_CT_ACCEPTANCE_PATH = Path(__file__).with_name(
     "cgl_lf_stage_i_scientific_acceptance.py"
 )
 CT_REPLAY_PATH = Path(__file__).with_name("cgl_lf_stage_i_fast_ct_replay.py")
+LEGACY_RESTART_TIME_TOLERANCE = 5.0e-6
 CT_ABSENCE_REASON = (
     "Authenticated AthenaK rank-local .bin snapshots expose cell-centered "
     "bcc1/bcc2/bcc3, not the staggered face-centered magnetic state advanced "
@@ -420,7 +421,9 @@ def load_native_ct_authority() -> tuple[
 def native_restart_time(acceptance: object, path: Path) -> float:
     """Read one native restart physical time with the reviewed prefix parser."""
 
-    with acceptance.open_stable_regular(path, "direct-fast restart representative") as descriptor:
+    with acceptance.open_stable_regular(
+        path, "direct-fast restart representative"
+    ) as descriptor:
         profile = os.fstat(descriptor)
         prefix = acceptance.pread_exact(
             descriptor,
@@ -437,6 +440,35 @@ def native_restart_time(acceptance: object, path: Path) -> float:
         )
         unpacked = struct.unpack(acceptance.RESTART_HEADER_FORMAT, header)
         return require_finite(unpacked[49], "direct-fast restart physical time")
+
+
+def restart_parameter_time(acceptance: object, path: Path) -> float:
+    """Read the restart time marker used by the bound direct-fast replay parser."""
+
+    with acceptance.open_stable_regular(path, "direct-fast restart representative") as descriptor:
+        profile = os.fstat(descriptor)
+        prefix = acceptance.pread_exact(
+            descriptor,
+            min(profile.st_size, acceptance.MAX_PARAMETER_DUMP_BYTES),
+            0,
+            "direct-fast restart parameter prefix",
+        )
+        parameters, _ = acceptance.parse_parameter_dump(prefix)
+    values = [
+        parameters[key]
+        for key in ("time/time", "time/restart_time")
+        if key in parameters
+    ]
+    if len(values) != 1:
+        raise CaseAuthenticationError(
+            "direct-fast restart has ambiguous parameter time"
+        )
+    try:
+        return require_finite(float(values[0]), "direct-fast restart parameter time")
+    except (TypeError, ValueError) as error:
+        raise CaseAuthenticationError(
+            "direct-fast restart parameter time is invalid"
+        ) from error
 
 
 def authenticate_direct_fast_segment(
@@ -1084,8 +1116,19 @@ def authenticate_exact_state_replay(
         parent_name,
         f"{case_id} replay parent",
     )
-    parent_time = native_restart_time(acceptance, Path(str(parent_bindings[0]["path"])))
-    if parent_time != float(parent["time"]):
+    parent_path = Path(str(parent_bindings[0]["path"]))
+    recorded_parent_time = require_finite(parent.get("time"), f"{case_id} parent time")
+    parameter_parent_time = restart_parameter_time(acceptance, parent_path)
+    native_parent_time = native_restart_time(acceptance, parent_path)
+    if (
+        parameter_parent_time != recorded_parent_time
+        or not math.isclose(
+            native_parent_time,
+            parameter_parent_time,
+            rel_tol=0.0,
+            abs_tol=LEGACY_RESTART_TIME_TOLERANCE,
+        )
+    ):
         raise CaseAuthenticationError(f"{case_id} replay parent time differs")
 
     run_binding = verify_declared_binding(
@@ -1199,7 +1242,7 @@ def authenticate_exact_state_replay(
         "run_manifest": run_binding,
         "source_segment_manifest": source_binding,
         "source_lineage_order": source_segment.get("order"),
-        "parent_time": parent_time,
+        "parent_time": recorded_parent_time,
         "parent_rank_count": len(parent_bindings),
         "target_time": 9.0,
         "terminal_rank_count": len(terminal_bindings),

@@ -1154,6 +1154,11 @@ def test_retry_ct_submits_fresh_attempt_after_terminal_failure(
 
     assert attempt.name == "attempt-001"
     assert manifest["job_id"] == "900"
+    assert manifest["tools"]["ct"] == binding(downstream.CT_TOOL)
+    assert (
+        f"require_sha {binding(downstream.CT_TOOL)['sha256']} "
+        in (attempt / "run.sbatch").read_text(encoding="utf-8")
+    )
     assert calls == [[
         "/usr/bin/sbatch",
         "--parsable",

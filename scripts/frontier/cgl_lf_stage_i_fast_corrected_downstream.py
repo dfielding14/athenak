@@ -68,6 +68,11 @@ HISTORICAL_WORKFLOW_ORCHESTRATOR_SIZES = {
     # publication dependencies were separated.
     "779a649c8f85154b616636a54d474f28cfa38d8c6502adc46e85524d762b4541": 110317,
 }
+HISTORICAL_WORKFLOW_CT_TOOL_SIZES = {
+    # Exact-state replay auditor before legacy five-decimal restart markers
+    # were reconciled with the full-precision native restart header.
+    "af5987e0a080a98c02d80cfb03fcec072c7711467f4b298cbbdb8e1cc4caf6ef": 102546,
+}
 ACTIVE_CASES = (
     "R02",
     "R03",
@@ -1270,6 +1275,19 @@ def generic_batch_script(manifest: dict[str, object]) -> str:
         checks.append(
             f"require_sha {binding['sha256']} {shlex.quote(str(binding['path']))} {label}"
         )
+    stage = require_text(manifest.get("stage"), "job stage")
+    stage_tool = require_dict(manifest.get("tools"), "job tools").get(stage)
+    if stage_tool is not None:
+        binding = require_dict(stage_tool, f"{stage} tool binding")
+        tool_path = Path(require_text(binding.get("path"), f"{stage} tool path"))
+        if len(command) < 2 or Path(command[1]).resolve() != tool_path.resolve():
+            raise CorrectedDownstreamError(
+                f"{stage} command does not execute its bound stage tool"
+            )
+        checks.append(
+            f"require_sha {require_sha256(binding.get('sha256'), f'{stage} tool SHA-256')} "
+            f"{shlex.quote(str(tool_path))} {stage}_tool"
+        )
     return "\n".join([
         "#!/bin/bash",
         f"#SBATCH --account={manifest['account']}",
@@ -1446,6 +1464,16 @@ def workflow_context(workflow: dict[str, object]) -> dict[str, object]:
             and HISTORICAL_WORKFLOW_ORCHESTRATOR_SIZES.get(
                 declared.get("sha256")
             )
+            == declared.get("size_bytes")
+        ):
+            continue
+        if (
+            name == "ct"
+            and Path(
+                require_text(declared.get("path"), "workflow CT tool path")
+            ).resolve()
+            == CT_TOOL.resolve()
+            and HISTORICAL_WORKFLOW_CT_TOOL_SIZES.get(declared.get("sha256"))
             == declared.get("size_bytes")
         ):
             continue
@@ -1894,6 +1922,10 @@ def ct_contract_manifest(
     attempt: Path,
 ) -> dict[str, object]:
     stage = ct_stage(workflow)
+    tools = dict(require_dict(workflow.get("tools"), "workflow tools"))
+    initial = Path(require_text(stage.get("job_dir"), "CT job"))
+    if attempt != initial:
+        tools["ct"] = artifact_binding(CT_TOOL)
     return generic_job_manifest(
         "ct",
         attempt,
@@ -1902,7 +1934,7 @@ def ct_contract_manifest(
             for value in require_list(stage.get("command"), "CT command")
         ],
         context,
-        require_dict(workflow.get("tools"), "workflow tools"),
+        tools,
         require_text(template.get("account"), "CT account"),
         require_text(template.get("partition"), "CT partition"),
         require_text(template.get("walltime"), "CT walltime"),
