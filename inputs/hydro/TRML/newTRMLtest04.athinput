@@ -1,0 +1,91 @@
+<comment>
+problem = TRML frame-tracking tophat cooling (z-range expanded for low-xi safety)
+
+<job>
+basename = TRML
+
+<mesh>
+nghost = 4
+
+nx1 = 64
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 64
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 128
+x3min = -1.0
+x3max = 1.0
+ix3_bc = user
+ox3_bc = user
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 64
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.3
+tlim = 20.0
+ndiag = 1
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666667
+nscalars = 1
+fofc = true
+dfloor = 1.0e-4
+pfloor = 1.0e-5
+
+<units>
+length_cgs = 1.0
+mass_cgs = 1.0
+time_cgs = 1.0
+mu = 0.6
+
+<problem>
+rho_hot = 1.0 #density of cold phase
+rho_cold = 56.23413251 #density of hot phase
+velocity = 1.0 #relative velocity between phases
+pres = 1.0 #initial global pressure
+t_cool_min = 0.05 #minimum characteristic cooling time
+T_cutoff_over_T_cold = 20.0 #cooling curve high cutoff point (T_cold is the low)
+
+T_ci_over_T_cold = 10.0 # Temperature minimum for intermediate phase
+T_ih_over_T_cold = 30.0 # Temperature minimum for intermediate phase
+
+beta = 0.0 # t_cool = (T/T_at_t_cool_min)^beta * t_cool_min
+user_srcs = true
+user_dt = true
+user_hist = true
+user_bcs = true
+
+phase_sharpness = 100 #How should sharp should the tanh profile for temperature and velocity be
+
+max_init_perturb_log2freq = 5 #maximum number of wavelengths per unit length for initial perturbation
+min_init_perturb_log2freq = 2 #minimum number of wavelengths per unit length for initial perturbation
+init_perturb_sharpness = 50
+init_perturb_vel_frac = 0.02
+
+#custom_min_timestep = 0.1
+
+<output1>
+file_type = bin
+slice_x2 = 0.0
+id = slice_y
+variable = hydro_w
+dt = 0.1
+
+<output2>
+file_type = hst
+dcycle = 1

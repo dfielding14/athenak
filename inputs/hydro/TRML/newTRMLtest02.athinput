@@ -1,0 +1,76 @@
+<comment>
+problem = TRML frame-tracking tophat cooling (z-range expanded for low-xi safety)
+
+<job>
+basename = TRML
+
+<mesh>
+nghost = 4
+
+nx1 = 64
+x1min = -1.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 64
+x2min = -1.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 64
+x3min = -1.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.3
+tlim = 100.0
+ndiag = 1
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666667
+nscalars = 1
+fofc = true
+dfloor = 1.0e-4
+pfloor = 1.0e-5
+
+<units>
+length_cgs = 1.0
+mass_cgs = 1.0
+time_cgs = 1.0
+mu = 0.6
+
+<problem>
+rho_hot = 1.0
+rho_cold = 56.23413251
+velocity = 1.0
+pres = 1.3
+t_cool_min = 5.3
+T_cutoff_over_T_cold = 20.0
+beta = 0.0
+user_srcs = true
+user_hist = true
+
+<output1>
+file_type = bin
+slice_x2 = 0.0
+id = slice_y
+variable = hydro_w
+dt = 1
+
+<output2>
+file_type = hst
+dcycle = 1
