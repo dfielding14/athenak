@@ -127,10 +127,10 @@ schema-v3 `build_profile.json` and adjacent `profile_receipt.json` exclusively
 under Orion.
 
 The Frontier production environment sets
-`MPICH_GPU_EAGER_REGISTER_HOST_MEM=0`. A Q043 teardown reproduction on the
-pinned CPE 24.11 stack completed with that single change after the default
-eager host-memory registration path produced an HSA memory fault during
-process-exit cleanup.
+`MPICH_GPU_EAGER_REGISTER_HOST_MEM=0`, `MPICH_GPU_NO_ASYNC_COPY=1`, and
+`MPICH_GPU_IPC_ENABLED=0`. Q043 teardown reproductions on the pinned CPE 24.11
+stack showed intermittent HSA memory faults during process-exit cleanup with
+asynchronous GPU copies and IPC handle caching enabled.
 
 The clean-candidate freeze revalidates the profile and receipt and retains
 read-only copies of all eleven provenance inputs. The closed argv, hashes, and
