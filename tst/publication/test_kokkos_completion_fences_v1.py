@@ -5,6 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAIN = REPO_ROOT / "src/main.cpp"
+BVALS = REPO_ROOT / "src/bvals/bvals.cpp"
 BOUNDARY_FILES = (
     (
         REPO_ROOT / "src/bvals/bvals_fc.cpp",
@@ -33,16 +34,19 @@ def function_body(path: Path, signature: str) -> str:
 
 
 class KokkosCompletionFenceTests(unittest.TestCase):
-    def test_device_work_is_fenced_before_kokkos_state_is_destroyed(self) -> None:
+    def test_mpi_teardown_precedes_application_and_kokkos_teardown(self) -> None:
         source = MAIN.read_text(encoding="utf-8")
         self.assertIsNotNone(
             re.search(
                 r"Kokkos::fence\(\);\s*"
+                r"#if MPI_PARALLEL_ENABLED\s*"
+                r"MPI_Finalize\(\);\s*"
+                r"#endif\s*"
                 r"delete pout;\s*"
                 r"delete pdriver;\s*"
                 r"delete pmesh;\s*"
                 r"delete pinput;\s*"
-                r"FinalizeParallelRuntime\(\);",
+                r"Kokkos::finalize\(\);",
                 source,
             )
         )
@@ -56,6 +60,18 @@ class KokkosCompletionFenceTests(unittest.TestCase):
             r"Kokkos::finalize\(\);\s*(?:#if MPI_PARALLEL_ENABLED\s*)?"
             r"MPI_Finalize\(\);",
         )
+
+    def test_mpi_communicators_are_not_freed_after_mpi_finalize(self) -> None:
+        helper = function_body(BVALS, "void FreeCommunicatorIfMPIActive")
+        finalized_check = helper.index("MPI_Finalized(&finalized)")
+        communicator_free = helper.index("MPI_Comm_free(comm);")
+        self.assertLess(finalized_check, communicator_free)
+        self.assertIn("finalized != 0", helper)
+
+        source = BVALS.read_text(encoding="utf-8")
+        self.assertEqual(source.count("FreeCommunicatorIfMPIActive(&comm_"), 2)
+        self.assertEqual(source.count("FreeCommunicatorIfMPIActive(&mpi_comm_part)"), 1)
+        self.assertNotRegex(source, r"MPI_Comm_free\(&(?:comm_vars|comm_flux|mpi_comm_part)\)")
 
     def test_receive_unpack_finishes_before_task_reports_completion(self) -> None:
         for path, signature in BOUNDARY_FILES:

@@ -20,6 +20,21 @@
 #include "particles/particles.hpp"
 #include "bvals.hpp"
 
+#if MPI_PARALLEL_ENABLED
+namespace {
+
+void FreeCommunicatorIfMPIActive(MPI_Comm *comm) {
+  int initialized = 0;
+  int finalized = 0;
+  if (*comm == MPI_COMM_NULL) return;
+  if (MPI_Initialized(&initialized) != MPI_SUCCESS || initialized == 0) return;
+  if (MPI_Finalized(&finalized) != MPI_SUCCESS || finalized != 0) return;
+  MPI_Comm_free(comm);
+}
+
+}  // namespace
+#endif
+
 //----------------------------------------------------------------------------------------
 // MeshBoundaryValues constructor:
 
@@ -84,8 +99,8 @@ MeshBoundaryValues::~MeshBoundaryValues() {
     delete [] recvbuf[n].vars_req;
     delete [] recvbuf[n].flux_req;
   }
-  MPI_Comm_free(&comm_vars);
-  MPI_Comm_free(&comm_flux);
+  FreeCommunicatorIfMPIActive(&comm_vars);
+  FreeCommunicatorIfMPIActive(&comm_flux);
 #endif
 }
 
@@ -271,7 +286,7 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
 particles::ParticlesBoundaryValues::~ParticlesBoundaryValues() {
   // Free MPI communicator if it was allocated
 #if MPI_PARALLEL_ENABLED
-  MPI_Comm_free(&mpi_comm_part);
+  FreeCommunicatorIfMPIActive(&mpi_comm_part);
 #endif
 }
 

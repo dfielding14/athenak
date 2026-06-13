@@ -524,13 +524,17 @@ int main(int argc, char *argv[]) {
 
   //--- Step 8. -------------------------------------------------------------------------
   // clean up, and terminate
-  // Note anything containing a Kokkos::view must be deleted before Kokkos::finalize()
+  // Cray MPICH releases registered GPU-memory handles during MPI_Finalize(). Keep the
+  // application allocations and Kokkos/HIP runtime alive until that cleanup completes.
 
   Kokkos::fence();
+#if MPI_PARALLEL_ENABLED
+  MPI_Finalize();
+#endif
   delete pout;
   delete pdriver;
   delete pmesh;
   delete pinput;
-  FinalizeParallelRuntime();
+  Kokkos::finalize();
   return(exit_code);
 }
