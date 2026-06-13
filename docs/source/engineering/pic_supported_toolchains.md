@@ -126,6 +126,12 @@ configure/build logs. It publishes the
 schema-v3 `build_profile.json` and adjacent `profile_receipt.json` exclusively
 under Orion.
 
+The Frontier production environment sets
+`MPICH_GPU_EAGER_REGISTER_HOST_MEM=0`. A Q043 teardown reproduction on the
+pinned CPE 24.11 stack completed with that single change after the default
+eager host-memory registration path produced an HSA memory fault during
+process-exit cleanup.
+
 The clean-candidate freeze revalidates the profile and receipt and retains
 read-only copies of all eleven provenance inputs. The closed argv, hashes, and
 fresh detached checkout reduce stale or mixed-build mistakes; they do not
