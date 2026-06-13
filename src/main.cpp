@@ -203,6 +203,15 @@ void ApplyInitialTurbulenceKick(Mesh *pm, ParameterInput *pin) {
   pm->ncycle = saved_cycle;
 }
 
+void FinalizeParallelRuntime() {
+#if MPI_PARALLEL_ENABLED
+  // Cray MPICH's GPU transport releases HSA memory handles during MPI_Finalize().
+  // Keep the Kokkos/HIP runtime alive until that transport cleanup is complete.
+  MPI_Finalize();
+#endif
+  Kokkos::finalize();
+}
+
 }  // namespace
 
 int main(int argc, char *argv[]) {
@@ -289,10 +298,7 @@ int main(int argc, char *argv[]) {
               std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                         << std::endl << "-" << opt_letter
                         << " must be followed by a valid argument" << std::endl;
-              Kokkos::finalize();
-#if MPI_PARALLEL_ENABLED
-              MPI_Finalize();
-#endif
+              FinalizeParallelRuntime();
               return(0);
             }
           }
@@ -324,10 +330,7 @@ int main(int argc, char *argv[]) {
           break;
         case 'c':
           if (global_variable::my_rank == 0) ShowConfig();
-          Kokkos::finalize();
-#if MPI_PARALLEL_ENABLED
-          MPI_Finalize();
-#endif
+          FinalizeParallelRuntime();
           return(0);
           break;
         case 'h':
@@ -347,10 +350,7 @@ int main(int argc, char *argv[]) {
             std::cout << "  -h              this help\n";
             ShowConfig();
           }
-          Kokkos::finalize();
-#if MPI_PARALLEL_ENABLED
-          MPI_Finalize();
-#endif
+          FinalizeParallelRuntime();
           return(0);
           break;
       }
@@ -363,10 +363,7 @@ int main(int argc, char *argv[]) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "Either an input or restart file must be specified." << std::endl
               << "See " << argv[0] << " -h for options and usage." << std::endl;
-    Kokkos::finalize();
-#if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
-#endif
+    FinalizeParallelRuntime();
     return(0);
   }
 
@@ -443,10 +440,7 @@ int main(int argc, char *argv[]) {
     if (global_variable::my_rank == 0) pinput->ParameterDump(std::cout);
     if (res_flag) restartfile.Close(single_file_per_rank);
     delete pinput;
-    Kokkos::finalize();
-#if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
-#endif
+    FinalizeParallelRuntime();
     return(0);
   }
 
@@ -485,10 +479,7 @@ int main(int argc, char *argv[]) {
     if (res_flag) {restartfile.Close(single_file_per_rank);}
     delete pmesh;
     delete pinput;
-    Kokkos::finalize();
-#if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
-#endif
+    FinalizeParallelRuntime();
     return(0);
   }
 
@@ -540,9 +531,6 @@ int main(int argc, char *argv[]) {
   delete pdriver;
   delete pmesh;
   delete pinput;
-  Kokkos::finalize();
-#if MPI_PARALLEL_ENABLED
-  MPI_Finalize();
-#endif
+  FinalizeParallelRuntime();
   return(exit_code);
 }

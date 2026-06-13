@@ -42,9 +42,19 @@ class KokkosCompletionFenceTests(unittest.TestCase):
                 r"delete pdriver;\s*"
                 r"delete pmesh;\s*"
                 r"delete pinput;\s*"
-                r"Kokkos::finalize\(\);",
+                r"FinalizeParallelRuntime\(\);",
                 source,
             )
+        )
+
+    def test_mpi_gpu_transport_is_finalized_before_kokkos(self) -> None:
+        source = MAIN.read_text(encoding="utf-8")
+        helper = function_body(MAIN, "void FinalizeParallelRuntime()")
+        self.assertLess(helper.index("MPI_Finalize();"), helper.index("Kokkos::finalize();"))
+        self.assertNotRegex(
+            source,
+            r"Kokkos::finalize\(\);\s*(?:#if MPI_PARALLEL_ENABLED\s*)?"
+            r"MPI_Finalize\(\);",
         )
 
     def test_receive_unpack_finishes_before_task_reports_completion(self) -> None:
