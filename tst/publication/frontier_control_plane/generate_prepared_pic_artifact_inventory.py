@@ -20,6 +20,9 @@ DEFAULT_OUTPUT = SCRIPT_DIR / "prepared_pic_artifact_inventory.json"
 Q043_DECK_ROOT = (
     REPO_ROOT / "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle"
 )
+Q023_DECK_ROOT = (
+    REPO_ROOT / "inputs/tests/q023_paper_bell_linear_joverc_predecessor"
+)
 Q019_DECK_ROOT = (
     REPO_ROOT / "inputs/publication/q019_physics_first_nonlinear_bell_successor_v2"
 )
@@ -44,6 +47,7 @@ def prepared_artifact_inventory() -> dict[str, object]:
         [
             *(REPO_ROOT / "inputs/tests").glob("pic*.athinput"),
             *Q043_DECK_ROOT.glob("*.athinput"),
+            *Q023_DECK_ROOT.glob("*.athinput"),
             *Q019_DECK_ROOT.glob("*.athinput"),
             *Q019_RUNTIME_CONTROLLER_DECK_ROOT.glob("*.athinput"),
             *(
