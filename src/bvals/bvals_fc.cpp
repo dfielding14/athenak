@@ -361,5 +361,7 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
     }
   });  // end par_for_outer
 
+  // The next stage may reuse recvbuf as soon as this task reports completion.
+  Kokkos::fence();
   return TaskStatus::complete;
 }

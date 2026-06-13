@@ -426,5 +426,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
     }  // end if-neighbor-exists block
   });  // end par_for_outer
 
+  // The next stage may reuse recvbuf as soon as this task reports completion.
+  Kokkos::fence();
   return TaskStatus::complete;
 }

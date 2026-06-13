@@ -535,6 +535,7 @@ int main(int argc, char *argv[]) {
   // clean up, and terminate
   // Note anything containing a Kokkos::view must be deleted before Kokkos::finalize()
 
+  Kokkos::fence();
   delete pout;
   delete pdriver;
   delete pmesh;
