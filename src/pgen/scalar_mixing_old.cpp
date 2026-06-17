@@ -30,6 +30,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
+#include "srcterms/scalar_driver.hpp"
 #include "pgen.hpp"
 #include "globals.hpp"
 #include "utils/random.hpp"
@@ -2159,7 +2160,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
   ZeroScalarFaceVelocities(pmbp);
 
   if (cfg.method == VelocityMethod::Projection) {
-    RNG_State rstate;
+    RNG_State rstate{};
     rstate.idum = -cfg.rseed;
     const ModeCatalog catalog = BuildModeCatalog(cfg, &rstate);
 
@@ -2219,7 +2220,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
   }
 
   if (cfg.method == VelocityMethod::Stream2D) {
-    RNG_State rstate;
+    RNG_State rstate{};
     rstate.idum = -cfg.rseed;
     const ModeCatalog catalog = BuildModeCatalog(cfg, &rstate);
 
@@ -2253,7 +2254,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     return;
   }
 
-  RNG_State catalog_state;
+  RNG_State catalog_state{};
   catalog_state.idum = -MixSeed(cfg.rseed, 1);
 
   if (MaxSupportedShell(cfg) < cfg.nhigh) {
@@ -2271,8 +2272,8 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
   const std::vector<int> shell_counts = CountModesPerShell(catalog, cfg.nhigh);
   EnsureShellCoverage(shell_counts, cfg.nlow, cfg.nhigh, "phi");
 
-  RNG_State coeff_state1;
-  RNG_State coeff_state2;
+  RNG_State coeff_state1{};
+  RNG_State coeff_state2{};
   coeff_state1.idum = -MixSeed(cfg.rseed, 101);
   coeff_state2.idum = -MixSeed(cfg.rseed, 102);
   const ScalarCoefficients phi1_coeffs =
@@ -2407,6 +2408,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   user_hist_func = ScalarMixingHistory;
 
   if (restart) {
+    if (pin->GetOrAddBoolean("problem", "divfree_scalar_flux", false)) {
+      const Real den = pin->GetOrAddReal("problem", "rho0", 1.0);
+      InitTurbulentVelocity(pmbp, pin, den, true_2d);
+    }
     return;
   }
 
@@ -2617,7 +2622,7 @@ void ScalarForcingSource(Mesh* pm, const Real bdt) {
 
 //----------------------------------------------------------------------------------------
 //! \fn ScalarMixingHistory
-//  \brief User history outputs: volume-integrated |grad theta_s|^2 for each scalar.
+//  \brief User history outputs for scalar mixing and stochastic scalar forcing.
 
 void ScalarMixingHistory(HistoryData *pdata, Mesh *pm) {
   auto *phydro = pm->pmb_pack->phydro;
@@ -2629,19 +2634,40 @@ void ScalarMixingHistory(HistoryData *pdata, Mesh *pm) {
     return;
   }
 
-  if (phydro->nscalars > NHISTORY_VARIABLES) {
-    FatalProblemSetup("ScalarMixingHistory requires NHISTORY_VARIABLES >= nscalars.");
+  auto *pdriver = pm->pmb_pack->pscalar_driver;
+  const int nextra = (pdriver != nullptr) ? 7 : 0;
+  if (phydro->nscalars + nextra > NHISTORY_VARIABLES) {
+    FatalProblemSetup(
+        "ScalarMixingHistory exceeds NHISTORY_VARIABLES with scalar forcing "
+        "diagnostics.");
   }
 
-  pdata->nhist = phydro->nscalars;
-  for (int n = 0; n < pdata->nhist; ++n) {
+  pdata->nhist = phydro->nscalars + nextra;
+  for (int n = 0; n < phydro->nscalars; ++n) {
     pdata->label[n] = "gradth2_s" + std::to_string(n);
+  }
+  int driven_scalar = -1;
+  const int forcing_offset = phydro->nscalars;
+  if (pdriver != nullptr) {
+    driven_scalar = pdriver->scalar_index;
+    const std::string suffix = "_s" + std::to_string(driven_scalar);
+    pdata->label[forcing_offset] = "rho";
+    pdata->label[forcing_offset + 1] = "rth" + suffix;
+    pdata->label[forcing_offset + 2] = "rth2" + suffix;
+    pdata->label[forcing_offset + 3] = "rf" + suffix;
+    pdata->label[forcing_offset + 4] = "rthf" + suffix;
+    pdata->label[forcing_offset + 5] = "rf2" + suffix;
+    pdata->label[forcing_offset + 6] = "rg2" + suffix;
   }
 
   auto &w0 = phydro->w0;
+  DvceArray5D<Real> scalar_force;
+  if (pdriver != nullptr) scalar_force = pdriver->force;
   auto &size = pm->pmb_pack->pmb->mb_size;
   const int nhist = pdata->nhist;
+  const int nscalars = phydro->nscalars;
   const int nhydro = phydro->nhydro;
+  const bool forcing_enabled = (pdriver != nullptr);
   const bool multi_d = pm->multi_d;
   const bool three_d = pm->three_d;
 
@@ -2672,7 +2698,8 @@ void ScalarMixingHistory(HistoryData *pdata, Mesh *pm) {
     const Real vol = dx1 * dx2 * dx3;
 
     array_sum::GlobalSum hvars;
-    for (int ns = 0; ns < nhist; ++ns) {
+    Real driven_grad2 = 0.0;
+    for (int ns = 0; ns < nscalars; ++ns) {
       const Real dtheta_dx =
           (w0(m, nhydro + ns, k, j, i+1) - w0(m, nhydro + ns, k, j, i-1)) / (2.0 * dx1);
       Real dtheta_dy = 0.0;
@@ -2687,6 +2714,20 @@ void ScalarMixingHistory(HistoryData *pdata, Mesh *pm) {
       }
       const Real grad2 = dtheta_dx*dtheta_dx + dtheta_dy*dtheta_dy + dtheta_dz*dtheta_dz;
       hvars.the_array[ns] = grad2 * vol;
+      if (ns == driven_scalar) driven_grad2 = grad2;
+    }
+
+    if (forcing_enabled) {
+      const Real rho = w0(m, IDN, k, j, i);
+      const Real theta = w0(m, nhydro + driven_scalar, k, j, i);
+      const Real f = scalar_force(m, 0, k, j, i);
+      hvars.the_array[forcing_offset] = rho * vol;
+      hvars.the_array[forcing_offset + 1] = rho * theta * vol;
+      hvars.the_array[forcing_offset + 2] = rho * theta * theta * vol;
+      hvars.the_array[forcing_offset + 3] = rho * f * vol;
+      hvars.the_array[forcing_offset + 4] = rho * theta * f * vol;
+      hvars.the_array[forcing_offset + 5] = rho * f * f * vol;
+      hvars.the_array[forcing_offset + 6] = rho * driven_grad2 * vol;
     }
 
     for (int n = nhist; n < NHISTORY_VARIABLES; ++n) {

@@ -1,0 +1,100 @@
+# Statistically stationary passive scalar in a frozen, divergence-free 2D velocity field
+
+<comment>
+problem   = autonomous scalar mixing with low-wavenumber OU forcing
+reference = docs/stochastic_scalar_forcing.tex
+
+<job>
+problem_id = scalar_mixing_perfect_powerlaw
+basename   = scalar_mix_ou
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim       = 20.0
+nlim       = -1
+
+<mesh>
+nghost = 2
+nx1    = 128
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 128
+x2min  = 0.0
+x2max  = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 1
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = reflect
+ox3_bc = reflect
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 1
+
+<hydro>
+eos                = ideal
+gamma              = 1.6666666666667
+sfloor             = -1.0e100
+reconstruct        = plm
+rsolver            = hllc
+nscalars           = 1
+scalar_only        = true
+scalar_diffusivity = 1.0e-3
+
+<problem>
+rho0                   = 1.0
+temp0                  = 1.0
+user_srcs              = false
+user_hist              = true
+scalar0_mode           = 0
+scalar0_use_sine_x1    = false
+scalar0_init           = 0.0
+scalar0_theta_floor    = -1.0e100
+turb_velocity_method   = projection
+divfree_scalar_flux    = true
+turb_v_rms             = 1.0
+turb_nlow              = 1
+turb_nhigh             = 32
+turb_expo              = 1.6666666666667
+turb_rseed             = 24680
+turb_k_crit            = 32.0
+turb_spectrum_contract = statistical
+
+<scalar_driving>
+scalar_index  = 0
+nlow         = 1
+nhigh        = 3
+spectrum     = parabolic
+npeak        = 2
+tcorr        = 1.0
+dt_update    = 0.05
+rseed        = 13579
+normalization = source_rms
+source_rms    = 0.1
+
+<output1>
+file_type      = hst
+user_hist_only = true
+data_format    = %.16e
+dt             = 0.1
+
+<output2>
+file_type = bin
+variable  = hydro_w
+id        = scalar
+dt        = 1.0
+
+<output3>
+file_type = bin
+variable  = scalar_force
+id        = forcing
+dt        = 1.0

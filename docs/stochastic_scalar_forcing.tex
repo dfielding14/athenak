@@ -16,16 +16,34 @@
 
 \section{Model and steady state}
 
-For one selected passive scalar $\theta$, AthenaK evolves
+The intended autonomous scalar problem has a spatially uniform, frozen density
+$\rho=\rho_0$ and an incompressible frozen velocity.  AthenaK stores the
+conserved scalar $q=\rho\theta$ and implements
 \begin{equation}
-  \frac{\partial(\rho\theta)}{\partial t}
-  + \nabla\!\cdot(\rho\theta\boldsymbol{u})
-  = \nabla\!\cdot(\rho\kappa\nabla\theta)+\rho f ,
+  \frac{\partial q}{\partial t}
+  + \nabla\!\cdot(q\boldsymbol{u})
+  = \nabla\!\cdot(\rho\kappa\nabla\theta)+\rho f .
+  \label{eq:conservative}
+\end{equation}
+For $\rho=\rho_0$, division by $\rho_0$ gives the desired primitive equation
+\begin{equation}
+  \partial_t\theta+\boldsymbol{u}\!\cdot\nabla\theta
+  =\chi\nabla^2\theta+f,\qquad \chi\equiv\kappa_{\rm code}.
   \label{eq:scalar}
 \end{equation}
-with the velocity field $\boldsymbol{u}(\boldsymbol{x})$ held fixed.  The new
-driver supplies the stochastic source $f(\boldsymbol{x},t)$.  On a periodic
-domain, the mass-weighted mean
+This equivalence is not true for a spatially varying density.  In that case
+the implemented primitive diffusion operator is
+\begin{equation}
+ \frac{1}{\rho}\nabla\!\cdot(\rho\kappa\nabla\theta)
+ =\kappa\nabla^2\theta+\kappa\nabla\ln\rho\!\cdot\nabla\theta
+ \quad\hbox{for constant }\kappa .
+\end{equation}
+Thus the standard constant-$\chi$ problem below assumes uniform frozen
+density; choosing $\kappa\propto1/\rho$ does not recover
+$\chi\nabla^2\theta$ after division by $\rho$.
+
+The new driver supplies $f(\boldsymbol{x},t)$.  On a periodic domain, the
+mass-weighted mean
 \begin{equation}
   \bar{\theta}=\avg{\theta}
   \equiv \frac{1}{M}\int\rho\theta\,dV,\qquad
@@ -43,13 +61,15 @@ obeys
 \begin{equation}
   \frac{dZ}{dt}
   = \underbrace{\avg{(\theta-\bar{\theta})f}}_{\mathcal I}
-  - \underbrace{\kappa\avg{|\nabla\theta|^2}}_{\mathcal D}.
+  - \underbrace{\chi\avg{|\nabla\theta|^2}}_{\varepsilon_\theta}.
   \label{eq:budget}
 \end{equation}
-Thus a statistically stationary state requires $\kappa>0$ and
-$\langle\mathcal I\rangle_t=\langle\mathcal D\rangle_t$.  Advection transfers
-variance to small scales, where diffusion removes it.  With $\kappa=0$, a
-positive variance-injection rate cannot reach a stationary variance.
+Thus a statistically stationary state requires $\chi>0$ and
+$\langle\mathcal I\rangle_t=\langle\varepsilon_\theta\rangle_t$.  Advection transfers
+variance to small scales, where diffusion removes it.  The controlled
+finite-resolution experiment therefore uses $\chi>0$.  At $\chi=0$, any
+stationary balance in the code is numerical unless an inviscid dissipative
+limit has first been established by a resolved $\chi\to0$ sequence.
 
 \section{OU forcing}
 
@@ -88,7 +108,8 @@ Two mutually exclusive normalizations are provided:
       \frac{1}{2}\Delta t\,Q\,s^2+C\,s=\dot Z_f .
     \end{equation}
 \end{enumerate}
-The source is updated once per forcing cadence and applied during every
+The modal OU state is updated at the forcing cadence; the field is rendered,
+projected, and normalized once per cycle and applied during every
 Runge--Kutta stage, following the turbulence-driver task ordering.  A
 \texttt{scalar\_index} selects the forced scalar.  Because stochastic forcing
 does not preserve pointwise bounds, signed-scalar calculations must choose an
@@ -122,10 +143,146 @@ These give
  \mathcal I &= \texttt{rthf}/\texttt{rho}
                 -\bar{\theta}\,\texttt{rf}/\texttt{rho},\\
  f_{\rm rms} &= \sqrt{\texttt{rf2}/\texttt{rho}},\qquad
- \mathcal D = \kappa\,\texttt{rg2}/\texttt{rho}.
+ \varepsilon_\theta = \chi\,\texttt{rg2}/\texttt{rho}.
 \end{align}
 The mean-source column verifies conservation directly; the injection and
 dissipation columns determine whether the scalar has reached statistical
-steady state.
+steady state.  Binary output with
+\texttt{variable = scalar\_force} stores the cell-centered $f$ required for
+the finite-separation forcing term in the Yaglom budget below.
+
+\section{Anomalous dissipation and Yaglom's law}
+
+\paragraph{Vanishing-diffusivity protocol.}
+For each autonomous velocity realization, keep the solver-effective velocity,
+OU seed, forcing shell, correlation time, and forcing normalization fixed
+while taking a jointly resolved sequence $\chi\to0$.  The cleanest anomaly
+test uses \texttt{source\_rms}, because the forcing law is then independent of
+both $\theta$ and $\chi$.  After a burn-in interval, require simultaneously
+\begin{equation}
+ \frac{\texttt{rf}}{\texttt{rho}}\simeq0,\qquad
+ \frac{d\bar{\theta}}{dt}\simeq0,\qquad
+ \left\langle\frac{dZ}{dt}\right\rangle_t\simeq0,\qquad
+ \langle\mathcal I\rangle_t\simeq
+ \langle\varepsilon_\theta\rangle_t .
+\end{equation}
+The residual
+$\mathcal I-dZ/dt-\varepsilon_\theta$ estimates numerical dissipation and
+must decrease under grid refinement before
+$\varepsilon_\theta=\chi\langle|\nabla\theta|^2\rangle$ is interpreted as a
+physical dissipation rate.
+At every $\chi$, repeat at higher resolution until
+$\langle\varepsilon_\theta\rangle_t$ and the scalar structure functions are
+grid-converged and the diffusive cutoff is resolved.  Evidence for a
+statistically stationary dissipation anomaly is then
+\begin{equation}
+ \liminf_{\chi\to0}\langle\varepsilon_\theta\rangle_t>0
+ \quad\hbox{together with bounded, converged }Z
+ \hbox{ and large-scale statistics}.
+\end{equation}
+A positive dissipation alone is not sufficient when
+\texttt{variance\_rate} is used, because that option deliberately fixes the
+source-only variance input.  In that case the nontrivial evidence is
+convergence of the stationary scalar measure, a resolved constant flux, and
+the Yaglom balance.  This permanent-regime test complements, rather than
+replaces, the unforced finite-time diagnostic
+$\chi\int_0^T\langle|\nabla\theta|^2\rangle\,dt$.
+
+\paragraph{Scale-by-scale test.}
+Define increments $\delta_{\boldsymbol r}\theta
+=\theta(\boldsymbol{x}+\boldsymbol r)-\theta(\boldsymbol{x})$ and similarly
+$\delta_{\boldsymbol r}\boldsymbol u$ and $\delta_{\boldsymbol r}f$.  For
+uniform density, homogeneous statistics, and incompressible advection,
+\begin{equation}
+ \partial_t S_2+
+ \nabla_{\boldsymbol r}\!\cdot
+ \left\langle\delta_{\boldsymbol r}\boldsymbol u
+                  (\delta_{\boldsymbol r}\theta)^2\right\rangle
+ =2\chi\nabla_{\boldsymbol r}^2S_2-4\varepsilon_\theta
+  +2\left\langle\delta_{\boldsymbol r}\theta\,
+                    \delta_{\boldsymbol r}f\right\rangle ,
+ \label{eq:yaglom-full}
+\end{equation}
+where $S_2=\langle(\delta_{\boldsymbol r}\theta)^2\rangle$.  If the OU forcing
+is confined to large scales, then for
+$\ell_\chi\ll r\ll\ell_f$ the last and diffusive terms are negligible.  The
+isotropic longitudinal mixed structure function must then satisfy
+\begin{equation}
+ Y(r)\equiv
+ \left\langle\delta_ru_L(\delta_r\theta)^2\right\rangle
+ =-\frac{4}{d}\,\varepsilon_\theta r .
+ \label{eq:yaglom}
+\end{equation}
+The coefficient is $-2$ in two dimensions and $-4/3$ in three dimensions.
+The primary test is the compensated plateau
+$-dY/(4\varepsilon_\theta r)\simeq1$ over the same range in which the full
+budget \eqref{eq:yaglom-full} closes.  If
+$\delta_ru\sim r^\alpha$ and
+$S_2(r)\sim r^{2\beta}$ with a single scaling exponent, the linear mixed
+flux implies $\alpha+2\beta=1$; the exact mixed third-order law is stronger
+than fitting those two exponents separately.
+For one frozen velocity realization, compute the isotropic sector by
+averaging over positions and separation directions, and repeat over forcing
+seeds or velocity realizations to quantify residual finite-box anisotropy.
+
+\section{Comparison with mean-gradient forcing}
+
+Writing the total scalar as
+$T(\boldsymbol{x},t)=\boldsymbol G\!\cdot\boldsymbol{x}+\theta(\boldsymbol{x},t)$
+gives the periodic fluctuation equation
+\begin{equation}
+ \partial_t\theta+\boldsymbol u\!\cdot\nabla\theta
+ =\chi\nabla^2\theta-\boldsymbol G\!\cdot\boldsymbol u .
+ \label{eq:mean-gradient}
+\end{equation}
+Its mean is preserved when $\langle\boldsymbol u\rangle=0$, and its variance
+input is
+\begin{equation}
+ \mathcal I_G=-\boldsymbol G\!\cdot\langle\boldsymbol u\theta\rangle .
+\end{equation}
+The existing AthenaK source adds
+\texttt{+mean\_gradient}$\,v_x$; this corresponds to
+$\boldsymbol G=-\texttt{mean\_gradient}\,\hat{\boldsymbol x}$ in
+\eqref{eq:mean-gradient}.
+
+\begin{center}
+\small
+\begin{tabular}{p{0.20\linewidth}p{0.35\linewidth}p{0.35\linewidth}}
+\toprule
+ & OU scalar forcing & Mean-gradient forcing \\
+\midrule
+Injection &
+Independent stochastic field in a chosen low-$k$ shell. &
+$-\boldsymbol G\!\cdot\boldsymbol u$; tied to the velocity spectrum. \\
+Symmetry &
+Homogeneous and isotropic in the ensemble when the shell sampling is isotropic. &
+Selects $\boldsymbol G$ and is anisotropic. \\
+Primary use &
+Clean stationary cascade, dissipation anomaly, and Yaglom flux. &
+Turbulent scalar flux and effective diffusivity
+$\langle u_i\theta\rangle=-K_{ij}G_j$. \\
+Autonomous velocity &
+Produces a time-stationary scalar process through the OU coefficients. &
+The source is time independent and may relax to one steady spatial solution. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For the periodic fluctuation $\theta$, mean-gradient forcing contributes
+\begin{equation}
+ 2\langle\delta_r\theta\,\delta_r f_G\rangle
+ =-2\boldsymbol G\!\cdot
+   \langle\delta_r\boldsymbol u\,\delta_r\theta\rangle
+\end{equation}
+to \eqref{eq:yaglom-full}.  Therefore the simple compensated Yaglom law may
+not hold unless this production term is negligible, or unless one projects
+the statistics of the total field $T$ onto the isotropic sector.  This is
+especially important here because a broadband rough autonomous velocity
+makes $-\boldsymbol G\!\cdot\boldsymbol u$ a broadband source.  The OU option
+provides cleaner separation between forcing, inertial, and diffusive scales;
+the mean-gradient option provides the cleaner measurement of transport
+relative to an imposed macroscopic gradient.  Results from the two protocols
+should be compared as distinct forcing ensembles, not pooled without checking
+their full scale-by-scale budgets.
 
 \end{document}

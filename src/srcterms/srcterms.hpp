@@ -11,6 +11,7 @@
 //!  (1) constant (gravitational) acceleration - for RTI
 //!  (2) shearing box in 2D (x-z), for both hydro and MHD
 //!  (3) random forcing to drive turbulence - implemented in TurbulenceDriver class
+//!  (4) random forcing of a passive scalar - implemented in ScalarForcingDriver class
 
 #include <map>
 #include <string>
@@ -21,6 +22,7 @@
 
 // forward declarations
 class TurbulenceDriver;
+class ScalarForcingDriver;
 class Driver;
 
 //----------------------------------------------------------------------------------------

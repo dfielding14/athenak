@@ -29,6 +29,7 @@
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/scalar_driver.hpp"
 #include "srcterms/turb_driver.hpp"
 //#include "outputs.hpp"
 
@@ -176,6 +177,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   mhd::MHD* pmhd = pm->pmb_pack->pmhd;
   radiation::Radiation* prad = pm->pmb_pack->prad;
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
+  ScalarForcingDriver* pscalar_driver=pm->pmb_pack->pscalar_driver;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   adm::ADM* padm = pm->pmb_pack->padm;
   int nhydro=0, nmhd=0, nrad=0, nz4c=0, nadm=0, nco=0;
@@ -333,6 +335,17 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       WriteMetadata(pturb->mode_amp_imag.h_view.data(),
                     3 * pturb->mode_count * sizeof(Real), "byte");
     }
+    if (pscalar_driver != nullptr) {
+      ScalarForcingRestartMetadata metadata = pscalar_driver->RestartMetadata();
+      pscalar_driver->mode_amp_real.template sync<HostMemSpace>();
+      pscalar_driver->mode_amp_imag.template sync<HostMemSpace>();
+      WriteMetadata(&metadata, sizeof(ScalarForcingRestartMetadata), "byte");
+      WriteMetadata(&(pscalar_driver->rstate), sizeof(RNG_State), "byte");
+      WriteMetadata(pscalar_driver->mode_amp_real.h_view.data(),
+                    pscalar_driver->mode_count * sizeof(Real), "byte");
+      WriteMetadata(pscalar_driver->mode_amp_imag.h_view.data(),
+                    pscalar_driver->mode_count * sizeof(Real), "byte");
+    }
   }
 
   //--- STEP 4.  All ranks write data over all MeshBlocks (5D arrays) in parallel
@@ -383,6 +396,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (pturb != nullptr) {
     step3size += sizeof(TurbulenceRestartMetadata) + sizeof(RNG_State) +
                  6 * pturb->mode_count * sizeof(Real);
+  }
+  if (pscalar_driver != nullptr) {
+    step3size += sizeof(ScalarForcingRestartMetadata) + sizeof(RNG_State) +
+                 2 * pscalar_driver->mode_count * sizeof(Real);
   }
 
   // write cell-centered variables in parallel

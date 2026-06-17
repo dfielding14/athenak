@@ -26,6 +26,7 @@
 #include "z4c/tmunu.hpp"
 #include "z4c/z4c.hpp"
 #include "srcterms/srcterms.hpp"
+#include "srcterms/scalar_driver.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "outputs.hpp"
 
@@ -157,6 +158,13 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
        << "Output of particles requested in <output> block '"
        << out_params.block_name << "' but particle object not constructed."
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if ((ivar==152) && (pm->pmb_pack->pscalar_driver == nullptr)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Output of scalar forcing requested in <output> block '"
+              << out_params.block_name
+              << "' but no <scalar_driving> block has been configured." << std::endl;
     exit(EXIT_FAILURE);
   }
 
@@ -583,6 +591,10 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("force1",0,&(pm->pmb_pack->pturb->force));
       outvars.emplace_back("force2",1,&(pm->pmb_pack->pturb->force));
       outvars.emplace_back("force3",2,&(pm->pmb_pack->pturb->force));
+    }
+
+    if (variable.compare("scalar_force") == 0) {
+      outvars.emplace_back("scalar_force",0,&(pm->pmb_pack->pscalar_driver->force));
     }
 
     // ADM variables, excluding gauge

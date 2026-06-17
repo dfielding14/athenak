@@ -28,6 +28,7 @@
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/scalar_driver.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "pgen.hpp"
 
@@ -988,6 +989,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   radiation::Radiation* prad=pm->pmb_pack->prad;
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
+  ScalarForcingDriver* pscalar_driver=pm->pmb_pack->pscalar_driver;
   int nrad = 0, nhydro = 0, nmhd = 0, nforce = 0, nadm = 0, nz4c = 0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
@@ -1094,6 +1096,58 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     pturb->mode_amp_real.template sync<DevExeSpace>();
     pturb->mode_amp_imag.template modify<HostMemSpace>();
     pturb->mode_amp_imag.template sync<DevExeSpace>();
+  }
+
+  if (pscalar_driver != nullptr) {
+    ScalarForcingRestartMetadata metadata;
+    RNG_State rng_state;
+    std::vector<Real> amp_real(pscalar_driver->mode_count);
+    std::vector<Real> amp_imag(pscalar_driver->mode_count);
+    if (global_variable::my_rank == 0 || use_serial_io) {
+      if (resfile.Read_bytes(&metadata, 1, sizeof(ScalarForcingRestartMetadata),
+                             use_serial_io) != sizeof(ScalarForcingRestartMetadata) ||
+          resfile.Read_bytes(&rng_state, 1, sizeof(RNG_State), use_serial_io)
+              != sizeof(RNG_State)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Scalar forcing state read from restart file is incorrect, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      pscalar_driver->ValidateRestartMetadata(metadata);
+      if (resfile.Read_bytes(amp_real.data(), 1, amp_real.size() * sizeof(Real),
+                             use_serial_io) != amp_real.size() * sizeof(Real) ||
+          resfile.Read_bytes(amp_imag.data(), 1, amp_imag.size() * sizeof(Real),
+                             use_serial_io) != amp_imag.size() * sizeof(Real)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Scalar forcing modal data read from restart file is incorrect, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+#if MPI_PARALLEL_ENABLED
+    if (!use_serial_io) {
+      io_wrapper::BroadcastBytes(&metadata, sizeof(ScalarForcingRestartMetadata), 0,
+                                 MPI_COMM_WORLD);
+      io_wrapper::BroadcastBytes(&rng_state, sizeof(RNG_State), 0, MPI_COMM_WORLD);
+      io_wrapper::BroadcastBytes(amp_real.data(), amp_real.size() * sizeof(Real), 0,
+                                 MPI_COMM_WORLD);
+      io_wrapper::BroadcastBytes(amp_imag.data(), amp_imag.size() * sizeof(Real), 0,
+                                 MPI_COMM_WORLD);
+      pscalar_driver->ValidateRestartMetadata(metadata);
+    }
+#endif
+    pscalar_driver->rstate = rng_state;
+    pscalar_driver->n_updates_yet = metadata.n_updates;
+    for (int n = 0; n < pscalar_driver->mode_count; ++n) {
+      pscalar_driver->mode_amp_real.h_view(n) = amp_real[n];
+      pscalar_driver->mode_amp_imag.h_view(n) = amp_imag[n];
+    }
+    pscalar_driver->mode_amp_real.template modify<HostMemSpace>();
+    pscalar_driver->mode_amp_real.template sync<DevExeSpace>();
+    pscalar_driver->mode_amp_imag.template modify<HostMemSpace>();
+    pscalar_driver->mode_amp_imag.template sync<DevExeSpace>();
   }
 
   // root process reads size of CC and FC data arrays from restart file

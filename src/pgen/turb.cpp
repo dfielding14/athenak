@@ -6,12 +6,14 @@
 //! \file turb.cpp
 //  \brief Problem generator for turbulence
 #include <iostream> // cout
+#include <string>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "globals.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
@@ -19,6 +21,16 @@
 
 // User-defined history functions
 void TurbulentHistory(HistoryData *pdata, Mesh *pm);
+void TurbulenceLocationRefinement(MeshBlockPack *pmbp);
+
+namespace {
+
+Real refine_x1 = 0.0;
+Real refine_x2 = 0.0;
+Real refine_x3 = 0.0;
+Real refine_radius = 0.0;
+
+}  // namespace
 
 
 //----------------------------------------------------------------------------------------
@@ -26,6 +38,28 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm);
 //  \brief Problem Generator for turbulence
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
+  if (pin->DoesBlockExist("amr_criterion0")) {
+    std::string method = pin->GetString("amr_criterion0", "method");
+    if (method != "location") {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "The turbulence problem supports only method=location in "
+                << "<amr_criterion0> on this branch." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    refine_x1 = pin->GetOrAddReal("amr_criterion0", "location_x1", 0.0);
+    refine_x2 = pin->GetOrAddReal("amr_criterion0", "location_x2", 0.0);
+    refine_x3 = pin->GetOrAddReal("amr_criterion0", "location_x3", 0.0);
+    refine_radius = pin->GetReal("amr_criterion0", "location_rad");
+    if (refine_radius <= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<amr_criterion0>/location_rad must be positive." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    user_ref_func = TurbulenceLocationRefinement;
+  }
+
   if (restart) return;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
@@ -164,6 +198,37 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   }
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief refine blocks intersecting the configured location-centered region
+
+void TurbulenceLocationRefinement(MeshBlockPack *pmbp) {
+  Mesh *pm = pmbp->pmesh;
+  auto &refine_flag = pm->pmr->refine_flag;
+  auto &size = pmbp->pmb->mb_size;
+  int gid_offset = pm->gids_eachrank[global_variable::my_rank];
+
+  for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+    bool overlaps =
+        size.h_view(m).x1min < refine_x1 + refine_radius &&
+        size.h_view(m).x1max > refine_x1 - refine_radius;
+    if (pm->multi_d) {
+      overlaps =
+          overlaps && size.h_view(m).x2min < refine_x2 + refine_radius &&
+          size.h_view(m).x2max > refine_x2 - refine_radius;
+    }
+    if (pm->three_d) {
+      overlaps =
+          overlaps && size.h_view(m).x3min < refine_x3 + refine_radius &&
+          size.h_view(m).x3max > refine_x3 - refine_radius;
+    }
+    if (overlaps) {
+      refine_flag.h_view(m + gid_offset) = 1;
+    }
+  }
+  refine_flag.template modify<HostMemSpace>();
+  refine_flag.template sync<DevExeSpace>();
 }
 
 

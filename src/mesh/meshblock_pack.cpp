@@ -26,6 +26,7 @@
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/scalar_driver.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "particles/particles.hpp"
 #include "units/units.hpp"
@@ -63,6 +64,7 @@ MeshBlockPack::~MeshBlockPack() {
   if (pdyngr != nullptr) {delete pdyngr;}
   if (pnr    != nullptr) {delete pnr;}
   if (pturb  != nullptr) {delete pturb;}
+  if (pscalar_driver != nullptr) {delete pscalar_driver;}
   if (punit  != nullptr) {delete punit;}
   if (pz4c   != nullptr) {delete pz4c;}
   if (ppart  != nullptr) {delete ppart;}
@@ -183,7 +185,18 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
     pturb = nullptr;
   }
 
-  // (7) Z4c and ADM
+  // (7) PASSIVE-SCALAR DRIVER
+  // Like turbulence driving, stochastic scalar forcing stores an OU process outside
+  // the ordinary source-term objects and applies the rendered field during RK stages.
+  if (pin->DoesBlockExist("scalar_driving")) {
+    pscalar_driver = new ScalarForcingDriver(this, pin);
+    pscalar_driver->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);
+    pscalar_driver->IncludeAddForcingTask(tl_map["stagen"], none);
+  } else {
+    pscalar_driver = nullptr;
+  }
+
+  // (8) Z4c and ADM
   // Create Z4c and ADM physics module.
   if (pin->DoesBlockExist("z4c")) {
     pz4c = new z4c::Z4c(this, pin);
@@ -199,7 +212,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
     }
   }
 
-  // (8) Dynamical Spacetime and Matter (MHD TODO)
+  // (9) Dynamical Spacetime and Matter (MHD TODO)
   if ((pin->DoesBlockExist("z4c") || pin->DoesBlockExist("adm")) &&
       (pin->DoesBlockExist("hydro")) ) {
     std::cout << "Dynamical metric and hydro not compatible; use MHD instead  "
@@ -217,7 +230,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
     pnr->AssembleNumericalRelativityTasks(tl_map);
   }
 
-  // (8) PARTICLES
+  // (10) PARTICLES
   // Create particles module.  Create tasklist.
   if (pin->DoesBlockExist("particles")) {
     ppart = new particles::Particles(this, pin);

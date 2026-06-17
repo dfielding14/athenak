@@ -1,0 +1,79 @@
+<job>
+basename = scalar_variance_test
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 1
+tlim       = 1.0
+ndiag      = 1
+
+<mesh>
+nghost = 2
+nx1    = 16
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2    = 16
+x2min  = 0.0
+x2max  = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3    = 1
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = reflect
+ox3_bc = reflect
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 1
+
+<hydro>
+eos          = ideal
+gamma        = 1.6666666666667
+sfloor       = -1.0e100
+reconstruct  = plm
+rsolver      = hllc
+nscalars     = 1
+scalar_only  = true
+
+<problem>
+rho0                = 1.0
+temp0               = 1.0
+user_srcs           = false
+user_hist           = true
+scalar0_mode        = 0
+scalar0_use_sine_x1 = false
+scalar0_init        = 0.5
+scalar0_theta_floor = -1.0e100
+turb_velocity_method = projection
+divfree_scalar_flux  = true
+turb_v_rms           = 0.0
+turb_nlow            = 1
+turb_nhigh           = 4
+turb_expo            = 1.6666666666667
+turb_rseed           = 1234
+turb_k_crit          = 4.0
+turb_spectrum_contract = statistical
+
+<scalar_driving>
+scalar_index   = 0
+nlow          = 1
+nhigh         = 3
+spectrum      = power_law
+expo          = 1.6666666666667
+tcorr         = 0.1
+dt_update     = 0.02
+rseed         = 9012
+normalization = variance_rate
+variance_rate = 0.04
+
+<output1>
+file_type      = hst
+user_hist_only = true
+data_format    = %.16e
+dcycle         = 1
