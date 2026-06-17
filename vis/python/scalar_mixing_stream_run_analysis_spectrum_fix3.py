@@ -310,15 +310,8 @@ def _fixed_spectrum_metadata(metadata: dict[str, object]) -> dict[str, object]:
     updated["plotted_spectrum"] = PLOTTED_SPECTRUM
     updated["rebinning"] = REBINNING_KIND
     updated["diagnostic_shell_sum"] = DIAGNOSTIC_SHELL_SUM
-    case_name = str(updated.get("case_name", ""))
-    updated.setdefault(
-        "problem_generator",
-        "scalar_mixing_perfect_powerlaw" if "perfect_powerlaw" in case_name else "",
-    )
-    updated.setdefault(
-        "turb_spectrum_contract",
-        "exact_shell" if "perfect_powerlaw" in case_name else "",
-    )
+    updated.setdefault("problem_generator", "scalar_mixing")
+    updated.setdefault("turb_spectrum_contract", "")
     return updated
 
 

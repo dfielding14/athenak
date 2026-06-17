@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # Exit on any error
-set -e
+set -Eeuo pipefail
 
 # Create log file with timestamp
-log_file="build_frontier_scalar_mixing_$(date +%Y%m%d_%H%M%S).log"
+timestamp="$(date +%Y%m%d_%H%M%S)"
+log_file="build_frontier_scalar_mixing_${timestamp}.log"
 echo "Build log will be saved to: ${log_file}"
 
 # Function to echo to both stdout and log file
@@ -16,14 +17,23 @@ log_echo() {
 exec > >(tee -a "${log_file}")
 exec 2>&1
 
-# Frontier-optimized build script for AthenaK with scalar_mixing problem
+# Frontier-optimized build script for AthenaK with the scalar_mixing problem
 log_echo "=== Building AthenaK on Frontier with scalar_mixing ==="
 log_echo "=== Build started at $(date) ==="
 
-# Load optimal modules for Frontier
+# This is an OLCF-listed GPU-aware MPI tuple. Override all four module
+# variables together when moving to another compatible Frontier toolchain.
+cpe_module="${FRONTIER_CPE_MODULE:-cpe/25.09}"
+mpich_module="${FRONTIER_MPICH_MODULE:-cray-mpich/9.0.1}"
+rocm_module="${FRONTIER_ROCM_MODULE:-rocm/6.4.2}"
+cce_module="${FRONTIER_CCE_MODULE:-cce/20.0.0}"
+
 module restore
-module load cpe/24.07 PrgEnv-amd cray-mpich/8.1.30 craype-accel-amd-gfx90a amd/6.2.0 rocm/6.2.0
-module load cmake cray-python emacs
+module load PrgEnv-cray
+module load craype-accel-amd-gfx90a
+module load "${cpe_module}" "${mpich_module}" "${rocm_module}"
+module load "${cce_module}"
+module load cmake
 module unload darshan-runtime
 
 
@@ -31,26 +41,70 @@ echo "=== Loaded modules ==="
 module -t list
 
 # Set environment variables
-export LD_LIBRARY_PATH=${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}
+: "${CRAY_LD_LIBRARY_PATH:?Frontier modules did not define CRAY_LD_LIBRARY_PATH}"
+: "${ROCM_PATH:?Frontier ROCm module did not define ROCM_PATH}"
+export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
+export MPICH_GPU_SUPPORT_ENABLED=1
+export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
+export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
+export FI_MR_CACHE_MONITOR=kdreg2
 
 # Define paths
-athenak_dir='/ccs/home/dfielding/athenak-df-fractal'
+athenak_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 build_dir="${athenak_dir}/build_scalar_mixing"
+active_build_dir="${athenak_dir}/.build_scalar_mixing_${timestamp}_$$"
+lock_dir="${build_dir}.lock"
+jobs="${BUILD_JOBS:-16}"
+
+release_lock() {
+    if [ -r "${lock_dir}/pid" ] && [ "$(cat "${lock_dir}/pid" 2>/dev/null)" = "$$" ]; then
+        rm -rf "${lock_dir}"
+    fi
+}
+
+acquire_lock() {
+    if mkdir "${lock_dir}" 2>/dev/null; then
+        printf '%s\n' "$$" > "${lock_dir}/pid"
+        trap release_lock EXIT
+        return
+    fi
+
+    if [ -r "${lock_dir}/pid" ]; then
+        lock_pid="$(cat "${lock_dir}/pid" 2>/dev/null || true)"
+        if [ -n "${lock_pid}" ] && kill -0 "${lock_pid}" 2>/dev/null; then
+            echo "ERROR: another scalar_mixing build is already running."
+            echo "       build directory: ${build_dir}"
+            echo "       lock held by PID: ${lock_pid}"
+            echo "       Wait for it to finish, or remove ${lock_dir} if that PID is stale."
+            exit 1
+        fi
+    fi
+
+    echo "Removing stale build lock: ${lock_dir}"
+    rm -rf "${lock_dir}"
+    if ! mkdir "${lock_dir}" 2>/dev/null; then
+        echo "ERROR: failed to acquire build lock after removing stale lock."
+        echo "       another build may have started concurrently: ${lock_dir}"
+        exit 1
+    fi
+    printf '%s\n' "$$" > "${lock_dir}/pid"
+    trap release_lock EXIT
+}
 
 # Clean and create build directory
 echo "=== Setting up build directory ==="
+acquire_lock
 
-if [ -d "${build_dir}" ]; then
-    echo "Removing existing build directory..."
-    rm -rf "${build_dir}"
-fi
-mkdir -p "${build_dir}"
+echo "Building in private directory: ${active_build_dir}"
+rm -rf "${active_build_dir}"
+mkdir -p "${active_build_dir}"
 
 # Configure with CMake
 echo "=== Configuring with CMake ==="
 cd "${athenak_dir}"
 
-cmake -B"${build_dir}" \
+cmake -B"${active_build_dir}" \
+      -DCMAKE_BUILD_TYPE=Release \
       -DAthena_ENABLE_MPI=ON \
       -DKokkos_ARCH_ZEN3=ON \
       -DKokkos_ARCH_VEGA90A=ON \
@@ -62,8 +116,16 @@ cmake -B"${build_dir}" \
 
 # Build
 echo "=== Building AthenaK ==="
-cd "${build_dir}"
-make -j16
+cmake --build "${active_build_dir}" --parallel "${jobs}"
+
+echo "=== Publishing successful build ==="
+previous_build_dir="${build_dir}.previous"
+rm -rf "${previous_build_dir}"
+if [ -e "${build_dir}" ]; then
+    mv "${build_dir}" "${previous_build_dir}"
+fi
+mv "${active_build_dir}" "${build_dir}"
+rm -rf "${previous_build_dir}"
 
 echo "=== Build complete! ==="
 echo "Executable location: ${build_dir}/src/athena"

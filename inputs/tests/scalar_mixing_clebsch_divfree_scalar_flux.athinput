@@ -49,23 +49,24 @@ scalar_only        = true
 scalar_diffusivity = 0.0
 
 <problem>
-rho0                 = 1.0
-temp0                = 1.0
-scalar_init          = 0.5
-user_srcs            = false
-user_hist            = true
-mean_gradient        = 0.0
-divfree_scalar_flux  = true
-turb_velocity_method = clebsch
-turb_alpha           = 0.3333333333333333
-turb_v_rms           = 1.0
-turb_nlow            = 2
-turb_nhigh           = 10
-turb_expo            = 1.6666667
-turb_sol_frac        = 1.0
-turb_rseed           = 12345
-turb_k_crit          = 16.0
-turb_dump_generator_diagnostics = true
+rho0                   = 1.0
+temp0                  = 1.0
+scalar_init            = 0.5
+scalar0_use_sine_x1    = false
+user_srcs              = false
+user_hist              = true
+mean_gradient          = 0.0
+divfree_scalar_flux    = true
+turb_velocity_method   = clebsch
+turb_alpha             = 0.3333333333333333
+turb_v_rms             = 1.0
+turb_nlow              = 2
+turb_nhigh             = 10
+turb_expo              = 1.6666667
+turb_sol_frac          = 1.0
+turb_rseed             = 12345
+turb_k_crit            = 16.0
+turb_spectrum_contract = statistical
 
 <output1>
 file_type = hst

@@ -4,21 +4,16 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file scalar_mixing.cpp
-//  \brief Problem generator for scalar mixing in frozen turbulent velocity field
+//  \brief Scalar mixing with selectable exact-shell or statistical velocity spectra
 //
 //  Passive scalars with selectable source terms (mean gradient, reaction, sponge).
 //  This simulates mixing of background gradients and/or reactive reservoirs by turbulence.
 //
 //  When scalar_only=true in <hydro>, velocity is frozen and only the scalars evolve.
 
-#include <array>
 #include <algorithm>
-#include <chrono>
 #include <cmath>
-#include <cstdint>
 #include <cstdlib>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -48,6 +43,9 @@ void ScalarMixingHistory(HistoryData *pdata, Mesh *pm);
 namespace {
 
 constexpr Real kTiny = 1.0e-16;
+constexpr Real kPi = 3.141592653589793238462643383279502884L;
+constexpr Real kDefaultScalar0WavelengthsPerBox = 1.0;
+constexpr Real kDefaultScalar1WavelengthsPerBox = 2.0;
 
 enum class VelocityMethod { Projection, Stream2D, Clebsch };
 
@@ -60,8 +58,10 @@ struct TurbulenceConfig {
   Real alpha = 1.0/3.0;
   Real phi_slope = 11.0/3.0;
   Real velocity_slope = 5.0/3.0;
+  Real sol_frac = 1.0;
   int rseed = 12345;
   Real k_crit = 16.0;
+  std::string spectrum_contract = "exact_shell";
 
   int nx1 = 1;
   int nx2 = 1;
@@ -76,24 +76,19 @@ struct TurbulenceConfig {
   bool stream_2d = false;
   bool clebsch_3d = false;
   bool active_v3 = false;
-  bool dump_generator_diagnostics = false;
+  bool divfree_scalar_flux = false;
   bool legacy_stream_bool_used = false;
   bool clebsch_alpha_from_expo = false;
 
   Real lx = 1.0;
   Real ly = 1.0;
   Real lz = 1.0;
-  Real x1min = 0.0;
-  Real x1max = 1.0;
-  Real x2min = 0.0;
-  Real x2max = 1.0;
-  Real x3min = 0.0;
-  Real x3max = 1.0;
   Real dkx = 0.0;
   Real dky = 0.0;
   Real dkz = 0.0;
   Real k_crit_mag = 0.0;
-  std::string basename;
+
+  bool exact_shell_contract = true;
 };
 
 struct ModeCatalog {
@@ -114,14 +109,41 @@ struct ScalarCoefficients {
   std::vector<Real> aka, akb;
 };
 
+struct CandidateMode {
+  int nkx = 0;
+  int nky = 0;
+  int nkz = 0;
+  int shell = 0;
+  Real kx = 0.0;
+  Real ky = 0.0;
+  Real kz = 0.0;
+  Real kiso = 0.0;
+  Real p_accept = 1.0;
+};
+
 struct VelocityStats {
   Real vmean1 = 0.0;
   Real vmean2 = 0.0;
   Real vmean3 = 0.0;
   Real scale = 1.0;
-  bool scalar_face_velocity = false;
-  Real face_divergence_ratio = 0.0;
-  Real face_divergence_linf = 0.0;
+};
+
+struct FaceDivergenceStats {
+  bool valid = false;
+  Real rms = 0.0;
+  Real max_abs = 0.0;
+  Real normalized_rms = 0.0;
+  Real normalized_max_abs = 0.0;
+};
+
+struct ClebschGradientModeData {
+  int nmodes = 0;
+  DvceArray1D<Real> kx, ky, kz;
+  DvceArray1D<Real> p1a, p1b;
+  DvceArray1D<Real> g1a0, g1a1, g1a2;
+  DvceArray1D<Real> g1b0, g1b1, g1b2;
+  DvceArray1D<Real> g2a0, g2a1, g2a2;
+  DvceArray1D<Real> g2b0, g2b1, g2b2;
 };
 
 enum ScalarForcingMode {
@@ -161,6 +183,26 @@ struct ScalarForcingConfig {
 
 std::vector<ScalarForcingConfig> scalar_forcing_cfg;
 
+KOKKOS_INLINE_FUNCTION
+void FastSinCos(float phase, float &sink, float &cosk) {
+#if defined(__HIP_DEVICE_COMPILE__) || defined(__CUDA_ARCH__) || defined(__GLIBC__)
+  ::sincosf(phase, &sink, &cosk);
+#else
+  sink = sin(phase);
+  cosk = cos(phase);
+#endif
+}
+
+KOKKOS_INLINE_FUNCTION
+void FastSinCos(double phase, double &sink, double &cosk) {
+#if defined(__HIP_DEVICE_COMPILE__) || defined(__CUDA_ARCH__) || defined(__GLIBC__)
+  ::sincos(phase, &sink, &cosk);
+#else
+  sink = sin(phase);
+  cosk = cos(phase);
+#endif
+}
+
 bool UseTrue2DVelocity(ParameterInput *pin, Mesh *pm) {
   if (!pm->two_d) return false;
   if (!(pin->DoesParameterExist("mesh", "ix3_bc") &&
@@ -191,38 +233,36 @@ int MixSeed(int seed, int salt) {
   std::exit(EXIT_FAILURE);
 }
 
-void RejectRemovedProblemParameter(ParameterInput *pin, const std::string &name,
-                                   const std::string &replacement) {
-  if (!pin->DoesParameterExist("problem", name)) return;
-  FatalProblemSetup("<problem>/" + name + " was removed from scalar_mixing. "
-                    + replacement);
-}
-
 int ShellFromIndexSqr(int nsqr) {
   if (nsqr <= 0) return 0;
-  return static_cast<int>(std::ceil(std::sqrt(static_cast<Real>(nsqr)) - 1.0e-12));
+  return static_cast<int>(std::floor(std::sqrt(static_cast<Real>(nsqr)) + 0.5 - 1.0e-12));
+}
+
+Real FitLogSlope(const std::vector<Real> &spectrum, int nlow, int nhigh) {
+  Real sx = 0.0;
+  Real sy = 0.0;
+  Real sxx = 0.0;
+  Real sxy = 0.0;
+  int npts = 0;
+  for (int shell = nlow; shell <= nhigh; ++shell) {
+    if (shell < 1 || shell >= static_cast<int>(spectrum.size())) continue;
+    if (spectrum[shell] <= kTiny) continue;
+    const Real x = std::log(static_cast<Real>(shell));
+    const Real y = std::log(spectrum[shell]);
+    sx += x;
+    sy += y;
+    sxx += x*x;
+    sxy += x*y;
+    ++npts;
+  }
+  if (npts < 2) return 0.0;
+  const Real denom = npts * sxx - sx*sx;
+  if (std::abs(denom) <= kTiny) return 0.0;
+  return (npts * sxy - sx * sy) / denom;
 }
 
 Real TargetShellEnergy(int shell, Real expo) {
   return 1.0 / std::pow(static_cast<Real>(shell), expo);
-}
-
-using WallClock = std::chrono::steady_clock;
-using WallTimePoint = WallClock::time_point;
-
-Real ElapsedWallSeconds(const WallTimePoint &start_time) {
-  return std::chrono::duration<Real>(WallClock::now() - start_time).count();
-}
-
-Real GlobalMaxReal(Real local_value) {
-#if MPI_PARALLEL_ENABLED
-  Real global_value = 0.0;
-  MPI_Allreduce(&local_value, &global_value, 1, MPI_ATHENA_REAL, MPI_MAX,
-                MPI_COMM_WORLD);
-  return global_value;
-#else
-  return local_value;
-#endif
 }
 
 const char *VelocityMethodName(VelocityMethod method) {
@@ -245,18 +285,6 @@ Real ClebschPhiSlopeFromAlpha(Real alpha) {
   return (alpha >= 0.0) ? (3.0 + 2.0 * alpha) : (3.0 + alpha);
 }
 
-Real UniformCellCenter(int index, int ncell, Real xmin, Real xmax) {
-  if (ncell <= 0) return 0.5 * (xmin + xmax);
-  return xmin + (static_cast<Real>(index) + 0.5) * (xmax - xmin) / static_cast<Real>(ncell);
-}
-
-KOKKOS_INLINE_FUNCTION
-Real X1SineScalarProfile(Real x1, Real x1min, Real lx) {
-  if (lx <= 0.0) return 0.0;
-  const Real phase = 2.0 * M_PI * (x1 - x1min) / lx;
-  return 0.5 * (1.0 - cos(phase));
-}
-
 std::vector<Real> ComputeScalarShellEnergy(const ModeCatalog &catalog,
                                            const ScalarCoefficients &coeffs,
                                            int nshell_max) {
@@ -268,468 +296,6 @@ std::vector<Real> ComputeScalarShellEnergy(const ModeCatalog &catalog,
                                   coeffs.akb[n] * coeffs.akb[n]);
   }
   return shell_energy;
-}
-
-std::vector<Real> ComputeVectorShellEnergy(const ModeCatalog &catalog,
-                                           const VectorCoefficients &coeffs,
-                                           int nshell_max) {
-  std::vector<Real> shell_energy(nshell_max + 1, 0.0);
-  for (int n = 0; n < catalog.KeptModes(); ++n) {
-    const int shell = catalog.shell[n];
-    if (shell < 0 || shell > nshell_max) continue;
-    shell_energy[shell] += 0.5 * (
-        coeffs.aka0[n] * coeffs.aka0[n] + coeffs.akb0[n] * coeffs.akb0[n] +
-        coeffs.aka1[n] * coeffs.aka1[n] + coeffs.akb1[n] * coeffs.akb1[n] +
-        coeffs.aka2[n] * coeffs.aka2[n] + coeffs.akb2[n] * coeffs.akb2[n]);
-  }
-  return shell_energy;
-}
-
-std::vector<Real> SampleScalarFieldXY(const TurbulenceConfig &cfg,
-                                      const ModeCatalog &catalog,
-                                      const ScalarCoefficients &coeffs,
-                                      int nx, int ny, Real x3_slice) {
-  std::vector<Real> field(static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny), 0.0);
-  for (int j = 0; j < ny; ++j) {
-    const Real x2 = UniformCellCenter(j, ny, cfg.x2min, cfg.x2max);
-    for (int i = 0; i < nx; ++i) {
-      const Real x1 = UniformCellCenter(i, nx, cfg.x1min, cfg.x1max);
-      Real value = 0.0;
-      for (int n = 0; n < catalog.KeptModes(); ++n) {
-        const Real phase = catalog.kx[n] * x1 + catalog.ky[n] * x2 + catalog.kz[n] * x3_slice;
-        value += coeffs.aka[n] * std::cos(phase) - coeffs.akb[n] * std::sin(phase);
-      }
-      field[static_cast<std::size_t>(j) * static_cast<std::size_t>(nx) + i] = value;
-    }
-  }
-  return field;
-}
-
-std::string JsonEscape(const std::string &value) {
-  std::string escaped;
-  escaped.reserve(value.size() + 8);
-  for (char ch : value) {
-    switch (ch) {
-      case '\\':
-        escaped += "\\\\";
-        break;
-      case '"':
-        escaped += "\\\"";
-        break;
-      case '\n':
-        escaped += "\\n";
-        break;
-      case '\r':
-        escaped += "\\r";
-        break;
-      case '\t':
-        escaped += "\\t";
-        break;
-      default:
-        escaped += ch;
-        break;
-    }
-  }
-  return escaped;
-}
-
-void WriteIndent(std::ostream &os, int indent) {
-  os << std::string(indent, ' ');
-}
-
-template <typename T>
-void WriteJsonNumericArray(std::ostream &os, const std::vector<T> &values) {
-  os << "[";
-  for (std::size_t n = 0; n < values.size(); ++n) {
-    if (n > 0) os << ", ";
-    os << values[n];
-  }
-  os << "]";
-}
-
-void WriteJsonModeCatalog(std::ostream &os, const ModeCatalog &catalog, int indent) {
-  WriteIndent(os, indent);
-  os << "{\n";
-  WriteIndent(os, indent + 2);
-  os << "\"total_modes\": " << catalog.total_modes << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"kept_modes\": " << catalog.KeptModes() << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"nkx\": ";
-  WriteJsonNumericArray(os, catalog.nkx);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"nky\": ";
-  WriteJsonNumericArray(os, catalog.nky);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"nkz\": ";
-  WriteJsonNumericArray(os, catalog.nkz);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"shell\": ";
-  WriteJsonNumericArray(os, catalog.shell);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"prob\": ";
-  WriteJsonNumericArray(os, catalog.prob);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"boost\": ";
-  WriteJsonNumericArray(os, catalog.boost);
-  os << "\n";
-  WriteIndent(os, indent);
-  os << "}";
-}
-
-void WriteJsonScalarCoefficients(std::ostream &os, const ScalarCoefficients &coeffs,
-                                 int indent) {
-  WriteIndent(os, indent);
-  os << "{\n";
-  WriteIndent(os, indent + 2);
-  os << "\"aka\": ";
-  WriteJsonNumericArray(os, coeffs.aka);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"akb\": ";
-  WriteJsonNumericArray(os, coeffs.akb);
-  os << "\n";
-  WriteIndent(os, indent);
-  os << "}";
-}
-
-void WriteJsonVectorCoefficients(std::ostream &os, const VectorCoefficients &coeffs,
-                                 int indent) {
-  WriteIndent(os, indent);
-  os << "{\n";
-  WriteIndent(os, indent + 2);
-  os << "\"aka0\": ";
-  WriteJsonNumericArray(os, coeffs.aka0);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"aka1\": ";
-  WriteJsonNumericArray(os, coeffs.aka1);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"aka2\": ";
-  WriteJsonNumericArray(os, coeffs.aka2);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"akb0\": ";
-  WriteJsonNumericArray(os, coeffs.akb0);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"akb1\": ";
-  WriteJsonNumericArray(os, coeffs.akb1);
-  os << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"akb2\": ";
-  WriteJsonNumericArray(os, coeffs.akb2);
-  os << "\n";
-  WriteIndent(os, indent);
-  os << "}";
-}
-
-void WriteJsonField2D(std::ostream &os, const std::vector<Real> &field,
-                      int nx, int ny, Real x3_slice, int indent) {
-  WriteIndent(os, indent);
-  os << "{\n";
-  WriteIndent(os, indent + 2);
-  os << "\"shape\": [" << ny << ", " << nx << "],\n";
-  WriteIndent(os, indent + 2);
-  os << "\"x3_slice\": " << x3_slice << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"data\": ";
-  WriteJsonNumericArray(os, field);
-  os << "\n";
-  WriteIndent(os, indent);
-  os << "}";
-}
-
-void WriteDiagnosticsMetadata(std::ostream &os, const TurbulenceConfig &cfg,
-                              const std::string &construction,
-                              const VelocityStats &stats,
-                              Real init_wall_seconds, int indent) {
-  WriteIndent(os, indent);
-  os << "{\n";
-  WriteIndent(os, indent + 2);
-  os << "\"basename\": \"" << JsonEscape(cfg.basename) << "\",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"velocity_method\": \"" << VelocityMethodName(cfg.method) << "\",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"construction\": \"" << construction << "\",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"active_velocity_components\": " << (cfg.active_v3 ? 3 : 2) << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"projection_true_2d\": " << (cfg.projection_true_2d ? "true" : "false") << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"stream_2d\": " << (cfg.stream_2d ? "true" : "false") << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"clebsch_3d\": " << (cfg.clebsch_3d ? "true" : "false") << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"legacy_stream_bool_used\": "
-     << (cfg.legacy_stream_bool_used ? "true" : "false") << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"clebsch_alpha_from_expo\": "
-     << (cfg.clebsch_alpha_from_expo ? "true" : "false") << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"scalar_face_velocity\": "
-     << (stats.scalar_face_velocity ? "true" : "false") << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"face_divergence_ratio\": " << stats.face_divergence_ratio << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"face_divergence_linf\": " << stats.face_divergence_linf << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"init_wall_seconds\": " << init_wall_seconds << ",\n";
-  WriteIndent(os, indent + 2);
-  os << "\"mesh\": {\n";
-  WriteIndent(os, indent + 4);
-  os << "\"global_nx1\": " << cfg.global_nx1 << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"global_nx2\": " << cfg.global_nx2 << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"global_nx3\": " << cfg.global_nx3 << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"x1min\": " << cfg.x1min << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"x1max\": " << cfg.x1max << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"x2min\": " << cfg.x2min << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"x2max\": " << cfg.x2max << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"x3min\": " << cfg.x3min << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"x3max\": " << cfg.x3max << "\n";
-  WriteIndent(os, indent + 2);
-  os << "},\n";
-  WriteIndent(os, indent + 2);
-  os << "\"target\": {\n";
-  WriteIndent(os, indent + 4);
-  os << "\"v_rms\": " << cfg.v_rms << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"nlow\": " << cfg.nlow << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"nhigh\": " << cfg.nhigh << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"expo\": " << cfg.expo << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"alpha\": " << cfg.alpha << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"phi_slope\": " << cfg.phi_slope << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"velocity_slope\": " << cfg.velocity_slope << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"rseed\": " << cfg.rseed << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"k_crit\": " << cfg.k_crit << ",\n";
-  WriteIndent(os, indent + 4);
-  os << "\"k_crit_mag\": " << cfg.k_crit_mag << "\n";
-  WriteIndent(os, indent + 2);
-  os << "},\n";
-  WriteIndent(os, indent + 2);
-  os << "\"normalization\": {\n";
-  WriteIndent(os, indent + 4);
-  os << "\"vmean\": [" << stats.vmean1 << ", " << stats.vmean2 << ", "
-     << stats.vmean3 << "],\n";
-  WriteIndent(os, indent + 4);
-  os << "\"scale\": " << stats.scale << "\n";
-  WriteIndent(os, indent + 2);
-  os << "}\n";
-  WriteIndent(os, indent);
-  os << "}";
-}
-
-std::string DiagnosticsPath(const TurbulenceConfig &cfg) {
-  return cfg.basename + ".turb_init_diag.json";
-}
-
-void WriteProjectionDiagnostics(const TurbulenceConfig &cfg,
-                                const ModeCatalog &catalog,
-                                const VectorCoefficients &coeffs,
-                                const VelocityStats &stats,
-                                Real init_wall_seconds) {
-  if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
-
-  std::ofstream os(DiagnosticsPath(cfg));
-  os << std::setprecision(17);
-  const std::vector<Real> velocity_shell =
-      ComputeVectorShellEnergy(catalog, coeffs, cfg.nhigh);
-
-  os << "{\n";
-  WriteIndent(os, 2);
-  os << "\"metadata\": ";
-  WriteDiagnosticsMetadata(os, cfg,
-                           cfg.projection_true_2d ? "projection_2d" : "projection_3d",
-                           stats, init_wall_seconds, 2);
-  os << ",\n";
-  WriteIndent(os, 2);
-  os << "\"catalogs\": {\n";
-  WriteIndent(os, 4);
-  os << "\"velocity\": ";
-  WriteJsonModeCatalog(os, catalog, 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"coefficients\": {\n";
-  WriteIndent(os, 4);
-  os << "\"velocity\": ";
-  WriteJsonVectorCoefficients(os, coeffs, 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"spectra\": {\n";
-  WriteIndent(os, 4);
-  os << "\"velocity_shell_energy\": ";
-  WriteJsonNumericArray(os, velocity_shell);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"slices\": {}\n";
-  os << "}\n";
-}
-
-void WriteStream2DDiagnostics(const TurbulenceConfig &cfg,
-                              const ModeCatalog &catalog,
-                              const ScalarCoefficients &psi_coeffs,
-                              const VectorCoefficients &vel_coeffs,
-                              const VelocityStats &stats,
-                              Real init_wall_seconds) {
-  if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
-
-  const std::vector<Real> psi_field =
-      SampleScalarFieldXY(cfg, catalog, psi_coeffs, cfg.global_nx1, cfg.global_nx2,
-                          UniformCellCenter(0, 1, cfg.x3min, cfg.x3max));
-  const std::vector<Real> psi_shell =
-      ComputeScalarShellEnergy(catalog, psi_coeffs, cfg.nhigh);
-  const std::vector<Real> velocity_shell =
-      ComputeVectorShellEnergy(catalog, vel_coeffs, cfg.nhigh);
-
-  std::ofstream os(DiagnosticsPath(cfg));
-  os << std::setprecision(17);
-  os << "{\n";
-  WriteIndent(os, 2);
-  os << "\"metadata\": ";
-  WriteDiagnosticsMetadata(os, cfg, "stream_2d", stats, init_wall_seconds, 2);
-  os << ",\n";
-  WriteIndent(os, 2);
-  os << "\"catalogs\": {\n";
-  WriteIndent(os, 4);
-  os << "\"psi\": ";
-  WriteJsonModeCatalog(os, catalog, 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"coefficients\": {\n";
-  WriteIndent(os, 4);
-  os << "\"psi\": ";
-  WriteJsonScalarCoefficients(os, psi_coeffs, 4);
-  os << ",\n";
-  WriteIndent(os, 4);
-  os << "\"velocity\": ";
-  WriteJsonVectorCoefficients(os, vel_coeffs, 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"spectra\": {\n";
-  WriteIndent(os, 4);
-  os << "\"psi_shell_energy\": ";
-  WriteJsonNumericArray(os, psi_shell);
-  os << ",\n";
-  WriteIndent(os, 4);
-  os << "\"velocity_shell_energy\": ";
-  WriteJsonNumericArray(os, velocity_shell);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"slices\": {\n";
-  WriteIndent(os, 4);
-  os << "\"psi_xy\": ";
-  WriteJsonField2D(os, psi_field, cfg.global_nx1, cfg.global_nx2,
-                   UniformCellCenter(0, 1, cfg.x3min, cfg.x3max), 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "}\n";
-  os << "}\n";
-}
-
-void WriteClebsch3DDiagnostics(const TurbulenceConfig &cfg,
-                               const ModeCatalog &catalog,
-                               const ScalarCoefficients &phi1_coeffs,
-                               const ScalarCoefficients &phi2_coeffs,
-                               const VelocityStats &stats,
-                               Real init_wall_seconds) {
-  if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
-
-  const int slice_k = cfg.global_nx3 / 2;
-  const Real x3_slice = UniformCellCenter(slice_k, cfg.global_nx3, cfg.x3min, cfg.x3max);
-  const std::vector<Real> phi1_xy =
-      SampleScalarFieldXY(cfg, catalog, phi1_coeffs, cfg.global_nx1, cfg.global_nx2, x3_slice);
-  const std::vector<Real> phi2_xy =
-      SampleScalarFieldXY(cfg, catalog, phi2_coeffs, cfg.global_nx1, cfg.global_nx2, x3_slice);
-  const std::vector<Real> phi1_shell =
-      ComputeScalarShellEnergy(catalog, phi1_coeffs, cfg.nhigh);
-  const std::vector<Real> phi2_shell =
-      ComputeScalarShellEnergy(catalog, phi2_coeffs, cfg.nhigh);
-
-  std::ofstream os(DiagnosticsPath(cfg));
-  os << std::setprecision(17);
-  os << "{\n";
-  WriteIndent(os, 2);
-  os << "\"metadata\": ";
-  WriteDiagnosticsMetadata(os, cfg, "clebsch_3d", stats, init_wall_seconds, 2);
-  os << ",\n";
-  WriteIndent(os, 2);
-  os << "\"catalogs\": {\n";
-  WriteIndent(os, 4);
-  os << "\"phi\": ";
-  WriteJsonModeCatalog(os, catalog, 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"coefficients\": {\n";
-  WriteIndent(os, 4);
-  os << "\"phi1\": ";
-  WriteJsonScalarCoefficients(os, phi1_coeffs, 4);
-  os << ",\n";
-  WriteIndent(os, 4);
-  os << "\"phi2\": ";
-  WriteJsonScalarCoefficients(os, phi2_coeffs, 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"spectra\": {\n";
-  WriteIndent(os, 4);
-  os << "\"phi1_shell_energy\": ";
-  WriteJsonNumericArray(os, phi1_shell);
-  os << ",\n";
-  WriteIndent(os, 4);
-  os << "\"phi2_shell_energy\": ";
-  WriteJsonNumericArray(os, phi2_shell);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "},\n";
-  WriteIndent(os, 2);
-  os << "\"slices\": {\n";
-  WriteIndent(os, 4);
-  os << "\"phi1_xy_mid\": ";
-  WriteJsonField2D(os, phi1_xy, cfg.global_nx1, cfg.global_nx2, x3_slice, 4);
-  os << ",\n";
-  WriteIndent(os, 4);
-  os << "\"phi2_xy_mid\": ";
-  WriteJsonField2D(os, phi2_xy, cfg.global_nx1, cfg.global_nx2, x3_slice, 4);
-  os << "\n";
-  WriteIndent(os, 2);
-  os << "}\n";
-  os << "}\n";
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -753,25 +319,56 @@ Real KppReaction(Real theta, Real tau, Real t1, Real t3) {
   return inv * (theta - t1) * (t3 - theta);
 }
 
+KOKKOS_INLINE_FUNCTION
+Real NormalizeBoxCoordinate(Real x, Real xmin, Real xmax) {
+  const Real length = xmax - xmin;
+  return (fabs(length) > kTiny) ? (x - xmin) / length : 0.0;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real SineScalarIC1D(Real x1v,
+                    Real x1min, Real x1max,
+                    Real wavelengths_per_box) {
+  const Real mode = 2.0 * kPi * wavelengths_per_box;
+  const Real xi1 = NormalizeBoxCoordinate(x1v, x1min, x1max);
+  return 0.5 * (1.0 + sin(mode * xi1));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real SineScalarIC(Real x1v, Real x2v, Real x3v,
+                  Real x1min, Real x1max,
+                  Real x2min, Real x2max,
+                  Real x3min, Real x3max,
+                  Real wavelengths_per_box,
+                  bool multi_d, bool three_d) {
+  const Real mode = 2.0 * kPi * wavelengths_per_box;
+  const Real xi1 = NormalizeBoxCoordinate(x1v, x1min, x1max);
+  Real pattern = sin(mode * xi1);
+  if (multi_d) {
+    const Real xi2 = NormalizeBoxCoordinate(x2v, x2min, x2max);
+    pattern *= sin(mode * xi2);
+  }
+  if (three_d) {
+    const Real xi3 = NormalizeBoxCoordinate(x3v, x3min, x3max);
+    pattern *= sin(mode * xi3);
+  }
+  return 0.5 * (1.0 + pattern);
+}
+
 TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
                                       bool projection_true_2d) {
   TurbulenceConfig cfg;
-
-  RejectRemovedProblemParameter(pin, "turb_sol_frac",
-                                "Projection mode is now always solenoidal.");
-  RejectRemovedProblemParameter(pin, "divfree_scalar_flux",
-                                "scalar_mixing now always uses the divergence-free "
-                                "scalar face velocity.");
 
   cfg.v_rms = pin->GetOrAddReal("problem", "turb_v_rms", 1.0);
   cfg.nlow = pin->GetOrAddInteger("problem", "turb_nlow", 1);
   cfg.nhigh = pin->GetOrAddInteger("problem", "turb_nhigh", 4);
   cfg.expo = pin->GetOrAddReal("problem", "turb_expo", 5.0/3.0);
+  cfg.sol_frac = pin->GetOrAddReal("problem", "turb_sol_frac", 1.0);
   cfg.rseed = GetTurbulenceSeed(pin);
   cfg.k_crit = pin->GetOrAddReal("problem", "turb_k_crit", 16.0);
-  cfg.dump_generator_diagnostics =
-      pin->GetOrAddBoolean("problem", "turb_dump_generator_diagnostics", false);
-  cfg.basename = pin->GetString("job", "basename");
+  cfg.spectrum_contract =
+      pin->GetOrAddString("problem", "turb_spectrum_contract", "exact_shell");
+  cfg.divfree_scalar_flux = pin->GetOrAddBoolean("problem", "divfree_scalar_flux", false);
 
   cfg.nx1 = pm->mb_indcs.nx1;
   cfg.nx2 = pm->mb_indcs.nx2;
@@ -848,12 +445,9 @@ TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
   cfg.lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
   cfg.ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
   cfg.lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
-  cfg.x1min = pm->mesh_size.x1min;
-  cfg.x1max = pm->mesh_size.x1max;
-  cfg.x2min = pm->mesh_size.x2min;
-  cfg.x2max = pm->mesh_size.x2max;
-  cfg.x3min = pm->mesh_size.x3min;
-  cfg.x3max = pm->mesh_size.x3max;
+  cfg.dkx = 2.0*M_PI/cfg.lx;
+  cfg.dky = (cfg.nx2 > 1) ? 2.0*M_PI/cfg.ly : 0.0;
+  cfg.dkz = (cfg.nx3 > 1) ? 2.0*M_PI/cfg.lz : 0.0;
   cfg.global_nx1 = std::max(1, static_cast<int>(std::llround(cfg.lx / pm->mesh_size.dx1)));
   cfg.global_nx2 = (cfg.mesh_multi_d && pm->mesh_size.dx2 > 0.0)
                        ? std::max(1, static_cast<int>(std::llround(cfg.ly / pm->mesh_size.dx2)))
@@ -861,10 +455,12 @@ TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
   cfg.global_nx3 = (cfg.mesh_three_d && pm->mesh_size.dx3 > 0.0)
                        ? std::max(1, static_cast<int>(std::llround(cfg.lz / pm->mesh_size.dx3)))
                        : 1;
-  cfg.dkx = 2.0*M_PI/cfg.lx;
-  cfg.dky = (cfg.nx2 > 1) ? 2.0*M_PI/cfg.ly : 0.0;
-  cfg.dkz = (cfg.nx3 > 1) ? 2.0*M_PI/cfg.lz : 0.0;
   cfg.k_crit_mag = cfg.k_crit * cfg.dkx;
+  cfg.exact_shell_contract = (cfg.spectrum_contract == "exact_shell");
+
+  if (!(cfg.spectrum_contract == "exact_shell" || cfg.spectrum_contract == "statistical")) {
+    FatalProblemSetup("<problem>/turb_spectrum_contract must be 'exact_shell' or 'statistical'.");
+  }
 
   return cfg;
 }
@@ -874,12 +470,131 @@ Real ModeAcceptanceProbability(const TurbulenceConfig &cfg, Real kiso) {
   return (cfg.k_crit_mag * cfg.k_crit_mag) / (kiso * kiso);
 }
 
-bool IsHalfSpaceMode(int nkx, int nky, int nkz) {
-  if (nkx == 0) {
-    if (nky < 0) return false;
-    if (nky == 0 && nkz <= 0) return false;
+bool SupportsExactShellContract(const TurbulenceConfig &cfg) {
+  if (cfg.method == VelocityMethod::Stream2D) return true;
+  if (cfg.method == VelocityMethod::Projection) {
+    return cfg.mesh_three_d && cfg.active_v3 && std::abs(cfg.sol_frac - 1.0) <= 1.0e-12;
   }
-  return !(nkx == 0 && nky == 0 && nkz == 0);
+  return false;
+}
+
+void ValidateExactShellContract(const TurbulenceConfig &cfg) {
+  if (!cfg.exact_shell_contract) return;
+  if (SupportsExactShellContract(cfg)) return;
+
+  if (cfg.method == VelocityMethod::Stream2D) {
+    FatalProblemSetup("exact_shell is only supported for 2D stream_2d initialization.");
+  }
+  if (cfg.method == VelocityMethod::Clebsch) {
+    FatalProblemSetup("exact_shell does not support 3D clebsch initialization.");
+  }
+  FatalProblemSetup(
+      "exact_shell is only supported for 3D projection initialization with turb_sol_frac=1.");
+}
+
+void AppendCandidateMode(const CandidateMode &candidate, ModeCatalog &catalog) {
+  catalog.nkx.push_back(candidate.nkx);
+  catalog.nky.push_back(candidate.nky);
+  catalog.nkz.push_back(candidate.nkz);
+  catalog.shell.push_back(candidate.shell);
+  catalog.prob.push_back(candidate.p_accept);
+  catalog.boost.push_back(1.0);
+  catalog.kx.push_back(candidate.kx);
+  catalog.ky.push_back(candidate.ky);
+  catalog.kz.push_back(candidate.kz);
+  catalog.kiso.push_back(candidate.kiso);
+}
+
+ModeCatalog BuildExactShellModeCatalog(const TurbulenceConfig &cfg, RNG_State *rstate) {
+  ModeCatalog catalog;
+  std::vector<std::vector<CandidateMode>> shell_candidates(cfg.nhigh + 1);
+
+  for (int nkx = 0; nkx <= cfg.nhigh; ++nkx) {
+    for (int nky = (cfg.mesh_multi_d ? -cfg.nhigh : 0);
+         nky <= (cfg.mesh_multi_d ? cfg.nhigh : 0); ++nky) {
+      for (int nkz = (cfg.mesh_three_d ? -cfg.nhigh : 0);
+           nkz <= (cfg.mesh_three_d ? cfg.nhigh : 0); ++nkz) {
+        if (nkx == 0 && nky == 0 && nkz == 0) continue;
+
+        // Keep half of the kx=0 plane to avoid double-counting the implicit conjugates.
+        if (nkx == 0) {
+          if (nky < 0) continue;
+          if (nky == 0 && nkz <= 0) continue;
+        }
+
+        const int nsqr = nkx*nkx + nky*nky + nkz*nkz;
+        const int shell = ShellFromIndexSqr(nsqr);
+        if (shell < cfg.nlow || shell > cfg.nhigh) continue;
+
+        const CandidateMode candidate{
+            nkx, nky, nkz, shell, cfg.dkx * nkx, cfg.dky * nky, cfg.dkz * nkz,
+            std::sqrt((cfg.dkx * nkx)*(cfg.dkx * nkx) +
+                      (cfg.dky * nky)*(cfg.dky * nky) +
+                      (cfg.dkz * nkz)*(cfg.dkz * nkz)),
+            1.0};
+        shell_candidates[shell].push_back(candidate);
+      }
+    }
+  }
+
+  for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+    auto &candidates = shell_candidates[shell];
+    if (candidates.empty()) {
+      FatalProblemSetup("exact_shell requires at least one Fourier mode in every in-band shell.");
+    }
+    catalog.total_modes += static_cast<int>(candidates.size());
+    for (auto &candidate : candidates) {
+      candidate.p_accept = ModeAcceptanceProbability(cfg, candidate.kiso);
+    }
+
+    Real expected_count = 0.0;
+    for (const auto &candidate : candidates) {
+      expected_count += candidate.p_accept;
+    }
+    const int quota = std::min(static_cast<int>(candidates.size()),
+                               std::max(1, static_cast<int>(std::llround(expected_count))));
+
+    if (quota >= static_cast<int>(candidates.size())) {
+      std::sort(candidates.begin(), candidates.end(),
+                [](const CandidateMode &lhs, const CandidateMode &rhs) {
+                  if (lhs.nkx != rhs.nkx) return lhs.nkx < rhs.nkx;
+                  if (lhs.nky != rhs.nky) return lhs.nky < rhs.nky;
+                  return lhs.nkz < rhs.nkz;
+                });
+      for (const auto &candidate : candidates) {
+        AppendCandidateMode(candidate, catalog);
+      }
+      continue;
+    }
+
+    std::vector<std::pair<Real, int>> weighted_keys;
+    weighted_keys.reserve(candidates.size());
+    for (int idx = 0; idx < static_cast<int>(candidates.size()); ++idx) {
+      const Real u = std::max(RanSt(rstate), 1.0e-12);
+      weighted_keys.emplace_back(std::log(u) / candidates[idx].p_accept, idx);
+    }
+    std::sort(weighted_keys.begin(), weighted_keys.end(),
+              [](const std::pair<Real, int> &lhs, const std::pair<Real, int> &rhs) {
+                return lhs.first > rhs.first;
+              });
+
+    std::vector<CandidateMode> selected;
+    selected.reserve(quota);
+    for (int idx = 0; idx < quota; ++idx) {
+      selected.push_back(candidates[weighted_keys[idx].second]);
+    }
+    std::sort(selected.begin(), selected.end(),
+              [](const CandidateMode &lhs, const CandidateMode &rhs) {
+                if (lhs.nkx != rhs.nkx) return lhs.nkx < rhs.nkx;
+                if (lhs.nky != rhs.nky) return lhs.nky < rhs.nky;
+                return lhs.nkz < rhs.nkz;
+              });
+    for (const auto &candidate : selected) {
+      AppendCandidateMode(candidate, catalog);
+    }
+  }
+
+  return catalog;
 }
 
 ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, int nlow, int nhigh,
@@ -931,6 +646,9 @@ ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, int nlow, int nhigh,
 }
 
 ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, RNG_State *rstate) {
+  if (cfg.exact_shell_contract) {
+    return BuildExactShellModeCatalog(cfg, rstate);
+  }
   return BuildModeCatalog(cfg, cfg.nlow, cfg.nhigh, rstate);
 }
 
@@ -956,6 +674,75 @@ VectorCoefficients GenerateProjectionCoefficients(const TurbulenceConfig &cfg,
   coeffs.akb1.resize(nmodes);
   coeffs.akb2.resize(nmodes);
 
+  if (cfg.exact_shell_contract) {
+    std::vector<std::vector<int>> shell_members(cfg.nhigh + 1);
+    for (int n = 0; n < nmodes; ++n) {
+      shell_members[catalog.shell[n]].push_back(n);
+    }
+
+    for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+      const auto &members = shell_members[shell];
+      if (members.empty()) continue;
+
+      std::vector<Real> weights(members.size(), 0.0);
+      Real weight_sum = 0.0;
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real weight = 1.0 / std::pow(catalog.kiso[n], cfg.expo + 2.0);
+        weights[idx] = weight;
+        weight_sum += weight;
+
+        const Real k_vec[3] = {catalog.kx[n], catalog.ky[n], catalog.kz[n]};
+        Real a[3] = {0.0, 0.0, 0.0};
+        Real b[3] = {0.0, 0.0, 0.0};
+        Real mode_energy = 0.0;
+
+        for (int attempt = 0; attempt < 64; ++attempt) {
+          for (int dir = 0; dir < 3; ++dir) {
+            a[dir] = RanGaussianSt(rstate);
+            b[dir] = RanGaussianSt(rstate);
+          }
+          const Real kiso_sqr = catalog.kiso[n] * catalog.kiso[n];
+          const Real k_dot_a = k_vec[0]*a[0] + k_vec[1]*a[1] + k_vec[2]*a[2];
+          const Real k_dot_b = k_vec[0]*b[0] + k_vec[1]*b[1] + k_vec[2]*b[2];
+          for (int dir = 0; dir < 3; ++dir) {
+            a[dir] -= k_vec[dir] * k_dot_a / kiso_sqr;
+            b[dir] -= k_vec[dir] * k_dot_b / kiso_sqr;
+          }
+          mode_energy = 0.5 * (a[0]*a[0] + a[1]*a[1] + a[2]*a[2] +
+                               b[0]*b[0] + b[1]*b[1] + b[2]*b[2]);
+          if (mode_energy > kTiny) break;
+        }
+        if (mode_energy <= kTiny) {
+          FatalProblemSetup("Failed to draw a non-degenerate solenoidal projection mode.");
+        }
+
+        const Real inv_norm = 1.0 / std::sqrt(mode_energy);
+        coeffs.aka0[n] = a[0] * inv_norm;
+        coeffs.aka1[n] = a[1] * inv_norm;
+        coeffs.aka2[n] = a[2] * inv_norm;
+        coeffs.akb0[n] = b[0] * inv_norm;
+        coeffs.akb1[n] = b[1] * inv_norm;
+        coeffs.akb2[n] = b[2] * inv_norm;
+      }
+
+      const Real shell_target = std::pow(static_cast<Real>(shell), -cfg.expo);
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real mode_target = shell_target * weights[idx] / weight_sum;
+        const Real scale = std::sqrt(mode_target);
+        coeffs.aka0[n] *= scale;
+        coeffs.aka1[n] *= scale;
+        coeffs.aka2[n] *= scale;
+        coeffs.akb0[n] *= scale;
+        coeffs.akb1[n] *= scale;
+        coeffs.akb2[n] *= scale;
+      }
+    }
+
+    return coeffs;
+  }
+
   for (int n = 0; n < nmodes; ++n) {
     const Real kiso = catalog.kiso[n];
     const Real norm = ProjectionAmplitudeNorm(cfg, kiso) * catalog.boost[n];
@@ -977,8 +764,12 @@ VectorCoefficients GenerateProjectionCoefficients(const TurbulenceConfig &cfg,
     const Real k_dot_b = k_vec[0]*b[0] + k_vec[1]*b[1] + k_vec[2]*b[2];
 
     for (int dir = 0; dir < 3; ++dir) {
-      a[dir] -= k_vec[dir] * k_dot_a / kiso_sqr;
-      b[dir] -= k_vec[dir] * k_dot_b / kiso_sqr;
+      const Real a_sol = a[dir] - k_vec[dir] * k_dot_a / kiso_sqr;
+      const Real b_sol = b[dir] - k_vec[dir] * k_dot_b / kiso_sqr;
+      const Real a_div = k_vec[dir] * k_dot_a / kiso_sqr;
+      const Real b_div = k_vec[dir] * k_dot_b / kiso_sqr;
+      a[dir] = cfg.sol_frac * a_sol + (1.0 - cfg.sol_frac) * a_div;
+      b[dir] = cfg.sol_frac * b_sol + (1.0 - cfg.sol_frac) * b_div;
     }
 
     coeffs.aka0[n] = a[0];
@@ -999,6 +790,39 @@ ScalarCoefficients GenerateStream2DPsiCoefficients(const TurbulenceConfig &cfg,
   const int nmodes = catalog.KeptModes();
   coeffs.aka.resize(nmodes);
   coeffs.akb.resize(nmodes);
+
+  if (cfg.exact_shell_contract) {
+    std::vector<std::vector<int>> shell_members(cfg.nhigh + 1);
+    for (int n = 0; n < nmodes; ++n) {
+      shell_members[catalog.shell[n]].push_back(n);
+    }
+
+    for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+      const auto &members = shell_members[shell];
+      if (members.empty()) continue;
+
+      std::vector<Real> weights(members.size(), 0.0);
+      Real weight_sum = 0.0;
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real weight = 1.0 / std::pow(catalog.kiso[n], cfg.expo + 1.0);
+        weights[idx] = weight;
+        weight_sum += weight;
+      }
+
+      const Real shell_target = std::pow(static_cast<Real>(shell), -cfg.expo);
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real mode_target = shell_target * weights[idx] / weight_sum;
+        const Real amplitude = std::sqrt(2.0 * mode_target) / catalog.kiso[n];
+        const Real phase = 2.0 * kPi * RanSt(rstate);
+        coeffs.aka[n] = amplitude * std::cos(phase);
+        coeffs.akb[n] = amplitude * std::sin(phase);
+      }
+    }
+
+    return coeffs;
+  }
 
   for (int n = 0; n < nmodes; ++n) {
     const Real norm = Stream2DPsiAmplitudeNorm(cfg, catalog.kiso[n]) * catalog.boost[n];
@@ -1094,6 +918,133 @@ VectorCoefficients ConvertScalarToGradientCoefficients(const ModeCatalog &catalo
   }
 
   return coeffs;
+}
+
+ClebschGradientModeData UploadClebschGradientModeData(
+    const ModeCatalog &catalog, const ScalarCoefficients &phi1_coeffs,
+    const VectorCoefficients &grad1_coeffs, const VectorCoefficients &grad2_coeffs) {
+  ClebschGradientModeData mode_data;
+  mode_data.nmodes = catalog.KeptModes();
+  if (mode_data.nmodes == 0) return mode_data;
+
+  const int nmodes = mode_data.nmodes;
+  mode_data.kx = DvceArray1D<Real>("scalar_clebsch_kx", nmodes);
+  mode_data.ky = DvceArray1D<Real>("scalar_clebsch_ky", nmodes);
+  mode_data.kz = DvceArray1D<Real>("scalar_clebsch_kz", nmodes);
+  mode_data.p1a = DvceArray1D<Real>("scalar_clebsch_p1a", nmodes);
+  mode_data.p1b = DvceArray1D<Real>("scalar_clebsch_p1b", nmodes);
+  mode_data.g1a0 = DvceArray1D<Real>("scalar_clebsch_g1a0", nmodes);
+  mode_data.g1a1 = DvceArray1D<Real>("scalar_clebsch_g1a1", nmodes);
+  mode_data.g1a2 = DvceArray1D<Real>("scalar_clebsch_g1a2", nmodes);
+  mode_data.g1b0 = DvceArray1D<Real>("scalar_clebsch_g1b0", nmodes);
+  mode_data.g1b1 = DvceArray1D<Real>("scalar_clebsch_g1b1", nmodes);
+  mode_data.g1b2 = DvceArray1D<Real>("scalar_clebsch_g1b2", nmodes);
+  mode_data.g2a0 = DvceArray1D<Real>("scalar_clebsch_g2a0", nmodes);
+  mode_data.g2a1 = DvceArray1D<Real>("scalar_clebsch_g2a1", nmodes);
+  mode_data.g2a2 = DvceArray1D<Real>("scalar_clebsch_g2a2", nmodes);
+  mode_data.g2b0 = DvceArray1D<Real>("scalar_clebsch_g2b0", nmodes);
+  mode_data.g2b1 = DvceArray1D<Real>("scalar_clebsch_g2b1", nmodes);
+  mode_data.g2b2 = DvceArray1D<Real>("scalar_clebsch_g2b2", nmodes);
+
+  auto h_kx = Kokkos::create_mirror_view(mode_data.kx);
+  auto h_ky = Kokkos::create_mirror_view(mode_data.ky);
+  auto h_kz = Kokkos::create_mirror_view(mode_data.kz);
+  auto h_p1a = Kokkos::create_mirror_view(mode_data.p1a);
+  auto h_p1b = Kokkos::create_mirror_view(mode_data.p1b);
+  auto h_g1a0 = Kokkos::create_mirror_view(mode_data.g1a0);
+  auto h_g1a1 = Kokkos::create_mirror_view(mode_data.g1a1);
+  auto h_g1a2 = Kokkos::create_mirror_view(mode_data.g1a2);
+  auto h_g1b0 = Kokkos::create_mirror_view(mode_data.g1b0);
+  auto h_g1b1 = Kokkos::create_mirror_view(mode_data.g1b1);
+  auto h_g1b2 = Kokkos::create_mirror_view(mode_data.g1b2);
+  auto h_g2a0 = Kokkos::create_mirror_view(mode_data.g2a0);
+  auto h_g2a1 = Kokkos::create_mirror_view(mode_data.g2a1);
+  auto h_g2a2 = Kokkos::create_mirror_view(mode_data.g2a2);
+  auto h_g2b0 = Kokkos::create_mirror_view(mode_data.g2b0);
+  auto h_g2b1 = Kokkos::create_mirror_view(mode_data.g2b1);
+  auto h_g2b2 = Kokkos::create_mirror_view(mode_data.g2b2);
+
+  for (int n = 0; n < nmodes; ++n) {
+    h_kx(n) = catalog.kx[n];
+    h_ky(n) = catalog.ky[n];
+    h_kz(n) = catalog.kz[n];
+    h_p1a(n) = phi1_coeffs.aka[n];
+    h_p1b(n) = phi1_coeffs.akb[n];
+    h_g1a0(n) = grad1_coeffs.aka0[n];
+    h_g1a1(n) = grad1_coeffs.aka1[n];
+    h_g1a2(n) = grad1_coeffs.aka2[n];
+    h_g1b0(n) = grad1_coeffs.akb0[n];
+    h_g1b1(n) = grad1_coeffs.akb1[n];
+    h_g1b2(n) = grad1_coeffs.akb2[n];
+    h_g2a0(n) = grad2_coeffs.aka0[n];
+    h_g2a1(n) = grad2_coeffs.aka1[n];
+    h_g2a2(n) = grad2_coeffs.aka2[n];
+    h_g2b0(n) = grad2_coeffs.akb0[n];
+    h_g2b1(n) = grad2_coeffs.akb1[n];
+    h_g2b2(n) = grad2_coeffs.akb2[n];
+  }
+
+  Kokkos::deep_copy(mode_data.kx, h_kx);
+  Kokkos::deep_copy(mode_data.ky, h_ky);
+  Kokkos::deep_copy(mode_data.kz, h_kz);
+  Kokkos::deep_copy(mode_data.p1a, h_p1a);
+  Kokkos::deep_copy(mode_data.p1b, h_p1b);
+  Kokkos::deep_copy(mode_data.g1a0, h_g1a0);
+  Kokkos::deep_copy(mode_data.g1a1, h_g1a1);
+  Kokkos::deep_copy(mode_data.g1a2, h_g1a2);
+  Kokkos::deep_copy(mode_data.g1b0, h_g1b0);
+  Kokkos::deep_copy(mode_data.g1b1, h_g1b1);
+  Kokkos::deep_copy(mode_data.g1b2, h_g1b2);
+  Kokkos::deep_copy(mode_data.g2a0, h_g2a0);
+  Kokkos::deep_copy(mode_data.g2a1, h_g2a1);
+  Kokkos::deep_copy(mode_data.g2a2, h_g2a2);
+  Kokkos::deep_copy(mode_data.g2b0, h_g2b0);
+  Kokkos::deep_copy(mode_data.g2b1, h_g2b1);
+  Kokkos::deep_copy(mode_data.g2b2, h_g2b2);
+
+  return mode_data;
+}
+
+KOKKOS_INLINE_FUNCTION
+void AccumulateClebschGradients(const ClebschGradientModeData &mode_data,
+                                Real x1v, Real x2v, Real x3v,
+                                Real &g1x, Real &g1y, Real &g1z,
+                                Real &g2x, Real &g2y, Real &g2z) {
+  for (int n = 0; n < mode_data.nmodes; ++n) {
+    const Real phase = mode_data.kx(n)*x1v + mode_data.ky(n)*x2v + mode_data.kz(n)*x3v;
+    Real sink = 0.0;
+    Real cosk = 0.0;
+    FastSinCos(phase, sink, cosk);
+    g1x += mode_data.g1a0(n)*cosk - mode_data.g1b0(n)*sink;
+    g1y += mode_data.g1a1(n)*cosk - mode_data.g1b1(n)*sink;
+    g1z += mode_data.g1a2(n)*cosk - mode_data.g1b2(n)*sink;
+    g2x += mode_data.g2a0(n)*cosk - mode_data.g2b0(n)*sink;
+    g2y += mode_data.g2a1(n)*cosk - mode_data.g2b1(n)*sink;
+    g2z += mode_data.g2a2(n)*cosk - mode_data.g2b2(n)*sink;
+  }
+}
+
+KOKKOS_INLINE_FUNCTION
+void AccumulateClebschVectorPotential(const ClebschGradientModeData &mode_data,
+                                      Real x1v, Real x2v, Real x3v,
+                                      Real &ax, Real &ay, Real &az) {
+  Real phi1 = 0.0;
+  Real g2x = 0.0;
+  Real g2y = 0.0;
+  Real g2z = 0.0;
+  for (int n = 0; n < mode_data.nmodes; ++n) {
+    const Real phase = mode_data.kx(n)*x1v + mode_data.ky(n)*x2v + mode_data.kz(n)*x3v;
+    Real sink = 0.0;
+    Real cosk = 0.0;
+    FastSinCos(phase, sink, cosk);
+    phi1 += mode_data.p1a(n)*cosk - mode_data.p1b(n)*sink;
+    g2x += mode_data.g2a0(n)*cosk - mode_data.g2b0(n)*sink;
+    g2y += mode_data.g2a1(n)*cosk - mode_data.g2b1(n)*sink;
+    g2z += mode_data.g2a2(n)*cosk - mode_data.g2b2(n)*sink;
+  }
+  ax = phi1 * g2x;
+  ay = phi1 * g2y;
+  az = phi1 * g2z;
 }
 
 VectorCoefficients ConvertVelocityToVectorPotentialCoefficients(
@@ -1286,8 +1237,7 @@ void SynthesizeVelocityFromVectorModes(MeshBlockPack *pmbp, const TurbulenceConf
 
 void SynthesizeClebschVelocityFromGradientModes(
     MeshBlockPack *pmbp, const TurbulenceConfig &cfg, Real den,
-    const ModeCatalog &catalog, const VectorCoefficients &grad1_coeffs,
-    const VectorCoefficients &grad2_coeffs) {
+    const ClebschGradientModeData &mode_data) {
   Mesh *pm = pmbp->pmesh;
   auto &indcs = pm->mb_indcs;
   const int is = indcs.is;
@@ -1300,75 +1250,7 @@ void SynthesizeClebschVelocityFromGradientModes(
   const int nx2 = indcs.nx2;
   const int nx3 = indcs.nx3;
   const int nmb = pmbp->nmb_thispack;
-
-  const int nmodes = catalog.KeptModes();
-  if (nmodes == 0) return;
-
-  DvceArray1D<Real> d_kx("scalar_mix_kx", nmodes);
-  DvceArray1D<Real> d_ky("scalar_mix_ky", nmodes);
-  DvceArray1D<Real> d_kz("scalar_mix_kz", nmodes);
-  DvceArray1D<Real> d_g1a0("scalar_mix_g1a0", nmodes);
-  DvceArray1D<Real> d_g1a1("scalar_mix_g1a1", nmodes);
-  DvceArray1D<Real> d_g1a2("scalar_mix_g1a2", nmodes);
-  DvceArray1D<Real> d_g1b0("scalar_mix_g1b0", nmodes);
-  DvceArray1D<Real> d_g1b1("scalar_mix_g1b1", nmodes);
-  DvceArray1D<Real> d_g1b2("scalar_mix_g1b2", nmodes);
-  DvceArray1D<Real> d_g2a0("scalar_mix_g2a0", nmodes);
-  DvceArray1D<Real> d_g2a1("scalar_mix_g2a1", nmodes);
-  DvceArray1D<Real> d_g2a2("scalar_mix_g2a2", nmodes);
-  DvceArray1D<Real> d_g2b0("scalar_mix_g2b0", nmodes);
-  DvceArray1D<Real> d_g2b1("scalar_mix_g2b1", nmodes);
-  DvceArray1D<Real> d_g2b2("scalar_mix_g2b2", nmodes);
-
-  auto h_kx = Kokkos::create_mirror_view(d_kx);
-  auto h_ky = Kokkos::create_mirror_view(d_ky);
-  auto h_kz = Kokkos::create_mirror_view(d_kz);
-  auto h_g1a0 = Kokkos::create_mirror_view(d_g1a0);
-  auto h_g1a1 = Kokkos::create_mirror_view(d_g1a1);
-  auto h_g1a2 = Kokkos::create_mirror_view(d_g1a2);
-  auto h_g1b0 = Kokkos::create_mirror_view(d_g1b0);
-  auto h_g1b1 = Kokkos::create_mirror_view(d_g1b1);
-  auto h_g1b2 = Kokkos::create_mirror_view(d_g1b2);
-  auto h_g2a0 = Kokkos::create_mirror_view(d_g2a0);
-  auto h_g2a1 = Kokkos::create_mirror_view(d_g2a1);
-  auto h_g2a2 = Kokkos::create_mirror_view(d_g2a2);
-  auto h_g2b0 = Kokkos::create_mirror_view(d_g2b0);
-  auto h_g2b1 = Kokkos::create_mirror_view(d_g2b1);
-  auto h_g2b2 = Kokkos::create_mirror_view(d_g2b2);
-
-  for (int n = 0; n < nmodes; ++n) {
-    h_kx(n) = catalog.kx[n];
-    h_ky(n) = catalog.ky[n];
-    h_kz(n) = catalog.kz[n];
-    h_g1a0(n) = grad1_coeffs.aka0[n];
-    h_g1a1(n) = grad1_coeffs.aka1[n];
-    h_g1a2(n) = grad1_coeffs.aka2[n];
-    h_g1b0(n) = grad1_coeffs.akb0[n];
-    h_g1b1(n) = grad1_coeffs.akb1[n];
-    h_g1b2(n) = grad1_coeffs.akb2[n];
-    h_g2a0(n) = grad2_coeffs.aka0[n];
-    h_g2a1(n) = grad2_coeffs.aka1[n];
-    h_g2a2(n) = grad2_coeffs.aka2[n];
-    h_g2b0(n) = grad2_coeffs.akb0[n];
-    h_g2b1(n) = grad2_coeffs.akb1[n];
-    h_g2b2(n) = grad2_coeffs.akb2[n];
-  }
-
-  Kokkos::deep_copy(d_kx, h_kx);
-  Kokkos::deep_copy(d_ky, h_ky);
-  Kokkos::deep_copy(d_kz, h_kz);
-  Kokkos::deep_copy(d_g1a0, h_g1a0);
-  Kokkos::deep_copy(d_g1a1, h_g1a1);
-  Kokkos::deep_copy(d_g1a2, h_g1a2);
-  Kokkos::deep_copy(d_g1b0, h_g1b0);
-  Kokkos::deep_copy(d_g1b1, h_g1b1);
-  Kokkos::deep_copy(d_g1b2, h_g1b2);
-  Kokkos::deep_copy(d_g2a0, h_g2a0);
-  Kokkos::deep_copy(d_g2a1, h_g2a1);
-  Kokkos::deep_copy(d_g2a2, h_g2a2);
-  Kokkos::deep_copy(d_g2b0, h_g2b0);
-  Kokkos::deep_copy(d_g2b1, h_g2b1);
-  Kokkos::deep_copy(d_g2b2, h_g2b2);
+  if (mode_data.nmodes == 0) return;
 
   auto &size = pmbp->pmb->mb_size;
   auto &u0 = pmbp->phydro->u0;
@@ -1394,17 +1276,8 @@ void SynthesizeClebschVelocityFromGradientModes(
     Real g2x = 0.0;
     Real g2y = 0.0;
     Real g2z = 0.0;
-    for (int n = 0; n < nmodes; ++n) {
-      const Real phase = d_kx(n)*x1v + d_ky(n)*x2v + d_kz(n)*x3v;
-      const Real cosk = cos(phase);
-      const Real sink = sin(phase);
-      g1x += d_g1a0(n)*cosk - d_g1b0(n)*sink;
-      g1y += d_g1a1(n)*cosk - d_g1b1(n)*sink;
-      g1z += d_g1a2(n)*cosk - d_g1b2(n)*sink;
-      g2x += d_g2a0(n)*cosk - d_g2b0(n)*sink;
-      g2y += d_g2a1(n)*cosk - d_g2b1(n)*sink;
-      g2z += d_g2a2(n)*cosk - d_g2b2(n)*sink;
-    }
+    AccumulateClebschGradients(mode_data, x1v, x2v, x3v,
+                               g1x, g1y, g1z, g2x, g2y, g2z);
 
     const Real vx = g1y*g2z - g1z*g2y;
     const Real vy = g1z*g2x - g1x*g2z;
@@ -1442,56 +1315,19 @@ VelocityStats NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig
   Real sum_mom1 = 0.0;
   Real sum_mom2 = 0.0;
   Real sum_mom3 = 0.0;
+  Real sum_v1 = 0.0;
+  Real sum_v2 = 0.0;
+  Real sum_v3 = 0.0;
+  Real sum_v1sqr_raw = 0.0;
+  Real sum_v2sqr_raw = 0.0;
+  Real sum_v3sqr_raw = 0.0;
+  Real sum_vol = 0.0;
 
   Kokkos::parallel_reduce("scalar_mix_turb_vel_mean",
                           Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, Real &s_mass, Real &s_mom1, Real &s_mom2, Real &s_mom3) {
-    const int m = idx/nkji;
-    int k = (idx - m*nkji)/nji;
-    int j = (idx - m*nkji - k*nji)/nx1;
-    int i = (idx - m*nkji - k*nji - j*nx1) + is;
-    k += ks;
-    j += js;
-
-    const Real vol = size.d_view(m).dx1 * size.d_view(m).dx2 * size.d_view(m).dx3;
-    const Real rho = u0(m,IDN,k,j,i);
-    s_mass += rho * vol;
-    s_mom1 += u0(m,IM1,k,j,i) * vol;
-    s_mom2 += u0(m,IM2,k,j,i) * vol;
-    s_mom3 += u0(m,IM3,k,j,i) * vol;
-  }, Kokkos::Sum<Real>(sum_mass), Kokkos::Sum<Real>(sum_mom1),
-     Kokkos::Sum<Real>(sum_mom2), Kokkos::Sum<Real>(sum_mom3));
-
-#if MPI_PARALLEL_ENABLED
-  Real local_mean[4] = {sum_mass, sum_mom1, sum_mom2, sum_mom3};
-  Real global_mean[4];
-  MPI_Allreduce(local_mean, global_mean, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
-  sum_mass = global_mean[0];
-  sum_mom1 = global_mean[1];
-  sum_mom2 = global_mean[2];
-  sum_mom3 = global_mean[3];
-#endif
-
-  const Real vmean1 = sum_mom1 / sum_mass;
-  const Real vmean2 = sum_mom2 / sum_mass;
-  const Real vmean3 = active_v3 ? sum_mom3 / sum_mass : 0.0;
-
-  par_for("scalar_mix_turb_vel_submean", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    const Real rho = u0(m,IDN,k,j,i);
-    u0(m,IM1,k,j,i) -= rho * vmean1;
-    u0(m,IM2,k,j,i) -= rho * vmean2;
-    u0(m,IM3,k,j,i) -= rho * vmean3;
-  });
-
-  Real sum_v1sqr = 0.0;
-  Real sum_v2sqr = 0.0;
-  Real sum_v3sqr = 0.0;
-  Real sum_vol = 0.0;
-
-  Kokkos::parallel_reduce("scalar_mix_turb_vel_rms",
-                          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, Real &s_v1sqr, Real &s_v2sqr, Real &s_v3sqr, Real &s_vol) {
+  KOKKOS_LAMBDA(const int &idx, Real &s_mass, Real &s_mom1, Real &s_mom2, Real &s_mom3,
+                Real &s_v1, Real &s_v2, Real &s_v3,
+                Real &s_v1sqr_raw, Real &s_v2sqr_raw, Real &s_v3sqr_raw, Real &s_vol) {
     const int m = idx/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/nx1;
@@ -1504,23 +1340,56 @@ VelocityStats NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig
     const Real v1 = u0(m,IM1,k,j,i)/rho;
     const Real v2 = u0(m,IM2,k,j,i)/rho;
     const Real v3 = active_v3 ? u0(m,IM3,k,j,i)/rho : 0.0;
-
-    s_v1sqr += v1*v1 * vol;
-    s_v2sqr += v2*v2 * vol;
-    s_v3sqr += v3*v3 * vol;
+    s_mass += rho * vol;
+    s_mom1 += u0(m,IM1,k,j,i) * vol;
+    s_mom2 += u0(m,IM2,k,j,i) * vol;
+    s_mom3 += u0(m,IM3,k,j,i) * vol;
+    s_v1 += v1 * vol;
+    s_v2 += v2 * vol;
+    s_v3 += v3 * vol;
+    s_v1sqr_raw += v1*v1 * vol;
+    s_v2sqr_raw += v2*v2 * vol;
+    s_v3sqr_raw += v3*v3 * vol;
     s_vol += vol;
-  }, Kokkos::Sum<Real>(sum_v1sqr), Kokkos::Sum<Real>(sum_v2sqr),
-     Kokkos::Sum<Real>(sum_v3sqr), Kokkos::Sum<Real>(sum_vol));
+  }, Kokkos::Sum<Real>(sum_mass), Kokkos::Sum<Real>(sum_mom1),
+     Kokkos::Sum<Real>(sum_mom2), Kokkos::Sum<Real>(sum_mom3),
+     Kokkos::Sum<Real>(sum_v1), Kokkos::Sum<Real>(sum_v2), Kokkos::Sum<Real>(sum_v3),
+     Kokkos::Sum<Real>(sum_v1sqr_raw), Kokkos::Sum<Real>(sum_v2sqr_raw),
+     Kokkos::Sum<Real>(sum_v3sqr_raw), Kokkos::Sum<Real>(sum_vol));
 
 #if MPI_PARALLEL_ENABLED
-  Real local_rms[4] = {sum_v1sqr, sum_v2sqr, sum_v3sqr, sum_vol};
-  Real global_rms[4];
-  MPI_Allreduce(local_rms, global_rms, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
-  sum_v1sqr = global_rms[0];
-  sum_v2sqr = global_rms[1];
-  sum_v3sqr = global_rms[2];
-  sum_vol = global_rms[3];
+  Real local_moments[11] = {sum_mass, sum_mom1, sum_mom2, sum_mom3,
+                            sum_v1, sum_v2, sum_v3,
+                            sum_v1sqr_raw, sum_v2sqr_raw, sum_v3sqr_raw,
+                            sum_vol};
+  Real global_moments[11];
+  MPI_Allreduce(local_moments, global_moments, 11, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  sum_mass = global_moments[0];
+  sum_mom1 = global_moments[1];
+  sum_mom2 = global_moments[2];
+  sum_mom3 = global_moments[3];
+  sum_v1 = global_moments[4];
+  sum_v2 = global_moments[5];
+  sum_v3 = global_moments[6];
+  sum_v1sqr_raw = global_moments[7];
+  sum_v2sqr_raw = global_moments[8];
+  sum_v3sqr_raw = global_moments[9];
+  sum_vol = global_moments[10];
 #endif
+
+  const Real vmean1 = sum_mom1 / sum_mass;
+  const Real vmean2 = sum_mom2 / sum_mass;
+  const Real vmean3 = active_v3 ? sum_mom3 / sum_mass : 0.0;
+
+  const Real sum_v1sqr = std::max(static_cast<Real>(0.0),
+                                  sum_v1sqr_raw - 2.0*vmean1*sum_v1
+                                  + vmean1*vmean1*sum_vol);
+  const Real sum_v2sqr = std::max(static_cast<Real>(0.0),
+                                  sum_v2sqr_raw - 2.0*vmean2*sum_v2
+                                  + vmean2*vmean2*sum_vol);
+  const Real sum_v3sqr = std::max(static_cast<Real>(0.0),
+                                  sum_v3sqr_raw - 2.0*vmean3*sum_v3
+                                  + vmean3*vmean3*sum_vol);
 
   const Real v1_rms = std::sqrt(sum_v1sqr / sum_vol);
   const Real v2_rms = std::sqrt(sum_v2sqr / sum_vol);
@@ -1542,9 +1411,10 @@ VelocityStats NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig
   par_for("scalar_mix_turb_vel_normalize", DevExeSpace(), 0, nmb-1,
           ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    u0(m,IM1,k,j,i) *= scale;
-    u0(m,IM2,k,j,i) *= scale;
-    u0(m,IM3,k,j,i) = active_v3 ? u0(m,IM3,k,j,i) * scale : 0.0;
+    const Real rho = u0(m,IDN,k,j,i);
+    u0(m,IM1,k,j,i) = (u0(m,IM1,k,j,i) - rho * vmean1) * scale;
+    u0(m,IM2,k,j,i) = (u0(m,IM2,k,j,i) - rho * vmean2) * scale;
+    u0(m,IM3,k,j,i) = active_v3 ? (u0(m,IM3,k,j,i) - rho * vmean3) * scale : 0.0;
   });
 
   return {vmean1, vmean2, vmean3, scale};
@@ -1552,7 +1422,7 @@ VelocityStats NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig
 
 void PopulateScalarFaceVelocitiesFromVectorPotential(
     MeshBlockPack *pmbp, const TurbulenceConfig &cfg, const ModeCatalog &catalog,
-    const VectorCoefficients &apot_coeffs) {
+    const VectorCoefficients &apot_coeffs, const VelocityStats &stats) {
   auto &indcs = pmbp->pmesh->mb_indcs;
   const int is = indcs.is;
   const int ie = indcs.ie;
@@ -1565,13 +1435,21 @@ void PopulateScalarFaceVelocitiesFromVectorPotential(
   const int nx3 = indcs.nx3;
   const int ng = indcs.ng;
   const int nmb = pmbp->nmb_thispack;
+  const bool multi_d = cfg.mesh_multi_d;
+  const bool three_d = cfg.mesh_three_d;
   const int nmodes = catalog.KeptModes();
 
   if (nmodes == 0) return;
 
   auto &hydro = *pmbp->phydro;
-  const bool multi_d = cfg.mesh_multi_d;
-  const bool three_d = cfg.mesh_three_d;
+  const int ncells1 = nx1 + 2*ng;
+  const int ncells2 = multi_d ? nx2 + 2*ng : 1;
+  const int ncells3 = three_d ? nx3 + 2*ng : 1;
+  if (!hydro.scalar_vface) {
+    hydro.scalar_vface = std::make_unique<DvceFaceFld4D<Real>>(
+        "scalar_vface", nmb, ncells3, ncells2, ncells1);
+  }
+  hydro.use_scalar_face_velocity = true;
 
   DvceArray1D<Real> d_kx("scalar_face_kx", nmodes);
   DvceArray1D<Real> d_ky("scalar_face_ky", nmodes);
@@ -1653,7 +1531,7 @@ void PopulateScalarFaceVelocitiesFromVectorPotential(
         d_kx, d_ky, d_kz, d_aA0, d_aA1, d_aA2, d_bA0, d_bA1, d_bA2, nmodes,
         x1v, x2v, x3v, size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
         multi_d, three_d, vx, vy, vz);
-    sface_x1f(m,k,j,i) = vx;
+    sface_x1f(m,k,j,i) = (vx - stats.vmean1) * stats.scale;
   });
 
   if (multi_d) {
@@ -1687,7 +1565,7 @@ void PopulateScalarFaceVelocitiesFromVectorPotential(
           d_kx, d_ky, d_kz, d_aA0, d_aA1, d_aA2, d_bA0, d_bA1, d_bA2, nmodes,
           x1v, x2v, x3v, size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
           multi_d, three_d, vx, vy, vz);
-      sface_x2f(m,k,j,i) = vy;
+      sface_x2f(m,k,j,i) = (vy - stats.vmean2) * stats.scale;
     });
   }
 
@@ -1724,34 +1602,14 @@ void PopulateScalarFaceVelocitiesFromVectorPotential(
           d_kx, d_ky, d_kz, d_aA0, d_aA1, d_aA2, d_bA0, d_bA1, d_bA2, nmodes,
           x1v, x2v, x3v, size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
           multi_d, three_d, vx, vy, vz);
-      sface_x3f(m,k,j,i) = vz;
+      sface_x3f(m,k,j,i) = (vz - stats.vmean3) * stats.scale;
     });
   }
 }
 
-void EnsureScalarFaceVelocityField(MeshBlockPack *pmbp) {
-  auto &indcs = pmbp->pmesh->mb_indcs;
-  auto &hydro = *pmbp->phydro;
-  const int ncells1 = indcs.nx1 + 2*indcs.ng;
-  const int ncells2 = pmbp->pmesh->multi_d ? indcs.nx2 + 2*indcs.ng : 1;
-  const int ncells3 = pmbp->pmesh->three_d ? indcs.nx3 + 2*indcs.ng : 1;
-  if (!hydro.scalar_vface) {
-    hydro.scalar_vface = std::make_unique<DvceFaceFld4D<Real>>(
-        "scalar_vface", pmbp->nmb_thispack, ncells3, ncells2, ncells1);
-  }
-  hydro.use_scalar_face_velocity = true;
-}
-
-void ZeroScalarFaceVelocities(MeshBlockPack *pmbp) {
-  EnsureScalarFaceVelocityField(pmbp);
-  auto &hydro = *pmbp->phydro;
-  Kokkos::deep_copy(hydro.scalar_vface->x1f, 0.0);
-  Kokkos::deep_copy(hydro.scalar_vface->x2f, 0.0);
-  Kokkos::deep_copy(hydro.scalar_vface->x3f, 0.0);
-}
-
-void AverageScalarFaceVelocitiesToCellCenters(MeshBlockPack *pmbp,
-                                              const TurbulenceConfig &cfg) {
+void PopulateScalarFaceVelocitiesFromClebsch(
+    MeshBlockPack *pmbp, const TurbulenceConfig &cfg,
+    const ClebschGradientModeData &mode_data, const VelocityStats &stats) {
   auto &indcs = pmbp->pmesh->mb_indcs;
   const int is = indcs.is;
   const int ie = indcs.ie;
@@ -1759,91 +1617,185 @@ void AverageScalarFaceVelocitiesToCellCenters(MeshBlockPack *pmbp,
   const int je = indcs.je;
   const int ks = indcs.ks;
   const int ke = indcs.ke;
-  const int nmb = pmbp->nmb_thispack;
-
-  auto &hydro = *pmbp->phydro;
-  auto sface_x1f = hydro.scalar_vface->x1f;
-  auto sface_x2f = hydro.scalar_vface->x2f;
-  auto sface_x3f = hydro.scalar_vface->x3f;
-  auto &u0 = hydro.u0;
-  const bool multi_d = cfg.mesh_multi_d;
-  const bool use_v3 = cfg.mesh_three_d && cfg.active_v3;
-
-  par_for("scalar_face_to_cell_center", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    const Real rho = u0(m, IDN, k, j, i);
-    const Real v1 = 0.5 * (sface_x1f(m, k, j, i) + sface_x1f(m, k, j, i + 1));
-    const Real v2 = multi_d
-                        ? 0.5 * (sface_x2f(m, k, j, i) + sface_x2f(m, k, j + 1, i))
-                        : 0.0;
-    const Real v3 = use_v3
-                        ? 0.5 * (sface_x3f(m, k, j, i) + sface_x3f(m, k + 1, j, i))
-                        : 0.0;
-    u0(m, IM1, k, j, i) = rho * v1;
-    u0(m, IM2, k, j, i) = rho * v2;
-    u0(m, IM3, k, j, i) = rho * v3;
-  });
-}
-
-void ApplyVelocityStatsToScalarFaceVelocities(MeshBlockPack *pmbp,
-                                              const TurbulenceConfig &cfg,
-                                              const VelocityStats &stats) {
-  auto &indcs = pmbp->pmesh->mb_indcs;
-  const int is = indcs.is;
-  const int ie = indcs.ie;
-  const int js = indcs.js;
-  const int je = indcs.je;
-  const int ks = indcs.ks;
-  const int ke = indcs.ke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
   const int ng = indcs.ng;
   const int nmb = pmbp->nmb_thispack;
+  const bool multi_d = cfg.mesh_multi_d;
+  const bool three_d = cfg.mesh_three_d;
+  if (mode_data.nmodes == 0) return;
 
   auto &hydro = *pmbp->phydro;
+  const int ncells1 = nx1 + 2*ng;
+  const int ncells2 = multi_d ? nx2 + 2*ng : 1;
+  const int ncells3 = three_d ? nx3 + 2*ng : 1;
+  if (!hydro.scalar_vface) {
+    hydro.scalar_vface = std::make_unique<DvceFaceFld4D<Real>>(
+        "scalar_vface", nmb, ncells3, ncells2, ncells1);
+  }
+  hydro.use_scalar_face_velocity = true;
+
+  auto &size = pmbp->pmb->mb_size;
   auto sface_x1f = hydro.scalar_vface->x1f;
   auto sface_x2f = hydro.scalar_vface->x2f;
   auto sface_x3f = hydro.scalar_vface->x3f;
-  const bool multi_d = cfg.mesh_multi_d;
-  const bool use_v3 = cfg.mesh_three_d && cfg.active_v3;
-  const bool three_d = cfg.mesh_three_d;
 
-  const int x1_kl = three_d ? ks - ng : ks;
-  const int x1_ku = three_d ? ke + ng : ke;
-  const int x1_jl = multi_d ? js - ng : js;
-  const int x1_ju = multi_d ? je + ng : je;
-  par_for("scalar_face_apply_stats_x1", DevExeSpace(), 0, nmb-1,
-          x1_kl, x1_ku, x1_jl, x1_ju, is - ng, ie + ng + 1,
+  int il = is - ng;
+  int iu = ie + ng + 1;
+  int jl = multi_d ? js - ng : js;
+  int ju = multi_d ? je + ng : je;
+  int kl = three_d ? ks - ng : ks;
+  int ku = three_d ? ke + ng : ke;
+  par_for("scalar_face_clebsch_x1", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    sface_x1f(m, k, j, i) = (sface_x1f(m, k, j, i) - stats.vmean1) * stats.scale;
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    const Real x1v = LeftEdgeX(i-is, nx1, x1min, x1max);
+
+    Real vx = 0.0;
+    if (multi_d && three_d) {
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+      const Real x2m = LeftEdgeX(j-js, nx2, x2min, x2max);
+      const Real x2p = LeftEdgeX(j-js+1, nx2, x2min, x2max);
+
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      const Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+      const Real x3m = LeftEdgeX(k-ks, nx3, x3min, x3max);
+      const Real x3p = LeftEdgeX(k-ks+1, nx3, x3min, x3max);
+
+      Real ax_tmp = 0.0;
+      Real ay_tmp = 0.0;
+      Real az_yp = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1v, x2p, x3v,
+                                       ax_tmp, ay_tmp, az_yp);
+      Real az_ym = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1v, x2m, x3v,
+                                       ax_tmp, ay_tmp, az_ym);
+      Real ay_zp = 0.0;
+      Real az_tmp = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1v, x2v, x3p,
+                                       ax_tmp, ay_zp, az_tmp);
+      Real ay_zm = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1v, x2v, x3m,
+                                       ax_tmp, ay_zm, az_tmp);
+
+      vx = (az_yp - az_ym)/size.d_view(m).dx2 - (ay_zp - ay_zm)/size.d_view(m).dx3;
+    }
+    sface_x1f(m,k,j,i) = (vx - stats.vmean1) * stats.scale;
   });
 
   if (multi_d) {
-    const int x2_kl = three_d ? ks - ng : ks;
-    const int x2_ku = three_d ? ke + ng : ke;
-    par_for("scalar_face_apply_stats_x2", DevExeSpace(), 0, nmb-1,
-            x2_kl, x2_ku, js - ng, je + ng + 1, is - ng, ie + ng,
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng + 1;
+    kl = three_d ? ks - ng : ks;
+    ku = three_d ? ke + ng : ke;
+    par_for("scalar_face_clebsch_x2", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      sface_x2f(m, k, j, i) = (sface_x2f(m, k, j, i) - stats.vmean2) * stats.scale;
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      const Real x1m = LeftEdgeX(i-is, nx1, x1min, x1max);
+      const Real x1p = LeftEdgeX(i-is+1, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = LeftEdgeX(j-js, nx2, x2min, x2max);
+
+      Real vy = 0.0;
+      if (three_d) {
+        Real &x3min = size.d_view(m).x3min;
+        Real &x3max = size.d_view(m).x3max;
+        const Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+        const Real x3m = LeftEdgeX(k-ks, nx3, x3min, x3max);
+        const Real x3p = LeftEdgeX(k-ks+1, nx3, x3min, x3max);
+
+        Real ax_zp = 0.0;
+        Real ay_tmp = 0.0;
+        Real az_tmp = 0.0;
+        AccumulateClebschVectorPotential(mode_data, x1v, x2v, x3p,
+                                         ax_zp, ay_tmp, az_tmp);
+        Real ax_zm = 0.0;
+        AccumulateClebschVectorPotential(mode_data, x1v, x2v, x3m,
+                                         ax_zm, ay_tmp, az_tmp);
+        Real ax_tmp = 0.0;
+        Real az_xp = 0.0;
+        AccumulateClebschVectorPotential(mode_data, x1p, x2v, x3v,
+                                         ax_tmp, ay_tmp, az_xp);
+        Real az_xm = 0.0;
+        AccumulateClebschVectorPotential(mode_data, x1m, x2v, x3v,
+                                         ax_tmp, ay_tmp, az_xm);
+
+        vy = (ax_zp - ax_zm)/size.d_view(m).dx3 - (az_xp - az_xm)/size.d_view(m).dx1;
+      }
+      sface_x2f(m,k,j,i) = (vy - stats.vmean2) * stats.scale;
     });
-  } else {
-    Kokkos::deep_copy(hydro.scalar_vface->x2f, 0.0);
   }
 
   if (three_d) {
-    par_for("scalar_face_apply_stats_x3", DevExeSpace(), 0, nmb-1,
-            ks - ng, ke + ng + 1, js - ng, je + ng, is - ng, ie + ng,
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng;
+    kl = ks - ng;
+    ku = ke + ng + 1;
+    par_for("scalar_face_clebsch_x3", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      sface_x3f(m, k, j, i) = use_v3
-                                  ? (sface_x3f(m, k, j, i) - stats.vmean3) * stats.scale
-                                  : 0.0;
+      if (!cfg.active_v3) {
+        sface_x3f(m,k,j,i) = 0.0;
+        return;
+      }
+
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      const Real x1m = LeftEdgeX(i-is, nx1, x1min, x1max);
+      const Real x1p = LeftEdgeX(i-is+1, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+      const Real x2m = LeftEdgeX(j-js, nx2, x2min, x2max);
+      const Real x2p = LeftEdgeX(j-js+1, nx2, x2min, x2max);
+
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      const Real x3v = LeftEdgeX(k-ks, nx3, x3min, x3max);
+
+      Real ax_tmp = 0.0;
+      Real ay_xp = 0.0;
+      Real az_tmp = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1p, x2v, x3v,
+                                       ax_tmp, ay_xp, az_tmp);
+      Real ay_xm = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1m, x2v, x3v,
+                                       ax_tmp, ay_xm, az_tmp);
+      Real ax_yp = 0.0;
+      Real ay_tmp = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1v, x2p, x3v,
+                                       ax_yp, ay_tmp, az_tmp);
+      Real ax_ym = 0.0;
+      AccumulateClebschVectorPotential(mode_data, x1v, x2m, x3v,
+                                       ax_ym, ay_tmp, az_tmp);
+
+      const Real vz = (ay_xp - ay_xm)/size.d_view(m).dx1
+                    - (ax_yp - ax_ym)/size.d_view(m).dx2;
+      sface_x3f(m,k,j,i) = (vz - stats.vmean3) * stats.scale;
     });
-  } else {
-    Kokkos::deep_copy(hydro.scalar_vface->x3f, 0.0);
   }
 }
 
-void UpdateScalarFaceVelocityDiagnostics(MeshBlockPack *pmbp,
-                                         const TurbulenceConfig &cfg,
-                                         VelocityStats &stats) {
+FaceDivergenceStats ComputeScalarFaceDivergenceStats(MeshBlockPack *pmbp,
+                                                     const TurbulenceConfig &cfg) {
+  FaceDivergenceStats stats;
+  auto &hydro = *pmbp->phydro;
+  if (!hydro.scalar_vface) return stats;
+
   auto &indcs = pmbp->pmesh->mb_indcs;
   const int is = indcs.is;
   const int ie = indcs.ie;
@@ -1855,241 +1807,83 @@ void UpdateScalarFaceVelocityDiagnostics(MeshBlockPack *pmbp,
   const int nx2 = indcs.nx2;
   const int nx3 = indcs.nx3;
   const int nmb = pmbp->nmb_thispack;
-  const int nmkji = nmb * nx3 * nx2 * nx1;
-  const int nkji = nx3 * nx2 * nx1;
-  const int nji = nx2 * nx1;
-
-  auto &hydro = *pmbp->phydro;
-  auto sface_x1f = hydro.scalar_vface->x1f;
-  auto sface_x2f = hydro.scalar_vface->x2f;
-  auto sface_x3f = hydro.scalar_vface->x3f;
-  auto &size = pmbp->pmb->mb_size;
   const bool multi_d = cfg.mesh_multi_d;
   const bool three_d = cfg.mesh_three_d;
 
-  Real sum_div2 = 0.0;
-  Real sum_grad2 = 0.0;
-  Real max_abs_div = 0.0;
-  Kokkos::parallel_reduce("scalar_face_divergence_norm",
+  const int nmkji = nmb*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1;
+  const int nji = nx2*nx1;
+
+  auto &size = pmbp->pmb->mb_size;
+  auto sface_x1f = hydro.scalar_vface->x1f;
+  auto sface_x2f = hydro.scalar_vface->x2f;
+  auto sface_x3f = hydro.scalar_vface->x3f;
+
+  Real sum_div2_vol = 0.0;
+  Real sum_vol = 0.0;
+  Real max_abs = 0.0;
+  Kokkos::parallel_reduce("scalar_face_divergence",
                           Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, Real &s_div2, Real &s_grad2, Real &s_maxdiv) {
-    const int m = idx / nkji;
-    int k = (idx - m * nkji) / nji;
-    int j = (idx - m * nkji - k * nji) / nx1;
-    int i = (idx - m * nkji - k * nji - j * nx1) + is;
+  KOKKOS_LAMBDA(const int &idx, Real &s_div2_vol, Real &s_vol, Real &s_max_abs) {
+    const int m = idx/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/nx1;
+    int i = (idx - m*nkji - k*nji - j*nx1) + is;
     k += ks;
     j += js;
 
     const Real dx1 = size.d_view(m).dx1;
     const Real dx2 = size.d_view(m).dx2;
     const Real dx3 = size.d_view(m).dx3;
-    const Real d1 = (sface_x1f(m, k, j, i + 1) - sface_x1f(m, k, j, i)) / dx1;
-    const Real d2 = multi_d
-                        ? (sface_x2f(m, k, j + 1, i) - sface_x2f(m, k, j, i)) / dx2
-                        : 0.0;
-    const Real d3 = three_d
-                        ? (sface_x3f(m, k + 1, j, i) - sface_x3f(m, k, j, i)) / dx3
-                        : 0.0;
-    const Real div = d1 + d2 + d3;
-    s_div2 += div * div;
-    s_grad2 += d1 * d1 + d2 * d2 + d3 * d3;
+    const Real vol = dx1 * dx2 * dx3;
+    Real div = (sface_x1f(m,k,j,i+1) - sface_x1f(m,k,j,i)) / dx1;
+    if (multi_d) {
+      div += (sface_x2f(m,k,j+1,i) - sface_x2f(m,k,j,i)) / dx2;
+    }
+    if (three_d) {
+      div += (sface_x3f(m,k+1,j,i) - sface_x3f(m,k,j,i)) / dx3;
+    }
     const Real abs_div = fabs(div);
-    if (abs_div > s_maxdiv) s_maxdiv = abs_div;
-  }, Kokkos::Sum<Real>(sum_div2), Kokkos::Sum<Real>(sum_grad2),
-     Kokkos::Max<Real>(max_abs_div));
+    s_div2_vol += div * div * vol;
+    s_vol += vol;
+    if (abs_div > s_max_abs) s_max_abs = abs_div;
+  }, Kokkos::Sum<Real>(sum_div2_vol), Kokkos::Sum<Real>(sum_vol),
+     Kokkos::Max<Real>(max_abs));
 
 #if MPI_PARALLEL_ENABLED
-  Real local_sum[2] = {sum_div2, sum_grad2};
-  Real global_sum[2];
+  Real local_sum[2] = {sum_div2_vol, sum_vol};
+  Real global_sum[2] = {0.0, 0.0};
   MPI_Allreduce(local_sum, global_sum, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
-  sum_div2 = global_sum[0];
-  sum_grad2 = global_sum[1];
-  Real global_max_div = 0.0;
-  MPI_Allreduce(&max_abs_div, &global_max_div, 1, MPI_ATHENA_REAL, MPI_MAX,
-                MPI_COMM_WORLD);
-  max_abs_div = global_max_div;
+  sum_div2_vol = global_sum[0];
+  sum_vol = global_sum[1];
+  Real global_max = 0.0;
+  MPI_Allreduce(&max_abs, &global_max, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  max_abs = global_max;
 #endif
 
-  stats.scalar_face_velocity = true;
-  stats.face_divergence_ratio = (sum_grad2 > kTiny) ? std::sqrt(sum_div2 / sum_grad2) : 0.0;
-  stats.face_divergence_linf = max_abs_div;
+  if (sum_vol <= 0.0) return stats;
+  stats.valid = true;
+  stats.rms = std::sqrt(sum_div2_vol / sum_vol);
+  stats.max_abs = max_abs;
+  Real dx_min = cfg.lx / static_cast<Real>(cfg.global_nx1);
+  if (multi_d) dx_min = std::min(dx_min, cfg.ly / static_cast<Real>(cfg.global_nx2));
+  if (three_d) dx_min = std::min(dx_min, cfg.lz / static_cast<Real>(cfg.global_nx3));
+  const Real norm = (dx_min > 0.0) ? cfg.v_rms / dx_min : 0.0;
+  if (norm > kTiny) {
+    stats.normalized_rms = stats.rms / norm;
+    stats.normalized_max_abs = stats.max_abs / norm;
+  }
+  return stats;
 }
 
-KOKKOS_INLINE_FUNCTION
-void AccumulateScalarFieldAndGradient(const DvceArray1D<Real> &d_kx,
-                                      const DvceArray1D<Real> &d_ky,
-                                      const DvceArray1D<Real> &d_kz,
-                                      const DvceArray1D<Real> &d_aka,
-                                      const DvceArray1D<Real> &d_akb,
-                                      int mode_count, Real x1v, Real x2v, Real x3v,
-                                      Real &phi, Real &d1phi, Real &d2phi, Real &d3phi) {
-  for (int n = 0; n < mode_count; ++n) {
-    const Real phase = d_kx(n) * x1v + d_ky(n) * x2v + d_kz(n) * x3v;
-    const Real cosk = cos(phase);
-    const Real sink = sin(phase);
-    const Real a = d_aka(n);
-    const Real b = d_akb(n);
-    const Real sin_term = a * sink + b * cosk;
-    phi += a * cosk - b * sink;
-    d1phi -= d_kx(n) * sin_term;
-    d2phi -= d_ky(n) * sin_term;
-    d3phi -= d_kz(n) * sin_term;
-  }
-}
-
-void PopulateScalarFaceVelocitiesFromClebschPotential(
-    MeshBlockPack *pmbp, const TurbulenceConfig &cfg, const ModeCatalog &catalog,
-    const ScalarCoefficients &phi1_coeffs, const ScalarCoefficients &phi2_coeffs) {
-  auto &indcs = pmbp->pmesh->mb_indcs;
-  const int is = indcs.is;
-  const int ie = indcs.ie;
-  const int js = indcs.js;
-  const int je = indcs.je;
-  const int ks = indcs.ks;
-  const int ke = indcs.ke;
-  const int nx1 = indcs.nx1;
-  const int nx2 = indcs.nx2;
-  const int nx3 = indcs.nx3;
-  const int ng = indcs.ng;
-  const int nmb = pmbp->nmb_thispack;
-  const int nmodes = catalog.KeptModes();
-
-  if (nmodes == 0) return;
-
-  DvceArray1D<Real> d_kx("scalar_clebsch_kx", nmodes);
-  DvceArray1D<Real> d_ky("scalar_clebsch_ky", nmodes);
-  DvceArray1D<Real> d_kz("scalar_clebsch_kz", nmodes);
-  DvceArray1D<Real> d_phi1a("scalar_clebsch_phi1a", nmodes);
-  DvceArray1D<Real> d_phi1b("scalar_clebsch_phi1b", nmodes);
-  DvceArray1D<Real> d_phi2a("scalar_clebsch_phi2a", nmodes);
-  DvceArray1D<Real> d_phi2b("scalar_clebsch_phi2b", nmodes);
-
-  auto h_kx = Kokkos::create_mirror_view(d_kx);
-  auto h_ky = Kokkos::create_mirror_view(d_ky);
-  auto h_kz = Kokkos::create_mirror_view(d_kz);
-  auto h_phi1a = Kokkos::create_mirror_view(d_phi1a);
-  auto h_phi1b = Kokkos::create_mirror_view(d_phi1b);
-  auto h_phi2a = Kokkos::create_mirror_view(d_phi2a);
-  auto h_phi2b = Kokkos::create_mirror_view(d_phi2b);
-
-  for (int n = 0; n < nmodes; ++n) {
-    h_kx(n) = catalog.kx[n];
-    h_ky(n) = catalog.ky[n];
-    h_kz(n) = catalog.kz[n];
-    h_phi1a(n) = phi1_coeffs.aka[n];
-    h_phi1b(n) = phi1_coeffs.akb[n];
-    h_phi2a(n) = phi2_coeffs.aka[n];
-    h_phi2b(n) = phi2_coeffs.akb[n];
-  }
-
-  Kokkos::deep_copy(d_kx, h_kx);
-  Kokkos::deep_copy(d_ky, h_ky);
-  Kokkos::deep_copy(d_kz, h_kz);
-  Kokkos::deep_copy(d_phi1a, h_phi1a);
-  Kokkos::deep_copy(d_phi1b, h_phi1b);
-  Kokkos::deep_copy(d_phi2a, h_phi2a);
-  Kokkos::deep_copy(d_phi2b, h_phi2b);
-
-  const int ncells1 = nx1 + 2 * ng;
-  const int ncells2 = nx2 + 2 * ng;
-  const int ncells3 = nx3 + 2 * ng;
-  DvceEdgeFld4D<Real> apot("scalar_clebsch_apot", nmb, ncells3, ncells2, ncells1);
-  auto apot_x1e = apot.x1e;
-  auto apot_x2e = apot.x2e;
-  auto apot_x3e = apot.x3e;
-
-  auto &size = pmbp->pmb->mb_size;
-  auto &hydro = *pmbp->phydro;
-  auto sface_x1f = hydro.scalar_vface->x1f;
-  auto sface_x2f = hydro.scalar_vface->x2f;
-  auto sface_x3f = hydro.scalar_vface->x3f;
-
-  par_for("scalar_clebsch_apot_x1", DevExeSpace(), 0, nmb-1,
-          ks - ng, ke + ng + 1, js - ng, je + ng + 1, is - ng, ie + ng,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real &x1min = size.d_view(m).x1min;
-    Real &x1max = size.d_view(m).x1max;
-    Real &x2min = size.d_view(m).x2min;
-    Real &x2max = size.d_view(m).x2max;
-    Real &x3min = size.d_view(m).x3min;
-    Real &x3max = size.d_view(m).x3max;
-    const Real x1v = CellCenterX(i - is, nx1, x1min, x1max);
-    const Real x2v = LeftEdgeX(j - js, nx2, x2min, x2max);
-    const Real x3v = LeftEdgeX(k - ks, nx3, x3min, x3max);
-    Real phi1 = 0.0, d1phi1 = 0.0, d2phi1 = 0.0, d3phi1 = 0.0;
-    Real phi2 = 0.0, d1phi2 = 0.0, d2phi2 = 0.0, d3phi2 = 0.0;
-    AccumulateScalarFieldAndGradient(d_kx, d_ky, d_kz, d_phi1a, d_phi1b, nmodes,
-                                     x1v, x2v, x3v, phi1, d1phi1, d2phi1, d3phi1);
-    AccumulateScalarFieldAndGradient(d_kx, d_ky, d_kz, d_phi2a, d_phi2b, nmodes,
-                                     x1v, x2v, x3v, phi2, d1phi2, d2phi2, d3phi2);
-    apot_x1e(m, k, j, i) = 0.5 * (phi1 * d1phi2 - phi2 * d1phi1);
-  });
-
-  par_for("scalar_clebsch_apot_x2", DevExeSpace(), 0, nmb-1,
-          ks - ng, ke + ng + 1, js - ng, je + ng, is - ng, ie + ng + 1,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real &x1min = size.d_view(m).x1min;
-    Real &x1max = size.d_view(m).x1max;
-    Real &x2min = size.d_view(m).x2min;
-    Real &x2max = size.d_view(m).x2max;
-    Real &x3min = size.d_view(m).x3min;
-    Real &x3max = size.d_view(m).x3max;
-    const Real x1v = LeftEdgeX(i - is, nx1, x1min, x1max);
-    const Real x2v = CellCenterX(j - js, nx2, x2min, x2max);
-    const Real x3v = LeftEdgeX(k - ks, nx3, x3min, x3max);
-    Real phi1 = 0.0, d1phi1 = 0.0, d2phi1 = 0.0, d3phi1 = 0.0;
-    Real phi2 = 0.0, d1phi2 = 0.0, d2phi2 = 0.0, d3phi2 = 0.0;
-    AccumulateScalarFieldAndGradient(d_kx, d_ky, d_kz, d_phi1a, d_phi1b, nmodes,
-                                     x1v, x2v, x3v, phi1, d1phi1, d2phi1, d3phi1);
-    AccumulateScalarFieldAndGradient(d_kx, d_ky, d_kz, d_phi2a, d_phi2b, nmodes,
-                                     x1v, x2v, x3v, phi2, d1phi2, d2phi2, d3phi2);
-    apot_x2e(m, k, j, i) = 0.5 * (phi1 * d2phi2 - phi2 * d2phi1);
-  });
-
-  par_for("scalar_clebsch_apot_x3", DevExeSpace(), 0, nmb-1,
-          ks - ng, ke + ng, js - ng, je + ng + 1, is - ng, ie + ng + 1,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real &x1min = size.d_view(m).x1min;
-    Real &x1max = size.d_view(m).x1max;
-    Real &x2min = size.d_view(m).x2min;
-    Real &x2max = size.d_view(m).x2max;
-    Real &x3min = size.d_view(m).x3min;
-    Real &x3max = size.d_view(m).x3max;
-    const Real x1v = LeftEdgeX(i - is, nx1, x1min, x1max);
-    const Real x2v = LeftEdgeX(j - js, nx2, x2min, x2max);
-    const Real x3v = CellCenterX(k - ks, nx3, x3min, x3max);
-    Real phi1 = 0.0, d1phi1 = 0.0, d2phi1 = 0.0, d3phi1 = 0.0;
-    Real phi2 = 0.0, d1phi2 = 0.0, d2phi2 = 0.0, d3phi2 = 0.0;
-    AccumulateScalarFieldAndGradient(d_kx, d_ky, d_kz, d_phi1a, d_phi1b, nmodes,
-                                     x1v, x2v, x3v, phi1, d1phi1, d2phi1, d3phi1);
-    AccumulateScalarFieldAndGradient(d_kx, d_ky, d_kz, d_phi2a, d_phi2b, nmodes,
-                                     x1v, x2v, x3v, phi2, d1phi2, d2phi2, d3phi2);
-    apot_x3e(m, k, j, i) = 0.5 * (phi1 * d3phi2 - phi2 * d3phi1);
-  });
-
-  par_for("scalar_clebsch_face_x1", DevExeSpace(), 0, nmb-1,
-          ks - ng, ke + ng, js - ng, je + ng, is - ng, ie + ng + 1,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    sface_x1f(m, k, j, i) =
-        (apot_x3e(m, k, j + 1, i) - apot_x3e(m, k, j, i)) / size.d_view(m).dx2
-        - (apot_x2e(m, k + 1, j, i) - apot_x2e(m, k, j, i)) / size.d_view(m).dx3;
-  });
-
-  par_for("scalar_clebsch_face_x2", DevExeSpace(), 0, nmb-1,
-          ks - ng, ke + ng, js - ng, je + ng + 1, is - ng, ie + ng,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    sface_x2f(m, k, j, i) =
-        (apot_x1e(m, k + 1, j, i) - apot_x1e(m, k, j, i)) / size.d_view(m).dx3
-        - (apot_x3e(m, k, j, i + 1) - apot_x3e(m, k, j, i)) / size.d_view(m).dx1;
-  });
-
-  par_for("scalar_clebsch_face_x3", DevExeSpace(), 0, nmb-1,
-          ks - ng, ke + ng + 1, js - ng, je + ng, is - ng, ie + ng,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    sface_x3f(m, k, j, i) =
-        (apot_x2e(m, k, j, i + 1) - apot_x2e(m, k, j, i)) / size.d_view(m).dx1
-        - (apot_x1e(m, k, j + 1, i) - apot_x1e(m, k, j, i)) / size.d_view(m).dx2;
-  });
+void PrintScalarFaceDivergenceStats(const FaceDivergenceStats &stats) {
+  if (!stats.valid || global_variable::my_rank != 0) return;
+  std::cout << "  scalar_vface_discrete_divergence:"
+            << " rms=" << stats.rms
+            << ", max_abs=" << stats.max_abs
+            << ", normalized_rms=" << stats.normalized_rms
+            << ", normalized_max_abs=" << stats.normalized_max_abs
+            << std::endl;
 }
 
 std::vector<int> CountModesPerShell(const ModeCatalog &catalog, int nhigh) {
@@ -2123,41 +1917,43 @@ int MaxSupportedShell(const TurbulenceConfig &cfg) {
 
 void LogModeSummary(const TurbulenceConfig &cfg, const ModeCatalog &catalog,
                     const std::string &label) {
-  std::cout << "  " << label << ": total_modes_in_shell=" << catalog.total_modes
-            << ", kept_via_importance_sampling=" << catalog.KeptModes() << std::endl;
+  std::cout << "  " << label << ": total_modes_in_shell=" << catalog.total_modes;
+  if (cfg.exact_shell_contract) {
+    std::cout << ", kept_via_shell_quota=" << catalog.KeptModes();
+  } else {
+    std::cout << ", kept_via_importance_sampling=" << catalog.KeptModes();
+  }
+  std::cout << std::endl;
   if (cfg.method == VelocityMethod::Stream2D && cfg.stream_2d) {
     std::cout << "  " << label << ": stream_2d coefficients preserve "
               << "E_u(k) ~ k^(-expo) through |psi_k| ~ k^{-(expo+3)/2}" << std::endl;
+  }
+  if (cfg.exact_shell_contract) {
+    std::cout << "  " << label << ": exact_shell enforces raw centered-shell energy "
+              << "E(k_shell) ~ k_shell^(-expo)" << std::endl;
   }
 }
 
 void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
                            bool projection_true_2d) {
-  (void)den;
-  const WallTimePoint init_start_time = WallClock::now();
-  Real recorded_init_wall_seconds = -1.0;
-  auto log_init_time = [&init_start_time, &recorded_init_wall_seconds]() {
-    const Real wall_seconds = (recorded_init_wall_seconds > 0.0)
-                                  ? recorded_init_wall_seconds
-                                  : GlobalMaxReal(ElapsedWallSeconds(init_start_time));
-    if (global_variable::my_rank == 0) {
-      std::cout << "  velocity_init_wall_seconds=" << wall_seconds << std::endl;
-    }
-  };
-
   const TurbulenceConfig cfg = ReadTurbulenceConfig(pin, pmbp->pmesh, projection_true_2d);
+  ValidateExactShellContract(cfg);
   auto &hydro = *pmbp->phydro;
-  if (!hydro.scalar_only) {
-    FatalProblemSetup("scalar_mixing now requires <hydro>/scalar_only = true because "
-                      "the problem always uses the divergence-free scalar face velocity.");
+  hydro.use_scalar_face_velocity = false;
+  hydro.scalar_vface.reset();
+  const bool face_requested = cfg.divfree_scalar_flux;
+  const bool face_scalar_ok = hydro.scalar_only && (hydro.nscalars > 0);
+
+  if (face_requested && !hydro.scalar_only && global_variable::my_rank == 0) {
+    std::cout << "  NOTE: divfree_scalar_flux ignored (scalar_only=false)." << std::endl;
+  } else if (face_requested && hydro.nscalars == 0 && global_variable::my_rank == 0) {
+    std::cout << "  NOTE: divfree_scalar_flux ignored (nscalars=0)." << std::endl;
   }
   if (cfg.legacy_stream_bool_used && global_variable::my_rank == 0) {
     std::cout << "  NOTE: turb_use_stream_function is deprecated; prefer "
               << "turb_velocity_method=stream_2d or turb_velocity_method=clebsch."
               << std::endl;
   }
-
-  ZeroScalarFaceVelocities(pmbp);
 
   if (cfg.method == VelocityMethod::Projection) {
     RNG_State rstate{};
@@ -2167,7 +1963,6 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     if (catalog.KeptModes() == 0) {
       std::cout << "### WARNING: No turbulent modes kept in range [" << cfg.nlow << ", "
                 << cfg.nhigh << "]. Using zero velocity." << std::endl;
-      log_init_time();
       return;
     }
 
@@ -2175,7 +1970,9 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
       std::cout << "Initializing turbulent velocity field:" << std::endl
                 << "  velocity_method=projection" << std::endl
                 << "  v_rms=" << cfg.v_rms << ", nlow=" << cfg.nlow
-                << ", nhigh=" << cfg.nhigh << ", expo=" << cfg.expo << std::endl
+                << ", nhigh=" << cfg.nhigh << ", expo=" << cfg.expo
+                << ", sol_frac=" << cfg.sol_frac << std::endl
+                << "  spectrum_contract=" << cfg.spectrum_contract << std::endl
                 << "  true_2d=" << (cfg.projection_true_2d ? "true" : "false")
                 << ", active_velocity_components=" << (cfg.active_v3 ? 3 : 2)
                 << std::endl
@@ -2185,18 +1982,25 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     }
 
     const VectorCoefficients coeffs = GenerateProjectionCoefficients(cfg, catalog, &rstate);
-    const VectorCoefficients apot_coeffs =
-        ConvertVelocityToVectorPotentialCoefficients(catalog, coeffs);
-    PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs);
-    AverageScalarFaceVelocitiesToCellCenters(pmbp, cfg);
-    VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
-    ApplyVelocityStatsToScalarFaceVelocities(pmbp, cfg, stats);
-    AverageScalarFaceVelocitiesToCellCenters(pmbp, cfg);
-    UpdateScalarFaceVelocityDiagnostics(pmbp, cfg, stats);
-    const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
-    recorded_init_wall_seconds = init_wall_seconds;
-    WriteProjectionDiagnostics(cfg, catalog, coeffs, stats, init_wall_seconds);
-    log_init_time();
+    SynthesizeVelocityFromVectorModes(pmbp, cfg, den, catalog, coeffs);
+    const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+    bool use_face_velocity = face_requested && face_scalar_ok;
+    if (use_face_velocity && cfg.sol_frac < 1.0) {
+      use_face_velocity = false;
+      if (global_variable::my_rank == 0) {
+        std::cout << "  NOTE: divfree_scalar_flux ignored when turb_sol_frac < 1 in "
+                  << "projection mode." << std::endl;
+      }
+    }
+    if (use_face_velocity) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
+      }
+      const VectorCoefficients apot_coeffs =
+          ConvertVelocityToVectorPotentialCoefficients(catalog, coeffs);
+      PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
+      PrintScalarFaceDivergenceStats(ComputeScalarFaceDivergenceStats(pmbp, cfg));
+    }
     return;
   }
 
@@ -2204,14 +2008,19 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     std::cout << "Initializing turbulent velocity field:" << std::endl
               << "  velocity_method=" << VelocityMethodName(cfg.method) << std::endl
               << "  v_rms=" << cfg.v_rms << ", nlow=" << cfg.nlow
-              << ", nhigh=" << cfg.nhigh << ", expo=" << cfg.expo << std::endl
+              << ", nhigh=" << cfg.nhigh << ", expo=" << cfg.expo
+              << ", sol_frac=" << cfg.sol_frac << std::endl
+              << "  spectrum_contract=" << cfg.spectrum_contract << std::endl
               << "  active_velocity_components=" << (cfg.active_v3 ? 3 : 2) << std::endl
               << "  k_crit=" << cfg.k_crit
               << " (wavenumber=" << cfg.k_crit_mag << ")" << std::endl;
-    if (cfg.clebsch_3d) {
+    if (cfg.stream_2d) {
+      std::cout << "  turb_sol_frac is ignored in stream_2d mode." << std::endl;
+    } else if (cfg.clebsch_3d) {
       std::cout << "  alpha=" << cfg.alpha
                 << ", velocity_slope=" << cfg.velocity_slope
-                << ", phi_slope=" << cfg.phi_slope << std::endl;
+                << ", phi_slope=" << cfg.phi_slope << std::endl
+                << "  turb_sol_frac is ignored in clebsch mode." << std::endl;
       if (cfg.clebsch_alpha_from_expo) {
         std::cout << "  NOTE: clebsch now prefers turb_alpha; using alpha=(turb_expo-1)/2 "
                   << "for compatibility." << std::endl;
@@ -2227,7 +2036,6 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     if (catalog.KeptModes() == 0) {
       std::cout << "### WARNING: No turbulent modes kept in range [" << cfg.nlow << ", "
                 << cfg.nhigh << "]. Using zero velocity." << std::endl;
-      log_init_time();
       return;
     }
 
@@ -2239,34 +2047,32 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     const ScalarCoefficients psi_coeffs = GenerateStream2DPsiCoefficients(cfg, catalog,
                                                                           &rstate);
     const VectorCoefficients vel_coeffs = ConvertPsiToVelocityCoefficients(catalog, psi_coeffs);
-    const VectorCoefficients apot_coeffs =
-        ConvertVelocityToVectorPotentialCoefficients(catalog, vel_coeffs);
-    PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs);
-    AverageScalarFaceVelocitiesToCellCenters(pmbp, cfg);
-    VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
-    ApplyVelocityStatsToScalarFaceVelocities(pmbp, cfg, stats);
-    AverageScalarFaceVelocitiesToCellCenters(pmbp, cfg);
-    UpdateScalarFaceVelocityDiagnostics(pmbp, cfg, stats);
-    const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
-    recorded_init_wall_seconds = init_wall_seconds;
-    WriteStream2DDiagnostics(cfg, catalog, psi_coeffs, vel_coeffs, stats, init_wall_seconds);
-    log_init_time();
+    SynthesizeVelocityFromVectorModes(pmbp, cfg, den, catalog, vel_coeffs);
+    const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+    if (face_requested && face_scalar_ok) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
+      }
+      const VectorCoefficients apot_coeffs =
+          ConvertVelocityToVectorPotentialCoefficients(catalog, vel_coeffs);
+      PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
+      PrintScalarFaceDivergenceStats(ComputeScalarFaceDivergenceStats(pmbp, cfg));
+    }
     return;
   }
-
-  RNG_State catalog_state{};
-  catalog_state.idum = -MixSeed(cfg.rseed, 1);
 
   if (MaxSupportedShell(cfg) < cfg.nhigh) {
     FatalProblemSetup("clebsch mode requires turb_nhigh to lie within the resolved Fourier band.");
   }
+
+  RNG_State catalog_state{};
+  catalog_state.idum = -MixSeed(cfg.rseed, 1);
 
   const ModeCatalog catalog = BuildModeCatalog(cfg, cfg.nlow, cfg.nhigh, &catalog_state);
   if (catalog.KeptModes() == 0) {
     std::cout << "### WARNING: No turbulent modes kept in range [" << cfg.nlow << ", "
               << cfg.nhigh << "] for clebsch initialization. Using zero velocity."
               << std::endl;
-    log_init_time();
     return;
   }
   const std::vector<int> shell_counts = CountModesPerShell(catalog, cfg.nhigh);
@@ -2282,6 +2088,12 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
   const ScalarCoefficients phi2_coeffs =
       GenerateShellPowerLawScalarCoefficients(catalog, cfg.nlow, cfg.nhigh,
                                               cfg.phi_slope, &coeff_state2);
+  const VectorCoefficients grad1_coeffs =
+      ConvertScalarToGradientCoefficients(catalog, phi1_coeffs);
+  const VectorCoefficients grad2_coeffs =
+      ConvertScalarToGradientCoefficients(catalog, phi2_coeffs);
+  const ClebschGradientModeData clebsch_mode_data =
+      UploadClebschGradientModeData(catalog, phi1_coeffs, grad1_coeffs, grad2_coeffs);
 
   if (global_variable::my_rank == 0) {
     std::cout << "  stream_geometry=3D (Clebsch form v = grad(phi1) x grad(phi2))"
@@ -2290,21 +2102,18 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     std::cout << "  clebsch scalar spectra:"
               << " phi_target_slope=" << cfg.phi_slope
               << ", target_velocity_slope=" << cfg.velocity_slope
-              << ", realized velocity spectrum is measured from hydro output FFTs"
+              << ", exact_shell remains disabled for clebsch in this generator"
               << std::endl;
   }
-  PopulateScalarFaceVelocitiesFromClebschPotential(pmbp, cfg, catalog,
-                                                   phi1_coeffs, phi2_coeffs);
-  AverageScalarFaceVelocitiesToCellCenters(pmbp, cfg);
-  VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
-  ApplyVelocityStatsToScalarFaceVelocities(pmbp, cfg, stats);
-  AverageScalarFaceVelocitiesToCellCenters(pmbp, cfg);
-  UpdateScalarFaceVelocityDiagnostics(pmbp, cfg, stats);
-  const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
-  recorded_init_wall_seconds = init_wall_seconds;
-  WriteClebsch3DDiagnostics(cfg, catalog, phi1_coeffs, phi2_coeffs,
-                            stats, init_wall_seconds);
-  log_init_time();
+  SynthesizeClebschVelocityFromGradientModes(pmbp, cfg, den, clebsch_mode_data);
+  const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+  if (face_requested && face_scalar_ok) {
+    if (global_variable::my_rank == 0) {
+      std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
+    }
+    PopulateScalarFaceVelocitiesFromClebsch(pmbp, cfg, clebsch_mode_data, stats);
+    PrintScalarFaceDivergenceStats(ComputeScalarFaceDivergenceStats(pmbp, cfg));
+  }
 }
 
 }  // namespace
@@ -2313,7 +2122,8 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
 //! \brief Problem Generator for scalar mixing
 //
 //  Initializes density, turbulent velocity, and passive scalars.
-//  Scalars start from a shared box-scale x1 sine profile.
+//  Scalar 0 uses the existing uniform/step initialization path, while scalar 1
+//  is initialized to a smooth sinusoidal product if it is present.
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
@@ -2323,35 +2133,48 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const int nscalars = pmbp->phydro->nscalars;
   const int nhydro = pmbp->phydro->nhydro;
   const bool true_2d = UseTrue2DVelocity(pin, pmy_mesh_);
+  const bool multi_d = pmy_mesh_->multi_d;
+  const bool three_d = pmy_mesh_->three_d;
+  const bool has_sine_scalar = (nscalars > 1);
 
   if (nscalars == 0) {
     FatalProblemSetup("Scalar mixing requires nscalars > 0.");
   }
 
-  RejectRemovedProblemParameter(pin, "scalar_init",
-                                "The scalar base state is now fixed to the box-scale "
-                                "x1 sine profile.");
-  RejectRemovedProblemParameter(pin, "scalar_use_x1_step",
-                                "The scalar base state is now fixed to the box-scale "
-                                "x1 sine profile.");
-  RejectRemovedProblemParameter(pin, "scalar_step_x1",
-                                "The scalar base state is now fixed to the box-scale "
-                                "x1 sine profile.");
-  RejectRemovedProblemParameter(pin, "scalar_left",
-                                "The scalar base state is now fixed to the box-scale "
-                                "x1 sine profile.");
-  RejectRemovedProblemParameter(pin, "scalar_right",
-                                "The scalar base state is now fixed to the box-scale "
-                                "x1 sine profile.");
-
   const Real legacy_G = pin->GetOrAddReal("problem", "mean_gradient", 1.0);
+  const Real scalar_init_default = pin->GetOrAddReal("problem", "scalar_init", 0.5);
+  const bool scalar0_use_sine_x1 =
+      pin->GetOrAddBoolean("problem", "scalar0_use_sine_x1", true);
+  const Real scalar0_wavelengths_per_box =
+      pin->GetOrAddReal("problem", "scalar0_wavelengths_per_box",
+                        kDefaultScalar0WavelengthsPerBox);
+  if (scalar0_wavelengths_per_box <= 0.0) {
+    FatalProblemSetup("problem/scalar0_wavelengths_per_box must be > 0.");
+  }
+  const bool scalar_use_x1_step =
+      pin->GetOrAddBoolean("problem", "scalar_use_x1_step", false);
+  const Real scalar_step_x1 = pin->GetOrAddReal("problem", "scalar_step_x1", 0.0);
+  const Real scalar_left = pin->GetOrAddReal("problem", "scalar_left", 0.0);
+  const Real scalar_right = pin->GetOrAddReal("problem", "scalar_right", 1.0);
+  const Real scalar1_wavelengths_per_box =
+      pin->GetOrAddReal("problem", "scalar1_wavelengths_per_box",
+                        kDefaultScalar1WavelengthsPerBox);
+  if (scalar1_wavelengths_per_box <= 0.0) {
+    FatalProblemSetup("problem/scalar1_wavelengths_per_box must be > 0.");
+  }
   const Real x1min = pmy_mesh_->mesh_size.x1min;
   const Real x1max = pmy_mesh_->mesh_size.x1max;
+  const Real x2min = pmy_mesh_->mesh_size.x2min;
+  const Real x2max = pmy_mesh_->mesh_size.x2max;
+  const Real x3min = pmy_mesh_->mesh_size.x3min;
+  const Real x3max = pmy_mesh_->mesh_size.x3max;
   const Real lx = x1max - x1min;
 
   scalar_forcing_cfg.resize(nscalars);
+  std::vector<Real> scalar_init(nscalars, scalar_init_default);
   const Real scalar_noise_default = pin->GetOrAddReal("problem", "scalar_noise", 0.0);
   std::vector<Real> scalar_noise(nscalars, scalar_noise_default);
+  bool clipped_inits = false;
   bool clipped_noise = false;
   bool noise_enabled = (scalar_noise_default > 0.0);
 
@@ -2389,9 +2212,12 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
     scalar_forcing_cfg[ns] = cfg;
 
-    RejectRemovedProblemParameter(pin, prefix + "init",
-                                  "The scalar base state is now fixed to the box-scale "
-                                  "x1 sine profile.");
+    Real init = pin->GetOrAddReal("problem", prefix + "init", scalar_init_default);
+    if (init < cfg.theta_floor) {
+      init = cfg.theta_floor;
+      clipped_inits = true;
+    }
+    scalar_init[ns] = init;
 
     Real noise = pin->GetOrAddReal("problem", prefix + "noise", scalar_noise_default);
     if (noise < 0.0) {
@@ -2423,6 +2249,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int &ks = indcs.ks;
   int &ke = indcs.ke;
   const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
   auto &u0 = pmbp->phydro->u0;
   EOS_Data &eos = pmbp->phydro->peos->eos_data;
   const Real gm1 = eos.gamma - 1.0;
@@ -2434,12 +2262,34 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   if (global_variable::my_rank == 0) {
     std::cout << "Scalar mixing problem:" << std::endl
-              << "  scalar_ic = x1_sine" << std::endl
+              << "  scalar0_ic = "
+              << (scalar0_use_sine_x1 ? "sine_x1_global"
+                                      : (scalar_use_x1_step ? "x1_step" : "uniform"))
+              << std::endl
               << "  true_2d = " << (true_2d ? "true" : "false") << std::endl
               << "  nscalars = " << nscalars << std::endl
-              << "  scalar_sine_period = " << lx << std::endl
+              << "  scalar_init (default) = " << scalar_init_default << std::endl
+              << "  scalar0_wavelengths_per_box = " << scalar0_wavelengths_per_box
+              << std::endl
+              << "  scalar1_ic = "
+              << (has_sine_scalar
+                      ? (three_d ? "sine_product_3d"
+                                 : (multi_d ? "sine_product_2d"
+                                            : "sine_x1"))
+                      : "disabled (set nscalars >= 2)")
+              << std::endl
+              << "  scalar1_wavelengths_per_box = " << scalar1_wavelengths_per_box
+              << std::endl
               << "  scalar0_mode = " << scalar_forcing_cfg[0].mode << std::endl
               << "  scalar0_mean_gradient = " << scalar_forcing_cfg[0].G << std::endl;
+    if (scalar_use_x1_step) {
+      std::cout << "  scalar_left = " << scalar_left << std::endl
+                << "  scalar_right = " << scalar_right << std::endl
+                << "  scalar_step_x1 = " << scalar_step_x1 << std::endl;
+    }
+    if (clipped_inits) {
+      std::cout << "  NOTE: scalar_init clipped to theta_floor for positivity." << std::endl;
+    }
     if (noise_enabled) {
       std::cout << "  scalar_noise default = " << scalar_noise_default << std::endl;
     }
@@ -2471,15 +2321,48 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
   for (int ns = 0; ns < nscalars; ++ns) {
+    const Real init = scalar_init[ns];
     const Real noise = scalar_noise[ns];
     const Real theta_floor = scalar_forcing_cfg[ns].theta_floor;
+    const bool sine_scalar = (ns == 1);
     const std::string label = "scalar_mix_pgen_scalar_" + std::to_string(ns);
     par_for(label, DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       const Real rho = u0(m, IDN, k, j, i);
-      Real &x1min_ = size.d_view(m).x1min;
-      const Real x1v = CellCenterX(i-is, nx1, x1min_, size.d_view(m).x1max);
-      Real theta = X1SineScalarProfile(x1v, x1min, lx);
+      Real theta = init;
+      if (ns == 0 && scalar0_use_sine_x1) {
+        Real &mb_x1min = size.d_view(m).x1min;
+        Real &mb_x1max = size.d_view(m).x1max;
+        const Real x1v = CellCenterX(i-is, nx1, mb_x1min, mb_x1max);
+        theta = SineScalarIC1D(x1v, x1min, x1max, scalar0_wavelengths_per_box);
+      } else if (sine_scalar) {
+        Real &mb_x1min = size.d_view(m).x1min;
+        Real &mb_x1max = size.d_view(m).x1max;
+        const Real x1v = CellCenterX(i-is, nx1, mb_x1min, mb_x1max);
+        Real x2v = 0.0;
+        Real x3v = 0.0;
+        if (multi_d) {
+          Real &mb_x2min = size.d_view(m).x2min;
+          Real &mb_x2max = size.d_view(m).x2max;
+          x2v = CellCenterX(j-js, nx2, mb_x2min, mb_x2max);
+        }
+        if (three_d) {
+          Real &mb_x3min = size.d_view(m).x3min;
+          Real &mb_x3max = size.d_view(m).x3max;
+          x3v = CellCenterX(k-ks, nx3, mb_x3min, mb_x3max);
+        }
+        theta = SineScalarIC(x1v, x2v, x3v,
+                             x1min, x1max,
+                             x2min, x2max,
+                             x3min, x3max,
+                             scalar1_wavelengths_per_box,
+                             multi_d, three_d);
+      } else if (scalar_use_x1_step) {
+        Real &x1min_ = size.d_view(m).x1min;
+        Real &x1max_ = size.d_view(m).x1max;
+        const Real x1v = CellCenterX(i-is, nx1, x1min_, x1max_);
+        theta = (x1v < scalar_step_x1) ? scalar_left : scalar_right;
+      }
       if (noise > 0.0) {
         auto rand_gen = rand_pool64.get_state();
         const Real r = 2.0*static_cast<Real>(rand_gen.frand()) - 1.0;
@@ -2567,7 +2450,7 @@ void ScalarForcingSource(Mesh* pm, const Real bdt) {
 #if MPI_PARALLEL_ENABLED
       Real local_sum[2] = {num_local, den_local};
       Real global_sum[2] = {0.0, 0.0};
-      MPI_Allreduce(local_sum, global_sum, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(local_sum, global_sum, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
       num_local = global_sum[0];
       den_local = global_sum[1];
 #endif

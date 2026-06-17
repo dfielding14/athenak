@@ -27,7 +27,7 @@ Velocity Construction, STS Diffusion, and Verification}
 \maketitle
 
 \begin{abstract}
-This document consolidates the scalar-mixing TeX notes in \code{./docs} into a single narrative. The organizing logic is the numerical problem itself. We begin with the passive-scalar question that motivates the calculations: whether a frozen, divergence-free, rough velocity field can sustain finite-time scalar dissipation as the diffusivity tends to zero, and how that transition depends on the geometry of the advecting field. We then translate between the two roughness languages used across the notes: the shell-integrated velocity spectrum $E_u(k)\propto k^{-\zeta}$ and the regularity index $\alpha$. That translation clarifies why $\alpha=(\zeta-1)/2$ is a classical H\"older exponent only when $1<\zeta<3$, while the regime $\alpha\le 0$ must be interpreted distributionally and approached numerically through ultraviolet-truncated approximations. With that dictionary in place, we document the velocity construction actually used by the current production campaign: the 3D Clebsch path in \code{scalar\_mixing\_perfect\_powerlaw.cpp}, run with divergence-free scalar face fluxes, the statistical spectrum contract, and RKL2 STS scalar diffusion. We then summarize the representative \code{clebsch\_1024} campaign setup and the independent scalar advection--diffusion verification problem, now including a dedicated \STS figure. The result is a single reference that starts from the scientific question, moves through the production spectral setup, and ends with the tests that justify using the implementation for scalar-mixing studies.
+This document consolidates the scalar-mixing TeX notes in \code{./docs} into a single narrative. The organizing logic is the numerical problem itself. We begin with the passive-scalar question that motivates the calculations: whether a frozen, divergence-free, rough velocity field can sustain finite-time scalar dissipation as the diffusivity tends to zero, and how that transition depends on the geometry of the advecting field. We then translate between the two roughness languages used across the notes: the shell-integrated velocity spectrum $E_u(k)\propto k^{-\zeta}$ and the regularity index $\alpha$. That translation clarifies why $\alpha=(\zeta-1)/2$ is a classical H\"older exponent only when $1<\zeta<3$, while the regime $\alpha\le 0$ must be interpreted distributionally and approached numerically through ultraviolet-truncated approximations. With that dictionary in place, we document the velocity construction actually used by the current production campaign: the 3D Clebsch path in \code{scalar\_mixing.cpp}, run with divergence-free scalar face fluxes, the statistical spectrum contract, and RKL2 STS scalar diffusion. We then summarize the representative \code{clebsch\_1024} campaign setup and the independent scalar advection--diffusion verification problem, now including a dedicated \STS figure. The result is a single reference that starts from the scientific question, moves through the production spectral setup, and ends with the tests that justify using the implementation for scalar-mixing studies.
 \end{abstract}
 
 \section{Problem Statement}
@@ -66,7 +66,7 @@ The practical objective is to identify a roughness threshold separating weak-mix
 
 AthenaK contains several prescribed velocity generators, but the production comparison described here is intentionally narrower. The runs in
 \path{/lustre/orion/ast207/proj-shared/dfielding/autonomous_scalars/clebsch_1024}
-use the 3D Clebsch stream construction in \path{scalar_mixing_perfect_powerlaw.cpp},
+use the 3D Clebsch stream construction in \path{scalar_mixing.cpp},
 \begin{equation}
 \uu=\nabla\phi_1\times\nabla\phi_2,
 \end{equation}
@@ -161,7 +161,7 @@ Field & Complex-mode variance & Amplitude law \\
 
 \section{Velocity Field Setup}
 The production velocity setup is the 3D Clebsch branch of
-\code{scalar\_mixing\_perfect\_powerlaw.cpp}. This section therefore documents
+\code{scalar\_mixing.cpp}. This section therefore documents
 that path only. The older four-mode comparison figures are useful historical
 checks, but they are not representative of the fixed-resolution
 \code{clebsch\_1024} simulations.
@@ -233,20 +233,19 @@ problem generator installs a staggered scalar face velocity and uses that field
 for the conservative scalar fluxes. This is the discrete object that matters for
 scalar transport: a continuum Clebsch identity alone would not guarantee a
 zero-divergence upwind scalar flux on the mesh. The small regression input
-\path{inputs/tests/scalar_mixing_perfect_powerlaw_clebsch_divfree_scalar_flux.athinput}
+\path{inputs/tests/scalar_mixing_clebsch_divfree_scalar_flux.athinput}
 exercises this same path on a $32^3$ mesh with a constant scalar, while the
 production campaign uses the same controls at $1024^3$.
 
 \section{Production Velocity Setup}
 The representative campaign is staged in
 \path{/lustre/orion/ast207/proj-shared/dfielding/autonomous_scalars/clebsch_1024}.
-Every case uses \code{problem\_id=scalar\_mixing\_perfect\_powerlaw}, a
+Every case uses \code{problem\_id=scalar\_mixing}, a
 $1024^3$ mesh with $256^3$ meshblocks, periodic boundaries, the fiducial seed
 51825, \code{scalar\_only=true}, \code{divfree\_scalar\_flux=true}, and
 \code{scalar\_diffusivity\_integrator=sts}. The scalar initial data are the
-production perfect-power-law pair: \code{s\_00} is the global $x_1$ sine mode,
-and \code{s\_01} is the second scalar field used by the perfect-power-law
-generator.
+production scalar pair: \code{s\_00} is the global $x_1$ sine mode, and
+\code{s\_01} is the second scalar field used by the canonical generator.
 
 Figure~\ref{fig:clebsch1024-setup} summarizes the generated sweep. The four
 roughness values are $\alpha=0,1/6,1/3,1/2$. The diffusivity grid is expressed as
@@ -262,15 +261,15 @@ velocity cutoff.
 \caption{Production Clebsch setup for the fixed $1024^3$ campaign. Each point is
 one generated athinput in \code{clebsch\_1024}; color shows the per-case
 \code{turb\_nhigh}. The right panel records the controls that make this setup
-representative of the simulations: \code{scalar\_mixing\_perfect\_powerlaw},
+representative of the simulations: \code{scalar\_mixing},
 3D Clebsch velocity, statistical spectrum contract, divergence-free scalar face
 fluxes, and RKL2 STS scalar diffusion with \code{sts\_max\_dt\_ratio=100}.}
 \label{fig:clebsch1024-setup}
 \end{figure}
 
 This setup figure replaces the older four-generator velocity-test figures in
-this master note. Those older figures mixed \code{scalar\_mixing} and
-non-production projection/stream cases. The production question here is narrower:
+this master note. Those older figures mixed several non-production
+projection/stream cases. The production question here is narrower:
 given this Clebsch ensemble and this scalar transport operator, how do the
 finite-time scalar statistics depend on $\alpha$ and $D$?
 
@@ -353,7 +352,7 @@ First, the scientific question should be stated in finite-time form. The relevan
 Second, the roughness dictionary must be handled carefully. The spectral slope $\zeta$ is the direct numerical input. The relation $\alpha=(\zeta-1)/2$ is a classical H\"older statement only when $1<\zeta<3$; for $\alpha\le 0$ it becomes a negative regularity index and must be interpreted distributionally.
 
 Third, the velocity setup documented here now matches the production
-\path{scalar_mixing_perfect_powerlaw.cpp} campaign. The representative
+\path{scalar_mixing.cpp} campaign. The representative
 configuration is the \code{clebsch\_1024} suite: a three-dimensional Clebsch
 velocity field with a statistical spectrum contract, divergence-free scalar
 face fluxes, scalar-only evolution, and an $\alpha$--$D$ sweep generated from a

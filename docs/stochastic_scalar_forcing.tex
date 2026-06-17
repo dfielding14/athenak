@@ -285,4 +285,24 @@ relative to an imposed macroscopic gradient.  Results from the two protocols
 should be compared as distinct forcing ensembles, not pooled without checking
 their full scale-by-scale budgets.
 
+\section{Frontier execution}
+
+The Frontier launcher uses eight MPI ranks per node and binds one
+\texttt{gfx90a} GCD to each rank.  The forcing normalization evaluates the
+five raw moments needed for mean projection and normalization in one Kokkos
+reduction followed by one \texttt{MPI\_Allreduce} per forcing refresh; the
+projected, normalized source is then formed in one device kernel.  This is
+algebraically identical to projecting first and measuring the projected
+moments in a second pass, but removes one device reduction, one global
+collective, and one device kernel from every refresh.
+
+The production input writes binary fields and restart payloads with
+\texttt{single\_file\_per\_node=true}.  Submit the supplied batch script as
+\begin{verbatim}
+sbatch -A PROJECT_ID -N NODES scripts/run_frontier_scalar_ou.sbatch
+\end{verbatim}
+and override input parameters after the script name when needed.  The build
+and run scripts default to an OLCF-listed GPU-aware CPE/CCE/ROCm/Cray-MPICH
+tuple; module overrides must be made as a compatible set.
+
 \end{document}

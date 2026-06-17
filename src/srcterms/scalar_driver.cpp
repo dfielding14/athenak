@@ -506,52 +506,15 @@ TaskStatus ScalarForcingDriver::UpdateForcing(Driver *pdrive, int stage) {
   size.template sync<DevExeSpace>();
 
   Real mass = 0.0;
-  Real source_integral = 0.0;
-  Kokkos::parallel_reduce(
-      "scalar_force_mean", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-      KOKKOS_LAMBDA(const int &idx, Real &sum_mass, Real &sum_source) {
-        int m = idx / nkji;
-        int k = (idx - m * nkji) / nji;
-        int j = (idx - m * nkji - k * nji) / nx1;
-        int i = (idx - m * nkji - k * nji - j * nx1) + is;
-        k += ks;
-        j += js;
-        Real vol =
-            size.d_view(m).dx1 * size.d_view(m).dx2 * size.d_view(m).dx3;
-        Real rho = u0(m, IDN, k, j, i);
-        sum_mass += rho * vol;
-        sum_source += rho * force_(m, 0, k, j, i) * vol;
-      },
-      Kokkos::Sum<Real>(mass), Kokkos::Sum<Real>(source_integral));
-
-#if MPI_PARALLEL_ENABLED
-  Real local_mean_data[2] = {mass, source_integral};
-  Real global_mean_data[2] = {0.0, 0.0};
-  MPI_Allreduce(local_mean_data, global_mean_data, 2, MPI_ATHENA_REAL, MPI_SUM,
-                MPI_COMM_WORLD);
-  mass = global_mean_data[0];
-  source_integral = global_mean_data[1];
-#endif
-
-  if (mass <= 0.0) {
-    FatalScalarForcingError("mass integral is not positive");
-  }
-  Real source_mean = source_integral / mass;
-  par_for(
-      "scalar_force_project_mean", DevExeSpace(), 0, nmb - 1, ks,
-      ks + nx3 - 1, js, js + nx2 - 1, is, is + nx1 - 1,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        force_(m, 0, k, j, i) -= source_mean;
-      });
-
   Real scalar_integral = 0.0;
-  Real projected_source_integral = 0.0;
+  Real source_integral = 0.0;
   Real scalar_source_integral = 0.0;
   Real source_square_integral = 0.0;
   Kokkos::parallel_reduce(
-      "scalar_force_norm", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-      KOKKOS_LAMBDA(const int &idx, Real &sum_scalar, Real &sum_source,
-                    Real &sum_scalar_source, Real &sum_source_square) {
+      "scalar_force_moments", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int &idx, Real &sum_mass, Real &sum_scalar,
+                    Real &sum_source, Real &sum_scalar_source,
+                    Real &sum_source_square) {
         int m = idx / nkji;
         int k = (idx - m * nkji) / nji;
         int j = (idx - m * nkji - k * nji) / nx1;
@@ -563,33 +526,39 @@ TaskStatus ScalarForcingDriver::UpdateForcing(Driver *pdrive, int stage) {
         Real rho = u0(m, IDN, k, j, i);
         Real scalar = u0(m, scalar_component, k, j, i);
         Real source = force_(m, 0, k, j, i);
+        sum_mass += rho * vol;
         sum_scalar += scalar * vol;
         sum_source += rho * source * vol;
         sum_scalar_source += scalar * source * vol;
         sum_source_square += rho * source * source * vol;
       },
-      Kokkos::Sum<Real>(scalar_integral),
-      Kokkos::Sum<Real>(projected_source_integral),
+      Kokkos::Sum<Real>(mass), Kokkos::Sum<Real>(scalar_integral),
+      Kokkos::Sum<Real>(source_integral),
       Kokkos::Sum<Real>(scalar_source_integral),
       Kokkos::Sum<Real>(source_square_integral));
 
 #if MPI_PARALLEL_ENABLED
-  Real local_norm_data[4] = {scalar_integral, projected_source_integral,
-                             scalar_source_integral, source_square_integral};
-  Real global_norm_data[4] = {0.0, 0.0, 0.0, 0.0};
-  MPI_Allreduce(local_norm_data, global_norm_data, 4, MPI_ATHENA_REAL, MPI_SUM,
+  Real local_moments[5] = {mass, scalar_integral, source_integral,
+                           scalar_source_integral, source_square_integral};
+  Real global_moments[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
+  MPI_Allreduce(local_moments, global_moments, 5, MPI_ATHENA_REAL, MPI_SUM,
                 MPI_COMM_WORLD);
-  scalar_integral = global_norm_data[0];
-  projected_source_integral = global_norm_data[1];
-  scalar_source_integral = global_norm_data[2];
-  source_square_integral = global_norm_data[3];
+  mass = global_moments[0];
+  scalar_integral = global_moments[1];
+  source_integral = global_moments[2];
+  scalar_source_integral = global_moments[3];
+  source_square_integral = global_moments[4];
 #endif
 
+  if (mass <= 0.0) {
+    FatalScalarForcingError("mass integral is not positive");
+  }
+
+  Real source_mean = source_integral / mass;
   Real mean_scalar = scalar_integral / mass;
-  Real mean_source = projected_source_integral / mass;
-  Real covariance =
-      scalar_source_integral / mass - mean_scalar * mean_source;
-  Real mean_source_square = source_square_integral / mass;
+  Real covariance = scalar_source_integral / mass - mean_scalar * source_mean;
+  Real mean_source_square =
+      std::max(source_square_integral / mass - source_mean * source_mean, 0.0);
   Real scale = 0.0;
 
   if (normalization == ScalarForcingNormalization::source_rms) {
@@ -623,10 +592,11 @@ TaskStatus ScalarForcingDriver::UpdateForcing(Driver *pdrive, int stage) {
   }
 
   par_for(
-      "scalar_force_scale", DevExeSpace(), 0, nmb - 1, ks, ks + nx3 - 1,
-      js, js + nx2 - 1, is, is + nx1 - 1,
+      "scalar_force_project_scale", DevExeSpace(), 0, nmb - 1, ks,
+      ks + nx3 - 1, js, js + nx2 - 1, is, is + nx1 - 1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        force_(m, 0, k, j, i) *= scale;
+        force_(m, 0, k, j, i) =
+            (force_(m, 0, k, j, i) - source_mean) * scale;
       });
   return TaskStatus::complete;
 }
