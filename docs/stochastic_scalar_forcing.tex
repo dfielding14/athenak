@@ -1,0 +1,131 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.8in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage[T1]{fontenc}
+
+\newcommand{\avg}[1]{\left\langle #1\right\rangle_\rho}
+
+\title{Stochastic Ornstein--Uhlenbeck Forcing of a Passive Scalar}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-2em}
+
+\section{Model and steady state}
+
+For one selected passive scalar $\theta$, AthenaK evolves
+\begin{equation}
+  \frac{\partial(\rho\theta)}{\partial t}
+  + \nabla\!\cdot(\rho\theta\boldsymbol{u})
+  = \nabla\!\cdot(\rho\kappa\nabla\theta)+\rho f ,
+  \label{eq:scalar}
+\end{equation}
+with the velocity field $\boldsymbol{u}(\boldsymbol{x})$ held fixed.  The new
+driver supplies the stochastic source $f(\boldsymbol{x},t)$.  On a periodic
+domain, the mass-weighted mean
+\begin{equation}
+  \bar{\theta}=\avg{\theta}
+  \equiv \frac{1}{M}\int\rho\theta\,dV,\qquad
+  M=\int\rho\,dV ,
+\end{equation}
+is preserved by enforcing $\avg{f}=0$ every time the forcing is rendered.
+This removes the discrete zero mode even for nonuniform density or AMR.
+
+Mean preservation is necessary but is not the mechanism that produces a
+steady state.  The scalar variance
+\begin{equation}
+  Z=\frac{1}{2}\avg{(\theta-\bar{\theta})^2}
+\end{equation}
+obeys
+\begin{equation}
+  \frac{dZ}{dt}
+  = \underbrace{\avg{(\theta-\bar{\theta})f}}_{\mathcal I}
+  - \underbrace{\kappa\avg{|\nabla\theta|^2}}_{\mathcal D}.
+  \label{eq:budget}
+\end{equation}
+Thus a statistically stationary state requires $\kappa>0$ and
+$\langle\mathcal I\rangle_t=\langle\mathcal D\rangle_t$.  Advection transfers
+variance to small scales, where diffusion removes it.  With $\kappa=0$, a
+positive variance-injection rate cannot reach a stationary variance.
+
+\section{OU forcing}
+
+The source is represented by nonzero Fourier modes in a configured shell,
+\begin{equation}
+  f_0(\boldsymbol{x},t)
+  = \sum_{\boldsymbol{k}}
+    \operatorname{Re}\!\left[A_{\boldsymbol{k}}(t)
+    e^{i\boldsymbol{k}\cdot\boldsymbol{x}}\right],
+  \qquad n_{\rm low}\leq |\boldsymbol{n}|\leq n_{\rm high}.
+\end{equation}
+At cadence $\Delta t_f$, each complex coefficient follows the exact
+Ornstein--Uhlenbeck recurrence
+\begin{equation}
+ A_{\boldsymbol{k}}^{j+1}
+ = r A_{\boldsymbol{k}}^j+\sqrt{1-r^2}\,\sigma_k\xi_{\boldsymbol{k}}^j,
+ \qquad r=\exp(-\Delta t_f/\tau_f),
+\end{equation}
+where $\xi_{\boldsymbol{k}}^j$ is independent complex Gaussian noise and
+$\sigma_k$ is selected by a parabolic or power-law spectrum.  The rendered
+field is projected and scaled as
+\begin{equation}
+  f=s\left(f_0-\avg{f_0}\right).
+\end{equation}
+The coefficient arrays, random-number state, update count, and configuration
+are restart state; the cell-centered field is regenerated from them.
+
+Two mutually exclusive normalizations are provided:
+\begin{enumerate}
+  \item \texttt{source\_rms}: choose $s$ so that
+    $\avg{f^2}^{1/2}$ equals a specified value.
+  \item \texttt{variance\_rate}: choose $s\geq0$ to inject a specified
+    $\dot Z_f$ over one full step $\Delta t$.  If
+    $C=\avg{(\theta-\bar{\theta})f_0}$ and $Q=\avg{f_0^2}$, solve
+    \begin{equation}
+      \frac{1}{2}\Delta t\,Q\,s^2+C\,s=\dot Z_f .
+    \end{equation}
+\end{enumerate}
+The source is updated once per forcing cadence and applied during every
+Runge--Kutta stage, following the turbulence-driver task ordering.  A
+\texttt{scalar\_index} selects the forced scalar.  Because stochastic forcing
+does not preserve pointwise bounds, signed-scalar calculations must choose an
+appropriate scalar floor.
+
+\section{History diagnostics}
+
+The existing \texttt{gradth2\_sN} columns remain.  When scalar driving is
+enabled, the user history function adds the following additive integrals for
+the selected scalar; AthenaK performs the MPI sum:
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Label & Integral \\
+\midrule
+\texttt{rho}     & $\int\rho\,dV$ \\
+\texttt{rth\_sN} & $\int\rho\theta\,dV$ \\
+\texttt{rth2\_sN}& $\int\rho\theta^2\,dV$ \\
+\texttt{rf\_sN}  & $\int\rho f\,dV$ \\
+\texttt{rthf\_sN}& $\int\rho\theta f\,dV$ \\
+\texttt{rf2\_sN} & $\int\rho f^2\,dV$ \\
+\texttt{rg2\_sN} & $\int\rho|\nabla\theta|^2\,dV$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+These give
+\begin{align}
+ \bar{\theta} &= \texttt{rth}/\texttt{rho},\\
+ 2Z &= \texttt{rth2}/\texttt{rho}-\bar{\theta}^2,\\
+ \avg{f} &= \texttt{rf}/\texttt{rho},\\
+ \mathcal I &= \texttt{rthf}/\texttt{rho}
+                -\bar{\theta}\,\texttt{rf}/\texttt{rho},\\
+ f_{\rm rms} &= \sqrt{\texttt{rf2}/\texttt{rho}},\qquad
+ \mathcal D = \kappa\,\texttt{rg2}/\texttt{rho}.
+\end{align}
+The mean-source column verifies conservation directly; the injection and
+dissipation columns determine whether the scalar has reached statistical
+steady state.
+
+\end{document}
