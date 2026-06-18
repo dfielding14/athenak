@@ -11,8 +11,8 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INPUT = REPO_ROOT / "tst" / "inputs" / "turb_sgs_2d.athinput"
 PRODUCTION_INPUTS = (
-    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_12288_k16_viscous.athinput",
-    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_16384_k16_viscous.athinput",
+    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_12288_k64_viscous.athinput",
+    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_16384_k64_viscous.athinput",
 )
 ATHENA = Path.cwd() / "athena"
 sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
@@ -271,8 +271,8 @@ def test_isothermal_hllc_is_rejected(tmp_path):
 
 
 def test_production_inputs_have_resolved_explicit_viscosity():
-    """The production pair keeps one physical viscosity with a resolved cutoff."""
-    expected_cells = {12288: 7.5, 16384: 10.0}
+    """The production pair keeps one viscosity and a resolved cutoff wavelength."""
+    expected_wavelength_cells = {12288: 11.5, 16384: 15.5}
     for path in PRODUCTION_INPUTS:
         resolution = int(input_parameter(path, "mesh", "nx1"))
         assert int(input_parameter(path, "mesh", "nx2")) == resolution
@@ -291,7 +291,22 @@ def test_production_inputs_have_resolved_explicit_viscosity():
         enstrophy_injection = forcing_wavenumber**2 * injection
         viscous_length = (viscosity**3 / enstrophy_injection) ** (1.0 / 6.0)
         dissipation_mode = box_length / (2.0 * math.pi * viscous_length)
+        cutoff_wavelength = box_length / dissipation_mode
 
-        assert viscosity == 8.4e-7
-        assert viscous_length * resolution >= expected_cells[resolution]
+        assert forcing_mode == 64.0
+        assert float(input_parameter(path, "turb_driving", "nlow")) == 63.0
+        assert float(input_parameter(path, "turb_driving", "nhigh")) == 65.0
+        assert viscosity == 1.316e-7
+        assert cutoff_wavelength * resolution >= expected_wavelength_cells[resolution]
         assert 15.5 <= dissipation_mode / forcing_mode <= 16.5
+        tcorr = float(input_parameter(path, "turb_driving", "tcorr"))
+        assert tcorr == 0.15625
+        assert float(input_parameter(path, "turb_driving", "dt_update")) == tcorr / 100.0
+        assert float(input_parameter(path, "time", "tlim")) == 40.0 * tcorr
+        assert float(input_parameter(path, "output1", "dt")) == tcorr / 20.0
+        assert float(input_parameter(path, "output2", "dt")) == 4.0 * tcorr
+        assert float(input_parameter(path, "output3", "dt")) == tcorr
+        for output_index in range(4, 12):
+            assert float(input_parameter(path, f"output{output_index}", "dt")) == (
+                tcorr / 20.0
+            )

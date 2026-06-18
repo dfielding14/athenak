@@ -2,8 +2,8 @@
 
 This project studies fully two-dimensional, compressible isothermal turbulence and
 on-the-fly subgrid-scale (SGS) filtering. The explicit-viscosity science pair is
-`mach010_12288_k16_viscous.athinput` and
-`mach010_16384_k16_viscous.athinput`. The older `512^2` and `1024^2` inputs are
+`mach010_12288_k64_viscous.athinput` and
+`mach010_16384_k64_viscous.athinput`. The older `512^2` and `1024^2` inputs are
 historical ILES commissioning runs and must not be used as resolved-viscosity DNS.
 
 See [HANDOFF.md](HANDOFF.md) for the scientific rationale, completed pilot results,
@@ -13,26 +13,29 @@ production run.
 ## Resolved-Viscosity Production Contract
 
 The science inputs use AthenaK's uniform isotropic kinematic shear viscosity with
-`viscosity = 8.4e-7`. For a narrow forcing annulus centered on mode `k_f`, estimate
-the enstrophy injection and viscous length as
+`viscosity = 1.316e-7`. For a narrow forcing annulus centered on Fourier mode
+`k_f`, distinguish the inverse-angular-wavenumber length `l_nu` from the cutoff
+wavelength `lambda_nu`:
 
 ```text
 eta_est = (2*pi*k_f/L_box)^2 * dedt
 l_nu = (viscosity^3/eta_est)^(1/6)
-k_nu = L_box/(2*pi*l_nu)
+n_nu = L_box/(2*pi*l_nu)
+lambda_nu = L_box/n_nu = 2*pi*l_nu
 ```
 
-For `k_f = 16`, `dedt = 0.001`, and `L_box = 1`, this gives
-`eta_est = 10.1065`, `l_nu = 6.2331e-4`, and `k_nu = 255.3`. Thus the same physical
-viscosity is sampled by `7.66` cells at `12288^2` and `10.21` cells at `16384^2`,
-while retaining `k_nu/k_f = 15.96`. The `12288^2` run is the convergence reference;
-the `16384^2` result is the production candidate.
+For `k_f = 64`, `dedt = 0.001`, and `L_box = 1`, this gives
+`eta_est = 161.704`, `l_nu = 1.5542e-4`, `n_nu = 1024.03`, and
+`lambda_nu = 9.7654e-4`. The cutoff wavelength is sampled by `12.0` cells at
+`12288^2` and `16.0` cells at `16384^2`, while `n_nu/k_f = 16.0`. The corresponding
+`l_nu` sampling is `1.91` and `2.55` cells; those numbers are not the wavelength
+sampling. The `12288^2` run is the convergence reference, and the `16384^2` result
+is the production candidate.
 
-This explicit resolution requirement changes the forcing-scale choice. Driving at
-`k_f = sqrt(16384) = 128` would place a conservatively resolved viscous cutoff too
-close to the forcing to leave a useful direct-cascade interval. The production pair
-therefore keeps `k_f = 16`, which is close to the logarithmic midpoint between the
-box mode and the estimated viscous cutoff.
+At the same 16-cell cutoff wavelength, `k_f = 128` would give only
+`n_nu/k_f = 8`, and `k_f = 96` would give `10.67`. The production pair therefore
+uses `k_f = 64`, preserving the requested factor of 16 between forcing and the
+estimated viscous cutoff while retaining a factor of 64 for the inverse cascade.
 
 Use `rsolver = roe`. AthenaK's HLLC implementation is ideal-gas only and rejects an
 isothermal EOS. HLLE supports isothermal hydro but is intentionally more diffusive;
@@ -42,7 +45,7 @@ viscosity should control the small-scale dissipation.
 ## Two-Dimensional Forcing And Drag
 
 The production inputs use a global parabolic spectrum over the narrow annulus
-`15 <= |k| <= 17`, peaked at `npeak = 16`. The sparse-annulus sampler selects
+`63 <= |k| <= 65`, peaked at `npeak = 64`. The sparse-annulus sampler selects
 64 equal-angle complex modes from one Fourier half-plane; their conjugates supply
 the other half-plane. The driver therefore evolves 64 modes without
 enumerating the full Cartesian mode volume or periodically repeating a smaller
@@ -156,12 +159,14 @@ target Mach number. The third velocity remained zero.
 
 ## Explicit-Viscosity Science Pair
 
-`mach010_12288_k16_viscous.athinput` and
-`mach010_16384_k16_viscous.athinput` hold the physical parameters fixed while
+`mach010_12288_k64_viscous.athinput` and
+`mach010_16384_k64_viscous.athinput` hold the physical parameters fixed while
 increasing the linear resolution by a factor of `4/3`. Both use Mach `0.1`,
-`k_f = 16`, ordinary kinematic viscosity `8.4e-7`, Rayleigh drag `0.1`,
-`dedt = 0.001`, and the same
-random seed. Each run lasts 40 forcing-scale turnover times.
+`k_f = 64`, ordinary kinematic viscosity `1.316e-7`, Rayleigh drag `0.1`,
+`dedt = 0.001`, and the same random seed. With `tcorr = t_eddy = 0.15625`, each
+run lasts 40 forcing-scale turnover times (`tlim = 6.25`). This duration is not
+assumed to establish large-scale stationarity from rest; the history and spectra
+must demonstrate it.
 
 SGS products are written 20 times per turnover for factors
 `4, 8, 16, 32, 64, 128, 256, 512`. Full-resolution primitive states are written
