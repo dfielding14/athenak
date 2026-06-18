@@ -11,7 +11,7 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INPUT = REPO_ROOT / "tst" / "inputs" / "turb_sgs_2d.athinput"
 PRODUCTION_INPUTS = (
-    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_8192_k16_viscous.athinput",
+    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_12288_k16_viscous.athinput",
     REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_16384_k16_viscous.athinput",
 )
 ATHENA = Path.cwd() / "athena"
@@ -272,7 +272,7 @@ def test_isothermal_hllc_is_rejected(tmp_path):
 
 def test_production_inputs_have_resolved_explicit_viscosity():
     """The production pair keeps one physical viscosity with a resolved cutoff."""
-    expected_cells = {8192: 7.5, 16384: 15.0}
+    expected_cells = {12288: 7.5, 16384: 10.0}
     for path in PRODUCTION_INPUTS:
         resolution = int(input_parameter(path, "mesh", "nx1"))
         assert int(input_parameter(path, "mesh", "nx2")) == resolution
@@ -292,6 +292,6 @@ def test_production_inputs_have_resolved_explicit_viscosity():
         viscous_length = (viscosity**3 / enstrophy_injection) ** (1.0 / 6.0)
         dissipation_mode = box_length / (2.0 * math.pi * viscous_length)
 
-        assert viscosity == 2.0e-6
+        assert viscosity == 8.4e-7
         assert viscous_length * resolution >= expected_cells[resolution]
-        assert dissipation_mode / forcing_mode >= 10.0
+        assert 15.5 <= dissipation_mode / forcing_mode <= 16.5

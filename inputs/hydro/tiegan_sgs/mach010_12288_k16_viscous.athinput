@@ -5,32 +5,32 @@
 #   c_s = 1, target v_rms = 0.1, target Mach = 0.1
 #   sparse global annulus 15 <= |k| <= 17, npeak = 16, 64 complex modes
 #   L_drive = L_box/16 = 0.0625, t_eddy = L_drive/v_rms = 0.625
-#   drag_rate = 0.1, dedt = 0.001, viscosity nu = 2.0e-6
+#   drag_rate = 0.1, dedt = 0.001, viscosity nu = 8.4e-7
 #   estimated eta = (2*pi*k_f)^2*dedt = 10.1065
-#   estimated l_nu = (nu^3/eta)^(1/6) = 9.6179e-4 = 7.88 cells
-#   estimated dissipation mode k_nu = 1/(2*pi*l_nu) = 165.5 = 10.3*k_f
+#   estimated l_nu = (nu^3/eta)^(1/6) = 6.2331e-4 = 7.66 cells
+#   estimated dissipation mode k_nu = 1/(2*pi*l_nu) = 255.3 = 15.96*k_f
 #
 # This is the lower-resolution member of a same-physics convergence pair. Its
-# viscous length is acceptably sampled but less conservative than the 15.8-cell
+# viscous length is acceptably sampled but less conservative than the 10.2-cell
 # sampling in mach010_16384_k16_viscous.athinput.
 #
 # The run lasts 40 forcing-scale turnover times. SGS output is written 20 times
 # per turnover; full-resolution output is written once per turnover.
 
 <comment>
-problem = Tiegan SGS Mach-0.1 8192^2 explicit-viscosity convergence run
+problem = Tiegan SGS Mach-0.1 12288^2 explicit-viscosity convergence run
 
 <job>
-basename = tiegan_sgs_m010_8192_k16_visc_nu2e6
+basename = tiegan_sgs_m010_12288_k16_visc_nu8p4e7
 
 <mesh>
 nghost = 3
-nx1 = 8192
+nx1 = 12288
 x1min = -0.5
 x1max = 0.5
 ix1_bc = periodic
 ox1_bc = periodic
-nx2 = 8192
+nx2 = 12288
 x2min = -0.5
 x2max = 0.5
 ix2_bc = periodic
@@ -59,7 +59,7 @@ eos = isothermal
 reconstruct = wenoz
 rsolver = roe
 iso_sound_speed = 1.0
-viscosity = 2.0e-6
+viscosity = 8.4e-7
 
 <hydro_srcterms>
 linear_drag = true

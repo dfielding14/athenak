@@ -2,7 +2,7 @@
 
 This project studies fully two-dimensional, compressible isothermal turbulence and
 on-the-fly subgrid-scale (SGS) filtering. The explicit-viscosity science pair is
-`mach010_8192_k16_viscous.athinput` and
+`mach010_12288_k16_viscous.athinput` and
 `mach010_16384_k16_viscous.athinput`. The older `512^2` and `1024^2` inputs are
 historical ILES commissioning runs and must not be used as resolved-viscosity DNS.
 
@@ -13,7 +13,7 @@ production run.
 ## Resolved-Viscosity Production Contract
 
 The science inputs use AthenaK's uniform isotropic kinematic shear viscosity with
-`viscosity = 2.0e-6`. For a narrow forcing annulus centered on mode `k_f`, estimate
+`viscosity = 8.4e-7`. For a narrow forcing annulus centered on mode `k_f`, estimate
 the enstrophy injection and viscous length as
 
 ```text
@@ -23,9 +23,9 @@ k_nu = L_box/(2*pi*l_nu)
 ```
 
 For `k_f = 16`, `dedt = 0.001`, and `L_box = 1`, this gives
-`eta_est = 10.1065`, `l_nu = 9.6179e-4`, and `k_nu = 165.5`. Thus the same physical
-viscosity is sampled by `7.88` cells at `8192^2` and `15.76` cells at `16384^2`,
-while retaining `k_nu/k_f = 10.3`. The `8192^2` run is the convergence reference;
+`eta_est = 10.1065`, `l_nu = 6.2331e-4`, and `k_nu = 255.3`. Thus the same physical
+viscosity is sampled by `7.66` cells at `12288^2` and `10.21` cells at `16384^2`,
+while retaining `k_nu/k_f = 15.96`. The `12288^2` run is the convergence reference;
 the `16384^2` result is the production candidate.
 
 This explicit resolution requirement changes the forcing-scale choice. Driving at
@@ -156,17 +156,18 @@ target Mach number. The third velocity remained zero.
 
 ## Explicit-Viscosity Science Pair
 
-`mach010_8192_k16_viscous.athinput` and
+`mach010_12288_k16_viscous.athinput` and
 `mach010_16384_k16_viscous.athinput` hold the physical parameters fixed while
-doubling the linear resolution. Both use Mach `0.1`, `k_f = 16`, ordinary
-kinematic viscosity `2.0e-6`, Rayleigh drag `0.1`, `dedt = 0.001`, and the same
+increasing the linear resolution by a factor of `4/3`. Both use Mach `0.1`,
+`k_f = 16`, ordinary kinematic viscosity `8.4e-7`, Rayleigh drag `0.1`,
+`dedt = 0.001`, and the same
 random seed. Each run lasts 40 forcing-scale turnover times.
 
 SGS products are written 20 times per turnover for factors
 `4, 8, 16, 32, 64, 128, 256, 512`. Full-resolution primitive states are written
 once per turnover, and restarts every four turnovers. A successful run must still
 demonstrate the measured enstrophy budget, a viscous dissipation rolloff separated
-from the numerical cutoff, and agreement between the `8192^2` and `16384^2`
+from the numerical cutoff, and agreement between the `12288^2` and `16384^2`
 solutions over their shared resolved range before it is labeled resolved DNS.
 
 For the isothermal hydro history file,
