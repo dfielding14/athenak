@@ -2,8 +2,8 @@
 
 This project studies fully two-dimensional, compressible isothermal turbulence and
 on-the-fly subgrid-scale (SGS) filtering. The explicit-viscosity science pair is
-`mach010_12288_k64_viscous.athinput` and
-`mach010_16384_k64_viscous.athinput`. The older `512^2` and `1024^2` inputs are
+`mach010_12288_n64_viscous.athinput` and
+`mach010_16384_n64_viscous.athinput`. The older `512^2` and `1024^2` inputs are
 historical ILES commissioning runs and must not be used as resolved-viscosity DNS.
 
 See [HANDOFF.md](HANDOFF.md) for the scientific rationale, completed pilot results,
@@ -13,30 +13,30 @@ production run.
 ## Resolved-Viscosity Production Contract
 
 The science inputs use AthenaK's uniform isotropic kinematic shear viscosity with
-`viscosity = 5.196e-6`. For a narrow forcing annulus centered on Fourier mode
-`k_f`, the viscous length `l_nu` uses the same inverse-angular-wavenumber definition
-as the earlier 15.76-cell estimate. Its associated wavelength is `lambda_nu`:
+`viscosity = 1.316e-7`. AthenaK's `nlow`, `npeak`, and `nhigh` are dimensionless
+integer box-mode numbers. For a periodic box of length `L_box`, distinguish this
+mode number `n` from physical angular wavenumber `k = 2*pi*n/L_box`:
 
 ```text
-eta_est = (2*pi*k_f/L_box)^2 * dedt
-l_nu = (viscosity^3/eta_est)^(1/6)
-n_nu = L_box/(2*pi*l_nu)
-lambda_nu = L_box/n_nu = 2*pi*l_nu
+k_peak = 2*pi*n_peak/L_box
+eta_est = k_peak^2 * dedt
+ell_visc = (viscosity^3/eta_est)^(1/6) = 1/k_visc
+n_visc = L_box*k_visc/(2*pi) = L_box/(2*pi*ell_visc)
+lambda_visc = L_box/n_visc = 2*pi*ell_visc
 ```
 
-For `k_f = 64`, `dedt = 0.001`, and `L_box = 1`, this gives
-`eta_est = 161.704`, `l_nu = 9.7660e-4`, `n_nu = 162.97`, and
-`lambda_nu = 6.1361e-3`. The viscous length is sampled by `12.0` cells at
-`12288^2` and `16.0` cells at `16384^2`. The associated wavelengths are `75.4`
-and `100.5` cells, and `n_nu/k_f = 2.546`. The `12288^2` run is the convergence
-reference, and the `16384^2` result is the production candidate.
+For `n_peak = 64`, `dedt = 0.001`, and `L_box = 1`, this gives
+`eta_est = 161.704`, `ell_visc = 1.5542e-4`, `n_visc = 1024.03`, and
+`lambda_visc = 9.7654e-4`. Thus `n_visc/n_peak = 16.0`. The viscous wavelength is
+sampled by `12.0` cells at `12288^2` and `16.0` cells at `16384^2`. The corresponding
+`ell_visc = 1/k_visc` sampling is `1.91` and `2.55` cells because it differs from
+the wavelength by `2*pi`. The `12288^2` run is the convergence reference, and the
+`16384^2` result is the production candidate.
 
-The three desired conditions cannot all hold at `16384^2`: `k_f = 64`,
-`l_nu = 16*dx`, and `n_nu/k_f = 16`. The first two imply `n_nu/k_f = 2.546`.
-Using `k_f = 96` would reduce it further to `1.698`; obtaining a mode ratio of 16
-with a 16-cell `l_nu` would require `k_f` near `10.2`. The production pair keeps
-`k_f = 64` because it is the better of the requested `64` and `96` choices, but it
-does not provide a broad forward-cascade interval under this estimate.
+At the same `n_visc = 1024`, `n_peak = 128` would give a ratio of `8`, and
+`n_peak = 96` would give `10.67`. The production pair therefore uses `n_peak = 64`,
+preserving the requested factor of 16 between forcing and viscous mode while
+retaining a factor of 64 between the box and forcing modes.
 
 Use `rsolver = roe`. AthenaK's HLLC implementation is ideal-gas only and rejects an
 isothermal EOS. HLLE supports isothermal hydro but is intentionally more diffusive;
@@ -45,8 +45,8 @@ viscosity should control the small-scale dissipation.
 
 ## Two-Dimensional Forcing And Drag
 
-The production inputs use a global parabolic spectrum over the narrow annulus
-`63 <= |k| <= 65`, peaked at `npeak = 64`. The sparse-annulus sampler selects
+The production inputs use a global parabolic spectrum over the narrow mode annulus
+`63 <= |n| <= 65`, peaked at `npeak = 64`. The sparse-annulus sampler selects
 64 equal-angle complex modes from one Fourier half-plane; their conjugates supply
 the other half-plane. The driver therefore evolves 64 modes without
 enumerating the full Cartesian mode volume or periodically repeating a smaller
@@ -103,7 +103,7 @@ a global non-overlapping square filter. The supplied inputs use powers of two.
 - a `1024 x 1024 x 1` mesh with `512 x 512 x 1` MeshBlocks;
 - isothermal sound speed `c_s = 1`;
 - target steady-state `v_rms = 0.25` and Mach `0.25`;
-- sparse global forcing over `31 <= |k| <= 33`, peaked at mode `32`, so
+- sparse global forcing over `31 <= |n| <= 33`, peaked at mode `32`, so
   `L_drive = 1/32`;
 - OU correlation time `tcorr = t_eddy = L_drive/v_rms = 0.125`;
 - Rayleigh `drag_rate = 0.25` and constant-Edot normalization with
@@ -134,7 +134,7 @@ decomposition intended for eight MPI ranks.
 
 `mach025_512_k16_mpi8_steady.athinput` is the first inverse-cascade steady-state
 run. It uses a `512 x 512 x 1` mesh split into eight `128 x 256 x 1` MeshBlocks,
-64 complex modes in the narrow annulus `15 <= |k| <= 17`, and `npeak = 16`.
+64 complex modes in the narrow annulus `15 <= |n| <= 17`, and `npeak = 16`.
 With `drag_rate = 0.25` and `dedt = 0.015625`, the inverse-cascade friction-scale
 estimate is `k_drag ~ (drag_rate^3/dedt)^(1/2) = 1`, while drag changes the
 forcing-scale velocity by only `drag_rate*t_eddy = 1/16` per turnover. The run
@@ -160,10 +160,10 @@ target Mach number. The third velocity remained zero.
 
 ## Explicit-Viscosity Science Pair
 
-`mach010_12288_k64_viscous.athinput` and
-`mach010_16384_k64_viscous.athinput` hold the physical parameters fixed while
+`mach010_12288_n64_viscous.athinput` and
+`mach010_16384_n64_viscous.athinput` hold the physical parameters fixed while
 increasing the linear resolution by a factor of `4/3`. Both use Mach `0.1`,
-`k_f = 64`, ordinary kinematic viscosity `5.196e-6`, Rayleigh drag `0.1`,
+`n_peak = 64`, ordinary kinematic viscosity `1.316e-7`, Rayleigh drag `0.1`,
 `dedt = 0.001`, and the same random seed. With `tcorr = t_eddy = 0.15625`, each
 run lasts 40 forcing-scale turnover times (`tlim = 6.25`). This duration is not
 assumed to establish large-scale stationarity from rest; the history and spectra

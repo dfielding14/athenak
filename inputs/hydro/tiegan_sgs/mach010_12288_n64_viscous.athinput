@@ -1,39 +1,37 @@
-# Tiegan SGS explicit-viscosity production candidate: fully 2D isothermal turbulence.
-# Run only after the 12288^2 convergence case and a short machine-specific scaling pilot.
+# Tiegan SGS explicit-viscosity convergence run: fully 2D isothermal turbulence.
+# Run with a machine-appropriate MPI/GPU launcher and record the exact Git commit.
 #
-# Nominal physical and resolution scales:
+# Physical parameters shared with the 16384^2 production candidate:
 #   c_s = 1, target v_rms = 0.1, target Mach = 0.1
-#   sparse global annulus 63 <= |k| <= 65, npeak = 64, 64 complex modes
-#   L_drive = L_box/64 = 0.015625, t_eddy = L_drive/v_rms = 0.15625
-#   drag_rate = 0.1, dedt = 0.001, viscosity nu = 5.196e-6
-#   estimated eta = (2*pi*k_f)^2*dedt = 161.704
-#   viscous length l_nu = (nu^3/eta)^(1/6) = 9.7660e-4 = 16.0 cells
-#   dissipation mode n_nu = 1/(2*pi*l_nu) = 162.97 = 2.546*k_f
-#   cutoff wavelength lambda_nu = 1/n_nu = 6.1361e-3 = 100.5 cells
-#   forcing-scale Reynolds number v_rms*L_drive/nu = 301
+#   sparse global annulus 63 <= |n| <= 65, npeak = 64, 64 complex modes
+#   L_drive = L_box/npeak = 0.015625, t_eddy = L_drive/v_rms = 0.15625
+#   drag_rate = 0.1, dedt = 0.001, viscosity nu = 1.316e-7
+#   estimated eta = (2*pi*npeak)^2*dedt = 161.704
+#   inverse angular-wavenumber length 1/k_visc = 1.5542e-4
+#   AthenaK mode n_visc = k_visc/(2*pi) = 1024.0 = 16.0*npeak
+#   viscous wavelength lambda_visc = 1/n_visc = 9.7654e-4 = 12.0 cells
 #
-# The coefficient targets a 16-cell viscous length l_nu, using the same definition
-# as the earlier 15.76-cell estimate. At k_f=64 this necessarily gives only
-# n_nu/k_f=2.546. A measured enstrophy budget and 12288^2/16384^2 convergence
-# comparison are still required before labeling the resulting dataset resolved DNS.
+# This is the lower-resolution member of a same-physics convergence pair. Its
+# viscous wavelength is acceptably sampled but less conservatively than the 16-cell
+# sampling in mach010_16384_n64_viscous.athinput.
 #
 # The run lasts 40 forcing-scale turnover times. SGS output is written 20 times
 # per turnover; full-resolution output is written once per turnover.
 
 <comment>
-problem = Tiegan SGS Mach-0.1 16384^2 resolved-viscosity production candidate
+problem = Tiegan SGS Mach-0.1 12288^2 explicit-viscosity convergence run
 
 <job>
-basename = tiegan_sgs_m010_16384_k64_visc_nu5p196e6
+basename = tiegan_sgs_m010_12288_n64_visc_nu1p316e7
 
 <mesh>
 nghost = 3
-nx1 = 16384
+nx1 = 12288
 x1min = -0.5
 x1max = 0.5
 ix1_bc = periodic
 ox1_bc = periodic
-nx2 = 16384
+nx2 = 12288
 x2min = -0.5
 x2max = 0.5
 ix2_bc = periodic
@@ -62,7 +60,7 @@ eos = isothermal
 reconstruct = wenoz
 rsolver = roe
 iso_sound_speed = 1.0
-viscosity = 5.196e-6
+viscosity = 1.316e-7
 
 <hydro_srcterms>
 linear_drag = true

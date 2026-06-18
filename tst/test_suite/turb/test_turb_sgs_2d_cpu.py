@@ -11,8 +11,8 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INPUT = REPO_ROOT / "tst" / "inputs" / "turb_sgs_2d.athinput"
 PRODUCTION_INPUTS = (
-    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_12288_k64_viscous.athinput",
-    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_16384_k64_viscous.athinput",
+    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_12288_n64_viscous.athinput",
+    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_16384_n64_viscous.athinput",
 )
 ATHENA = Path.cwd() / "athena"
 sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
@@ -271,8 +271,8 @@ def test_isothermal_hllc_is_rejected(tmp_path):
 
 
 def test_production_inputs_have_resolved_explicit_viscosity():
-    """The production pair keeps one viscosity and a resolved viscous length."""
-    expected_viscous_cells = {12288: 11.5, 16384: 15.5}
+    """The production pair targets n_visc/n_peak=16 and a resolved wavelength."""
+    expected_wavelength_cells = {12288: 11.5, 16384: 15.5}
     for path in PRODUCTION_INPUTS:
         resolution = int(input_parameter(path, "mesh", "nx1"))
         assert int(input_parameter(path, "mesh", "nx2")) == resolution
@@ -282,22 +282,23 @@ def test_production_inputs_have_resolved_explicit_viscosity():
 
         viscosity = float(input_parameter(path, "hydro", "viscosity"))
         injection = float(input_parameter(path, "turb_driving", "dedt"))
-        forcing_mode = float(input_parameter(path, "turb_driving", "npeak"))
+        n_peak = float(input_parameter(path, "turb_driving", "npeak"))
         box_length = (
             float(input_parameter(path, "mesh", "x1max"))
             - float(input_parameter(path, "mesh", "x1min"))
         )
-        forcing_wavenumber = 2.0 * math.pi * forcing_mode / box_length
-        enstrophy_injection = forcing_wavenumber**2 * injection
-        viscous_length = (viscosity**3 / enstrophy_injection) ** (1.0 / 6.0)
-        dissipation_mode = box_length / (2.0 * math.pi * viscous_length)
+        k_peak = 2.0 * math.pi * n_peak / box_length
+        enstrophy_injection = k_peak**2 * injection
+        ell_visc = (viscosity**3 / enstrophy_injection) ** (1.0 / 6.0)
+        n_visc = box_length / (2.0 * math.pi * ell_visc)
+        lambda_visc = box_length / n_visc
 
-        assert forcing_mode == 64.0
+        assert n_peak == 64.0
         assert float(input_parameter(path, "turb_driving", "nlow")) == 63.0
         assert float(input_parameter(path, "turb_driving", "nhigh")) == 65.0
-        assert viscosity == 5.196e-6
-        assert viscous_length * resolution >= expected_viscous_cells[resolution]
-        assert 2.4 <= dissipation_mode / forcing_mode <= 2.7
+        assert viscosity == 1.316e-7
+        assert lambda_visc * resolution >= expected_wavelength_cells[resolution]
+        assert 15.5 <= n_visc / n_peak <= 16.5
         tcorr = float(input_parameter(path, "turb_driving", "tcorr"))
         assert tcorr == 0.15625
         assert float(input_parameter(path, "turb_driving", "dt_update")) == tcorr / 100.0
