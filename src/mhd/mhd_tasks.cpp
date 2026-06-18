@@ -279,7 +279,12 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
 
   // Add user source terms
   if (pmy_pack->pmesh->pgen->user_srcs) {
-    (pmy_pack->pmesh->pgen->user_srcs_func)(pmy_pack->pmesh, beta_dt);
+    auto *pgen = pmy_pack->pmesh->pgen.get();
+    if (pgen->user_stage_srcs_func != nullptr) {
+      pgen->user_stage_srcs_func(pmy_pack->pmesh, beta_dt, pdrive, stage);
+    } else {
+      pgen->user_srcs_func(pmy_pack->pmesh, beta_dt);
+    }
   }
 
   return TaskStatus::complete;
