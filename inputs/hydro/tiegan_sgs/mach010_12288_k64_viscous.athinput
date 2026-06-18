@@ -5,14 +5,14 @@
 #   c_s = 1, target v_rms = 0.1, target Mach = 0.1
 #   sparse global annulus 63 <= |k| <= 65, npeak = 64, 64 complex modes
 #   L_drive = L_box/64 = 0.015625, t_eddy = L_drive/v_rms = 0.15625
-#   drag_rate = 0.1, dedt = 0.001, viscosity nu = 1.316e-7
+#   drag_rate = 0.1, dedt = 0.001, viscosity nu = 5.196e-6
 #   estimated eta = (2*pi*k_f)^2*dedt = 161.704
-#   inverse-wavenumber length l_nu = (nu^3/eta)^(1/6) = 1.5542e-4
-#   dissipation mode n_nu = 1/(2*pi*l_nu) = 1024.0 = 16.0*k_f
-#   cutoff wavelength lambda_nu = 1/n_nu = 9.7654e-4 = 12.0 cells
+#   viscous length l_nu = (nu^3/eta)^(1/6) = 9.7660e-4 = 12.0 cells
+#   dissipation mode n_nu = 1/(2*pi*l_nu) = 162.97 = 2.546*k_f
+#   cutoff wavelength lambda_nu = 1/n_nu = 6.1361e-3 = 75.4 cells
 #
 # This is the lower-resolution member of a same-physics convergence pair. Its
-# cutoff wavelength is acceptably sampled but less conservatively than the 16-cell
+# viscous length is acceptably sampled but less conservatively than the 16-cell
 # sampling in mach010_16384_k64_viscous.athinput.
 #
 # The run lasts 40 forcing-scale turnover times. SGS output is written 20 times
@@ -22,7 +22,7 @@
 problem = Tiegan SGS Mach-0.1 12288^2 explicit-viscosity convergence run
 
 <job>
-basename = tiegan_sgs_m010_12288_k64_visc_nu1p316e7
+basename = tiegan_sgs_m010_12288_k64_visc_nu5p196e6
 
 <mesh>
 nghost = 3
@@ -60,7 +60,7 @@ eos = isothermal
 reconstruct = wenoz
 rsolver = roe
 iso_sound_speed = 1.0
-viscosity = 1.316e-7
+viscosity = 5.196e-6
 
 <hydro_srcterms>
 linear_drag = true

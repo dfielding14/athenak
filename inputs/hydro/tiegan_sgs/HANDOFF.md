@@ -1,13 +1,13 @@
 # Project status update: Tiegan SGS turbulence and high-resolution handoff
 
 - Date: 2026-06-18
-- Exact timestamp: 2026-06-18T10:27:47-04:00
+- Exact timestamp: 2026-06-18T10:49:29-04:00
 - Project or repository: AthenaK, `dfielding14/athenak`
 - Report profile: standard, because this is a simulation-pilot and supercomputer handoff
 - Status: explicit-viscosity production inputs configured; supercomputer convergence not run
 - Branch: `Tiegan_SGS`
-- Commit: `02457b3b0d37cb3f2b057610b0c28fb1f68da2d6` before the forcing-scale correction
-- Worktree state: modified by the forcing-scale input and test update
+- Commit: `c4cbf4ec8ce10055c775d07cff7df531ccc8b973` before the viscous-scale correction
+- Worktree state: modified by the viscous-scale input and test update
 - Agent identifier: Codex
 - Data or simulations analyzed: completed `512 x 512` drag-0.25 and drag-0.025 pilots
 - Compute environment: local macOS CPU, Release build, MPI enabled, Kokkos Serial
@@ -21,9 +21,9 @@ Favre velocity, and the three independent components of the two-dimensional SGS
 stress tensor.
 
 The implementation, inputs, tests, and pilot configurations live on the `Tiegan_SGS`
-branch. Immediately before the forcing-scale correction, the clean local branch and
+branch. Immediately before the viscous-scale correction, the clean local branch and
 the live remote branch both pointed to commit
-`02457b3b0d37cb3f2b057610b0c28fb1f68da2d6`.
+`c4cbf4ec8ce10055c775d07cff7df531ccc8b973`.
 
 The simulations are genuinely two-dimensional: `nx3 = 1`, the forcing contains no
 $k_z$ modes or out-of-plane force, and completed pilots retained exactly zero third
@@ -49,15 +49,17 @@ before WENOZ/Roe implicit dissipation becomes important. Lower drag changes the
 inverse cascade dramatically but does not recover a clean $k^{-3}$ regime.
 
 The science configuration now requires ordinary explicit viscosity. The same physical
-coefficient, $\nu=1.316\times10^{-7}$, is used in committed `12288 x 12288` and
+coefficient, $\nu=5.196\times10^{-6}$, is used in committed `12288 x 12288` and
 `16384 x 16384` inputs. With Mach `0.1`, $k_f=64$, and energy injection `0.001`, the
-estimated cutoff wavelength is sampled by `12.0` and `16.0` cells, respectively. Its
-Fourier mode is $n_\nu\simeq1024$, a factor `16.0` above the forcing peak.
+estimated viscous length $\ell_\nu$ is sampled by `12.0` and `16.0` cells,
+respectively. Its Fourier mode is $n_\nu\simeq162.97$, only a factor `2.546` above
+the forcing peak.
 
-At this fixed cutoff, $k_f=128$ would leave only a factor of `8` for the direct
-cascade, while $k_f=96$ would leave `10.67`. The production pair therefore uses
-$k_f=64$, giving the requested direct-cascade factor of `16` and an inverse-cascade
-factor of `64` between the box and forcing modes.
+The requested conditions $k_f=64$, $\ell_\nu=16\Delta x$, and
+$n_\nu/k_f=16$ cannot all hold at `16384^2`. The first two fix the ratio at `2.546`;
+$k_f=96$ would reduce it to `1.698`, while a ratio of `16` would require $k_f\simeq10.2$.
+The production pair keeps $k_f=64$ as the better of the requested `64` and `96`
+choices, but the estimated forward-cascade interval is narrow.
 
 Roe remains the baseline Riemann solver. AthenaK's HLLC implementation is ideal-gas
 only and explicitly rejects an isothermal EOS. HLLE supports isothermal hydro but is
@@ -89,7 +91,7 @@ Mach `0.25` has been used for faster local commissioning and drag calibration.
 | OU correlation time | $t_{\rm corr}=t_{\rm eddy}$ |
 | Large-scale sink | Uniform Rayleigh drag, $d\boldsymbol{v}/dt=-\alpha\boldsymbol{v}$ |
 | Forcing normalization | Constant energy injection rate, `normalization = edot` |
-| Baseline dissipation | Uniform isotropic kinematic shear viscosity, $\nu=1.316\times10^{-7}$ |
+| Baseline dissipation | Uniform isotropic kinematic shear viscosity, $\nu=5.196\times10^{-6}$ |
 
 For forcing centered on box mode $k_f$,
 
@@ -125,9 +127,9 @@ n_\nu = \frac{L_{\rm box}}{2\pi\ell_\nu},
 $$
 
 For the production parameters, $\eta_f\simeq161.704$,
-$\ell_\nu\simeq1.5542\times10^{-4}$, $n_\nu\simeq1024.03$, and
-$\lambda_\nu\simeq9.7654\times10^{-4}$. At `16384^2`, $\lambda_\nu$ is `16.0`
-cells while $\ell_\nu$ is `2.55` cells. Reporting both prevents a hidden factor of
+$\ell_\nu\simeq9.7660\times10^{-4}$, $n_\nu\simeq162.97$, and
+$\lambda_\nu\simeq6.1361\times10^{-3}$. At `16384^2`, $\ell_\nu$ is `16.0`
+cells and $\lambda_\nu$ is `100.5` cells. Reporting both prevents a hidden factor of
 $2\pi$ in the resolution claim. These remain design estimates; the run must measure
 the enstrophy injection and dissipation budget.
 
@@ -171,17 +173,17 @@ comparison before it is treated as production-ready.
 | Alternative MeshBlock | `256 x 256 x 1` | 4096 MeshBlocks; may expose more parallelism but caps filters at 256 |
 | Target Mach | `0.1` | Fiducial low-Mach SGS case |
 | Sound speed | `1.0` | Then target $v_{\rm rms}=0.1$ |
-| Explicit viscosity | `1.316e-7` | Same physical coefficient at `12288^2` and `16384^2` |
-| Forcing peak | `npeak = 64` | Factor 64 above the box mode and 16 below the viscous cutoff |
+| Explicit viscosity | `5.196e-6` | Same physical coefficient at `12288^2` and `16384^2` |
+| Forcing peak | `npeak = 64` | Requested forcing scale; only 2.546 below the estimated cutoff mode |
 | Forcing annulus | `63 <= |k| <= 65` | Narrow global annulus |
 | Sparse complex modes | `64` | Angularly distributed forcing without a full mode-volume scan |
 | `tcorr` | `0.15625` | One forcing-scale eddy time |
 | `dt_update` baseline | `0.0015625` | `tcorr / 100`, matching pilot practice |
 | Drag rate | `0.1` | Initial Mach-0.1 calibration |
 | `dedt` | `0.001` | Initial Mach-0.1 calibration |
-| Estimated $\lambda_\nu/\Delta x$ | `16.0` | Cutoff wavelength sampling at `16384^2` |
-| Estimated $\ell_\nu/\Delta x$ | `2.55` | Inverse-angular-wavenumber length; differs by $2\pi$ |
-| Estimated $n_\nu/k_f$ | `16.0` | Target direct-cascade scale separation |
+| Estimated $\ell_\nu/\Delta x$ | `16.0` | Viscous-length sampling at `16384^2` |
+| Estimated $\lambda_\nu/\Delta x$ | `100.5` | Associated wavelength; differs by $2\pi$ |
+| Estimated $n_\nu/k_f$ | `2.546` | Unavoidable for $k_f=64$ and $\ell_\nu=16\Delta x$ |
 | Duration | `40 t_eddy = 6.25` | Fixed turnover count; stationarity still requires verification |
 | Filter factors | `4, 8, 16, 32, 64, 128, 256, 512` with 512-square blocks | Broad SGS hierarchy; all factors divide each active block dimension |
 
@@ -293,18 +295,18 @@ been benchmarked at `16384 x 16384` and is a required production gate.
 
 HLLC is not an alternative for these inputs: AthenaK rejects HLLC with an isothermal
 EOS. Roe supports isothermal hydro and is less diffusive than HLLE. Since the explicit
-viscous cutoff is predicted near mode `1024`, below the numerical grid cutoff,
+viscous cutoff is predicted near mode `163`, below the numerical grid cutoff,
 Roe is retained so numerical diffusion is minimized rather than deliberately increased.
 
 ## 2.5 Validation
 
 | Purpose | Method | Expected result | Actual result | Tolerance | Status | Caveat |
 | --- | --- | --- | --- | --- | --- | --- |
-| Confirm branch baseline | Compared `HEAD`, `origin/Tiegan_SGS`, and the live remote before editing | All SHAs equal | All were `02457b3b0d37cb3f2b057610b0c28fb1f68da2d6` | Exact | passed | Must recheck after correction commit |
+| Confirm branch baseline | Compared `HEAD`, `origin/Tiegan_SGS`, and the live remote before editing | All SHAs equal | All were `c4cbf4ec8ce10055c775d07cff7df531ccc8b973` | Exact | passed | Must recheck after correction commit |
 | Verify SGS math, viscosity path, and 2D contract | Ran focused CPU turbulence regressions with isothermal viscosity enabled | Direct Favre reconstruction matches; $v_3=0$ | 13 focused CPU tests passed | SGS `rtol=5e-6`, `atol=5e-8`; exact zero checks | passed | Current local Release/MPI executable |
 | Verify MPI turbulence path | Ran forcing and four-rank viscous-SGS regressions | MPI normalization matches; viscous SGS output retains $v_3=0$ | 2 MPI tests passed | RMS forcing `rel=2e-6`; exact zero checks | passed | Local regression scale, not production scale |
 | Verify production input execution | Ran both inputs at downscaled `512^2` with zero cycles and the `16384^2` input for two cycles | Inputs initialize and the explicit-viscosity task list advances | Both initialized; the smoke run reached cycle 2 | Exact successful execution | passed | Not a performance or physics run |
-| Verify viscosity resolution contract | Parsed both production inputs and evaluated the design estimate | Same $\nu$; at least 11.5 and 15.5 cells per $\lambda_\nu$; $n_\nu/k_f\simeq16$ | `12.0` and `16.0` cells; $n_\nu/k_f=16.0$ | Configuration assertions | passed | Uses estimated, not measured, enstrophy injection |
+| Verify viscosity resolution contract | Parsed both production inputs and evaluated the design estimate | Same $\nu$; at least 11.5 and 15.5 cells per $\ell_\nu$ | `12.0` and `16.0` cells; $n_\nu/k_f=2.546$ | Configuration assertions | passed | Uses estimated, not measured, enstrophy injection |
 | Verify solver compatibility | Attempted isothermal HLLC initialization | Unsupported combination is rejected | Fatal rejection matched the expected message | Exact message | passed | Roe remains the baseline |
 | Verify high-drag pilot completion | Inspected exit status, run log, and history | Reaches `t=10`, zero exit, $K_z=0$ | Reached `t=10`, exit `0`, $v_{\rm rms}=0.24452$, $K_z=0$ | Exact completion and zero $K_z$ | passed | Local eight-rank run |
 | Verify low-drag comparison completion | Inspected exit status, run log, and history | Reaches `t=10`, zero exit, $K_z=0$ | Reached `t=10`, exit `0`, $v_{\rm rms}=0.45581$, $K_z=0$ | Exact completion and zero $K_z$ | passed | Not statistically stationary |
@@ -334,11 +336,11 @@ above the forcing supports insufficient resolved scale separation and broad impl
 dissipation as the leading explanation.
 
 The explicit-viscosity production design is a calculated configuration, not a new
-simulation result. Its predicted cutoff wavelength is `9.7654e-4`, corresponding to
-`12.0` cells at `12288^2` and `16.0` cells at `16384^2`. The associated
-inverse-wavenumber length is `1.5542e-4`, or `1.91` and `2.55` cells. The forcing-scale
-Reynolds number is approximately `11873`, so the selected viscosity remains small at
-the driving scale while being deliberately resolvable at the dissipation scale.
+simulation result. Its predicted viscous length is `9.7660e-4`, corresponding to
+`12.0` cells at `12288^2` and `16.0` cells at `16384^2`. The associated wavelength
+is `6.1361e-3`, or `75.4` and `100.5` cells. The forcing-scale Reynolds number is
+approximately `301`; the viscosity is resolved but leaves little separation between
+the forcing and estimated dissipation modes.
 
 ## 2.7 Failures and discarded approaches
 
@@ -349,13 +351,12 @@ the driving scale while being deliberately resolvable at the dissipation scale.
   for science production because it repeats a smaller spatial realization.
 - Tenfold lower drag was tested and produced a strong condensate rather than a
   comparable lower-friction steady state.
-- The previous $k_f=128$ `16384^2` proposal was discarded because a 16-cell cutoff
-  wavelength would leave only $n_\nu/k_f\simeq8$.
-- The intermediate $k_f=16$, $\nu=8.4\times10^{-7}$ configuration was discarded
-  because it targeted a mode ratio without implementing the requested forcing scale
-  and 16-cell cutoff wavelength together.
+- The previous $k_f=128$ `16384^2` proposal was discarded because a 16-cell viscous
+  length would leave only $n_\nu/k_f\simeq1.27$.
+- The intermediate $k_f=64$, $\nu=1.316\times10^{-7}$ configuration was discarded
+  because it put the cutoff wavelength, rather than the viscous length, at 16 cells.
 - The `8192^2` convergence input remains discarded; with the final physical model it
-  would sample the cutoff wavelength with only `8` cells.
+  would sample the viscous length with only `8` cells.
 - HLLC was considered but is unavailable for AthenaK's isothermal hydro equations.
 - Saving high-cadence full-resolution data at `16384 x 16384` is rejected as the
   default production plan because it creates several tebibytes of output.
@@ -388,7 +389,7 @@ the driving scale while being deliberately resolvable at the dissipation scale.
 
 ## 2.9 Recommended next steps
 
-1. Run the committed `12288^2` case with $\nu=1.316\times10^{-7}$ and measure the actual
+1. Run the committed `12288^2` case with $\nu=5.196\times10^{-6}$ and measure the actual
    energy and enstrophy injection and viscous dissipation rates.
 2. Run the same physical model at `16384^2`. Require agreement over the shared
    resolved range and confirm that the viscous rolloff does not move materially.
@@ -400,18 +401,18 @@ the driving scale while being deliberately resolvable at the dissipation scale.
 
 ## 3.1 Repository state
 
-Before the forcing-scale correction:
+Before the viscous-scale correction:
 
 ```text
 repository: git@github.com:dfielding14/athenak.git
 branch:     Tiegan_SGS
-HEAD:       02457b3b0d37cb3f2b057610b0c28fb1f68da2d6
-remote:     02457b3b0d37cb3f2b057610b0c28fb1f68da2d6
+HEAD:       c4cbf4ec8ce10055c775d07cff7df531ccc8b973
+remote:     c4cbf4ec8ce10055c775d07cff7df531ccc8b973
 worktree:   clean
 ```
 
 After cloning or pulling, use `git log -1 --oneline` to record the later commit that
-corrects the forcing scale and viscous-cutoff convention.
+restores the original viscous-length convention.
 
 The scientific analysis scripts and generated simulation data intentionally live
 outside the AthenaK branch under the local research directory

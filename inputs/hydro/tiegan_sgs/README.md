@@ -13,9 +13,9 @@ production run.
 ## Resolved-Viscosity Production Contract
 
 The science inputs use AthenaK's uniform isotropic kinematic shear viscosity with
-`viscosity = 1.316e-7`. For a narrow forcing annulus centered on Fourier mode
-`k_f`, distinguish the inverse-angular-wavenumber length `l_nu` from the cutoff
-wavelength `lambda_nu`:
+`viscosity = 5.196e-6`. For a narrow forcing annulus centered on Fourier mode
+`k_f`, the viscous length `l_nu` uses the same inverse-angular-wavenumber definition
+as the earlier 15.76-cell estimate. Its associated wavelength is `lambda_nu`:
 
 ```text
 eta_est = (2*pi*k_f/L_box)^2 * dedt
@@ -25,17 +25,18 @@ lambda_nu = L_box/n_nu = 2*pi*l_nu
 ```
 
 For `k_f = 64`, `dedt = 0.001`, and `L_box = 1`, this gives
-`eta_est = 161.704`, `l_nu = 1.5542e-4`, `n_nu = 1024.03`, and
-`lambda_nu = 9.7654e-4`. The cutoff wavelength is sampled by `12.0` cells at
-`12288^2` and `16.0` cells at `16384^2`, while `n_nu/k_f = 16.0`. The corresponding
-`l_nu` sampling is `1.91` and `2.55` cells; those numbers are not the wavelength
-sampling. The `12288^2` run is the convergence reference, and the `16384^2` result
-is the production candidate.
+`eta_est = 161.704`, `l_nu = 9.7660e-4`, `n_nu = 162.97`, and
+`lambda_nu = 6.1361e-3`. The viscous length is sampled by `12.0` cells at
+`12288^2` and `16.0` cells at `16384^2`. The associated wavelengths are `75.4`
+and `100.5` cells, and `n_nu/k_f = 2.546`. The `12288^2` run is the convergence
+reference, and the `16384^2` result is the production candidate.
 
-At the same 16-cell cutoff wavelength, `k_f = 128` would give only
-`n_nu/k_f = 8`, and `k_f = 96` would give `10.67`. The production pair therefore
-uses `k_f = 64`, preserving the requested factor of 16 between forcing and the
-estimated viscous cutoff while retaining a factor of 64 for the inverse cascade.
+The three desired conditions cannot all hold at `16384^2`: `k_f = 64`,
+`l_nu = 16*dx`, and `n_nu/k_f = 16`. The first two imply `n_nu/k_f = 2.546`.
+Using `k_f = 96` would reduce it further to `1.698`; obtaining a mode ratio of 16
+with a 16-cell `l_nu` would require `k_f` near `10.2`. The production pair keeps
+`k_f = 64` because it is the better of the requested `64` and `96` choices, but it
+does not provide a broad forward-cascade interval under this estimate.
 
 Use `rsolver = roe`. AthenaK's HLLC implementation is ideal-gas only and rejects an
 isothermal EOS. HLLE supports isothermal hydro but is intentionally more diffusive;
@@ -162,7 +163,7 @@ target Mach number. The third velocity remained zero.
 `mach010_12288_k64_viscous.athinput` and
 `mach010_16384_k64_viscous.athinput` hold the physical parameters fixed while
 increasing the linear resolution by a factor of `4/3`. Both use Mach `0.1`,
-`k_f = 64`, ordinary kinematic viscosity `1.316e-7`, Rayleigh drag `0.1`,
+`k_f = 64`, ordinary kinematic viscosity `5.196e-6`, Rayleigh drag `0.1`,
 `dedt = 0.001`, and the same random seed. With `tcorr = t_eddy = 0.15625`, each
 run lasts 40 forcing-scale turnover times (`tlim = 6.25`). This duration is not
 assumed to establish large-scale stationarity from rest; the history and spectra

@@ -271,8 +271,8 @@ def test_isothermal_hllc_is_rejected(tmp_path):
 
 
 def test_production_inputs_have_resolved_explicit_viscosity():
-    """The production pair keeps one viscosity and a resolved cutoff wavelength."""
-    expected_wavelength_cells = {12288: 11.5, 16384: 15.5}
+    """The production pair keeps one viscosity and a resolved viscous length."""
+    expected_viscous_cells = {12288: 11.5, 16384: 15.5}
     for path in PRODUCTION_INPUTS:
         resolution = int(input_parameter(path, "mesh", "nx1"))
         assert int(input_parameter(path, "mesh", "nx2")) == resolution
@@ -291,14 +291,13 @@ def test_production_inputs_have_resolved_explicit_viscosity():
         enstrophy_injection = forcing_wavenumber**2 * injection
         viscous_length = (viscosity**3 / enstrophy_injection) ** (1.0 / 6.0)
         dissipation_mode = box_length / (2.0 * math.pi * viscous_length)
-        cutoff_wavelength = box_length / dissipation_mode
 
         assert forcing_mode == 64.0
         assert float(input_parameter(path, "turb_driving", "nlow")) == 63.0
         assert float(input_parameter(path, "turb_driving", "nhigh")) == 65.0
-        assert viscosity == 1.316e-7
-        assert cutoff_wavelength * resolution >= expected_wavelength_cells[resolution]
-        assert 15.5 <= dissipation_mode / forcing_mode <= 16.5
+        assert viscosity == 5.196e-6
+        assert viscous_length * resolution >= expected_viscous_cells[resolution]
+        assert 2.4 <= dissipation_mode / forcing_mode <= 2.7
         tcorr = float(input_parameter(path, "turb_driving", "tcorr"))
         assert tcorr == 0.15625
         assert float(input_parameter(path, "turb_driving", "dt_update")) == tcorr / 100.0
