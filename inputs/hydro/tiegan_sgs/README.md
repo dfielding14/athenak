@@ -1,21 +1,50 @@
 # Tiegan SGS
 
 This project studies fully two-dimensional, compressible isothermal turbulence and
-on-the-fly subgrid-scale (SGS) filtering. `mach010_1024.athinput` is the project
-fiducial Mach-0.1 run; `mach025_1024.athinput` is the first higher-Mach commissioning
-run.
+on-the-fly subgrid-scale (SGS) filtering. The explicit-viscosity science pair is
+`mach010_8192_k16_viscous.athinput` and
+`mach010_16384_k16_viscous.athinput`. The older `512^2` and `1024^2` inputs are
+historical ILES commissioning runs and must not be used as resolved-viscosity DNS.
 
 See [HANDOFF.md](HANDOFF.md) for the scientific rationale, completed pilot results,
 known limitations, and the staged plan for moving toward a `16384 x 16384`
 production run.
 
+## Resolved-Viscosity Production Contract
+
+The science inputs use AthenaK's uniform isotropic kinematic shear viscosity with
+`viscosity = 2.0e-6`. For a narrow forcing annulus centered on mode `k_f`, estimate
+the enstrophy injection and viscous length as
+
+```text
+eta_est = (2*pi*k_f/L_box)^2 * dedt
+l_nu = (viscosity^3/eta_est)^(1/6)
+k_nu = L_box/(2*pi*l_nu)
+```
+
+For `k_f = 16`, `dedt = 0.001`, and `L_box = 1`, this gives
+`eta_est = 10.1065`, `l_nu = 9.6179e-4`, and `k_nu = 165.5`. Thus the same physical
+viscosity is sampled by `7.88` cells at `8192^2` and `15.76` cells at `16384^2`,
+while retaining `k_nu/k_f = 10.3`. The `8192^2` run is the convergence reference;
+the `16384^2` result is the production candidate.
+
+This explicit resolution requirement changes the forcing-scale choice. Driving at
+`k_f = sqrt(16384) = 128` would place a conservatively resolved viscous cutoff too
+close to the forcing to leave a useful direct-cascade interval. The production pair
+therefore keeps `k_f = 16`, which is close to the logarithmic midpoint between the
+box mode and the estimated viscous cutoff.
+
+Use `rsolver = roe`. AthenaK's HLLC implementation is ideal-gas only and rejects an
+isothermal EOS. HLLE supports isothermal hydro but is intentionally more diffusive;
+it is a robustness fallback, not the baseline for a calculation in which explicit
+viscosity should control the small-scale dissipation.
+
 ## Two-Dimensional Forcing And Drag
 
-For `Nres = 1024`, the supplied inputs target global mode
-`k_drive = sqrt(Nres) = 32`. They use a global parabolic spectrum over the narrow
-annulus `31 <= |k| <= 33`, peaked at `npeak = 32`. The sparse-annulus sampler
-selects 32 equal-angle complex modes from one Fourier half-plane; their conjugates
-supply the other half-plane. The driver therefore evolves 32 modes without
+The production inputs use a global parabolic spectrum over the narrow annulus
+`15 <= |k| <= 17`, peaked at `npeak = 16`. The sparse-annulus sampler selects
+64 equal-angle complex modes from one Fourier half-plane; their conjugates supply
+the other half-plane. The driver therefore evolves 64 modes without
 enumerating the full Cartesian mode volume or periodically repeating a smaller
 forcing realization.
 
@@ -63,7 +92,7 @@ The coarsening factor must divide every active MeshBlock dimension. Keeping ever
 factor aligned with MeshBlock boundaries makes the local box filters equivalent to
 a global non-overlapping square filter. The supplied inputs use powers of two.
 
-## First Run
+## Historical Commissioning Runs
 
 `mach025_1024.athinput` uses:
 
@@ -124,6 +153,21 @@ velocity spectrum placed `23.6%` of its energy in the box mode, `62.2%` at
 `k <= 4`, and `94.1%` below the forcing band. Thus a tenfold drag reduction at
 fixed `dedt` produces a strong box-scale condensate and does not preserve the
 target Mach number. The third velocity remained zero.
+
+## Explicit-Viscosity Science Pair
+
+`mach010_8192_k16_viscous.athinput` and
+`mach010_16384_k16_viscous.athinput` hold the physical parameters fixed while
+doubling the linear resolution. Both use Mach `0.1`, `k_f = 16`, ordinary
+kinematic viscosity `2.0e-6`, Rayleigh drag `0.1`, `dedt = 0.001`, and the same
+random seed. Each run lasts 40 forcing-scale turnover times.
+
+SGS products are written 20 times per turnover for factors
+`4, 8, 16, 32, 64, 128, 256, 512`. Full-resolution primitive states are written
+once per turnover, and restarts every four turnovers. A successful run must still
+demonstrate the measured enstrophy budget, a viscous dissipation rolloff separated
+from the numerical cutoff, and agreement between the `8192^2` and `16384^2`
+solutions over their shared resolved range before it is labeled resolved DNS.
 
 For the isothermal hydro history file,
 `v_rms = sqrt(2 * (1-KE + 2-KE + 3-KE) / mass)`. The `3-KE` column should remain

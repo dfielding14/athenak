@@ -39,6 +39,7 @@ eos = isothermal
 reconstruct = plm
 rsolver = roe
 iso_sound_speed = 1.0
+viscosity = 0.01
 
 <problem>
 d_n = 1.0

@@ -1,0 +1,158 @@
+# Tiegan SGS explicit-viscosity production candidate: fully 2D isothermal turbulence.
+# Run only after the 8192^2 convergence case and a short machine-specific scaling pilot.
+#
+# Nominal physical and resolution scales:
+#   c_s = 1, target v_rms = 0.1, target Mach = 0.1
+#   sparse global annulus 15 <= |k| <= 17, npeak = 16, 64 complex modes
+#   L_drive = L_box/16 = 0.0625, t_eddy = L_drive/v_rms = 0.625
+#   drag_rate = 0.1, dedt = 0.001, viscosity nu = 2.0e-6
+#   estimated eta = (2*pi*k_f)^2*dedt = 10.1065
+#   estimated l_nu = (nu^3/eta)^(1/6) = 9.6179e-4 = 15.76 cells
+#   estimated dissipation mode k_nu = 1/(2*pi*l_nu) = 165.5 = 10.3*k_f
+#   forcing-scale Reynolds number v_rms*L_drive/nu = 3125
+#
+# The coefficient is deliberately conservative: the predicted viscous length is
+# resolved by nearly 16 cells while retaining about a decade from forcing to
+# dissipation. A measured enstrophy budget and 8192^2/16384^2 convergence comparison
+# are still required before labeling the resulting dataset resolved DNS.
+#
+# The run lasts 40 forcing-scale turnover times. SGS output is written 20 times
+# per turnover; full-resolution output is written once per turnover.
+
+<comment>
+problem = Tiegan SGS Mach-0.1 16384^2 resolved-viscosity production candidate
+
+<job>
+basename = tiegan_sgs_m010_16384_k16_visc_nu2e6
+
+<mesh>
+nghost = 3
+nx1 = 16384
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 16384
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 512
+nx2 = 512
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.4
+nlim = -1
+tlim = 25.0
+ndiag = 100
+
+<hydro>
+eos = isothermal
+reconstruct = wenoz
+rsolver = roe
+iso_sound_speed = 1.0
+viscosity = 2.0e-6
+
+<hydro_srcterms>
+linear_drag = true
+drag_rate = 0.1
+
+<problem>
+d_n = 1.0
+
+<turb_driving>
+turb_flag = 2
+tcorr = 0.625
+dt_update = 0.00625
+normalization = edot
+dedt = 0.001
+nlow = 15
+nhigh = 17
+npeak = 16
+spectrum = parabolic
+mode_sampling = sparse_annulus
+sparse_mode_count = 64
+min_kz = 0
+max_kz = 0
+sol_fraction = 1.0
+rseed = 2718
+
+<output1>
+file_type = hst
+dt = 0.03125
+
+<output2>
+file_type = rst
+dt = 2.5
+
+<output3>
+file_type = bin
+variable = hydro_w
+id = prim
+dt = 0.625
+
+<output4>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f004
+coarsen_factor = 4
+dt = 0.03125
+
+<output5>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f008
+coarsen_factor = 8
+dt = 0.03125
+
+<output6>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f016
+coarsen_factor = 16
+dt = 0.03125
+
+<output7>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f032
+coarsen_factor = 32
+dt = 0.03125
+
+<output8>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f064
+coarsen_factor = 64
+dt = 0.03125
+
+<output9>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f128
+coarsen_factor = 128
+dt = 0.03125
+
+<output10>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f256
+coarsen_factor = 256
+dt = 0.03125
+
+<output11>
+file_type = cbin
+variable = hydro_sgs_2d
+id = sgs_f512
+coarsen_factor = 512
+dt = 0.03125

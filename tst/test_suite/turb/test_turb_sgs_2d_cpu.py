@@ -1,6 +1,7 @@
 """Regression tests for fully 2D turbulence and coarsened SGS output."""
 
 from pathlib import Path
+import math
 import subprocess
 import sys
 
@@ -9,6 +10,10 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INPUT = REPO_ROOT / "tst" / "inputs" / "turb_sgs_2d.athinput"
+PRODUCTION_INPUTS = (
+    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_8192_k16_viscous.athinput",
+    REPO_ROOT / "inputs" / "hydro" / "tiegan_sgs" / "mach010_16384_k16_viscous.athinput",
+)
 ATHENA = Path.cwd() / "athena"
 sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 
@@ -37,6 +42,21 @@ def latest(path, pattern):
     outputs = sorted(path.glob(pattern))
     assert outputs
     return outputs[-1]
+
+
+def input_parameter(path, block, name):
+    """Read one scalar parameter from an AthenaK input block."""
+    current_block = None
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if line.startswith("<") and line.endswith(">"):
+            current_block = line[1:-1]
+            continue
+        if current_block == block and "=" in line:
+            key, value = (item.strip() for item in line.split("=", 1))
+            if key == name:
+                return value
+    raise KeyError(f"missing <{block}>/{name} in {path}")
 
 
 def square_mean(values, factor):
@@ -110,6 +130,27 @@ def test_2d_sgs_output_matches_direct_favre_filter(tmp_path):
     history = np.loadtxt(run_dir / "turb_sgs_2d_test.hydro.hst")
     assert np.all(history[:, 5] == 0.0)
     assert np.all(history[:, 8] == 0.0)
+
+
+def test_isothermal_viscosity_changes_the_evolution(tmp_path):
+    """The configured shear viscosity must have a measurable dynamical effect."""
+    viscous_dir = tmp_path / "viscous"
+    inviscid_dir = tmp_path / "inviscid"
+    require_success(run_athena(viscous_dir))
+    require_success(run_athena(inviscid_dir, "hydro/viscosity=1.0e-30"))
+
+    viscous = read_binary(str(latest(viscous_dir / "bin", "*.state.*.bin")))
+    inviscid = read_binary(str(latest(inviscid_dir / "bin", "*.state.*.bin")))
+    momentum_difference = max(
+        np.max(
+            np.abs(
+                np.asarray(viscous["mb_data"][name])
+                - np.asarray(inviscid["mb_data"][name])
+            )
+        )
+        for name in ("mom1", "mom2")
+    )
+    assert momentum_difference > 1.0e-4
 
 
 def test_2d_parabolic_spectrum_uses_active_dimensions(tmp_path):
@@ -220,3 +261,37 @@ def test_2d_turbulence_rejects_kz_modes(tmp_path):
     assert "two-dimensional meshes require min_kz = max_kz = 0" in (
         result.stdout + result.stderr
     )
+
+
+def test_isothermal_hllc_is_rejected(tmp_path):
+    """HLLC is not implemented for AthenaK's isothermal hydro system."""
+    result = run_athena(tmp_path / "bad_hllc", "hydro/rsolver=hllc", "time/nlim=0")
+    assert result.returncode != 0
+    assert "hllc cannot be used with isothermal EOS" in result.stdout + result.stderr
+
+
+def test_production_inputs_have_resolved_explicit_viscosity():
+    """The production pair keeps one physical viscosity with a resolved cutoff."""
+    expected_cells = {8192: 7.5, 16384: 15.0}
+    for path in PRODUCTION_INPUTS:
+        resolution = int(input_parameter(path, "mesh", "nx1"))
+        assert int(input_parameter(path, "mesh", "nx2")) == resolution
+        assert int(input_parameter(path, "mesh", "nx3")) == 1
+        assert input_parameter(path, "hydro", "eos") == "isothermal"
+        assert input_parameter(path, "hydro", "rsolver") == "roe"
+
+        viscosity = float(input_parameter(path, "hydro", "viscosity"))
+        injection = float(input_parameter(path, "turb_driving", "dedt"))
+        forcing_mode = float(input_parameter(path, "turb_driving", "npeak"))
+        box_length = (
+            float(input_parameter(path, "mesh", "x1max"))
+            - float(input_parameter(path, "mesh", "x1min"))
+        )
+        forcing_wavenumber = 2.0 * math.pi * forcing_mode / box_length
+        enstrophy_injection = forcing_wavenumber**2 * injection
+        viscous_length = (viscosity**3 / enstrophy_injection) ** (1.0 / 6.0)
+        dissipation_mode = box_length / (2.0 * math.pi * viscous_length)
+
+        assert viscosity == 2.0e-6
+        assert viscous_length * resolution >= expected_cells[resolution]
+        assert dissipation_mode / forcing_mode >= 10.0
