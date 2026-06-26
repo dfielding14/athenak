@@ -1,0 +1,285 @@
+"""Integrated regressions for simple_TRML, frame tracking, and MC tracers."""
+
+from pathlib import Path
+from subprocess import PIPE, run
+import sys
+
+import numpy as np
+import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import athena_read  # noqa: E402
+import bin_convert  # noqa: E402
+from read_prtcl_thermo_history import read_history  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def simple_trml_binary(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("simple_trml_build")
+    build = root / "build"
+    configure = run(
+        [
+            "cmake",
+            "-S",
+            str(REPO_ROOT),
+            "-B",
+            str(build),
+            "-DPROBLEM=simple_TRML",
+            "-DCMAKE_BUILD_TYPE=Release",
+        ],
+        check=False,
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    )
+    assert configure.returncode == 0, configure.stdout + configure.stderr
+    compile_result = run(
+        ["cmake", "--build", str(build), "-j", "4"],
+        check=False,
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    return build / "src" / "athena"
+
+
+def run_case(
+    binary: Path,
+    input_path: Path,
+    run_dir: Path,
+    overrides: list[str],
+    restart: Path | None = None,
+) -> None:
+    run_dir.mkdir(exist_ok=True)
+    command = [str(binary)]
+    if restart is not None:
+        command.extend(["-r", str(restart)])
+    command.extend(["-i", str(input_path), "-d", str(run_dir), *overrides])
+    result = run(command, check=False, stdout=PIPE, stderr=PIPE, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("integrator", ["rk2", "rk3", "rk4"])
+def test_stage_aware_cooling_matches_energy_loss(
+    simple_trml_binary: Path, tmp_path: Path, integrator: str
+) -> None:
+    basename = f"SimpleTRML{integrator.upper()}"
+    run_dir = tmp_path / integrator
+    run_case(
+        simple_trml_binary,
+        REPO_ROOT / "tst" / "inputs" / "simple_trml_cooling.athinput",
+        run_dir,
+        [f"job/basename={basename}", f"time/integrator={integrator}"],
+    )
+
+    hydro = athena_read.hst(str(run_dir / f"{basename}.hydro.hst"))
+    user = athena_read.hst(str(run_dir / f"{basename}.user.hst"))
+    assert hydro["time"].size == 2
+    cooling_name = next(name for name in user if name.startswith("cooling"))
+    elapsed = hydro["time"][-1] - hydro["time"][0]
+    energy_loss = hydro["tot-E"][0] - hydro["tot-E"][-1]
+    reported_loss = user[cooling_name][-1] * elapsed
+    np.testing.assert_allclose(reported_loss, energy_loss, rtol=2.0e-12, atol=2.0e-14)
+
+
+def combined_overrides(basename: str, nlim: int) -> list[str]:
+    return [
+        f"job/basename={basename}",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        f"time/nlim={nlim}",
+        "time/tlim=1.0",
+        "problem/phase_sharpness=20",
+        "initial_perturbations/nhigh=8",
+        "frame_tracking/diagnostic_every=1000",
+        "tracer_seed1/count_per_event=32",
+        "tracer_seed2/count_per_event=32",
+        "tracer_seed3/count_per_event=32",
+        "output1/dt=1.0e-20",
+        "output2/dt=1.0e-20",
+        "output3/variable=hydro_u",
+        "output3/dt=1.0e-20",
+        "output4/dt=10",
+        "output5/dt=1.0e-20",
+    ]
+
+
+def load_thermo(run_dir: Path) -> dict[str, np.ndarray]:
+    files = sorted((run_dir / "prtcl_thermo_history").glob("*.thp"))
+    assert len(files) == 1
+    return read_history(files[0])
+
+
+def assert_mc_grid_steps(data: dict[str, np.ndarray]) -> None:
+    moved = False
+    dx = (1.0 / 32.0, 1.0 / 32.0, 2.0 / 32.0)
+    lengths = (1.0, 1.0, 2.0)
+    for tag in np.unique(data["tag"]):
+        rows = np.flatnonzero(data["tag"] == tag)
+        rows = rows[np.argsort(data["cycle"][rows])]
+        unique_rows = []
+        for cycle in np.unique(data["cycle"][rows]):
+            same_cycle = rows[data["cycle"][rows] == cycle]
+            for axis in ("x1", "x2", "x3"):
+                np.testing.assert_allclose(
+                    data[axis][same_cycle], data[axis][same_cycle[0]], rtol=0.0, atol=0.0
+                )
+            unique_rows.append(same_cycle[0])
+        rows = np.asarray(unique_rows)
+        deltas = []
+        for axis, spacing, length in zip(("x1", "x2", "x3"), dx, lengths):
+            delta = np.abs(np.diff(data[axis][rows]))
+            if axis != "x3":
+                delta = np.minimum(delta, length - delta)
+            assert np.all(delta <= spacing + 1.0e-12)
+            deltas.append(delta > 1.0e-12)
+        if deltas[0].size:
+            moved_axes = np.vstack(deltas).sum(axis=0)
+            assert np.all(moved_axes <= 1)
+            moved = moved or bool(np.any(moved_axes == 1))
+    assert moved
+
+
+def final_particle_rows(data: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    final = data["cycle"] == np.max(data["cycle"])
+    final_rows = np.flatnonzero(final)
+    rows = np.asarray(
+        [final_rows[np.flatnonzero(data["tag"][final_rows] == tag)[-1]]
+         for tag in np.unique(data["tag"][final_rows])]
+    )
+    order = np.argsort(data["tag"][rows])
+    return {name: values[rows][order] for name, values in data.items()}
+
+
+def test_combined_run_and_restart_are_consistent(
+    simple_trml_binary: Path, tmp_path: Path
+) -> None:
+    input_path = (
+        REPO_ROOT
+        / "inputs"
+        / "hydro"
+        / "TRML"
+        / "TRML_with_Tracers_and_Tracking.athinput"
+    )
+    continuous = tmp_path / "continuous"
+    split = tmp_path / "split"
+
+    run_case(
+        simple_trml_binary,
+        input_path,
+        continuous,
+        combined_overrides("CombinedContinuous", 8),
+    )
+    run_case(
+        simple_trml_binary,
+        input_path,
+        split,
+        combined_overrides("CombinedSplit", 4),
+    )
+    restart_files = sorted(
+        (split / "rst" / "rank_00000000").glob("CombinedSplit.*.rst")
+    )
+    assert restart_files
+    run_case(
+        simple_trml_binary,
+        input_path,
+        split,
+        combined_overrides("CombinedSplit", 8),
+        restart=restart_files[-1].resolve(),
+    )
+
+    frame = athena_read.hst(
+        str(continuous / "CombinedContinuous.frame_tracker.hst")
+    )
+    assert np.all(np.isfinite(frame["ft_weight"]))
+    assert np.max(frame["ft_weight"]) > 0.0
+    assert np.max(frame["ft_misses"]) == 0.0
+    assert np.any(np.abs(frame["ft_dv_x3"]) > 0.0)
+    assert np.any(np.abs(frame["ft_dx_x3"]) > 0.0)
+
+    continuous_thermo = load_thermo(continuous)
+    split_thermo = load_thermo(split)
+    assert len(np.unique(continuous_thermo["tag"])) == 96
+    assert set(np.unique(continuous_thermo["seed_id"])) == {1, 2, 3}
+    for name, values in continuous_thermo.items():
+        if np.issubdtype(values.dtype, np.floating):
+            assert np.all(np.isfinite(values)), name
+    assert_mc_grid_steps(continuous_thermo)
+
+    # A frame boost changes fluid velocity, not the grid-frame position of an MC tracer.
+    # The one-cell/one-axis condition above rejects any extra continuous particle shift.
+    final_continuous = final_particle_rows(continuous_thermo)
+    final_split = final_particle_rows(split_thermo)
+    np.testing.assert_array_equal(final_split["tag"], final_continuous["tag"])
+    np.testing.assert_array_equal(final_split["seed_id"], final_continuous["seed_id"])
+    for name in continuous_thermo:
+        if name in {"time", "cycle", "tag", "seed_id", "gid"}:
+            continue
+        np.testing.assert_allclose(
+            final_split[name], final_continuous[name], rtol=2.0e-13, atol=2.0e-14
+        )
+
+    split_frame = athena_read.hst(str(split / "CombinedSplit.frame_tracker.hst"))
+    for name in ("ft_vf_x3", "ft_dx_x3", "ft_pos_x3", "ft_err_x3", "ft_dv_x3"):
+        np.testing.assert_allclose(
+            split_frame[name][-1], frame[name][-1], rtol=2.0e-13, atol=2.0e-14
+        )
+
+    continuous_bins = sorted((continuous / "bin").glob("*.bin"))
+    split_bins = sorted((split / "bin").glob("*.bin"))
+    assert continuous_bins and split_bins
+    continuous_state = bin_convert.read_binary(str(continuous_bins[-1]))["mb_data"]
+    split_state = bin_convert.read_binary(str(split_bins[-1]))["mb_data"]
+    for field in ("dens", "mom1", "mom2", "mom3", "ener", "r_00"):
+        np.testing.assert_allclose(
+            split_state[field], continuous_state[field], rtol=2.0e-13, atol=2.0e-14
+        )
+
+
+def test_combined_amr_updates_tracker_and_particles(
+    simple_trml_binary: Path, tmp_path: Path
+) -> None:
+    input_path = (
+        REPO_ROOT
+        / "inputs"
+        / "hydro"
+        / "TRML"
+        / "TRML_with_Tracers_and_Tracking.athinput"
+    )
+    run_dir = tmp_path / "amr"
+    overrides = combined_overrides("CombinedAMR", 4) + [
+        "mesh_refinement/refinement=adaptive",
+        "tracer_seed1/count_per_event=8",
+        "tracer_seed2/count_per_event=8",
+        "tracer_seed3/count_per_event=8",
+    ]
+    run_case(simple_trml_binary, input_path, run_dir, overrides)
+
+    frame = athena_read.hst(str(run_dir / "CombinedAMR.frame_tracker.hst"))
+    assert np.all(np.isfinite(frame["ft_weight"]))
+    assert np.max(frame["ft_weight"]) > 0.0
+
+    thermo = load_thermo(run_dir)
+    assert len(np.unique(thermo["tag"])) == 24
+    assert np.all(np.isfinite(thermo["x1"]))
+    assert np.all(np.isfinite(thermo["x2"]))
+    assert np.all(np.isfinite(thermo["x3"]))
+    assert np.all(thermo["gid"] >= 0)
+
+    snapshots = sorted((run_dir / "bin").glob("*.bin"))
+    assert snapshots
+    initial_state = bin_convert.read_binary(str(snapshots[0]))
+    final_state = bin_convert.read_binary(str(snapshots[-1]))
+    initial_levels = initial_state["mb_logical"][:, 3]
+    final_levels = final_state["mb_logical"][:, 3]
+    assert np.max(final_levels) > np.max(initial_levels)
+    assert final_levels.size > initial_levels.size
