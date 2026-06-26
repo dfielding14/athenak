@@ -30,6 +30,7 @@ basename="${Q011_BASENAME:-q011_section54_dsa}"
 static_lb_interval="${Q011_STATIC_LB_INTERVAL:-0}"
 static_lb_cost_per_particle="${Q011_STATIC_LB_COST_PER_PARTICLE:-0.0}"
 history_python="${Q011_HISTORY_PYTHON:-/opt/cray/pe/python/3.11.7/bin/python3}"
+restart_override_deck="${Q011_RESTART_OVERRIDE_DECK:-${repo_root}/inputs/q011_static_pic_load_balance_restart_override_v1.athinput}"
 
 if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
   printf 'Refusing to run from a dirty or untracked source tree:\n' >&2
@@ -47,6 +48,10 @@ fi
 if [[ ! -x "${history_python}" ]]; then
   printf 'Q011 restart-history Python is absent or not executable: %s\n' \
     "${history_python}" >&2
+  exit 2
+fi
+if [[ ! -f "${restart_override_deck}" ]]; then
+  printf 'Q011 restart override deck is absent: %s\n' "${restart_override_deck}" >&2
   exit 2
 fi
 
@@ -90,6 +95,7 @@ trap finish_segment EXIT
 sha256sum \
   "${executable}" \
   "${deck}" \
+  "${restart_override_deck}" \
   "${repo_root}/src/pgen/tests/pic_parallel_shock.cpp" \
   "${repo_root}/tst/publication/frontier_q011_section54_long_dsa_v1.sh" \
   "${repo_root}/tst/publication/prepare_q011_restart_history_v1.py" \
@@ -109,6 +115,7 @@ printf '%s\n' \
   "static_lb_interval=${static_lb_interval}" \
   "static_lb_cost_per_particle=${static_lb_cost_per_particle}" \
   "history_python=${history_python}" \
+  "restart_override_deck=${restart_override_deck}" \
   "nodes=${SLURM_JOB_NUM_NODES}" \
   "ranks=$((SLURM_JOB_NUM_NODES * 8))" \
   >"${segment_root}/invocation.txt"
@@ -169,7 +176,7 @@ case "${grid_mode}" in
     ;;
 esac
 if [[ -n "${restart_file}" ]]; then
-  athena_args=(-r "${restart_file}" "${athena_args[@]}")
+  athena_args=(-r "${restart_file}" -i "${restart_override_deck}" "${athena_args[@]}")
 else
   athena_args=(-i "${deck}" "${athena_args[@]}")
 fi

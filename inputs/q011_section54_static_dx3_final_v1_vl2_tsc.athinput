@@ -118,6 +118,8 @@ pic_deltaf_adapt_mode             = off
 pic_deltaf_adapt_interval         = 0.0
 # Preparation choice only: Frontier load-balance tuning remains open.
 pic_load_balance_cost_per_particle = 0.0
+pic_static_load_balance_interval = 0
+pic_static_load_balance_cost_per_particle = 0.0
 pic_sort_interval                 = 16
 pic_intermediate_arrays           = auto
 pic_random_seed                   = 23050101
