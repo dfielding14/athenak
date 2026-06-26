@@ -29,6 +29,7 @@ grid_mode="${Q011_GRID_MODE:-static_dx3}"
 basename="${Q011_BASENAME:-q011_section54_dsa}"
 static_lb_interval="${Q011_STATIC_LB_INTERVAL:-0}"
 static_lb_cost_per_particle="${Q011_STATIC_LB_COST_PER_PARTICLE:-0.0}"
+history_python="${Q011_HISTORY_PYTHON:-/opt/cray/pe/python/3.11.7/bin/python3}"
 
 if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
   printf 'Refusing to run from a dirty or untracked source tree:\n' >&2
@@ -41,6 +42,11 @@ if [[ ! -x "${executable}" ]]; then
 fi
 if [[ ! -f "${deck}" ]]; then
   printf 'Q011 deck is absent: %s\n' "${deck}" >&2
+  exit 2
+fi
+if [[ ! -x "${history_python}" ]]; then
+  printf 'Q011 restart-history Python is absent or not executable: %s\n' \
+    "${history_python}" >&2
   exit 2
 fi
 
@@ -102,6 +108,7 @@ printf '%s\n' \
   "restart_file=${restart_file:-fresh}" \
   "static_lb_interval=${static_lb_interval}" \
   "static_lb_cost_per_particle=${static_lb_cost_per_particle}" \
+  "history_python=${history_python}" \
   "nodes=${SLURM_JOB_NUM_NODES}" \
   "ranks=$((SLURM_JOB_NUM_NODES * 8))" \
   >"${segment_root}/invocation.txt"
@@ -112,7 +119,7 @@ if [[ -n "${restart_file}" ]]; then
     printf 'Continuation history is absent: %s\n' "${history_file}" >&2
     exit 1
   fi
-  python3 "${repo_root}/tst/publication/prepare_q011_restart_history_v1.py" \
+  "${history_python}" "${repo_root}/tst/publication/prepare_q011_restart_history_v1.py" \
     --restart "${restart_file}" \
     --history "${history_file}" \
     --archive "${segment_root}/${basename}.mhd.hst.pre-continuation" \
