@@ -20,7 +20,7 @@ The canonical input is
 - `lagrangian_mc` particles sample the fluid and move using saved mass fluxes.
 - Of 3,072 canonical tracers, 777 start throughout the volume and 2,295 enter
   through a one-root-cell-thick top boundary slab in 51 equal batches from `t=0` through
-  `t=20`.
+  `t=75`.
 - A frame update precedes the Monte-Carlo particle push. These particles have
   positions but no physical velocity state, so the frame boost is not applied a
   second time to their positions. Lab coordinates are reconstructed with
@@ -204,7 +204,7 @@ Do not proceed if F0 fails.
 
 ## Frontier gate F1: uninterrupted versus restart-split
 
-Use one node and the canonical 64 x 64 x 128 mesh. Run an uninterrupted
+Use one node and the canonical 48 x 48 x 96 mesh. Run an uninterrupted
 32-cycle reference, then a 16 + 16 cycle restart using the same eight ranks.
 
 ```bash
@@ -254,7 +254,7 @@ python "${REPO}/scripts/compare_frame_tracking_validation.py" \
   --binary-id state \
   --output "${TRML_RUN_ROOT}/F1-restart.csv" \
   --problem simple_TRML \
-  --resolution 64x64x128 \
+  --resolution 48x48x96 \
   --tracking-mode scalar0-hot-edge-position-rate \
   --restart-split 16+16 \
   --ranks 8 \

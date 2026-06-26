@@ -106,25 +106,24 @@ def test_x3_reservoir_vx_boundary_modes(
     )
     ng = 4
     nx = 8
-    rho_cold = 56.23413251
+    rho_cold = 56.23413251903491
     rho_hot = 1.0
     pressure_fixed = 1.0
     shear_velocity = 1.0
-    default_input = tmp_path / "default_zero_gradient_vx.athinput"
+    zero_gradient_input = tmp_path / "zero_gradient_vx.athinput"
     canonical_text = input_path.read_text()
-    assert "zero_gradient_vx = true\n" in canonical_text
-    default_input.write_text(canonical_text.replace("zero_gradient_vx = true\n", ""))
+    assert "zero_gradient_vx = false\n" in canonical_text
+    zero_gradient_input.write_text(
+        canonical_text.replace("zero_gradient_vx = false\n", "zero_gradient_vx = true\n")
+    )
 
-    for zero_gradient in (False, None):
-        mode = "default_zero_gradient" if zero_gradient is None else "fixed"
+    for zero_gradient in (False, True):
+        mode = "zero_gradient" if zero_gradient else "fixed"
         basename = f"TRMLBoundary{mode}"
         run_dir = tmp_path / mode
-        mode_overrides = (
-            [] if zero_gradient is None else ["problem/zero_gradient_vx=false"]
-        )
         run_case(
             simple_trml_binary,
-            default_input if zero_gradient is None else input_path,
+            zero_gradient_input if zero_gradient else input_path,
             run_dir,
             [
                 f"job/basename={basename}",
@@ -136,6 +135,7 @@ def test_x3_reservoir_vx_boundary_modes(
                 "meshblock/nx3=8",
                 "time/nlim=1",
                 "time/tlim=1.0",
+                "problem/velocity=1.0",
                 "problem/phase_sharpness=8",
                 "initial_perturbations/nlow=1",
                 "initial_perturbations/nhigh=2",
@@ -154,7 +154,6 @@ def test_x3_reservoir_vx_boundary_modes(
                 "output3/ghost_zones=true",
                 "output4/dt=10",
                 "output5/dt=10",
-                *mode_overrides,
             ],
         )
 
@@ -191,7 +190,7 @@ def test_x3_reservoir_vx_boundary_modes(
 
         bottom_active = vx[ng, interior, interior]
         top_active = vx[ng + nx - 1, interior, interior]
-        if zero_gradient is None:
+        if zero_gradient:
             np.testing.assert_allclose(
                 vx[bottom],
                 np.broadcast_to(bottom_active, vx[bottom].shape),

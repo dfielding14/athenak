@@ -1,5 +1,6 @@
-# AthenaK input for the integrated simple TRML, interface frame tracker,
-# one-time Fourier perturbations, and Monte-Carlo thermodynamic tracers.
+# Canonical simple-TRML run with perturbations, thermodynamic Monte-Carlo tracers,
+# and one low-bandwidth interface-frame controller active from t=0 to t=75.
+# Validated locally on 8 MPI ranks at 48 x 48 x 96. No timed retuning is used.
 
 <comment>
 problem = Simple cooling TRML with interface tracking and thermodynamic tracers
@@ -10,28 +11,30 @@ basename = TRML_with_Tracers_and_Tracking
 <mesh>
 nghost = 4
 
-nx1 = 64
+# The 2 x 2 x 2 MeshBlock layout below gives one block per rank with 8 MPI ranks.
+nx1 = 48
 x1min = -0.5
 x1max = 0.5
 ix1_bc = periodic
 ox1_bc = periodic
 
-nx2 = 64
+nx2 = 48
 x2min = -0.5
 x2max = 0.5
 ix2_bc = periodic
 ox2_bc = periodic
 
-nx3 = 128
+nx3 = 96
 x3min = -1.0
 x3max = 1.0
+# User boundaries maintain the cold reservoir at x3min and hot reservoir at x3max.
 ix3_bc = user
 ox3_bc = user
 
 <meshblock>
-nx1 = 32
-nx2 = 32
-nx3 = 64
+nx1 = 24
+nx2 = 24
+nx3 = 48
 
 # Disabled by default. The committed local/Frontier matrix enables this block to exercise
 # simultaneous particle remapping and frame-tracker MeshBlockPack updates.
@@ -48,11 +51,11 @@ value_max = 0.1
 
 <time>
 evolution = dynamic
-integrator = rk3
+integrator = rk2
 cfl_number = 0.3
 nlim = -1
-tlim = 20.0
-ndiag = 1
+tlim = 75.0
+ndiag = 2000
 
 <hydro>
 eos = ideal
@@ -72,11 +75,16 @@ mu = 0.6
 
 <problem>
 rho_hot = 1.0
-rho_cold = 56.23413251
-velocity = 1.0
-zero_gradient_vx = true
+# chi = rho_cold/rho_hot = 10^1.75.
+rho_cold = 56.23413251903491
+# Relative shear Mach number is 0.5 for the pressure and gamma below.
+velocity = 0.6454972243679028
+# Hold the imposed shear vx in both x3 reservoirs. Set true to copy vx from the
+# boundary-adjacent active cell instead.
+zero_gradient_vx = false
 pres = 1.0
-t_cool_min = 0.05
+# Minimum cooling time chosen for xi = 100.
+t_cool_min = 0.015491933384829668
 T_cutoff_over_T_cold = 20.0
 T_ci_over_T_cold = 10.0
 T_ih_over_T_cold = 30.0
@@ -87,7 +95,7 @@ user_dt = true
 user_hist = true
 user_bcs = true
 
-phase_sharpness = 100.0
+phase_sharpness = 96
 
 # Retained for compatibility with simple_TRML. The shared perturbation module below
 # supplies the actual initial velocity perturbation, so this amplitude must remain zero.
@@ -97,12 +105,13 @@ init_perturb_sharpness = 50.0
 init_perturb_vel_frac = 0.0
 
 <initial_perturbations>
+# Reproducible, solenoidal in-plane perturbations localized around the interface.
 variables = velocity
 velocity_rms = 0.02
 remove_velocity_mean = true
 spectral_slope = 1.666666666666667
-nlow = 4
-nhigh = 16
+nlow = 2
+nhigh = 4
 min_kz = 0
 max_kz = 0
 f_solenoidal = 1.0
@@ -112,11 +121,12 @@ x3_center = 0.0
 x3_scale = 0.1414213562373095
 
 <frame_tracking>
+# Track the volume-weighted centroid of the hot-side scalar band along x3.
 enabled = true
 tracked_fluid = hydro
 start_time = 0.0
 apply_every = 1
-diagnostic_every = 5
+diagnostic_every = 2000
 axes = x3
 x3_target = 0.0
 target = scalar0
@@ -126,20 +136,25 @@ weight = volume
 mode = pd
 position_signal = centroid
 velocity_signal = position_rate
-tau_avg = 0.1
-tau_relax = 0.1
-tau_vel = 0.05
+# One nominally critically damped, low-bandwidth controller is used for the entire run.
+# The long response time removes secular drift without chasing turbulent fluctuations.
+tau_avg = 1.0
+tau_relax = 5.0
+tau_vel = 2.5
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 1.0
+# Limit frame acceleration; this suppresses boundary-flux and cooling oscillations.
+max_boost_change_rate = 0.02
 
 <particles>
+# Thermodynamic fields are sampled at each MC tracer's grid-frame cell center.
 particle_type = lagrangian_mc
 pusher = lagrangian_mc
 random_seed = 67890
 track_variables = density, pressure, temperature, entropy, v1, v2, v3, mach, scalar0
 
 <tracer_seed1>
+# 777 tracers (25.3% of the population) uniformly sample the initial volume at t=0.
 id = 1
 start_time = 0.0
 end_time = 0.0
@@ -150,45 +165,51 @@ region = all
 seed = 112233
 
 <tracer_seed2>
+# Inject 45 tracers at each of 51 uniformly spaced times from t=0 through t=75.
+# This contributes 2,295 tracers (74.7%), for 3,072 total.
 id = 2
 start_time = 0.0
-end_time = 20.0
-cadence = 0.4
+end_time = 75.0
+cadence = 1.5
 count_per_event = 45
 weight = volume
 region = slab
 slab_axis = 3
-# A top-boundary slab one cell thick on the committed 128-cell x3 root grid.
-slab_min = 0.984375
+# Top active-cell layer: one root-grid cell thick for nx3=96.
+slab_min = 0.9791666666666666
 slab_max = 1.0
 seed = 223344
 
 <output1>
+# Hydro, user-cooling, and frame-tracker histories share this cadence.
 file_type = hst
 data_format = %24.16e
-dt = 0.01
+dt = 0.25
 
 <output2>
 file_type = prtcl_thermo_history
 id = thermo
-dt = 0.01
+dt = 0.25
 variables = density, pressure, temperature, entropy, v1, v2, v3, mach, scalar0
 
 <output3>
+# Full-precision primitive snapshots for slice plots and interface checks.
 file_type = bin
 id = state
 variable = hydro_w
 data_precision = real
 ghost_zones = false
-dt = 0.1
+dt = 15.0
 
 <output4>
+# Effectively disable frequent particle VTK dumps; thermo histories remain enabled above.
 file_type = pvtk
 id = tracers
 variable = prtcl_all
-dt = 0.1
+dt = 1.0e9
 
 <output5>
+# Per-rank restart files preserve frame state, tracers, and injection schedules under MPI.
 file_type = rst
-dt = 1.0
+dt = 25.0
 single_file_per_rank = true

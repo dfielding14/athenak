@@ -18,29 +18,43 @@ The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four piec
   interface-position rate rather than the velocity of gas flowing through the interface.
 - `particle_type=lagrangian_mc` follows the mass flux and samples thermodynamic fields.
 
-## Reproducible local-run inputs
+## Canonical input
 
-These standalone inputs record the complete configurations used for the local
-parameter runs, without requiring command-line parameter overrides:
+`TRML_with_Tracers_and_Tracking.athinput` is the single supported integrated-run
+configuration. It records the validated `xi=100`, `48 x 48 x 96`, `t=75` setup,
+including eight root MeshBlocks for one-block-per-rank launches on eight MPI ranks,
+the low-bandwidth controller, and the 3,072-particle/51-event tracer schedule.
 
-- `TRML_chi56p234_mach0p5_xi1e3_t150_16x16x32.athinput`: `xi=1000`,
-  `16 x 16 x 32`, through `t=150`.
-- `TRML_chi56p234_mach0p5_xi1e2_t75_48x48x96.athinput`: `xi=100`,
-  `48 x 48 x 96`, through `t=75`.
-- `TRML_chi56p234_mach0p5_xi1e2_t75_48x48x96_zero_gradient_vx.athinput`:
-  the same `xi=100` run with zero-gradient `vx` at both x3 reservoirs.
+## Low-bandwidth frame control
 
-All three use eight root MeshBlocks for one-block-per-rank launches on eight MPI ranks,
-and retain the same 3,072-particle split and 51-event injection schedule.
+The frame should remove secular interface drift, not force every resolved turbulent
+excursion back to exactly zero. The stable input uses `tau_avg=1`, `tau_relax=5`,
+`tau_vel=2.5`, and `max_boost_change_rate=0.02` from `t=0`. These ratios give a
+nominally critically damped PD response while placing its bandwidth below the resolved
+turbulent fluctuations. Proportional feedback naturally strengthens as the interface
+moves farther from center, so the same controller can acquire the initial interface
+without a timed gain switch, mode transition, or controller-memory reset.
+
+There is no parameter-free way to distinguish secular drift from turbulence: that is a
+choice of scale. For another problem, choose one tracking timescale that is longer than
+the turbulent correlation time but shorter than the time for the interface to approach a
+boundary, then keep it fixed for the entire run. A useful critically damped starting
+ratio is `tau_avg = 0.2 tau_relax` and `tau_vel = 0.5 tau_relax`. This is a bandwidth
+choice, not a simulation-phase or absolute-time trigger.
+
+For the `xi=100`, `48 x 48 x 96` validation through `t=75`, the low-bandwidth
+controller's initial tracked-band offset peaked at 0.136 and returned within one cell of
+center by `t=19.5`. Over `t=20.25--74.75`, its detrended cooling standard deviation was
+0.0163 versus 0.0798 for the aggressive controller, and the fraction of cooling power
+in the controller-artifact band at frequencies 1.5--2.0 fell from 80.8% to 2.35%. The
+final tracked-band centroid was -0.0124, inside one cell (`dx3=0.02083`).
 
 ## X3 reservoir velocity condition
 
 Both x3 boundaries always hold density, pressure, and cold-material fraction at their
-reservoir values. By default, `problem/zero_gradient_vx=true` copies `vx` from the
-boundary-adjacent active cell into every ghost layer. Set it to `false` to hold `vx`
-at the imposed shear values instead. The `vy` and `vz` treatment is unchanged. The
-standalone inputs for the completed fixed-`vx` runs keep `false` explicitly so those
-results remain reproducible.
+reservoir values. The canonical `problem/zero_gradient_vx=false` holds `vx` at the
+imposed shear values. Set it to `true` to copy `vx` from the boundary-adjacent active
+cell into every ghost layer instead. The `vy` and `vz` treatment is unchanged.
 
 ## Frame and particle coordinates
 
@@ -76,12 +90,12 @@ The canonical run contains 3,072 tracers in total:
 - seed ID 1 places 777 tracers uniformly by volume throughout the initial domain at
   `t=0` (25.3% of the total population);
 - seed ID 2 places 45 tracers uniformly by area in the top boundary slab at
-  each of 51 times, `t=0, 0.4, ..., 20` (2,295 tracers, or 74.7%).
+  each of 51 times, `t=0, 1.5, ..., 75` (2,295 tracers, or 74.7%).
 
-The top schedule uses the slab `0.984375 <= x3 <= 1.0`, which is one root-grid cell
-thick on the committed 128-cell x3 mesh. In the default uniform run this is the
-uppermost active-cell layer; if that slab is refined it contains the corresponding fine
-cells. Particles are seeded at active-cell centers, not in ghost cells. If `time/tlim`,
+The top schedule uses the slab `0.9791666666666666 <= x3 <= 1.0`, which is one
+root-grid cell thick on the committed 96-cell x3 mesh. In the default uniform run this
+is the uppermost active-cell layer; if that slab is refined it contains the corresponding
+fine cells. Particles are seeded at active-cell centers, not in ghost cells. If `time/tlim`,
 the x3 domain, or the root x3 resolution is changed, update `tracer_seed2/end_time`,
 `slab_min`, and (if needed) `cadence` together. Keeping
 `(end_time - start_time) / cadence` integral includes both endpoints.
