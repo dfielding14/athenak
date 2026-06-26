@@ -82,6 +82,7 @@ boundary code should keep a zero-frame fallback.
 | `tau_avg` | `1.0` | Exponential smoothing time for sampled position and velocity. |
 | `tau_relax` | `1.0` | Position-feedback timescale. |
 | `tau_vel` | `1.0` | Velocity-feedback timescale. |
+| `velocity_signal` | `material_mean` | Velocity observable for PD feedback: selected-material mean velocity, or `position_rate` for the time derivative of the filtered position signal. |
 | `tau_int` | `0.0` | Integral feedback timescale; zero disables integral control. |
 | `int_max_abs` | `0.0` | Absolute cap on the integral term; zero disables integral control. |
 | `int_leak_tau` | `1.0` | Leak time for the integral term. |
@@ -147,7 +148,7 @@ At initialization, rank 0 writes one interpreted configuration summary, for
 example:
 
 ```text
-FrameTracker configuration: fluid=hydro axes=x1 target=scalar0 range=[0,inf] weight=tracer_mass mode=pd position_signal=centroid slew=per_time state=new
+FrameTracker configuration: fluid=hydro axes=x1 target=scalar0 range=[0,inf] weight=tracer_mass mode=pd position_signal=centroid velocity_signal=material_mean slew=per_time state=new
 ```
 
 Use this summary to confirm fluid selection, axes, selected material,

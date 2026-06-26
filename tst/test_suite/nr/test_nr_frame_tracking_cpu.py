@@ -223,11 +223,27 @@ def test_initialization_summary_records_interpreted_configuration() -> None:
         assert "target=density" in output
         assert "weight=mass" in output
         assert "position_signal=blend" in output
+        assert "velocity_signal=material_mean" in output
         assert "slew=per_time state=new" in output
     finally:
         remove_outputs(basename)
         shutil.rmtree("rst", ignore_errors=True)
         testutils.cleanup()
+
+
+def test_invalid_velocity_signal_is_rejected(tmp_path: Path) -> None:
+    input_path = input_with_frame_key(tmp_path, "velocity_signal", "gas_magic")
+    result = run(
+        ["./athena", "-i", str(input_path)],
+        check=False,
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "Expected one of: material_mean, position_rate" in (
+        result.stdout + result.stderr
+    )
 
 
 def test_tracer_mass_weight_requires_scalar_target(tmp_path: Path) -> None:

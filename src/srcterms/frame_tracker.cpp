@@ -55,6 +55,11 @@ enum FrameTrackingPositionSignal {
   kFTPosBlend = 2
 };
 
+enum FrameTrackingVelocitySignal {
+  kFTVelMaterialMean = 0,
+  kFTVelPositionRate = 1
+};
+
 enum FrameTrackingBoostChangeMode {
   kFTBoostPerApply = 0,
   kFTBoostPerTime = 1
@@ -259,6 +264,19 @@ int ParseFrameTrackingPositionSignal(const std::string &signal_raw) {
   FatalFrameTrackingInput("Invalid <frame_tracking>/position_signal '" + signal_raw +
                           "'. Expected one of: centroid, band_midpoint, blend.");
   return kFTPosBlend;
+}
+
+int ParseFrameTrackingVelocitySignal(const std::string &signal_raw) {
+  const std::string signal = NormalizeToken(signal_raw);
+  if (signal == "material_mean" || signal == "mean_velocity") {
+    return kFTVelMaterialMean;
+  }
+  if (signal == "position_rate" || signal == "position_derivative") {
+    return kFTVelPositionRate;
+  }
+  FatalFrameTrackingInput("Invalid <frame_tracking>/velocity_signal '" + signal_raw +
+                          "'. Expected one of: material_mean, position_rate.");
+  return kFTVelMaterialMean;
 }
 
 int ParseFrameTrackingBoostChangeMode(const std::string &mode_raw) {
@@ -495,6 +513,9 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
   position_signal_name_ =
       pin->GetOrAddString(block_name_, "position_signal", "blend");
   position_signal_ = ParseFrameTrackingPositionSignal(position_signal_name_);
+  velocity_signal_name_ =
+      pin->GetOrAddString(block_name_, "velocity_signal", "material_mean");
+  velocity_signal_ = ParseFrameTrackingVelocitySignal(velocity_signal_name_);
   boost_change_mode_name_ =
       pin->GetOrAddString(block_name_, "max_boost_change_mode", "per_apply");
   boost_change_mode_ = ParseFrameTrackingBoostChangeMode(
@@ -798,6 +819,7 @@ void FrameTracker::PrintConfigurationSummary() const {
                 (weight_mode_ == kFTWeightTarget) ? "target" : "tracer_mass")
             << " mode=" << NormalizeToken(mode_name_)
             << " position_signal=" << NormalizeToken(position_signal_name_)
+            << " velocity_signal=" << NormalizeToken(velocity_signal_name_)
             << " slew=" << NormalizeToken(boost_change_mode_name_)
             << " state=" << state_name << std::endl;
 }
@@ -1345,8 +1367,14 @@ bool FrameTracker::ApplyTracking() {
     } else {
       Real alpha = 1.0 - std::exp(-dt_boost/tau_avg_);
       alpha = std::max(static_cast<Real>(0.0), std::min(static_cast<Real>(1.0), alpha));
+      const Real previous_filtered_x = state.last_filtered_x;
       state.last_filtered_x += alpha*(x_ctrl - state.last_filtered_x);
-      state.last_filtered_v += alpha*(samples[axis].mean_v - state.last_filtered_v);
+      if (velocity_signal_ == kFTVelPositionRate) {
+        state.last_filtered_v =
+            (state.last_filtered_x - previous_filtered_x)/dt_boost;
+      } else {
+        state.last_filtered_v += alpha*(samples[axis].mean_v - state.last_filtered_v);
+      }
     }
   }
 

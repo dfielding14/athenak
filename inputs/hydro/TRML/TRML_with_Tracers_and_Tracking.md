@@ -13,7 +13,9 @@ The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four piec
   x3 reservoirs, and user history diagnostics.
 - `<initial_perturbations>` supplies the one-time, reproducibly seeded velocity field.
   The pgen-local perturbation amplitude is zero to prevent applying two perturbations.
-- `<frame_tracking>` follows the conserved cold-material scalar (`scalar0`) along x3.
+- `<frame_tracking>` follows the hot-side edge of the cold-material scalar
+  (`0.05 <= scalar0 <= 0.2`) along x3. Its PD derivative uses the measured
+  interface-position rate rather than the velocity of gas flowing through the interface.
 - `particle_type=lagrangian_mc` follows the mass flux and samples thermodynamic fields.
 
 ## Frame and particle coordinates
@@ -66,6 +68,12 @@ The pgen stores cold-material fraction in `scalar0` as a conserved scalar:
 `rho * cold_fraction`. The inner x3 reservoir supplies fraction one and the outer
 reservoir supplies fraction zero. When frame tracking is active, both reservoirs are
 transformed from their lab velocities using the current frame velocity.
+
+The canonical frame tracker volume-weights cells with cold fraction from 0.05 to 0.2.
+This band marks the visible hot-side density/temperature front and is present in the
+smoothed initial condition. `velocity_signal=position_rate` differentiates the filtered
+band centroid, avoiding the persistent offset produced by using the mean velocity of
+gas that crosses a cooling interface.
 
 ## Restart convention
 

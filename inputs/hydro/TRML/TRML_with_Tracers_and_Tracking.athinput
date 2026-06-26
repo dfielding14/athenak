@@ -1,8 +1,8 @@
-# AthenaK input for the integrated simple TRML, material frame tracker,
+# AthenaK input for the integrated simple TRML, interface frame tracker,
 # one-time Fourier perturbations, and Monte-Carlo thermodynamic tracers.
 
 <comment>
-problem = Simple cooling TRML with material tracking and thermodynamic tracers
+problem = Simple cooling TRML with interface tracking and thermodynamic tracers
 
 <job>
 basename = TRML_with_Tracers_and_Tracking
@@ -119,13 +119,15 @@ diagnostic_every = 5
 axes = x3
 x3_target = 0.0
 target = scalar0
-target_min = 0.0
-weight = tracer_mass
+target_min = 0.05
+target_max = 0.2
+weight = volume
 mode = pd
 position_signal = centroid
+velocity_signal = position_rate
 tau_avg = 0.1
-tau_relax = 1.0
-tau_vel = 0.25
+tau_relax = 0.1
+tau_vel = 0.05
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
 max_boost_change_rate = 1.0

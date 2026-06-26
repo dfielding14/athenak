@@ -15,7 +15,8 @@ The canonical input is
   frame-aware x3 reservoirs, the cold-material scalar, and 24 user-history
   diagnostics.
 - `<initial_perturbations>` supplies the single seeded velocity perturbation.
-- `<frame_tracking>` follows the conserved cold-material scalar along x3.
+- `<frame_tracking>` follows the hot-side `0.05 <= scalar0 <= 0.2` interface
+  band along x3 and derives its damping signal from the interface-position rate.
 - `lagrangian_mc` particles sample the fluid and move using saved mass fluxes.
 - Of 3,072 canonical tracers, 777 start throughout the volume and 2,295 enter
   through a one-root-cell-thick top boundary slab in 51 equal batches from `t=0` through
@@ -37,7 +38,7 @@ The following checks passed on the integration branch:
 | --- | --- |
 | C++ and Python style | 2 passed |
 | Combined population, RK2/RK3/RK4 cooling, serial restart, and AMR regression | 6 passed |
-| Frame-tracker CPU regression | 20 passed |
+| Frame-tracker CPU regression | 21 passed |
 | Initial-perturbation Hydro/MHD regression | 2 passed |
 | Frame restart regression | 2 passed |
 | Shipped frame-aware problem examples | 2 passed |
@@ -254,7 +255,7 @@ python "${REPO}/scripts/compare_frame_tracking_validation.py" \
   --output "${TRML_RUN_ROOT}/F1-restart.csv" \
   --problem simple_TRML \
   --resolution 64x64x128 \
-  --tracking-mode scalar0-tracer-mass-centroid \
+  --tracking-mode scalar0-hot-edge-position-rate \
   --restart-split 16+16 \
   --ranks 8 \
   --amr-mode uniform \

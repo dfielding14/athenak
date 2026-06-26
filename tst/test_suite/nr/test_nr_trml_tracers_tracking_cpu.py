@@ -105,7 +105,7 @@ def combined_overrides(basename: str, nlim: int) -> list[str]:
         "meshblock/nx3=16",
         f"time/nlim={nlim}",
         "time/tlim=1.0",
-        "problem/phase_sharpness=20",
+        "problem/phase_sharpness=32",
         "initial_perturbations/nhigh=8",
         "frame_tracking/diagnostic_every=1000",
         "tracer_seed1/count_per_event=48",
