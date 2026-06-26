@@ -18,6 +18,19 @@ The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four piec
   interface-position rate rather than the velocity of gas flowing through the interface.
 - `particle_type=lagrangian_mc` follows the mass flux and samples thermodynamic fields.
 
+## Reproducible local-run inputs
+
+These standalone inputs record the complete configurations used for the local
+parameter runs, without requiring command-line parameter overrides:
+
+- `TRML_chi56p234_mach0p5_xi1e3_t150_16x16x32.athinput`: `xi=1000`,
+  `16 x 16 x 32`, through `t=150`.
+- `TRML_chi56p234_mach0p5_xi1e2_t75_48x48x96.athinput`: `xi=100`,
+  `48 x 48 x 96`, through `t=75`.
+
+Both use eight root MeshBlocks for one-block-per-rank launches on eight MPI ranks,
+and both retain the same 3,072-particle split and 51-event injection schedule.
+
 ## Frame and particle coordinates
 
 Lagrangian Monte-Carlo tracers store grid-frame cell-center positions. They do not carry
