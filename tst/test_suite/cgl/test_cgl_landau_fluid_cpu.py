@@ -731,6 +731,24 @@ def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_forc
         _cleanup()
 
 
+def test_cgl_paper_initializer_supports_pure_cgl_without_lf():
+    try:
+        _run("cgl_paper_no_lf.athinput", "cgl_ci_paper_no_lf")
+        mhd = testutils.athena_read.hst("cgl_ci_paper_no_lf.mhd.hst")
+        user = testutils.athena_read.hst("cgl_ci_paper_no_lf.user.hst")
+        assert user["p_parallel"][0] == user["p_perp"][0]
+        assert user["force_prp2"][-1] > 0.0
+        assert user["force_prl2"][-1] == 0.0
+        assert np.isclose(user["mass"][0], user["volume"][0])
+        assert np.isclose(user["beta"][0] / user["volume"][0], 10.0)
+        assert user["force_work"][-1] > user["force_work"][0]
+        assert mhd["tot-E"][-1] > mhd["tot-E"][0]
+        if "lf_nstage" in mhd:
+            assert mhd["lf_nstage"][-1] == 0.0
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_paper_random_forcing_leaves_cartesian_amplitudes_unprojected():
     try:
         _run_paper(

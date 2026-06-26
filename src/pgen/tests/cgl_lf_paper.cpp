@@ -4,7 +4,7 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file cgl_lf_paper.cpp
-//! \brief Reduced/current-API initializer for MKS24 CGL-LF forced-turbulence runs.
+//! \brief Reduced/current-API initializer for CGL forced-turbulence runs.
 
 #include <cmath>
 #include <cstdlib>
@@ -151,8 +151,8 @@ void ProblemGenerator::CGLLFPaper(ParameterInput *pin, const bool restart) {
 
   auto *pmbp = pmy_mesh_->pmb_pack;
   auto *pmhd = pmbp->pmhd;
-  if (pmhd == nullptr || !pmhd->peos->eos_data.is_cgl || pmhd->pcgl_lf == nullptr) {
-    Fail("cgl_lf_paper requires <mhd>/eos = cgl and cgl_heat_flux = landau_fluid");
+  if (pmhd == nullptr || !pmhd->peos->eos_data.is_cgl) {
+    Fail("cgl_lf_paper requires <mhd>/eos = cgl");
   }
 
   const std::string mode =
