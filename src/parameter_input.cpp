@@ -38,7 +38,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -106,7 +108,7 @@ void ParameterInput::CheckBlockNames() {
     "time", "problem", "output", "units",
     "hydro", "mhd", "ion-neutral", "radiation", "z4c", "z4c_amr", "cce",
     "rad_srcterms", "hydro_srcterms", "mhd_srcterms", "particles", "tracer_seed",
-    "turb_driving", "initial_perturbations", "initial_perturbation"
+    "turb_driving", "initial_perturbations", "initial_perturbation", "frame_tracking"
     };
 
   for (auto it1 = block.begin(); it1 != block.end(); ++it1) {
@@ -718,6 +720,23 @@ Real ParameterInput::SetReal(std::string block, std::string name, Real value) {
   Lock();
   pb = FindOrAddBlock(block);
   ss_value << value;
+  AddParameter(pb, name, ss_value.str(), "# Updated during run time");
+  Unlock();
+  return value;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Real ParameterInput::SetRealPrecise(std::string block, std::string name,
+//!                                         Real value)
+//  \brief updates a real parameter while preserving restart-exact precision
+
+Real ParameterInput::SetRealPrecise(std::string block, std::string name, Real value) {
+  InputBlock* pb;
+  std::stringstream ss_value;
+
+  Lock();
+  pb = FindOrAddBlock(block);
+  ss_value << std::setprecision(std::numeric_limits<Real>::max_digits10) << value;
   AddParameter(pb, name, ss_value.str(), "# Updated during run time");
   Unlock();
   return value;

@@ -150,6 +150,7 @@ add_executable(
         shearing_box/shearing_box_tasks.cpp
 
         srcterms/initial_perturbations.cpp
+        srcterms/frame_tracker.cpp
         srcterms/srcterms.cpp
         srcterms/srcterms_newdt.cpp
         srcterms/turb_driver.cpp

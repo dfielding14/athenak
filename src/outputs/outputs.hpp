@@ -145,6 +145,7 @@ struct OutputParameters {
   bool logscale=true, logscale2=true;
   bool mass_weighted=false;
   bool single_file_per_rank=false; // DBF: parameter for single file per rank
+  std::string data_precision="float32"; // binary field storage: float32 or native Real
 };
 
 //----------------------------------------------------------------------------------------
@@ -284,6 +285,7 @@ class HistoryOutput : public BaseTypeOutput {
   void LoadOutputData(Mesh *pm) override;
   void LoadHydroHistoryData(HistoryData *pdata, Mesh *pm);
   void LoadMHDHistoryData(HistoryData *pdata, Mesh *pm);
+  void LoadFrameTrackingHistoryData(HistoryData *pdata, Mesh *pm);
   void LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm);
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
 };

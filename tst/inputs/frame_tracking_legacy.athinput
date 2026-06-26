@@ -1,0 +1,84 @@
+# Legacy FrameTracker state input for backward-compatibility coverage.
+
+<job>
+basename = FrameTrackLegacy
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 4
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 4
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 3
+tlim = 10.0
+ndiag = 100
+
+<coord>
+special_rel = false
+general_rel = false
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.4
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.0
+pl = 1.0
+ul = 0.0
+vl = 0.0
+wl = 0.0
+dr = 0.125
+pr = 0.1
+ur = 0.0
+vr = 0.0
+wr = 0.0
+
+<frame_tracking>
+tracked_fluid = hydro
+start_time = -1.0
+apply_every = 1
+axes = x1
+x1_target = 0.0
+target = density
+target_min = 0.1
+target_max = 1.1
+mode = pd
+tau_avg = 0.01
+tau_relax = 1.0
+tau_vel = 1.0
+max_abs_boost = 0.01
+max_boost_change_mode = per_time
+max_boost_change_rate = 0.1
+frame_velocity_x1 = 0.001
+frame_displacement_x1 = 0.0
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

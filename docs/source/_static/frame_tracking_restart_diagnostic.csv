@@ -1,0 +1,40 @@
+problem,resolution,tracking_mode,restart_split,ranks,amr_mode,diagnostic_metric,comparison_reference,absolute_error,relative_error,tolerance,result
+TRML,32x32x64,enabled,25_percent,1,uniform,dens_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,eint_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,velx_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,vely_l2_grid_frame_binary,continuous_tracking_enabled,6.1064350014492732e-14,3.9661131058679689e-13,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,velz_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,ft_vf_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,ft_dx_x3,continuous_tracking_enabled,8.6736173798840355e-19,2.1376250979285515e-16,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,ft_pos_x3,continuous_tracking_enabled,6.9388939039072284e-18,1.5864535008315023e-16,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,ft_err_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,ft_dv_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,finite_fields,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,max_missed_samples,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,enabled,25_percent,1,uniform,limit_events,continuous_tracking_enabled,1.0000000000000000e+00,1.0000000000000000e+00,absolute <= 0,fail
+TRML,32x32x64,enabled,50_percent,1,uniform,dens_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,eint_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,velx_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,vely_l2_grid_frame_binary,continuous_tracking_enabled,2.1255936110432069e-14,1.3805673320860478e-13,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,velz_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,ft_vf_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,ft_dx_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,ft_pos_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,ft_err_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,ft_dv_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,finite_fields,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,max_missed_samples,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,enabled,50_percent,1,uniform,limit_events,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,dens_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,eint_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,velx_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,vely_l2_grid_frame_binary,continuous_tracking_enabled,1.8673429614517314e-14,1.2128342299240539e-13,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,velz_l2_grid_frame_binary,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,native float32 snapshot: absolute or relative <= 1.1920928955078125e-05,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,ft_vf_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,ft_dx_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,ft_pos_x3,continuous_tracking_enabled,6.9388939039072284e-18,1.5864535008315023e-16,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,ft_err_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,ft_dv_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,finite_fields,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,max_missed_samples,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,enabled,75_percent,1,uniform,limit_events,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass

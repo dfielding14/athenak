@@ -27,6 +27,7 @@
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/frame_tracker.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "particles/particles.hpp"
 #include "units/units.hpp"
@@ -66,6 +67,7 @@ MeshBlockPack::~MeshBlockPack() {
     pz4c_cce.resize(0);
   }
   if (pturb  != nullptr) {delete pturb;}
+  if (pframe_tracker != nullptr) {delete pframe_tracker;}
   if (prad   != nullptr) {delete prad;}
   if (pmhd   != nullptr) {delete pmhd;}
   if (phydro != nullptr) {delete phydro;}
@@ -185,6 +187,19 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
     pturb->IncludeAddForcingTask(tl_map["stagen"], none);
   } else {
     pturb = nullptr;
+  }
+
+  // (6b) FRAME TRACKING
+  // Shared post-timestep Galilean boost controller for hydro/MHD.  Unlike old
+  // pgen-local implementations, this is enabled solely by a <frame_tracking> block.
+  if (pin->DoesBlockExist("frame_tracking") &&
+      pin->GetOrAddBoolean("frame_tracking", "enabled", true)) {
+    pframe_tracker = new FrameTracker(this, pin);
+    if (tl_map.find("after_timeintegrator") != tl_map.end()) {
+      pframe_tracker->IncludeFrameTrackingTask(tl_map["after_timeintegrator"], none);
+    }
+  } else {
+    pframe_tracker = nullptr;
   }
 
   // (7) Z4c and ADM
