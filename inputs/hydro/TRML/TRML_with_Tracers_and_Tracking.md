@@ -56,3 +56,6 @@ MPI runs with Monte-Carlo tracers must use `single_file_per_rank=true` for resta
 output. Restart files preserve particle tags and seed schedules as well as the complete
 frame-controller state. Initial perturbations are applied only to new runs and are not
 replayed after restart.
+
+The staged HIP/MPI validation procedure is in
+[`docs/TRML_WITH_TRACERS_AND_TRACKING_FRONTIER_HANDOFF.md`](../../../docs/TRML_WITH_TRACERS_AND_TRACKING_FRONTIER_HANDOFF.md).
