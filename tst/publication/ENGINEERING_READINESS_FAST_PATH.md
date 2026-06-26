@@ -12,7 +12,7 @@ publication qualification and claim-signoff program.
 | ER2 compact linear Bell | 4905859 | Pass: growth and phase agree with theory |
 | ER3 compact nonlinear Bell | 4905865 | Pass: peak `Bperp_rms/B0 = 2.0746` |
 | ER4 shock transport/AMR/coupling | 4905864 | Pass: triad and coupled RK2 smoke |
-| ER4 coupled shock acceleration | 4905888 | Pass: resolved momentum-tail growth |
+| ER4 coupled shock transport | 4905888 | Pass: strong shock, injection, and transport |
 
 The ER2 measurement used 89 snapshots. The measured normalized growth was
 `0.90587175` versus `0.91651514` expected and the measured phase was
@@ -21,15 +21,12 @@ The ER3 coarse run retained 49 matched ten-product snapshots, reached a peak
 `Bperp_rms/B0 = 2.07458316`, and ended at `1.14421976`.
 
 ER4 proves shock evolution, particle injection/transport, dynamic AMR, and the
-coupled deposition/feedback path. It does not by itself prove acceleration.
-Use the compact coupled acceleration job below for time-resolved momentum-tail
-growth.
-
-The coupled acceleration run retained 21 spectra through `t=20` and completed
-with 129,069 particles. Its final `p99/p_injection` was `1.10079612`, the peak
-was `1.10357986`, and 1.17 percent of final particles exceeded 1.1 times the
-injection momentum. This is a successful compact acceleration demonstration,
-not a converged Section 5.4 spectrum or publication claim.
+coupled deposition/feedback path. The compact coupled run retained 21 outputs
+through `t=20` and completed with 129,069 particles. The measured shock front
+was `x=199.5` versus the prescribed ideal position `x=200`, and the downstream
+density approached the strong-shock value of four. Exact tag matching for the
+initial 8,600-particle cohort found a maximum momentum increase of only
+`0.077%`; this run does not resolve diffusive shock acceleration.
 
 ## Milestones
 
@@ -90,11 +87,29 @@ publication claim and does not replace the 132-case Q043 campaign.
 sbatch tst/publication/frontier_q023_linear_bell_engineering_v1.sh
 sbatch tst/publication/frontier_q019_nonlinear_bell_engineering_v1.sh
 sbatch tst/publication/frontier_pic_shock_engineering_readiness_v1.sh
-sbatch tst/publication/frontier_q011_shock_acceleration_engineering_v1.sh
+sbatch tst/publication/frontier_q011_coupled_shock_transport_engineering_v1.sh
 ```
 
 The Bell jobs write `quicklook.json` under their job-specific
 `engineering_readiness/` roots. The shock mechanics gate writes an artifact
-manifest, CSV/JSON summaries, and comparison plot. The acceleration job runs a
-one-node uniform reduction of the coupled Section 5.4 production deck and
-writes time-resolved particle-tail statistics to `quicklook.json`.
+manifest, CSV/JSON summaries, and comparison plot. The coupled transport job
+runs a one-node uniform reduction of the Section 5.4 production deck and writes
+time-resolved particle and exact-cohort statistics to `quicklook.json`.
+
+## Publication-Style Figures
+
+The checked-in figure generator produces two-column-width vector PDFs,
+400-DPI PNGs, manuscript-ready captions, and a SHA-256 provenance manifest:
+
+```bash
+python3 -B -m tst.publication.make_bell_shock_publication_figures_v1 \
+  --linear-root /lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/linear-bell-4905859 \
+  --nonlinear-root /lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/nonlinear-bell-4905865 \
+  --shock-root /lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/shock-acceleration-4905888 \
+  --output-root /lustre/orion/ast207/proj-shared/dfielding/PIC/publication_figures/bell_shock_20260626
+```
+
+The figures are publication-quality presentations of compact engineering runs.
+They support corrected linear Bell growth, coherent finite-amplitude Bell
+response, shock formation, coupled injection, and particle transport. They do
+not support turbulent Bell saturation or diffusive shock acceleration claims.

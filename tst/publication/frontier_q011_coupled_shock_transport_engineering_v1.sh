@@ -1,11 +1,11 @@
 #!/bin/bash
-# Compact coupled non-relativistic shock-acceleration engineering run.
+# Compact coupled non-relativistic shock transport engineering run.
 #SBATCH --account=AST207
 #SBATCH --partition=batch
 #SBATCH --qos=debug
 #SBATCH --nodes=1
 #SBATCH --time=00:30:00
-#SBATCH --job-name=pic-shock-acceleration-engineering
+#SBATCH --job-name=pic-shock-transport-engineering
 #SBATCH --output=/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/%x.%j.log
 
 set -euo pipefail
@@ -13,8 +13,8 @@ set -euo pipefail
 repo_root="${PIC_SOURCE_ROOT:-/autofs/nccs-svm1_home2/dfielding/athenak-pic}"
 executable="${PIC_EXECUTABLE:-/lustre/orion/ast207/proj-shared/dfielding/PIC/bin/a8eed16a6dd3/hip-mpi-release-paper-pic/athena}"
 deck="${repo_root}/inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput"
-basename="q011_shock_acceleration_engineering_${SLURM_JOB_ID}"
-output_root="${PIC_OUTPUT_ROOT:-/lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/shock-acceleration-${SLURM_JOB_ID}}"
+basename="q011_shock_transport_engineering_${SLURM_JOB_ID}"
+output_root="${PIC_OUTPUT_ROOT:-/lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/shock-transport-${SLURM_JOB_ID}}"
 
 export PIC_FRONTIER_PROFILE=frontier_minimum_supported
 source "${repo_root}/tst/publication/frontier_control_plane/frontier_pic_environment.sh"
@@ -45,11 +45,11 @@ sha256sum "${executable}" "${deck}" >"${output_root}/bindings.sha256"
 
 cd "${repo_root}"
 /opt/cray/pe/python/3.11.7/bin/python3 -B -m \
-  tst.publication.shock_acceleration_engineering_quicklook_v1 \
+  tst.publication.shock_transport_engineering_quicklook_v1 \
   "${output_root}" "${basename}" --output "${output_root}/quicklook.json" \
-  --require-tail-growth
+  --require-transport
 
 printf '%s\n' \
   'execution_complete=true' \
-  'coupled_shock_acceleration_analysis_complete=true' \
+  'coupled_shock_transport_analysis_complete=true' \
   >"${output_root}/engineering_readiness.status"

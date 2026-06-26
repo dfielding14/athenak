@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure particle-tail growth in a compact coupled shock run."""
+"""Measure particle transport and exact cohort retention in a coupled shock."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from tst.publication.q011_section54_particles import reconstruct_chi_from_pvtk_v
 UPSTREAM_SPEED = 30.0
 INJECTION_SPEED_RATIO = 3.16227766017
 INJECTION_MOMENTUM = UPSTREAM_SPEED * INJECTION_SPEED_RATIO
-TAIL_GROWTH_THRESHOLD = 1.10
 _HEADER_RE = re.compile(
     rb"time=\s*([^\s]+)\s+nranks=\s*([0-9]+)\s+cycle=([0-9]+)"
 )
@@ -60,10 +59,11 @@ def analyze(run_root: Path, basename: str) -> dict[str, Any]:
     if len(paths) < 3:
         raise RuntimeError(f"shock quicklook needs at least 3 particle snapshots, found {len(paths)}")
     snapshots: list[dict[str, Any]] = []
+    particle_states: list[dict[str, np.ndarray]] = []
     for path in paths:
         time, cycle, ranks = _header(path)
         data = read_particle_vtk(path)
-        required_scalars = {"cr_source", "birth_time", "macro_weight"}
+        required_scalars = {"cr_source", "birth_time", "macro_weight", "ptag"}
         if not required_scalars.issubset(data.scalars) or "vel" not in data.vectors:
             raise RuntimeError(f"particle field inventory is incomplete: {path}")
         mask = np.asarray(data.scalars["cr_source"]) == 1
@@ -71,6 +71,12 @@ def analyze(run_root: Path, basename: str) -> dict[str, Any]:
         chi = reconstruct_chi_from_pvtk_velocity(velocity)
         momentum = UPSTREAM_SPEED * np.sqrt(chi)
         statistics = _percentiles(momentum)
+        particle_states.append(
+            {
+                "ptag": np.asarray(data.scalars["ptag"], dtype=np.int64)[mask],
+                "momentum": momentum,
+            }
+        )
         snapshots.append(
             {
                 "path": str(path.relative_to(run_root)),
@@ -83,37 +89,65 @@ def analyze(run_root: Path, basename: str) -> dict[str, Any]:
                     float(np.min(data.scalars["birth_time"][mask])) if mask.any() else None
                 ),
                 **statistics,
-                "p99_over_injection": (
+                "simulation_frame_p99_over_injection": (
                     statistics["p99"] / INJECTION_MOMENTUM
                     if statistics["p99"] is not None
                     else None
                 ),
-                "fraction_above_1p1_injection": (
-                    float(np.mean(momentum > TAIL_GROWTH_THRESHOLD * INJECTION_MOMENTUM))
-                    if momentum.size
-                    else 0.0
-                ),
             }
         )
-    finite_p99 = [row["p99"] for row in snapshots if row["p99"] is not None]
-    if not finite_p99:
+    nonempty = [index for index, row in enumerate(snapshots) if row["particle_count"] > 0]
+    if not nonempty:
         raise RuntimeError("shock run produced no injected particles")
-    maximum_p99 = max(finite_p99)
+    initial_index = nonempty[0]
+    initial_state = particle_states[initial_index]
+    initial_order = np.argsort(initial_state["ptag"])
+    initial_tags = initial_state["ptag"][initial_order]
+    initial_momentum = initial_state["momentum"][initial_order]
+    cohort_history = []
+    maximum_matched_gain = 0.0
+    for index in nonempty:
+        state = particle_states[index]
+        common, first, current = np.intersect1d(
+            initial_tags, state["ptag"], return_indices=True
+        )
+        delta = 100.0 * (
+            state["momentum"][current] / initial_momentum[first] - 1.0
+        )
+        maximum_matched_gain = max(maximum_matched_gain, float(np.max(delta)))
+        cohort_history.append(
+            {
+                "time": snapshots[index]["time"],
+                "cycle": snapshots[index]["cycle"],
+                "matched_count": int(common.size),
+                "surviving_fraction": float(common.size / initial_tags.size),
+                "momentum_change_percentiles": {
+                    f"p{quantile}": float(np.percentile(delta, quantile))
+                    for quantile in (10, 50, 90, 99)
+                },
+            }
+        )
+    transport_ready = bool(
+        len(snapshots) >= 3
+        and initial_tags.size > 0
+        and cohort_history[-1]["matched_count"] > 0
+        and snapshots[-1]["time"] > snapshots[initial_index]["time"]
+    )
     return {
-        "record_type": "q011_shock_acceleration_engineering_quicklook_v1",
+        "record_type": "q011_shock_transport_engineering_quicklook_v1",
         "run_root": str(run_root),
         "basename": basename,
         "snapshot_count": len(snapshots),
         "injection_momentum": INJECTION_MOMENTUM,
-        "tail_growth_threshold_over_injection": TAIL_GROWTH_THRESHOLD,
-        "maximum_p99": maximum_p99,
-        "maximum_p99_over_injection": maximum_p99 / INJECTION_MOMENTUM,
-        "momentum_tail_growth_detected": bool(
-            maximum_p99 >= TAIL_GROWTH_THRESHOLD * INJECTION_MOMENTUM
-        ),
+        "initial_cohort_count": int(initial_tags.size),
+        "final_cohort_surviving_fraction": cohort_history[-1]["surviving_fraction"],
+        "maximum_matched_momentum_gain_percent": maximum_matched_gain,
+        "transport_ready": transport_ready,
         "snapshots": snapshots,
+        "cohort_history": cohort_history,
         "claim_scope": (
-            "compact_uniform_coupled_engineering_evidence_not_section54_qualification"
+            "compact_uniform_coupled_shock_injection_and_transport_engineering_evidence;"
+            "no_diffusive_shock_acceleration_or_section54_qualification_claim"
         ),
     }
 
@@ -123,7 +157,7 @@ def main() -> int:
     parser.add_argument("run_root", type=Path)
     parser.add_argument("basename")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--require-tail-growth", action="store_true")
+    parser.add_argument("--require-transport", action="store_true")
     args = parser.parse_args()
     report = analyze(args.run_root.resolve(strict=True), args.basename)
     payload = json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n"
@@ -131,7 +165,7 @@ def main() -> int:
         print(payload, end="")
     else:
         args.output.write_text(payload, encoding="utf-8")
-    return 0 if (not args.require_tail_growth or report["momentum_tail_growth_detected"]) else 1
+    return 0 if (not args.require_transport or report["transport_ready"]) else 1
 
 
 if __name__ == "__main__":
