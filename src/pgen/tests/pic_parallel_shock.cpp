@@ -2694,9 +2694,13 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
     restart_utils::AbortOnFatalError();
   }
 
-  // Resolve the downstream strip in logical cell space so it can cross block and
-  // rank boundaries without floating-point coordinate matching.
-  std::vector<GlobalStencilCell> global_stencil_cells;
+  // Resolve only this rank's downstream strip in logical cell space. Every rank
+  // has the same requested-key order, so a single count reduction proves that
+  // every target has exactly one owner without all-gathering the full stencil.
+  std::vector<ParallelShockCellKey> requested_stencil_keys;
+  std::vector<GlobalStencilCell> local_stencil_cells;
+  std::vector<std::size_t> local_stencil_request_indices;
+  std::map<ParallelShockCellKey, std::size_t> local_stencil_indices;
   if (ps_enable_subtraction && !global_cells.empty()) {
     const std::size_t stencil_size = static_cast<std::size_t>(ps_subtract_stencil_cells);
     if (global_cells.size() > std::numeric_limits<std::size_t>::max() / stencil_size) {
@@ -2706,11 +2710,15 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       restart_utils::AbortOnFatalError();
     }
 
-    std::vector<ParallelShockCellKey> requested_stencil_keys;
     requested_stencil_keys.reserve(global_cells.size() * stencil_size);
-    std::map<ParallelShockCellKey, int> unique_stencil_keys;
+    std::map<ParallelShockCellKey, int> unique_surface_keys;
     bool invalid_stencil_request = false;
     for (const GlobalShockCell &cell : global_cells) {
+      const ParallelShockCellKey surface_key =
+          std::make_tuple(cell.level, cell.global_k, cell.global_j, cell.global_i);
+      if (!unique_surface_keys.emplace(surface_key, 1).second) {
+        invalid_stencil_request = true;
+      }
       for (int offset = 0; offset < ps_subtract_stencil_cells; ++offset) {
         const std::int64_t target_i = cell.global_i - static_cast<std::int64_t>(offset);
         if (target_i < 0) {
@@ -2719,9 +2727,6 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
         }
         const ParallelShockCellKey key =
             std::make_tuple(cell.level, cell.global_k, cell.global_j, target_i);
-        if (!unique_stencil_keys.emplace(key, 1).second) {
-          invalid_stencil_request = true;
-        }
         requested_stencil_keys.push_back(key);
       }
     }
@@ -2748,8 +2753,12 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       }
     }
 
-    std::vector<GlobalStencilCell> local_stencil_cells;
-    for (const ParallelShockCellKey &key : requested_stencil_keys) {
+    local_stencil_cells.reserve(requested_stencil_keys.size() /
+                                static_cast<std::size_t>(global_variable::nranks) + 1);
+    local_stencil_request_indices.reserve(local_stencil_cells.capacity());
+    for (std::size_t request_index = 0; request_index < requested_stencil_keys.size();
+         ++request_index) {
+      const ParallelShockCellKey &key = requested_stencil_keys[request_index];
       const int level = std::get<0>(key);
       const std::int64_t global_k = std::get<1>(key);
       const std::int64_t global_j = std::get<2>(key);
@@ -2773,79 +2782,32 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       target.global_j = global_j;
       target.global_k = global_k;
       target.vol = mb_size.h_view(m).dx1 * mb_size.h_view(m).dx2 * mb_size.h_view(m).dx3;
-      local_stencil_cells.push_back(target);
-    }
-
-#if MPI_PARALLEL_ENABLED
-    if (local_stencil_cells.size() >
-        static_cast<std::size_t>(std::numeric_limits<int>::max()) / sizeof(GlobalStencilCell)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-                << "pic_parallel_shock local downstream stencil exceeds MPI count range."
-                << std::endl;
-      restart_utils::AbortOnFatalError();
-    }
-    const int local_stencil_bytes =
-        static_cast<int>(local_stencil_cells.size() * sizeof(GlobalStencilCell));
-    std::vector<int> stencil_bytes_eachrank(global_variable::nranks, 0);
-    MPI_Allgather(&local_stencil_bytes, 1, MPI_INT, stencil_bytes_eachrank.data(), 1, MPI_INT,
-                  MPI_COMM_WORLD);
-    std::vector<int> stencil_byte_offsets(global_variable::nranks, 0);
-    int global_stencil_bytes = 0;
-    for (int r = 0; r < global_variable::nranks; ++r) {
-      stencil_byte_offsets[r] = global_stencil_bytes;
-      if (stencil_bytes_eachrank[r] < 0 ||
-          global_stencil_bytes > std::numeric_limits<int>::max() - stencil_bytes_eachrank[r]) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-                  << "pic_parallel_shock global downstream stencil exceeds MPI "
-                  << "displacement range." << std::endl;
-        restart_utils::AbortOnFatalError();
-      }
-      global_stencil_bytes += stencil_bytes_eachrank[r];
-    }
-    if (global_stencil_bytes % static_cast<int>(sizeof(GlobalStencilCell)) != 0) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-                << "pic_parallel_shock gathered downstream stencil has invalid size." << std::endl;
-      restart_utils::AbortOnFatalError();
-    }
-    global_stencil_cells.resize(static_cast<std::size_t>(global_stencil_bytes) /
-                                sizeof(GlobalStencilCell));
-    MPI_Allgatherv(local_stencil_cells.data(), local_stencil_bytes, MPI_BYTE,
-                   global_stencil_cells.data(), stencil_bytes_eachrank.data(),
-                   stencil_byte_offsets.data(), MPI_BYTE, MPI_COMM_WORLD);
-#else
-    global_stencil_cells = local_stencil_cells;
-#endif
-
-    std::map<ParallelShockCellKey, GlobalStencilCell> targets_by_key;
-    bool invalid_stencil_target = false;
-    for (const GlobalStencilCell &target : global_stencil_cells) {
-      const ParallelShockCellKey key =
-          std::make_tuple(target.level, target.global_k, target.global_j, target.global_i);
       const bool target_metadata_valid =
-          target.owner_rank >= 0 && target.owner_rank < global_variable::nranks && target.m >= 0 &&
-          target.m < pm->nmb_eachrank[target.owner_rank] && target.k >= ks && target.k <= ke &&
-          target.j >= js && target.j <= je && target.i >= is && target.i <= ie && target.gid >= 0 &&
-          target.gid < pm->nmb_total &&
-          target.gid == pm->gids_eachrank[target.owner_rank] + target.m &&
-          pm->rank_eachmb[target.gid] == target.owner_rank &&
+          target.m >= 0 && target.m < pmbp->nmb_thispack && target.k >= ks && target.k <= ke &&
+          target.j >= js && target.j <= je && target.i >= is && target.i <= ie &&
+          target.gid >= 0 && target.gid < pm->nmb_total &&
+          pm->rank_eachmb[target.gid] == global_variable::my_rank &&
           pm->lloc_eachmb[target.gid].level == target.level && std::isfinite(target.vol) &&
           target.vol > 0.0;
-      if (!target_metadata_valid || !targets_by_key.emplace(key, target).second) {
-        invalid_stencil_target = true;
+      if (!target_metadata_valid ||
+          !local_stencil_indices.emplace(key, local_stencil_cells.size()).second) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                  << "pic_parallel_shock found invalid or duplicate local downstream "
+                  << "stencil ownership." << std::endl;
+        restart_utils::AbortOnFatalError();
       }
+      local_stencil_cells.push_back(target);
+      local_stencil_request_indices.push_back(request_index);
     }
 
-    std::vector<GlobalStencilCell> ordered_stencil_cells;
-    ordered_stencil_cells.reserve(requested_stencil_keys.size());
-    for (const ParallelShockCellKey &key : requested_stencil_keys) {
-      const auto target_it = targets_by_key.find(key);
-      if (target_it == targets_by_key.end()) {
-        invalid_stencil_target = true;
-        continue;
-      }
-      ordered_stencil_cells.push_back(target_it->second);
-    }
-    if (invalid_stencil_target || ordered_stencil_cells.size() != requested_stencil_keys.size()) {
+    std::uint64_t local_stencil_count =
+        static_cast<std::uint64_t>(local_stencil_cells.size());
+    std::uint64_t global_stencil_count = local_stencil_count;
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(&local_stencil_count, &global_stencil_count, 1, MPI_UINT64_T, MPI_SUM,
+                  MPI_COMM_WORLD);
+#endif
+    if (global_stencil_count != static_cast<std::uint64_t>(requested_stencil_keys.size())) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
                 << "pic_parallel_shock requires exactly " << ps_subtract_stencil_cells
                 << " contiguous same-resolution downstream cells for every "
@@ -2853,7 +2815,6 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
                 << "provide them. No particle was injected." << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    global_stencil_cells.swap(ordered_stencil_cells);
   }
 
   SeedNextTag(ppart, pm->time);
@@ -3012,10 +2973,12 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       continue;
     const std::size_t stencil_begin = idx * static_cast<std::size_t>(ps_subtract_stencil_cells);
     for (int offset = 0; offset < ps_subtract_stencil_cells; ++offset) {
-      const GlobalStencilCell &target =
-          global_stencil_cells[stencil_begin + static_cast<std::size_t>(offset)];
-      if (target.owner_rank != global_variable::my_rank)
+      const ParallelShockCellKey &target_key =
+          requested_stencil_keys[stencil_begin + static_cast<std::size_t>(offset)];
+      const auto target_it = local_stencil_indices.find(target_key);
+      if (target_it == local_stencil_indices.end())
         continue;
+      const GlobalStencilCell &target = local_stencil_cells[target_it->second];
 
       const Real mass_rho =
           ps_particle_macro_mass / (static_cast<Real>(ps_subtract_stencil_cells) * target.vol);
@@ -3100,7 +3063,9 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   }
   if (ps_enable_subtraction && ps_enable_surface_averaged_subtraction) {
     const Real inv_stencil_cells = 1.0 / static_cast<Real>(ps_subtract_stencil_cells);
-    for (std::size_t idx = 0; idx < global_cells.size(); ++idx) {
+    for (std::size_t local_index = 0; local_index < local_stencil_cells.size(); ++local_index) {
+      const std::size_t request_index = local_stencil_request_indices[local_index];
+      const std::size_t idx = request_index / static_cast<std::size_t>(ps_subtract_stencil_cells);
       const Real cell_weight =
           (global_cells[idx].area / global_running_area) * inv_stencil_cells;
       if (!std::isfinite(cell_weight) || cell_weight <= 0.0) {
@@ -3109,34 +3074,25 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
                   << std::endl;
         restart_utils::AbortOnFatalError();
       }
-      const std::size_t stencil_begin =
-          idx * static_cast<std::size_t>(ps_subtract_stencil_cells);
-      for (int offset = 0; offset < ps_subtract_stencil_cells; ++offset) {
-        const GlobalStencilCell &target =
-            global_stencil_cells[stencil_begin + static_cast<std::size_t>(offset)];
-        if (target.owner_rank != global_variable::my_rank)
-          continue;
-
-        const Real density_weight = cell_weight / target.vol;
-        GasDelta delta{};
-        delta.m = target.m;
-        delta.k = target.k;
-        delta.j = target.j;
-        delta.i = target.i;
-        delta.vol = target.vol;
-        delta.dm = injected_global[1] * density_weight;
-        delta.dmx = injected_global[2] * density_weight;
-        delta.dmy = injected_global[3] * density_weight;
-        delta.dmz = injected_global[4] * density_weight;
-        delta.de = injected_global[5] * density_weight;
-        const auto key = std::make_tuple(target.m, target.k, target.j, target.i);
-        if (!gas_deltas.emplace(key, delta).second) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl
-                    << "pic_parallel_shock surface-averaged gas subtraction found "
-                    << "a duplicate local stencil target." << std::endl;
-          restart_utils::AbortOnFatalError();
-        }
+      const GlobalStencilCell &target = local_stencil_cells[local_index];
+      const Real density_weight = cell_weight / target.vol;
+      GasDelta delta{};
+      delta.m = target.m;
+      delta.k = target.k;
+      delta.j = target.j;
+      delta.i = target.i;
+      delta.vol = target.vol;
+      delta.dm = injected_global[1] * density_weight;
+      delta.dmx = injected_global[2] * density_weight;
+      delta.dmy = injected_global[3] * density_weight;
+      delta.dmz = injected_global[4] * density_weight;
+      delta.de = injected_global[5] * density_weight;
+      const auto key = std::make_tuple(target.m, target.k, target.j, target.i);
+      if (!gas_deltas.emplace(key, delta).second) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                  << "pic_parallel_shock surface-averaged gas subtraction found "
+                  << "a duplicate local stencil target." << std::endl;
+        restart_utils::AbortOnFatalError();
       }
     }
   }
