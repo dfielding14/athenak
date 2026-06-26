@@ -11,6 +11,7 @@ publication qualification and claim-signoff program.
 | ER1 corrected current | 4905833 | Pass: 26/26 cases in 44 s |
 | ER2 compact linear Bell | 4905859 | Pass: growth and phase agree with theory |
 | ER3 compact nonlinear Bell | 4905865 | Pass: peak `Bperp_rms/B0 = 2.0746` |
+| ER3 3D finite-rigidity Bell saturation | 4906210 | Pass: sustained saturation after nonlinear onset |
 | ER4 shock transport/AMR/coupling | 4905864 | Pass: triad and coupled RK2 smoke |
 | ER4 coupled shock transport | 4905888 | Pass: strong shock, injection, and transport |
 
@@ -19,6 +20,15 @@ The ER2 measurement used 89 snapshots. The measured normalized growth was
 `-0.39613559` versus `-0.4` expected; both fits had `R^2 > 0.99999998`.
 The ER3 coarse run retained 49 matched ten-product snapshots, reached a peak
 `Bperp_rms/B0 = 2.07458316`, and ended at `1.14421976`.
+
+The separate three-dimensional finite-rigidity saturation run retained 81
+matched six-product snapshots. It crossed nonlinear onset at
+`k0*uA0*t = 18.2216`, peaked at `Bperp_rms/B0 = 1.7291`, and passed the frozen
+sustained-saturation gate over 19 snapshots spanning `11.3097` normalized time
+units. The plateau energy max/min was `1.3604`, its log-energy slope was
+`-0.01276`, and the mean parallel CR current declined by `94.48%`. This is
+compact single-run engineering evidence; box-size and resolution convergence
+remain outside its claim scope.
 
 ER4 proves shock evolution, particle injection/transport, dynamic AMR, and the
 coupled deposition/feedback path. The compact coupled run retained 21 outputs
@@ -109,7 +119,20 @@ python3 -B -m tst.publication.make_bell_shock_publication_figures_v1 \
   --output-root /lustre/orion/ast207/proj-shared/dfielding/PIC/publication_figures/bell_shock_20260626
 ```
 
-The figures are publication-quality presentations of compact engineering runs.
-They support corrected linear Bell growth, coherent finite-amplitude Bell
-response, shock formation, coupled injection, and particle transport. They do
-not support turbulent Bell saturation or diffusive shock acceleration claims.
+The earlier two-figure set is a publication-quality presentation of compact
+engineering runs. It supports corrected linear Bell growth, coherent
+finite-amplitude Bell response, shock formation, coupled injection, and
+particle transport. That earlier set does not support turbulent Bell saturation
+or diffusive shock acceleration claims.
+
+The finite-rigidity nonlinear-to-saturation figure is generated separately:
+
+```bash
+python3 -B -m tst.publication.make_bell_saturation_publication_figure_v1 \
+  /lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/bell-saturation-4906210 \
+  /lustre/orion/ast207/proj-shared/dfielding/PIC/publication_figures/bell_saturation_20260626
+```
+
+This figure supports nonlinear onset, current-relaxation saturation, and a
+sustained turbulent plateau for the compact 3D finite-rigidity run. It does not
+establish box-size, resolution, seed-ensemble, or publication qualification.
