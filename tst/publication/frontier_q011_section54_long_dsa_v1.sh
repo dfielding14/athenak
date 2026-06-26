@@ -27,6 +27,8 @@ deck="${Q011_DECK:-${repo_root}/inputs/q011_section54_static_dx3_final_v1_vl2_ts
 target_time="${Q011_TLIM:-1200}"
 grid_mode="${Q011_GRID_MODE:-static_dx3}"
 basename="${Q011_BASENAME:-q011_section54_dsa}"
+static_lb_interval="${Q011_STATIC_LB_INTERVAL:-0}"
+static_lb_cost_per_particle="${Q011_STATIC_LB_COST_PER_PARTICLE:-0.0}"
 
 if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
   printf 'Refusing to run from a dirty or untracked source tree:\n' >&2
@@ -98,6 +100,8 @@ printf '%s\n' \
   "grid_mode=${grid_mode}" \
   "deck=${deck}" \
   "restart_file=${restart_file:-fresh}" \
+  "static_lb_interval=${static_lb_interval}" \
+  "static_lb_cost_per_particle=${static_lb_cost_per_particle}" \
   "nodes=${SLURM_JOB_NUM_NODES}" \
   "ranks=$((SLURM_JOB_NUM_NODES * 8))" \
   >"${segment_root}/invocation.txt"
@@ -123,6 +127,8 @@ athena_args=(
   "time/nlim=200000"
   "time/ndiag=500"
   "particles/pic_load_balance_cost_per_particle=0.0"
+  "particles/pic_static_load_balance_interval=${static_lb_interval}"
+  "particles/pic_static_load_balance_cost_per_particle=${static_lb_cost_per_particle}"
   "problem/ps_feedback_diag_dcycle=5000"
 )
 case "${grid_mode}" in
