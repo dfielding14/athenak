@@ -43,6 +43,23 @@ they can be joined exactly by time or cycle. Velocity-carrying particle species 
 been validated with this frame tracker; the statement above is specific to
 `lagrangian_mc` tracers.
 
+## Tracer population and injection
+
+The canonical run contains 3,072 tracers in total:
+
+- seed ID 1 places 777 tracers uniformly by volume throughout the initial domain at
+  `t=0` (25.3% of the total population);
+- seed ID 2 places 45 tracers uniformly by area in the top boundary slab at
+  each of 51 times, `t=0, 0.4, ..., 20` (2,295 tracers, or 74.7%).
+
+The top schedule uses the slab `0.984375 <= x3 <= 1.0`, which is one root-grid cell
+thick on the committed 128-cell x3 mesh. In the default uniform run this is the
+uppermost active-cell layer; if that slab is refined it contains the corresponding fine
+cells. Particles are seeded at active-cell centers, not in ghost cells. If `time/tlim`,
+the x3 domain, or the root x3 resolution is changed, update `tracer_seed2/end_time`,
+`slab_min`, and (if needed) `cadence` together. Keeping
+`(end_time - start_time) / cadence` integral includes both endpoints.
+
 ## Passive scalar convention
 
 The pgen stores cold-material fraction in `scalar0` as a conserved scalar:

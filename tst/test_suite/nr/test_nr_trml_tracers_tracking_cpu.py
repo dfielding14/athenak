@@ -78,9 +78,16 @@ def test_stage_aware_cooling_matches_energy_loss(
     )
 
     hydro = athena_read.hst(str(run_dir / f"{basename}.hydro.hst"))
-    user = athena_read.hst(str(run_dir / f"{basename}.user.hst"))
+    check_nan = athena_read.check_nan_flag
+    athena_read.check_nan_flag = False
+    try:
+        # Empty phase bins intentionally report NaN extrema in this uniform test.
+        user = athena_read.hst(str(run_dir / f"{basename}.user.hst"))
+    finally:
+        athena_read.check_nan_flag = check_nan
     assert hydro["time"].size == 2
     cooling_name = next(name for name in user if name.startswith("cooling"))
+    assert np.all(np.isfinite(user[cooling_name]))
     elapsed = hydro["time"][-1] - hydro["time"][0]
     energy_loss = hydro["tot-E"][0] - hydro["tot-E"][-1]
     reported_loss = user[cooling_name][-1] * elapsed
@@ -101,9 +108,11 @@ def combined_overrides(basename: str, nlim: int) -> list[str]:
         "problem/phase_sharpness=20",
         "initial_perturbations/nhigh=8",
         "frame_tracking/diagnostic_every=1000",
-        "tracer_seed1/count_per_event=32",
-        "tracer_seed2/count_per_event=32",
-        "tracer_seed3/count_per_event=32",
+        "tracer_seed1/count_per_event=48",
+        "tracer_seed2/end_time=0.03",
+        "tracer_seed2/cadence=0.015",
+        "tracer_seed2/count_per_event=16",
+        "tracer_seed2/slab_min=0.9375",
         "output1/dt=1.0e-20",
         "output2/dt=1.0e-20",
         "output3/variable=hydro_u",
@@ -117,6 +126,39 @@ def load_thermo(run_dir: Path) -> dict[str, np.ndarray]:
     files = sorted((run_dir / "prtcl_thermo_history").glob("*.thp"))
     assert len(files) == 1
     return read_history(files[0])
+
+
+def first_particle_rows(data: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    rows = np.asarray(
+        [np.flatnonzero(data["tag"] == tag)[0] for tag in np.unique(data["tag"])]
+    )
+    order = np.argsort(data["tag"][rows])
+    return {name: values[rows][order] for name, values in data.items()}
+
+
+def assert_seed_populations(data: dict[str, np.ndarray]) -> None:
+    first = first_particle_rows(data)
+    initial = first["seed_id"] == 1
+    injected = first["seed_id"] == 2
+    assert np.count_nonzero(initial) == 48
+    assert np.count_nonzero(injected) == 48
+    np.testing.assert_allclose(first["time"][initial], 0.0, rtol=0.0, atol=0.0)
+
+    # The one-shot population samples the full initial volume, not one phase or face.
+    for axis in ("x1", "x2", "x3"):
+        assert np.min(first[axis][initial]) < -0.25
+        assert np.max(first[axis][initial]) > 0.25
+
+    # Sixteen particles are introduced in the top active-cell layer at each of
+    # three uniformly spaced schedule times. The first history sample can lag the
+    # requested creation time by at most one timestep.
+    expected_times = np.repeat(np.asarray([0.0, 0.015, 0.03]), 16)
+    injection_order = np.argsort(first["tag"][injected])
+    first_times = first["time"][injected][injection_order]
+    assert np.all(first_times >= expected_times - 2.0e-14)
+    assert np.all(first_times <= expected_times + 0.01)
+    assert np.all(first["x3"][injected] >= 0.9375)
+    assert np.all(first["x3"][injected] <= 1.0)
 
 
 def assert_mc_grid_steps(data: dict[str, np.ndarray]) -> None:
@@ -158,6 +200,56 @@ def final_particle_rows(data: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     )
     order = np.argsort(data["tag"][rows])
     return {name: values[rows][order] for name, values in data.items()}
+
+
+def test_canonical_population_split_includes_both_endpoints(
+    simple_trml_binary: Path, tmp_path: Path
+) -> None:
+    input_path = (
+        REPO_ROOT
+        / "inputs"
+        / "hydro"
+        / "TRML"
+        / "TRML_with_Tracers_and_Tracking.athinput"
+    )
+    run_dir = tmp_path / "population"
+    run_case(
+        simple_trml_binary,
+        input_path,
+        run_dir,
+        [
+            "job/basename=CanonicalPopulation",
+            "mesh/nx1=8",
+            "mesh/nx2=8",
+            "mesh/nx3=8",
+            "meshblock/nx1=8",
+            "meshblock/nx2=8",
+            "meshblock/nx3=8",
+            "time/nlim=1",
+            "time/tlim=1.0",
+            "problem/phase_sharpness=8",
+            "initial_perturbations/nhigh=4",
+            # Compress all 51 canonical events into the first timestep.
+            "tracer_seed2/end_time=0.003",
+            "tracer_seed2/cadence=0.00006",
+            "tracer_seed2/slab_min=0.75",
+            "output1/dt=1.0e-20",
+            "output2/dt=1.0e-20",
+            "output3/dt=10",
+            "output4/dt=10",
+            "output5/dt=10",
+        ],
+    )
+
+    first = first_particle_rows(load_thermo(run_dir))
+    assert len(first["tag"]) == 3072
+    np.testing.assert_array_equal(first["tag"], np.arange(3072))
+    initial = first["seed_id"] == 1
+    injected = first["seed_id"] == 2
+    assert np.count_nonzero(initial) == 777
+    assert np.count_nonzero(injected) == 45 * 51
+    assert np.all(first["x3"][injected] >= 0.75)
+    assert np.all(first["x3"][injected] <= 1.0)
 
 
 def test_combined_run_and_restart_are_consistent(
@@ -209,7 +301,8 @@ def test_combined_run_and_restart_are_consistent(
     continuous_thermo = load_thermo(continuous)
     split_thermo = load_thermo(split)
     assert len(np.unique(continuous_thermo["tag"])) == 96
-    assert set(np.unique(continuous_thermo["seed_id"])) == {1, 2, 3}
+    assert set(np.unique(continuous_thermo["seed_id"])) == {1, 2}
+    assert_seed_populations(continuous_thermo)
     for name, values in continuous_thermo.items():
         if np.issubdtype(values.dtype, np.floating):
             assert np.all(np.isfinite(values)), name
@@ -258,9 +351,10 @@ def test_combined_amr_updates_tracker_and_particles(
     run_dir = tmp_path / "amr"
     overrides = combined_overrides("CombinedAMR", 4) + [
         "mesh_refinement/refinement=adaptive",
-        "tracer_seed1/count_per_event=8",
-        "tracer_seed2/count_per_event=8",
-        "tracer_seed3/count_per_event=8",
+        "tracer_seed1/count_per_event=12",
+        "tracer_seed2/end_time=0.0",
+        "tracer_seed2/cadence=-1.0",
+        "tracer_seed2/count_per_event=12",
     ]
     run_case(simple_trml_binary, input_path, run_dir, overrides)
 
@@ -270,6 +364,7 @@ def test_combined_amr_updates_tracker_and_particles(
 
     thermo = load_thermo(run_dir)
     assert len(np.unique(thermo["tag"])) == 24
+    assert set(np.unique(thermo["seed_id"])) == {1, 2}
     assert np.all(np.isfinite(thermo["x1"]))
     assert np.all(np.isfinite(thermo["x2"]))
     assert np.all(np.isfinite(thermo["x3"]))

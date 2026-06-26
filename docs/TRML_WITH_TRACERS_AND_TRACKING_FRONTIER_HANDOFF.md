@@ -17,6 +17,9 @@ The canonical input is
 - `<initial_perturbations>` supplies the single seeded velocity perturbation.
 - `<frame_tracking>` follows the conserved cold-material scalar along x3.
 - `lagrangian_mc` particles sample the fluid and move using saved mass fluxes.
+- Of 3,072 canonical tracers, 777 start throughout the volume and 2,295 enter
+  through a one-root-cell-thick top boundary slab in 51 equal batches from `t=0` through
+  `t=20`.
 - A frame update precedes the Monte-Carlo particle push. These particles have
   positions but no physical velocity state, so the frame boost is not applied a
   second time to their positions. Lab coordinates are reconstructed with
@@ -33,7 +36,7 @@ The following checks passed on the integration branch:
 | Gate | Result |
 | --- | --- |
 | C++ and Python style | 2 passed |
-| Combined RK2/RK3/RK4 cooling, serial restart, and AMR regression | 5 passed |
+| Combined population, RK2/RK3/RK4 cooling, serial restart, and AMR regression | 6 passed |
 | Frame-tracker CPU regression | 20 passed |
 | Initial-perturbation Hydro/MHD regression | 2 passed |
 | Frame restart regression | 2 passed |
@@ -168,9 +171,9 @@ srun -N 1 -n 8 --ntasks-per-node=8 --cpus-per-task=7 \
   job/basename=F0 \
   time/nlim=8 time/tlim=1.0 \
   frame_tracking/diagnostic_every=1000 \
-  tracer_seed1/count_per_event=32 \
-  tracer_seed2/count_per_event=32 \
-  tracer_seed3/count_per_event=32 \
+  tracer_seed1/count_per_event=48 \
+  tracer_seed2/end_time=0.01 tracer_seed2/cadence=0.005 \
+  tracer_seed2/count_per_event=16 \
   output1/dt=1.0e-20 output2/dt=1.0e-20 \
   output3/variable=hydro_u output3/dt=1.0e-20 \
   output4/dt=10 output5/dt=1.0e-20 \
@@ -182,7 +185,7 @@ F0 passes only if:
 - the run reaches cycle 8 without a HIP, MPI, Kokkos, or finite-value failure;
 - `F0.frame_tracker.hst` has positive `ft_weight`, zero `ft_misses`, and
   nonzero `ft_dv_x3` and `ft_dx_x3` after controller actuation;
-- the particle history contains 96 unique tags, seed IDs 1, 2, and 3, finite
+- the particle history contains 96 unique tags, seed IDs 1 and 2, finite
   coordinates and thermodynamic fields, and nonnegative MeshBlock IDs;
 - the final conserved binary contains finite `dens`, `mom1`, `mom2`, `mom3`,
   `ener`, and `r_00` fields;
@@ -211,6 +214,7 @@ mkdir -p "${CONTINUOUS}" "${SPLIT}"
 common_f1_overrides=(
   time/tlim=1.0
   frame_tracking/diagnostic_every=1000
+  tracer_seed2/end_time=0.06 tracer_seed2/cadence=0.0012
   output1/dt=1.0e-20 output2/dt=1.0e-20
   output3/variable=hydro_u output3/dt=1.0e-20
   output4/dt=10 output5/dt=1.0e-20
@@ -266,8 +270,8 @@ python "${REPO}/scripts/compare_frame_tracking_validation.py" \
 ```
 
 F1 passes if every CSV row is `pass`, particle tags and seed IDs match exactly,
-the final tag set has 3072 members, and no seed event is duplicated across the
-restart boundary.
+the final tag set has 3,072 members, all 51 top-injection events are represented,
+and no seed event is duplicated across the restart boundary.
 
 ## Frontier gate F2: MPI plus adaptive refinement
 
@@ -283,12 +287,13 @@ srun -N 1 -n 8 --ntasks-per-node=8 --cpus-per-task=7 \
   job/basename=F2 \
   mesh_refinement/refinement=adaptive \
   time/nlim=32 time/tlim=1.0 \
+  tracer_seed2/end_time=0.03 tracer_seed2/cadence=0.0006 \
   output3/variable=hydro_u output3/dt=1.0e-20 \
   output4/dt=10 output5/dt=1.0e-20 \
   2>&1 | tee "${F2}/launch.log"
 ```
 
-F2 passes if refinement actually increases the MeshBlock count, all 3072 tags
+F2 passes if refinement actually increases the MeshBlock count, all 3,072 tags
 remain unique and assigned to valid MeshBlocks, frame history remains finite
 with zero missed samples, and a same-rank restart can advance the refined state
 for at least eight additional cycles without reseeding particles.

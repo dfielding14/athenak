@@ -141,37 +141,24 @@ id = 1
 start_time = 0.0
 end_time = 0.0
 cadence = -1.0
-count_per_event = 1024
-weight = mass
+count_per_event = 777
+weight = volume
 region = all
-target = scalar0
-target_min = 0.9
 seed = 112233
 
 <tracer_seed2>
 id = 2
 start_time = 0.0
-end_time = 0.0
-cadence = -1.0
-count_per_event = 1024
+end_time = 20.0
+cadence = 0.4
+count_per_event = 45
 weight = volume
-region = all
-target = scalar0
-target_min = 0.1
-target_max = 0.9
+region = slab
+slab_axis = 3
+# A top-boundary slab one cell thick on the committed 128-cell x3 root grid.
+slab_min = 0.984375
+slab_max = 1.0
 seed = 223344
-
-<tracer_seed3>
-id = 3
-start_time = 0.0
-end_time = 0.0
-cadence = -1.0
-count_per_event = 1024
-weight = volume
-region = all
-target = scalar0
-target_max = 0.1
-seed = 334455
 
 <output1>
 file_type = hst
