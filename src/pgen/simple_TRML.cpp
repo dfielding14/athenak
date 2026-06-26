@@ -302,7 +302,6 @@ void TRMLZBoundary(Mesh *pm) {
   int &ie = indcs.ie;
   int &js = indcs.js;
   int &je = indcs.je;
-  int &ks = indcs.ks;
   int &ke = indcs.ke;
 
   auto &u0 = pmbp->phydro->u0;
@@ -312,7 +311,6 @@ void TRMLZBoundary(Mesh *pm) {
   int nhydro = pmbp->phydro->nhydro;
   int nscalars = pmbp->phydro->nscalars;
 
-  Real rho_cold = glob_rho_cold;
   Real rho_hot = glob_rho_hot;
   Real velocity = glob_velocity;
   Real pres = glob_pres;
@@ -329,40 +327,6 @@ void TRMLZBoundary(Mesh *pm) {
   par_for(
       "TRML_boundary", DevExeSpace(), 0, (pmbp->nmb_thispack - 1), js, je, is,
       ie, KOKKOS_LAMBDA(int m, int j, int i) {
-        if (mb_bcs.d_view(m, BoundaryFace::inner_x3) == BoundaryFlag::user) {
-          for (int k = 0; k < ng; k++) {
-            int ghost_inner_k = ks - k - 1;
-            u0(m, IDN, ghost_inner_k, j, i) = rho_cold;
-            if (zero_gradient_vx) {
-              u0(m, IM1, ghost_inner_k, j, i) =
-                  rho_cold * u0(m, IM1, ks, j, i) / u0(m, IDN, ks, j, i);
-            } else if (frame_tracking) {
-              u0(m, IM1, ghost_inner_k, j, i) =
-                  rho_cold * (-0.5 * velocity - frame_v1);
-            } else {
-              u0(m, IM1, ghost_inner_k, j, i) = rho_cold * (-0.5 * velocity);
-            }
-            if (frame_tracking) {
-              u0(m, IM2, ghost_inner_k, j, i) = -rho_cold * frame_v2;
-              u0(m, IM3, ghost_inner_k, j, i) = -rho_cold * frame_v3;
-            } else {
-              u0(m, IM2, ghost_inner_k, j, i) =
-                  rho_cold * u0(m, IM2, ks, j, i) / u0(m, IDN, ks, j, i);
-              u0(m, IM3, ghost_inner_k, j, i) =
-                  rho_cold * u0(m, IM3, ks, j, i) / u0(m, IDN, ks, j, i);
-            }
-            u0(m, IEN, ghost_inner_k, j, i) =
-                pres / gm1 + 0.5 *
-                                 (SQR(u0(m, IM1, ghost_inner_k, j, i)) +
-                                  SQR(u0(m, IM2, ghost_inner_k, j, i)) +
-                                  SQR(u0(m, IM3, ghost_inner_k, j, i))) /
-                                 u0(m, IDN, ghost_inner_k, j, i);
-            for (int n = nhydro; n < nhydro + nscalars; ++n) {
-              u0(m, n, ghost_inner_k, j, i) = rho_cold;
-            }
-          }
-        }
-
         if (mb_bcs.d_view(m, BoundaryFace::outer_x3) == BoundaryFlag::user) {
           for (int k = 0; k < ng; k++) {
             int ghost_outer_k = ke + k + 1;

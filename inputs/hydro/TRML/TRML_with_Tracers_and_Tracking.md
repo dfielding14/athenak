@@ -10,7 +10,7 @@ cmake --build build_trml -j
 The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four pieces:
 
 - `simple_TRML.cpp` supplies the pressure-balanced shear layer, exact cooling update,
-  x3 reservoirs, and user history diagnostics.
+  upper x3 hot reservoir, and user history diagnostics.
 - `<initial_perturbations>` supplies the one-time, reproducibly seeded velocity field.
   The pgen-local perturbation amplitude is zero to prevent applying two perturbations.
 - `<frame_tracking>` follows the hot-side edge of the cold-material scalar
@@ -49,12 +49,14 @@ center by `t=19.5`. Over `t=20.25--74.75`, its detrended cooling standard deviat
 in the controller-artifact band at frequencies 1.5--2.0 fell from 80.8% to 2.35%. The
 final tracked-band centroid was -0.0124, inside one cell (`dx3=0.02083`).
 
-## X3 reservoir velocity condition
+## X3 boundary conditions
 
-Both x3 boundaries always hold density, pressure, and cold-material fraction at their
-reservoir values. The canonical `problem/zero_gradient_vx=false` holds `vx` at the
-imposed shear values. Set it to `true` to copy `vx` from the boundary-adjacent active
-cell into every ghost layer instead. The `vy` and `vz` treatment is unchanged.
+The lower x3 boundary uses AthenaK's standard outflow condition, which copies every
+conserved hydro and passive-scalar variable from the first active cell into each ghost
+layer. The upper x3 boundary remains a custom hot reservoir with fixed density,
+pressure, and zero cold-material fraction. The canonical
+`problem/zero_gradient_vx=false` holds its `vx` at the imposed hot-side shear value.
+Set it to `true` to copy `vx` from the upper boundary-adjacent active cell instead.
 
 ## Frame and particle coordinates
 
@@ -77,6 +79,10 @@ avoids applying the frame change twice.
 x3_lab = x3_grid + ft_dx_x3
 v3_lab = v3_grid + ft_vf_x3
 ```
+
+See [TRML_TRACER_PARTICLE_OUTPUT_GUIDE.md](TRML_TRACER_PARTICLE_OUTPUT_GUIDE.md)
+for the complete column reference, MPI/restart behavior, integrity checks, and
+temperature-evolution plotting examples.
 
 The canonical input gives the history and particle-history outputs the same cadence so
 they can be joined exactly by time or cycle. Velocity-carrying particle species have not
@@ -103,9 +109,9 @@ the x3 domain, or the root x3 resolution is changed, update `tracer_seed2/end_ti
 ## Passive scalar convention
 
 The pgen stores cold-material fraction in `scalar0` as a conserved scalar:
-`rho * cold_fraction`. The inner x3 reservoir supplies fraction one and the outer
-reservoir supplies fraction zero. When frame tracking is active, both reservoirs are
-transformed from their lab velocities using the current frame velocity.
+`rho * cold_fraction`. The lower outflow boundary copies the adjacent active scalar,
+while the upper reservoir supplies fraction zero. When frame tracking is active, the
+upper reservoir is transformed from its lab velocity using the current frame velocity.
 
 The canonical frame tracker volume-weights cells with cold fraction from 0.05 to 0.2.
 This band marks the visible hot-side density/temperature front and is present in the

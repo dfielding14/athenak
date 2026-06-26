@@ -195,7 +195,7 @@ F0 passes only if:
 Inspect the particle stream with:
 
 ```bash
-python "${REPO}/scripts/read_prtcl_thermo_history.py" \
+python "${REPO}/vis/python/read_prtcl_thermo_history.py" \
   "${F0}/prtcl_thermo_history/F0.thermo.thp" \
   --npz "${F0}/F0-thermo.npz"
 ```

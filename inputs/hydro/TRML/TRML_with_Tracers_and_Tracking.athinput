@@ -27,8 +27,9 @@ ox2_bc = periodic
 nx3 = 96
 x3min = -1.0
 x3max = 1.0
-# User boundaries maintain the cold reservoir at x3min and hot reservoir at x3max.
-ix3_bc = user
+# The lower boundary copies the adjacent active state; the upper user boundary
+# maintains the hot reservoir.
+ix3_bc = outflow
 ox3_bc = user
 
 <meshblock>
@@ -79,8 +80,8 @@ rho_hot = 1.0
 rho_cold = 56.23413251903491
 # Relative shear Mach number is 0.5 for the pressure and gamma below.
 velocity = 0.6454972243679028
-# Hold the imposed shear vx in both x3 reservoirs. Set true to copy vx from the
-# boundary-adjacent active cell instead.
+# Hold the imposed shear vx in the upper reservoir. Set true to copy vx from the
+# upper boundary-adjacent active cell instead.
 zero_gradient_vx = false
 pres = 1.0
 # Minimum cooling time chosen for xi = 100.

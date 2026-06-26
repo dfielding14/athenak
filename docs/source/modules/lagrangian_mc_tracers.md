@@ -34,7 +34,7 @@ thermodynamic-history requests should fail during input validation.
 | `src/particles/tracer_fields.hpp` | Tracer-field registry interface and field metadata. |
 | `src/particles/tracer_fields.cpp` | Field-name parser and host-side field evaluator. |
 | `src/outputs/prtcl_thermo_history.cpp` | Versioned append-only binary history output. |
-| `scripts/read_prtcl_thermo_history.py` | Python reader for v1 and v2 history files. |
+| `vis/python/read_prtcl_thermo_history.py` | Python reader for v1 and v2 history files. |
 | `scripts/test_prtcl_thermo_history_reader.py` | Synthetic v2 reader regression test. |
 | `inputs/particles/lagrangian_mc_thermo*.athinput` | Hydro, AMR, and MHD smoke-test inputs. |
 
@@ -81,7 +81,7 @@ Run the serial smoke test:
 Read the history file:
 
 ```bash
-python scripts/read_prtcl_thermo_history.py \
+python vis/python/read_prtcl_thermo_history.py \
   run_lmc_hydro/prtcl_thermo_history/lagrangian_mc_thermo.prtcl_thermo_history.thp
 ```
 
@@ -243,10 +243,10 @@ the owning rank and snapped back to valid cell centers on the new mesh.
 
 ## Reader Usage
 
-Use `scripts/read_prtcl_thermo_history.py` to inspect or convert the binary file:
+Use `vis/python/read_prtcl_thermo_history.py` to inspect or convert the binary file:
 
 ```bash
-python scripts/read_prtcl_thermo_history.py path/to/file.thp --npz tracers.npz
+python vis/python/read_prtcl_thermo_history.py path/to/file.thp --npz tracers.npz
 ```
 
 The reader returns arrays keyed by column name. For v2 files, the data keys come

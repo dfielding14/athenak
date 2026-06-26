@@ -156,7 +156,7 @@ with a clear fatal error rather than silently corrupting the file.
 Read history files with:
 
 ```bash
-python scripts/read_prtcl_thermo_history.py \
+python vis/python/read_prtcl_thermo_history.py \
   prtcl_thermo_history/<basename>.prtcl_thermo_history.thp \
   --npz tracers.npz
 ```
@@ -205,7 +205,7 @@ Build and static checks:
 | Serial release build | `cmake --build build -j 8` | Passed. The build reported only pre-existing VLA warnings in `src/mesh/mesh.cpp`. |
 | MPI release build | `cmake --build build_mpi -j 8` | Passed with the same pre-existing VLA warnings. |
 | Reader unit test | `python3 scripts/test_prtcl_thermo_history_reader.py` | Passed. The synthetic v2 file returned named columns `density`, `temperature`, `mach`, and `scalar0` with 3 records. |
-| Reader syntax | `python3 -m py_compile scripts/read_prtcl_thermo_history.py scripts/test_prtcl_thermo_history_reader.py` | Passed. |
+| Reader syntax | `python3 -m py_compile vis/python/read_prtcl_thermo_history.py scripts/test_prtcl_thermo_history_reader.py` | Passed. |
 | Whitespace check | `git diff --check` | Passed. |
 
 Runtime checks:

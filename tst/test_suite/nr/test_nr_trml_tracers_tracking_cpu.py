@@ -94,7 +94,7 @@ def test_stage_aware_cooling_matches_energy_loss(
     np.testing.assert_allclose(reported_loss, energy_loss, rtol=2.0e-12, atol=2.0e-14)
 
 
-def test_x3_reservoir_vx_boundary_modes(
+def test_x3_outflow_and_outer_reservoir_vx_modes(
     simple_trml_binary: Path, tmp_path: Path
 ) -> None:
     input_path = (
@@ -106,12 +106,13 @@ def test_x3_reservoir_vx_boundary_modes(
     )
     ng = 4
     nx = 8
-    rho_cold = 56.23413251903491
     rho_hot = 1.0
     pressure_fixed = 1.0
     shear_velocity = 1.0
     zero_gradient_input = tmp_path / "zero_gradient_vx.athinput"
     canonical_text = input_path.read_text()
+    assert "ix3_bc = outflow\n" in canonical_text
+    assert "ox3_bc = user\n" in canonical_text
     assert "zero_gradient_vx = false\n" in canonical_text
     zero_gradient_input.write_text(
         canonical_text.replace("zero_gradient_vx = false\n", "zero_gradient_vx = true\n")
@@ -175,28 +176,42 @@ def test_x3_reservoir_vx_boundary_modes(
         interior = slice(ng, ng + nx)
         bottom = (slice(0, ng), interior, interior)
         top = (slice(ng + nx, ng + nx + ng), interior, interior)
-        np.testing.assert_allclose(density[bottom], rho_cold, rtol=0.0, atol=1.0e-13)
+        bottom_density = density[ng, interior, interior]
+        bottom_pressure = pressure[ng, interior, interior]
+        bottom_scalar = fields["r_00"][ng, interior, interior]
+        bottom_vx = vx[ng, interior, interior]
+        np.testing.assert_allclose(
+            density[bottom],
+            np.broadcast_to(bottom_density, density[bottom].shape),
+            rtol=0.0,
+            atol=1.0e-14,
+        )
         np.testing.assert_allclose(density[top], rho_hot, rtol=0.0, atol=1.0e-14)
         np.testing.assert_allclose(
-            pressure[bottom], pressure_fixed, rtol=0.0, atol=2.0e-14
+            pressure[bottom],
+            np.broadcast_to(bottom_pressure, pressure[bottom].shape),
+            rtol=0.0,
+            atol=2.0e-14,
         )
         np.testing.assert_allclose(
             pressure[top], pressure_fixed, rtol=0.0, atol=2.0e-14
         )
         np.testing.assert_allclose(
-            fields["r_00"][bottom], rho_cold, rtol=0.0, atol=1.0e-13
+            fields["r_00"][bottom],
+            np.broadcast_to(bottom_scalar, fields["r_00"][bottom].shape),
+            rtol=0.0,
+            atol=1.0e-14,
         )
         np.testing.assert_allclose(fields["r_00"][top], 0.0, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(
+            vx[bottom],
+            np.broadcast_to(bottom_vx, vx[bottom].shape),
+            rtol=0.0,
+            atol=1.0e-14,
+        )
 
-        bottom_active = vx[ng, interior, interior]
         top_active = vx[ng + nx - 1, interior, interior]
         if zero_gradient:
-            np.testing.assert_allclose(
-                vx[bottom],
-                np.broadcast_to(bottom_active, vx[bottom].shape),
-                rtol=0.0,
-                atol=1.0e-14,
-            )
             np.testing.assert_allclose(
                 vx[top],
                 np.broadcast_to(top_active, vx[top].shape),
@@ -204,9 +219,6 @@ def test_x3_reservoir_vx_boundary_modes(
                 atol=1.0e-14,
             )
         else:
-            np.testing.assert_allclose(
-                vx[bottom], -0.5 * shear_velocity, rtol=0.0, atol=1.0e-14
-            )
             np.testing.assert_allclose(
                 vx[top], 0.5 * shear_velocity, rtol=0.0, atol=1.0e-14
             )
