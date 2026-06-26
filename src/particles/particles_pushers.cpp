@@ -50,6 +50,8 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
       });
 
     break;
+  case ParticlesPusher::lagrangian_mc:
+    return PushLagrangianMC(pdriver, stage);
   default:
     break;
   }
