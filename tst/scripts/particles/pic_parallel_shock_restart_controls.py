@@ -101,6 +101,8 @@ def run(**kwargs):
         'pic_parallel_shock_restart_controls_same',
         'pic_parallel_shock_restart_controls_eta',
         'pic_parallel_shock_restart_controls_frame',
+        'pic_parallel_shock_restart_controls_stencil',
+        'pic_parallel_shock_restart_controls_surface_average',
     ]
     for basename in basenames:
         _remove_outputs(basename)
@@ -117,12 +119,24 @@ def run(**kwargs):
         'changed_frame_control',
         _args(basenames[3], 2, 0) + ['problem/ps_frame_vfrac=0.25'],
         restart_file)
+    _run_expect_mismatch(
+        'changed_subtraction_stencil_control',
+        _args(basenames[4], 2, 0) +
+        ['problem/ps_subtract_stencil_cells=3'],
+        restart_file)
+    _run_expect_mismatch(
+        'changed_surface_averaged_subtraction_control',
+        _args(basenames[5], 2, 0) +
+        ['problem/ps_enable_surface_averaged_subtraction=true'],
+        restart_file)
 
     _RESULTS['unchanged_restart'] = True
     _RESULTS['rejected_changed_injection_control'] = True
     _RESULTS['rejected_changed_frame_control'] = True
+    _RESULTS['rejected_changed_subtraction_stencil_control'] = True
+    _RESULTS['rejected_changed_surface_averaged_subtraction_control'] = True
 
 
 def analyze():
     logger.info('PIC parallel-shock restart control guards: %s', _RESULTS)
-    return all(_RESULTS.values()) and len(_RESULTS) == 3
+    return all(_RESULTS.values()) and len(_RESULTS) == 5
