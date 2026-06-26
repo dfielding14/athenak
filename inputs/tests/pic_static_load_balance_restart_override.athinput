@@ -1,0 +1,8 @@
+# Performance-only continuation settings for pic_static_load_balance_restart.athinput.
+
+<time>
+nlim = 2
+
+<particles>
+pic_static_load_balance_interval = 1
+pic_static_load_balance_cost_per_particle = 1.0

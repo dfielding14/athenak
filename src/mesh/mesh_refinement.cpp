@@ -225,28 +225,64 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
 
   // Refine/derefine mesh and evolved data, set boundary conditions/timestep on new mesh
   if (nnew != 0 || ndel != 0) { // at least one (de)refinement flagged
-    RedistAndRefineMeshBlocks(pin, nnew, ndel);
-
-    pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
-
-    MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
-    if (pmbp->phydro != nullptr) {
-      (void) pmbp->phydro->NewTimeStep(pdriver, pdriver->nexp_stages);
-    }
-    if (pmbp->pmhd != nullptr) {
-      (void) pmbp->pmhd->NewTimeStep(pdriver, pdriver->nexp_stages);
-    }
-    if (pmbp->prad != nullptr) {
-      (void) pmbp->prad->NewTimeStep(pdriver, pdriver->nexp_stages);
-    }
-    if (pmbp->pz4c != nullptr) {
-      (void) pmbp->pz4c->NewTimeStep(pdriver, pdriver->nexp_stages);
-    }
+    RedistributeAndReinitializeMeshBlocks(pdriver, pin, nnew, ndel);
 
     nmb_created += nnew;
     nmb_deleted += ndel;
   }
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RedistributeAndReinitializeMeshBlocks()
+//! \brief Redistribute an adaptive mesh and refresh state tied to MeshBlock ownership.
+
+void MeshRefinement::RedistributeAndReinitializeMeshBlocks(
+    Driver *pdriver, ParameterInput *pin, int nnew, int ndel) {
+  RedistAndRefineMeshBlocks(pin, nnew, ndel);
+  ReinitializeAfterRedistribution(pdriver);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RedistributeStaticMeshBlocks()
+//! \brief Redistribute an unchanged static mesh with an explicit particle cost.
+
+void MeshRefinement::RedistributeStaticMeshBlocks(
+    Driver *pdriver, ParameterInput *pin, Real cost_per_particle) {
+  RedistributeAndReinitializeMeshBlocks(pdriver, pin, 0, 0, cost_per_particle);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RedistributeAndReinitializeMeshBlocks()
+//! \brief Redistribute with an explicit cost and refresh ownership-dependent state.
+
+void MeshRefinement::RedistributeAndReinitializeMeshBlocks(
+    Driver *pdriver, ParameterInput *pin, int nnew, int ndel,
+    Real cost_per_particle) {
+  RedistAndRefineMeshBlocks(pin, nnew, ndel, cost_per_particle);
+  ReinitializeAfterRedistribution(pdriver);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::ReinitializeAfterRedistribution()
+//! \brief Refresh boundaries, primitives, and module timestep constraints.
+
+void MeshRefinement::ReinitializeAfterRedistribution(Driver *pdriver) {
+  pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
+
+  MeshBlockPack *pmbp = pmy_mesh->pmb_pack;
+  if (pmbp->phydro != nullptr) {
+    (void) pmbp->phydro->NewTimeStep(pdriver, pdriver->nexp_stages);
+  }
+  if (pmbp->pmhd != nullptr) {
+    (void) pmbp->pmhd->NewTimeStep(pdriver, pdriver->nexp_stages);
+  }
+  if (pmbp->prad != nullptr) {
+    (void) pmbp->prad->NewTimeStep(pdriver, pdriver->nexp_stages);
+  }
+  if (pmbp->pz4c != nullptr) {
+    (void) pmbp->pz4c->NewTimeStep(pdriver, pdriver->nexp_stages);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -614,6 +650,16 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
 //! Boundary values and primitives are set in calling function: AdaptiveMeshRefinement()
 
 void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, int ndel) {
+  Real cost_per_particle = 0.0;
+  auto *ppart = pmy_mesh->pmb_pack->ppart;
+  if (ppart != nullptr) {
+    cost_per_particle = ppart->pic_load_balance_cost_per_particle;
+  }
+  RedistAndRefineMeshBlocks(pin, nnew, ndel, cost_per_particle);
+}
+
+void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, int ndel,
+                                               Real cost_per_particle) {
   Mesh* pm = pmy_mesh;
   const int old_nmb = pm->nmb_total;
   const std::int64_t new_nmb_wide = static_cast<std::int64_t>(old_nmb) +
@@ -675,7 +721,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   new_nmb_eachrank = new int[global_variable::nranks];
 
   for (int i=0; i<new_nmb; i++) {new_cost_eachmb[i] = 1.0;}
-  AssignParticleAwareCosts(new_cost_eachmb, new_nmb);
+  AssignParticleAwareCosts(new_cost_eachmb, new_nmb, cost_per_particle);
   pm->LoadBalance(new_cost_eachmb, new_rank_eachmb, new_gids_eachrank, new_nmb_eachrank,
                   new_nmb_total);
   if (new_nmb_eachrank[global_variable::my_rank] > pm->nmb_maxperrank) {
@@ -1724,11 +1770,12 @@ void MeshRefinement::RefineParticles() {
 
 //----------------------------------------------------------------------------------------
 //! \fn void MeshRefinement::AssignParticleAwareCosts
-//! \brief Add an optional particle-count contribution to each post-AMR MeshBlock cost.
+//! \brief Add an optional particle-count contribution to post-redistribution costs.
 
-void MeshRefinement::AssignParticleAwareCosts(float *costs, int new_nmb) {
+void MeshRefinement::AssignParticleAwareCosts(float *costs, int new_nmb,
+                                              Real cost_per_particle) {
   auto *ppart = pmy_mesh->pmb_pack->ppart;
-  if ((ppart == nullptr) || (ppart->pic_load_balance_cost_per_particle == 0.0)) {
+  if ((ppart == nullptr) || (cost_per_particle == 0.0)) {
     return;
   }
 
@@ -1826,7 +1873,7 @@ void MeshRefinement::AssignParticleAwareCosts(float *costs, int new_nmb) {
 #else
   global_counts = local_counts;
 #endif
-  const float weight = static_cast<float>(ppart->pic_load_balance_cost_per_particle);
+  const float weight = static_cast<float>(cost_per_particle);
   for (int gid = 0; gid < new_nmb; ++gid) {
     costs[gid] += weight*static_cast<float>(global_counts[gid]);
   }

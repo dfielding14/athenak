@@ -70,6 +70,17 @@ bool CheckedMpiByteCount(const IOWrapperSizeT count, const IOWrapperSizeT width,
   return true;
 }
 
+bool StaticParticleLoadBalanceRequested(ParameterInput *pin) {
+  if (!pin->DoesBlockExist("particles") ||
+      !pin->DoesParameterExist("particles", "pic_static_load_balance_interval") ||
+      !pin->DoesParameterExist(
+          "particles", "pic_static_load_balance_cost_per_particle")) {
+    return false;
+  }
+  return pin->GetInteger("particles", "pic_static_load_balance_interval") > 0 &&
+         pin->GetReal("particles", "pic_static_load_balance_cost_per_particle") > 0.0;
+}
+
 int CheckedMaxRefinementLevel(ParameterInput *pin, const int root_level) {
   const int num_levels = pin->GetOrAddInteger("mesh_refinement", "num_levels", 1);
   if (root_level < 0 || root_level > 30 || num_levels < 1 ||
@@ -379,9 +390,11 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   pmb_pack->AddMeshBlocks(pin);
   pmb_pack->pmb->SetNeighbors(ptree, rank_eachmb);
 
-  // Fix maximum number of MeshBlocks per rank with AMR
+  // Reserve per-rank capacity for topology changes or opt-in static redistribution.
   nmb_maxperrank = nmb_thisrank;
-  if (adaptive) {
+  const bool static_particle_lb =
+      multilevel && !adaptive && StaticParticleLoadBalanceRequested(pin);
+  if (adaptive || static_particle_lb) {
     if (pin->DoesParameterExist("mesh_refinement", "max_nmb_per_rank")) {
       nmb_maxperrank = pin->GetReal("mesh_refinement", "max_nmb_per_rank");
       if (nmb_maxperrank < nmb_thisrank) {
@@ -393,7 +406,9 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
       }
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "With AMR maximum number of MeshBlocks per rank must be "
+        << std::endl << "With "
+        << (adaptive ? "AMR" : "static particle load balancing")
+        << " maximum number of MeshBlocks per rank must be "
         << "specified in input file using <mesh_refinement>/max_nmb_per_rank"
         << std::endl;
       restart_utils::AbortOnFatalError();
@@ -949,9 +964,11 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   pmb_pack->AddMeshBlocks(pin);
   pmb_pack->pmb->SetNeighbors(ptree, rank_eachmb);
 
-  // Fix maximum number of MeshBlocks per rank with AMR
+  // Reserve per-rank capacity for topology changes or opt-in static redistribution.
   nmb_maxperrank = nmb_thisrank;
-  if (adaptive) {
+  const bool static_particle_lb =
+      multilevel && !adaptive && StaticParticleLoadBalanceRequested(pin);
+  if (adaptive || static_particle_lb) {
     if (pin->DoesParameterExist("mesh_refinement", "max_nmb_per_rank")) {
       nmb_maxperrank = pin->GetReal("mesh_refinement", "max_nmb_per_rank");
       if (nmb_maxperrank < nmb_thisrank) {
@@ -963,7 +980,9 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       }
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "With AMR maximum number of MeshBlocks per rank must be "
+        << std::endl << "With "
+        << (adaptive ? "AMR" : "static particle load balancing")
+        << " maximum number of MeshBlocks per rank must be "
         << "specified in input file using <mesh_refinement>/max_nmb_per_rank"
         << std::endl;
       restart_utils::AbortOnFatalError();
