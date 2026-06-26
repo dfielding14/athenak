@@ -65,7 +65,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
   }
   // Check that user defined srcterms were enrolled if needed
   if (user_srcs) {
-    if (user_srcs_func == nullptr) {
+    if (user_srcs_func == nullptr && user_stage_srcs_func == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;
@@ -656,7 +656,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
   // Check that user defined srcterms were enrolled if needed
   if (user_srcs) {
-    if (user_srcs_func == nullptr) {
+    if (user_srcs_func == nullptr && user_stage_srcs_func == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;

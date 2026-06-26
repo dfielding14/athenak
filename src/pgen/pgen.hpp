@@ -15,9 +15,13 @@
 #include "geodesic-grid/spherical_grid.hpp"
 #include "parameter_input.hpp"
 
+class Driver;
+
 using ProblemFinalizeFnPtr = void (*)(ParameterInput *pin, Mesh *pm);
 using UserBoundaryFnPtr = void (*)(Mesh* pm);
 using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
+using UserStageSrctermFnPtr =
+    void (*)(Mesh* pm, const Real bdt, Driver* pdrive, const int stage);
 using UserTimestepFnPtr = void (*)(Mesh* pm);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
@@ -58,6 +62,8 @@ class ProblemGenerator {
   // function pointer for user-enrolled BCs.  Called in ApplyPhysicalBCs in task list
   UserBoundaryFnPtr user_bcs_func=nullptr;
   UserSrctermFnPtr user_srcs_func=nullptr;
+  // Optional source callback for pgens that need the active RK driver and stage.
+  UserStageSrctermFnPtr user_stage_srcs_func=nullptr;
   UserTimestepFnPtr user_time_step_func=nullptr;
   UserRefinementFnPtr user_ref_func=nullptr;
   UserHistoryFnPtr user_hist_func=nullptr;
