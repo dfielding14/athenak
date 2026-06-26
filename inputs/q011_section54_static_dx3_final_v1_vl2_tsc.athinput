@@ -31,10 +31,10 @@ ix3_bc    = periodic
 ox3_bc    = periodic
 
 <meshblock>
-# MeshBlock shape does not change the physical dx=3 grid. Long x1 blocks leave
-# roughly one 400x20 block per Frontier rank at 92 nodes, distributing the 52
-# transverse shock-surface strips instead of concentrating injection on a few GPUs.
-nx1       = 400
+# MeshBlock shape does not change the physical dx=3 grid. Long x1 blocks spread
+# the 52 transverse shock strips across ranks at onset while retaining enough
+# downstream blocks to occupy all 736 GPUs late in the acceleration history.
+nx1       = 200
 nx2       = 20
 nx3       = 1
 
