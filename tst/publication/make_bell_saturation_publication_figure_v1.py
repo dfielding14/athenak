@@ -130,9 +130,12 @@ def make_figure(run_root: Path, output_root: Path, dpi: int) -> list[Path]:
     tau = np.asarray([row["tau"] for row in rows], dtype=np.float64)
     bperp = np.asarray([row["bperp_rms_over_B0"] for row in rows], dtype=np.float64)
     current = np.asarray([row["mean_jx_over_initial"] for row in rows], dtype=np.float64)
+    # The t=0 moment file precedes the first particle deposition.
+    if current.size > 1 and current[0] < 0.5 and current[1] > 0.9:
+        current[0] = np.nan
     _style()
-    fig = plt.figure(figsize=(7.15, 5.35), constrained_layout=True)
-    grid = fig.add_gridspec(2, 3, height_ratios=(1.05, 1.0))
+    fig = plt.figure(figsize=(7.15, 4.70), constrained_layout=True)
+    grid = fig.add_gridspec(2, 3, height_ratios=(1.35, 0.62))
     ax = fig.add_subplot(grid[0, :])
     amplitude_line = ax.semilogy(
         tau, bperp, color="#D55E00", lw=2.0, label=r"$B_{\perp,\rm rms}/B_0$"
@@ -167,7 +170,7 @@ def make_figure(run_root: Path, output_root: Path, dpi: int) -> list[Path]:
     )
     current_ax.set_ylabel(r"$\langle J_{\rm CR,x}\rangle/J_{\rm CR,x}(0)$", color="#0072B2")
     current_ax.tick_params(axis="y", labelcolor="#0072B2")
-    current_ax.set_ylim(min(0.0, 1.05 * float(np.min(current))), 1.05)
+    current_ax.set_ylim(min(0.0, 1.05 * float(np.nanmin(current))), 1.05)
     handles = amplitude_line + current_line
     handles.extend(ax.get_legend_handles_labels()[0][1:])
     labels = [item.get_label() for item in handles]
@@ -221,7 +224,18 @@ def make_figure(run_root: Path, output_root: Path, dpi: int) -> list[Path]:
         else:
             ax.set_yticklabels([])
         ax.set_aspect("equal")
-        _panel_label(ax, f"({chr(ord('b') + column)})")
+        ax.text(
+            0.025,
+            0.95,
+            f"({chr(ord('b') + column)})",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=10.5,
+            fontweight="bold",
+            color="white",
+            bbox={"facecolor": "black", "edgecolor": "none", "alpha": 0.45, "pad": 1.5},
+        )
     if image is not None:
         figure_bar = fig.colorbar(image, ax=fig.axes[2:5], orientation="horizontal", shrink=0.72, pad=0.02)
         figure_bar.set_label(r"$B_\perp/B_0$ at $z=L_z/2$")
