@@ -30,8 +30,10 @@ ix3_bc    = periodic
 ox3_bc    = periodic
 
 <meshblock>
-# Figure 8 uses 20 x 20 cells per MeshBlock.
-nx1       = 20
+# MeshBlock shape does not change the physical dx=6 grid. Long x1 blocks spread
+# the transverse injection surface across Frontier ranks and reduce static-grid
+# particle imbalance; the retained physical cells and output products are unchanged.
+nx1       = 400
 nx2       = 20
 nx3       = 1
 

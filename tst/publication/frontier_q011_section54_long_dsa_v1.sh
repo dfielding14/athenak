@@ -122,7 +122,7 @@ athena_args=(
   "time/tlim=${target_time}"
   "time/nlim=200000"
   "time/ndiag=500"
-  "particles/pic_load_balance_cost_per_particle=0.001"
+  "particles/pic_load_balance_cost_per_particle=0.0"
   "problem/ps_feedback_diag_dcycle=5000"
 )
 case "${grid_mode}" in
