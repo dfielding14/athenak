@@ -74,6 +74,7 @@ mu = 0.6
 rho_hot = 1.0
 rho_cold = 56.23413251903491
 velocity = 0.6454972243679028
+zero_gradient_vx = false
 pres = 1.0
 t_cool_min = 0.0015491933384829668
 T_cutoff_over_T_cold = 20.0
@@ -178,6 +179,7 @@ file_type = bin
 id = state
 variable = hydro_w
 data_precision = real
+ghost_zones = false
 dt = 30.0
 
 <output4>

@@ -32,6 +32,7 @@ Real glob_T_ih_over_T_cold;
 Real glob_beta;
 Real glob_custom_min_timestep;
 Real glob_velocity;
+bool glob_zero_gradient_vx;
 Real glob_shear_vel_thresh;
 Real glob_vy_vel_thresh;
 
@@ -76,6 +77,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   glob_T_ih_over_T_cold = pin->GetReal("problem", "T_ih_over_T_cold");
   glob_beta = pin->GetReal("problem", "beta");
   glob_velocity = pin->GetReal("problem", "velocity");
+  glob_zero_gradient_vx =
+      pin->GetOrAddBoolean("problem", "zero_gradient_vx", false);
 
   glob_shear_vel_thresh =
       pin->GetOrAddReal("problem", "hist_shear_vel_frac", 0.45) * glob_velocity;
@@ -313,10 +316,11 @@ void TRMLZBoundary(Mesh *pm) {
   Real rho_hot = glob_rho_hot;
   Real velocity = glob_velocity;
   Real pres = glob_pres;
+  bool zero_gradient_vx = glob_zero_gradient_vx;
 
-  // The reservoirs are uniform in space, so frame displacement does not change
-  // them. Their lab-frame velocities must still be transformed into the tracked
-  // grid frame.
+  // The fixed reservoir states are uniform, so frame displacement does not change
+  // them. Fixed velocities are transformed into the tracked grid frame; the optional
+  // zero-gradient vx condition instead copies the adjacent grid-frame velocity.
   bool frame_tracking = (pmbp->pframe_tracker != nullptr);
   Real frame_v1 = frame_tracking ? pmbp->pframe_tracker->FrameVelocity(0) : 0.0;
   Real frame_v2 = frame_tracking ? pmbp->pframe_tracker->FrameVelocity(1) : 0.0;
@@ -329,13 +333,19 @@ void TRMLZBoundary(Mesh *pm) {
           for (int k = 0; k < ng; k++) {
             int ghost_inner_k = ks - k - 1;
             u0(m, IDN, ghost_inner_k, j, i) = rho_cold;
-            if (frame_tracking) {
+            if (zero_gradient_vx) {
+              u0(m, IM1, ghost_inner_k, j, i) =
+                  rho_cold * u0(m, IM1, ks, j, i) / u0(m, IDN, ks, j, i);
+            } else if (frame_tracking) {
               u0(m, IM1, ghost_inner_k, j, i) =
                   rho_cold * (-0.5 * velocity - frame_v1);
+            } else {
+              u0(m, IM1, ghost_inner_k, j, i) = rho_cold * (-0.5 * velocity);
+            }
+            if (frame_tracking) {
               u0(m, IM2, ghost_inner_k, j, i) = -rho_cold * frame_v2;
               u0(m, IM3, ghost_inner_k, j, i) = -rho_cold * frame_v3;
             } else {
-              u0(m, IM1, ghost_inner_k, j, i) = rho_cold * (-0.5 * velocity);
               u0(m, IM2, ghost_inner_k, j, i) =
                   rho_cold * u0(m, IM2, ks, j, i) / u0(m, IDN, ks, j, i);
               u0(m, IM3, ghost_inner_k, j, i) =
@@ -357,13 +367,19 @@ void TRMLZBoundary(Mesh *pm) {
           for (int k = 0; k < ng; k++) {
             int ghost_outer_k = ke + k + 1;
             u0(m, IDN, ghost_outer_k, j, i) = rho_hot;
-            if (frame_tracking) {
+            if (zero_gradient_vx) {
+              u0(m, IM1, ghost_outer_k, j, i) =
+                  rho_hot * u0(m, IM1, ke, j, i) / u0(m, IDN, ke, j, i);
+            } else if (frame_tracking) {
               u0(m, IM1, ghost_outer_k, j, i) =
                   rho_hot * (0.5 * velocity - frame_v1);
+            } else {
+              u0(m, IM1, ghost_outer_k, j, i) = rho_hot * (0.5 * velocity);
+            }
+            if (frame_tracking) {
               u0(m, IM2, ghost_outer_k, j, i) = -rho_hot * frame_v2;
               u0(m, IM3, ghost_outer_k, j, i) = -rho_hot * frame_v3;
             } else {
-              u0(m, IM1, ghost_outer_k, j, i) = rho_hot * (0.5 * velocity);
               u0(m, IM2, ghost_outer_k, j, i) =
                   rho_hot * u0(m, IM2, ke, j, i) / u0(m, IDN, ke, j, i);
               u0(m, IM3, ghost_outer_k, j, i) =

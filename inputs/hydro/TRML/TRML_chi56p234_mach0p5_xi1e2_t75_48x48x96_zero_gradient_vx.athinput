@@ -1,11 +1,11 @@
-# Reproducible local run: chi=10^1.75, mach_rel=0.5, xi=100, tlim=75,
+# Zero-gradient-vx comparison run: chi=10^1.75, mach_rel=0.5, xi=100, tlim=75,
 # on a 48 x 48 x 96 grid with eight MPI ranks and one MeshBlock per rank.
 
 <comment>
 problem = Simple cooling TRML with interface tracking and thermodynamic tracers
 
 <job>
-basename = TRML_chi56p234_M0p5_xi1e2_n48
+basename = TRML_chi56p234_M0p5_xi1e2_n48_zgvx
 
 <mesh>
 nghost = 4
@@ -74,7 +74,7 @@ mu = 0.6
 rho_hot = 1.0
 rho_cold = 56.23413251903491
 velocity = 0.6454972243679028
-zero_gradient_vx = false
+zero_gradient_vx = true
 pres = 1.0
 t_cool_min = 0.015491933384829668
 T_cutoff_over_T_cold = 20.0

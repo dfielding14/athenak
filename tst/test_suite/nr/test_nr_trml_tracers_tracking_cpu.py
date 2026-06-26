@@ -94,6 +94,118 @@ def test_stage_aware_cooling_matches_energy_loss(
     np.testing.assert_allclose(reported_loss, energy_loss, rtol=2.0e-12, atol=2.0e-14)
 
 
+def test_x3_reservoir_vx_boundary_modes(
+    simple_trml_binary: Path, tmp_path: Path
+) -> None:
+    input_path = (
+        REPO_ROOT
+        / "inputs"
+        / "hydro"
+        / "TRML"
+        / "TRML_with_Tracers_and_Tracking.athinput"
+    )
+    ng = 4
+    nx = 8
+    rho_cold = 56.23413251
+    rho_hot = 1.0
+    pressure_fixed = 1.0
+    shear_velocity = 1.0
+
+    for zero_gradient in (False, True):
+        mode = "zero_gradient" if zero_gradient else "fixed"
+        basename = f"TRMLBoundary{mode}"
+        run_dir = tmp_path / mode
+        run_case(
+            simple_trml_binary,
+            input_path,
+            run_dir,
+            [
+                f"job/basename={basename}",
+                "mesh/nx1=8",
+                "mesh/nx2=8",
+                "mesh/nx3=8",
+                "meshblock/nx1=8",
+                "meshblock/nx2=8",
+                "meshblock/nx3=8",
+                "time/nlim=1",
+                "time/tlim=1.0",
+                f"problem/zero_gradient_vx={str(zero_gradient).lower()}",
+                "problem/phase_sharpness=8",
+                "initial_perturbations/nlow=1",
+                "initial_perturbations/nhigh=2",
+                "initial_perturbations/localization=none",
+                "initial_perturbations/x3_scale=-1",
+                "frame_tracking/enabled=false",
+                "tracer_seed1/count_per_event=1",
+                "tracer_seed2/end_time=0",
+                "tracer_seed2/cadence=-1",
+                "tracer_seed2/count_per_event=1",
+                "tracer_seed2/slab_min=0.75",
+                "output1/dt=10",
+                "output2/dt=10",
+                "output3/variable=hydro_u",
+                "output3/dt=1.0e-20",
+                "output3/ghost_zones=true",
+                "output4/dt=10",
+                "output5/dt=10",
+            ],
+        )
+
+        snapshots = sorted((run_dir / "bin").glob("*.bin"))
+        assert snapshots
+        state = bin_convert.read_binary(str(snapshots[-1]))
+        fields = {
+            name: np.asarray(values)[0] for name, values in state["mb_data"].items()
+        }
+        density = fields["dens"]
+        vx = fields["mom1"] / density
+        kinetic = (
+            0.5
+            * (fields["mom1"] ** 2 + fields["mom2"] ** 2 + fields["mom3"] ** 2)
+            / density
+        )
+        pressure = (1.666666667 - 1.0) * (fields["ener"] - kinetic)
+
+        interior = slice(ng, ng + nx)
+        bottom = (slice(0, ng), interior, interior)
+        top = (slice(ng + nx, ng + nx + ng), interior, interior)
+        np.testing.assert_allclose(density[bottom], rho_cold, rtol=0.0, atol=1.0e-13)
+        np.testing.assert_allclose(density[top], rho_hot, rtol=0.0, atol=1.0e-14)
+        np.testing.assert_allclose(
+            pressure[bottom], pressure_fixed, rtol=0.0, atol=2.0e-14
+        )
+        np.testing.assert_allclose(
+            pressure[top], pressure_fixed, rtol=0.0, atol=2.0e-14
+        )
+        np.testing.assert_allclose(
+            fields["r_00"][bottom], rho_cold, rtol=0.0, atol=1.0e-13
+        )
+        np.testing.assert_allclose(fields["r_00"][top], 0.0, rtol=0.0, atol=0.0)
+
+        bottom_active = vx[ng, interior, interior]
+        top_active = vx[ng + nx - 1, interior, interior]
+        if zero_gradient:
+            np.testing.assert_allclose(
+                vx[bottom],
+                np.broadcast_to(bottom_active, vx[bottom].shape),
+                rtol=0.0,
+                atol=1.0e-14,
+            )
+            np.testing.assert_allclose(
+                vx[top],
+                np.broadcast_to(top_active, vx[top].shape),
+                rtol=0.0,
+                atol=1.0e-14,
+            )
+        else:
+            np.testing.assert_allclose(
+                vx[bottom], -0.5 * shear_velocity, rtol=0.0, atol=1.0e-14
+            )
+            np.testing.assert_allclose(
+                vx[top], 0.5 * shear_velocity, rtol=0.0, atol=1.0e-14
+            )
+
+
 def combined_overrides(basename: str, nlim: int) -> list[str]:
     return [
         f"job/basename={basename}",

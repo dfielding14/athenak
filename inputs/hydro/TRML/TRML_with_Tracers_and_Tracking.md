@@ -27,9 +27,18 @@ parameter runs, without requiring command-line parameter overrides:
   `16 x 16 x 32`, through `t=150`.
 - `TRML_chi56p234_mach0p5_xi1e2_t75_48x48x96.athinput`: `xi=100`,
   `48 x 48 x 96`, through `t=75`.
+- `TRML_chi56p234_mach0p5_xi1e2_t75_48x48x96_zero_gradient_vx.athinput`:
+  the same `xi=100` run with zero-gradient `vx` at both x3 reservoirs.
 
-Both use eight root MeshBlocks for one-block-per-rank launches on eight MPI ranks,
-and both retain the same 3,072-particle split and 51-event injection schedule.
+All three use eight root MeshBlocks for one-block-per-rank launches on eight MPI ranks,
+and retain the same 3,072-particle split and 51-event injection schedule.
+
+## X3 reservoir velocity condition
+
+Both x3 boundaries always hold density, pressure, and cold-material fraction at their
+reservoir values. `problem/zero_gradient_vx=false` also holds `vx` at the imposed
+shear values. Setting it to `true` instead copies `vx` from the boundary-adjacent
+active cell into every ghost layer. The `vy` and `vz` treatment is unchanged.
 
 ## Frame and particle coordinates
 
