@@ -36,9 +36,11 @@ and retain the same 3,072-particle split and 51-event injection schedule.
 ## X3 reservoir velocity condition
 
 Both x3 boundaries always hold density, pressure, and cold-material fraction at their
-reservoir values. `problem/zero_gradient_vx=false` also holds `vx` at the imposed
-shear values. Setting it to `true` instead copies `vx` from the boundary-adjacent
-active cell into every ghost layer. The `vy` and `vz` treatment is unchanged.
+reservoir values. By default, `problem/zero_gradient_vx=true` copies `vx` from the
+boundary-adjacent active cell into every ghost layer. Set it to `false` to hold `vx`
+at the imposed shear values instead. The `vy` and `vz` treatment is unchanged. The
+standalone inputs for the completed fixed-`vx` runs keep `false` explicitly so those
+results remain reproducible.
 
 ## Frame and particle coordinates
 

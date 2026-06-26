@@ -78,7 +78,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   glob_beta = pin->GetReal("problem", "beta");
   glob_velocity = pin->GetReal("problem", "velocity");
   glob_zero_gradient_vx =
-      pin->GetOrAddBoolean("problem", "zero_gradient_vx", false);
+      pin->GetOrAddBoolean("problem", "zero_gradient_vx", true);
 
   glob_shear_vel_thresh =
       pin->GetOrAddReal("problem", "hist_shear_vel_frac", 0.45) * glob_velocity;

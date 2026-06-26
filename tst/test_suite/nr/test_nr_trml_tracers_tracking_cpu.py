@@ -110,14 +110,21 @@ def test_x3_reservoir_vx_boundary_modes(
     rho_hot = 1.0
     pressure_fixed = 1.0
     shear_velocity = 1.0
+    default_input = tmp_path / "default_zero_gradient_vx.athinput"
+    canonical_text = input_path.read_text()
+    assert "zero_gradient_vx = true\n" in canonical_text
+    default_input.write_text(canonical_text.replace("zero_gradient_vx = true\n", ""))
 
-    for zero_gradient in (False, True):
-        mode = "zero_gradient" if zero_gradient else "fixed"
+    for zero_gradient in (False, None):
+        mode = "default_zero_gradient" if zero_gradient is None else "fixed"
         basename = f"TRMLBoundary{mode}"
         run_dir = tmp_path / mode
+        mode_overrides = (
+            [] if zero_gradient is None else ["problem/zero_gradient_vx=false"]
+        )
         run_case(
             simple_trml_binary,
-            input_path,
+            default_input if zero_gradient is None else input_path,
             run_dir,
             [
                 f"job/basename={basename}",
@@ -129,7 +136,6 @@ def test_x3_reservoir_vx_boundary_modes(
                 "meshblock/nx3=8",
                 "time/nlim=1",
                 "time/tlim=1.0",
-                f"problem/zero_gradient_vx={str(zero_gradient).lower()}",
                 "problem/phase_sharpness=8",
                 "initial_perturbations/nlow=1",
                 "initial_perturbations/nhigh=2",
@@ -148,6 +154,7 @@ def test_x3_reservoir_vx_boundary_modes(
                 "output3/ghost_zones=true",
                 "output4/dt=10",
                 "output5/dt=10",
+                *mode_overrides,
             ],
         )
 
@@ -184,7 +191,7 @@ def test_x3_reservoir_vx_boundary_modes(
 
         bottom_active = vx[ng, interior, interior]
         top_active = vx[ng + nx - 1, interior, interior]
-        if zero_gradient:
+        if zero_gradient is None:
             np.testing.assert_allclose(
                 vx[bottom],
                 np.broadcast_to(bottom_active, vx[bottom].shape),
