@@ -177,6 +177,9 @@ Real ps_particle_light_speed = 1.0;
 Real ps_mass_reservoir_global = 0.0;
 int ps_injection_transaction_cycle = std::numeric_limits<int>::min();
 std::vector<GasDelta> ps_injection_transaction_gas_deltas;
+int ps_injection_transaction_device_cycle = std::numeric_limits<int>::min();
+HostArray1D<GasDelta> ps_injection_transaction_gas_deltas_host;
+DvceArray1D<GasDelta> ps_injection_transaction_gas_deltas_device;
 std::array<Real, 5> ps_injection_transaction_expected_global = {};
 std::array<Real, 5> ps_injection_transaction_applied_local = {};
 std::array<Real, 5> ps_injection_transaction_abs_global = {};
@@ -2370,6 +2373,12 @@ void SeedNextTag(particles::Particles *ppart, const Real current_time) {
   StoreRuntimeStateForRestart(current_time);
 }
 
+void ResetParallelShockGasSubtractionDeviceLedger() {
+  ps_injection_transaction_gas_deltas_host = HostArray1D<GasDelta>();
+  ps_injection_transaction_gas_deltas_device = DvceArray1D<GasDelta>();
+  ps_injection_transaction_device_cycle = std::numeric_limits<int>::min();
+}
+
 void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   if (!ps_enable_subtraction) return;
   if (!(stage_weight > 0.0) || !std::isfinite(stage_weight)) {
@@ -2384,37 +2393,24 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
   auto *pmhd = pmbp->pmhd;
   const int nsub = static_cast<int>(ps_injection_transaction_gas_deltas.size());
-  HostArray1D<int> h_m("ps_m", nsub);
-  HostArray1D<int> h_k("ps_k", nsub);
-  HostArray1D<int> h_j("ps_j", nsub);
-  HostArray1D<int> h_i("ps_i", nsub);
-  HostArray1D<Real> h_dm("ps_dm", nsub);
-  HostArray1D<Real> h_dmx("ps_dmx", nsub);
-  HostArray1D<Real> h_dmy("ps_dmy", nsub);
-  HostArray1D<Real> h_dmz("ps_dmz", nsub);
-  HostArray1D<Real> h_de("ps_de", nsub);
-  for (int n = 0; n < nsub; ++n) {
-    const GasDelta &d = ps_injection_transaction_gas_deltas[n];
-    h_m(n) = d.m;
-    h_k(n) = d.k;
-    h_j(n) = d.j;
-    h_i(n) = d.i;
-    h_dm(n) = stage_weight*d.dm;
-    h_dmx(n) = stage_weight*d.dmx;
-    h_dmy(n) = stage_weight*d.dmy;
-    h_dmz(n) = stage_weight*d.dmz;
-    h_de(n) = stage_weight*d.de;
+  if (ps_injection_transaction_device_cycle != pm->ncycle) {
+    if (ps_injection_transaction_gas_deltas_host.extent_int(0) != nsub) {
+      ps_injection_transaction_gas_deltas_host =
+          HostArray1D<GasDelta>("ps_gas_deltas_host", nsub);
+      ps_injection_transaction_gas_deltas_device =
+          DvceArray1D<GasDelta>("ps_gas_deltas_device", nsub);
+    }
+    for (int n = 0; n < nsub; ++n) {
+      ps_injection_transaction_gas_deltas_host(n) =
+          ps_injection_transaction_gas_deltas[n];
+    }
+    if (nsub > 0) {
+      Kokkos::deep_copy(ps_injection_transaction_gas_deltas_device,
+                        ps_injection_transaction_gas_deltas_host);
+    }
+    ps_injection_transaction_device_cycle = pm->ncycle;
   }
-
-  auto d_m = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_m);
-  auto d_k = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_k);
-  auto d_j = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_j);
-  auto d_i = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_i);
-  auto d_dm = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dm);
-  auto d_dmx = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmx);
-  auto d_dmy = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmy);
-  auto d_dmz = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmz);
-  auto d_de = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_de);
+  auto d_gas_deltas = ps_injection_transaction_gas_deltas_device;
 
   auto &u0 = pmhd->u0;
   auto &b0 = pmhd->b0;
@@ -2428,13 +2424,18 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
     "ps_gas_subtract_validate", Kokkos::RangePolicy<>(DevExeSpace(), 0, nsub),
   KOKKOS_LAMBDA(const int n, int &density_clips, int &pressure_clips,
                 int &nonfinite_cells) {
-    const int m = d_m(n);
-    const int k = d_k(n);
-    const int j = d_j(n);
-    const int i = d_i(n);
-    const Real dm = d_dm(n);
-    if (!isfinite(dm) || !isfinite(d_dmx(n)) || !isfinite(d_dmy(n)) ||
-        !isfinite(d_dmz(n)) || !isfinite(d_de(n))) {
+    const GasDelta d = d_gas_deltas(n);
+    const int m = d.m;
+    const int k = d.k;
+    const int j = d.j;
+    const int i = d.i;
+    const Real dm = stage_weight*d.dm;
+    const Real dmx = stage_weight*d.dmx;
+    const Real dmy = stage_weight*d.dmy;
+    const Real dmz = stage_weight*d.dmz;
+    const Real de = stage_weight*d.de;
+    if (!isfinite(dm) || !isfinite(dmx) || !isfinite(dmy) ||
+        !isfinite(dmz) || !isfinite(de)) {
       ++nonfinite_cells;
       return;
     }
@@ -2448,10 +2449,10 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
       ++density_clips;
       return;
     }
-    const Real mx = u0(m, IM1, k, j, i) - d_dmx(n);
-    const Real my = u0(m, IM2, k, j, i) - d_dmy(n);
-    const Real mz = u0(m, IM3, k, j, i) - d_dmz(n);
-    const Real energy = u0(m, IEN, k, j, i) - d_de(n);
+    const Real mx = u0(m, IM1, k, j, i) - dmx;
+    const Real my = u0(m, IM2, k, j, i) - dmy;
+    const Real mz = u0(m, IM3, k, j, i) - dmz;
+    const Real energy = u0(m, IEN, k, j, i) - de;
     const Real bx = 0.5*(b0.x1f(m, k, j, i) + b0.x1f(m, k, j, i + 1));
     const Real by = 0.5*(b0.x2f(m, k, j, i) + b0.x2f(m, k, j + 1, i));
     const Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
@@ -2496,18 +2497,19 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   if (nsub <= 0) return;
   par_for("ps_gas_subtract", DevExeSpace(), 0, nsub - 1,
   KOKKOS_LAMBDA(const int n) {
-    const int m = d_m(n);
-    const int k = d_k(n);
-    const int j = d_j(n);
-    const int i = d_i(n);
-    const Real dm = d_dm(n);
+    const GasDelta d = d_gas_deltas(n);
+    const int m = d.m;
+    const int k = d.k;
+    const int j = d.j;
+    const int i = d.i;
+    const Real dm = stage_weight*d.dm;
     if (dm <= 0.0) return;
 
     u0(m, IDN, k, j, i) -= dm;
-    u0(m, IM1, k, j, i) -= d_dmx(n);
-    u0(m, IM2, k, j, i) -= d_dmy(n);
-    u0(m, IM3, k, j, i) -= d_dmz(n);
-    u0(m, IEN, k, j, i) -= d_de(n);
+    u0(m, IM1, k, j, i) -= stage_weight*d.dmx;
+    u0(m, IM2, k, j, i) -= stage_weight*d.dmy;
+    u0(m, IM3, k, j, i) -= stage_weight*d.dmz;
+    u0(m, IEN, k, j, i) -= stage_weight*d.de;
   });
   std::array<Real, 5> stage_delta = {};
   for (const GasDelta &d : ps_injection_transaction_gas_deltas) {
@@ -3710,6 +3712,7 @@ void ParallelShockFinalize(ParameterInput *pin, Mesh *pm) {
   ValidateParallelShockParticlePopulation(pm);
   StoreRuntimeStateForRestart(pm->time);
   FinalizeParallelShockEscapeEventStream();
+  ResetParallelShockGasSubtractionDeviceLedger();
   if (global_variable::my_rank == 0) {
     std::cout << "pic_parallel_shock escape_accounting_telemetry:"
               << " population_audit_calls=" << ps_particle_population_audit_calls
@@ -4227,6 +4230,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       pin->GetOrAddReal("problem", "ps_injected_cr_energy_global", 0.0) : 0.0;
   ps_injection_transaction_cycle = std::numeric_limits<int>::min();
   ps_injection_transaction_gas_deltas.clear();
+  ResetParallelShockGasSubtractionDeviceLedger();
   ps_removed_excluded_early_cohort = restart ?
       pin->GetOrAddBoolean("problem", "ps_removed_excluded_early_cohort", false) :
       false;
