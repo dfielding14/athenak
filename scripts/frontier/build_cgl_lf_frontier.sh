@@ -18,6 +18,10 @@ module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2
 module load cce/20.0.0
 module unload darshan-runtime
 
+# Login shells can retain include/library overrides from the default ROCm stack
+# after switching CPE versions.  Do not let those paths mix toolchains.
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
+export INCLUDE_PATH_X86_64="$(CC --print-resource-dir)/include:${CC_X86_64}/include/craylibs"
 export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
 
 git -C "${SRC_DIR}" rev-parse --is-inside-work-tree >/dev/null
