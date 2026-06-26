@@ -534,6 +534,12 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
         self,
     ) -> None:
         case = _case("q043-current-oracle-d1-coarse-ppc1-single-cvr1000")
+        self.assertEqual(
+            oracle.expected_runtime_parameters(case)["particles"][
+                "pic_boundary_conservation_ledger"
+            ],
+            "0",
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             paths = _write_raw_case(root / "bookkeeping", case)
@@ -548,6 +554,21 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
             drift["prtcl_jz"][("output4", "ghost_zones")] = "true"
             paths = _write_raw_case(root / "drift", case, parameter_overrides=drift)
             with self.assertRaisesRegex(oracle.ContractError, "immutable contract drifted"):
+                oracle.analyze_raw_case(str(case["case_id"]), paths)
+
+            enabled_ledger = {
+                field: {("particles", "pic_boundary_conservation_ledger"): "1"}
+                for field in oracle.FIELDS
+            }
+            paths = _write_raw_case(
+                root / "enabled-ledger",
+                case,
+                parameter_overrides=enabled_ledger,
+            )
+            with self.assertRaisesRegex(
+                oracle.ContractError,
+                "authoritative deck and frozen default contract",
+            ):
                 oracle.analyze_raw_case(str(case["case_id"]), paths)
 
     def test_runtime_output_bookkeeping_rejects_malformed_or_impossible_states(
@@ -610,6 +631,29 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
             oracle._normalized_runtime_parameters(
                 parameters, case=case, field="prtcl_rho"
             )
+
+    def test_runtime_accepts_exact_explicit_multidimensional_species_velocity(
+        self,
+    ) -> None:
+        case = _case("q043-current-oracle-d2-coarse-ppc1-single-cvr1000")
+        particles = oracle.parse_athinput_text(oracle.render_oracle_deck(case))[
+            "particles"
+        ]
+        exact_velocity = {
+            field: {
+                ("species0", f"v{axis}0"): particles[f"cr_v{axis}0"]
+                for axis in ("x", "y", "z")
+            }
+            for field in oracle.FIELDS
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            paths = _write_raw_case(
+                Path(directory),
+                case,
+                parameter_overrides=exact_velocity,
+            )
+            report = oracle.analyze_raw_case(str(case["case_id"]), paths)
+            self.assertTrue(report["source_local_oracle_check_pass"])
 
     def test_transverse_current_and_spatial_nonuniformity_fail_closed(self) -> None:
         case = _case("q043-current-oracle-d1-coarse-ppc1-single-cvr1000")

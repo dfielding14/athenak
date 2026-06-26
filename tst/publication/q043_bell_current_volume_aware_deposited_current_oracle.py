@@ -162,6 +162,7 @@ _RUNTIME_DEFAULTS = {
         "pic_deltaf_adapt_mode": "off",
         "pic_deltaf_adapt_interval": "0",
         "pic_q017_sync_kernel_timers": "0",
+        "pic_boundary_conservation_ledger": "0",
         "pic_random_seed": "0",
         "pic_expansion_law": "linear",
         "pic_expansion_rate_x1": "0",
@@ -903,6 +904,7 @@ def _normalized_runtime_parameters(
         f"{field}: runtime output block inventory drifted",
     )
     field_index = FIELDS.index(field) + 1
+    deck_particles = parse_athinput_text(render_oracle_deck(case))["particles"]
     normalized = {}
     for block, values in parameters.items():
         _require(
@@ -960,6 +962,16 @@ def _normalized_runtime_parameters(
             for key, value in values.items()
             if not (numbered_output and key in RUNTIME_OUTPUT_BOOKKEEPING_KEYS)
         }
+        if block == "species0":
+            for axis in ("x", "y", "z"):
+                key = f"v{axis}0"
+                exact = deck_particles[f"cr_v{axis}0"]
+                implicit = format(float(exact), ".6g")
+                _require(
+                    normalized[block].get(key) in {exact, implicit},
+                    f"{field}: runtime species0/{key} drifted",
+                )
+                normalized[block][key] = implicit
     return normalized
 
 

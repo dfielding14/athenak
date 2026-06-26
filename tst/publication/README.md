@@ -15,6 +15,10 @@ them as `engineering_proxy` and mark them
 `PIC_PRODUCTION_READINESS_PLAN.md` as the only controlling release,
 qualification and Frontier-authorization plan.
 
+For the compact operational path from a clean build to exploratory Bell and
+parallel-shock runs, see `ENGINEERING_READINESS_FAST_PATH.md`. This engineering
+gate is separate from publication qualification and claim signoff.
+
 ## Files
 
 - `pic_publication_manifest.py`

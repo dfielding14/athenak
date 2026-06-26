@@ -51,6 +51,9 @@ fi
 export MODULEPATH=/sw/frontier/spack-envs/modules/rocmcc/6.2.4/cray-mpich-8.1.31/rocm-6.2.4/rocmcc-6.2.4:/sw/frontier/spack-envs/modules/rocmcc/6.2.4/rocm-6.2.4/rocmcc-6.2.4:/sw/frontier/spack-envs/modules/rocmcc/6.2.4/cray-mpich-8.1.31/rocmcc-6.2.4:/sw/frontier/spack-envs/modules/rocmcc/6.2.4/rocmcc-6.2.4:/opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0:/opt/cray/pe/lmod/modulefiles/comnet/amd/4.0/ofi/1.0:/opt/cray/pe/lmod/modulefiles/compiler/amd/4.0:/opt/cray/pe/lmod/modulefiles/mix_compilers:/opt/cray/pe/lmod/modulefiles/perftools/24.11.0:/opt/cray/pe/lmod/modulefiles/net/ofi/1.0:/opt/cray/pe/lmod/modulefiles/cpu/x86-trento/1.0:/opt/cray/modulefiles:/opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0:/opt/cray/pe/lmod/modulefiles/core:/opt/cray/pe/modulefiles/Linux:/opt/cray/pe/modulefiles/Core:/opt/cray/pe/lmod/lmod/modulefiles/Core:/opt/cray/pe/lmod/modulefiles/craype-targets/default:/sw/frontier/modulefiles
 
 export MPICH_GPU_SUPPORT_ENABLED=1
+export MPICH_GPU_EAGER_REGISTER_HOST_MEM=0
+export MPICH_GPU_NO_ASYNC_COPY=1
+export MPICH_GPU_IPC_ENABLED=0
 export MPICH_ENV_DISPLAY=1
 export MPICH_VERSION_DISPLAY=1
 export SLURM_EXPORT_ENV=ALL
@@ -90,7 +93,9 @@ record_pic_environment() {
   printf 'PIC_FRONTIER_PROFILE=%s\n' "$PIC_FRONTIER_PROFILE"
   printf 'HSA_XNACK=%s\n' "${HSA_XNACK:-0}"
   for name in MPICH_ENV_DISPLAY MPICH_VERSION_DISPLAY \
-      MPICH_GPU_SUPPORT_ENABLED MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED \
+      MPICH_GPU_SUPPORT_ENABLED MPICH_GPU_EAGER_REGISTER_HOST_MEM \
+      MPICH_GPU_NO_ASYNC_COPY MPICH_GPU_IPC_ENABLED \
+      MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED \
       MPICH_OFI_NIC_POLICY MPICH_GPU_IPC_CACHE_MAX_SIZE MPICH_MPIIO_HINTS \
       MPICH_OFI_NUM_CQ_ENTRIES FI_MR_CACHE_MONITOR FI_CXI_RX_MATCH_MODE \
       OMP_NUM_THREADS SLURM_EXPORT_ENV ROCM_PATH LOADEDMODULES _LMFILES_ \
