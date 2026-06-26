@@ -17,7 +17,7 @@
 #include "io_wrapper.hpp"
 #include "particles/tracer_fields.hpp"
 
-#define NHISTORY_VARIABLES 20
+#define NHISTORY_VARIABLES 24
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif

@@ -462,7 +462,8 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
 
       sched.event_index++;
       next_tracer_tag += sched.count_per_event;
-      if (sched.cadence <= 0.0 || sched.next_time + sched.cadence > sched.end_time + eps) {
+      if (sched.cadence <= 0.0 ||
+          sched.next_time + sched.cadence > sched.end_time + eps) {
         sched.complete = true;
       } else {
         sched.next_time += sched.cadence;
@@ -678,17 +679,32 @@ TaskStatus Particles::AdjustMeshRefinement(Driver *pdriver, int stage) {
       else if (draw < flx[0] + flx[1] + flx[2]) target = 3;
 
       if (lastmove == 1 || lastmove == 2) {
-        if (target == 2) pr(LMCY,p) += dx2;
-        else if (target == 3) pr(LMCZ,p) += dx3;
-        else if (target == 4) {pr(LMCY,p) += dx2; pr(LMCZ,p) += dx3;}
+        if (target == 2) {
+          pr(LMCY,p) += dx2;
+        } else if (target == 3) {
+          pr(LMCZ,p) += dx3;
+        } else if (target == 4) {
+          pr(LMCY,p) += dx2;
+          pr(LMCZ,p) += dx3;
+        }
       } else if (lastmove == 3 || lastmove == 4) {
-        if (target == 2) pr(LMCX,p) += dx1;
-        else if (target == 3) pr(LMCZ,p) += dx3;
-        else if (target == 4) {pr(LMCX,p) += dx1; pr(LMCZ,p) += dx3;}
+        if (target == 2) {
+          pr(LMCX,p) += dx1;
+        } else if (target == 3) {
+          pr(LMCZ,p) += dx3;
+        } else if (target == 4) {
+          pr(LMCX,p) += dx1;
+          pr(LMCZ,p) += dx3;
+        }
       } else if (lastmove == 5 || lastmove == 6) {
-        if (target == 2) pr(LMCX,p) += dx1;
-        else if (target == 3) pr(LMCY,p) += dx2;
-        else if (target == 4) {pr(LMCX,p) += dx1; pr(LMCY,p) += dx2;}
+        if (target == 2) {
+          pr(LMCX,p) += dx1;
+        } else if (target == 3) {
+          pr(LMCY,p) += dx2;
+        } else if (target == 4) {
+          pr(LMCX,p) += dx1;
+          pr(LMCY,p) += dx2;
+        }
       }
     } else if (level < lastlevel) {
       pr(LMCX,p) += (i_parity ? -0.25 : 0.25)*dx1;
@@ -723,15 +739,19 @@ void Particles::RemapAfterMeshRefinement() {
 
   std::vector<int> dest_rank(nprtcl_thispack, global_variable::my_rank);
   for (int p=0; p<nprtcl_thispack; ++p) {
-    hr(LMCX,p) = WrapOrClamp(hr(LMCX,p), pm->mesh_size.x1min, pm->mesh_size.x1max,
-                             pm->mesh_bcs[BoundaryFace::inner_x1] == BoundaryFlag::periodic ||
-                             pm->mesh_bcs[BoundaryFace::outer_x1] == BoundaryFlag::periodic);
-    hr(LMCY,p) = WrapOrClamp(hr(LMCY,p), pm->mesh_size.x2min, pm->mesh_size.x2max,
-                             pm->mesh_bcs[BoundaryFace::inner_x2] == BoundaryFlag::periodic ||
-                             pm->mesh_bcs[BoundaryFace::outer_x2] == BoundaryFlag::periodic);
-    hr(LMCZ,p) = WrapOrClamp(hr(LMCZ,p), pm->mesh_size.x3min, pm->mesh_size.x3max,
-                             pm->mesh_bcs[BoundaryFace::inner_x3] == BoundaryFlag::periodic ||
-                             pm->mesh_bcs[BoundaryFace::outer_x3] == BoundaryFlag::periodic);
+    bool periodic =
+        pm->mesh_bcs[BoundaryFace::inner_x1] == BoundaryFlag::periodic ||
+        pm->mesh_bcs[BoundaryFace::outer_x1] == BoundaryFlag::periodic;
+    hr(LMCX,p) = WrapOrClamp(hr(LMCX,p), pm->mesh_size.x1min,
+                             pm->mesh_size.x1max, periodic);
+    periodic = pm->mesh_bcs[BoundaryFace::inner_x2] == BoundaryFlag::periodic ||
+               pm->mesh_bcs[BoundaryFace::outer_x2] == BoundaryFlag::periodic;
+    hr(LMCY,p) = WrapOrClamp(hr(LMCY,p), pm->mesh_size.x2min,
+                             pm->mesh_size.x2max, periodic);
+    periodic = pm->mesh_bcs[BoundaryFace::inner_x3] == BoundaryFlag::periodic ||
+               pm->mesh_bcs[BoundaryFace::outer_x3] == BoundaryFlag::periodic;
+    hr(LMCZ,p) = WrapOrClamp(hr(LMCZ,p), pm->mesh_size.x3min,
+                             pm->mesh_size.x3max, periodic);
 
     int gid = LocateMeshBlockGID(pm, hr(LMCX,p), hr(LMCY,p), hr(LMCZ,p));
     if (gid < 0) {
@@ -867,7 +887,8 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
   if (header.nschedules > 0) {
     resfile.Write_any_type(sched_real.data(), sched_real.size(), "Real",
                            single_file_per_rank);
-    resfile.Write_any_type(sched_int.data(), sched_int.size(), "int", single_file_per_rank);
+    resfile.Write_any_type(sched_int.data(), sched_int.size(), "int",
+                           single_file_per_rank);
   }
 
   HostArray2D<Real> hr("rst_prtcl_rdata", nrdata, nprtcl_thispack);
@@ -875,8 +896,10 @@ void Particles::WriteRestartData(IOWrapper &resfile, bool single_file_per_rank) 
   if (nprtcl_thispack > 0) {
     Kokkos::deep_copy(hr, prtcl_rdata);
     Kokkos::deep_copy(hi, prtcl_idata);
-    resfile.Write_any_type(hr.data(), nrdata*nprtcl_thispack, "Real", single_file_per_rank);
-    resfile.Write_any_type(hi.data(), nidata*nprtcl_thispack, "int", single_file_per_rank);
+    resfile.Write_any_type(hr.data(), nrdata*nprtcl_thispack, "Real",
+                           single_file_per_rank);
+    resfile.Write_any_type(hi.data(), nidata*nprtcl_thispack, "int",
+                           single_file_per_rank);
   }
 }
 

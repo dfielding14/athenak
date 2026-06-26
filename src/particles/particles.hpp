@@ -111,7 +111,8 @@ class Particles {
 
   // functions...
   void CreateParticleTags(ParameterInput *pin);
-  void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
+  void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl,
+                     TaskID after_integrator_start);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);

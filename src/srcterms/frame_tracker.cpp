@@ -977,15 +977,16 @@ void FrameTracker::ValidateConfiguration() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void FrameTracker::IncludeFrameTrackingTask()
+//! \fn TaskID FrameTracker::IncludeFrameTrackingTask()
 //! \brief Add frame tracking to the after-time-integrator task list.
 
-void FrameTracker::IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl, TaskID start) {
+TaskID FrameTracker::IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl,
+                                              TaskID start) {
   if (tl == nullptr) {
-    return;
+    return TaskID(0);
   }
   TaskID dep = start;
-  (void) tl->AddTask(&FrameTracker::Apply, this, dep);
+  return tl->AddTask(&FrameTracker::Apply, this, dep);
 }
 
 //----------------------------------------------------------------------------------------

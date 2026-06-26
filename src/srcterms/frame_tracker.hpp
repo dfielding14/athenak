@@ -29,7 +29,7 @@ class FrameTracker {
                const std::string &block_name = "frame_tracking");
   ~FrameTracker() = default;
 
-  void IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl, TaskID start);
+  TaskID IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus Apply(Driver *pdrive, int stage);
   bool ApplyTracking();
 

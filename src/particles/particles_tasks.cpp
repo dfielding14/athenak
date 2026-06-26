@@ -25,15 +25,21 @@ namespace particles {
 //! \brief Adds hydro tasks to appropriate task lists used by time integrators.
 //! Called by MeshBlockPack::AddPhysics() function directly after Hydro constructor.
 
-void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
+void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl,
+                              TaskID after_integrator_start) {
   TaskID none(0);
 
   std::shared_ptr<TaskList> list = tl["before_timeintegrator"];
+  TaskID push_dependency = none;
   if (pusher == ParticlesPusher::lagrangian_mc) {
     list = tl["after_timeintegrator"];
+    // A frame change is instantaneous: lagrangian_mc tracers have positions but no
+    // velocity state to boost. Move them afterward with the just-completed step's saved
+    // mass fluxes; the boosted fluid fluxes then govern their next step.
+    push_dependency = after_integrator_start;
   }
 
-  id.push   = list->AddTask(&Particles::Push, this, none);
+  id.push   = list->AddTask(&Particles::Push, this, push_dependency);
   id.newgid = list->AddTask(&Particles::NewGID, this, id.push);
   id.count  = list->AddTask(&Particles::SendCnt, this, id.newgid);
   id.irecv  = list->AddTask(&Particles::InitRecv, this, id.count);

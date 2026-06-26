@@ -1,0 +1,58 @@
+# Simple TRML with tracers and frame tracking
+
+Build this problem with:
+
+```bash
+cmake -S . -B build_trml -DPROBLEM=simple_TRML
+cmake --build build_trml -j
+```
+
+The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four pieces:
+
+- `simple_TRML.cpp` supplies the pressure-balanced shear layer, exact cooling update,
+  x3 reservoirs, and user history diagnostics.
+- `<initial_perturbations>` supplies the one-time, reproducibly seeded velocity field.
+  The pgen-local perturbation amplitude is zero to prevent applying two perturbations.
+- `<frame_tracking>` follows the conserved cold-material scalar (`scalar0`) along x3.
+- `particle_type=lagrangian_mc` follows the mass flux and samples thermodynamic fields.
+
+## Frame and particle coordinates
+
+Lagrangian Monte-Carlo tracers store grid-frame cell-center positions. They do not carry
+particle velocities. A frame-controller update is an instantaneous velocity-coordinate
+change, so it must not translate these particle positions or write the unused drift-
+particle velocity slots. The after-integrator task dependency is instead:
+
+1. advance the frame displacement and apply the fluid boost;
+2. move Monte-Carlo tracers with the saved mass fluxes from the completed timestep;
+3. migrate particles and seed any events due at the new time.
+
+The boosted fluid fluxes naturally control tracer motion on the following timestep. This
+avoids applying the frame change twice.
+
+`prtcl_thermo_history` records grid-frame coordinates. The aligned frame history records
+`ft_dx_x3` and `ft_vf_x3`. Reconstruct lab-frame quantities at a common time with
+
+```text
+x3_lab = x3_grid + ft_dx_x3
+v3_lab = v3_grid + ft_vf_x3
+```
+
+The canonical input gives the history and particle-history outputs the same cadence so
+they can be joined exactly by time or cycle. Velocity-carrying particle species have not
+been validated with this frame tracker; the statement above is specific to
+`lagrangian_mc` tracers.
+
+## Passive scalar convention
+
+The pgen stores cold-material fraction in `scalar0` as a conserved scalar:
+`rho * cold_fraction`. The inner x3 reservoir supplies fraction one and the outer
+reservoir supplies fraction zero. When frame tracking is active, both reservoirs are
+transformed from their lab velocities using the current frame velocity.
+
+## Restart convention
+
+MPI runs with Monte-Carlo tracers must use `single_file_per_rank=true` for restart
+output. Restart files preserve particle tags and seed schedules as well as the complete
+frame-controller state. Initial perturbations are applied only to new runs and are not
+replayed after restart.

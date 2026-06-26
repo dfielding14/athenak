@@ -189,6 +189,8 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
     pturb = nullptr;
   }
 
+  TaskID after_integrator_start = none;
+
   // (6b) FRAME TRACKING
   // Shared post-timestep Galilean boost controller for hydro/MHD.  Unlike old
   // pgen-local implementations, this is enabled solely by a <frame_tracking> block.
@@ -196,7 +198,8 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
       pin->GetOrAddBoolean("frame_tracking", "enabled", true)) {
     pframe_tracker = new FrameTracker(this, pin);
     if (tl_map.find("after_timeintegrator") != tl_map.end()) {
-      pframe_tracker->IncludeFrameTrackingTask(tl_map["after_timeintegrator"], none);
+      after_integrator_start =
+          pframe_tracker->IncludeFrameTrackingTask(tl_map["after_timeintegrator"], none);
     }
   } else {
     pframe_tracker = nullptr;
@@ -248,7 +251,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // Create particles module.  Create tasklist.
   if (pin->DoesBlockExist("particles")) {
     ppart = new particles::Particles(this, pin);
-    ppart->AssembleTasks(tl_map);
+    ppart->AssembleTasks(tl_map, after_integrator_start);
     nphysics++;
   } else {
     ppart = nullptr;
