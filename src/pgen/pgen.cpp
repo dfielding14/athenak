@@ -1767,6 +1767,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
   } else if (
       pgen_fun_name.compare("q019_physics_first_nonlinear_bell_successor_v2") == 0) {
     Q019PhysicsFirstNonlinearBellSuccessorV2(pin, false);
+  } else if (
+      pgen_fun_name.compare("q019_nonlinear_bell_saturation_engineering") == 0) {
+    Q019NonlinearBellSaturationEngineering(pin, false);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, false);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear_joverc") == 0) {
@@ -2455,6 +2458,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   } else if (
       pgen_fun_name.compare("q019_physics_first_nonlinear_bell_successor_v2") == 0) {
     Q019PhysicsFirstNonlinearBellSuccessorV2(pin, true);
+  } else if (
+      pgen_fun_name.compare("q019_nonlinear_bell_saturation_engineering") == 0) {
+    Q019NonlinearBellSaturationEngineering(pin, true);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear") == 0) {
     Q023PaperBellLinear(pin, true);
   } else if (pgen_fun_name.compare("q023_paper_bell_linear_joverc") == 0) {

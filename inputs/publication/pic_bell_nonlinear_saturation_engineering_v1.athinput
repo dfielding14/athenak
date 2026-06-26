@@ -1,0 +1,164 @@
+# Compact 3D finite-rigidity Bell run for nonlinear saturation engineering evidence.
+
+<comment>
+problem = 3D finite-rigidity nonlinear Bell saturation engineering run
+
+<job>
+basename = bell_nonlinear_saturation_engineering_v1
+
+<mesh>
+nghost = 2
+nx1 = 128
+x1min = 0
+x1max = 8
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 64
+x2min = 0
+x2max = 4
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 64
+x3min = 0
+x3max = 4
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+refinement = none
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim = -1
+tlim = 8
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+gamma = 1.6666666666666667
+
+<particles>
+particle_type = cosmic_ray
+ppc = 1
+pusher = boris_tsc
+nspecies = 1
+cr_distribution = center
+deposit_moments = true
+deposit_order = 2
+deposit_qscale = 4.8828125e-7
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_coeff = 1
+couple_moments_energy_coeff = 1
+cr_vx0 = 100
+cr_vy0 = 0
+cr_vz0 = 0
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_enable_2d3v = true
+pic_cr_light_speed = 1000
+pic_cr_initial_state = velocity
+pic_cr_hall_mode = off
+pic_wave_damping_mode = off
+pic_deltaf_mode = off
+pic_expanding_box_mode = off
+pic_max_cell_cross = 2
+pic_theta_max = 0.3
+pic_load_balance_cost_per_particle = 1
+pic_sort_interval = 10
+pic_intermediate_arrays = auto
+pic_random_seed = 0
+
+<species0>
+mass = 1
+charge = 62.83185307179586
+vx0 = 100
+vy0 = 0
+vz0 = 0
+
+<problem>
+pgen_name = q019_nonlinear_bell_saturation_engineering
+
+<q019_nonlinear_bell_saturation_engineering>
+dimension = 3
+rho = 1
+pressure = 1
+b_g = 1
+u_a = 1
+wavelength = 1
+k0 = 6.283185307179586
+epsilon = 0.01
+omega = 62.83185307179586
+eigenmode_amplitude = 1e-3
+broadband_amplitude = 5e-4
+field_seed = 39019
+current_normalization = deposited_j_over_c_equals_2_b_g_k0
+claim_scope = compact_single_run_engineering_evidence_not_convergence_or_publication_qualification
+
+<output1>
+file_type = bin
+variable = mhd_w_bcc
+id = mhd_w_bcc
+dt = 0.1
+ghost_zones = false
+
+<output2>
+file_type = bin
+variable = prtcl_rho
+id = prtcl_rho
+dt = 0.1
+ghost_zones = false
+
+<output3>
+file_type = bin
+variable = prtcl_jx
+id = prtcl_jx
+dt = 0.1
+ghost_zones = false
+
+<output4>
+file_type = bin
+variable = prtcl_jy
+id = prtcl_jy
+dt = 0.1
+ghost_zones = false
+
+<output5>
+file_type = bin
+variable = prtcl_jz
+id = prtcl_jz
+dt = 0.1
+ghost_zones = false
+
+<output6>
+file_type = bin
+variable = prtcl_dedt
+id = prtcl_dedt
+dt = 0.1
+ghost_zones = false
+
+<output7>
+file_type = rst
+id = rst
+dt = 1
+single_file_per_rank = false
+
+<output8>
+file_type = hst
+dcycle = 1
