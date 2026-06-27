@@ -47,14 +47,13 @@ def _final_particle_count():
     return int(match.group(1))
 
 
-def run(**kwargs):
-    logger.debug("Running test " + __name__)
+def _run_case(overrides):
     for path in glob.glob(
         os.path.join(_athena_exe_dir(), "pvtk", _BASENAME + ".*")
     ):
         os.remove(path)
     proc = subprocess.run(
-        ["./athena", "-i", _input_path()],
+        ["./athena", "-i", _input_path(), *overrides],
         cwd=_athena_exe_dir(),
         capture_output=True,
         text=True,
@@ -62,36 +61,56 @@ def run(**kwargs):
     output = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode != 0:
         raise RuntimeError("2D SMR corner-routing run failed\n" + output)
-    _RESULT.update(
+    return {
+        "output": output,
+        "particle_count": _final_particle_count(),
+        "telemetry_particle_count": _last_telemetry_value(
+            output, "particles.total"
+        ),
+        "invalid_records": _last_telemetry_value(
+            output, "particle_memory.invalid_records"
+        ),
+    }
+
+
+def run(**kwargs):
+    logger.debug("Running test " + __name__)
+    baseline = _run_case([])
+    baseline.update(
         {
-            "output": output,
-            "particle_count": _final_particle_count(),
-            "telemetry_particle_count": _last_telemetry_value(
-                output, "particles.total"
-            ),
             "coarse_level_count": _last_telemetry_value(
-                output, "particle_memory.level.1.count"
+                baseline["output"], "particle_memory.level.1.count"
             ),
             "fine_level_count": _last_telemetry_value(
-                output, "particle_memory.level.2.count"
-            ),
-            "invalid_records": _last_telemetry_value(
-                output, "particle_memory.invalid_records"
+                baseline["output"], "particle_memory.level.2.count"
             ),
         }
+    )
+    _RESULT["baseline"] = baseline
+    _RESULT["periodic_wrap"] = _run_case(
+        [
+            "mesh/nx2=24",
+            "refinement1/x2max=2.0",
+            "problem/particle_y=1.999",
+        ]
     )
 
 
 def analyze():
     logger.debug("Analyzing test " + __name__)
-    output = _RESULT["output"]
+    baseline = _RESULT["baseline"]
+    periodic_wrap = _RESULT["periodic_wrap"]
+    outputs = baseline["output"] + periodic_wrap["output"]
     return (
-        _RESULT["particle_count"] == 1
-        and _RESULT["telemetry_particle_count"] == 1.0
-        and _RESULT["coarse_level_count"] == 1.0
-        and _RESULT["fine_level_count"] == 0.0
-        and _RESULT["invalid_records"] == 0.0
-        and "invalid particle destruction" not in output
-        and "invalid_neighbor" not in output
-        and "FATAL ERROR" not in output
+        baseline["particle_count"] == 1
+        and baseline["telemetry_particle_count"] == 1.0
+        and baseline["coarse_level_count"] == 1.0
+        and baseline["fine_level_count"] == 0.0
+        and baseline["invalid_records"] == 0.0
+        and periodic_wrap["particle_count"] == 1
+        and periodic_wrap["telemetry_particle_count"] == 1.0
+        and periodic_wrap["invalid_records"] == 0.0
+        and "invalid particle destruction" not in outputs
+        and "invalid_neighbor" not in outputs
+        and "FATAL ERROR" not in outputs
     )
