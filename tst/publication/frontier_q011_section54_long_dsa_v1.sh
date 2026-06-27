@@ -64,7 +64,14 @@ else
   run_root="${Q011_RUN_ROOT}"
   restart_file="$({
     find "${run_root}/rst" -maxdepth 1 -type f -name '*.rst.complete' -print0
-  } | sort -zV | tail -z -n 1 | tr -d '\0')"
+  } | while IFS= read -r -d '' complete_marker; do
+    restart_payload="${complete_marker%.complete}"
+    if [[ -f "${restart_payload}" &&
+          -f "${restart_payload}.manifest" &&
+          -f "${restart_payload}.manifest.complete" ]]; then
+      printf '%s\0' "${complete_marker}"
+    fi
+  done | sort -zV | tail -z -n 1 | tr -d '\0')"
   if [[ -z "${restart_file}" ]]; then
     printf 'No complete restart is available below %s/rst\n' "${run_root}" >&2
     exit 1
