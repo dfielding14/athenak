@@ -123,6 +123,17 @@ void MeshRefinement::ObserveQ017OwnedKokkosViewAllocationBytes(
 //! just for SMR/AMR, which is why it is part of the Mesh and not MeshRefinement class.
 
 void Mesh::LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb) {
+  const int nranks = global_variable::nranks;
+  auto fail = [nb, nranks](const char *reason) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << reason << " (MeshBlocks=" << nb << ", ranks=" << nranks
+              << ")." << std::endl;
+    std::exit(EXIT_FAILURE);
+  };
+  if (nranks <= 0 || nb < nranks) {
+    fail("Load balancing requires at least one MeshBlock per rank");
+  }
+
   float min_cost = std::numeric_limits<float>::max();
   float max_cost = 0.0, totalcost = 0.0;
   // find min/max and total cost in clist
@@ -132,8 +143,8 @@ void Mesh::LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb)
     max_cost = std::max(max_cost,clist[i]);
   }
 
-  int j = (global_variable::nranks) - 1;
-  float targetcost = totalcost/global_variable::nranks;
+  int j = nranks - 1;
+  float targetcost = totalcost/nranks;
   float mycost = 0.0;
   // create rank list from the end: the master MPI rank should have less load
   for (int i=nb-1; i>=0; i--) {
@@ -146,13 +157,18 @@ void Mesh::LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb)
     }
     mycost += clist[i];
     rlist[i] = j;
-    if (mycost >= targetcost && j>0) {
+    // Split at i == j to reserve one block for each remaining rank.
+    if (j > 0 && (mycost >= targetcost || i == j)) {
       j--;
       totalcost -= mycost;
       mycost = 0.0;
       targetcost = totalcost/(j+1);
     }
   }
+  if (j != 0) {
+    fail("Load balancing did not assign a MeshBlock to every rank");
+  }
+
   slist[0] = 0;
   j = 0;
   for (int i=1; i<nb; i++) { // make the list of nbstart and nblocks
@@ -162,9 +178,25 @@ void Mesh::LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb)
     }
   }
   nlist[j] = nb-slist[j];
+  if (j != nranks - 1) {
+    fail("Load balancing did not produce one contiguous segment per rank");
+  }
+
+  int next_start = 0;
+  for (int rank=0; rank<nranks; ++rank) {
+    if (nlist[rank] <= 0 || slist[rank] != next_start ||
+        rlist[slist[rank]] != rank ||
+        rlist[slist[rank] + nlist[rank] - 1] != rank) {
+      fail("Load balancing produced an invalid rank partition");
+    }
+    next_start += nlist[rank];
+  }
+  if (next_start != nb) {
+    fail("Load balancing rank partition does not cover every MeshBlock");
+  }
 
 #if MPI_PARALLEL_ENABLED
-  if (nb % global_variable::nranks != 0
+  if (nb % nranks != 0
      && !adaptive && max_cost == min_cost && global_variable::my_rank == 0) {
     std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "Number of MeshBlocks cannot be divided evenly by number of MPI ranks. "
