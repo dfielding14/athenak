@@ -1614,6 +1614,8 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
   const int ndestroy = ppart->pbval_part->nprtcl_destroy;
   const auto &destroylist = ppart->pbval_part->destroylist.h_view;
   std::vector<int> destroyed_indices;
+  int rejected_particle = -1;
+  int rejected_reason = static_cast<int>(ParticleDestructionReason::none);
   if (npart < 0 || ndestroy < 0 || ndestroy > npart ||
       static_cast<std::size_t>(ndestroy) > destroylist.extent(0)) {
     local[7] += 1.0;
@@ -1656,6 +1658,10 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
               static_cast<int>(ParticleDestructionReason::physical_boundary) ||
           entry.physical_boundary_mask != particle_boundary_outer_x1) {
         local[7] += 1.0;
+        if (rejected_particle < 0) {
+          rejected_particle = p;
+          rejected_reason = entry.destruction_reason;
+        }
       }
     }
     std::sort(destroyed_indices.begin(), destroyed_indices.end());
@@ -1664,6 +1670,64 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       local[7] += 1.0;
       local_diag[6] += 1.0;
     }
+  }
+  if (rejected_particle >= 0) {
+    const auto h_pr = Kokkos::create_mirror_view_and_copy(
+        HostMemSpace(), ppart->prtcl_rdata);
+    const auto h_pi = Kokkos::create_mirror_view_and_copy(
+        HostMemSpace(), ppart->prtcl_idata);
+    auto &size = pm->pmb_pack->pmb->mb_size;
+    auto &level = pm->pmb_pack->pmb->mb_lev;
+    size.template sync<HostMemSpace>();
+    level.template sync<HostMemSpace>();
+    const int gid = h_pi(PGID, rejected_particle);
+    const int m = gid - pm->pmb_pack->gids;
+    std::ostringstream sample;
+    sample << std::setprecision(17)
+           << "pic_parallel_shock destruction_reject_particle: rank="
+           << global_variable::my_rank << " p=" << rejected_particle
+           << " reason=" << rejected_reason << " gid=" << gid
+           << " local_m=" << m << " tag=" << h_pi(PTAG, rejected_particle)
+           << " x1=" << h_pr(IPX, rejected_particle)
+           << " x2=" << h_pr(IPY, rejected_particle)
+           << " x3=" << h_pr(IPZ, rejected_particle)
+           << " state1=" << h_pr(IPVX, rejected_particle)
+           << " state2=" << h_pr(IPVY, rejected_particle)
+           << " state3=" << h_pr(IPVZ, rejected_particle);
+    if (m >= 0 && m < pm->pmb_pack->nmb_thispack) {
+      const RegionSize block = size.h_view(m);
+      Real vx = 0.0;
+      Real vy = 0.0;
+      Real vz = 0.0;
+      particles::CRVelocityFromState(
+          ppart->UsesRelativisticCRState(), ppart->pic_cr_light_speed,
+          h_pr(IPVX, rejected_particle), h_pr(IPVY, rejected_particle),
+          h_pr(IPVZ, rejected_particle), vx, vy, vz);
+      const Real lx = block.x1max - block.x1min;
+      const Real ly = block.x2max - block.x2min;
+      const Real lz = block.x3max - block.x3min;
+      sample << " level=" << level.h_view(m)
+             << " x1min=" << block.x1min << " x1max=" << block.x1max
+             << " x2min=" << block.x2min << " x2max=" << block.x2max
+             << " x3min=" << block.x3min << " x3max=" << block.x3max
+             << " block_offset1="
+             << (h_pr(IPX, rejected_particle) - block.x1min)/lx
+             << " block_offset2="
+             << (h_pr(IPY, rejected_particle) - block.x2min)/ly
+             << " block_offset3="
+             << (h_pr(IPZ, rejected_particle) - block.x3min)/lz
+             << " velocity1=" << vx << " velocity2=" << vy
+             << " velocity3=" << vz
+             << " step_cells1=" << pm->dt*vx/block.dx1
+             << " step_cells2=" << pm->dt*vy/block.dx2
+             << " step_cells3=" << pm->dt*vz/block.dx3;
+    }
+    if (gid >= 0 && gid < pm->nmb_total && pm->lloc_eachmb != nullptr) {
+      const LogicalLocation loc = pm->lloc_eachmb[gid];
+      sample << " logical_level=" << loc.level << " lx1=" << loc.lx1
+             << " lx2=" << loc.lx2 << " lx3=" << loc.lx3;
+    }
+    std::cout << sample.str() << std::endl;
   }
   if (local[7] == 0.0 && ndestroy > 0) {
     auto &pr = ppart->prtcl_rdata;
