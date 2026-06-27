@@ -73,8 +73,6 @@ void MarkForDestruction(int *pcounter, DualArray1D<ParticleLocationData> dlist, 
 
 namespace {
 
-constexpr int kMaxParticleNeighbors = 56;
-
 KOKKOS_INLINE_FUNCTION
 bool IsPeriodicParticleBoundary(const BoundaryFlag flag) {
   return (flag == BoundaryFlag::periodic || flag == BoundaryFlag::shear_periodic);
@@ -94,7 +92,8 @@ int ParticleMeshBlockOffset(const Real x, const Real xmin, const Real block_leng
 template <typename NeighborViewType>
 KOKKOS_INLINE_FUNCTION
 void AdvanceToInitializedNeighbor(const NeighborViewType &nghbr, const int m, int *indx) {
-  while ((*indx) < kMaxParticleNeighbors && nghbr(m, *indx).gid < 0) {
+  const int neighbor_count = nghbr.extent_int(1);
+  while ((*indx) < neighbor_count && nghbr(m, *indx).gid < 0) {
     ++(*indx);
   }
 }
@@ -103,7 +102,8 @@ template <typename NeighborViewType>
 KOKKOS_INLINE_FUNCTION
 bool HasValidNeighbor(const NeighborViewType &nghbr, const int m, const int indx,
                       const int nranks) {
-  if (indx < 0 || indx >= kMaxParticleNeighbors) {
+  if (m < 0 || m >= nghbr.extent_int(0) ||
+      indx < 0 || indx >= nghbr.extent_int(1)) {
     return false;
   }
   const auto nbr = nghbr(m, indx);
