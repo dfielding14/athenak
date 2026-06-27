@@ -13,6 +13,9 @@ from typing import Any, Mapping, Sequence
 
 import matplotlib as mpl
 from matplotlib import colors
+from matplotlib import patheffects
+from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -93,6 +96,20 @@ def _finite_positive(value: object, label: str) -> float:
     _require(
         math.isfinite(result) and result > 0.0,
         f"{label} must be finite and positive",
+    )
+    return result
+
+
+def _finite_nonnegative(value: object, label: str) -> float:
+    if isinstance(value, bool):
+        raise Figure8Error(f"{label} must be a real scalar")
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise Figure8Error(f"{label} must be a real scalar") from error
+    _require(
+        math.isfinite(result) and result >= 0.0,
+        f"{label} must be finite and non-negative",
     )
     return result
 
@@ -191,14 +208,56 @@ def _validate_particles(data: ParticleVTKData) -> dict[str, np.ndarray]:
     return arrays
 
 
+def _meshblock_overlay_metadata(
+    dataset: output_primitives.AthenaBinaryDataset,
+    x1_limits: tuple[float, float],
+    x2_limits: tuple[float, float],
+) -> dict[str, object]:
+    """Extract visible leaf-block rectangles from structured Athena metadata."""
+    blocks: list[dict[str, object]] = []
+    ordered = sorted(
+        dataset.blocks,
+        key=lambda block: (block.level, *block.logical_location),
+    )
+    for block in ordered:
+        x1_min, x1_max, x2_min, x2_max = block.geometry[:4]
+        if (
+            x1_max <= x1_limits[0]
+            or x1_min >= x1_limits[1]
+            or x2_max <= x2_limits[0]
+            or x2_min >= x2_limits[1]
+        ):
+            continue
+        blocks.append(
+            {
+                "logical_location": [int(value) for value in block.logical_location],
+                "level": int(block.level),
+                "x1_bounds": [float(x1_min), float(x1_max)],
+                "x2_bounds": [float(x2_min), float(x2_max)],
+            }
+        )
+    _require(bool(blocks), "near-shock panel intersects no structured MeshBlocks")
+    return {
+        "metadata_source": "AthenaBinaryDataset.blocks.geometry_and_level",
+        "blocks": blocks,
+        "refinement_levels": sorted({int(block["level"]) for block in blocks}),
+    }
+
+
 def analyze_figure8(
     mhd_path: Path,
     particle_path: Path,
     *,
     x_offsets: tuple[float, float] = DEFAULT_X_OFFSETS,
+    target_time: float | None = None,
 ) -> dict[str, object]:
     """Read and reduce one exact common-cycle MHD/PVTK snapshot."""
     _require(x_offsets[0] < x_offsets[1], "near-shock x offsets must increase")
+    validated_target_time = (
+        None
+        if target_time is None
+        else _finite_nonnegative(target_time, "target time")
+    )
     try:
         dataset = output_primitives.read_athenak_binary(mhd_path)
     except (OSError, output_primitives.AnalysisError) as error:
@@ -210,6 +269,15 @@ def analyze_figure8(
         dataset.time == projected_time,
         "mhd_w_bcc time is not the six-significant-digit projection of PVTK time",
     )
+    if validated_target_time is not None:
+        _require(
+            header["time"] == validated_target_time,
+            "prtcl_all time does not match the requested target epoch",
+        )
+        _require(
+            dataset.time == float(format(validated_target_time, ".6g")),
+            "mhd_w_bcc time does not match the requested target epoch projection",
+        )
 
     fields, x1_faces, x2_faces, source_levels = _compose_mhd_state(dataset)
     rho0 = _runtime_parameter(dataset, "problem", "ps_rho0")
@@ -259,6 +327,11 @@ def analyze_figure8(
     first_x = int(x_indices[0])
     last_x = int(x_indices[-1]) + 1
     panel_x_faces = x1_faces[first_x : last_x + 1]
+    meshblock_overlay = _meshblock_overlay_metadata(
+        dataset,
+        (float(panel_x_faces[0]), float(panel_x_faces[-1])),
+        (float(x2_faces[0]), float(x2_faces[-1])),
+    )
 
     try:
         particle_data = read_particle_vtk(particle_path)
@@ -309,17 +382,28 @@ def analyze_figure8(
     wrong_source = arrays["cr_source"] != 1
     early_birth = source_admitted & (arrays["birth_time"] < 45.0)
     nonpositive_weight = birth_admitted & (arrays["macro_weight"] <= 0.0)
+    snapshot: dict[str, object] = {
+        "cycle": int(dataset.cycle),
+        "mhd_time": float(dataset.time),
+        "particle_time": float(header["time"]),
+        "particle_nranks": int(header["nranks"]),
+        "mesh_time_projection": projected_time,
+    }
+    if validated_target_time is not None:
+        snapshot.update(
+            {
+                "target_time": validated_target_time,
+                "epoch_label": f"t={validated_target_time:.6g}",
+                "target_validation": (
+                    "exact_particle_time_and_six_significant_digit_mesh_projection"
+                ),
+            }
+        )
     metrics: dict[str, object] = {
         "record_type": RECORD_TYPE,
         "schema_version": SCHEMA_VERSION,
         "qualification_effect": "derived_figure_only_no_claim_closure",
-        "snapshot": {
-            "cycle": int(dataset.cycle),
-            "mhd_time": float(dataset.time),
-            "particle_time": float(header["time"]),
-            "particle_nranks": int(header["nranks"]),
-            "mesh_time_projection": projected_time,
-        },
+        "snapshot": snapshot,
         "normalization": {
             "rho0": rho0,
             "b0": b0,
@@ -349,6 +433,11 @@ def analyze_figure8(
             "source_refinement_levels": sorted(
                 int(value) for value in np.unique(source_levels[:, first_x:last_x])
             ),
+            "meshblock_overlay_metadata_source": meshblock_overlay[
+                "metadata_source"
+            ],
+            "visible_leaf_meshblock_count": len(meshblock_overlay["blocks"]),
+            "visible_leaf_meshblock_levels": meshblock_overlay["refinement_levels"],
             "density_over_rho0_min": float(np.min(density[:, first_x:last_x])),
             "density_over_rho0_max": float(np.max(density[:, first_x:last_x])),
             "bmag_over_b0_min": float(np.min(bmag[:, first_x:last_x])),
@@ -386,6 +475,7 @@ def analyze_figure8(
         "x2_faces": x2_faces,
         "log10_chi_edges": log10_chi_edges,
         "phase_density": phase_density,
+        "meshblock_overlay": meshblock_overlay,
     }
 
 
@@ -420,11 +510,74 @@ def _positive_log_norm(values: np.ndarray) -> colors.LogNorm:
     return colors.LogNorm(vmin=lower, vmax=upper)
 
 
+def _draw_meshblock_overlay(
+    axis: Any, overlay: Mapping[str, object], *, show_legend: bool
+) -> None:
+    raw_blocks = overlay.get("blocks", ())
+    _require(isinstance(raw_blocks, Sequence), "MeshBlock overlay blocks are malformed")
+    blocks = list(raw_blocks)
+    if not blocks:
+        return
+    levels = sorted({int(block["level"]) for block in blocks})
+    cmap = plt.get_cmap("tab10")
+    level_colors = {level: cmap(index % 10) for index, level in enumerate(levels)}
+    halo = [
+        patheffects.Stroke(linewidth=2.6, foreground="black", alpha=0.9),
+        patheffects.Normal(),
+    ]
+    for block in blocks:
+        x1_min, x1_max = (float(value) for value in block["x1_bounds"])
+        x2_min, x2_max = (float(value) for value in block["x2_bounds"])
+        level = int(block["level"])
+        _require(
+            x1_max > x1_min and x2_max > x2_min,
+            "MeshBlock overlay contains invalid geometry",
+        )
+        rectangle = Rectangle(
+            (x1_min, x2_min),
+            x1_max - x1_min,
+            x2_max - x2_min,
+            fill=False,
+            edgecolor=level_colors[level],
+            linewidth=1.15,
+            zorder=5,
+        )
+        rectangle.set_path_effects(halo)
+        axis.add_patch(rectangle)
+    if show_legend:
+        handles = []
+        for level in levels:
+            handle = Line2D(
+                [0.0],
+                [0.0],
+                color=level_colors[level],
+                linewidth=1.6,
+                label=f"level {level}",
+            )
+            handle.set_path_effects(halo)
+            handles.append(handle)
+        axis.legend(
+            handles=handles,
+            title="Leaf MeshBlocks",
+            loc="upper right",
+            framealpha=0.9,
+            facecolor="white",
+            edgecolor="black",
+            fontsize=8,
+            title_fontsize=8,
+        )
+
+
 def render_figure8(
-    reduction: Mapping[str, object], output_paths: Sequence[Path], dpi: int
+    reduction: Mapping[str, object],
+    output_paths: Sequence[Path],
+    dpi: int,
+    *,
+    show_meshblocks: bool = False,
 ) -> None:
     """Render one already validated Figure 8 reduction."""
     _require(dpi > 0, "dpi must be positive")
+    _require(isinstance(show_meshblocks, bool), "show_meshblocks must be boolean")
     _style()
     density = np.asarray(reduction["density"])
     bmag = np.asarray(reduction["bmag"])
@@ -454,6 +607,12 @@ def render_figure8(
             0.012, 0.90, f"({chr(ord('a') + index)})", transform=axes[index].transAxes,
             color="white", fontweight="bold", fontsize=11,
         )
+        if show_meshblocks:
+            overlay = reduction.get("meshblock_overlay")
+            if isinstance(overlay, Mapping):
+                _draw_meshblock_overlay(
+                    axes[index], overlay, show_legend=index == 0
+                )
 
     phase_plot = np.where(phase_density.T > 0.0, phase_density.T, np.nan)
     phase = axes[2].pcolormesh(
@@ -476,10 +635,17 @@ def render_figure8(
         axis.axvline(shock["ideal_surface_x1"], color="#f0f0f0", lw=0.8, ls=":")
         axis.axvline(shock["detected_front_x1"], color="#ffffff", lw=0.9, ls="--")
         axis.set_xlim(x1_faces[0], x1_faces[-1])
-    fig.suptitle(
-        rf"Q011 Section 5.4: $\Omega_0 t={snapshot['particle_time']:.6g}$, "
-        rf"cycle {snapshot['cycle']}"
-    )
+    if "target_time" in snapshot:
+        title = (
+            rf"Q011 Section 5.4 morphology at target epoch "
+            rf"$\Omega_0 t={snapshot['target_time']:.6g}$, cycle {snapshot['cycle']}"
+        )
+    else:
+        title = (
+            rf"Q011 Section 5.4: $\Omega_0 t={snapshot['particle_time']:.6g}$, "
+            rf"cycle {snapshot['cycle']}"
+        )
+    fig.suptitle(title)
     for path in output_paths:
         if path.suffix.lower() == ".png":
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -496,6 +662,8 @@ def make_figure8(
     stem: str = "q011_section54_figure8_v1",
     x_offsets: tuple[float, float] = DEFAULT_X_OFFSETS,
     dpi: int = 300,
+    show_meshblocks: bool = False,
+    target_time: float | None = None,
 ) -> list[Path]:
     """Analyze exact inputs, render PNG/PDF, and write metrics plus manifest."""
     _require(_SAFE_STEM.fullmatch(stem) is not None, "output stem is unsafe")
@@ -503,12 +671,22 @@ def make_figure8(
     particle_path = particle_path.resolve(strict=True)
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    reduction = analyze_figure8(mhd_path, particle_path, x_offsets=x_offsets)
+    reduction = analyze_figure8(
+        mhd_path,
+        particle_path,
+        x_offsets=x_offsets,
+        target_time=target_time,
+    )
     png_path = output_dir / f"{stem}.png"
     pdf_path = output_dir / f"{stem}.pdf"
     metrics_path = output_dir / f"{stem}_metrics.json"
     manifest_path = output_dir / f"{stem}_manifest.json"
-    render_figure8(reduction, (png_path, pdf_path), dpi)
+    render_figure8(
+        reduction,
+        (png_path, pdf_path),
+        dpi,
+        show_meshblocks=show_meshblocks,
+    )
     metrics_path.write_text(_canonical_json(reduction["metrics"]), encoding="utf-8")
     manifest = {
         "record_type": MANIFEST_RECORD_TYPE,
@@ -521,6 +699,8 @@ def make_figure8(
         "analysis_parameters": {
             "near_shock_x_offsets": list(x_offsets),
             "dpi": dpi,
+            "show_meshblocks": show_meshblocks,
+            "target_time": reduction["metrics"]["snapshot"].get("target_time"),
             "particle_filter": [
                 "cr_source == 1",
                 "birth_time >= 45",
@@ -546,6 +726,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--x-offset-min", type=float, default=DEFAULT_X_OFFSETS[0])
     parser.add_argument("--x-offset-max", type=float, default=DEFAULT_X_OFFSETS[1])
     parser.add_argument("--dpi", type=int, default=300)
+    parser.add_argument(
+        "--show-meshblocks",
+        "--show-meshblock-boundaries",
+        "--meshblock-overlay",
+        dest="show_meshblocks",
+        action="store_true",
+        help="Overlay level-colored leaf MeshBlock boundaries on spatial panels",
+    )
+    parser.add_argument(
+        "--target-time",
+        "--target-epoch",
+        dest="target_time",
+        type=float,
+        help="Require and explicitly label this particle epoch (for example 500)",
+    )
     args = parser.parse_args(argv)
     outputs = make_figure8(
         args.mhd,
@@ -554,6 +749,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         stem=args.stem,
         x_offsets=(args.x_offset_min, args.x_offset_max),
         dpi=args.dpi,
+        show_meshblocks=args.show_meshblocks,
+        target_time=args.target_time,
     )
     print(_canonical_json({"outputs": [str(path) for path in outputs]}), end="")
     return 0
