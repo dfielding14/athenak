@@ -107,6 +107,7 @@ void AdvanceToInitializedNeighbor(const NeighborViewType &nghbr, const int m, in
   while ((*indx) < group_end && nghbr(m, *indx).gid < 0) {
     ++(*indx);
   }
+  if (*indx >= group_end) *indx = -1;
 }
 
 template <typename NeighborViewType>
