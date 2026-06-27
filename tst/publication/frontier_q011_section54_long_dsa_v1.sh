@@ -21,6 +21,7 @@ set -euo pipefail
 repo_root="${PIC_SOURCE_ROOT:-/autofs/nccs-svm1_home2/dfielding/athenak-pic}"
 shared_root="${PIC_SHARED_ROOT:-/lustre/orion/ast207/proj-shared/dfielding/PIC}"
 source_commit="$(git -C "${repo_root}" rev-parse HEAD)"
+source_status="$(git -C "${repo_root}" status --porcelain=v1)"
 commit_key="${source_commit:0:12}"
 executable="${PIC_EXECUTABLE:-${shared_root}/bin/${commit_key}/hip-mpi-release-paper-pic/athena}"
 deck="${Q011_DECK:-${repo_root}/inputs/q011_section54_static_dx3_final_v1_vl2_tsc.athinput}"
@@ -32,9 +33,9 @@ static_lb_cost_per_particle="${Q011_STATIC_LB_COST_PER_PARTICLE:-0.0}"
 history_python="${Q011_HISTORY_PYTHON:-/opt/cray/pe/python/3.11.7/bin/python3}"
 restart_override_deck="${Q011_RESTART_OVERRIDE_DECK:-${repo_root}/inputs/q011_static_pic_load_balance_restart_override_v1.athinput}"
 
-if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
+if [[ -n "${source_status}" ]]; then
   printf 'Refusing to run from a dirty or untracked source tree:\n' >&2
-  git -C "${repo_root}" status --short >&2
+  printf '%s\n' "${source_status}" >&2
   exit 2
 fi
 if [[ ! -x "${executable}" ]]; then
@@ -104,7 +105,7 @@ sha256sum \
   "${repo_root}/tst/publication/make_q011_section54_dsa_spectrum_v1.py" \
   >"${segment_root}/bindings.sha256"
 printf '%s\n' "${source_commit}" >"${segment_root}/source_commit.txt"
-git -C "${repo_root}" status --porcelain=v1 >"${segment_root}/source_status.txt"
+printf '%s' "${source_status}" >"${segment_root}/source_status.txt"
 printf '%s\n' \
   "job_id=${SLURM_JOB_ID}" \
   "run_root=${run_root}" \
