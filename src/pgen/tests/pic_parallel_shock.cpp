@@ -1580,9 +1580,14 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
   }
 
   Real local[14] = {};
+  // Populated only for a fail-closed diagnostic. These counters identify the
+  // rejected migration condition without weakening the escape ledger.
+  constexpr int ndiag = 20;
+  Real local_diag[ndiag] = {};
   Real audit_time = pm->time + pm->dt;
   if (!std::isfinite(pm->time) || !std::isfinite(pm->dt) || pm->dt <= 0.0) {
     local[7] += 1.0;
+    local_diag[0] += 1.0;
   } else if (ppart->UsesPaperVL2Coupling()) {
     if (stage == 1) {
       audit_time = pm->time + 0.5*pm->dt;
@@ -1590,6 +1595,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       audit_time = pm->time + pm->dt;
     } else {
       local[7] += 1.0;
+      local_diag[1] += 1.0;
     }
   }
   if (!std::isfinite(audit_time) ||
@@ -1597,9 +1603,11 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
                                                  ps_escape_last_audit_time) <
           ps_escape_last_audit_time) {
     local[7] += 1.0;
+    local_diag[2] += 1.0;
   }
   if (!PaperVL2EscapeStageChronologyIsValid(ppart, pm, stage, audit_time)) {
     local[7] += 1.0;
+    local_diag[3] += 1.0;
   }
 
   const int npart = ppart->nprtcl_thispack;
@@ -1609,16 +1617,41 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
   if (npart < 0 || ndestroy < 0 || ndestroy > npart ||
       static_cast<std::size_t>(ndestroy) > destroylist.extent(0)) {
     local[7] += 1.0;
+    local_diag[4] += 1.0;
   } else {
+    local_diag[19] += static_cast<Real>(ndestroy);
     destroyed_indices.reserve(static_cast<std::size_t>(ndestroy));
     for (int n = 0; n < ndestroy; ++n) {
       const ParticleLocationData entry = destroylist(n);
       const int p = entry.prtcl_indx;
       if (p < 0 || p >= npart) {
         local[7] += 1.0;
+        local_diag[5] += 1.0;
         continue;
       }
       destroyed_indices.push_back(p);
+      switch (static_cast<ParticleDestructionReason>(entry.destruction_reason)) {
+        case ParticleDestructionReason::none: local_diag[7] += 1.0; break;
+        case ParticleDestructionReason::physical_boundary: local_diag[8] += 1.0; break;
+        case ParticleDestructionReason::invalid_parent_gid: local_diag[9] += 1.0; break;
+        case ParticleDestructionReason::excessive_cell_crossing:
+          local_diag[10] += 1.0;
+          break;
+        case ParticleDestructionReason::invalid_neighbor: local_diag[11] += 1.0; break;
+        case ParticleDestructionReason::invalid_send_target:
+          local_diag[12] += 1.0;
+          break;
+        default: local_diag[13] += 1.0; break;
+      }
+      if (entry.physical_boundary_mask == particle_boundary_none) {
+        local_diag[14] += 1.0;
+      } else if (entry.physical_boundary_mask == particle_boundary_inner_x1) {
+        local_diag[15] += 1.0;
+      } else if (entry.physical_boundary_mask == particle_boundary_outer_x1) {
+        local_diag[16] += 1.0;
+      } else {
+        local_diag[17] += 1.0;
+      }
       if (entry.destruction_reason !=
               static_cast<int>(ParticleDestructionReason::physical_boundary) ||
           entry.physical_boundary_mask != particle_boundary_outer_x1) {
@@ -1629,6 +1662,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
     if (std::adjacent_find(destroyed_indices.begin(), destroyed_indices.end()) !=
         destroyed_indices.end()) {
       local[7] += 1.0;
+      local_diag[6] += 1.0;
     }
   }
   if (local[7] == 0.0 && ndestroy > 0) {
@@ -1713,6 +1747,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       const RawEscapeEvent event = host_events(n);
       if (event.valid != 1) {
         local[7] += 1.0;
+        local_diag[18] += 1.0;
         continue;
       }
       const Real macro_mass = ps_particle_macro_mass;
@@ -1747,7 +1782,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
 #else
   Real *global = local;
 #endif
-  if (global[7] != 0.0 ||
+  const bool invalid = global[7] != 0.0 ||
       !ParallelShockLedgerValuesAgree(global[1],
                                       global[0]*ps_particle_macro_mass,
                                       global[0]) ||
@@ -1761,7 +1796,42 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       std::abs(global[3]) >
           global[10] + ParallelShockLedgerTolerance(global[3], global[10], global[13]) ||
       std::abs(global[4]) >
-          global[11] + ParallelShockLedgerTolerance(global[4], global[11], global[13])) {
+          global[11] + ParallelShockLedgerTolerance(global[4], global[11], global[13]);
+  if (invalid) {
+#if MPI_PARALLEL_ENABLED
+    Real global_diag[ndiag] = {};
+    MPI_Allreduce(local_diag, global_diag, ndiag, MPI_ATHENA_REAL, MPI_SUM,
+                  MPI_COMM_WORLD);
+#else
+    Real *global_diag = local_diag;
+#endif
+    if (global_variable::my_rank == 0) {
+      std::cout << std::setprecision(17)
+                << "pic_parallel_shock destruction_reject_diag: cycle=" << pm->ncycle
+                << " time=" << pm->time << " dt=" << pm->dt << " stage=" << stage
+                << " npart_global=" << pm->nprtcl_total
+                << " invalid_terms=" << global[7]
+                << " runtime=" << global_diag[0]
+                << " stage_invalid=" << global_diag[1]
+                << " time_regression=" << global_diag[2]
+                << " chronology=" << global_diag[3]
+                << " count_bounds=" << global_diag[4]
+                << " index=" << global_diag[5]
+                << " duplicate=" << global_diag[6]
+                << " reason_none=" << global_diag[7]
+                << " reason_physical=" << global_diag[8]
+                << " reason_parent=" << global_diag[9]
+                << " reason_crossing=" << global_diag[10]
+                << " reason_neighbor=" << global_diag[11]
+                << " reason_send=" << global_diag[12]
+                << " reason_other=" << global_diag[13]
+                << " mask_none=" << global_diag[14]
+                << " mask_inner_x1=" << global_diag[15]
+                << " mask_outer_x1=" << global_diag[16]
+                << " mask_other=" << global_diag[17]
+                << " payload=" << global_diag[18]
+                << " destroy_total=" << global_diag[19] << std::endl;
+    }
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock found an unaccounted or invalid particle "
