@@ -147,6 +147,7 @@ Real ps_p_floor_frac = 1.0e-8;
 bool ps_enable_injection = true;
 bool ps_enable_subtraction = true;
 bool ps_enable_curvature_amr = true;
+bool ps_allow_floor_clipped_subtraction = false;
 bool ps_enable_frame_tracking = false;
 bool ps_enable_conservation_ledger = false;
 bool ps_use_2d3v = false;
@@ -183,6 +184,8 @@ DvceArray1D<GasDelta> ps_injection_transaction_gas_deltas_device;
 std::array<Real, 5> ps_injection_transaction_expected_global = {};
 std::array<Real, 5> ps_injection_transaction_applied_local = {};
 std::array<Real, 5> ps_injection_transaction_abs_global = {};
+Real ps_injection_transaction_clipped_energy_local = 0.0;
+int ps_injection_transaction_clipped_cells_local = 0;
 Real ps_injection_transaction_terms_global = 1.0;
 bool ps_test_source_transaction_terms_override = false;
 Real ps_test_source_transaction_terms = 1.0;
@@ -2551,6 +2554,7 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   const Real rho_floor = ps_rho_floor_frac*ps_rho0;
   const Real p_floor = ps_p_floor_frac*ps_p0;
   const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  const bool allow_floor_clipped_subtraction = ps_allow_floor_clipped_subtraction;
   int local_density_floor_clips = 0;
   int local_pressure_floor_clips = 0;
   int local_nonfinite_cells = 0;
@@ -2616,8 +2620,8 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   int global_pressure_floor_clips = local_pressure_floor_clips;
   int global_nonfinite_cells = local_nonfinite_cells;
 #endif
-  if (global_density_floor_clips > 0 || global_pressure_floor_clips > 0 ||
-      global_nonfinite_cells > 0) {
+  if (global_density_floor_clips > 0 || global_nonfinite_cells > 0 ||
+      (global_pressure_floor_clips > 0 && !ps_allow_floor_clipped_subtraction)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock gas subtraction would violate a fluid floor: "
@@ -2629,8 +2633,11 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
     restart_utils::AbortOnFatalError();
   }
   if (nsub <= 0) return;
-  par_for("ps_gas_subtract", DevExeSpace(), 0, nsub - 1,
-  KOKKOS_LAMBDA(const int n) {
+  Real local_clipped_energy = 0.0;
+  int local_clipped_cells = 0;
+  Kokkos::parallel_reduce(
+    "ps_gas_subtract", Kokkos::RangePolicy<>(DevExeSpace(), 0, nsub),
+  KOKKOS_LAMBDA(const int n, Real &clipped_energy, int &clipped_cells) {
     const GasDelta d = d_gas_deltas(n);
     const int m = d.m;
     const int k = d.k;
@@ -2643,8 +2650,29 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
     u0(m, IM1, k, j, i) -= stage_weight*d.dmx;
     u0(m, IM2, k, j, i) -= stage_weight*d.dmy;
     u0(m, IM3, k, j, i) -= stage_weight*d.dmz;
-    u0(m, IEN, k, j, i) -= stage_weight*d.de;
-  });
+    Real applied_de = stage_weight*d.de;
+    if (allow_floor_clipped_subtraction) {
+      const Real rho = u0(m, IDN, k, j, i);
+      const Real mx = u0(m, IM1, k, j, i);
+      const Real my = u0(m, IM2, k, j, i);
+      const Real mz = u0(m, IM3, k, j, i);
+      const Real bx = 0.5*(b0.x1f(m, k, j, i) + b0.x1f(m, k, j, i + 1));
+      const Real by = 0.5*(b0.x2f(m, k, j, i) + b0.x2f(m, k, j + 1, i));
+      const Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
+      const Real kin = 0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho;
+      const Real efloor = p_floor/gm1 + kin + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+      const Real max_de = u0(m, IEN, k, j, i) - efloor;
+      const Real capped_de = (max_de <= 0.0) ? 0.0 :
+          ((applied_de > max_de) ? max_de : applied_de);
+      if (capped_de < applied_de) {
+        clipped_energy += (applied_de - capped_de)*d.vol;
+        ++clipped_cells;
+        applied_de = capped_de;
+      }
+    }
+    u0(m, IEN, k, j, i) -= applied_de;
+  }, Kokkos::Sum<Real>(local_clipped_energy),
+     Kokkos::Sum<int>(local_clipped_cells));
   std::array<Real, 5> stage_delta = {};
   for (const GasDelta &d : ps_injection_transaction_gas_deltas) {
     stage_delta[0] += d.dm*d.vol;
@@ -2656,16 +2684,31 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   const bool paper_vl2 =
       (pm->pmb_pack != nullptr) && (pm->pmb_pack->ppart != nullptr) &&
       pm->pmb_pack->ppart->UsesPaperVL2Coupling();
+  if (paper_vl2) {
+    ps_injection_transaction_clipped_energy_local = local_clipped_energy;
+    ps_injection_transaction_clipped_cells_local = local_clipped_cells;
+  } else {
+    ps_injection_transaction_clipped_energy_local =
+        stage_weight*ps_injection_transaction_clipped_energy_local + local_clipped_energy;
+    ps_injection_transaction_clipped_cells_local += local_clipped_cells;
+  }
   for (int n=0; n<5; ++n) {
+    Real actual_stage_delta = stage_weight*stage_delta[n];
+    if (n == 4) {
+      actual_stage_delta -= local_clipped_energy;
+    }
     if (paper_vl2) {
       // VL2 stage 2 resets to the saved cycle-start state before replaying the
       // full source transaction. The stage-1 half-step is predictor-only.
-      ps_injection_transaction_applied_local[n] = stage_weight*stage_delta[n];
+      ps_injection_transaction_applied_local[n] = actual_stage_delta;
     } else {
       // Qualified legacy shock injection uses SSPRK1/2/3, whose source-only
       // low-storage recurrence is S <- beta*(S + Delta).
       ps_injection_transaction_applied_local[n] =
           stage_weight*(ps_injection_transaction_applied_local[n] + stage_delta[n]);
+      if (n == 4) {
+        ps_injection_transaction_applied_local[n] -= local_clipped_energy;
+      }
     }
   }
 }
@@ -2678,6 +2721,8 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   ps_injection_transaction_expected_global.fill(0.0);
   ps_injection_transaction_applied_local.fill(0.0);
   ps_injection_transaction_abs_global.fill(0.0);
+  ps_injection_transaction_clipped_energy_local = 0.0;
+  ps_injection_transaction_clipped_cells_local = 0;
   ps_injection_transaction_terms_global = 1.0;
   if (!ps_enable_injection)
     return;
@@ -3406,16 +3451,25 @@ void ValidateParallelShockInjectionTransaction(Mesh *pm) {
 #if MPI_PARALLEL_ENABLED
   std::array<Real, 5> applied_global = {};
   Real delta_terms_global = 0.0;
+  Real clipped_energy_global = 0.0;
+  int clipped_cells_global = 0;
   const Real delta_terms_local =
       static_cast<Real>(ps_injection_transaction_gas_deltas.size());
   MPI_Allreduce(ps_injection_transaction_applied_local.data(), applied_global.data(),
                 5, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(&delta_terms_local, &delta_terms_global, 1, MPI_ATHENA_REAL, MPI_SUM,
                 MPI_COMM_WORLD);
+  MPI_Allreduce(&ps_injection_transaction_clipped_energy_local,
+                &clipped_energy_global, 1, MPI_ATHENA_REAL, MPI_SUM,
+                MPI_COMM_WORLD);
+  MPI_Allreduce(&ps_injection_transaction_clipped_cells_local,
+                &clipped_cells_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #else
   const std::array<Real, 5> &applied_global = ps_injection_transaction_applied_local;
   const Real delta_terms_global =
       static_cast<Real>(ps_injection_transaction_gas_deltas.size());
+  const Real clipped_energy_global = ps_injection_transaction_clipped_energy_local;
+  const int clipped_cells_global = ps_injection_transaction_clipped_cells_local;
 #endif
   // Count particle aggregation, cell aggregation and worst-case qualified
   // three-stage SSPRK shadow arithmetic, plus a conservative rank reduction depth.
@@ -3425,8 +3479,10 @@ void ValidateParallelShockInjectionTransaction(Mesh *pm) {
     terms = ps_test_source_transaction_terms;
   }
   for (int n=0; n<5; ++n) {
+    const Real comparable_applied = (n == 4 && ps_allow_floor_clipped_subtraction)
+        ? applied_global[n] + clipped_energy_global : applied_global[n];
     if (!ParallelShockSourceTransactionValuesAgree(
-            applied_global[n], ps_injection_transaction_expected_global[n],
+            comparable_applied, ps_injection_transaction_expected_global[n],
             ps_injection_transaction_abs_global[n], terms)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
@@ -3450,7 +3506,12 @@ void ValidateParallelShockInjectionTransaction(Mesh *pm) {
               << ps_injection_transaction_expected_global[1] << ","
               << ps_injection_transaction_expected_global[2] << ","
               << ps_injection_transaction_expected_global[3] << ","
-              << ps_injection_transaction_expected_global[4] << ")" << std::endl;
+              << ps_injection_transaction_expected_global[4] << ")";
+    if (ps_allow_floor_clipped_subtraction) {
+      std::cout << " clipped_energy=" << clipped_energy_global
+                << " clipped_cells=" << clipped_cells_global;
+    }
+    std::cout << std::endl;
   }
 }
 
@@ -4034,6 +4095,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_enable_gas_subtraction", true);
   ps_enable_curvature_amr = pin->GetOrAddBoolean(
       "problem", "ps_enable_curvature_amr", true);
+  ps_allow_floor_clipped_subtraction = pin->GetOrAddBoolean(
+      "problem", "ps_allow_floor_clipped_subtraction", false);
   ps_enable_conservation_ledger = pin->GetOrAddBoolean(
       "problem", "ps_enable_conservation_ledger", false);
   ps_test_source_transaction_terms_override = pin->GetOrAddBoolean(
@@ -4102,6 +4165,14 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock gas subtraction requires "
               << "<particles>/pic_background_mode=coupled." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (ps_allow_floor_clipped_subtraction && ps_enable_conservation_ledger) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock floor-clipped subtraction is an exploratory "
+              << "non-conservative continuation mode and cannot be combined with "
+              << "the exact conservation ledger." << std::endl;
     restart_utils::AbortOnFatalError();
   }
   if (ps_enable_conservation_ledger) {
