@@ -555,7 +555,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       pmesh->time = pmesh->time + pmesh->dt;
       pmesh->ncycle++;
       nmb_updated_ += pmesh->nmb_total;
-      npart_updated_ += pmesh->nprtcl_total;
+      npart_updated_ += pmesh->nprtcl_total_u64;
       // load balancing efficiency
       if (global_variable::nranks > 1) {
         int minnmb = std::numeric_limits<int>::max();
@@ -783,7 +783,7 @@ void Driver::OutputQ017Telemetry(Mesh *pm, double exe_time) {
   }
 
   double mean_nmb = static_cast<double>(pm->nmb_total)/nranks;
-  double mean_nprtcl = static_cast<double>(pm->nprtcl_total)/nranks;
+  double mean_nprtcl = static_cast<double>(pm->nprtcl_total_u64)/nranks;
   double mean_cost = total_cost/nranks;
   double nmb_efficiency = (max_nmb > 0)? mean_nmb/max_nmb : 0.0;
   double nprtcl_efficiency = (max_nprtcl > 0)? mean_nprtcl/max_nprtcl : 0.0;
@@ -818,7 +818,7 @@ void Driver::OutputQ017Telemetry(Mesh *pm, double exe_time) {
   print_scalar("meshblocks.rank_mean", mean_nmb);
   print_scalar("mesh.cells_per_meshblock", cells_per_meshblock);
   print_scalar("mesh.active_cells", active_cells);
-  print_scalar("particles.total", pm->nprtcl_total);
+  print_scalar("particles.total", pm->nprtcl_total_u64);
   print_scalar("particles.rank_min", min_nprtcl);
   print_scalar("particles.rank_max", max_nprtcl);
   print_scalar("particles.rank_mean", mean_nprtcl);

@@ -11,7 +11,7 @@
 //! MeshBlocks (potentially on different levels) that tile the entire domain.  MeshBlocks
 //! are grouped together into MeshBlockPacks for better performance on GPUs.
 
-#include <cstdint>  // int32_t
+#include <cstdint>  // int32_t, uint64_t
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -161,7 +161,8 @@ class Mesh {
   int max_level;  // logical level of maximum refinement grid in Mesh
 
   int nprtcl_thisrank;     // number of particles this rank
-  int nprtcl_total;        // total number of particles across all ranks
+  int nprtcl_total;        // bounded legacy total number of particles across all ranks
+  std::uint64_t nprtcl_total_u64; // exact total number of particles across all ranks
 
   // following 3x arrays allocated with length [nmb_total] in BuildTreeFromXXXX()
   float *cost_eachmb;            // cost of each MeshBlock

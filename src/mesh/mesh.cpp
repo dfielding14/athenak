@@ -51,6 +51,7 @@ Mesh::Mesh(ParameterInput *pin) :
   nmb_packs_thisrank(1),
   nprtcl_thisrank(0),
   nprtcl_total(0),
+  nprtcl_total_u64(0),
   nprtcl_eachrank(nullptr),
   dtold(0.) {
   // Set physical size and number of cells in mesh (root level)
@@ -690,8 +691,12 @@ void Mesh::CountParticles() {
   // Share number of particles on each rank with all ranks
   MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
 #endif
-  nprtcl_total = 0;
+  nprtcl_total_u64 = 0;
   for (int n=0; n<global_variable::nranks; ++n) {
-    nprtcl_total += nprtcl_eachrank[n];
+    nprtcl_total_u64 += static_cast<std::uint64_t>(nprtcl_eachrank[n]);
   }
+  const std::uint64_t max_legacy_nprtcl_total =
+      static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+  nprtcl_total = (nprtcl_total_u64 > max_legacy_nprtcl_total) ?
+      std::numeric_limits<int>::max() : static_cast<int>(nprtcl_total_u64);
 }
