@@ -236,6 +236,7 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_init_recv);
   TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
   if (tstat != TaskStatus::complete) return tstat;
   if (pmy_pack->pmesh->multilevel) {
@@ -316,6 +317,7 @@ TaskStatus MHD::SendFlux(Driver *pdrive, int stage) {
   TaskStatus tstat = TaskStatus::complete;
   // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel)  {
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_flux);
     tstat = pbval_u->PackAndSendFluxCC(uflx);
   }
   return tstat;
@@ -330,6 +332,7 @@ TaskStatus MHD::RecvFlux(Driver *pdrive, int stage) {
   TaskStatus tstat = TaskStatus::complete;
   // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel) {
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_flux);
     tstat = pbval_u->RecvAndUnpackFluxCC(uflx);
   }
   return tstat;
@@ -492,6 +495,7 @@ TaskStatus MHD::RecvU_OA(Driver *pdrive, int stage) {
 TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
   // Only execute Mesh function with SMR/AMR
   if (pmy_pack->pmesh->multilevel) {
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_restrict_u);
     pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
   }
   return TaskStatus::complete;
@@ -502,6 +506,7 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to pack/send cell-centered conserved variables
 
 TaskStatus MHD::SendU(Driver *pdrive, int stage) {
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_u);
   TaskStatus tstat = pbval_u->PackAndSendCC(u0, coarse_u0);
   return tstat;
 }
@@ -511,6 +516,7 @@ TaskStatus MHD::SendU(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to receive/unpack cell-centered conserved variables
 
 TaskStatus MHD::RecvU(Driver *pdrive, int stage) {
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_u);
   TaskStatus tstat = pbval_u->RecvAndUnpackCC(u0, coarse_u0);
   return tstat;
 }
@@ -673,6 +679,8 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
   // do not apply BCs if domain is strictly periodic
   if (pmy_pack->pmesh->strictly_periodic) return TaskStatus::complete;
 
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_physical_bcs);
+
   // physical BCs
   pbval_u->HydroBCs((pmy_pack), (pbval_u->u_in), u0);
   pbval_b->BFieldBCs((pmy_pack), (pbval_b->b_in), b0);
@@ -692,6 +700,7 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
 
 TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {  // only prolongate with SMR/AMR
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_prolongate);
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
     pbval_b->FillCoarseInBndryFC(b0, coarse_b0);
     if (pmy_pack->pmesh->pmr->prolong_prims) {

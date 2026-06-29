@@ -7057,7 +7057,7 @@ def write_analysis_publication_generation(
     for name in ("diagnostics.json", FIGURE_13_FIREHOSE_PRODUCT_NAME):
         ensure_publication_alias(output_dir, name)
     selected = read_analysis_publication(output_dir)
-    if selected["generation_dir"] != generation:
+    if selected["generation_dir"] != generation.resolve():
         raise ValueError("analysis publication current pointer selected another generation")
     return generation
 

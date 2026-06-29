@@ -622,7 +622,10 @@ MHD::~MHD() {
   if (pbval_cgl_pflux != nullptr) {delete pbval_cgl_pflux;}
   if (psrc!= nullptr) {delete psrc;}
   if (pscalar_diff != nullptr) {delete pscalar_diff;}
-  if (pcgl_lf != nullptr) {delete pcgl_lf;}
+  if (pcgl_lf != nullptr) {
+    pcgl_lf->ReportProfile("shutdown");
+    delete pcgl_lf;
+  }
   if (pcond != nullptr) {delete pcond;}
   if (presist!= nullptr) {delete presist;}
   if (pvisc != nullptr) {delete pvisc;}

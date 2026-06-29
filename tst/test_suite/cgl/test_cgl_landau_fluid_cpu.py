@@ -1,5 +1,6 @@
 """CPU regressions for the CGL Landau-fluid closure and CGL FOFC path."""
 
+import contextlib
 import fcntl
 import hashlib
 import importlib.util
@@ -144,6 +145,85 @@ def _assert_restarted_lf_diagnostics(reference, resumed):
             rtol=1.0e-12,
             atol=1.0e-14,
         )
+
+
+def test_cgl_lf_profile_summary_reports_core_buckets():
+    try:
+        result = subprocess.run(
+            [
+                "./athena",
+                "-i",
+                f"{UNIT_INPUT_ROOT}/cgl_lf_sts_parallel.athinput",
+                "job/basename=cgl_ci_profile",
+                "time/nlim=1",
+                "time/tlim=1.0e-5",
+            ],
+            capture_output=True,
+            env={**os.environ, "ATHENAK_CGL_LF_PROFILE": "1"},
+            text=True,
+            check=False,
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "CGL Landau-fluid profiling enabled" in output
+        assert "CGL Landau-fluid profile summary (shutdown)" in output
+        for bucket in (
+            "heat_flux_precompute",
+            "heat_flux_flux1",
+            "sts_clear_flux",
+            "sts_update_kernel",
+            "primitive_refresh",
+            "admissibility",
+        ):
+            assert bucket in output
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_profile_detail_reports_directional_probe_buckets():
+    try:
+        result = subprocess.run(
+                [
+                    "./athena",
+                    "-i",
+                    PAPER_INPUT,
+                    "job/basename=cgl_ci_profile_detail",
+                    "time/nlim=1",
+                    "time/tlim=1.0e-5",
+                    "mesh/nx1=8",
+                    "mesh/nx2=8",
+                    "mesh/nx3=8",
+                    "meshblock/nx1=8",
+                    "meshblock/nx2=8",
+                    "meshblock/nx3=8",
+                ],
+            capture_output=True,
+            env={
+                **os.environ,
+                "ATHENAK_CGL_LF_PROFILE": "1",
+                "ATHENAK_CGL_LF_PROFILE_DETAIL": "1",
+            },
+            text=True,
+            check=False,
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "CGL Landau-fluid detailed profiling enabled" in output
+        assert "profile_detail=true" in output
+        for bucket in (
+            "heat_flux_flux1_gradients",
+            "heat_flux_flux1_face_state",
+            "heat_flux_flux1_closure",
+            "heat_flux_flux2_gradients",
+            "heat_flux_flux2_face_state",
+            "heat_flux_flux2_closure",
+            "heat_flux_flux3_gradients",
+            "heat_flux_flux3_face_state",
+            "heat_flux_flux3_closure",
+        ):
+            assert bucket in output
+    finally:
+        _cleanup()
 
 
 def test_cgl_lf_quantitative_decay_and_diagnostics():
@@ -1214,7 +1294,7 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     (output_dir / "rst").mkdir()
     manifest_dir.mkdir()
     mhd_history = output_dir / "case.mhd.hst"
-    (output_dir / "case.user.hst").write_text("# retained user history\n")
+    user_history = output_dir / "case.user.hst"
     snapshot = output_dir / "bin" / "case.00000.bin"
     restart = output_dir / "rst" / "case.00000.rst"
     restart.write_bytes(b"restart")
@@ -1232,10 +1312,49 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
         )
 
     def write_history(rows):
+        mhd_columns = (
+            "time", "mass", "tot-E", "lf_nstage", "lf_qface", "lf_qprcap",
+            "lf_qpr10", "lf_qpecap", "lf_qpe10", "lf_qprwrk", "lf_qpewrk",
+            "lf_cpwrk", "lf_cawrk", "lf_hwproj", "lf_dfloor", "lf_pfloor",
+            "lf_nonfin", "lf_nonpos", "lf_hardbd",
+        )
+        user_columns = ("time", "mass", "hard_vol", "force_work", "max_ndiv")
+        mhd_lines = []
+        user_lines = []
+        for row in rows:
+            time, dfloor, pfloor, nonfin, nonpos, hardbd, hwproj = row
+            stage_count = int(round(10 * time))
+            qface_count = int(round(100 * time))
+            mhd_lines.append(
+                [
+                    time, 1.0, 10.0 + 0.1 * time, stage_count, qface_count,
+                    0, 0, 0, 0, 0.01 * time, 0.0, 0.02 * time, 0.0,
+                    hwproj, dfloor, pfloor, nonfin, nonpos, hardbd,
+                ]
+            )
+            user_lines.append([time, 1.0, 0.0, 0.1 * time, 0.0])
         mhd_history.write_text(
-            "# [0]=time [1]=lf_dfloor [2]=lf_pfloor [3]=lf_nonfin "
-            "[4]=lf_nonpos [5]=lf_hardbd [6]=lf_hwproj\n"
-            + "\n".join(" ".join(str(value) for value in row) for row in rows)
+            "# "
+            + " ".join(
+                f"[{index}]={name}"
+                for index, name in enumerate(mhd_columns, start=1)
+            )
+            + "\n"
+            + "\n".join(
+                " ".join(str(value) for value in row) for row in mhd_lines
+            )
+            + "\n"
+        )
+        user_history.write_text(
+            "# "
+            + " ".join(
+                f"[{index}]={name}"
+                for index, name in enumerate(user_columns, start=1)
+            )
+            + "\n"
+            + "\n".join(
+                " ".join(str(value) for value in row) for row in user_lines
+            )
             + "\n"
         )
         restart.write_text(
@@ -1308,16 +1427,16 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
         (1.0, 0, 0, 1, 0, 0, 1),
         (2.0, 0, 0, 0, 0, 0, 2),
     ])
-    assert stage_i.inspect_segment(inspect_args) == 1
-    inspection_path = manifest_dir / "segment_inspection.json"
-    inspection = json.loads(inspection_path.read_text())
-    assert not inspection["checks"]["strict_lf_failure_counters_zero"]
+    with pytest.raises(ValueError, match="strict LF failure counter"):
+        stage_i.inspect_segment(inspect_args)
 
+    write_history([(0.0, 0, 0, 0, 0, 0, 0), (2.0, 0, 0, 0, 0, 0, 2)])
     restart.write_text("<time>\nrestart_time = 1.5\n<par_end>\n")
     with pytest.raises(ValueError, match="explicit physical time"):
         stage_i.inspect_segment(inspect_args)
     write_history([(0.0, 0, 0, 0, 0, 0, 0), (2.0, 0, 0, 0, 0, 0, 2)])
     assert stage_i.inspect_segment(inspect_args) == 0
+    inspection_path = manifest_dir / "segment_inspection.json"
     inspection_path.unlink()
     sacct_path = tmp_path / "job.sacct"
     sacct_path.write_text(
@@ -1393,10 +1512,13 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     stage_i.write_json(manifest_path, accounted)
     continuation = tmp_path / "continuation.mhd.hst"
     continuation.write_text(
-        "# [0]=time [1]=lf_dfloor [2]=lf_pfloor [3]=lf_nonfin "
-        "[4]=lf_nonpos [5]=lf_hardbd [6]=lf_hwproj\n"
-        "2.0 0 0 0 0 0 2\n"
-        "3.0 0 0 0 0 0 3\n"
+        "# [1]=time [2]=mass [3]=tot-E [4]=lf_nstage [5]=lf_qface "
+        "[6]=lf_qprcap [7]=lf_qpr10 [8]=lf_qpecap [9]=lf_qpe10 "
+        "[10]=lf_qprwrk [11]=lf_qpewrk [12]=lf_cpwrk [13]=lf_cawrk "
+        "[14]=lf_hwproj [15]=lf_dfloor [16]=lf_pfloor [17]=lf_nonfin "
+        "[18]=lf_nonpos [19]=lf_hardbd\n"
+        "2.0 1.0 10.2 20 200 0 0 0 0 0.02 0.0 0.04 0.0 2 0 0 0 0 0\n"
+        "3.0 1.0 10.3 30 300 0 0 0 0 0.03 0.0 0.06 0.0 3 0 0 0 0 0\n"
     )
     merged = tmp_path / "merged.mhd.hst"
     stage_i.merge_history_files([mhd_history, continuation], merged)
@@ -1422,8 +1544,12 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
         detached_reservations[0]["execution_intent_sha256"] = (
             stage_i.execution_intent_sha256(detached_manifest)
         )
-    stage_i.write_json(manifest_path, detached_manifest)
-    stage_i.write_json(paths["reservations"], detached_reservations)
+    manifest_path.write_text(
+        json.dumps(detached_manifest, indent=2, sort_keys=True) + "\n"
+    )
+    paths["reservations"].write_text(
+        json.dumps(detached_reservations, indent=2, sort_keys=True) + "\n"
+    )
     detached = stage_i.reconcile_report(root)
     assert not detached["consistent"]
     assert any(
@@ -1431,11 +1557,15 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
         and "nodes differs from manifest" in issue
         for issue in detached["issues"]
     )
-    stage_i.write_json(manifest_path, accounted)
-    stage_i.write_json(paths["reservations"], json.loads(before_reconcile))
+    manifest_path.write_text(
+        json.dumps(accounted, indent=2, sort_keys=True) + "\n"
+    )
+    paths["reservations"].write_text(before_reconcile)
     reservations = json.loads(before_reconcile)
     reservations[0]["segment"] = "wrong"
-    stage_i.write_json(paths["reservations"], reservations)
+    paths["reservations"].write_text(
+        json.dumps(reservations, indent=2, sort_keys=True) + "\n"
+    )
     inconsistent = stage_i.reconcile_report(root)
     assert not inconsistent["consistent"]
     assert any(
@@ -1492,20 +1622,11 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
 
     metadata = tmp_path / "metadata.json"
     metadata.write_text('{"old": true}\n')
-    original_replace = stage_i.os.replace
-    replacements = []
-
-    def capture_replace(source, destination):
-        replacements.append((Path(source), Path(destination)))
-        original_replace(source, destination)
-
-    monkeypatch.setattr(stage_i.os, "replace", capture_replace)
     stage_i.write_json(metadata, {"new": True})
     assert json.loads(metadata.read_text()) == {"new": True}
-    assert len(replacements) == 1
-    assert replacements[0][0] != metadata
-    assert replacements[0][1] == metadata
-    assert not list(tmp_path.glob(".metadata.json.*.tmp"))
+    assert stage_i.sha256(metadata) == stage_i.stable_json_sha256({"new": True})
+    assert stat.S_IMODE(metadata.stat().st_mode) == 0o644
+    assert not list(tmp_path.glob(".metadata.json.*"))
 
     local_root = tmp_path / "offline"
     with stage_i.canonical_root_lock(local_root):
@@ -1545,9 +1666,10 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
     assert paths["ledger"].read_text() == original_ledger
     ceiling_ledger_row = dict(invalid_ledger_row)
     ceiling_ledger_row["elapsed_seconds"] = "3600"
+    ceiling_ledger_row["reserved_node_hours"] = "1.000000"
     ceiling_ledger_row["actual_node_hours"] = "1.000000"
-    ceiling_ledger_row["cumulative_stage_i_node_hours"] = str(
-        stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS + 1.0
+    ceiling_ledger_row["cumulative_stage_i_node_hours"] = (
+        f"{stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS + 1.0:.6f}"
     )
     with pytest.raises(ValueError, match="accounting ceiling"):
         stage_i.validate_ledger_cumulative_fields(
@@ -1648,7 +1770,11 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
             "acknowledged_shared_root_campaigns": [],
         },
     })
-    with pytest.raises(ValueError, match="outside the E03 run store"):
+    with pytest.raises(
+        ValueError,
+        match="Stage I transaction journal must be an owner-controlled regular "
+        "0644 single-link file",
+    ):
         stage_i.read_transaction(paths, transaction)
 
     canonical_root = tmp_path / "canonical"
@@ -1703,7 +1829,10 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
 
     with monkeypatch.context() as policy:
         policy.setattr(stage_i.fcntl, "flock", replace_lock_path)
-        with pytest.raises(ValueError, match="path changed while locking"):
+        with pytest.raises(
+            ValueError,
+            match="path changed while locking|link count differs",
+        ):
             with stage_i.canonical_root_lock(canonical_root):
                 pass
     lock_path.chmod(0o666)
@@ -1782,6 +1911,21 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
     scheduler_calls = []
     submitted_script = tmp_path / "submitted.sbatch"
     submitted_script.write_text("#!/bin/bash\n")
+    submitted_script.chmod(0o750)
+    submitted_fd = os.open(
+        submitted_script, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    )
+    submitted_payload, submitted_profile = stage_i.read_batch_script_descriptor(
+        submitted_fd, submitted_script, "test submitted batch script"
+    )
+    submitted_batch = {
+        "fd": submitted_fd,
+        "descriptor_path": f"/proc/self/fd/{submitted_fd}",
+        "path": submitted_script,
+        "binding": stage_i.batch_script_binding(
+            submitted_script, submitted_profile, submitted_payload
+        ),
+    }
     submitted_manifest_path = tmp_path / "submitted.json"
     submitted_manifest = {
         "execution_epoch": stage_i.EXECUTION_EPOCH,
@@ -1818,7 +1962,11 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
         policy.setattr(
             stage_i,
             "submission_preflight",
-            lambda *_args, **_kwargs: (paths, submitted_script, {}),
+            lambda *_args, **_kwargs: (
+                paths,
+                submitted_batch,
+                {"batch_script": submitted_batch["binding"]},
+            ),
         )
         policy.setattr(
             stage_i,
@@ -1835,14 +1983,18 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
             lambda *_args: tmp_path / "submit-pending.json",
         )
         policy.setattr(stage_i, "read_reservations", lambda _paths: [])
-        policy.setattr(stage_i, "finish_submit_transaction", lambda *_args: None)
+        policy.setattr(
+            stage_i,
+            "finish_submit_transaction",
+            lambda *_args, **_kwargs: None,
+        )
         assert stage_i.submit.__wrapped__(SimpleNamespace(
             manifest=str(submitted_manifest_path),
             allow_local_root=False,
             sbatch_output_file=None,
         )) == 0
     assert scheduler_calls == [(
-        ["/usr/bin/sbatch", "--parsable", str(submitted_script)],
+        ["/usr/bin/sbatch", "--parsable", submitted_batch["descriptor_path"]],
         scheduler_calls[0][1],
     )]
     assert "SLURM_CONF" not in scheduler_calls[0][1]
@@ -2197,6 +2349,8 @@ def test_cgl_lf_stage_i_replay_budget_gate_precedes_controlled_writes(
         }],
         "ledger_row": row,
     }
+    journal.write_text(json.dumps(transaction, indent=2, sort_keys=True) + "\n")
+    journal.chmod(0o644)
     monkeypatch.setattr(stage_i, "read_transaction", lambda *_args: transaction)
     monkeypatch.setattr(
         stage_i, "validate_transaction_reservation_baseline", lambda *_args: None
@@ -2219,6 +2373,7 @@ def test_cgl_lf_stage_i_replay_budget_gate_precedes_controlled_writes(
     assert journal.is_file()
 
     transaction["reservations"] = []
+    journal.write_text(json.dumps(transaction, indent=2, sort_keys=True) + "\n")
     monkeypatch.setattr(stage_i, "read_ledger", lambda _paths: [row])
     unlinked = []
     monkeypatch.setattr(stage_i, "refresh_summary", lambda *_args: None)
@@ -2229,7 +2384,8 @@ def test_cgl_lf_stage_i_replay_budget_gate_precedes_controlled_writes(
         (paths["reservations"], []),
         (manifest_path, {}),
     ]
-    assert unlinked == [journal]
+    assert unlinked == []
+    assert not journal.exists()
 
 
 def test_cgl_lf_stage_i_retains_r17_last_across_lifecycle(tmp_path, monkeypatch):
@@ -2264,7 +2420,7 @@ def test_cgl_lf_stage_i_retains_r17_last_across_lifecycle(tmp_path, monkeypatch)
 
 
 def test_cgl_lf_stage_i_rejects_late_r17_replay_and_reconcile(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, request
 ):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_r17_replay_test", PAPER_STAGE_I_TOOL
@@ -2278,6 +2434,9 @@ def test_cgl_lf_stage_i_rejects_late_r17_replay_and_reconcile(
     paths = stage_i.initialize(root)
     monkeypatch.setattr(stage_i, "DEFAULT_ROOT", root)
     monkeypatch.setattr(stage_i, "accepted_case_lineage", lambda *_args: [])
+    root_lock = contextlib.ExitStack()
+    root_lock.enter_context(stage_i.canonical_root_lock(root))
+    request.addfinalizer(root_lock.close)
     manifest_path = (
         paths["runs"] / "R17" / "s00"
         / "manifest" / "prepared_run.json"
@@ -2335,7 +2494,7 @@ def test_cgl_lf_stage_i_rejects_late_r17_replay_and_reconcile(
                 "job_id": "321",
                 "submitted_recorded_utc": stage_i.utc_now(),
             })
-        stage_i.write_json(journal, value)
+        stage_i.write_json(journal, value, mode=0o644)
         return journal
 
     submitted = reservation("submitted")
@@ -3115,18 +3274,17 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
             )
 
     shared_manifest = (
-        root / "runs" / "exploratory" / "manifest" / "prepared_run.json"
+        root / "runs" / stage_i.SHARED_ROOT_STALE_CAMPAIGN_ID
+        / "manifest" / "prepared_run.json"
     )
     shared_manifest.parent.mkdir(parents=True)
     stage_i.write_json(shared_manifest, {
-        "campaign_id": "exploratory",
+        "campaign_id": stage_i.SHARED_ROOT_STALE_CAMPAIGN_ID,
         "state": "running",
     })
     with pytest.raises(ValueError, match="shared-root campaign records"):
         stage_i.check_submit(args)
-    args.allow_shared_root_campaign = [
-        "exploratory", "beta 25", "-reviewed", "exploratory",
-    ]
+    args.allow_shared_root_campaign = [stage_i.SHARED_ROOT_STALE_CAMPAIGN_ID]
     assert stage_i.check_submit(args) == 0
     python = stage_i.authenticated_python_binary()
     helper = str(PAPER_STAGE_I_TOOL.resolve())
@@ -3140,7 +3298,7 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     assert tokens[:5] == [python, "-I", "-S", "-B", helper]
     parsed = stage_i.parser().parse_args(tokens[5:])
     assert parsed.allow_shared_root_campaign == [
-        "-reviewed", "beta 25", "exploratory",
+        stage_i.SHARED_ROOT_STALE_CAMPAIGN_ID,
     ]
 
     manifest = json.loads(manifest_path.read_text())
@@ -3164,6 +3322,48 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
     root = tmp_path / "root"
     paths = stage_i.initialize(root)
 
+    def retained_history_text(times):
+        mhd_columns = (
+            "time", "dt", "mass", "tot-E", "lf_nstage", "lf_qface",
+            "lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10", "lf_qprwrk",
+            "lf_qpewrk", "lf_cpwrk", "lf_cawrk", "lf_hwproj", "lf_dfloor",
+            "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
+        )
+        rows = []
+        for index, time in enumerate(times):
+            rows.append([
+                time, 0.001, 1.0, 10.0 + 0.1 * index, 10 * index, 100 * index,
+                0, 0, 0, 0, 0.01 * index, 0.0, 0.02 * index, 0.0,
+                0, 0, 0, 0, 0, 0,
+            ])
+        return (
+            "# "
+            + " ".join(
+                f"[{index}]={name}"
+                for index, name in enumerate(mhd_columns, start=1)
+            )
+            + "\n"
+            + "\n".join(" ".join(str(value) for value in row) for row in rows)
+            + "\n"
+        )
+
+    def retained_user_history_text(times):
+        user_columns = ("time", "mass", "hard_vol", "force_work", "max_ndiv")
+        rows = [
+            [time, 1.0, 0.0, 0.1 * index, 0.0]
+            for index, time in enumerate(times)
+        ]
+        return (
+            "# "
+            + " ".join(
+                f"[{index}]={name}"
+                for index, name in enumerate(user_columns, start=1)
+            )
+            + "\n"
+            + "\n".join(" ".join(str(value) for value in row) for row in rows)
+            + "\n"
+        )
+
     def record_segment(segment, times, result, input_sha, parent=None):
         manifest_path = (
             root / "runs" / "mks24-stage-i" / stage_i.EXECUTION_EPOCH
@@ -3175,21 +3375,10 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
         (output_dir / "bin").mkdir(parents=True)
         input_file = manifest_path.parent / "submitted_input.athinput"
         input_file.write_text("retained input\n")
-        rows = "".join(f"{time} 0.001 0\n" for time in times)
-        for name in ("case.mhd.hst", "case.user.hst"):
-            (output_dir / name).write_text(
-                "# [0]=time [1]=dt [2]=clean\n" + rows
-            )
-        (output_dir / "bin" / f"{segment}.00000.bin").write_bytes(
-            (
-                "Athena binary output version=1.1\n"
-                "  size of preheader=5\n"
-                f"  time={times[-1]}\n"
-                "  cycle=0\n"
-                "  size of location=8\n"
-                "  size of variable=4\n"
-            ).encode()
-        )
+        mhd_history = output_dir / "case.mhd.hst"
+        user_history = output_dir / "case.user.hst"
+        mhd_history.write_text(retained_history_text(times))
+        user_history.write_text(retained_user_history_text(times))
         command = {
             "input_sha256": input_sha,
             "input_revision": "r" * 40,
@@ -3199,18 +3388,49 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
         }
         if parent is not None:
             command["parent_segment"] = {"manifest": str(parent)}
+        snapshot = output_dir / "bin" / f"{segment}.00000.bin"
+        snapshot.write_bytes(
+            (
+                "Athena binary output version=1.1\n"
+                "  size of preheader=5\n"
+                f"  time={times[-1]}\n"
+                "  cycle=0\n"
+                "  size of location=8\n"
+                "  size of variable=4\n"
+            ).encode()
+        )
+        inspection = {
+            "accepted": result == "accepted",
+            "clean_for_continuation": True,
+            "final_time": times[-1],
+        }
+        if result == "clean_partial":
+            mhd = stage_i.parse_history(mhd_history)
+            user = stage_i.parse_history(user_history)
+            inspection.update({
+                "schema_version": 4,
+                "mhd_history": stage_i.retained_file(mhd_history),
+                "user_history": stage_i.retained_file(user_history),
+                "snapshots": [stage_i.retained_product([snapshot])],
+                "restarts": [],
+                "plasma_continuation_policy": stage_i.CONTINUATION_PLASMA_POLICY,
+                "plasma_continuation_evidence":
+                    stage_i.continuation_plasma_evidence("R16", mhd, user),
+            })
         stage_i.write_json(manifest_path, {
             "execution_epoch": stage_i.EXECUTION_EPOCH,
             "state": "recorded",
+            "project_root": str(root),
+            "run": {
+                "case_id": "R16",
+                "case_name": "case",
+                "segment": segment,
+            },
             "accounting": {"result": result},
             "command": command,
             "allocation": {"nodes": 1, "ranks_per_node": 1},
             "paths": {"output_dir": str(output_dir)},
-            "scientific_inspection": {
-                "accepted": result == "accepted",
-                "clean_for_continuation": True,
-                "final_time": times[-1],
-            },
+            "scientific_inspection": inspection,
         })
         return manifest_path
 
@@ -3264,7 +3484,7 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
     merged = stage_i.parse_history(bundle / "history" / "case.mhd.hst")
     assert merged["time"] == [0.0, 1.8, 1.823, 2.0]
     (terminal.parent.parent / "output" / "case.mhd.hst").write_text(
-        "# [0]=time [1]=dt [2]=clean\n1.85 0.001 0\n2.0 0.001 0\n"
+        retained_history_text([1.85, 2.0])
     )
     args.output_dir = str(root / "runs" / "bundles" / "gap")
     with pytest.raises(ValueError, match="configured sampling cadence"):

@@ -37,6 +37,45 @@ struct CGLLFDiagnostics {
   Real anisotropic_pressure_work = 0.0;
 };
 
+enum class CGLLFProfileBucket {
+  heat_flux_total = 0,
+  heat_flux_precompute,
+  heat_flux_flux1,
+  heat_flux_flux1_gradients,
+  heat_flux_flux1_face_state,
+  heat_flux_flux1_closure,
+  heat_flux_flux2,
+  heat_flux_flux2_gradients,
+  heat_flux_flux2_face_state,
+  heat_flux_flux2_closure,
+  heat_flux_flux3,
+  heat_flux_flux3_gradients,
+  heat_flux_flux3_face_state,
+  heat_flux_flux3_closure,
+  heat_flux_work_diagnostics,
+  timestep_reduction,
+  sweep_begin_conversion,
+  sts_clear_flux,
+  sts_update_copies,
+  sts_update_kernel,
+  primitive_refresh,
+  admissibility,
+  sweep_end_conversion,
+  post_sweep_collisions,
+  parabolic_init_recv,
+  parabolic_send_flux,
+  parabolic_recv_flux,
+  parabolic_restrict_u,
+  parabolic_send_u,
+  parabolic_recv_u,
+  parabolic_physical_bcs,
+  parabolic_prolongate,
+  count
+};
+
+constexpr int kCGLLFProfileBucketCount =
+    static_cast<int>(CGLLFProfileBucket::count);
+
 class CGLLandauFluid {
  public:
   CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin);
@@ -62,11 +101,21 @@ class CGLLandauFluid {
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
                            int dfloor_delta, int pfloor_delta,
                            const char *sweep_name, int stage, int nstages);
+  bool ProfileEnabled() const {return profile_enabled_;}
+  void AddProfileTime(CGLLFProfileBucket bucket, Real seconds);
+  void ReportProfile(const char *context) const;
 
  private:
   void AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &stats);
 
   MeshBlockPack *pmy_pack;
+  bool profile_enabled_ = false;
+  bool profile_detail_enabled_ = false;
+  int profile_last_nstages_ = 0;
+  int profile_max_nstages_ = 0;
+  Real profile_seconds_[kCGLLFProfileBucketCount] = {};
+  std::uint64_t profile_counts_[kCGLLFProfileBucketCount] = {};
+  Real profile_detail_sink_ = 0.0;
   DvceArray4D<Real> tpar_, tperp_, bmag_;
   Real stage_qpar_work_ = 0.0;
   Real stage_qperp_work_ = 0.0;
@@ -80,6 +129,20 @@ class CGLLandauFluid {
   Real sweep_qperp_rhs_ = 0.0;
   Real pressure_work_cycle_start_ = 0.0;
   Real anisotropic_pressure_work_cycle_start_ = 0.0;
+};
+
+class CGLLFProfileRegion {
+ public:
+  CGLLFProfileRegion(CGLLandauFluid *profile, CGLLFProfileBucket bucket);
+  ~CGLLFProfileRegion();
+  CGLLFProfileRegion(const CGLLFProfileRegion&) = delete;
+  CGLLFProfileRegion& operator=(const CGLLFProfileRegion&) = delete;
+
+ private:
+  CGLLandauFluid *profile_;
+  CGLLFProfileBucket bucket_;
+  Kokkos::Timer timer_;
+  bool active_;
 };
 
 #endif // DIFFUSION_CGL_LANDAU_FLUID_HPP_

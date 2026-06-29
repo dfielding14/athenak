@@ -8,9 +8,14 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <string>
+
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -23,6 +28,98 @@
 #include "diffusion/cgl_landau_fluid_arithmetic.hpp"
 
 namespace {
+
+bool CGLProfileEnvValue(const char *name, bool fallback) {
+  const char *value = std::getenv(name);
+  if (value == nullptr) {
+    return fallback;
+  }
+  const std::string text(value);
+  if (text == "1" || text == "true" || text == "TRUE" ||
+      text == "yes" || text == "YES" || text == "on" || text == "ON") {
+    return true;
+  }
+  if (text == "0" || text == "false" || text == "FALSE" ||
+      text == "no" || text == "NO" || text == "off" || text == "OFF") {
+    return false;
+  }
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << name << " = '" << text
+            << "' is not a boolean value." << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+const char *CGLLFProfileBucketName(CGLLFProfileBucket bucket) {
+  switch (bucket) {
+    case CGLLFProfileBucket::heat_flux_total:
+      return "heat_flux_total";
+    case CGLLFProfileBucket::heat_flux_precompute:
+      return "heat_flux_precompute";
+    case CGLLFProfileBucket::heat_flux_flux1:
+      return "heat_flux_flux1";
+    case CGLLFProfileBucket::heat_flux_flux1_gradients:
+      return "heat_flux_flux1_gradients";
+    case CGLLFProfileBucket::heat_flux_flux1_face_state:
+      return "heat_flux_flux1_face_state";
+    case CGLLFProfileBucket::heat_flux_flux1_closure:
+      return "heat_flux_flux1_closure";
+    case CGLLFProfileBucket::heat_flux_flux2:
+      return "heat_flux_flux2";
+    case CGLLFProfileBucket::heat_flux_flux2_gradients:
+      return "heat_flux_flux2_gradients";
+    case CGLLFProfileBucket::heat_flux_flux2_face_state:
+      return "heat_flux_flux2_face_state";
+    case CGLLFProfileBucket::heat_flux_flux2_closure:
+      return "heat_flux_flux2_closure";
+    case CGLLFProfileBucket::heat_flux_flux3:
+      return "heat_flux_flux3";
+    case CGLLFProfileBucket::heat_flux_flux3_gradients:
+      return "heat_flux_flux3_gradients";
+    case CGLLFProfileBucket::heat_flux_flux3_face_state:
+      return "heat_flux_flux3_face_state";
+    case CGLLFProfileBucket::heat_flux_flux3_closure:
+      return "heat_flux_flux3_closure";
+    case CGLLFProfileBucket::heat_flux_work_diagnostics:
+      return "heat_flux_work_diagnostics";
+    case CGLLFProfileBucket::timestep_reduction:
+      return "timestep_reduction";
+    case CGLLFProfileBucket::sweep_begin_conversion:
+      return "sweep_begin_conversion";
+    case CGLLFProfileBucket::sts_clear_flux:
+      return "sts_clear_flux";
+    case CGLLFProfileBucket::sts_update_copies:
+      return "sts_update_copies";
+    case CGLLFProfileBucket::sts_update_kernel:
+      return "sts_update_kernel";
+    case CGLLFProfileBucket::primitive_refresh:
+      return "primitive_refresh";
+    case CGLLFProfileBucket::admissibility:
+      return "admissibility";
+    case CGLLFProfileBucket::sweep_end_conversion:
+      return "sweep_end_conversion";
+    case CGLLFProfileBucket::post_sweep_collisions:
+      return "post_sweep_collisions";
+    case CGLLFProfileBucket::parabolic_init_recv:
+      return "parabolic_init_recv";
+    case CGLLFProfileBucket::parabolic_send_flux:
+      return "parabolic_send_flux";
+    case CGLLFProfileBucket::parabolic_recv_flux:
+      return "parabolic_recv_flux";
+    case CGLLFProfileBucket::parabolic_restrict_u:
+      return "parabolic_restrict_u";
+    case CGLLFProfileBucket::parabolic_send_u:
+      return "parabolic_send_u";
+    case CGLLFProfileBucket::parabolic_recv_u:
+      return "parabolic_recv_u";
+    case CGLLFProfileBucket::parabolic_physical_bcs:
+      return "parabolic_physical_bcs";
+    case CGLLFProfileBucket::parabolic_prolongate:
+      return "parabolic_prolongate";
+    case CGLLFProfileBucket::count:
+      break;
+  }
+  return "unknown";
+}
 
 parabolic::ParabolicIntegratorMode ParseCGLHeatFluxIntegrator(ParameterInput *pin) {
   const std::string integrator =
@@ -258,6 +355,157 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
               << "hard-bound backup limiter; configured backup_limiters remains false."
               << std::endl;
   }
+  profile_enabled_ =
+      CGLProfileEnvValue("ATHENAK_CGL_LF_PROFILE",
+                         pin->GetOrAddBoolean("mhd", "cgl_lf_profile", false));
+  profile_detail_enabled_ =
+      CGLProfileEnvValue(
+          "ATHENAK_CGL_LF_PROFILE_DETAIL",
+          pin->GetOrAddBoolean("mhd", "cgl_lf_profile_detail", false));
+  profile_detail_enabled_ = profile_enabled_ && profile_detail_enabled_;
+  if (profile_enabled_ && global_variable::my_rank == 0) {
+    std::cout << "CGL Landau-fluid profiling enabled; timing regions use Kokkos "
+              << "fences and are intended for profiling runs only." << std::endl;
+    if (profile_detail_enabled_) {
+      std::cout << "CGL Landau-fluid detailed profiling enabled; additional "
+                << "probe kernels replay directional heat-flux sub-work and "
+                << "do not update evolved state." << std::endl;
+    }
+  }
+}
+
+CGLLFProfileRegion::CGLLFProfileRegion(CGLLandauFluid *profile,
+                                       CGLLFProfileBucket bucket) :
+    profile_(profile),
+    bucket_(bucket),
+    active_(profile != nullptr && profile->ProfileEnabled()) {
+  if (active_) {
+    Kokkos::fence();
+    timer_.reset();
+  }
+}
+
+CGLLFProfileRegion::~CGLLFProfileRegion() {
+  if (active_) {
+    Kokkos::fence();
+    profile_->AddProfileTime(bucket_, static_cast<Real>(timer_.seconds()));
+  }
+}
+
+void CGLLandauFluid::AddProfileTime(CGLLFProfileBucket bucket, Real seconds) {
+  if (!profile_enabled_) {
+    return;
+  }
+  const int index = static_cast<int>(bucket);
+  if (index < 0 || index >= kCGLLFProfileBucketCount) {
+    return;
+  }
+  profile_seconds_[index] += seconds;
+  profile_counts_[index] += 1;
+}
+
+void CGLLandauFluid::ReportProfile(const char *context) const {
+  if (!profile_enabled_) {
+    return;
+  }
+
+  Real local_seconds[kCGLLFProfileBucketCount] = {};
+  Real local_counts[kCGLLFProfileBucketCount] = {};
+  Real sum_seconds[kCGLLFProfileBucketCount] = {};
+  Real max_seconds[kCGLLFProfileBucketCount] = {};
+  Real sum_counts[kCGLLFProfileBucketCount] = {};
+  Real max_counts[kCGLLFProfileBucketCount] = {};
+  for (int n = 0; n < kCGLLFProfileBucketCount; ++n) {
+    local_seconds[n] = profile_seconds_[n];
+    local_counts[n] = static_cast<Real>(profile_counts_[n]);
+  }
+
+  int max_nstages = profile_max_nstages_;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(local_seconds, sum_seconds, kCGLLFProfileBucketCount, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(local_seconds, max_seconds, kCGLLFProfileBucketCount, MPI_ATHENA_REAL,
+                MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(local_counts, sum_counts, kCGLLFProfileBucketCount, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(local_counts, max_counts, kCGLLFProfileBucketCount, MPI_ATHENA_REAL,
+                MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(&profile_max_nstages_, &max_nstages, 1, MPI_INT, MPI_MAX,
+                MPI_COMM_WORLD);
+#else
+  for (int n = 0; n < kCGLLFProfileBucketCount; ++n) {
+    sum_seconds[n] = local_seconds[n];
+    max_seconds[n] = local_seconds[n];
+    sum_counts[n] = local_counts[n];
+    max_counts[n] = local_counts[n];
+  }
+#endif
+
+  if (global_variable::my_rank != 0) {
+    return;
+  }
+
+  const Mesh *pm = pmy_pack->pmesh;
+  const auto &mesh_indcs = pm->mesh_indcs;
+  const auto &mb_indcs = pm->mb_indcs;
+  const char *slurm_nodes = std::getenv("SLURM_JOB_NUM_NODES");
+  const Real inv_nranks =
+      (global_variable::nranks > 0) ? static_cast<Real>(1.0/global_variable::nranks)
+                                    : static_cast<Real>(1.0);
+
+  std::cout << std::endl
+            << "CGL Landau-fluid profile summary ("
+            << (context != nullptr ? context : "final") << ")" << std::endl;
+  std::cout << "  ranks=" << global_variable::nranks;
+  if (slurm_nodes != nullptr) {
+    std::cout << " slurm_nodes=" << slurm_nodes;
+  }
+  std::cout << " meshblocks_total=" << pm->nmb_total
+            << " meshblocks_rank0=" << pmy_pack->nmb_thispack
+            << " meshblock_cells=" << mb_indcs.nx1 << "x" << mb_indcs.nx2
+            << "x" << mb_indcs.nx3
+            << " global_cells=" << mesh_indcs.nx1 << "x" << mesh_indcs.nx2
+            << "x" << mesh_indcs.nx3 << std::endl;
+  std::cout << "  lf_k_parallel=" << lf_k_parallel
+            << " coeff_mode=" << (lf_coeff_local ? "local" : "background")
+            << " strict_admissibility=" << (strict_admissibility ? "true" : "false")
+            << " backup_limiter=" << (effective_backup_limiter ? "true" : "false")
+            << " profile_detail=" << (profile_detail_enabled_ ? "true" : "false")
+            << " last_nstages=" << profile_last_nstages_
+            << " max_nstages=" << max_nstages << std::endl;
+  std::cout << "  timing: rank_mean_s is averaged over ranks; rank_max_s is the "
+            << "slowest rank. heat_flux_total includes the three directional flux "
+            << "regions." << std::endl;
+  if (profile_detail_enabled_) {
+    std::cout << "  detailed heat-flux buckets are profile-only probe kernels: "
+              << "gradients, face_state, and closure replay sub-work without "
+              << "updating evolved flux arrays." << std::endl;
+  }
+  std::cout << std::left << std::setw(34) << "bucket"
+            << std::right << std::setw(16) << "rank_mean_s"
+            << std::setw(16) << "rank_max_s"
+            << std::setw(18) << "calls_rank_mean"
+            << std::setw(16) << "calls_rank_max"
+            << std::setw(18) << "max_s_per_call" << std::endl;
+  for (int n = 0; n < kCGLLFProfileBucketCount; ++n) {
+    if (sum_counts[n] <= 0.0) {
+      continue;
+    }
+    const Real calls_mean = sum_counts[n]*inv_nranks;
+    const Real seconds_mean = sum_seconds[n]*inv_nranks;
+    const Real seconds_per_call =
+        (max_counts[n] > 0.0) ? max_seconds[n]/max_counts[n] : 0.0;
+    std::cout << std::left << std::setw(34)
+              << CGLLFProfileBucketName(static_cast<CGLLFProfileBucket>(n))
+              << std::right << std::scientific << std::setprecision(6)
+              << std::setw(16) << seconds_mean
+              << std::setw(16) << max_seconds[n]
+              << std::fixed << std::setprecision(1)
+              << std::setw(18) << calls_mean
+              << std::setw(16) << max_counts[n]
+              << std::scientific << std::setprecision(6)
+              << std::setw(18) << seconds_per_call << std::endl;
+  }
 }
 
 void CGLLandauFluid::AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &stats) {
@@ -274,6 +522,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                                    const DvceArray5D<Real> &bcc,
                                    const EOS_Data &eos, Real dt_sweep,
                                    Real rkl_weight, DvceFaceFld5D<Real> &f) {
+  CGLLFProfileRegion heat_flux_profile(this, CGLLFProfileBucket::heat_flux_total);
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, ie = indcs.ie;
   const int js = indcs.js, je = indcs.je;
@@ -296,15 +545,18 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   auto tpar = tpar_;
   auto tperp = tperp_;
   auto bmag = bmag_;
-  par_for("cgl_lf_precompute", DevExeSpace(), 0, nmb1, 0, ncells3 - 1,
-          0, ncells2 - 1, 0, ncells1 - 1,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
-    tpar(m,k,j,i) = w(m,IPR,k,j,i)/rho;
-    tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
-    bmag(m,k,j,i) = ScaledMagneticMagnitude(
-        bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
-  });
+  {
+    CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_precompute);
+    par_for("cgl_lf_precompute", DevExeSpace(), 0, nmb1, 0, ncells3 - 1,
+            0, ncells2 - 1, 0, ncells1 - 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
+      tpar(m,k,j,i) = w(m,IPR,k,j,i)/rho;
+      tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
+      bmag(m,k,j,i) = ScaledMagneticMagnitude(
+          bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
+    });
+  }
 
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
@@ -324,9 +576,11 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   const int nkji1 = nk1*nji1;
   const int nmkji1 = (nmb1 + 1)*nkji1;
   array_sum::GlobalSum qstats1;
-  Kokkos::parallel_reduce("cgl_lf_flux1",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji1),
-  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
+  {
+    CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux1);
+    Kokkos::parallel_reduce("cgl_lf_flux1",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji1),
+    KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
     const int m = idx/nkji1;
     const int k = (idx - m*nkji1)/nji1 + ks;
     const int j = (idx - m*nkji1 - (k - ks)*nji1)/ni1 + js;
@@ -385,8 +639,118 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     }
     f1(m,IEN,k,j,i) = eflux;
     f1(m,IAN,k,j,i) = muflux;
-  }, Kokkos::Sum<array_sum::GlobalSum>(qstats1));
+    }, Kokkos::Sum<array_sum::GlobalSum>(qstats1));
+  }
   AccumulateHeatFluxDiagnostics(qstats1);
+  if (profile_detail_enabled_) {
+    Real detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux1_gradients);
+      Kokkos::parallel_reduce("cgl_lf_flux1_profile_gradients",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji1),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji1;
+      const int k = (idx - m*nkji1)/nji1 + ks;
+      const int j = (idx - m*nkji1 - (k - ks)*nji1)/ni1 + js;
+      const int i = idx - m*nkji1 - (k - ks)*nji1 - (j - js)*ni1 + is;
+      const Real tx = (tpar(m,k,j,i) - tpar(m,k,j,i-1))/size.d_view(m).dx1;
+      const Real px = (tperp(m,k,j,i) - tperp(m,k,j,i-1))/size.d_view(m).dx1;
+      const Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
+      Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
+      if (multi_d) {
+        ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
+                   tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+        py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
+                   tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+        byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                    bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
+      }
+      if (three_d) {
+        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
+                   tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
+                   tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+        bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                    bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
+      }
+      sum += fabs(tx) + fabs(px) + fabs(bxg) + fabs(ty) + fabs(py) + fabs(byg)
+             + fabs(tz) + fabs(pz) + fabs(bzg);
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+    detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux1_face_state);
+      Kokkos::parallel_reduce("cgl_lf_flux1_profile_face_state",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji1),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji1;
+      const int k = (idx - m*nkji1)/nji1 + ks;
+      const int j = (idx - m*nkji1 - (k - ks)*nji1)/ni1 + js;
+      const int i = idx - m*nkji1 - (k - ks)*nji1 - (j - js)*ni1 + is;
+      const Real bx = 0.5*bcc(m,IBX,k,j,i-1) + 0.5*bcc(m,IBX,k,j,i);
+      const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
+      const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
+      CGLLFFaceState face;
+      if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
+                              w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
+                              w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
+                              bx, by, bz, 0, lf_k, local, cpar0, backup, eos, face)) {
+        sum += face.cparallel + face.bmag_inv + fabs(face.bhdir) + face.nu;
+      }
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+    detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux1_closure);
+      Kokkos::parallel_reduce("cgl_lf_flux1_profile_closure",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji1),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji1;
+      const int k = (idx - m*nkji1)/nji1 + ks;
+      const int j = (idx - m*nkji1 - (k - ks)*nji1)/ni1 + js;
+      const int i = idx - m*nkji1 - (k - ks)*nji1 - (j - js)*ni1 + is;
+      const Real tx = (tpar(m,k,j,i) - tpar(m,k,j,i-1))/size.d_view(m).dx1;
+      const Real px = (tperp(m,k,j,i) - tperp(m,k,j,i-1))/size.d_view(m).dx1;
+      const Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
+      Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
+      if (multi_d) {
+        ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
+                   tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+        py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
+                   tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+        byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                    bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
+      }
+      if (three_d) {
+        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
+                   tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
+                   tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+        bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                    bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
+      }
+      const Real bx = 0.5*bcc(m,IBX,k,j,i-1) + 0.5*bcc(m,IBX,k,j,i);
+      const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
+      const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
+      CGLLFFaceState face;
+      Real eflux = 0.0, muflux = 0.0;
+      cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+      Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+      if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
+                              w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
+                              w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
+                              bx, by, bz, 0, lf_k, local, cpar0, backup, eos, face)) {
+        CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                  dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                  weighted_qperp_flux, qpar_ratio, qperp_ratio);
+        sum += fabs(eflux) + fabs(muflux) + qpar_ratio + qperp_ratio;
+      }
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+  }
   if (pmy_pack->pmesh->one_d) {
     return;
   }
@@ -399,9 +763,11 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   const int nkji2 = nk2*nji2;
   const int nmkji2 = (nmb1 + 1)*nkji2;
   array_sum::GlobalSum qstats2;
-  Kokkos::parallel_reduce("cgl_lf_flux2",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji2),
-  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
+  {
+    CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux2);
+    Kokkos::parallel_reduce("cgl_lf_flux2",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji2),
+    KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
     const int m = idx/nkji2;
     const int k = (idx - m*nkji2)/nji2 + ks;
     const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
@@ -458,8 +824,120 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     }
     f2(m,IEN,k,j,i) = eflux;
     f2(m,IAN,k,j,i) = muflux;
-  }, Kokkos::Sum<array_sum::GlobalSum>(qstats2));
+    }, Kokkos::Sum<array_sum::GlobalSum>(qstats2));
+  }
   AccumulateHeatFluxDiagnostics(qstats2);
+  if (profile_detail_enabled_) {
+    Real detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux2_gradients);
+      Kokkos::parallel_reduce("cgl_lf_flux2_profile_gradients",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji2),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji2;
+      const int k = (idx - m*nkji2)/nji2 + ks;
+      const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
+      const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
+      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
+                            tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))
+                            /size.d_view(m).dx1;
+      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
+                            tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))
+                            /size.d_view(m).dx1;
+      const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                             bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))
+                             /size.d_view(m).dx1;
+      const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
+      const Real py = (tperp(m,k,j,i) - tperp(m,k,j-1,i))/size.d_view(m).dx2;
+      const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
+      Real tz = 0.0, pz = 0.0, bzg = 0.0;
+      if (three_d) {
+        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
+                   tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
+                   tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+        bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                    bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
+      }
+      sum += fabs(tx) + fabs(px) + fabs(bxg) + fabs(ty) + fabs(py) + fabs(byg)
+             + fabs(tz) + fabs(pz) + fabs(bzg);
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+    detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux2_face_state);
+      Kokkos::parallel_reduce("cgl_lf_flux2_profile_face_state",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji2),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji2;
+      const int k = (idx - m*nkji2)/nji2 + ks;
+      const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
+      const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
+      const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
+      const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
+      const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
+      CGLLFFaceState face;
+      if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
+                              w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
+                              w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
+                              bx, by, bz, 1, lf_k, local, cpar0, backup, eos, face)) {
+        sum += face.cparallel + face.bmag_inv + fabs(face.bhdir) + face.nu;
+      }
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+    detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux2_closure);
+      Kokkos::parallel_reduce("cgl_lf_flux2_profile_closure",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji2),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji2;
+      const int k = (idx - m*nkji2)/nji2 + ks;
+      const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
+      const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
+      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
+                            tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))
+                            /size.d_view(m).dx1;
+      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
+                            tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))
+                            /size.d_view(m).dx1;
+      const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                             bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))
+                             /size.d_view(m).dx1;
+      const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
+      const Real py = (tperp(m,k,j,i) - tperp(m,k,j-1,i))/size.d_view(m).dx2;
+      const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
+      Real tz = 0.0, pz = 0.0, bzg = 0.0;
+      if (three_d) {
+        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
+                   tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
+                   tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+        bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                    bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
+      }
+      const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
+      const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
+      const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
+      CGLLFFaceState face;
+      Real eflux = 0.0, muflux = 0.0;
+      cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+      Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+      if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
+                              w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
+                              w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
+                              bx, by, bz, 1, lf_k, local, cpar0, backup, eos, face)) {
+        CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                  dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                  weighted_qperp_flux, qpar_ratio, qperp_ratio);
+        sum += fabs(eflux) + fabs(muflux) + qpar_ratio + qperp_ratio;
+      }
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+  }
   if (pmy_pack->pmesh->two_d) {
     return;
   }
@@ -472,9 +950,11 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   const int nkji3 = nk3*nji3;
   const int nmkji3 = (nmb1 + 1)*nkji3;
   array_sum::GlobalSum qstats3;
-  Kokkos::parallel_reduce("cgl_lf_flux3",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji3),
-  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
+  {
+    CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux3);
+    Kokkos::parallel_reduce("cgl_lf_flux3",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji3),
+    KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
     const int m = idx/nkji3;
     const int k = (idx - m*nkji3)/nji3 + ks;
     const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
@@ -528,12 +1008,131 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     }
     f3(m,IEN,k,j,i) = eflux;
     f3(m,IAN,k,j,i) = muflux;
-  }, Kokkos::Sum<array_sum::GlobalSum>(qstats3));
+    }, Kokkos::Sum<array_sum::GlobalSum>(qstats3));
+  }
   AccumulateHeatFluxDiagnostics(qstats3);
+  if (profile_detail_enabled_) {
+    Real detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux3_gradients);
+      Kokkos::parallel_reduce("cgl_lf_flux3_profile_gradients",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji3),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji3;
+      const int k = (idx - m*nkji3)/nji3 + ks;
+      const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
+      const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
+      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
+                            tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))
+                            /size.d_view(m).dx1;
+      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
+                            tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))
+                            /size.d_view(m).dx1;
+      const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                             bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))
+                             /size.d_view(m).dx1;
+      const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
+                            tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))
+                            /size.d_view(m).dx2;
+      const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
+                            tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))
+                            /size.d_view(m).dx2;
+      const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                             bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))
+                             /size.d_view(m).dx2;
+      const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
+      const Real pz = (tperp(m,k,j,i) - tperp(m,k-1,j,i))/size.d_view(m).dx3;
+      const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
+      sum += fabs(tx) + fabs(px) + fabs(bxg) + fabs(ty) + fabs(py) + fabs(byg)
+             + fabs(tz) + fabs(pz) + fabs(bzg);
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+    detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux3_face_state);
+      Kokkos::parallel_reduce("cgl_lf_flux3_profile_face_state",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji3),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji3;
+      const int k = (idx - m*nkji3)/nji3 + ks;
+      const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
+      const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
+      const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
+      const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
+      const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
+      CGLLFFaceState face;
+      if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
+                              w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
+                              w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
+                              bx, by, bz, 2, lf_k, local, cpar0, backup, eos, face)) {
+        sum += face.cparallel + face.bmag_inv + fabs(face.bhdir) + face.nu;
+      }
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+    detail = 0.0;
+    {
+      CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_flux3_closure);
+      Kokkos::parallel_reduce("cgl_lf_flux3_profile_closure",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji3),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+      const int m = idx/nkji3;
+      const int k = (idx - m*nkji3)/nji3 + ks;
+      const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
+      const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
+      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
+                            tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))
+                            /size.d_view(m).dx1;
+      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
+                            tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))
+                            /size.d_view(m).dx1;
+      const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                             bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))
+                             /size.d_view(m).dx1;
+      const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
+                            tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))
+                            /size.d_view(m).dx2;
+      const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
+                            tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))
+                            /size.d_view(m).dx2;
+      const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                             bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))
+                             /size.d_view(m).dx2;
+      const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
+      const Real pz = (tperp(m,k,j,i) - tperp(m,k-1,j,i))/size.d_view(m).dx3;
+      const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
+      const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
+      const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
+      const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
+      CGLLFFaceState face;
+      Real eflux = 0.0, muflux = 0.0;
+      cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+      Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+      if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
+                              w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
+                              w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
+                              bx, by, bz, 2, lf_k, local, cpar0, backup, eos, face)) {
+        CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                  dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                  weighted_qperp_flux, qpar_ratio, qperp_ratio);
+        sum += fabs(eflux) + fabs(muflux) + qpar_ratio + qperp_ratio;
+      }
+      }, Kokkos::Sum<Real>(detail));
+    }
+    profile_detail_sink_ += detail;
+  }
 }
 
 void CGLLandauFluid::AdvanceHeatFluxWorkDiagnostics(
     const parabolic::RKL2Coefficients &coeffs, int stage, int nstages) {
+  CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_work_diagnostics);
+  if (profile_enabled_) {
+    profile_last_nstages_ = nstages;
+    if (nstages > profile_max_nstages_) {
+      profile_max_nstages_ = nstages;
+    }
+  }
   if (stage == 1) {
     sweep_qpar_work_ = 0.0;
     sweep_qperp_work_ = 0.0;
@@ -587,6 +1186,7 @@ void CGLLandauFluid::AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Rea
 }
 
 void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos) {
+  CGLLFProfileRegion profile(this, CGLLFProfileBucket::timestep_reduction);
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;
   const int js = indcs.js, nx2 = indcs.nx2;
@@ -628,6 +1228,13 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          int dfloor_delta, int pfloor_delta,
                                          const char *sweep_name,
                                          int stage, int nstages) {
+  CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
+  if (profile_enabled_) {
+    profile_last_nstages_ = nstages;
+    if (nstages > profile_max_nstages_) {
+      profile_max_nstages_ = nstages;
+    }
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;
   const int js = indcs.js, nx2 = indcs.nx2;
