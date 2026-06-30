@@ -54,14 +54,6 @@ fofc        = true
 gamma       = 1.666666666666667
 tfloor      = 0.1   # code temperature, about 11 K with the default units
 
-<hydro_srcterms>
-ism_cooling = true
-hrate       = 2.0e-26
-hrate_auto  = false
-hrate_reference = 2.0e-26
-hrate_reference_pressure_over_k = 3.162277660168379e3
-cooling_timestep_factor = 0.1
-
 <problem>
 pressure_over_k       = 3.162277660168379e3  # P/k_B = 10^3.5 K cm^-3
 cloud_radius          = 1.0
@@ -84,7 +76,21 @@ constant_vy          = 0.0
 constant_vz          = 0.0
 boundary_timestep_factor = 0.15
 
+<cooling>
+enabled         = true
+units           = cgs
+cooling_model   = ism
+heating_model   = constant
+cooling_density = number_density
+heating_density = number_density
+mu              = 1.0
+heating_rate    = 2.0e-26
+timestep        = true
+timestep_factor = 0.1
+
 <frame_tracking>
+enabled          = true
+tracked_fluid    = hydro
 start_time       = 0.02
 apply_every      = 1
 diagnostic_every = 10
@@ -98,11 +104,12 @@ tau_avg          = 0.01
 tau_relax        = 0.05
 tau_vel          = 0.05
 max_abs_boost    = 50.0
-max_boost_change = 5.0
+max_boost_change_mode = per_time
+max_boost_change_rate = 5.0
 
 <output1>
 file_type   = hst
-data_format = %12.5e
+data_format = %24.16e
 dt          = 1.0e-3
 
 <output2>

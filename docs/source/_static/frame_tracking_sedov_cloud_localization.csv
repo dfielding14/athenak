@@ -1,0 +1,35 @@
+resolution,diagnostic_metric,region,absolute_error,relative_error,squared_error_fraction,notes
+48x16x16,hydro_conserved_l2_lab_frame,full_overlap,9.3933422580301709e+01,9.0074148338737051e-05,1.0000000000000000e+00,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+48x16x16,hydro_conserved_l2_lab_frame,inflow_x1_lt_0,8.5994596597408574e-02,3.8171959455878040e-07,8.3811195147479322e-07,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+48x16x16,hydro_conserved_l2_lab_frame,interaction_1_le_x1_lt_4,9.3933382203443145e+01,9.3608529453321221e-05,9.9999914030919401e-01,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+48x16x16,hydro_conserved_l2_lab_frame,downstream_x1_ge_4,1.1759866697135088e-02,3.6635515195456704e-06,1.5673446447939905e-08,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+48x16x16,hydro_conserved_l2_lab_frame,tracer_bearing,5.4076564248834316e+01,1.2347841759657841e-04,3.3141937083244399e-01,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+48x16x16,hydro_conserved_l2_lab_frame,nontracer,7.6806334873441457e+01,8.1153623894321893e-05,6.6858062916755590e-01,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+48x16x16,dens_l2_lab_frame,interaction_1_le_x1_lt_4,2.2276658496060121e-02,3.3336343673872524e-05,7.9029405329460023e-01,Per-field norm within the shock/cloud interaction zone.
+48x16x16,mom1_l2_lab_frame,interaction_1_le_x1_lt_4,1.1145024983841383e+00,6.6831584140694485e-05,9.9999922970493726e-01,Per-field norm within the shock/cloud interaction zone.
+48x16x16,mom2_l2_lab_frame,interaction_1_le_x1_lt_4,2.4678476244061220e-02,6.1503739433243650e-05,9.9998493840749691e-01,Per-field norm within the shock/cloud interaction zone.
+48x16x16,mom3_l2_lab_frame,interaction_1_le_x1_lt_4,2.4678476244225863e-02,6.1503739433653993e-05,9.9998493840749858e-01,Per-field norm within the shock/cloud interaction zone.
+48x16x16,ener_l2_lab_frame,interaction_1_le_x1_lt_4,9.3926761160253648e+01,9.3614895130929274e-05,9.9999915522449478e-01,Per-field norm within the shock/cloud interaction zone.
+48x16x16,integral_dens_lab_frame,full_overlap,5.1545753306208707e-06,9.1606295786301937e-09,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+48x16x16,integral_mom1_lab_frame,full_overlap,1.6295967559365374e-03,8.6675596018361787e-08,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+48x16x16,integral_mom2_lab_frame,full_overlap,2.7234070562145142e-13,2.0623880294310366e+00,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+48x16x16,integral_mom3_lab_frame,full_overlap,2.1041548916300587e-13,8.7025475682617526e-01,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+48x16x16,integral_ener_lab_frame,full_overlap,6.9552145857693493e-01,4.5099468243214274e-07,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+48x16x16,mean_eint_gradient_peak_position,interaction_1_le_x1_lt_4,0.0000000000000000e+00,0.0000000000000000e+00,0.0000000000000000e+00,disabled=1.8750000000000000e+00; enabled=1.8750000000000000e+00; relative in cells.
+96x32x32,hydro_conserved_l2_lab_frame,full_overlap,1.1532076775431519e+03,3.1725041337885902e-04,9.9999999999999978e-01,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+96x32x32,hydro_conserved_l2_lab_frame,inflow_x1_lt_0,4.0266276381579608e-01,6.0334689287102035e-07,1.2191801697515107e-07,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+96x32x32,hydro_conserved_l2_lab_frame,interaction_1_le_x1_lt_4,1.1532076070623705e+03,3.2596655971797939e-04,9.9999987776567767e-01,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+96x32x32,hydro_conserved_l2_lab_frame,downstream_x1_ge_4,1.3435772986432467e-02,1.4798294825957369e-06,1.3574075626165637e-10,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+96x32x32,hydro_conserved_l2_lab_frame,tracer_bearing,6.1998132636716400e+02,3.8033309276746846e-04,2.8902949737510469e-01,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+96x32x32,hydro_conserved_l2_lab_frame,nontracer,9.7237395198579975e+02,2.9928335614528504e-04,7.1097050262489514e-01,Aggregate state norm; regions use fixed lab-frame x1 bounds.
+96x32x32,dens_l2_lab_frame,interaction_1_le_x1_lt_4,1.3322872943121006e-01,6.7834202834767403e-05,9.9122852870900813e-01,Per-field norm within the shock/cloud interaction zone.
+96x32x32,mom1_l2_lab_frame,interaction_1_le_x1_lt_4,1.5024752550411815e+01,2.4939968638710240e-04,9.9999995102689498e-01,Per-field norm within the shock/cloud interaction zone.
+96x32x32,mom2_l2_lab_frame,interaction_1_le_x1_lt_4,6.7876556630551799e-01,5.0662299723148692e-04,9.9999938520072507e-01,Per-field norm within the shock/cloud interaction zone.
+96x32x32,mom3_l2_lab_frame,interaction_1_le_x1_lt_4,6.7876556631198848e-01,5.0662299723631889e-04,9.9999938520072529e-01,Per-field norm within the shock/cloud interaction zone.
+96x32x32,ener_l2_lab_frame,interaction_1_le_x1_lt_4,1.1531093194498235e+03,3.2598614128853838e-04,9.9999987787170741e-01,Per-field norm within the shock/cloud interaction zone.
+96x32x32,integral_dens_lab_frame,full_overlap,8.0409908598222358e-06,1.4179780591737625e-08,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+96x32x32,integral_mom1_lab_frame,full_overlap,8.8470942187556737e-04,4.6182925308300415e-08,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+96x32x32,integral_mom2_lab_frame,full_overlap,3.5638420541440732e-13,1.6199750983653343e+00,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+96x32x32,integral_mom3_lab_frame,full_overlap,1.6596894544940697e-13,8.6410219483610096e-01,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+96x32x32,integral_ener_lab_frame,full_overlap,1.6671372952561311e-03,1.0487777431033453e-09,0.0000000000000000e+00,Absolute and relative integrated-state difference over overlapping domain.
+96x32x32,mean_eint_gradient_peak_position,interaction_1_le_x1_lt_4,0.0000000000000000e+00,0.0000000000000000e+00,0.0000000000000000e+00,disabled=2.6875000000000000e+00; enabled=2.6875000000000000e+00; relative in cells.

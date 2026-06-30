@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <algorithm> // max
+#include <cctype>
 #include <string>
 
 #include "athena.hpp"
@@ -21,6 +22,32 @@
 #include "radiation/radiation.hpp"
 #include "refinement_criteria.hpp"
 #include "utils/utils.hpp"
+
+namespace {
+
+int ParsePassiveScalarVariable(const std::string &variable, const std::string &prefix,
+                               const int nscalars) {
+  if (variable.compare(0, prefix.size(), prefix) != 0) {
+    return -1;
+  }
+  const std::string suffix = variable.substr(prefix.size());
+  if (suffix.size() != 2 ||
+      !std::isdigit(static_cast<unsigned char>(suffix[0])) ||
+      !std::isdigit(static_cast<unsigned char>(suffix[1]))) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl;
+    Kokkos::abort("Passive-scalar AMR variables must end in a two-digit index.");
+  }
+  const int scalar_index = 10*(suffix[0] - '0') + (suffix[1] - '0');
+  if (scalar_index >= nscalars) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl;
+    Kokkos::abort("Passive-scalar AMR variable index exceeds configured nscalars.");
+  }
+  return scalar_index;
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // RefinementCriteria constructor:
@@ -137,6 +164,23 @@ void RefinementCriteria::SetRefinementData(MeshBlockPack* pmbp, bool count_deriv
           int n = static_cast<int>(IDN);
           it->rdata = Kokkos::subview(pmbp->phydro->w0, ALL, n, ALL, ALL, ALL);
         }
+      // hydro passive scalar mass densities and concentrations
+      } else if (it->rvariable.compare(0, std::string("hydro_u_s").size(),
+                                       "hydro_u_s") == 0) {
+        const int scalar = ParsePassiveScalarVariable(
+            it->rvariable, "hydro_u_s", pmbp->phydro->nscalars);
+        if (!(count_derived) && !(load_derived)) {
+          const int n = pmbp->phydro->nhydro + scalar;
+          it->rdata = Kokkos::subview(pmbp->phydro->u0, ALL, n, ALL, ALL, ALL);
+        }
+      } else if (it->rvariable.compare(0, std::string("hydro_w_s").size(),
+                                       "hydro_w_s") == 0) {
+        const int scalar = ParsePassiveScalarVariable(
+            it->rvariable, "hydro_w_s", pmbp->phydro->nscalars);
+        if (!(count_derived) && !(load_derived)) {
+          const int n = pmbp->phydro->nhydro + scalar;
+          it->rdata = Kokkos::subview(pmbp->phydro->w0, ALL, n, ALL, ALL, ALL);
+        }
       // mhd (lab-frame) density
       } else if (it->rvariable.compare("mhd_u_d") == 0) {
         if (!(count_derived) && !(load_derived)) {
@@ -147,6 +191,23 @@ void RefinementCriteria::SetRefinementData(MeshBlockPack* pmbp, bool count_deriv
       } else if (it->rvariable.compare("mhd_w_d") == 0) {
         if (!(count_derived) && !(load_derived)) {
           int n = static_cast<int>(IDN);
+          it->rdata = Kokkos::subview(pmbp->pmhd->w0, ALL, n, ALL, ALL, ALL);
+        }
+      // mhd passive scalar mass densities and concentrations
+      } else if (it->rvariable.compare(0, std::string("mhd_u_s").size(),
+                                       "mhd_u_s") == 0) {
+        const int scalar = ParsePassiveScalarVariable(
+            it->rvariable, "mhd_u_s", pmbp->pmhd->nscalars);
+        if (!(count_derived) && !(load_derived)) {
+          const int n = pmbp->pmhd->nmhd + scalar;
+          it->rdata = Kokkos::subview(pmbp->pmhd->u0, ALL, n, ALL, ALL, ALL);
+        }
+      } else if (it->rvariable.compare(0, std::string("mhd_w_s").size(),
+                                       "mhd_w_s") == 0) {
+        const int scalar = ParsePassiveScalarVariable(
+            it->rvariable, "mhd_w_s", pmbp->pmhd->nscalars);
+        if (!(count_derived) && !(load_derived)) {
+          const int n = pmbp->pmhd->nmhd + scalar;
           it->rdata = Kokkos::subview(pmbp->pmhd->w0, ALL, n, ALL, ALL, ALL);
         }
       // radiation coordinate frame energy density R^0^0

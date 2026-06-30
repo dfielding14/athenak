@@ -6,29 +6,33 @@ The source-terms module contains physics that is applied outside the conservativ
 divergence. Three paths live in this area:
 
 - `SourceTerms` (`src/srcterms/srcterms.{hpp,cpp}`) owns constant acceleration,
-  optically thin ISM cooling, relativistic cooling, and radiation beam injection.
+  standalone cooling dispatch, relativistic cooling, and radiation beam injection.
+- `GeneralCooling` (`src/srcterms/cooling.{hpp,cpp}`) owns the standalone
+  `<cooling>` block for optically thin cooling and heating.
 - `TurbulenceDriver` (`src/srcterms/turb_driver.{hpp,cpp}`) drives turbulence through
   stochastic acceleration fields that are inserted into the runtime task lists.
 - `InitialPerturbations` (`src/srcterms/initial_perturbations.{hpp,cpp}`) applies
   one-time Fourier perturbations to newly generated initial conditions.
 
 `SourceTerms::NewTimeStep` contributes source-term timestep constraints, currently for
-relativistic cooling, to the global timestep reduction.
+standalone cooling and relativistic cooling, to the global timestep reduction.
 
 ## File Layout
 
 | File | Purpose |
 |------|---------|
 | `srcterms.hpp/cpp` | Runtime source-term selection and application for hydro, MHD, and radiation states. |
+| `cooling.hpp/cpp` | Standalone cooling and heating configured by `<cooling>`. |
 | `srcterms_newdt.cpp` | Timestep constraints from source terms. |
 | `turb_driver.hpp/cpp` | Ornstein-Uhlenbeck-style turbulence forcing machinery. |
 | `initial_perturbations.hpp/cpp` | One-time Fourier perturbations applied after problem generation and before driver initialization. |
-| `ismcooling.hpp` | Analytic and tabulated cooling coefficients used by ISM cooling. |
+| `ismcooling.hpp` | Analytic coefficients used by the standalone `cooling_model = ism` path. |
 
 ## Runtime Wiring
 
 1. `Hydro`, `MHD`, and `Radiation` construct a `SourceTerms` object when their
    corresponding `<hydro_srcterms>`, `<mhd_srcterms>`, or `<rad_srcterms>` block exists.
+   Hydro and MHD also construct one when `<cooling enabled=true>` is present.
 2. `MeshBlockPack` constructs a `TurbulenceDriver` when `<turb_driving>` exists.
    The driver contributes tasks before the time integrator and during each stage.
 3. `main.cpp` calls `ApplyInitialPerturbations` only for brand-new runs, immediately
@@ -48,14 +52,11 @@ relativistic cooling, to the global timestep reduction.
 
 The term updates momentum and, for ideal equations of state, the corresponding energy.
 
-### ISM Cooling (`<hydro_srcterms>` or `<mhd_srcterms>`)
+### Standalone Cooling (`<cooling>`)
 
-| Parameter | Type | Notes |
-|-----------|------|-------|
-| `ism_cooling` | bool | Enables optically thin ISM cooling. |
-| `hrate` | real | Uniform heating rate in code units. |
-
-The cooling coefficient is evaluated from `ISMCoolFn(temp)` and applied to the gas energy.
+Cooling and heating are configured through the standalone `<cooling>` block. Legacy
+`ism_cooling` and `cgm_cooling` keys under fluid or source-term blocks are rejected at
+startup. See [Cooling](cooling.md) for the full parameter reference and validation suite.
 
 ### Relativistic Cooling (`<hydro_srcterms>` or `<mhd_srcterms>`)
 
@@ -221,43 +222,13 @@ temporary face-centered perturbation field.
 
 ## Frame Tracking
 
-`FrameTracker` is a shared post-timestep helper enabled with a
-`<frame_tracking>` input block. It samples selected material, estimates its
-position and velocity, and applies global Galilean boosts so that material can
-remain near a chosen target location in grid coordinates.
+`FrameTracker` is a shared post-timestep helper enabled with `<frame_tracking>`.
+It samples selected material, estimates its position and velocity, and applies
+global Galilean boosts so that material can remain near a chosen target location
+in grid coordinates.
 
-The tracker is owned by `MeshBlockPack`, scheduled on the existing
-`after_timeintegrator` task list, updates its pack pointer across AMR rebuilds,
-and stores its state in restart files through the `<frame_tracking>` block.
-
-Problem generators can query the moving-frame state with:
-
-| API | Meaning |
-|-----|---------|
-| `FrameVelocity(axis)` | Lab-frame velocity of the grid frame on axis `0`, `1`, or `2`. |
-| `FrameDisplacement(axis)` | Lab-frame displacement of the grid-frame origin on axis `0`, `1`, or `2`. |
-| `FrameVelocity()` / `FrameDisplacement()` | Three-component `std::array<Real, 3>` versions. |
-
-Common parameters:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `enabled` | `true` | Master switch. |
-| `target` | `density` | Cell selector: `density`, `temperature`, `pressure`, `entropy`, `internal_energy`, `scalar`/`scalarN`, `v1`/`v2`/`v3`, or `speed`. |
-| `target_min`, `target_max` | unbounded | Inclusive target range used to select tracked cells. |
-| `axes` | highest active dimension | Tracking axes: `x1`, `x2`, `x3`, `all`, or comma-separated combinations. |
-| `x1_target`, `x2_target`, `x3_target` | domain center | Target centroid location on each tracked axis. |
-| `mode` | `pd` | Controller mode: `velocity`, `position`, or `pd`. |
-| `apply_every` | `1` | Number of cycles between tracking updates. |
-| `start_time` | `0.0` | Simulation time after which updates begin. |
-| `diagnostic_every` | `-1` | Cycle cadence for tracker diagnostics; negative disables printing. |
-| `tau_avg`, `tau_relax`, `tau_vel` | `1.0` | Filter, position-feedback, and velocity-feedback timescales. |
-| `max_abs_boost` | `0.0` | Absolute boost limit; `0.0` disables the cap. |
-| `max_boost_change` | `0.0` | Per-update slew limit when positive. |
-
-The frame velocity is the lab velocity of the moving grid frame. The velocity
-stored in the fluid is grid-frame velocity, so lab-frame boundary data should
-be transformed as `v_grid = v_lab - V_frame`.
+See [Frame Tracking](frame_tracking.md) for the runtime contract, parameter
+reference, restart behavior, examples, and validation notes.
 
 ## Turbulence Driver
 

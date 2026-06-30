@@ -21,7 +21,7 @@ class Driver;
 
 //----------------------------------------------------------------------------------------
 //! \class FrameTracker
-//! \brief Applies global Galilean boosts that keep selected material near target positions.
+//! \brief Keeps selected material near target positions with Galilean boosts.
 
 class FrameTracker {
  public:
@@ -31,7 +31,7 @@ class FrameTracker {
 
   void IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus Apply(Driver *pdrive, int stage);
-  void ApplyTracking();
+  bool ApplyTracking();
 
   void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }
   Real FrameVelocity(const int axis) const {
@@ -42,6 +42,7 @@ class FrameTracker {
   }
   std::array<Real, 3> FrameVelocity() const { return frame_velocity_; }
   std::array<Real, 3> FrameDisplacement() const { return frame_displacement_; }
+  int FillHistoryData(std::string labels[], Real values[], const int max_values) const;
   void StoreStateInParameterInput(ParameterInput *pin) const;
 
  private:
@@ -83,9 +84,12 @@ class FrameTracker {
 
   void ParseAxes(ParameterInput *pin);
   void ParseAxisControls(ParameterInput *pin);
+  void ParseTrackedFluid(ParameterInput *pin);
+  void RejectRemovedAliases(ParameterInput *pin) const;
+  void PrintConfigurationSummary() const;
   void ValidateConfiguration();
   void SetActiveTargetRange();
-  bool SampleAxisMoments(const int axis, MomentSample &sample) const;
+  bool SampleMoments(std::array<MomentSample, 3> &samples) const;
   void PrintSkipMessage(const bool have_sample, const bool low_weight_floor,
                         const Real global_weight) const;
   void PrintPrimeMessage(const std::array<MomentSample, 3> &samples) const;
@@ -95,13 +99,16 @@ class FrameTracker {
                          const std::array<Real, 3> &v_i,
                          const std::array<Real, 3> &cmd_pre,
                          const std::array<Real, 3> &boost) const;
-  void AdvanceFrameDisplacement(const Real dt);
+  bool AdvanceFrameDisplacement(const Real dt);
   void RestoreFrameState(ParameterInput *pin);
 
   MeshBlockPack *pmy_pack = nullptr;
   std::string block_name_;
 
   bool enabled_ = true;
+  std::string target_name_ = "density";
+  std::string mode_name_ = "pd";
+  std::string boost_change_mode_name_ = "per_apply";
   int apply_every_ = 1;
   Real start_time_ = 0.0;
   int diagnostic_every_ = -1;
@@ -110,6 +117,7 @@ class FrameTracker {
   int target_kind_ = 0;
   int scalar_index_ = 0;
   int weight_mode_ = 0;
+  bool track_mhd_ = false;
   Real target_min_ = 0.0;
   Real target_max_ = 0.0;
   Real target_center_ = 0.0;
@@ -119,6 +127,7 @@ class FrameTracker {
 
   int mode_ = 0;
   int position_signal_ = 0;
+  std::string position_signal_name_ = "blend";
   int boost_change_mode_ = 0;
   Real position_blend_ = 0.0;
   Real tau_avg_ = 1.0;
@@ -144,6 +153,7 @@ class FrameTracker {
   Real last_apply_time_ = -1.0;
   int miss_streak_ = 0;
   int recover_streak_ = 0;
+  int restored_state_kind_ = 0;  // 0: new, 1: versioned restart, 2: legacy restart
   std::array<AxisState, 3> axes_;
   std::array<Real, 3> frame_velocity_ = {0.0, 0.0, 0.0};
   std::array<Real, 3> frame_displacement_ = {0.0, 0.0, 0.0};

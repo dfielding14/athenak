@@ -1,0 +1,87 @@
+# FrameTracker MPI/AMR regression input using the built-in linear-wave pgen.
+
+<job>
+basename = FrameTrackAMR
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 16
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 1
+
+<mesh_refinement>
+refinement = adaptive
+num_levels = 2
+refinement_interval = 1
+max_nmb_per_rank = 64
+
+<amr_criterion0>
+method = min_max
+variable = hydro_w_d
+value_max = 1.0008
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = 4
+tlim = 10.0
+ndiag = 100
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.66666666667
+iso_sound_speed = 1.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 1.0e-3
+dens = 1.0
+pgas = 0.6
+vx0 = 0.0
+along_x1 = false
+along_x2 = false
+along_x3 = false
+
+<frame_tracking>
+tracked_fluid = hydro
+start_time = -1.0
+apply_every = 1
+axes = x1,x2
+x1_target = 0.0
+x2_target = 0.0
+target = density
+target_min = 0.5
+target_max = 1.5
+mode = pd
+tau_avg = 0.01
+tau_relax = 1.0
+tau_vel = 1.0
+max_abs_boost = 0.1
+max_boost_change_mode = per_time
+max_boost_change_rate = 1.0
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

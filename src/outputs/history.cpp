@@ -20,6 +20,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "srcterms/frame_tracker.hpp"
 #include "srcterms/srcterms.hpp"
 #include "z4c/z4c.hpp"
 #include "coordinates/adm.hpp"
@@ -50,6 +51,9 @@ HistoryOutput::HistoryOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
   if (pm->pmb_pack->pz4c != nullptr) {
     hist_data.emplace_back(PhysicsModule::SpaceTimeDynamics);
   }
+  if (pm->pmb_pack->pframe_tracker != nullptr) {
+    hist_data.emplace_back(PhysicsModule::FrameTracking);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -63,6 +67,8 @@ void HistoryOutput::LoadOutputData(Mesh *pm) {
       LoadHydroHistoryData(&data, pm);
     } else if (data.physics == PhysicsModule::MagnetoHydroDynamics) {
       LoadMHDHistoryData(&data, pm);
+    } else if (data.physics == PhysicsModule::FrameTracking) {
+      LoadFrameTrackingHistoryData(&data, pm);
     } else if (data.physics == PhysicsModule::SpaceTimeDynamics) {
       LoadZ4cHistoryData(&data, pm);
     } else if (data.physics == PhysicsModule::UserDefined) {
@@ -283,6 +289,20 @@ void HistoryOutput::LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void HistoryOutput::LoadFrameTrackingHistoryData()
+//  \brief Load global controller diagnostics from the frame tracker.
+
+void HistoryOutput::LoadFrameTrackingHistoryData(HistoryData *pdata, Mesh *pm) {
+  pdata->nhist = pm->pmb_pack->pframe_tracker->FillHistoryData(
+      pdata->label, pdata->hdata, NHISTORY_VARIABLES);
+  if (global_variable::my_rank != 0) {
+    for (int n = 0; n < pdata->nhist; ++n) {
+      pdata->hdata[n] = 0.0;
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void HistoryOutput::LoadMHDHistoryData()
 //  \brief Compute and store history data over all MeshBlocks on this rank
 //  Data is stored in a Real array defined in derived class.
@@ -439,6 +459,9 @@ void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           break;
         case PhysicsModule::MagnetoHydroDynamics:
           fname.append(".mhd");
+          break;
+        case PhysicsModule::FrameTracking:
+          fname.append(".frame_tracker");
           break;
         case PhysicsModule::SpaceTimeDynamics:
           fname.append(".z4c");

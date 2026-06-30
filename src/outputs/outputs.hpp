@@ -233,6 +233,7 @@ struct OutputParameters {
   int nbin=0, nbin2=0;
   bool logscale=true, logscale2=true;
   FileShardMode file_shard_mode = FileShardMode::shared;
+  std::string data_precision="float32"; // binary field storage: float32 or native Real
 
   // N-D PDF parameters (max 4 dimensions)
   static constexpr int PDF_MAX_DIM = 4;
@@ -385,6 +386,7 @@ class HistoryOutput : public BaseTypeOutput {
   void LoadOutputData(Mesh *pm) override;
   void LoadHydroHistoryData(HistoryData *pdata, Mesh *pm);
   void LoadMHDHistoryData(HistoryData *pdata, Mesh *pm);
+  void LoadFrameTrackingHistoryData(HistoryData *pdata, Mesh *pm);
   void LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm);
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
 };

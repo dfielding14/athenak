@@ -94,6 +94,8 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // check if slicing
   bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3 ||
                     out_params.gid >= 0);
+  const bool write_real = (out_params.data_precision == "real");
+  const std::size_t variable_size = write_real ? sizeof(Real) : sizeof(float);
   auto AdvanceOutputCounters = [&]() {
     out_params.file_number++;
     if (out_params.last_time < 0.0) {
@@ -167,7 +169,7 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         << "  time=" << pm->time << std::endl
         << "  cycle=" << pm->ncycle << std::endl
         << "  size of location=" << sizeof(Real) << std::endl
-        << "  size of variable=" << sizeof(float) << std::endl
+        << "  size of variable=" << variable_size << std::endl
         << "  number of variables=" << outvars.size() << std::endl
         << "  variables:  ";
     for (int n=0; n<outvars.size(); n++) {
@@ -197,8 +199,8 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   header_time = phase_timer.seconds();
 
-  //  5. Data.  An arbitrary number of scalars and vectors can be written (every element
-  //  of the outvars vector), all in binary floats format
+  //  5. Data.  An arbitrary number of scalars and vectors can be written.
+  //  Fields use float32 by default or native Real precision when requested.
 
   int nout_vars = outvars.size();
   int nout_mbs = outmbs.size();
@@ -213,14 +215,15 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // ois, oie, ojs, oje, oks, oke + il1, il2, il3, level +
   // x1min, x1max, x2min, x2max, x3min, x3max + data
   std::size_t data_size = 10*sizeof(int32_t) + 6*sizeof(Real)
-                        + (cells*nout_vars)*sizeof(float);
+                        + (cells*nout_vars)*variable_size;
 
   int nb_mbs = pm->nmb_eachrank[global_variable::my_rank];
 
   int write_mbs = bin_slice ? nout_mbs : nb_mbs;
-  // allocate 1D vector of floats used to convert and output data
+  // Allocate conversion storage for the selected field precision.
   char *data = new char[write_mbs*data_size];
-  float *single_data = new float[cells];
+  float *single_data_float = write_real ? nullptr : new float[cells];
+  Real *single_data_real = write_real ? new Real[cells] : nullptr;
 
   // Loop over MeshBlocks
   for (int m=0; m<nout_mbs; ++m) {
@@ -290,20 +293,27 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     pdata+=sizeof(xv);
 
     // output variables
-    float tmp_data;
     for (int n=0; n<nout_vars; n++) {
       int cnt=0;
       for (int k=oks; k<=oke; k++) {
         for (int j=ojs; j<=oje; j++) {
           for (int i=ois; i<=oie; i++) {
-            tmp_data = static_cast<float>(outarray(n,m,k-oks,j-ojs,i-ois));
-            single_data[cnt] = tmp_data;
+            const Real value = outarray(n,m,k-oks,j-ojs,i-ois);
+            if (write_real) {
+              single_data_real[cnt] = value;
+            } else {
+              single_data_float[cnt] = static_cast<float>(value);
+            }
             cnt++;
           }
         }
       }
-      memcpy(pdata,single_data,cells*sizeof(float));
-      pdata+=cells*sizeof(float);
+      if (write_real) {
+        memcpy(pdata,single_data_real,cells*sizeof(Real));
+      } else {
+        memcpy(pdata,single_data_float,cells*sizeof(float));
+      }
+      pdata += cells*variable_size;
     }
   }
 
@@ -361,7 +371,8 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   binfile.Close(use_serial_io);
   close_time = phase_timer.seconds();
   delete [] data;
-  delete [] single_data;
+  delete [] single_data_float;
+  delete [] single_data_real;
 
   // increment counters
   AdvanceOutputCounters();

@@ -136,6 +136,8 @@ void TRMLZBoundary(Mesh *pm) {
   auto &u0 = pmbp->phydro->u0;
   auto &size = pmbp->pmb->mb_size;
   auto &mb_bcs = pmbp->pmb->mb_bcs;
+  const int nhydro = pmbp->phydro->nhydro;
+  const int nscalars = pmbp->phydro->nscalars;
   const TRMLFrameTrackingData data = trml_data;
 
   Real frame_x1 = 0.0;
@@ -168,6 +170,9 @@ void TRMLZBoundary(Mesh *pm) {
                       density, pressure, vx, vy, vz, cold_fraction);
     SetHydroState(u0, m, kb, j, i, density, pressure, vx - frame_v1,
                   vy - frame_v2, vz - frame_v3, data.gm1);
+    for (int n = nhydro; n < nhydro + nscalars; ++n) {
+      u0(m, n, kb, j, i) = density*cold_fraction;
+    }
   });
 
   par_for("trml_outer_x3", DevExeSpace(), 0, nmb1, 0, ng-1, 0, n2-1, 0, n1-1,
@@ -185,6 +190,9 @@ void TRMLZBoundary(Mesh *pm) {
                       density, pressure, vx, vy, vz, cold_fraction);
     SetHydroState(u0, m, kb, j, i, density, pressure, vx - frame_v1,
                   vy - frame_v2, vz - frame_v3, data.gm1);
+    for (int n = nhydro; n < nhydro + nscalars; ++n) {
+      u0(m, n, kb, j, i) = density*cold_fraction;
+    }
   });
 }
 
@@ -208,6 +216,9 @@ void TRMLCoolingSource(Mesh *pm, const Real bdt) {
   par_for("trml_cooling", DevExeSpace(), 0, pmbp->nmb_thispack-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const Real density = w0(m, IDN, k, j, i);
+    if (density <= 0.0) {
+      return;
+    }
     const Real eint = u0(m, IEN, k, j, i) -
         0.5*(SQR(u0(m, IM1, k, j, i)) + SQR(u0(m, IM2, k, j, i)) +
              SQR(u0(m, IM3, k, j, i)))/density;
@@ -243,7 +254,8 @@ void TRMLCoolingTimeStep(Mesh *pm) {
   Real dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 
   Kokkos::parallel_reduce("trml_cooling_newdt",
-  Kokkos::RangePolicy<>(DevExeSpace(), 0, pmbp->nmb_thispack*indcs.nx3*indcs.nx2*indcs.nx1),
+  Kokkos::RangePolicy<>(DevExeSpace(), 0,
+                        pmbp->nmb_thispack*indcs.nx3*indcs.nx2*indcs.nx1),
   KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
     const int nkji = indcs.nx3*indcs.nx2*indcs.nx1;
     const int nji = indcs.nx2*indcs.nx1;
@@ -253,6 +265,9 @@ void TRMLCoolingTimeStep(Mesh *pm) {
     int i = (idx - m*nkji - (k - ks)*nji - (j - js)*indcs.nx1) + is;
 
     const Real density = w0(m, IDN, k, j, i);
+    if (density <= 0.0) {
+      return;
+    }
     const Real eint = u0(m, IEN, k, j, i) -
         0.5*(SQR(u0(m, IM1, k, j, i)) + SQR(u0(m, IM2, k, j, i)) +
              SQR(u0(m, IM3, k, j, i)))/density;
