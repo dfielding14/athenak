@@ -37,6 +37,21 @@ struct CGLLFDiagnostics {
   Real anisotropic_pressure_work = 0.0;
 };
 
+enum class CGLLFDiagnosticsMode {
+  full,
+  none
+};
+
+enum class CGLLFArithmeticMode {
+  safe,
+  fast
+};
+
+enum class CGLLFSTSFluxMode {
+  weighted,
+  physical
+};
+
 enum class CGLLFProfileBucket {
   heat_flux_total = 0,
   heat_flux_precompute,
@@ -86,6 +101,9 @@ class CGLLandauFluid {
   Real lf_c_parallel0;
   bool strict_admissibility;
   bool effective_backup_limiter;
+  CGLLFDiagnosticsMode diagnostics_mode;
+  CGLLFArithmeticMode arithmetic_mode;
+  CGLLFSTSFluxMode sts_flux_mode;
   parabolic::ParabolicIntegratorMode mode;
   CGLLFDiagnostics diagnostics;
 
@@ -96,6 +114,7 @@ class CGLLandauFluid {
                                       int stage, int nstages);
   void AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1, int stage,
                                       Real pressure_power, Real anisotropic_power);
+  void ResetHeatFluxDiagnostics();
   void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos);
   void RecordAdmissibility(const DvceArray5D<Real> &u, const DvceArray5D<Real> &w,
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
@@ -104,6 +123,9 @@ class CGLLandauFluid {
   bool ProfileEnabled() const {return profile_enabled_;}
   void AddProfileTime(CGLLFProfileBucket bucket, Real seconds);
   void ReportProfile(const char *context) const;
+  bool UsesWeightedSTSFlux() const {
+    return sts_flux_mode == CGLLFSTSFluxMode::weighted;
+  }
 
  private:
   void AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &stats);

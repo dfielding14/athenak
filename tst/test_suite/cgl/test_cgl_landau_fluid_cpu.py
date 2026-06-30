@@ -58,6 +58,19 @@ def _run_paper_passive(basename, *flags):
     testutils.run(PAPER_PASSIVE_INPUT, [f"job/basename={basename}", *flags])
 
 
+def _lf_mode_env(**updates):
+    env = os.environ.copy()
+    for name in (
+        "ATHENAK_CGL_LF_PROFILE",
+        "ATHENAK_CGL_LF_PROFILE_DETAIL",
+        "ATHENAK_CGL_LF_DIAGNOSTICS",
+        "ATHENAK_CGL_LF_ARITHMETIC",
+    ):
+        env.pop(name, None)
+    env.update(updates)
+    return env
+
+
 def _cleanup():
     testutils.cleanup()
     for path in Path(".").glob("cgl_*.hst"):
@@ -116,6 +129,32 @@ def _assert_clean_lf_history(history):
     for name in ("lf_qprwrk", "lf_qpewrk", "lf_cpwrk", "lf_cawrk"):
         if name in history:
             assert np.all(np.isfinite(history[name]))
+
+
+def _assert_zero_lf_q_history(history):
+    assert history["lf_nstage"][-1] > 0.0
+    assert history["lf_dfloor"][-1] == 0.0
+    assert history["lf_pfloor"][-1] == 0.0
+    assert history["lf_nonfin"][-1] == 0.0
+    assert history["lf_nonpos"][-1] == 0.0
+    assert history["lf_hardbd"][-1] == 0.0
+    for name in (
+        "lf_qface",
+        "lf_qprcap",
+        "lf_qpr10",
+        "lf_qpecap",
+        "lf_qpe10",
+        "lf_qprwrk",
+        "lf_qpewrk",
+    ):
+        assert np.all(history[name] == 0.0)
+
+
+def _assert_tabs_match(reference, candidate, *, rtol=1.0e-11, atol=1.0e-13):
+    fields = set(reference).intersection(candidate) - {"time", "cycle"}
+    assert fields
+    for field in fields:
+        assert np.allclose(reference[field], candidate[field], rtol=rtol, atol=atol)
 
 
 def _assert_restarted_lf_diagnostics(reference, resumed):
@@ -234,6 +273,113 @@ def test_cgl_lf_quantitative_decay_and_diagnostics():
         assert history["lf_qprwrk"][-1] > history["lf_qprwrk"][0]
         assert abs(history["lf_qpewrk"][-1]) < 1.0e-6 * history["lf_qprwrk"][-1]
     finally:
+        _cleanup()
+
+
+def test_cgl_lf_runtime_mode_matrix_preserves_short_decay_state():
+    try:
+        cases = {
+            "safe_full": (),
+            "safe_none": ("mhd/cgl_lf_diagnostics=none",),
+            "fast_full": ("mhd/cgl_lf_arithmetic=fast",),
+            "fast_none": (
+                "mhd/cgl_lf_arithmetic=fast",
+                "mhd/cgl_lf_diagnostics=none",
+            ),
+            "fast_none_physical": (
+                "mhd/cgl_lf_arithmetic=fast",
+                "mhd/cgl_lf_diagnostics=none",
+                "mhd/cgl_lf_sts_flux=physical",
+            ),
+        }
+        for suffix, flags in cases.items():
+            _run("cgl_lf_decay.athinput", f"cgl_ci_modes_{suffix}", *flags)
+
+        reference = _final_tab("cgl_ci_modes_safe_full")
+        for suffix in (
+            "safe_none",
+            "fast_full",
+            "fast_none",
+            "fast_none_physical",
+        ):
+            _assert_tabs_match(reference, _final_tab(f"cgl_ci_modes_{suffix}"))
+
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_modes_safe_full.mhd.hst")
+        )
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_modes_fast_full.mhd.hst")
+        )
+        _assert_zero_lf_q_history(
+            testutils.athena_read.hst("cgl_ci_modes_safe_none.mhd.hst")
+        )
+        _assert_zero_lf_q_history(
+            testutils.athena_read.hst("cgl_ci_modes_fast_none.mhd.hst")
+        )
+        _assert_zero_lf_q_history(
+            testutils.athena_read.hst("cgl_ci_modes_fast_none_physical.mhd.hst")
+        )
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_3d_runtime_modes_exercise_directional_fast_paths():
+    try:
+        cases = {
+            "safe_full": {},
+            "safe_none": {"ATHENAK_CGL_LF_DIAGNOSTICS": "none"},
+            "fast_full": {"ATHENAK_CGL_LF_ARITHMETIC": "fast"},
+            "fast_none": {
+                "ATHENAK_CGL_LF_ARITHMETIC": "fast",
+                "ATHENAK_CGL_LF_DIAGNOSTICS": "none",
+            },
+            "fast_none_physical": {
+                "ATHENAK_CGL_LF_ARITHMETIC": "fast",
+                "ATHENAK_CGL_LF_DIAGNOSTICS": "none",
+                "ATHENAK_CGL_LF_STS_FLUX": "physical",
+            },
+        }
+        for suffix, env_updates in cases.items():
+            result = subprocess.run(
+                [
+                    "./athena",
+                    "-i",
+                    PAPER_INPUT,
+                    f"job/basename=cgl_ci_3d_modes_{suffix}",
+                    "time/nlim=1",
+                    "time/tlim=1.0e-5",
+                ],
+                capture_output=True,
+                env=_lf_mode_env(**env_updates),
+                text=True,
+                check=False,
+            )
+            output = result.stdout + result.stderr
+            assert result.returncode == 0, output
+
+        reference = _final_variable_tab("cgl_ci_3d_modes_safe_full", "mhd_w_bcc")
+        for suffix in ("safe_none", "fast_full", "fast_none", "fast_none_physical"):
+            _assert_tabs_match(
+                reference, _final_variable_tab(f"cgl_ci_3d_modes_{suffix}", "mhd_w_bcc")
+            )
+
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_3d_modes_safe_full.mhd.hst")
+        )
+        _assert_zero_lf_q_history(
+            testutils.athena_read.hst("cgl_ci_3d_modes_safe_none.mhd.hst")
+        )
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_3d_modes_fast_full.mhd.hst")
+        )
+        _assert_zero_lf_q_history(
+            testutils.athena_read.hst("cgl_ci_3d_modes_fast_none.mhd.hst")
+        )
+        _assert_zero_lf_q_history(
+            testutils.athena_read.hst("cgl_ci_3d_modes_fast_none_physical.mhd.hst")
+        )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
 
 
@@ -488,6 +634,43 @@ def test_cgl_lf_relaxed_face_backup_matches_explicit_backup():
         _cleanup()
 
 
+def test_cgl_lf_fast_arithmetic_relaxed_face_backup_matches_explicit_backup():
+    common = (
+        "mhd/cgl_lf_strict_admissibility=false",
+        "problem/pperp0=2.5",
+        "problem/amp=0.1",
+    )
+    try:
+        for basename, backup in (
+            ("cgl_ci_fast_relaxed_face_backup", "false"),
+            ("cgl_ci_fast_explicit_face_backup", "true"),
+        ):
+            result = subprocess.run(
+                [
+                    "./athena",
+                    "-i",
+                    f"{UNIT_INPUT_ROOT}/cgl_lf_limiter_heat_flux_suppression.athinput",
+                    f"job/basename={basename}",
+                    *common,
+                    f"mhd/backup_limiters={backup}",
+                ],
+                capture_output=True,
+                env={**os.environ, "ATHENAK_CGL_LF_ARITHMETIC": "fast"},
+                text=True,
+                check=False,
+            )
+            output = result.stdout + result.stderr
+            assert result.returncode == 0, output
+
+        relaxed = _final_tab("cgl_ci_fast_relaxed_face_backup")
+        explicit = _final_tab("cgl_ci_fast_explicit_face_backup")
+        assert set(relaxed) == set(explicit)
+        for field in relaxed:
+            assert np.array_equal(relaxed[field], explicit[field])
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_paper_history_reports_effective_relaxed_backup():
     try:
         _run_paper(
@@ -680,6 +863,36 @@ def test_cgl_lf_restart_preserves_final_state_and_admissibility():
         _cleanup()
 
 
+def test_cgl_lf_no_diagnostics_restart_clears_heat_flux_counters():
+    try:
+        _run(
+            "cgl_lf_restart.athinput",
+            "cgl_ci_restart_full_diag_partial",
+            "time/nlim=1",
+        )
+        full_history = testutils.athena_read.hst(
+            "cgl_ci_restart_full_diag_partial.mhd.hst"
+        )
+        assert full_history["lf_qface"][-1] > 0.0
+        restart_paths = sorted(Path("rst").glob("cgl_ci_restart_full_diag_partial.*.rst"))
+        assert restart_paths, "partial run did not write a restart checkpoint"
+        command = [
+            "./athena",
+            "-r",
+            str(restart_paths[-1]),
+            "job/basename=cgl_ci_restart_none_diag_resumed",
+            "mhd/cgl_lf_diagnostics=none",
+            "time/nlim=-1",
+        ]
+        assert testutils.run_command(command)
+        _assert_zero_lf_q_history(
+            testutils.athena_read.hst("cgl_ci_restart_none_diag_resumed.mhd.hst")
+        )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
 def test_cgl_lf_restart_with_finite_collision_preserves_corrected_split():
     try:
         collision = "mhd/nu_coll=1.0"
@@ -752,6 +965,40 @@ def test_cgl_lf_invalid_firehose_threshold_is_rejected():
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "cgl_firehose_threshold" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("option", "expected"),
+    (
+        ("mhd/cgl_lf_diagnostics=invalid", "cgl_lf_diagnostics"),
+        ("mhd/cgl_lf_arithmetic=invalid", "cgl_lf_arithmetic"),
+        ("mhd/cgl_lf_sts_flux=invalid", "cgl_lf_sts_flux"),
+        (
+            "mhd/cgl_lf_sts_flux=physical",
+            "requires <mhd>/cgl_lf_diagnostics = 'none'",
+        ),
+        (
+            (
+                "mhd/cgl_lf_diagnostics=none",
+                "mhd/cgl_lf_sts_flux=physical",
+            ),
+            "requires <mhd>/cgl_lf_arithmetic = 'fast'",
+        ),
+    ),
+)
+def test_cgl_lf_invalid_runtime_mode_is_rejected(option, expected):
+    command = [
+        "./athena",
+        "-i",
+        f"{INPUT_ROOT}/cgl_lf_decay.athinput",
+    ]
+    if isinstance(option, tuple):
+        command.extend(option)
+    else:
+        command.append(option)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert expected in result.stdout + result.stderr
 
 
 def test_cgl_lf_hardwall_requires_instability_limiter():

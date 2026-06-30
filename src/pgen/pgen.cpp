@@ -282,6 +282,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     diag.pressure_work = lf_diag[15];
     diag.anisotropic_pressure_work = lf_diag[16];
     diag.hardwall_projection = static_cast<std::uint64_t>(lf_diag[17]);
+    if (pmhd->pcgl_lf->diagnostics_mode == CGLLFDiagnosticsMode::none) {
+      pmhd->pcgl_lf->ResetHeatFluxDiagnostics();
+    }
   }
 
   // root process reads size of CC and FC data arrays from restart file

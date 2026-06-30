@@ -110,6 +110,46 @@ TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_clear_flux);
+  const bool lf_only_sts_cell_update =
+      has_sts_cgl_lf && pcgl_lf != nullptr && !has_sts_viscosity &&
+      !has_sts_conduction && !has_sts_resistivity && !has_sts_scalar_diffusion;
+  if (lf_only_sts_cell_update) {
+    auto flx1 = uflx.x1f;
+    auto flx2 = uflx.x2f;
+    auto flx3 = uflx.x3f;
+    const int nmb = static_cast<int>(flx1.extent(0));
+    const int n31 = static_cast<int>(flx1.extent(2));
+    const int n21 = static_cast<int>(flx1.extent(3));
+    const int n11 = static_cast<int>(flx1.extent(4));
+    const int n32 = static_cast<int>(flx2.extent(2));
+    const int n22 = static_cast<int>(flx2.extent(3));
+    const int n12 = static_cast<int>(flx2.extent(4));
+    const int n33 = static_cast<int>(flx3.extent(2));
+    const int n23 = static_cast<int>(flx3.extent(3));
+    const int n13 = static_cast<int>(flx3.extent(4));
+    par_for("mhd_sts_clear_cgl_lf_flux1", DevExeSpace(), 0, nmb - 1, 0, 1,
+            0, n31 - 1, 0, n21 - 1, 0, n11 - 1,
+    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
+                  const int i) {
+      const int n = (q == 0) ? IEN : IAN;
+      flx1(m,n,k,j,i) = 0.0;
+    });
+    par_for("mhd_sts_clear_cgl_lf_flux2", DevExeSpace(), 0, nmb - 1, 0, 1,
+            0, n32 - 1, 0, n22 - 1, 0, n12 - 1,
+    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
+                  const int i) {
+      const int n = (q == 0) ? IEN : IAN;
+      flx2(m,n,k,j,i) = 0.0;
+    });
+    par_for("mhd_sts_clear_cgl_lf_flux3", DevExeSpace(), 0, nmb - 1, 0, 1,
+            0, n33 - 1, 0, n23 - 1, 0, n13 - 1,
+    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
+                  const int i) {
+      const int n = (q == 0) ? IEN : IAN;
+      flx3(m,n,k,j,i) = 0.0;
+    });
+    return TaskStatus::complete;
+  }
   Kokkos::deep_copy(DevExeSpace(), uflx.x1f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x2f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x3f, 0.0);
@@ -204,13 +244,39 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
                               "magnetic-moment", u0);
   }
 
+  const bool lf_only_sts_cell_update =
+      has_sts_cgl_lf && pcgl_lf != nullptr && !has_sts_viscosity &&
+      !has_sts_conduction && !has_sts_resistivity && !has_sts_scalar_diffusion;
+
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_update_copies);
-    if (stage == 1) {
-      Kokkos::deep_copy(DevExeSpace(), u_sts0, u0);
+    if (lf_only_sts_cell_update) {
+      const int nmb = static_cast<int>(u0.extent(0));
+      const int n3 = static_cast<int>(u0.extent(2));
+      const int n2 = static_cast<int>(u0.extent(3));
+      const int n1 = static_cast<int>(u0.extent(4));
+      auto u0_ = u0;
+      auto u_sts0_ = u_sts0;
+      auto u_sts1_ = u_sts1;
+      auto u_sts2_ = u_sts2;
+      par_for("mhd_sts_copy_cgl_lf_u", DevExeSpace(), 0, nmb - 1, 0, 1,
+              0, n3 - 1, 0, n2 - 1, 0, n1 - 1,
+      KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
+                    const int i) {
+        const int n = (q == 0) ? IEN : IAN;
+        if (stage == 1) {
+          u_sts0_(m,n,k,j,i) = u0_(m,n,k,j,i);
+        }
+        u_sts2_(m,n,k,j,i) = u_sts1_(m,n,k,j,i);
+        u_sts1_(m,n,k,j,i) = u0_(m,n,k,j,i);
+      });
+    } else {
+      if (stage == 1) {
+        Kokkos::deep_copy(DevExeSpace(), u_sts0, u0);
+      }
+      Kokkos::deep_copy(DevExeSpace(), u_sts2, u_sts1);
+      Kokkos::deep_copy(DevExeSpace(), u_sts1, u0);
     }
-    Kokkos::deep_copy(DevExeSpace(), u_sts2, u_sts1);
-    Kokkos::deep_copy(DevExeSpace(), u_sts1, u0);
   }
 
   const bool update_momentum = has_sts_viscosity;
@@ -236,7 +302,8 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   int nmhd_vars = nmhd;
   Real dt_sweep = pdrive->sts.dt_sweep;
   auto coeffs = pdrive->sts.coeffs;
-  const bool cgl_lf_weighted_flux = has_cgl_lf_split;
+  const bool cgl_lf_weighted_flux =
+      has_cgl_lf_split && pcgl_lf != nullptr && pcgl_lf->UsesWeightedSTSFlux();
   const Real cgl_first_rkl_weight =
       cgl_lf_weighted_flux
           ? cgl_lf::FirstStageRKLWeight(pdrive->sts.nstages)
@@ -253,13 +320,15 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
 
   int scr_level = 0;
   size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1);
+  const int nvars_update = lf_only_sts_cell_update ? 2 : nvars;
 
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_update_kernel);
     par_for_outer("mhd_sts_update_u", DevExeSpace(), scr_size, scr_level, 0, nmb1,
-                  0, nvars - 1, ks, ke, js, je,
-    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int n, const int k,
+                  0, nvars_update - 1, ks, ke, js, je,
+    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int q, const int k,
                   const int j) {
+      const int n = lf_only_sts_cell_update ? ((q == 0) ? IEN : IAN) : q;
       if (!UpdateSTSMHDVariable(n, update_momentum, update_energy, update_cgl_moment,
                                 update_scalars, nmhd_vars)) {
         return;
