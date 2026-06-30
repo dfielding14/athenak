@@ -60,7 +60,31 @@ enum class PICIntermediateArraysMode { auto_mode, off };
 enum class PICExpandingBoxMode { off, on };
 enum class PICExpansionLaw { linear, reciprocal_linear, exponential };
 enum class CRParticleSource { initial = 0, shock_injected = 1 };
-enum class Q017ParticleTimer { adaptive_deltaf, push, deposition, migration, count };
+enum class Q017ParticleTimer {
+  adaptive_deltaf,
+  push,
+  deposition,
+  migration,
+  paper_smooth_reset,
+  paper_smooth_host_mirror,
+  paper_smooth_record_build,
+  paper_smooth_exchange,
+  paper_smooth_validate,
+  paper_smooth_record_h2d,
+  paper_smooth_device_deposit,
+  count
+};
+enum class Q017PaperSmoothCounter {
+  particles_routed,
+  candidate_receivers,
+  local_candidate_receivers,
+  remote_candidate_receivers,
+  accepted_receivers,
+  duplicate_receivers,
+  culled_receivers,
+  delivered_records,
+  count
+};
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -380,6 +404,11 @@ class Particles {
     q017_particle_time_[n] += seconds;
     q017_particle_calls_[n]++;
   }
+  void AccumulateQ017PaperSmoothCounter(Q017PaperSmoothCounter counter,
+                                        std::uint64_t amount) {
+    const int n = static_cast<int>(counter);
+    q017_paper_smooth_counters_[n] += amount;
+  }
   std::uint64_t Q017DirectViewAllocationBytes() const;
   std::uint64_t Q017OwnedKokkosViewAllocationBytes() const;
   void ObserveQ017OwnedKokkosViewAllocationBytes(std::uint64_t transient_bytes=0);
@@ -532,8 +561,11 @@ class Particles {
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles
   static constexpr int nq017_particle_timers =
       static_cast<int>(Q017ParticleTimer::count);
+  static constexpr int nq017_paper_smooth_counters =
+      static_cast<int>(Q017PaperSmoothCounter::count);
   std::array<double, nq017_particle_timers> q017_particle_time_{};
   std::array<std::uint64_t, nq017_particle_timers> q017_particle_calls_{};
+  std::array<std::uint64_t, nq017_paper_smooth_counters> q017_paper_smooth_counters_{};
   std::uint64_t q017_owned_kokkos_view_high_water_bytes_ = 0;
   std::uint64_t q017_paper_smooth_host_high_water_bytes_ = 0;
 };

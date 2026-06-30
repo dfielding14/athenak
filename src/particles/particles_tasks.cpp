@@ -625,7 +625,16 @@ void Particles::ObserveQ017PaperSmoothHostAllocationBytes(std::uint64_t transien
 
 void Particles::OutputQ017Telemetry() const {
   constexpr const char* timer_names[nq017_particle_timers] = {
-    "adaptive_deltaf", "push", "deposition", "migration"
+    "adaptive_deltaf", "push", "deposition", "migration",
+    "paper_smooth_reset", "paper_smooth_host_mirror",
+    "paper_smooth_record_build", "paper_smooth_exchange",
+    "paper_smooth_validate", "paper_smooth_record_h2d",
+    "paper_smooth_device_deposit"
+  };
+  constexpr const char* paper_smooth_counter_names[nq017_paper_smooth_counters] = {
+    "particles_routed", "candidate_receivers", "local_candidate_receivers",
+    "remote_candidate_receivers", "accepted_receivers", "duplicate_receivers",
+    "culled_receivers", "delivered_records"
   };
   const int nranks = global_variable::nranks;
   auto *pm = pmy_pack->pmesh;
@@ -679,6 +688,10 @@ void Particles::OutputQ017Telemetry() const {
   std::array<double, nq017_particle_timers> sum_times = q017_particle_time_;
   std::array<double, nq017_particle_timers> max_times = q017_particle_time_;
   std::array<std::uint64_t, nq017_particle_timers> max_calls = q017_particle_calls_;
+  std::array<std::uint64_t, nq017_paper_smooth_counters>
+      sum_paper_smooth_counters = q017_paper_smooth_counters_;
+  std::array<std::uint64_t, nq017_paper_smooth_counters>
+      max_paper_smooth_counters = q017_paper_smooth_counters_;
   std::uint64_t total_resident_bytes = resident_bytes;
   std::uint64_t total_allocated_bytes = allocated_bytes;
   std::uint64_t max_allocated_bytes = allocated_bytes;
@@ -705,6 +718,10 @@ void Particles::OutputQ017Telemetry() const {
              MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
   MPI_Reduce(q017_particle_calls_.data(), max_calls.data(), nq017_particle_timers,
              MPI_UINT64_T, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(q017_paper_smooth_counters_.data(), sum_paper_smooth_counters.data(),
+             nq017_paper_smooth_counters, MPI_UINT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(q017_paper_smooth_counters_.data(), max_paper_smooth_counters.data(),
+             nq017_paper_smooth_counters, MPI_UINT64_T, MPI_MAX, 0, MPI_COMM_WORLD);
   MPI_Reduce(&resident_bytes, &total_resident_bytes, 1, MPI_UINT64_T, MPI_SUM, 0,
              MPI_COMM_WORLD);
   MPI_Reduce(&allocated_bytes, &total_allocated_bytes, 1, MPI_UINT64_T, MPI_SUM, 0,
@@ -753,6 +770,16 @@ void Particles::OutputQ017Telemetry() const {
     print_scalar(prefix + ".seconds_rank_max", max_times[n]);
     print_scalar(prefix + ".seconds_rank_mean", sum_times[n]/nranks);
     print_scalar(prefix + ".calls_rank_max", max_calls[n]);
+  }
+  for (int n=0; n<nq017_paper_smooth_counters; ++n) {
+    const std::string prefix =
+        std::string("paper_smooth.") + paper_smooth_counter_names[n];
+    print_scalar(prefix + ".rank_sum",
+                 static_cast<double>(sum_paper_smooth_counters[n]));
+    print_scalar(prefix + ".rank_max",
+                 static_cast<double>(max_paper_smooth_counters[n]));
+    print_scalar(prefix + ".rank_mean",
+                 static_cast<double>(sum_paper_smooth_counters[n])/nranks);
   }
   print_scalar("particle_memory.sync_kernel_timers", pic_q017_sync_kernel_timers);
   print_scalar("particle_memory.record_bytes", record_bytes);

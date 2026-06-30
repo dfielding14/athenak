@@ -16,6 +16,7 @@
 #include <mpi.h>
 #endif
 #include "globals.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/nghbr_index.hpp"
 #include "bvals/bvals.hpp"
@@ -265,6 +266,77 @@ void ShapeOrder(const int i, const Real di, int &i_min, Real S[O + 1]) {
       S[1] = static_cast<Real>(1.0) - S[0] - S[2];
     }
   }
+}
+
+RegionSize PaperSmoothBlockSizeForGID(const Mesh *pm, const int gid) {
+  RegionSize size{};
+  const auto &mesh = pm->mesh_size;
+  const auto &loc = pm->lloc_eachmb[gid];
+  const int level_offset = loc.level - pm->root_level;
+  const int nmbx1 = pm->nmb_rootx1 << level_offset;
+  size.x1min = (loc.lx1 == 0) ?
+      mesh.x1min : LeftEdgeX(loc.lx1, nmbx1, mesh.x1min, mesh.x1max);
+  size.x1max = (loc.lx1 == nmbx1 - 1) ?
+      mesh.x1max : LeftEdgeX(loc.lx1 + 1, nmbx1, mesh.x1min, mesh.x1max);
+
+  if (pm->multi_d) {
+    const int nmbx2 = pm->nmb_rootx2 << level_offset;
+    size.x2min = (loc.lx2 == 0) ?
+        mesh.x2min : LeftEdgeX(loc.lx2, nmbx2, mesh.x2min, mesh.x2max);
+    size.x2max = (loc.lx2 == nmbx2 - 1) ?
+        mesh.x2max : LeftEdgeX(loc.lx2 + 1, nmbx2, mesh.x2min, mesh.x2max);
+  } else {
+    size.x2min = mesh.x2min;
+    size.x2max = mesh.x2max;
+  }
+
+  if (pm->three_d) {
+    const int nmbx3 = pm->nmb_rootx3 << level_offset;
+    size.x3min = (loc.lx3 == 0) ?
+        mesh.x3min : LeftEdgeX(loc.lx3, nmbx3, mesh.x3min, mesh.x3max);
+    size.x3max = (loc.lx3 == nmbx3 - 1) ?
+        mesh.x3max : LeftEdgeX(loc.lx3 + 1, nmbx3, mesh.x3min, mesh.x3max);
+  } else {
+    size.x3min = mesh.x3min;
+    size.x3max = mesh.x3max;
+  }
+
+  size.dx1 = (size.x1max - size.x1min)/static_cast<Real>(pm->mb_indcs.nx1);
+  size.dx2 = (size.x2max - size.x2min)/static_cast<Real>(pm->mb_indcs.nx2);
+  size.dx3 = (size.x3max - size.x3min)/static_cast<Real>(pm->mb_indcs.nx3);
+  return size;
+}
+
+bool PaperSmoothAxisSupportMayReachNeighbor(const Real x, const Real xmin,
+                                            const Real xmax, const Real dx,
+                                            const int direction) {
+  if (direction == 0) return true;
+  // TSC support is 1.5 cell widths; two cells is a conservative owner-side gate.
+  const Real support_margin = static_cast<Real>(2.0)*dx;
+  if (direction < 0) return (x - xmin) <= support_margin;
+  return (xmax - x) <= support_margin;
+}
+
+bool PaperSmoothOwnerTSCMayReachNeighbor(const Mesh *pm, const int owner_gid,
+                                         const Real x, const Real y, const Real z,
+                                         const int ox1, const int ox2,
+                                         const int ox3) {
+  const RegionSize owner_size = PaperSmoothBlockSizeForGID(pm, owner_gid);
+  if (!PaperSmoothAxisSupportMayReachNeighbor(
+          x, owner_size.x1min, owner_size.x1max, owner_size.dx1, ox1)) {
+    return false;
+  }
+  if (pm->multi_d &&
+      !PaperSmoothAxisSupportMayReachNeighbor(
+          y, owner_size.x2min, owner_size.x2max, owner_size.dx2, ox2)) {
+    return false;
+  }
+  if (pm->three_d &&
+      !PaperSmoothAxisSupportMayReachNeighbor(
+          z, owner_size.x3min, owner_size.x3max, owner_size.dx3, ox3)) {
+    return false;
+  }
+  return true;
 }
 
 template <int O>
@@ -572,13 +644,29 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
   auto *pm = pmy_pack->pmesh;
   auto *pmb = pmy_pack->pmb;
   auto &transport = *paper_smooth_mom_transport;
-  transport.Reset();
+  {
+    Kokkos::Timer q017_phase_timer;
+    transport.Reset();
+    AccumulateQ017Timer(Q017ParticleTimer::paper_smooth_reset,
+                        q017_phase_timer.seconds());
+  }
+
+  std::uint64_t q017_particles_routed = 0;
+  std::uint64_t q017_candidate_receivers = 0;
+  std::uint64_t q017_local_candidate_receivers = 0;
+  std::uint64_t q017_remote_candidate_receivers = 0;
+  std::uint64_t q017_accepted_receivers = 0;
+  std::uint64_t q017_duplicate_receivers = 0;
+  std::uint64_t q017_culled_receivers = 0;
 
   if (nprtcl_thispack > 0) {
+    Kokkos::Timer q017_phase_timer;
     auto h_pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
     auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
     auto h_qspecies =
         Kokkos::create_mirror_view_and_copy(HostMemSpace(), species_charge);
+    AccumulateQ017Timer(Q017ParticleTimer::paper_smooth_host_mirror,
+                        q017_phase_timer.seconds());
     const bool stage_has_feedback = (stage == 2);
     const bool use_momentum_feedback =
         stage_has_feedback && couple_moments_momentum_to_mhd;
@@ -593,6 +681,7 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
       deposit_flags |= kPaperSmoothDepositEnergyFeedback;
     }
 
+    Kokkos::Timer q017_build_timer;
     for (int p = 0; p < nprtcl_thispack; ++p) {
       const int owner_gid = h_pi(PGID, p);
       const int owner_m = owner_gid - pmy_pack->gids;
@@ -643,9 +732,21 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
                                   static_cast<Real>(0.0),
           use_energy_feedback ? physical_boundary_scale*df_weight*h_pr(IPDE, p) :
                                 static_cast<Real>(0.0)};
+      q017_particles_routed++;
 
-      auto queue_receiver = [&record, &transport, pm](const int gid, const int rank,
-                                                       const std::uint32_t image_code) {
+      auto queue_receiver = [&record, &transport, pm,
+                             &q017_candidate_receivers,
+                             &q017_local_candidate_receivers,
+                             &q017_remote_candidate_receivers,
+                             &q017_accepted_receivers,
+                             &q017_duplicate_receivers](
+          const int gid, const int rank, const std::uint32_t image_code) {
+        q017_candidate_receivers++;
+        if (rank == global_variable::my_rank) {
+          q017_local_candidate_receivers++;
+        } else {
+          q017_remote_candidate_receivers++;
+        }
         if (gid < 0 || gid >= pm->nmb_total ||
             rank < 0 || rank >= global_variable::nranks ||
             pm->rank_eachmb[gid] != rank ||
@@ -660,13 +761,18 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
         receiver_record.dest_gid = gid;
         receiver_record.reserved = image_code;
         ShiftPaperSmoothRecordIntoReceiverImage(receiver_record, pm);
-        if (transport.QueueReceiver(receiver_record, rank) ==
-            PaperSmoothRecordStatus::invalid) {
+        const auto status = transport.QueueReceiver(receiver_record, rank);
+        if (status == PaperSmoothRecordStatus::invalid) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
                     << "paper_smooth receiver transport rejected a destination"
                     << std::endl;
           std::exit(EXIT_FAILURE);
+        }
+        if (status == PaperSmoothRecordStatus::accepted) {
+          q017_accepted_receivers++;
+        } else {
+          q017_duplicate_receivers++;
         }
       };
       queue_receiver(owner_gid, pm->rank_eachmb[owner_gid], 0U);
@@ -683,58 +789,82 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
                       << std::endl;
             std::exit(EXIT_FAILURE);
           }
-          queue_receiver(neighbor.gid, neighbor.rank,
-                         PaperSmoothReceiverImageCode(pm, owner_gid, ox1, ox2, ox3));
+          const std::uint32_t image_code =
+              PaperSmoothReceiverImageCode(pm, owner_gid, ox1, ox2, ox3);
+          if (!PaperSmoothOwnerTSCMayReachNeighbor(
+                  pm, owner_gid, h_pr(IPX, p), h_pr(IPY, p), h_pr(IPZ, p),
+                  ox1, ox2, ox3)) {
+            q017_culled_receivers++;
+            continue;
+          }
+          queue_receiver(neighbor.gid, neighbor.rank, image_code);
         }
       }
     }
+    AccumulateQ017Timer(Q017ParticleTimer::paper_smooth_record_build,
+                        q017_build_timer.seconds());
     ObserveQ017PaperSmoothHostAllocationBytes(
         static_cast<std::uint64_t>(h_pr.span())*sizeof(Real) +
         static_cast<std::uint64_t>(h_pi.span())*sizeof(int) +
         static_cast<std::uint64_t>(h_qspecies.span())*sizeof(Real));
   }
 
-  if (!transport.Exchange()) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "paper_smooth receiver-record exchange failed" << std::endl;
-    std::exit(EXIT_FAILURE);
+  {
+    Kokkos::Timer q017_phase_timer;
+    if (!transport.Exchange()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "paper_smooth receiver-record exchange failed" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    AccumulateQ017Timer(Q017ParticleTimer::paper_smooth_exchange,
+                        q017_phase_timer.seconds());
   }
 
   const auto &records = transport.records();
-  bool local_delivery_valid = true;
-  for (const auto &record : records) {
-    if (record.dest_gid < pmy_pack->gids ||
-        record.dest_gid >= pmy_pack->gids + pmy_pack->nmb_thispack ||
-        pm->rank_eachmb[record.dest_gid] != global_variable::my_rank ||
-        !PaperSmoothImageCodeValid(record.reserved)) {
-      local_delivery_valid = false;
-      break;
+  {
+    Kokkos::Timer q017_phase_timer;
+    bool local_delivery_valid = true;
+    for (const auto &record : records) {
+      if (record.dest_gid < pmy_pack->gids ||
+          record.dest_gid >= pmy_pack->gids + pmy_pack->nmb_thispack ||
+          pm->rank_eachmb[record.dest_gid] != global_variable::my_rank ||
+          !PaperSmoothImageCodeValid(record.reserved)) {
+        local_delivery_valid = false;
+        break;
+      }
     }
-  }
 #if MPI_PARALLEL_ENABLED
-  int local_delivery_valid_int = local_delivery_valid ? 1 : 0;
-  int global_delivery_valid_int = 0;
-  if (MPI_Allreduce(&local_delivery_valid_int, &global_delivery_valid_int, 1,
-                    MPI_INT, MPI_MIN, MPI_COMM_WORLD) != MPI_SUCCESS) {
-    global_delivery_valid_int = 0;
-  }
-  local_delivery_valid = (global_delivery_valid_int != 0);
+    int local_delivery_valid_int = local_delivery_valid ? 1 : 0;
+    int global_delivery_valid_int = 0;
+    if (MPI_Allreduce(&local_delivery_valid_int, &global_delivery_valid_int, 1,
+                      MPI_INT, MPI_MIN, MPI_COMM_WORLD) != MPI_SUCCESS) {
+      global_delivery_valid_int = 0;
+    }
+    local_delivery_valid = (global_delivery_valid_int != 0);
 #endif
-  if (!local_delivery_valid) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "paper_smooth receiver transport delivered a record outside its "
-              << "owning rank pack" << std::endl;
-    std::exit(EXIT_FAILURE);
+    if (!local_delivery_valid) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "paper_smooth receiver transport delivered a record outside its "
+                << "owning rank pack" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    AccumulateQ017Timer(Q017ParticleTimer::paper_smooth_validate,
+                        q017_phase_timer.seconds());
   }
-  Kokkos::realloc(paper_smooth_mom_records, records.size());
-  if (!records.empty()) {
-    auto h_records = Kokkos::create_mirror_view(paper_smooth_mom_records);
-    for (std::size_t n = 0; n < records.size(); ++n) h_records(n) = records[n];
-    Kokkos::deep_copy(paper_smooth_mom_records, h_records);
-    ObserveQ017PaperSmoothHostAllocationBytes(
-        static_cast<std::uint64_t>(h_records.span())*sizeof(PaperSmoothMomentRecord));
+  {
+    Kokkos::Timer q017_phase_timer;
+    Kokkos::realloc(paper_smooth_mom_records, records.size());
+    if (!records.empty()) {
+      auto h_records = Kokkos::create_mirror_view(paper_smooth_mom_records);
+      for (std::size_t n = 0; n < records.size(); ++n) h_records(n) = records[n];
+      Kokkos::deep_copy(paper_smooth_mom_records, h_records);
+      ObserveQ017PaperSmoothHostAllocationBytes(
+          static_cast<std::uint64_t>(h_records.span())*sizeof(PaperSmoothMomentRecord));
+    }
+    AccumulateQ017Timer(Q017ParticleTimer::paper_smooth_record_h2d,
+                        q017_phase_timer.seconds());
   }
 
   auto &indcs = pm->mb_indcs;
@@ -752,6 +882,27 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
   auto &size = pmb->mb_size;
   auto &mom = moments;
   auto &device_records = paper_smooth_mom_records;
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::particles_routed, q017_particles_routed);
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::candidate_receivers, q017_candidate_receivers);
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::local_candidate_receivers,
+      q017_local_candidate_receivers);
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::remote_candidate_receivers,
+      q017_remote_candidate_receivers);
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::accepted_receivers, q017_accepted_receivers);
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::duplicate_receivers, q017_duplicate_receivers);
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::culled_receivers, q017_culled_receivers);
+  AccumulateQ017PaperSmoothCounter(
+      Q017PaperSmoothCounter::delivered_records,
+      static_cast<std::uint64_t>(nrecords));
+  Q017Fence();
+  Kokkos::Timer q017_device_timer;
   if (nrecords > 0) {
     par_for("deposit_paper_smooth_receiver_records", DevExeSpace(), 0, nrecords - 1,
     KOKKOS_LAMBDA(const int n) {
@@ -772,6 +923,9 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
           record.dpxdt, record.dpydt, record.dpzdt, record.dedt, false);
     });
   }
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::paper_smooth_device_deposit,
+                      q017_device_timer.seconds());
 
   Q017Fence();
   AccumulateQ017Timer(Q017ParticleTimer::deposition, q017_timer.seconds());
