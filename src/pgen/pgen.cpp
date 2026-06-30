@@ -29,6 +29,7 @@
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
+#include "particles/particles.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "pgen.hpp"
 
@@ -1714,6 +1715,16 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     myoffset = offset_myrank;
   }
 
+  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsLagrangianMC()) {
+#if MPI_PARALLEL_ENABLED
+    if (shard_mode != FileShardMode::per_rank && global_variable::nranks > 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "lagrangian_mc particle restarts currently require "
+                << "<output>/single_file_per_rank=true in MPI runs" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+#endif
+    pm->pmb_pack->ppart->ReadRestartData(resfile, use_serial_io);
   }
 
   // call problem generator again to re-initialize data, fn ptrs, as needed

@@ -25,6 +25,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "radiation/radiation.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/z4c.hpp"
@@ -636,6 +637,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
   if (pm->pmb_pack->pframe_tracker != nullptr) {
     pm->pmb_pack->pframe_tracker->UpdateMeshBlockPack(pm->pmb_pack);
+  }
+  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsLagrangianMC()) {
+    pm->pmb_pack->ppart->RemapAfterMeshRefinement();
   }
 
   Kokkos::realloc(fc_amr_repair, new_nmb_total);

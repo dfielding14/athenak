@@ -29,6 +29,7 @@
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
+#include "particles/particles.hpp"
 #include "srcterms/frame_tracker.hpp"
 #include "srcterms/turb_driver.hpp"
 //#include "outputs.hpp"
@@ -674,6 +675,18 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     offset_myrank += nout1*nout2*nout3*nadm*sizeof(Real); // adm u_adm
     myoffset = offset_myrank;
+  }
+
+  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsLagrangianMC()) {
+#if MPI_PARALLEL_ENABLED
+    if (shard_mode != FileShardMode::per_rank && global_variable::nranks > 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "lagrangian_mc particle restarts currently require "
+                << "<output>/single_file_per_rank=true in MPI runs" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+#endif
+    pm->pmb_pack->ppart->WriteRestartData(resfile, use_serial_io);
   }
 
   // close file, clean up

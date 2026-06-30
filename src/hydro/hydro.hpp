@@ -55,6 +55,7 @@ struct HydroTaskIDs {
   TaskID prol;
   TaskID c2p;
   TaskID newdt;
+  TaskID saveflx;
   TaskID csend;
   TaskID crecv;
 };
@@ -104,6 +105,9 @@ class Hydro {
   bool use_fofc = false;   // flag to enable FOFC
   DvceArray5D<Real> utest;  // scratch array for FOFC
 
+  bool uflxidn_saved = false;
+  DvceFaceFld4D<Real> uflxidnsaved;
+
   // container to hold names of TaskIDs
   HydroTaskIDs id;
 
@@ -129,6 +133,7 @@ class Hydro {
   TaskStatus Prolongate(Driver* pdrive, int stage);
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
+  TaskStatus SaveFlux(Driver *d, int stage);
   // ...in "after_stagen_tl" list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
@@ -139,6 +144,7 @@ class Hydro {
 
   // first-order flux correction
   void FOFC(Driver *d, int stage);
+  void SetSaveUFlxIdn();
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Hydro

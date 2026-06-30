@@ -344,6 +344,57 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   return;
 }
 
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Hydro::SaveFlux
+
+TaskStatus Hydro::SaveFlux(Driver *pdrive, int stage) {
+  if (!uflxidn_saved) return TaskStatus::complete;
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+
+  auto flx1 = uflx.x1f;
+  auto flx2 = uflx.x2f;
+  auto flx3 = uflx.x3f;
+  auto flxidn1 = uflxidnsaved.x1f;
+  auto flxidn2 = uflxidnsaved.x2f;
+  auto flxidn3 = uflxidnsaved.x3f;
+
+  int nstages = pdrive->nexp_stages;
+  Real dtfactor = pmy_pack->pmesh->dt/static_cast<Real>(nstages);
+
+  par_for("save_hydro_idn_flx1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real val = flx1(m,IDN,k,j,i)/mbsize.d_view(m).dx1*dtfactor;
+    flxidn1(m,k,j,i) = (stage == 1) ? val : flxidn1(m,k,j,i) + val;
+  });
+
+  if (multi_d) {
+    par_for("save_hydro_idn_flx2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real val = flx2(m,IDN,k,j,i)/mbsize.d_view(m).dx2*dtfactor;
+      flxidn2(m,k,j,i) = (stage == 1) ? val : flxidn2(m,k,j,i) + val;
+    });
+  }
+
+  if (three_d) {
+    par_for("save_hydro_idn_flx3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real val = flx3(m,IDN,k,j,i)/mbsize.d_view(m).dx3*dtfactor;
+      flxidn3(m,k,j,i) = (stage == 1) ? val : flxidn3(m,k,j,i) + val;
+    });
+  }
+
+  return TaskStatus::complete;
+}
+
 // function definitions for each template parameter
 template void Hydro::CalculateFluxes<Hydro_RSolver::advect>(Driver *pdriver, int stage);
 template void Hydro::CalculateFluxes<Hydro_RSolver::llf>(Driver *pdriver, int stage);

@@ -252,6 +252,7 @@ class ParticlesBoundaryValues {
 
   int nprtcl_send, nprtcl_recv;
   DualArray1D<ParticleLocationData> sendlist;
+  DualArray1D<int> send_count;
 
   // Data needed to count number of messages and particles to send between ranks
   int nsends; // number of MPI sends to neighboring ranks on this rank

@@ -31,6 +31,13 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   BaseTypeOutput(pin, pm, op) {
   // create new directory for this output. Comments in binary.cpp constructor explain why
   mkdir("trk",0775);
+  if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsLagrangianMC()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "TrackedParticleOutput assumes drift-particle velocity "
+              << "slots. Use file_type=prtcl_thermo_history for lagrangian_mc particles."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // allocate arrays
   npout_eachrank.resize(global_variable::nranks);
   ntrack = pin->GetInteger(op.block_name,"nparticles");
@@ -48,11 +55,12 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   int npart = pm->nprtcl_thisrank;
   auto &pr = pm->pmb_pack->ppart->prtcl_rdata;
   auto &pi = pm->pmb_pack->ppart->prtcl_idata;
-  int counter=0;
-  int *pcounter = &counter;
+  int ntrack_local = ntrack;
+  DvceArray1D<int> counter("tracked_particle_counter",1);
+  Kokkos::deep_copy(counter, 0);
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
-    if (pi(PTAG,p) < ntrack) {
-      int index = Kokkos::atomic_fetch_add(pcounter,1);
+    if (pi(PTAG,p) < ntrack_local) {
+      int index = Kokkos::atomic_fetch_add(&counter(0),1);
       tracked_prtcl.d_view(index).tag = pi(PTAG,p);
       tracked_prtcl.d_view(index).x   = pr(IPX,p);
       tracked_prtcl.d_view(index).y   = pr(IPY,p);
@@ -62,7 +70,8 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
       tracked_prtcl.d_view(index).vz  = pr(IPVZ,p);
     }
   });
-  npout = counter;
+  auto counter_host = Kokkos::create_mirror_view_and_copy(HostMemSpace(), counter);
+  npout = counter_host(0);
   // share number of tracked particles to be output across all ranks
   npout_eachrank[global_variable::my_rank] = npout;
 #if MPI_PARALLEL_ENABLED

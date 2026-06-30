@@ -395,6 +395,9 @@ void ProblemGenerator::LinearWave(ParameterInput *pin, const bool restart) {
 
     // Calculate cell-centered primitive variables
     auto &w0 = pmbp->phydro->w0;
+    int nhydro_ = pmbp->phydro->nhydro;
+    int nscalars_ = pmbp->phydro->nscalars;
+    Real scalar0 = pin->GetOrAddReal("problem", "scalar0", 0.0);
     par_for("pgen_linwave1", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real &x1min = size.d_view(m).x1min;
@@ -444,6 +447,9 @@ void ProblemGenerator::LinearWave(ParameterInput *pin, const bool restart) {
       w0(m,IVZ,k,j,i)=vx*lwv.sin_a2                           +vz*lwv.cos_a2;
       if (eos.is_ideal) {
         w0(m,IEN,k,j,i) = egas;
+      }
+      for (int n=0; n<nscalars_; ++n) {
+        w0(m,nhydro_+n,k,j,i) = scalar0;
       }
     });
 
@@ -668,6 +674,8 @@ void ProblemGenerator::LinearWave(ParameterInput *pin, const bool restart) {
 
     // now compute primitive quantities, as well as face- and cell-centered fields
     auto &w0 = pmbp->pmhd->w0;
+    int nscalars_ = pmbp->pmhd->nscalars;
+    Real scalar0 = pin->GetOrAddReal("problem", "scalar0", 0.0);
     par_for("pgen_linwave3", DevExeSpace(), 0,nmb-1,ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real &x1min = size.d_view(m).x1min;
@@ -712,6 +720,9 @@ void ProblemGenerator::LinearWave(ParameterInput *pin, const bool restart) {
       w0(m,IVZ,k,j,i)=vx*lwv.sin_a2                            +vz*lwv.cos_a2;
       if (eos.is_ideal) {
         w0(m,IEN,k,j,i) = egas;
+      }
+      for (int n=0; n<nscalars_; ++n) {
+        w0(m,nmhd_+n,k,j,i) = scalar0;
       }
 
       // Compute face-centered fields from curl(A).

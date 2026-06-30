@@ -103,8 +103,8 @@ void ParameterInput::CheckBlockNames() {
     "coord", "adm", "shearing_box",
     "time", "problem", "output", "units", "cooling",
     "hydro", "mhd", "ion-neutral", "radiation", "z4c", "z4c_amr", "cce",
-    "rad_srcterms", "hydro_srcterms", "mhd_srcterms", "particles", "turb_driving",
-    "initial_perturbations", "initial_perturbation", "frame_tracking"
+    "rad_srcterms", "hydro_srcterms", "mhd_srcterms", "particles", "tracer_seed",
+    "turb_driving", "initial_perturbations", "initial_perturbation", "frame_tracking"
     };
 
   for (auto it1 = block.begin(); it1 != block.end(); ++it1) {

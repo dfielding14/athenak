@@ -18,13 +18,14 @@
 #include "athena.hpp"
 #include "file_sharding.hpp"
 #include "io_wrapper.hpp"
+#include "particles/tracer_fields.hpp"
 
 #define NHISTORY_VARIABLES 20
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 218
+#define NOUTPUT_CHOICES 219
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -132,6 +133,9 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "mhd_w_s_00", "mhd_w_s_01", "mhd_w_s_02", "mhd_w_s_03", "mhd_w_s_04",
   // Hydro-only derived variables (217)
   "hydro_visc_heat",
+
+  // Particle history output (218)
+  "prtcl_thermo_history",
 };
 
 
@@ -550,6 +554,26 @@ class ParticleVTKOutput : public BaseTypeOutput {
   int npout_total;
   HostArray2D<Real> outpart_rdata;
   HostArray2D<int>  outpart_idata;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleThermoHistoryOutput
+//  \brief append-only binary thermodynamic history for lagrangian_mc particles
+
+class ParticleThermoHistoryOutput : public BaseTypeOutput {
+ public:
+  ParticleThermoHistoryOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  int npout_total;
+  Real tracer_gamma;
+  std::vector<particles::TracerField> tracer_fields;
+  std::vector<std::string> tracer_field_names;
+  HostArray2D<Real> outpart_rdata;
+  HostArray2D<int> outpart_idata;
+  HostArray2D<Real> outfield_data;
 };
 
 //----------------------------------------------------------------------------------------

@@ -19,6 +19,7 @@
 #include "outputs/outputs.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "z4c/z4c.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "ion-neutral/ion-neutral.hpp"
@@ -342,6 +343,11 @@ void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
 void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool res_flag) {
   //---- Step 1.  Set conserved variables in ghost zones for all physics
   InitBoundaryValuesAndPrimitives(pmesh);
+
+  if (!res_flag && pmesh->pmb_pack->ppart != nullptr &&
+      pmesh->pmb_pack->ppart->IsLagrangianMC()) {
+    pmesh->pmb_pack->ppart->SeedInitialTracers();
+  }
 
   //---- Step 2.  Compute time step (if problem involves time evolution)
   // NOTE: For new simulations (!res_flag), the initial conditions haven't been set yet
