@@ -320,6 +320,13 @@ def _check_close(label, actual, expected):
     return bool(np.allclose(actual, expected, atol=_ATOL, rtol=0.0))
 
 
+def _check_mapping_close(label, mapping, key, expected):
+    if key not in mapping:
+        logger.info('%s missing_key=%s expected=% .8e', label, key, expected)
+        return False
+    return _check_close(label, mapping[key], expected)
+
+
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
     oracle.validate_oracle()
@@ -408,17 +415,19 @@ def analyze():
             result['total'],
             _DUPLICATE_PTAG_WEIGHT_SUM * reference['total']) and ok
     if 'mpi2_g' in _DUPLICATE_PTAG_RESULTS:
-        geometry = (2.0, 4.0, -2.0, 2.0, -0.5, 0.5)
+        geometry = (0.0, 4.0, -2.0, 2.0, -0.5, 0.5)
         center = (3.5, -0.5, 0.0)
         duplicate = _DUPLICATE_PTAG_RESULTS['mpi2_g']
         reference = _RESULTS['mpi2_g']
-        ok = _check_close(
+        ok = _check_mapping_close(
             'mpi2_g:duplicate_ptag_pair_remote_receiver_block',
-            duplicate['block_totals'][geometry],
+            duplicate['block_totals'],
+            geometry,
             _DUPLICATE_PTAG_WEIGHT_SUM * reference['block_totals'][geometry]) and ok
-        ok = _check_close(
+        ok = _check_mapping_close(
             'mpi2_g:duplicate_ptag_pair_remote_receiver_cell',
-            duplicate['cell_charges'][center],
+            duplicate['cell_charges'],
+            center,
             _DUPLICATE_PTAG_WEIGHT_SUM * reference['cell_charges'][center]) and ok
     for mode in ('serial', 'mpi2', 'mpi3'):
         for label, (reference, scale) in _RECORD_ROUTES.items():
@@ -461,9 +470,9 @@ def analyze():
                 _RECORD_RESULTS[weighted_key]['prtcl_ebdot'],
                 reference_ebdot) and ok
     remote_checks = {
-        'mpi2_g': ((2.0, 4.0, -2.0, 2.0, -0.5, 0.5),
+        'mpi2_g': ((0.0, 4.0, -2.0, 2.0, -0.5, 0.5),
                    (3.5, -0.5, 0.0), 0.32, 0.22),
-        'mpi2_n': ((2.0, 4.0, -2.0, 2.0, -0.5, 0.5),
+        'mpi2_n': ((0.0, 4.0, -2.0, 2.0, -0.5, 0.5),
                    (3.5, -0.5, 0.0), -0.08, -0.055),
         'mpi3_j': ((-4.0, -2.0, -2.0, 0.0, 0.0, 2.0),
                    (-3.75, -0.75, 1.75), 0.0324, 0.0243),
@@ -473,17 +482,17 @@ def analyze():
     for case, (geometry, center, block_total, cell_charge) in remote_checks.items():
         if case in _RESULTS:
             result = _RESULTS[case]
-            ok = _check_close(
+            ok = _check_mapping_close(
                 case + ':remote_receiver_block',
-                result['block_totals'][geometry], block_total) and ok
-            ok = _check_close(
+                result['block_totals'], geometry, block_total) and ok
+            ok = _check_mapping_close(
                 case + ':remote_receiver_cell',
-                result['cell_charges'][center], cell_charge) and ok
+                result['cell_charges'], center, cell_charge) and ok
     record_remote_checks = {
-        'mpi2_g': ((2.0, 4.0, -2.0, 2.0, -0.5, 0.5),
-                   (3.5, -0.5, 0.0), 0.64, 0.44, 0.5, 1.0),
-        'mpi2_n': ((2.0, 4.0, -2.0, 2.0, -0.5, 0.5),
-                   (3.5, -0.5, 0.0), 0.64, 0.44, 0.5, -0.25),
+        'mpi2_g': ((0.0, 4.0, -2.0, 2.0, -0.5, 0.5),
+                   (3.5, -0.5, 0.0), 0.32, 0.22, 1.0, 1.0),
+        'mpi2_n': ((0.0, 4.0, -2.0, 2.0, -0.5, 0.5),
+                   (3.5, -0.5, 0.0), 0.32, 0.22, 1.0, -0.25),
         'mpi3_j': ((-4.0, -2.0, -2.0, 0.0, 0.0, 2.0),
                    (-3.75, -0.75, 1.75), 0.2592, 0.1944, 0.125, 1.0),
         'mpi3_p': ((-4.0, -2.0, -2.0, 0.0, 0.0, 2.0),
@@ -501,12 +510,14 @@ def analyze():
             else:
                 expected_block = scale * multiplier * rho_block
                 expected_cell = scale * multiplier * rho_cell
-            ok = _check_close(
+            ok = _check_mapping_close(
                 case + ':' + output_id + ':remote_receiver_block',
-                result['_block_raw_sums'][output_id][geometry],
+                result['_block_raw_sums'][output_id],
+                geometry,
                 expected_block) and ok
-            ok = _check_close(
+            ok = _check_mapping_close(
                 case + ':' + output_id + ':remote_receiver_cell',
-                result['_cell_raw_values'][output_id][center],
+                result['_cell_raw_values'][output_id],
+                center,
                 expected_cell) and ok
     return ok
