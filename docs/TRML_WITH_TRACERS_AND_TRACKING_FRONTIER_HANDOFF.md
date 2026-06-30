@@ -12,15 +12,15 @@ The canonical input is
 ## Integrated behavior
 
 - `simple_TRML.cpp` supplies the pressure-balanced shear layer, exact cooling,
-  frame-aware x3 reservoirs, the cold-material scalar, and 24 user-history
+  the frame-aware upper x3 reservoir, the cold-material scalar, and 24 user-history
   diagnostics.
 - `<initial_perturbations>` supplies the single seeded velocity perturbation.
 - `<frame_tracking>` follows the hot-side `0.05 <= scalar0 <= 0.2` interface
   band along x3 and derives its damping signal from the interface-position rate.
 - `lagrangian_mc` particles sample the fluid and move using saved mass fluxes.
 - Of 3,072 canonical tracers, 777 start throughout the volume and 2,295 enter
-  through a one-root-cell-thick top boundary slab in 51 equal batches from `t=0` through
-  `t=75`.
+  through a one-root-cell-thick top boundary slab in 51 equal batches from `t=0`
+  through `50 t_shear`.
 - A frame update precedes the Monte-Carlo particle push. These particles have
   positions but no physical velocity state, so the frame boost is not applied a
   second time to their positions. Lab coordinates are reconstructed with
@@ -177,7 +177,8 @@ srun -N 1 -n 8 --ntasks-per-node=8 --cpus-per-task=7 \
   tracer_seed2/count_per_event=16 \
   output1/dt=1.0e-20 output2/dt=1.0e-20 \
   output3/variable=hydro_u output3/dt=1.0e-20 \
-  output4/dt=10 output5/dt=1.0e-20 \
+  output4/dt=10 output5/dt=10 output6/dt=10 output7/dt=10 \
+  output8/dt=1.0e-20 \
   2>&1 | tee "${F0}/launch.log"
 ```
 
@@ -218,7 +219,8 @@ common_f1_overrides=(
   tracer_seed2/end_time=0.06 tracer_seed2/cadence=0.0012
   output1/dt=1.0e-20 output2/dt=1.0e-20
   output3/variable=hydro_u output3/dt=1.0e-20
-  output4/dt=10 output5/dt=1.0e-20
+  output4/dt=10 output5/dt=10 output6/dt=10 output7/dt=10
+  output8/dt=1.0e-20
 )
 
 srun -N 1 -n 8 --ntasks-per-node=8 --cpus-per-task=7 \
@@ -290,7 +292,8 @@ srun -N 1 -n 8 --ntasks-per-node=8 --cpus-per-task=7 \
   time/nlim=32 time/tlim=1.0 \
   tracer_seed2/end_time=0.03 tracer_seed2/cadence=0.0006 \
   output3/variable=hydro_u output3/dt=1.0e-20 \
-  output4/dt=10 output5/dt=1.0e-20 \
+  output4/dt=10 output5/dt=10 output6/dt=10 output7/dt=10 \
+  output8/dt=1.0e-20 \
   2>&1 | tee "${F2}/launch.log"
 ```
 
@@ -315,7 +318,7 @@ srun -N 4 -n 32 --ntasks-per-node=8 --cpus-per-task=7 \
   mesh/nx1=256 mesh/nx2=256 mesh/nx3=512 \
   meshblock/nx1=32 meshblock/nx2=32 meshblock/nx3=64 \
   time/nlim=100 time/tlim=1.0 \
-  output4/dt=10 \
+  output4/dt=10 output5/dt=10 output6/dt=10 output7/dt=10 \
   2>&1 | tee "${F3}/launch.log"
 ```
 

@@ -21,9 +21,10 @@ The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four piec
 ## Canonical input
 
 `TRML_with_Tracers_and_Tracking.athinput` is the single supported integrated-run
-configuration. It records the validated `xi=100`, `48 x 48 x 96`, `t=75` setup,
+configuration. It records the `xi=100`, `48 x 48 x 96`, 50-shear-time setup,
 including eight root MeshBlocks for one-block-per-rank launches on eight MPI ranks,
-the low-bandwidth controller, and the 3,072-particle/51-event tracer schedule.
+the low-bandwidth controller, single-precision full-volume and slice outputs, and
+the 3,072-particle/51-event tracer schedule.
 
 ## Low-bandwidth frame control
 
@@ -42,12 +43,12 @@ boundary, then keep it fixed for the entire run. A useful critically damped star
 ratio is `tau_avg = 0.2 tau_relax` and `tau_vel = 0.5 tau_relax`. This is a bandwidth
 choice, not a simulation-phase or absolute-time trigger.
 
-For the `xi=100`, `48 x 48 x 96` validation through `t=75`, the low-bandwidth
-controller's initial tracked-band offset peaked at 0.136 and returned within one cell of
-center by `t=19.5`. Over `t=20.25--74.75`, its detrended cooling standard deviation was
-0.0163 versus 0.0798 for the aggressive controller, and the fraction of cooling power
-in the controller-artifact band at frequencies 1.5--2.0 fell from 80.8% to 2.35%. The
-final tracked-band centroid was -0.0124, inside one cell (`dx3=0.02083`).
+In the `xi=100`, `48 x 48 x 96` validation used to choose this controller, the
+tracked-band offset peaked at 0.136 and returned within one cell of center by
+`t=19.5`. Over `t=20.25--74.75`, its detrended cooling standard deviation was
+0.0163 versus 0.0798 for the aggressive controller, and the fraction of cooling
+power in the controller-artifact band at frequencies 1.5--2.0 fell from 80.8% to
+2.35%.
 
 ## X3 boundary conditions
 
@@ -96,7 +97,8 @@ The canonical run contains 3,072 tracers in total:
 - seed ID 1 places 777 tracers uniformly by volume throughout the initial domain at
   `t=0` (25.3% of the total population);
 - seed ID 2 places 45 tracers uniformly by area in the top boundary slab at
-  each of 51 times, `t=0, 1.5, ..., 75` (2,295 tracers, or 74.7%).
+  each of 51 times, `t=0, t_shear, ..., 50 t_shear`, where
+  `t_shear=1.5491933384829668` (2,295 tracers, or 74.7%).
 
 The top schedule uses the slab `0.9791666666666666 <= x3 <= 1.0`, which is one
 root-grid cell thick on the committed 96-cell x3 mesh. In the default uniform run this

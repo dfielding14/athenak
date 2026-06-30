@@ -61,7 +61,7 @@ The final run contains two populations:
 | `seed_id` | Sampling | Schedule | Final count |
 | --- | --- | --- | ---: |
 | 1 | Uniform by volume throughout the initial domain | 777 particles at `t=0` | 777 |
-| 2 | Uniform by volume in the uppermost active-cell slab | 45 particles at each of 51 times, `t=0, 1.5, ..., 75` | 2,295 |
+| 2 | Uniform by volume in the uppermost active-cell slab | 45 particles at each of 51 times, `t=0, t_shear, ..., 50 t_shear` | 2,295 |
 
 Thus a complete run should contain 3,072 unique tags. Fewer particles are
 present at earlier times because most of the `seed_id=2` population has not yet
@@ -313,7 +313,7 @@ disables recurring snapshots. To produce ParaView-readable particle snapshots,
 override that cadence, for example:
 
 ```bash
-output4/dt=5.0
+output7/dt=5.0
 ```
 
 Files then appear as

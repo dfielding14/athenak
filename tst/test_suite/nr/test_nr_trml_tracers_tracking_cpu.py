@@ -109,6 +109,7 @@ def test_x3_outflow_and_outer_reservoir_vx_modes(
     rho_hot = 1.0
     pressure_fixed = 1.0
     shear_velocity = 1.0
+    single_precision_atol = 5.0e-7
     zero_gradient_input = tmp_path / "zero_gradient_vx.athinput"
     canonical_text = input_path.read_text()
     assert "ix3_bc = outflow\n" in canonical_text
@@ -155,6 +156,9 @@ def test_x3_outflow_and_outer_reservoir_vx_modes(
                 "output3/ghost_zones=true",
                 "output4/dt=10",
                 "output5/dt=10",
+                "output6/dt=10",
+                "output7/dt=10",
+                "output8/dt=10",
             ],
         )
 
@@ -194,7 +198,7 @@ def test_x3_outflow_and_outer_reservoir_vx_modes(
             atol=2.0e-14,
         )
         np.testing.assert_allclose(
-            pressure[top], pressure_fixed, rtol=0.0, atol=2.0e-14
+            pressure[top], pressure_fixed, rtol=0.0, atol=single_precision_atol
         )
         np.testing.assert_allclose(
             fields["r_00"][bottom],
@@ -207,7 +211,7 @@ def test_x3_outflow_and_outer_reservoir_vx_modes(
             vx[bottom],
             np.broadcast_to(bottom_vx, vx[bottom].shape),
             rtol=0.0,
-            atol=1.0e-14,
+            atol=single_precision_atol,
         )
 
         top_active = vx[ng + nx - 1, interior, interior]
@@ -216,11 +220,14 @@ def test_x3_outflow_and_outer_reservoir_vx_modes(
                 vx[top],
                 np.broadcast_to(top_active, vx[top].shape),
                 rtol=0.0,
-                atol=1.0e-14,
+                atol=single_precision_atol,
             )
         else:
             np.testing.assert_allclose(
-                vx[top], 0.5 * shear_velocity, rtol=0.0, atol=1.0e-14
+                vx[top],
+                0.5 * shear_velocity,
+                rtol=0.0,
+                atol=single_precision_atol,
             )
 
 
@@ -248,7 +255,10 @@ def combined_overrides(basename: str, nlim: int) -> list[str]:
         "output3/variable=hydro_u",
         "output3/dt=1.0e-20",
         "output4/dt=10",
-        "output5/dt=1.0e-20",
+        "output5/dt=10",
+        "output6/dt=10",
+        "output7/dt=10",
+        "output8/dt=1.0e-20",
     ]
 
 
@@ -368,6 +378,9 @@ def test_canonical_population_split_includes_both_endpoints(
             "output3/dt=10",
             "output4/dt=10",
             "output5/dt=10",
+            "output6/dt=10",
+            "output7/dt=10",
+            "output8/dt=10",
         ],
     )
 

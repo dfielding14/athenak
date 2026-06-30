@@ -1,5 +1,6 @@
 # Canonical simple-TRML run with perturbations, thermodynamic Monte-Carlo tracers,
-# and one low-bandwidth interface-frame controller active from t=0 to t=75.
+# and one low-bandwidth interface-frame controller active for 50 shear times.
+# t_shear = (x1max - x1min)/velocity = 1.5491933384829668.
 # Validated locally on 8 MPI ranks at 48 x 48 x 96. No timed retuning is used.
 
 <comment>
@@ -55,7 +56,8 @@ evolution = dynamic
 integrator = rk2
 cfl_number = 0.3
 nlim = -1
-tlim = 75.0
+# 50 shear times.
+tlim = 77.45966692414834
 ndiag = 2000
 
 <hydro>
@@ -166,12 +168,13 @@ region = all
 seed = 112233
 
 <tracer_seed2>
-# Inject 45 tracers at each of 51 uniformly spaced times from t=0 through t=75.
+# Inject 45 tracers at each of 51 uniformly spaced times from t=0
+# through t=50*t_shear.
 # This contributes 2,295 tracers (74.7%), for 3,072 total.
 id = 2
 start_time = 0.0
-end_time = 75.0
-cadence = 1.5
+end_time = 77.45966692414834
+cadence = 1.5491933384829668
 count_per_event = 45
 weight = volume
 region = slab
@@ -194,22 +197,48 @@ dt = 0.25
 variables = density, pressure, temperature, entropy, v1, v2, v3, mach, scalar0
 
 <output3>
-# Full-precision primitive snapshots for slice plots and interface checks.
+# Single-precision full-volume primitive snapshots for restart-independent checks.
 file_type = bin
 id = state
 variable = hydro_w
-data_precision = real
 ghost_zones = false
 dt = 15.0
 
 <output4>
+# Single-precision primitive slice through x1=0, sampled every quarter shear time.
+file_type = bin
+id = slice_x1
+variable = hydro_w
+slice_x1 = 0.0
+ghost_zones = false
+dt = 0.3872983346207417
+
+<output5>
+# Single-precision primitive slice through x2=0, sampled every quarter shear time.
+file_type = bin
+id = slice_x2
+variable = hydro_w
+slice_x2 = 0.0
+ghost_zones = false
+dt = 0.3872983346207417
+
+<output6>
+# Single-precision primitive slice through x3=0, sampled every quarter shear time.
+file_type = bin
+id = slice_x3
+variable = hydro_w
+slice_x3 = 0.0
+ghost_zones = false
+dt = 0.3872983346207417
+
+<output7>
 # Effectively disable frequent particle VTK dumps; thermo histories remain enabled above.
 file_type = pvtk
 id = tracers
 variable = prtcl_all
 dt = 1.0e9
 
-<output5>
+<output8>
 # Per-rank restart files preserve frame state, tracers, and injection schedules under MPI.
 file_type = rst
 dt = 25.0
