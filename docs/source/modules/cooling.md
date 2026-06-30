@@ -39,6 +39,26 @@ edot_heat = q_heat Gamma
 where `q_cool` and `q_heat` are selected by `cooling_density` and
 `heating_density`.
 
+## Which Options Do I Need?
+
+| Use case | Required choices |
+| --- | --- |
+| Code-unit power law | `enabled=true`, `units=code`, `cooling_model=powerlaw`, `cooling_reference_axis`, `cooling_reference_value`, and a `cooling_density`. |
+| Piecewise code-unit curve | Same as power law, plus `cooling_model=piecewise_powerlaw`, ordered `cooling_breaks`, and one-more-entry `cooling_slopes`. |
+| Cooling table | `cooling_model=table`, `cooling_table=...`, `cooling_density=...`, and a table with `value_kind Lambda`. |
+| Heating | `heating_model=constant`, `table`, `powerlaw`, or `piecewise_powerlaw`; select `heating_density` independently from `cooling_density`. |
+| CGS Lambda with total number density | Add a `<units>` block, set table/value units to `cgs`, set `cooling_density=number_density`, and provide `<cooling>/mu`. |
+| CGS Lambda with hydrogen number density | Add a `<units>` block, set table/value units to `cgs`, set `cooling_density=hydrogen_number_density`, and provide `hydrogen_mass_fraction` or `mu_H`. |
+| CGS temperature axis or cgs timestep temperature bounds | Add a `<units>` block and provide `temperature_mu` or `mu`. |
+| Passive-scalar/metallicity table axis | Compile/run with enough passive scalars and set `scalar_index=N` on that axis. |
+| Cooling timestep limit | Set `timestep=true`, `timestep_factor`, and explicit bound booleans/units if filtering cells. |
+| History rates | Set `history=true`; `cool_gross` and `cool_net` are interval-integrated rates. |
+| Pgen-defined cooling | Set `cooling_model=user` or `heating_model=user`, then register the user cooling hooks from the pgen. |
+
+Canonical examples live under `inputs/cooling/`, including code-unit power law,
+1D/2D/3D tables, CGS number-density and hydrogen-density tables, CGM PIE/CIE
+blending, and a pgen user-hook example.
+
 ## Units And Density
 
 `units` sets the default value units for built-in analytic cooling and heating:
@@ -89,6 +109,18 @@ data
 ...
 ```
 
+Table interpolation is logarithmic along each axis by default. An `axisN` line
+therefore has the form
+
+```text
+axisN kind units [linear|log10] xmin xmax n [axis_options]
+```
+
+If the optional scale token is omitted, the axis is treated as `log10`. For a
+logarithmic axis, `xmin` and `xmax` are the lower and upper `log10` coordinates,
+not the raw physical or code-unit values. Add `linear` on any axis that should
+use linear coordinates; axes may be mixed within one table.
+
 Required header keys:
 
 - `ndim`: 1, 2, or 3.
@@ -104,6 +136,18 @@ Required header keys:
 Allowed axes are `temperature`, `density`, and `scalar`. Density axes may add
 `density_kind=mass_density`, `density_kind=number_density`, or
 `density_kind=hydrogen_number_density`. Scalar axes may add `scalar_index=N`.
+
+Validate tables before running large jobs:
+
+```bash
+tools/validate_cooling_table.py path/to/table.tbl --expect-value-kind lambda
+tools/validate_cooling_table.py path/to/table.tbl --plot table_slice.png
+tools/validate_cooling_table.py --write-example scratch.tbl --ndim 2 --value-kind lambda
+```
+
+The validator checks the header grammar, axis order and extents, default-log
+axis assumptions, expected value count, value kind compatibility, non-finite
+values, and can make a quick 1D/2D slice plot.
 
 ## Power Laws
 
@@ -232,13 +276,16 @@ The source hook signature is declared in `src/pgen/pgen.hpp`:
 void MyCoolingSource(MeshBlockPack *pmbp, const DvceArray5D<Real> &w0,
                      const EOS_Data &eos_data,
                      const cooling::RuntimeData &runtime, const Real bdt,
+                     const Real history_bdt,
                      DvceArray5D<Real> &u0,
                      Real &gross_energy, Real &net_energy);
 ```
 
-The hook should launch its own device work, update `u0`, and return
-domain-local gross and net cooling energies in code units for history
-accumulation.
+The hook should launch its own device work and update `u0` with `bdt`.
+It should return domain-local gross and net cooling energies in code units
+using `history_bdt`.  `bdt` and `history_bdt` differ for multistage RK
+integrators because earlier source increments are blended before they reach the
+final step solution.
 
 Most pgens should include `src/srcterms/cooling_hooks.hpp` and use its shared
 templated launchers
@@ -246,7 +293,7 @@ instead of duplicating the unit conversion and history bookkeeping:
 
 ```cpp
 cooling::ApplyCoolingWithEvaluator(pmbp, w0, eos_data, runtime,
-                                   MyCoolingEvaluator{}, bdt, u0,
+                                   MyCoolingEvaluator{}, bdt, history_bdt, u0,
                                    gross_energy, net_energy);
 
 cooling::CoolingNewDtWithEvaluator(pmbp, w0, eos_data, runtime, timestep,
@@ -256,3 +303,135 @@ cooling::CoolingNewDtWithEvaluator(pmbp, w0, eos_data, runtime, timestep,
 The timestep hook receives a `cooling::TimestepData` object so the shared helper
 can apply the same temperature and density selection bounds as the built-in
 models.
+
+## Cooling Regression Test Suite
+
+The dedicated cooling regression suite lives in `tst/test_suite/cooling/` and
+uses the built-in `cooling_test` problem generator in
+`src/pgen/tests/cooling_test.cpp`.  The pgen initializes a uniform 1D ideal-gas
+state with zero velocity, optional passive scalar zero, and optional uniform
+magnetic field.  There are no fluid gradients, so any energy change and any
+cooling history signal must come from the cooling source term itself.
+
+This pgen is intentionally not a physical flow test.  It is a source-term test
+surface with analytic expectations:
+
+- `density = 1`, `pressure = 1`, and `gamma = 5/3` give code temperature
+  `T = p/rho = 1`.
+- The domain volume is one, so a code-unit volumetric rate is also the
+  domain-integrated rate.
+- With `cooling_density = mass_density` and `rho = 1`, a table or power law
+  returning `Lambda = 1.0e-2` should produce `cool_gross = 1.0e-2`.
+- If heating returns `Gamma = 2.0e-3`, `cool_net` should be `8.0e-3`.
+- The difference in total energy over the first evolved history interval must
+  match the reported `cool_net` rate.
+
+The suite covers:
+
+- Hydro and MHD source-term paths.
+- Constant power-law cooling under `rk1`, `rk2`, and `rk3`.
+- 1D, 2D, and 3D cooling tables.
+- Default logarithmic table axes and mixed logarithmic/linear table axes.
+- Piecewise power-law cooling.
+- Constant and table heating.
+- Constant and table multiplicative cooling modifiers.
+- User-defined pgen cooling hooks through `cooling_hooks.hpp`.
+- CGM PIE/CIE table blending with shielding disabled.
+- CGM shielding with explicit `mu` and `hydrogen_mass_fraction`.
+- Cooling history disabled mode.
+- Table bounds behavior for `zero` and `clamp`.
+- Cooling timestep control and temperature-bound exclusion.
+- Nontrivial CGS density conversion for total number density and hydrogen
+  number density.
+- Runtime scalar-axis selection and clean failure for invalid scalar indices.
+- The standalone table validator, including plotting and generated examples.
+- Clean failures for removed legacy cooling keys, fatal table bounds, missing
+  cgs `mu`, missing cgs hydrogen fraction, cgs timestep-temperature bounds
+  without a temperature composition, malformed tables, wrong value counts,
+  bad value kinds, non-finite data, invalid log axes, and bad axis-scale tokens.
+
+During the review that produced the suite, the multistage RK history
+accumulation was found to be overcounting.  The source update must still use the
+stage coefficient `beta[stage-1]*dt`, but the history accumulator must use the
+weight with which that stage contributes to the final RK solution.  For example,
+`rk2` contributes one half of each stage to the final solution, not raw source
+substeps with weights `1` and `1/2`.  The driver now passes a separate
+`history_bdt` to cooling source launchers, and the test
+`test_constant_powerlaw_history_weights` verifies that `rk1`, `rk2`, and `rk3`
+all report the same interval-integrated cooling rate for a constant source.
+
+To run the suite:
+
+```bash
+cd tst
+python run_test_suite.py --test test_suite/cooling/test_cooling_cpu.py --cpu
+```
+
+Local result for the implementation documented here:
+
+```text
+collected 39 items
+../../test_suite/cooling/test_cooling_cpu.py ...............................  [100%]
+39 passed
+```
+
+AthenaK may write a final duplicate-time history row after the accumulator has
+been reset.  The regression tests read raw history files and check the first
+strictly evolved interval, which is the interval with the source contribution.
+
+MPI and GPU targeted coverage is also present:
+
+```bash
+cd tst
+python run_test_suite.py --test test_suite/cooling/test_cooling_mpicpu.py --mpicpu
+python run_test_suite.py --test test_suite/cooling/test_cooling_gpu.py --gpu
+```
+
+The MPI test checks that `cool_gross` and `cool_net` are reduced correctly
+across ranks.  The GPU-targeted tests exercise table interpolation with a
+passive-scalar axis and the pgen user-hook launcher on CUDA builds.
+
+### Analytic Comparison Plots
+
+The plotting script
+`tst/test_suite/cooling/plot_cooling_tests.py` reruns representative cooling
+test cases with the built AthenaK binary and writes figures to
+`docs/source/modules/figures/`:
+
+```bash
+python tst/test_suite/cooling/plot_cooling_tests.py
+```
+
+For constant code-unit cooling, the exact solution is
+
+```text
+Delta E(t) = Lambda t = 1.0e-2 t
+```
+
+because the test has unit volume, unit density, and no heating.  The numerical
+loss from `rk1`, `rk2`, and `rk3` lies on that analytic line, and the source
+history rate errors are at roundoff level.  The largest absolute loss error in
+the generated data is `5.87e-16`; the largest net-rate error is `1.56e-17`.
+
+![Constant cooling analytic comparison](figures/cooling_constant_solution.png)
+
+The model-sweep plot compares the first-interval numerical gross and net
+cooling rates against analytic rates for the table, power-law, heating,
+modifier, user-hook, CGM, and MHD paths.  These short runs use `tlim = 1.0e-8`
+so table values are compared to their analytic initial-state expectations.  The
+largest gross or net rate error in the generated data is `3.34e-13`.
+
+![Cooling model rate errors](figures/cooling_model_rate_errors.png)
+
+The interpolation-convergence plot builds temporary 1D tables from the analytic
+curve
+
+```text
+Lambda(T) = 1.0e-2 [1 + 0.2 T^2]
+```
+
+and samples them at an off-grid temperature.  The error decreases with the
+expected second-order trend for linear interpolation as the table spacing is
+refined.
+
+![Cooling table interpolation convergence](figures/cooling_table_interpolation_convergence.png)

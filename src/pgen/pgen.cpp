@@ -1096,6 +1096,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     Advection(pin, false);
   } else if (pgen_fun_name.compare("cpaw") == 0) {
     AlfvenWave(pin, false);
+  } else if (pgen_fun_name.compare("cooling_test") == 0) {
+    CoolingTest(pin, false);
   } else if (pgen_fun_name.compare("gr_bondi") == 0) {
     BondiAccretion(pin, false);
   } else if (pgen_fun_name.compare("cshock") == 0) {
@@ -1734,6 +1736,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     Advection(pin, true);
   } else if (pgen_fun_name.compare("cpaw") == 0) {
     AlfvenWave(pin, true);
+  } else if (pgen_fun_name.compare("cooling_test") == 0) {
+    CoolingTest(pin, true);
   } else if (pgen_fun_name.compare("gr_bondi") == 0) {
     BondiAccretion(pin, true);
   } else if (pgen_fun_name.compare("cshock") == 0) {

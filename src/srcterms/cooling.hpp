@@ -42,12 +42,13 @@ struct CompositionData {
 struct AxisData {
   AxisKind kind = AxisKind::temperature;
   UnitSystem units = UnitSystem::code;
-  ValueScale scale = ValueScale::linear;
+  ValueScale scale = ValueScale::log10;
   DensityKind density_kind = DensityKind::mass_density;
   int scalar_index = 0;
   Real xmin = 0.0;
   Real xmax = 1.0;
   int n = 1;
+  Real inv_dx = 1.0;
 };
 
 struct TableData {
@@ -59,6 +60,7 @@ struct TableData {
   ValueScale value_scale = ValueScale::linear;
   AxisData axes[MAX_TABLE_AXES];
   int n0 = 1, n1 = 1, n2 = 1;
+  int stride0 = 1, stride1 = 1, stride2 = 1;
   DvceArray1D<Real> values;
 };
 
@@ -152,7 +154,7 @@ class GeneralCooling {
   bool HistoryEnabled() const { return enabled_ && history_enabled_; }
 
   void Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data, const Real bdt,
-             DvceArray5D<Real> &u0);
+             const Real history_bdt, DvceArray5D<Real> &u0);
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data, Real &dtnew);
 
   int AddHistoryLabels(std::string *labels, int start, int max_labels) const;

@@ -1,0 +1,67 @@
+# User hook example using the cooling_test pgen's registered hook.
+
+<job>
+basename = cooling_user_hook
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 2
+tlim = 1.0e-2
+ndiag = 10
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.6666666666666667
+
+<problem>
+pgen_name = cooling_test
+density = 1.0
+pressure = 1.0
+register_user_cooling = true
+user_lambda = 1.0e-2
+user_gamma = 1.0e-3
+user_lambda_units = code
+user_gamma_units = code
+
+<cooling>
+enabled = true
+units = code
+cooling_model = user
+heating_model = user
+cooling_density = mass_density
+heating_density = mass_density
+timestep = true
+timestep_factor = 0.1
+history = true
+
+<output1>
+file_type = hst
+data_format = %16.8e
+dt = 1.0e-3
