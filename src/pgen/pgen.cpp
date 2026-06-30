@@ -1715,6 +1715,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     myoffset = offset_myrank;
   }
 
+  }
+
   if (pm->pmb_pack->ppart != nullptr && pm->pmb_pack->ppart->IsLagrangianMC()) {
 #if MPI_PARALLEL_ENABLED
     if (shard_mode != FileShardMode::per_rank && global_variable::nranks > 1) {

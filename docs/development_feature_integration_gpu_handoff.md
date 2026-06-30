@@ -42,9 +42,44 @@ git diff --cached --check
 rg -n "^(<<<<<<<|=======|>>>>>>>)" .github docs inputs scripts src tst
 ```
 
-Both checks passed before the frame-tracker merge commit. No build or runtime
-validation has been run locally; this handoff intentionally stops at the GPU
-validation step.
+Both checks passed before the frame-tracker merge commit.
+
+## Pre-Push Local Compile And Smoke Audit
+
+After the handoff was first written, a local compile audit found a missing
+closing brace in `ProblemGenerator::ProblemGenerator(ParameterInput*, Mesh*,
+IOWrapper, FileShardMode)` after the shared restart data block. The pre-push fix
+restores that restart scope before MC particle restart data is read.
+
+These local CPU/macOS builds passed after that fix:
+
+```bash
+cmake -S . -B /tmp/athenak_integration_build_builtin -DPROBLEM=built_in_pgens
+cmake --build /tmp/athenak_integration_build_builtin -j 8
+
+cmake -S . -B /tmp/athenak_integration_build_cloud -DPROBLEM=cloud_crushing
+cmake --build /tmp/athenak_integration_build_cloud -j 8
+
+cmake -S . -B /tmp/athenak_integration_build_trml -DPROBLEM=TRML_frame_tracking
+cmake --build /tmp/athenak_integration_build_trml -j 8
+
+cmake -S . -B /tmp/athenak_integration_build_turb -DPROBLEM=turb
+cmake --build /tmp/athenak_integration_build_turb -j 8
+```
+
+These local serial smoke runs also passed:
+
+```text
+inputs/particles/lagrangian_mc_thermo.athinput
+inputs/hydro/frame_tracking_smoke.athinput
+inputs/tests/initial_perturbations.athinput
+inputs/hydro/cloud_crushing_snr.athinput
+inputs/hydro/TRML/TRML_frame_tracking_material.athinput
+inputs/hydro/turb_driving/constant_edot_fixed_grid.athinput
+```
+
+GPU validation has not been run locally; the remaining validation target is the
+GPU-machine matrix below.
 
 ## GPU Particle Counter Fix
 
