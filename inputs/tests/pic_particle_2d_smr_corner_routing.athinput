@@ -129,4 +129,3 @@ file_type = pvtk
 variable = prtcl_all
 id = prtcl_all
 dcycle = 4
-
