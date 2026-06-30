@@ -771,6 +771,10 @@
       "sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45"
     },
     {
+      "path": "inputs/tests/pic_particle_2d_smr_corner_routing.athinput",
+      "sha256": "37cfd058a8eddb867f0ebd5da28eca4d1510ac5feca8577e54c5fab512a24374"
+    },
+    {
       "path": "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_candidate.athinput",
       "sha256": "a2f9b4187628ae5e54d5850b1bf233410faae26d8e2cdd8fd5f3dab8e8356891"
     },
@@ -953,6 +957,22 @@
     {
       "path": "inputs/tests/pic_restart_safety_guards.athinput",
       "sha256": "618e551ddc36d0466363135b6a2f2f5c0f2c5be2468783816e7bc577eee28745"
+    },
+    {
+      "path": "inputs/tests/pic_static_load_balance_restart.athinput",
+      "sha256": "40684929c667d6f1181f10c110c2f107d9778d61307e607fe27257b777776121"
+    },
+    {
+      "path": "inputs/tests/pic_static_load_balance_restart_override.athinput",
+      "sha256": "cf959ef6003df6db2116b6414ab693583c239c47aa116abd191836afbf637feb"
+    },
+    {
+      "path": "inputs/tests/pic_turb_zero_field.athinput",
+      "sha256": "ed50186d9efc6b9d3bc917fa6b6baad9f0811f5dfc5914ffc160c1989c162c5e"
+    },
+    {
+      "path": "inputs/tests/pic_turbulent_dynamo_smoke.athinput",
+      "sha256": "8a0dd6eea005692d0d8138dd67a800212eb0f4eea1983cb6d5cff541210dd4c9"
     },
     {
       "path": "inputs/tests/pic_two_stream_growth_proxy.athinput",

@@ -244,6 +244,9 @@ AUTHORIZED_STORAGE_PREFLIGHT_PREDECESSOR_MIGRATION_SOURCE_AUTHENTICATION = {
 PREPARED_ARTIFACT_INVENTORY_PATH = (
     "tst/publication/frontier_control_plane/prepared_pic_artifact_inventory.json"
 )
+AUTHORIZED_LEGACY_Q023_OMISSION_PREPARED_INVENTORY_SHA256 = (
+    "2eaab9755c6f71295bc755a98f8d06ad412f5b55b8feb436f95abd8ddc1cddc8"
+)
 PREPARED_ARTIFACT_REQUIRED_PUBLICATION_DECK_PATHS = (
     "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput",
 )
@@ -1108,6 +1111,27 @@ def prepared_artifact_manifest_from_source_archive(
         field="Prepared analyzer inventory",
         source_files=source_files,
     )
+    q023_decks = [
+        path
+        for path in source_files
+        if path.startswith(
+            "inputs/tests/"
+            "q023_paper_bell_linear_joverc_predecessor/"
+        )
+        and path.endswith(".athinput")
+        and "/"
+        not in path[
+            len(
+                "inputs/tests/"
+                "q023_paper_bell_linear_joverc_predecessor/"
+            ) :
+        ]
+    ]
+    if (
+        sha256_bytes(inventory_bytes)
+        == AUTHORIZED_LEGACY_Q023_OMISSION_PREPARED_INVENTORY_SHA256
+    ):
+        q023_decks = []
     expected_paper_decks = sorted(
         [
             *(
@@ -1133,6 +1157,7 @@ def prepared_artifact_manifest_from_source_archive(
                     ) :
                 ]
             ),
+            *q023_decks,
             *(
                 path
                 for path in source_files
@@ -1178,8 +1203,9 @@ def prepared_artifact_manifest_from_source_archive(
     if [record["path"] for record in paper_decks] != expected_paper_decks:
         raise ValueError(
             "Prepared paper-deck inventory must exactly cover archived "
-            "inputs/tests/pic*.athinput, the nested Q043 and Q019 matrices, "
-            "the Q019 runtime-controller packet, and required publication decks"
+            "inputs/tests/pic*.athinput, the nested Q043, Q023, and Q019 "
+            "matrices, the Q019 runtime-controller packet, and required "
+            "publication decks"
         )
     if [record["path"] for record in analyzers] != expected_analyzers:
         raise ValueError(
