@@ -102,8 +102,7 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
   adm::ADM* padm = pm->pmb_pack->padm;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   radiation::Radiation* prad = pm->pmb_pack->prad;
-  TurbulenceDriver* pturb=pm->pmb_pack->pturb;
-  int nhydro=0, nmhd=0, nrad=0, nforce=3, nadm=0, nz4c=0;
+  int nhydro=0, nmhd=0, nrad=0, nadm=0, nz4c=0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
   }
@@ -145,11 +144,6 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
     Kokkos::deep_copy(outarray_rad, Kokkos::subview(prad->i0, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
-  if (pturb != nullptr) {
-    Kokkos::realloc(outarray_force, nmb, nforce, nout3, nout2, nout1);
-    Kokkos::deep_copy(outarray_force, Kokkos::subview(pturb->force, std::make_pair(0,nmb),
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
-  }
   if (pz4c != nullptr) {
     Kokkos::realloc(outarray_z4c, nmb, nz4c, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_z4c, Kokkos::subview(pz4c->u0, std::make_pair(0,nmb),
@@ -185,7 +179,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   adm::ADM* padm = pm->pmb_pack->padm;
-  int nhydro=0, nmhd=0, nrad=0, nforce=3, nz4c=0, nadm=0, nco=0;
+  int nhydro=0, nmhd=0, nrad=0, nz4c=0, nadm=0, nco=0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
   }
@@ -330,9 +324,18 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         WriteMetadata(pt->GetPos(), 3*sizeof(Real), "byte");
       }
     }
-    // turbulence driver internal RNG
+    // The modal OU state is authoritative; storing it makes restarts independent of
+    // the MeshBlock layout used to write the checkpoint.
     if (pturb != nullptr) {
+      TurbulenceRestartMetadata metadata = pturb->RestartMetadata();
+      pturb->mode_amp_real.template sync<HostMemSpace>();
+      pturb->mode_amp_imag.template sync<HostMemSpace>();
+      WriteMetadata(&metadata, sizeof(TurbulenceRestartMetadata), "byte");
       WriteMetadata(&(pturb->rstate), sizeof(RNG_State), "byte");
+      WriteMetadata(pturb->mode_amp_real.h_view.data(),
+                    3 * pturb->mode_count * sizeof(Real), "byte");
+      WriteMetadata(pturb->mode_amp_imag.h_view.data(),
+                    3 * pturb->mode_count * sizeof(Real), "byte");
     }
   }
 
@@ -353,9 +356,6 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   if (prad != nullptr) {
     data_size += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
-  }
-  if (pturb != nullptr) {
-    data_size += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
   }
   if (pz4c != nullptr) {
     data_size += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
@@ -384,7 +384,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   IOWrapperSizeT step3size = 3*nco*sizeof(Real);
   if (pz4c != nullptr) step3size += sizeof(Real);
-  if (pturb != nullptr) step3size += sizeof(RNG_State);
+  if (pturb != nullptr) {
+    step3size += sizeof(TurbulenceRestartMetadata) + sizeof(RNG_State) +
+                 6 * pturb->mode_count * sizeof(Real);
+  }
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank = 0;
@@ -598,43 +601,6 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       }
     }
     offset_myrank += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
-    myoffset = offset_myrank;
-  }
-
-  if (pturb != nullptr) {
-    for (int m=0;  m<shard_max; ++m) {
-      // every rank has a MB to write, so write collectively
-      if (m < shard_min) {
-        // get ptr to cell-centered MeshBlock data
-        auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
-                                          use_serial_io) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered turb data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
-
-      // some ranks are finished writing, so use non-collective write
-      } else if (m < pm->nmb_thisrank) {
-        // get ptr to MeshBlock data
-        auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
-                                      use_serial_io) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered turb data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
-      }
-    }
-    offset_myrank += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
     myoffset = offset_myrank;
   }
 
