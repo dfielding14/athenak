@@ -286,7 +286,8 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
   if (pturb != nullptr) {
     ValidateRestartAllocation({nmb, nforce, nout3, nout2, nout1});
     Kokkos::realloc(outarray_force, nmb, nforce, nout3, nout2, nout1);
-    Kokkos::deep_copy(outarray_force, Kokkos::subview(pturb->force, std::make_pair(0,nmb),
+    Kokkos::deep_copy(outarray_force, Kokkos::subview(pturb->force_tmp1,
+                      std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (pz4c != nullptr) {
@@ -495,8 +496,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         write_header_bytes(pt.GetPos(), 3*sizeof(Real));
       }
     }
-    // turbulence driver internal RNG
+    // Turbulence-driver OU accumulator metadata and internal RNG.  The raw
+    // accumulator itself is stored in outarray_force below.
     if (pturb != nullptr) {
+      TurbulenceRestartState state{1, pturb->n_turb_updates_yet};
+      write_header_bytes(&state, sizeof(TurbulenceRestartState));
       write_header_bytes(&(pturb->rstate), sizeof(RNG_State));
     }
   }
@@ -554,7 +558,10 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   IOWrapperSizeT step3size = 0;
   AdvanceRestartOffset(step3size, nco, 3*sizeof(Real));
   if (pz4c != nullptr) AdvanceRestartOffset(step3size, 1, sizeof(Real));
-  if (pturb != nullptr) AdvanceRestartOffset(step3size, 1, sizeof(RNG_State));
+  if (pturb != nullptr) {
+    AdvanceRestartOffset(step3size, 1, sizeof(TurbulenceRestartState));
+    AdvanceRestartOffset(step3size, 1, sizeof(RNG_State));
+  }
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank = step1size;

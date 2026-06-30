@@ -18,6 +18,13 @@
 #include "parameter_input.hpp"
 #include "utils/random.hpp"
 
+// Restart metadata for the mesh-space Ornstein-Uhlenbeck accumulator.  Native
+// restart files already require the same executable precision and feature layout.
+struct TurbulenceRestartState {
+  int version;
+  int n_updates;
+};
+
 //----------------------------------------------------------------------------------------
 //! \class TurbulenceDriver
 
@@ -31,14 +38,15 @@ class TurbulenceDriver {
   DvceArray5D<Real> force, force_tmp1, force_tmp2;  // arrays used for turb forcing
   RNG_State rstate;                                 // random state
 
-  DualArray2D<Real> mode_amp_real, mode_amp_imag;   // Fourier mode amplitudes (real/imag components, repeated on all tiles)
+  // Fourier mode amplitudes (real/imaginary components, repeated on all tiles)
+  DualArray2D<Real> mode_amp_real, mode_amp_imag;
   DualArray1D<Real> kx_mode, ky_mode, kz_mode;
   DvceArray3D<Real> xcos, xsin, ycos, ysin, zcos, zsin;
 
 
   // AMR tracking variables
   int current_nmb_;            // current number of mesh blocks
-  int last_nmb_created_;        // last tracked created blocks count  
+  int last_nmb_created_;        // last tracked created blocks count
   int last_nmb_deleted_;        // last tracked deleted blocks count
 
   // parameters of driving
@@ -80,7 +88,7 @@ class TurbulenceDriver {
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
   void ApplyImpulse(Real kick_dt);
-  
+
   // Update the MeshBlockPack pointer after AMR
   void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }
 

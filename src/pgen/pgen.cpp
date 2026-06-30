@@ -1118,8 +1118,14 @@ void LoadSingleFileRestartData(Mesh *pm,
       }
       srcfile.Close(true);
     }
-    Kokkos::deep_copy(Kokkos::subview(pturb->force, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
+    auto raw_force = Kokkos::subview(pturb->force_tmp1, std::make_pair(0,nmb),
+                                     Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL);
+    auto applied_force = Kokkos::subview(pturb->force, std::make_pair(0,nmb),
+                                         Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                         Kokkos::ALL);
+    Kokkos::deep_copy(raw_force, ccin);
+    Kokkos::deep_copy(applied_force, ccin);
   }
 
   if (pz4c != nullptr && nz4c > 0) {
@@ -1940,24 +1946,36 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
 
   if (pturb != nullptr) {
-    // root process reads size the random seed
+    TurbulenceRestartState turbulence_state{};
     char rng_data[sizeof(RNG_State)];
     // the master process reads the variables data
     if (global_variable::my_rank == 0 || single_file_per_rank) {
-      if (resfile.Read_bytes(rng_data, 1, sizeof(RNG_State), single_file_per_rank)
+      if (resfile.Read_bytes(&turbulence_state, 1, sizeof(TurbulenceRestartState),
+                             single_file_per_rank)
+              != sizeof(TurbulenceRestartState) ||
+          resfile.Read_bytes(rng_data, 1, sizeof(RNG_State), single_file_per_rank)
           != sizeof(RNG_State)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "RNG data size read from restart file is incorrect, "
-                  << "restart file is broken." << std::endl;
+                  << std::endl
+                  << "Turbulence restart state size is incorrect; restart file is "
+                  << "broken or predates OU-state restart version 1." << std::endl;
         restart_utils::AbortOnFatalError();
       }
     }
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
-      // then broadcast the RNG information
+      MPI_Bcast(&turbulence_state, sizeof(TurbulenceRestartState), MPI_CHAR, 0,
+                MPI_COMM_WORLD);
       MPI_Bcast(rng_data, sizeof(RNG_State), MPI_CHAR, 0, MPI_COMM_WORLD);
     }
 #endif
+    if (turbulence_state.version != 1 || turbulence_state.n_updates < 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Invalid turbulence restart state version or update "
+                << "counter." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    pturb->n_turb_updates_yet = turbulence_state.n_updates;
     std::memcpy(&(pturb->rstate), &(rng_data[0]), sizeof(RNG_State));
   }
 
@@ -2324,8 +2342,14 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         AdvanceParticleRestartOffset(myoffset, 1, data_size);
       }
     }
-    Kokkos::deep_copy(Kokkos::subview(pturb->force, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
+    auto raw_force = Kokkos::subview(pturb->force_tmp1, std::make_pair(0,nmb),
+                                     Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL);
+    auto applied_force = Kokkos::subview(pturb->force, std::make_pair(0,nmb),
+                                         Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                         Kokkos::ALL);
+    Kokkos::deep_copy(raw_force, ccin);
+    Kokkos::deep_copy(applied_force, ccin);
     AdvanceParticleRestartRealArrayOffset(offset_myrank, {nout1, nout2, nout3, nforce});
     myoffset = offset_myrank;
   }

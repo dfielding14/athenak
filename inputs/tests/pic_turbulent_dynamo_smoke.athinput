@@ -1,0 +1,180 @@
+# Small startup smoke for the zero-base-field seed and six-beam CR loading.
+
+<comment>
+problem = coupled turbulent-dynamo PIC startup smoke
+
+<job>
+basename = pic_turbulent_dynamo_smoke
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 16
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 16
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim = 2
+tlim = 0.01
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+gamma = 1.6666666666666667
+
+<eos>
+iso_sound_speed = 1.0
+
+<coord>
+special_rel = false
+general_rel = false
+
+<particles>
+particle_type = cosmic_ray
+ppc = 6.0
+pusher = boris_tsc
+nspecies = 6
+cr_distribution = random
+pic_random_seed = 161803
+deposit_moments = true
+deposit_order = 2
+deposit_qscale = 2.9296875e-7
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_coeff = 1.0
+couple_moments_energy_coeff = 1.0
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_cr_light_speed = 100.0
+pic_cr_initial_state = velocity
+pic_cr_hall_mode = off
+pic_wave_damping_mode = off
+pic_max_cell_cross = 2
+pic_theta_max = 0.3
+pic_deltaf_mode = off
+pic_deltaf_adapt_mode = off
+pic_deltaf_adapt_interval = 0.0
+pic_sort_interval = 0
+pic_intermediate_arrays = auto
+track_displacement = false
+pic_expanding_box_mode = off
+
+<species0>
+mass = 1.0
+charge = 100.0
+vx0 = 5.0
+vy0 = 0.0
+vz0 = 0.0
+<species1>
+mass = 1.0
+charge = 100.0
+vx0 = -5.0
+vy0 = 0.0
+vz0 = 0.0
+<species2>
+mass = 1.0
+charge = 100.0
+vx0 = 0.0
+vy0 = 5.0
+vz0 = 0.0
+<species3>
+mass = 1.0
+charge = 100.0
+vx0 = 0.0
+vy0 = -5.0
+vz0 = 0.0
+<species4>
+mass = 1.0
+charge = 100.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 5.0
+<species5>
+mass = 1.0
+charge = 100.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = -5.0
+
+<problem>
+pgen_name = turb
+d_i = 1.0
+d_n = 1.0
+beta = 1.0
+ifield = 0
+user_hist = true
+
+<initial_perturbations>
+variables = magnetic
+magnetic_rms = 1.0e-3
+spectral_slope = 1.6666666666666667
+nlow = 1
+nhigh = 4
+rseed = 271828
+localization = none
+
+<turb_driving>
+turb_flag = 2
+constant_edot = true
+tcorr = 1.0
+dedt = 0.06
+spect_form = 1
+npeak = 2
+nlow = 1
+nhigh = 3
+driving_type = 0
+sol_fraction = 1.0
+dt_turb_update = 0.01
+rseed = 314159
+
+<output1>
+file_type = hst
+dcycle = 1
+
+<output2>
+file_type = bin
+variable = mhd_w_bcc
+id = mhd_w_bcc
+dcycle = 1
+ghost_zones = false
+
+<output3>
+file_type = bin
+variable = mhd_divb
+id = mhd_divb
+dcycle = 1
+ghost_zones = false
+
+<output4>
+file_type = pvtk
+variable = prtcl_all
+id = prtcl_all
+dcycle = 1
