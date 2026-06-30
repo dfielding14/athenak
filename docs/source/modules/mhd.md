@@ -87,7 +87,7 @@ No Roe solver is implemented for MHD; specifying it raises a fatal error.
 
 ## Diffusion & Source Coupling
 - Viscosity, resistivity, and conduction modules are instantiated only when the corresponding coefficients appear in `<mhd>`. Their fluxes are added immediately after the Riemann solver inside `MHD::Fluxes` (`src/mhd/mhd_tasks.cpp:121`).
-- CGL Landau-fluid heat flux is a distinct STS parabolic process; it updates energy and the temporary magnetic-moment representation documented in [cgl_landau_fluid.md](cgl_landau_fluid.md).
+- CGL Landau-fluid heat flux is a distinct STS parabolic process; it updates energy and the temporary magnetic-moment representation documented in [CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md) and [CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md).
 - `SourceTerms("mhd", …)` applies body forces, turbulence driving, etc., and contributes to the timestep limiter.
 - Orbital advection and shearing-box boundary handlers (`OrbitalAdvection{CC,FC}`, `ShearingBoxBoundary{CC,FC}`) are constructed when `<shearing_box>` exists.
 

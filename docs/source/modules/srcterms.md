@@ -125,7 +125,8 @@ Prototype keys previously documented on this page, including
 For MHD calculations using the CGL Landau-fluid closure, modal driving runs
 in the ordinary source-term graph outside the dedicated LF split sweep. The
 CGL regression suite includes a strict AMR/restart interaction test for this
-combined path.
+combined path. The relevant CGL model assumptions are summarized in
+[CGL Method Physics Primer](cgl_mhd_method.md).
 
 ## Cooling Timestep Constraint
 `SourceTerms::NewTimeStep` scans the mesh pack for ISM and CGM cooling cells and stores the minimum stable timestep in `dtnew`. The driver reduces the global timestep against this value before advancing.

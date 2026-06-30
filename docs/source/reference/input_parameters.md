@@ -146,6 +146,12 @@ Complete list of all input parameters by block, extracted from source code.
 | `limiter_hardwall` | bool | false | cgl_mhd.cpp |
 | `backup_limiters` | bool | false | cgl_mhd.cpp |
 | `cgl_lf_strict_admissibility` | bool | false | cgl_landau_fluid.cpp |
+| `cgl_lf_record_pressure_work` | bool | false | mhd.cpp |
+| `cgl_lf_diagnostics` | string | full (`full` or `none`) | cgl_landau_fluid.cpp |
+| `cgl_lf_arithmetic` | string | safe (`safe` or `fast`) | cgl_landau_fluid.cpp |
+| `cgl_lf_sts_flux` | string | weighted (`weighted` or `physical`) | cgl_landau_fluid.cpp |
+| `cgl_lf_profile` | bool | false | cgl_landau_fluid.cpp |
+| `cgl_lf_profile_detail` | bool | false | cgl_landau_fluid.cpp |
 | `fixed` | bool | false | dyn_grmhd.cpp:L124 |
 | `fofc` | bool | false | mhd.cpp:L176 |
 | `fofc_method` | string | llf | dyn_grmhd.cpp:L109 |

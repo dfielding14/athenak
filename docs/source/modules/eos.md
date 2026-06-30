@@ -38,6 +38,7 @@ No energy equation needed
 CGL MHD uses parallel and perpendicular primitive pressures and a sixth
 conserved MHD component for pressure anisotropy. It is restricted to
 non-relativistic MHD and may be coupled to the STS Landau-fluid closure; see
+[CGL Method Physics Primer](cgl_mhd_method.md) and
 [CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md).
 
 ### Polytropic

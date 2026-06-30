@@ -23,7 +23,7 @@ Complete documentation for all AthenaK modules, organized by category.
 | **Ion-Neutral** | `src/ion-neutral/` | Two-fluid ion-neutral MHD | [ion_neutral.md](ion_neutral.md) |
 | **Particles** | `src/particles/` | Lagrangian particle tracking | [particles.md](particles.md) |
 
-## Numerical Methods (4 modules)
+## Numerical Methods
 
 | Module | Directory | Description | Documentation |
 |--------|-----------|-------------|---------------|
@@ -32,7 +32,9 @@ Complete documentation for all AthenaK modules, organized by category.
 | **EOS** | `src/eos/` | Equations of state | [eos.md](eos.md) |
 | **Diffusion** | `src/diffusion/` | Physical diffusion processes | [diffusion.md](diffusion.md) |
 | **Super Time Stepping** | `src/diffusion/`, `src/driver/` | RKL2 parabolic integration | [super_time_stepping.md](super_time_stepping.md) |
+| **CGL Method Physics Primer** | `src/eos/`, `src/mhd/` | Physics model for anisotropic CGL MHD and LF closure | [cgl_mhd_method.md](cgl_mhd_method.md) |
 | **CGL Landau-Fluid Heat Flux** | `src/eos/`, `src/diffusion/`, `src/mhd/` | Anisotropic MHD LF closure | [cgl_landau_fluid.md](cgl_landau_fluid.md) |
+| **CGL Landau-Fluid Code Guide** | `src/eos/`, `src/diffusion/`, `src/mhd/`, `tst/` | Implementation map, runtime modes, diagnostics, and tests | [cgl_landau_fluid_code_guide.md](cgl_landau_fluid_code_guide.md) |
 | **CGL LF Validation** | `inputs/unit_tests/`, `scripts/` | Quantitative and scientific validation workflow | [cgl_landau_fluid_validation.md](cgl_landau_fluid_validation.md) |
 | **Turbulence Driving** | `src/srcterms/` | Modal OU forcing, localization, AMR, and restart | [turbulence_driving.md](turbulence_driving.md) |
 
@@ -119,3 +121,35 @@ All module parameters are documented in [Input Parameters Reference](../referenc
 - [Architecture Overview](../flowcharts/runtime.md)
 - [File Reference](../reference/file_reference.md)
 - [Migration Guide](../migration/index.md)
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+mesh
+driver
+tasklist
+coordinates
+hydro
+mhd
+radiation
+z4c
+dyn_grmhd
+ion_neutral
+particles
+reconstruction
+riemann_solvers
+eos
+diffusion
+super_time_stepping
+cgl_mhd_method
+cgl_landau_fluid
+cgl_landau_fluid_code_guide
+cgl_landau_fluid_validation
+turbulence_driving
+outputs
+boundaries
+srcterms
+shearing_box
+pgen
+```

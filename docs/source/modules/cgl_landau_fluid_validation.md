@@ -1,5 +1,11 @@
 # CGL Landau-Fluid Validation
 
+This page documents validation workflows and evidence boundaries. For the
+physics model, see [CGL Method Physics Primer](cgl_mhd_method.md). For the
+implementation map and runtime performance modes, see
+[CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md). For the compact
+operator reference, see [CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md).
+
 ## Validation Tiers
 
 Routine CPU testing covers a quantitative decay case, analytic uniform

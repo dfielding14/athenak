@@ -7,6 +7,13 @@ state and an optional Landau-fluid (LF) heat-flux closure. The feature is
 implemented as a distinct MHD parabolic process, `mhd/cgl_heat_flux`, rather
 than as ordinary isotropic thermal conduction.
 
+For a physics-first explanation of the model, see
+[CGL Method Physics Primer](cgl_mhd_method.md). For the source-level map,
+runtime modes, and performance switches, see
+[CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md). For validation
+workflows and evidence boundaries, see
+[CGL Landau-Fluid Validation](cgl_landau_fluid_validation.md).
+
 Use CGL with the HLLE solver:
 
 ```ini
@@ -86,6 +93,26 @@ reporting is independent of whether `backup_limiters` is enabled.
 | `backup_limiters` | `false` | Apply rapid correction after an emergency bound is crossed. |
 | `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
+| `cgl_lf_diagnostics` | `full` | `full` collects heat-flux face/cap/work diagnostics; `none` skips those reductions for production runs. |
+| `cgl_lf_arithmetic` | `safe` | `safe` uses overflow-protected scaled arithmetic; `fast` uses direct normal-range `Real` arithmetic. |
+| `cgl_lf_sts_flux` | `weighted` | `weighted` embeds STS weights in LF fluxes; `physical` writes physical fluxes and requires `cgl_lf_diagnostics = none` plus `cgl_lf_arithmetic = fast`. |
+| `cgl_lf_profile` | `false` | Enable coarse LF timing regions with Kokkos fences; for profiling only. |
+| `cgl_lf_profile_detail` | `false` | Add directional probe kernels for detailed profiling when `cgl_lf_profile = true`. |
+
+The performance/safety switches can be overridden by
+`ATHENAK_CGL_LF_DIAGNOSTICS`, `ATHENAK_CGL_LF_ARITHMETIC`,
+`ATHENAK_CGL_LF_STS_FLUX`, `ATHENAK_CGL_LF_PROFILE`, and
+`ATHENAK_CGL_LF_PROFILE_DETAIL`. Production wall-time measurements should keep
+profiling disabled. The current fastest production mode is:
+
+```ini
+<mhd>
+cgl_lf_diagnostics = none
+cgl_lf_arithmetic = fast
+cgl_lf_sts_flux = physical
+cgl_lf_profile = false
+cgl_lf_profile_detail = false
+```
 
 At an operator face with `|B| <= bfloor`, LF does not construct a local field
 direction and applies zero heat-flux contribution at that face. The local
@@ -131,6 +158,12 @@ These are signed operator contractions; they are not required to be positive,
 equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for
 compatibility.
+
+When `cgl_lf_diagnostics = none`, LF admissibility and hard-wall projection
+counters remain active, but heat-flux face, cap, and q-work reductions are not
+collected. In that mode the corresponding heat-flux diagnostic columns should
+be treated as intentionally inactive rather than as measured zero cap
+occupancy.
 
 When `cgl_lf_record_pressure_work = true`, `lf_cpwrk` is the cumulative
 explicit-RK-applied contraction of velocity with the retained CGL
@@ -314,6 +347,8 @@ The routine CPU interaction regression uses
 admissibility, refinement, rendered forcing, and deterministic modal restart
 while turbulence driving is active.
 
-See also [Super Time Stepping](super_time_stepping.md) and
+See also [CGL Method Physics Primer](cgl_mhd_method.md),
+[CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md),
+[Super Time Stepping](super_time_stepping.md),
 [Magnetohydrodynamics](mhd.md), and
 [Turbulence Driving](turbulence_driving.md).

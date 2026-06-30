@@ -85,7 +85,8 @@ The LF process advances energy and magnetic moment, refreshes CGL primitives
 between stages, and restores anisotropy at the end of each sweep. This initial
 path is STS-only and rejects simultaneous MHD STS viscosity, resistivity,
 ordinary conduction, or scalar diffusion. See
-[CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md).
+[CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md) and
+[CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md).
 
 ## Process Contract
 
