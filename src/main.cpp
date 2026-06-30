@@ -43,6 +43,7 @@
 #include "outputs/outputs.hpp"
 #include "outputs/restart_utils.hpp"
 #include "driver/driver.hpp"
+#include "srcterms/initial_perturbations.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -492,6 +493,7 @@ int main(int argc, char *argv[]) {
   if (!res_flag) {
     // set ICs using ProblemGenerator constructor for new runs
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput, pmesh);
+    ApplyInitialPerturbations(pmesh, pinput);
     ApplyInitialTurbulenceKick(pmesh, pinput);
   } else {
     // read ICs from restart file using ProblemGenerator constructor for restarts
