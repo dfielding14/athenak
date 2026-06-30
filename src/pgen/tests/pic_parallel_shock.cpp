@@ -1580,9 +1580,14 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
   }
 
   Real local[14] = {};
+  // Populated only for a fail-closed diagnostic. These counters identify the
+  // rejected migration condition without weakening the escape ledger.
+  constexpr int ndiag = 20;
+  Real local_diag[ndiag] = {};
   Real audit_time = pm->time + pm->dt;
   if (!std::isfinite(pm->time) || !std::isfinite(pm->dt) || pm->dt <= 0.0) {
     local[7] += 1.0;
+    local_diag[0] += 1.0;
   } else if (ppart->UsesPaperVL2Coupling()) {
     if (stage == 1) {
       audit_time = pm->time + 0.5*pm->dt;
@@ -1590,6 +1595,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       audit_time = pm->time + pm->dt;
     } else {
       local[7] += 1.0;
+      local_diag[1] += 1.0;
     }
   }
   if (!std::isfinite(audit_time) ||
@@ -1597,39 +1603,131 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
                                                  ps_escape_last_audit_time) <
           ps_escape_last_audit_time) {
     local[7] += 1.0;
+    local_diag[2] += 1.0;
   }
   if (!PaperVL2EscapeStageChronologyIsValid(ppart, pm, stage, audit_time)) {
     local[7] += 1.0;
+    local_diag[3] += 1.0;
   }
 
   const int npart = ppart->nprtcl_thispack;
   const int ndestroy = ppart->pbval_part->nprtcl_destroy;
   const auto &destroylist = ppart->pbval_part->destroylist.h_view;
   std::vector<int> destroyed_indices;
+  int rejected_particle = -1;
+  int rejected_reason = static_cast<int>(ParticleDestructionReason::none);
   if (npart < 0 || ndestroy < 0 || ndestroy > npart ||
       static_cast<std::size_t>(ndestroy) > destroylist.extent(0)) {
     local[7] += 1.0;
+    local_diag[4] += 1.0;
   } else {
+    local_diag[19] += static_cast<Real>(ndestroy);
     destroyed_indices.reserve(static_cast<std::size_t>(ndestroy));
     for (int n = 0; n < ndestroy; ++n) {
       const ParticleLocationData entry = destroylist(n);
       const int p = entry.prtcl_indx;
       if (p < 0 || p >= npart) {
         local[7] += 1.0;
+        local_diag[5] += 1.0;
         continue;
       }
       destroyed_indices.push_back(p);
+      switch (static_cast<ParticleDestructionReason>(entry.destruction_reason)) {
+        case ParticleDestructionReason::none: local_diag[7] += 1.0; break;
+        case ParticleDestructionReason::physical_boundary: local_diag[8] += 1.0; break;
+        case ParticleDestructionReason::invalid_parent_gid: local_diag[9] += 1.0; break;
+        case ParticleDestructionReason::excessive_cell_crossing:
+          local_diag[10] += 1.0;
+          break;
+        case ParticleDestructionReason::invalid_neighbor: local_diag[11] += 1.0; break;
+        case ParticleDestructionReason::invalid_send_target:
+          local_diag[12] += 1.0;
+          break;
+        default: local_diag[13] += 1.0; break;
+      }
+      if (entry.physical_boundary_mask == particle_boundary_none) {
+        local_diag[14] += 1.0;
+      } else if (entry.physical_boundary_mask == particle_boundary_inner_x1) {
+        local_diag[15] += 1.0;
+      } else if (entry.physical_boundary_mask == particle_boundary_outer_x1) {
+        local_diag[16] += 1.0;
+      } else {
+        local_diag[17] += 1.0;
+      }
       if (entry.destruction_reason !=
               static_cast<int>(ParticleDestructionReason::physical_boundary) ||
           entry.physical_boundary_mask != particle_boundary_outer_x1) {
         local[7] += 1.0;
+        if (rejected_particle < 0) {
+          rejected_particle = p;
+          rejected_reason = entry.destruction_reason;
+        }
       }
     }
     std::sort(destroyed_indices.begin(), destroyed_indices.end());
     if (std::adjacent_find(destroyed_indices.begin(), destroyed_indices.end()) !=
         destroyed_indices.end()) {
       local[7] += 1.0;
+      local_diag[6] += 1.0;
     }
+  }
+  if (rejected_particle >= 0) {
+    const auto h_pr = Kokkos::create_mirror_view_and_copy(
+        HostMemSpace(), ppart->prtcl_rdata);
+    const auto h_pi = Kokkos::create_mirror_view_and_copy(
+        HostMemSpace(), ppart->prtcl_idata);
+    auto &size = pm->pmb_pack->pmb->mb_size;
+    auto &level = pm->pmb_pack->pmb->mb_lev;
+    size.template sync<HostMemSpace>();
+    level.template sync<HostMemSpace>();
+    const int gid = h_pi(PGID, rejected_particle);
+    const int m = gid - pm->pmb_pack->gids;
+    std::ostringstream sample;
+    sample << std::setprecision(17)
+           << "pic_parallel_shock destruction_reject_particle: rank="
+           << global_variable::my_rank << " p=" << rejected_particle
+           << " reason=" << rejected_reason << " gid=" << gid
+           << " local_m=" << m << " tag=" << h_pi(PTAG, rejected_particle)
+           << " x1=" << h_pr(IPX, rejected_particle)
+           << " x2=" << h_pr(IPY, rejected_particle)
+           << " x3=" << h_pr(IPZ, rejected_particle)
+           << " state1=" << h_pr(IPVX, rejected_particle)
+           << " state2=" << h_pr(IPVY, rejected_particle)
+           << " state3=" << h_pr(IPVZ, rejected_particle);
+    if (m >= 0 && m < pm->pmb_pack->nmb_thispack) {
+      const RegionSize block = size.h_view(m);
+      Real vx = 0.0;
+      Real vy = 0.0;
+      Real vz = 0.0;
+      particles::CRVelocityFromState(
+          ppart->UsesRelativisticCRState(), ppart->pic_cr_light_speed,
+          h_pr(IPVX, rejected_particle), h_pr(IPVY, rejected_particle),
+          h_pr(IPVZ, rejected_particle), vx, vy, vz);
+      const Real lx = block.x1max - block.x1min;
+      const Real ly = block.x2max - block.x2min;
+      const Real lz = block.x3max - block.x3min;
+      sample << " level=" << level.h_view(m)
+             << " x1min=" << block.x1min << " x1max=" << block.x1max
+             << " x2min=" << block.x2min << " x2max=" << block.x2max
+             << " x3min=" << block.x3min << " x3max=" << block.x3max
+             << " block_offset1="
+             << (h_pr(IPX, rejected_particle) - block.x1min)/lx
+             << " block_offset2="
+             << (h_pr(IPY, rejected_particle) - block.x2min)/ly
+             << " block_offset3="
+             << (h_pr(IPZ, rejected_particle) - block.x3min)/lz
+             << " velocity1=" << vx << " velocity2=" << vy
+             << " velocity3=" << vz
+             << " step_cells1=" << pm->dt*vx/block.dx1
+             << " step_cells2=" << pm->dt*vy/block.dx2
+             << " step_cells3=" << pm->dt*vz/block.dx3;
+    }
+    if (gid >= 0 && gid < pm->nmb_total && pm->lloc_eachmb != nullptr) {
+      const LogicalLocation loc = pm->lloc_eachmb[gid];
+      sample << " logical_level=" << loc.level << " lx1=" << loc.lx1
+             << " lx2=" << loc.lx2 << " lx3=" << loc.lx3;
+    }
+    std::cout << sample.str() << std::endl;
   }
   if (local[7] == 0.0 && ndestroy > 0) {
     auto &pr = ppart->prtcl_rdata;
@@ -1713,6 +1811,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       const RawEscapeEvent event = host_events(n);
       if (event.valid != 1) {
         local[7] += 1.0;
+        local_diag[18] += 1.0;
         continue;
       }
       const Real macro_mass = ps_particle_macro_mass;
@@ -1747,7 +1846,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
 #else
   Real *global = local;
 #endif
-  if (global[7] != 0.0 ||
+  const bool invalid = global[7] != 0.0 ||
       !ParallelShockLedgerValuesAgree(global[1],
                                       global[0]*ps_particle_macro_mass,
                                       global[0]) ||
@@ -1761,7 +1860,42 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       std::abs(global[3]) >
           global[10] + ParallelShockLedgerTolerance(global[3], global[10], global[13]) ||
       std::abs(global[4]) >
-          global[11] + ParallelShockLedgerTolerance(global[4], global[11], global[13])) {
+          global[11] + ParallelShockLedgerTolerance(global[4], global[11], global[13]);
+  if (invalid) {
+#if MPI_PARALLEL_ENABLED
+    Real global_diag[ndiag] = {};
+    MPI_Allreduce(local_diag, global_diag, ndiag, MPI_ATHENA_REAL, MPI_SUM,
+                  MPI_COMM_WORLD);
+#else
+    Real *global_diag = local_diag;
+#endif
+    if (global_variable::my_rank == 0) {
+      std::cout << std::setprecision(17)
+                << "pic_parallel_shock destruction_reject_diag: cycle=" << pm->ncycle
+                << " time=" << pm->time << " dt=" << pm->dt << " stage=" << stage
+                << " npart_global=" << pm->nprtcl_total
+                << " invalid_terms=" << global[7]
+                << " runtime=" << global_diag[0]
+                << " stage_invalid=" << global_diag[1]
+                << " time_regression=" << global_diag[2]
+                << " chronology=" << global_diag[3]
+                << " count_bounds=" << global_diag[4]
+                << " index=" << global_diag[5]
+                << " duplicate=" << global_diag[6]
+                << " reason_none=" << global_diag[7]
+                << " reason_physical=" << global_diag[8]
+                << " reason_parent=" << global_diag[9]
+                << " reason_crossing=" << global_diag[10]
+                << " reason_neighbor=" << global_diag[11]
+                << " reason_send=" << global_diag[12]
+                << " reason_other=" << global_diag[13]
+                << " mask_none=" << global_diag[14]
+                << " mask_inner_x1=" << global_diag[15]
+                << " mask_outer_x1=" << global_diag[16]
+                << " mask_other=" << global_diag[17]
+                << " payload=" << global_diag[18]
+                << " destroy_total=" << global_diag[19] << std::endl;
+    }
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock found an unaccounted or invalid particle "

@@ -62,6 +62,8 @@ class Driver {
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
   float lb_efficiency_;         // measure of how efficient was load balancing
+  int pic_static_load_balance_interval_;
+  Real pic_static_load_balance_cost_per_particle_;
   std::array<double, 5> q017_task_list_time_;
   std::array<std::uint64_t, 5> q017_task_list_calls_;
   double q017_output_time_;
@@ -71,6 +73,7 @@ class Driver {
   void OutputCycleDiagnostics(Mesh *pm);
   void OutputQ017Telemetry(Mesh *pm, double exe_time);
   void PublishOutput(BaseTypeOutput *out, Mesh *pm, ParameterInput *pin);
+  bool StaticParticleLoadBalanceDue(const Mesh *pm) const;
   Real UpdateWallClock();
 };
 #endif // DRIVER_DRIVER_HPP_

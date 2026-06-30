@@ -52,7 +52,9 @@ DEFAULT_ENERGY_BIN_COUNT = 64
 DEFAULT_MINIMUM_PARTICLES = 1000
 TAIL_FIT_CHI_WINDOW = particle_primitives.LATE_SLOPE_FIT_WINDOW
 TAIL_FIT_MINIMUM_POSITIVE_BINS = particle_primitives.LATE_SLOPE_MINIMUM_POSITIVE_BINS
-REFERENCE_F_EPSILON_EXPONENT = -1.5
+REFERENCE_F_CHI_EXPONENT = -1.5
+# Retained for callers that imported the original public constant.
+REFERENCE_F_EPSILON_EXPONENT = REFERENCE_F_CHI_EXPONENT
 PARTICLE_MACRO_MASS = 9.0e-4
 CANONICAL_QUALIFICATION_EFFECT = "derived_figure_only_no_claim_closure"
 EXPLORATORY_QUALIFICATION_EFFECT = (
@@ -418,6 +420,16 @@ def _validate_nominal_time(observed: float, nominal: float) -> None:
         )
 
 
+def _specific_energy_from_chi(
+    chi: object, upstream_speed: float, light_speed: float
+) -> np.ndarray:
+    values = np.asarray(chi, dtype=np.float64)
+    momentum_squared = values * upstream_speed**2
+    return momentum_squared / (
+        np.sqrt(1.0 + momentum_squared / light_speed**2) + 1.0
+    )
+
+
 def _read_snapshot(
     mhd_path: Path,
     particle_path: Path,
@@ -453,17 +465,15 @@ def _read_snapshot(
         raise DSASpectrumError(f"particle momentum reconstruction failed: {error}") from error
     u0 = float(runtime_model["upstream_speed_u0"])
     light_speed = float(runtime_model["particle_light_speed"])
-    momentum_squared = chi * u0**2
-    specific_energy = momentum_squared / (
-        np.sqrt(1.0 + momentum_squared / light_speed**2) + 1.0
-    )
+    specific_energy = _specific_energy_from_chi(chi, u0, light_speed)
     weights = np.asarray(arrays["macro_weight"][selected], dtype=np.float64)
     _require(
         np.all(np.isfinite(specific_energy))
-        and np.all(specific_energy > 0.0)
+        and np.all(specific_energy >= 0.0)
         and np.all(np.isfinite(weights))
         and np.all(weights > 0.0),
-        "admitted particle energies and macro weights must be finite and positive",
+        "admitted particle energies must be finite and non-negative; macro weights "
+        "must be finite and positive",
     )
     return {
         "dataset": dataset,
@@ -484,133 +494,169 @@ def _read_snapshot(
     }
 
 
-def _common_energy_edges(
-    snapshots: Sequence[Mapping[str, object]], bin_count: int
-) -> np.ndarray:
-    _require(bin_count >= 8, "energy bin count must be at least 8")
-    energies = np.concatenate(
-        [np.asarray(snapshot["specific_energy"], dtype=np.float64) for snapshot in snapshots]
-    )
-    minimum = float(np.min(energies))
-    maximum = float(np.max(energies))
-    _require(minimum > 0.0 and maximum >= minimum, "physical energy support is invalid")
-    if maximum == minimum:
-        lower = minimum / math.sqrt(2.0)
-        upper = maximum * math.sqrt(2.0)
-    else:
-        half_bin_padding = math.exp(0.5 * math.log(maximum / minimum) / bin_count)
-        lower = minimum / half_bin_padding
-        upper = maximum * half_bin_padding
-    lower = float(np.nextafter(lower, 0.0))
-    upper = float(np.nextafter(upper, math.inf))
-    edges = np.geomspace(lower, upper, bin_count + 1)
-    _require(
-        np.all(np.isfinite(edges)) and np.all(np.diff(edges) > 0.0),
-        "common physical-energy bins are invalid",
-    )
-    return edges
-
-
-def _tail_fit(
-    centers: np.ndarray, f_epsilon: np.ndarray, fit_window: tuple[float, float]
-) -> dict[str, object]:
+def _tail_fit(fixed_spectrum: Mapping[str, object]) -> dict[str, object]:
+    edges = np.asarray(fixed_spectrum["bin_edges"], dtype=np.float64)
+    centers = np.sqrt(edges[:-1] * edges[1:])
+    f_chi = np.asarray(fixed_spectrum["f_chi"], dtype=np.float64)
     selected = (
-        (centers >= fit_window[0])
-        & (centers <= fit_window[1])
-        & np.isfinite(f_epsilon)
-        & (f_epsilon > 0.0)
+        (centers >= TAIL_FIT_CHI_WINDOW[0])
+        & (centers <= TAIL_FIT_CHI_WINDOW[1])
+        & np.isfinite(f_chi)
+        & (f_chi > 0.0)
     )
     indices = np.flatnonzero(selected)
     record: dict[str, object] = {
-        "fit_window_specific_energy": list(fit_window),
+        "fit_window_chi": list(TAIL_FIT_CHI_WINDOW),
         "minimum_positive_bins": TAIL_FIT_MINIMUM_POSITIVE_BINS,
         "selected_bin_indices": indices.tolist(),
         "positive_bin_count": int(indices.size),
         "evaluated": bool(indices.size >= TAIL_FIT_MINIMUM_POSITIVE_BINS),
-        "slope_f_epsilon": None,
-        "intercept_log_f_epsilon": None,
+        "slope_f_chi": None,
+        "intercept_log_f_chi": None,
         "r_squared": None,
+        "reducer_record": None,
     }
     if indices.size < TAIL_FIT_MINIMUM_POSITIVE_BINS:
         return record
+
+    try:
+        reduced = particle_primitives.late_slope_record(f_chi)
+    except particle_primitives.ParticleReducerError as error:
+        raise DSASpectrumError(f"fixed chi tail fit failed: {error}") from error
     x = np.log(centers[selected])
-    y = np.log(f_epsilon[selected])
-    slope, intercept = np.polyfit(x, y, 1)
+    y = np.log(f_chi[selected])
+    slope = float(reduced["slope"])
+    intercept = float(reduced["intercept"])
     predicted = slope * x + intercept
     residual = float(np.sum((y - predicted) ** 2))
     total = float(np.sum((y - np.mean(y)) ** 2))
-    r_squared = 1.0 if total == 0.0 and residual == 0.0 else 1.0 - residual / total
+    r_squared = 1.0 if total == 0.0 else 1.0 - residual / total
     record.update(
         {
-            "slope_f_epsilon": float(slope),
-            "intercept_log_f_epsilon": float(intercept),
+            "slope_f_chi": slope,
+            "intercept_log_f_chi": intercept,
             "r_squared": float(r_squared),
+            "reducer_record": reduced,
         }
     )
     return record
 
 
-def _spectrum_record(
-    snapshot: Mapping[str, object], energy_edges: np.ndarray, fit_window: tuple[float, float]
-) -> dict[str, object]:
+def _spectrum_record(snapshot: Mapping[str, object]) -> dict[str, object]:
+    chi = np.asarray(snapshot["chi"], dtype=np.float64)
     energy = np.asarray(snapshot["specific_energy"], dtype=np.float64)
     weights = np.asarray(snapshot["macro_weight"], dtype=np.float64)
-    counts, _ = np.histogram(energy, bins=energy_edges)
-    weighted_counts, _ = np.histogram(energy, bins=energy_edges, weights=weights)
-    total_weight = float(np.sum(weights))
-    histogrammed_weight = float(np.sum(weighted_counts))
+    try:
+        fixed_spectrum = particle_primitives.weighted_spectrum_record(chi, weights)
+    except particle_primitives.ParticleReducerError as error:
+        raise DSASpectrumError(f"fixed chi spectrum reduction failed: {error}") from error
+
+    edges = np.asarray(fixed_spectrum["bin_edges"], dtype=np.float64)
+    frozen_edges = np.asarray(particle_primitives.CHI_BIN_EDGES, dtype=np.float64)
     _require(
-        int(np.sum(counts)) == energy.size
-        and math.isclose(histogrammed_weight, total_weight, rel_tol=1.0e-12, abs_tol=1.0e-12),
-        "common physical-energy histogram does not close",
+        np.array_equal(edges, frozen_edges),
+        "particle spectrum reducer did not return the frozen chi bin edges",
     )
-    widths = np.diff(energy_edges)
-    centers = np.sqrt(energy_edges[:-1] * energy_edges[1:])
-    f_epsilon = weighted_counts / total_weight / widths
-    epsilon2_f_epsilon = centers**2 * f_epsilon
+    centers = np.sqrt(edges[:-1] * edges[1:])
+    weighted_counts = np.asarray(fixed_spectrum["weighted_counts"], dtype=np.float64)
+    total_weight = float(fixed_spectrum["total_post_filter_macro_weight"])
+    in_bin_count = int(fixed_spectrum["particle_count_in_bins"])
+    in_bin_weight = float(fixed_spectrum["macro_weight_in_bins"])
+    underflow_count = int(fixed_spectrum["underflow_count"])
+    underflow_weight = float(fixed_spectrum["underflow_macro_weight"])
+    overflow_count = int(fixed_spectrum["overflow_count"])
+    overflow_weight = float(fixed_spectrum["overflow_macro_weight"])
+    accounted_count = in_bin_count + underflow_count + overflow_count
+    accounted_weight = in_bin_weight + underflow_weight + overflow_weight
+    _require(
+        accounted_count == chi.size
+        and math.isclose(
+            accounted_weight, total_weight, rel_tol=1.0e-12, abs_tol=1.0e-12
+        ),
+        "fixed chi histogram underflow/in-bin/overflow accounting does not close",
+    )
+
+    u0 = float(snapshot["runtime_model"]["upstream_speed_u0"])
+    light_speed = float(snapshot["runtime_model"]["particle_light_speed"])
+    energy_edges = _specific_energy_from_chi(edges, u0, light_speed)
+    energy_centers = _specific_energy_from_chi(centers, u0, light_speed)
+    f_epsilon = weighted_counts / total_weight / np.diff(energy_edges)
+    epsilon2_f_epsilon = energy_centers**2 * f_epsilon
+    fit_energy = _specific_energy_from_chi(TAIL_FIT_CHI_WINDOW, u0, light_speed)
+    tail_fit = _tail_fit(fixed_spectrum)
+    tail_fit["fit_window_specific_energy"] = fit_energy.tolist()
     macro_mass = float(snapshot["runtime_model"]["particle_macro_mass"])
     return {
         "snapshot": snapshot["snapshot"],
         "particle_filter": snapshot["particle_filter"],
+        "weighted_spectrum": fixed_spectrum,
+        "chi_bin_edges": fixed_spectrum["bin_edges"],
+        "chi_bin_centers": centers.tolist(),
+        "f_chi": fixed_spectrum["f_chi"],
+        "normalized_chi_f_chi": fixed_spectrum["normalized_chi_f_chi"],
         "specific_energy_bin_edges": energy_edges.tolist(),
-        "specific_energy_bin_centers": centers.tolist(),
-        "counts": counts.astype(np.int64).tolist(),
-        "macro_weighted_counts": weighted_counts.tolist(),
+        "specific_energy_bin_centers": energy_centers.tolist(),
+        "counts": fixed_spectrum["counts"],
+        "macro_weighted_counts": fixed_spectrum["weighted_counts"],
         "f_epsilon": f_epsilon.tolist(),
         "epsilon_squared_f_epsilon": epsilon2_f_epsilon.tolist(),
-        "selected_particle_count": int(energy.size),
+        "selected_particle_count": int(chi.size),
         "selected_macro_weight": total_weight,
         "selected_physical_macro_mass": macro_mass * total_weight,
         "selected_physical_kinetic_energy": float(macro_mass * np.sum(weights * energy)),
         "selected_specific_energy_minimum": float(np.min(energy)),
         "selected_specific_energy_maximum": float(np.max(energy)),
-        "histogrammed_particle_count": int(np.sum(counts)),
-        "histogrammed_macro_weight": histogrammed_weight,
-        "histogram_closure_fraction": histogrammed_weight / total_weight,
-        "tail_fit": _tail_fit(centers, f_epsilon, fit_window),
+        "histogrammed_particle_count": in_bin_count,
+        "histogrammed_macro_weight": in_bin_weight,
+        "underflow_count": underflow_count,
+        "underflow_macro_weight": underflow_weight,
+        "underflow_macro_weight_fraction": underflow_weight / total_weight,
+        "overflow_count": overflow_count,
+        "overflow_macro_weight": overflow_weight,
+        "overflow_macro_weight_fraction": fixed_spectrum[
+            "overflow_macro_weight_fraction"
+        ],
+        "overflow_gate": fixed_spectrum["overflow_gate"],
+        "accounted_particle_count": accounted_count,
+        "accounted_macro_weight": accounted_weight,
+        "in_bin_macro_weight_fraction": in_bin_weight / total_weight,
+        "histogram_closure_fraction": accounted_weight / total_weight,
+        "tail_fit": tail_fit,
     }
 
 
 def _reference_record(late_spectrum: Mapping[str, object]) -> dict[str, object]:
-    centers = np.asarray(late_spectrum["specific_energy_bin_centers"], dtype=np.float64)
-    f_epsilon = np.asarray(late_spectrum["f_epsilon"], dtype=np.float64)
-    fit_window = late_spectrum["tail_fit"]["fit_window_specific_energy"]
+    centers = np.asarray(late_spectrum["chi_bin_centers"], dtype=np.float64)
+    f_chi = np.asarray(late_spectrum["f_chi"], dtype=np.float64)
+    displayed = np.asarray(late_spectrum["normalized_chi_f_chi"], dtype=np.float64)
+    fit_window = late_spectrum["tail_fit"]["fit_window_chi"]
     candidates = np.flatnonzero(
-        (f_epsilon > 0.0) & (centers >= fit_window[0]) & (centers <= fit_window[1])
+        (f_chi > 0.0) & (centers >= fit_window[0]) & (centers <= fit_window[1])
     )
     if candidates.size == 0:
-        candidates = np.flatnonzero(f_epsilon > 0.0)
+        candidates = np.flatnonzero(f_chi > 0.0)
     _require(candidates.size > 0, "late spectrum contains no positive reference bin")
     target = math.sqrt(float(centers[candidates[0]] * centers[candidates[-1]]))
     index = int(candidates[np.argmin(np.abs(np.log(centers[candidates] / target)))])
     return {
-        "f_epsilon_exponent": REFERENCE_F_EPSILON_EXPONENT,
-        "displayed_epsilon_squared_f_exponent": 2.0 + REFERENCE_F_EPSILON_EXPONENT,
-        "label": "f(epsilon) proportional to epsilon^(-3/2)",
+        "f_chi_exponent": REFERENCE_F_CHI_EXPONENT,
+        "displayed_chi_f_chi_exponent": 1.0 + REFERENCE_F_CHI_EXPONENT,
+        "label": "f(chi) proportional to chi^(-3/2)",
         "anchor_bin_index": index,
-        "anchor_specific_energy": float(centers[index]),
-        "anchor_f_epsilon": float(f_epsilon[index]),
-        "line_specific_energy_range": list(fit_window),
+        "anchor_chi": float(centers[index]),
+        "anchor_f_chi": float(f_chi[index]),
+        "anchor_normalized_chi_f_chi": float(displayed[index]),
+        "line_chi_range": list(fit_window),
+        # Compatibility aliases for consumers of the original metrics record.
+        "f_epsilon_exponent": REFERENCE_F_CHI_EXPONENT,
+        "displayed_epsilon_squared_f_exponent": (
+            2.0 + REFERENCE_F_EPSILON_EXPONENT
+        ),
+        "anchor_specific_energy": late_spectrum["specific_energy_bin_centers"][index],
+        "anchor_f_epsilon": late_spectrum["f_epsilon"][index],
+        "line_specific_energy_range": late_spectrum["tail_fit"][
+            "fit_window_specific_energy"
+        ],
     }
 
 
@@ -625,6 +671,12 @@ def analyze_dsa_spectrum(
     expected_deposit_qscale: float = PARTICLE_MACRO_MASS,
 ) -> dict[str, object]:
     """Reduce exact t=500 and t=1200 same-model MHD/PVTK pairs."""
+    _require(
+        isinstance(energy_bin_count, int)
+        and not isinstance(energy_bin_count, (bool, np.bool_))
+        and energy_bin_count >= 8,
+        "energy bin count must be at least 8",
+    )
     _require(minimum_particles > 0, "minimum particle count must be positive")
     requested_qscale = _validated_expected_deposit_qscale(expected_deposit_qscale)
     snapshots = (
@@ -650,23 +702,15 @@ def analyze_dsa_spectrum(
         "t=500 and t=1200 runtime Q011 model parameters disagree",
     )
     for snapshot in snapshots:
-        count = int(np.asarray(snapshot["specific_energy"]).size)
+        count = int(np.asarray(snapshot["chi"]).size)
         _require(
             count >= minimum_particles,
             f"downstream spectrum has {count} particles; minimum is {minimum_particles}",
         )
-    energy_edges = _common_energy_edges(snapshots, energy_bin_count)
     u0 = float(snapshots[0]["runtime_model"]["upstream_speed_u0"])
     light_speed = float(snapshots[0]["runtime_model"]["particle_light_speed"])
-    fit_chi = np.asarray(TAIL_FIT_CHI_WINDOW, dtype=np.float64)
-    fit_momentum_squared = fit_chi * u0**2
-    fit_energy = fit_momentum_squared / (
-        np.sqrt(1.0 + fit_momentum_squared / light_speed**2) + 1.0
-    )
-    spectra = [
-        _spectrum_record(snapshot, energy_edges, tuple(fit_energy))
-        for snapshot in snapshots
-    ]
+    fit_energy = _specific_energy_from_chi(TAIL_FIT_CHI_WINDOW, u0, light_speed)
+    spectra = [_spectrum_record(snapshot) for snapshot in snapshots]
     reference = _reference_record(spectra[-1])
     observed_qscale = float(snapshots[0]["runtime_model"]["particle_macro_mass"])
     qscale_contract = {
@@ -703,25 +747,40 @@ def analyze_dsa_spectrum(
                 "strictly downstream of the ideal injection surface"
             ),
             "momentum_reconstruction": "p_over_m = gamma(v) * v from PVTK physical velocity",
+            "dimensionless_coordinate": "chi = p_over_m_squared / u0_squared",
             "specific_kinetic_energy": (
                 "epsilon = p_over_m_squared / "
                 "(sqrt(1 + p_over_m_squared / C_squared) + 1)"
             ),
             "distribution": (
-                "f(epsilon) = sum(macro_weight in bin) / "
-                "(sum(selected macro_weight) * delta_epsilon)"
+                "f_chi = sum(macro_weight in fixed chi bin) / delta_chi"
             ),
-            "displayed_quantity": "epsilon^2 f(epsilon)",
-            "displayed_units": "U_A0^2 because f(epsilon) is unit-normalized",
+            "displayed_quantity": (
+                "chi * f_chi / total_post_filter_macro_weight"
+            ),
+            "displayed_field": "normalized_chi_f_chi",
+            "displayed_units": "dimensionless",
             "physical_particle_weight": "deposit_qscale * macro_weight",
-            "common_data_bound_energy_bins": True,
+            "fixed_dimensionless_chi_bins": True,
+            "fixed_bin_source": "q011_section54_particles.CHI_BIN_EDGES",
+            "fixed_bin_edges": list(particle_primitives.CHI_BIN_EDGES),
+            "common_data_bound_energy_bins": False,
+            "legacy_energy_bin_count_argument": {
+                "requested": energy_bin_count,
+                "effect": "accepted for CLI compatibility; fixed chi bins are authoritative",
+            },
+            "underflow_policy": "archive count and macro weight; include weight in normalization",
+            "overflow_policy": (
+                "archive count and macro weight; include weight in normalization and evaluate "
+                "the frozen overflow gate"
+            ),
             "float32_velocity_caveat": model.FLOAT32_PROJECTION_UNCERTAINTY,
         },
         "tail_fit_definition": {
             "source_chi_window": list(TAIL_FIT_CHI_WINDOW),
             "physical_specific_energy_window": fit_energy.tolist(),
             "minimum_positive_bins": TAIL_FIT_MINIMUM_POSITIVE_BINS,
-            "fit_quantity": "unweighted least squares in log(f(epsilon)) vs log(epsilon)",
+            "fit_quantity": "q011_section54_particles.late_slope_record on fixed-bin f_chi",
         },
         "reference_power_law": reference,
         "spectra": spectra,
@@ -762,8 +821,8 @@ def render_dsa_spectrum(
     colors = ("#0072B2", "#D55E00")
     styles = ("-", "--")
     for spectrum, color, style in zip(spectra, colors, styles):
-        centers = np.asarray(spectrum["specific_energy_bin_centers"], dtype=np.float64)
-        displayed = np.asarray(spectrum["epsilon_squared_f_epsilon"], dtype=np.float64)
+        centers = np.asarray(spectrum["chi_bin_centers"], dtype=np.float64)
+        displayed = np.asarray(spectrum["normalized_chi_f_chi"], dtype=np.float64)
         positive = displayed > 0.0
         time = spectrum["snapshot"]["particle_time_omega0_inverse"]
         axis.loglog(
@@ -778,27 +837,27 @@ def render_dsa_spectrum(
             label=rf"$\Omega_0 t={time:.6g}$",
         )
     reference = metrics["reference_power_law"]
-    reference_energy = np.geomspace(*reference["line_specific_energy_range"], 100)
-    anchor_energy = float(reference["anchor_specific_energy"])
-    anchor_displayed = anchor_energy**2 * float(reference["anchor_f_epsilon"])
+    reference_chi = np.geomspace(*reference["line_chi_range"], 100)
+    anchor_chi = float(reference["anchor_chi"])
+    anchor_displayed = float(reference["anchor_normalized_chi_f_chi"])
     reference_displayed = anchor_displayed * (
-        reference_energy / anchor_energy
-    ) ** float(reference["displayed_epsilon_squared_f_exponent"])
+        reference_chi / anchor_chi
+    ) ** float(reference["displayed_chi_f_chi_exponent"])
     axis.loglog(
-        reference_energy,
+        reference_chi,
         reference_displayed,
         color="black",
         ls=":",
         lw=1.4,
         label=(
-            r"reference $f(\epsilon)\propto\epsilon^{-3/2}$ "
-            r"($\epsilon^2f\propto\epsilon^{1/2}$)"
+            r"reference $f(\chi)\propto\chi^{-3/2}$ "
+            r"($\chi f\propto\chi^{-1/2}$)"
         ),
     )
-    edges = np.asarray(spectra[0]["specific_energy_bin_edges"], dtype=np.float64)
+    edges = np.asarray(spectra[0]["chi_bin_edges"], dtype=np.float64)
     axis.set_xlim(edges[0], edges[-1])
-    axis.set_xlabel(r"specific kinetic energy $\epsilon\ [U_{A0}^{2}]$")
-    axis.set_ylabel(r"$\epsilon^2 f(\epsilon)\ [U_{A0}^{2}]$")
+    axis.set_xlabel(r"dimensionless momentum-energy coordinate $\chi=(p/m)^2/U_0^2$")
+    axis.set_ylabel(r"normalized $\chi f(\chi)$")
     axis.set_title("Q011 Section 5.4 downstream DSA spectrum")
     axis.grid(which="major", color="0.88", lw=0.5)
     axis.legend(frameon=False, fontsize=8.5, loc="best")
@@ -808,6 +867,24 @@ def render_dsa_spectrum(
         r"$cr\_source=1$, $t_{birth}\geq45$, $w>0$, $x_1<x_{ideal}(t)$",
         transform=axis.transAxes,
         fontsize=8,
+    )
+    accounting = []
+    for spectrum in spectra:
+        time = spectrum["snapshot"]["particle_time_omega0_inverse"]
+        accounting.append(
+            rf"$t={time:.6g}$: under={spectrum['underflow_count']} "
+            rf"({100.0 * spectrum['underflow_macro_weight_fraction']:.3g}\%), "
+            rf"over={spectrum['overflow_count']} "
+            rf"({100.0 * spectrum['overflow_macro_weight_fraction']:.3g}\%)"
+        )
+    axis.text(
+        0.98,
+        0.97,
+        "\n".join(accounting),
+        transform=axis.transAxes,
+        fontsize=7,
+        ha="right",
+        va="top",
     )
     if not metrics["deposit_qscale"]["canonical_run"]:
         axis.text(
@@ -884,6 +961,11 @@ def make_dsa_spectrum(
         "snapshots": [item["snapshot"] for item in reduction["metrics"]["spectra"]],
         "analysis_parameters": {
             "energy_bin_count": energy_bin_count,
+            "energy_bin_count_effect": (
+                "compatibility argument only; the frozen chi bin edges are authoritative"
+            ),
+            "fixed_chi_bin_count": len(particle_primitives.CHI_BIN_EDGES) - 1,
+            "fixed_chi_bin_edges": list(particle_primitives.CHI_BIN_EDGES),
             "minimum_admitted_particles_per_snapshot": minimum_particles,
             "expected_deposit_qscale": reduction["metrics"]["deposit_qscale"][
                 "requested"
@@ -897,8 +979,12 @@ def make_dsa_spectrum(
                 "macro_weight > 0",
                 "x1 < x_ideal(t)",
             ],
-            "displayed_quantity": "epsilon^2 f(epsilon)",
+            "displayed_quantity": (
+                "chi * f_chi / total_post_filter_macro_weight"
+            ),
+            "reference_f_chi_exponent": REFERENCE_F_CHI_EXPONENT,
             "reference_f_epsilon_exponent": REFERENCE_F_EPSILON_EXPONENT,
+            "underflow_overflow_accounting": True,
             "dpi": dpi,
             "cross_cycle_substitution": False,
         },
@@ -915,7 +1001,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--late-particles", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--stem", default="q011_section54_dsa_spectrum_v1")
-    parser.add_argument("--energy-bin-count", type=int, default=DEFAULT_ENERGY_BIN_COUNT)
+    parser.add_argument(
+        "--energy-bin-count",
+        type=int,
+        default=DEFAULT_ENERGY_BIN_COUNT,
+        help=(
+            "Deprecated compatibility option; validated but ignored because the "
+            "frozen dimensionless chi bins are authoritative"
+        ),
+    )
     parser.add_argument("--minimum-particles", type=int, default=DEFAULT_MINIMUM_PARTICLES)
     parser.add_argument(
         "--expected-deposit-qscale",

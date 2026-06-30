@@ -106,6 +106,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   nmb_updated_(0),
   npart_updated_(0),
   lb_efficiency_(0),
+  pic_static_load_balance_interval_(0),
+  pic_static_load_balance_cost_per_particle_(0.0),
   q017_task_list_time_(),
   q017_task_list_calls_(),
   q017_output_time_(0.0),
@@ -326,6 +328,35 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
          << "Valid choices are [rk1,rk2,rk3,imex2,imex3]." << std::endl;
       exit(EXIT_FAILURE);
     }
+  }
+
+  // These performance-only controls are intentionally owned by the driver rather than
+  // Particles so they are not part of the particle physical-model restart metadata.
+  if (pin->DoesBlockExist("particles")) {
+    if (pin->DoesParameterExist("particles", "pic_static_load_balance_interval")) {
+      pic_static_load_balance_interval_ =
+          pin->GetInteger("particles", "pic_static_load_balance_interval");
+    }
+    if (pin->DoesParameterExist(
+            "particles", "pic_static_load_balance_cost_per_particle")) {
+      pic_static_load_balance_cost_per_particle_ = pin->GetReal(
+          "particles", "pic_static_load_balance_cost_per_particle");
+    }
+  }
+  if (pic_static_load_balance_interval_ < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_static_load_balance_interval must be >= 0"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (!std::isfinite(pic_static_load_balance_cost_per_particle_) ||
+      pic_static_load_balance_cost_per_particle_ < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_static_load_balance_cost_per_particle must be "
+              << "finite and >= 0" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 }
 
@@ -579,6 +610,9 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         pmesh->pmr->AdaptiveMeshRefinement(this, pin);
         q017_amr_time_ += q017_timer.seconds();
         q017_amr_calls_++;
+      } else if (StaticParticleLoadBalanceDue(pmesh)) {
+        pmesh->pmr->RedistributeStaticMeshBlocks(
+            this, pin, pic_static_load_balance_cost_per_particle_);
       }
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
@@ -599,6 +633,18 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     }  // end while
   }    // end of (time_evolution != tstatic) clause
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Driver::StaticParticleLoadBalanceDue()
+//! \brief Return true when the opt-in static-mesh PIC redistribution cadence is due.
+
+bool Driver::StaticParticleLoadBalanceDue(const Mesh *pm) const {
+  return pic_static_load_balance_interval_ > 0 &&
+         pic_static_load_balance_cost_per_particle_ > 0.0 &&
+         pm != nullptr && pm->multilevel && !pm->adaptive && pm->pmr != nullptr &&
+         pm->pmb_pack != nullptr && pm->pmb_pack->ppart != nullptr &&
+         (pm->ncycle % pic_static_load_balance_interval_ == 0);
 }
 
 //----------------------------------------------------------------------------------------

@@ -1,0 +1,7 @@
+# Runtime-only continuation defaults for static-mesh PIC load balancing.
+# The long-run launcher overrides these values explicitly after loading this
+# file; loading the keys first permits an old restart to accept those overrides.
+
+<particles>
+pic_static_load_balance_interval          = 0
+pic_static_load_balance_cost_per_particle = 0.0

@@ -73,8 +73,6 @@ void MarkForDestruction(int *pcounter, DualArray1D<ParticleLocationData> dlist, 
 
 namespace {
 
-constexpr int kMaxParticleNeighbors = 56;
-
 KOKKOS_INLINE_FUNCTION
 bool IsPeriodicParticleBoundary(const BoundaryFlag flag) {
   return (flag == BoundaryFlag::periodic || flag == BoundaryFlag::shear_periodic);
@@ -94,16 +92,30 @@ int ParticleMeshBlockOffset(const Real x, const Real xmin, const Real block_leng
 template <typename NeighborViewType>
 KOKKOS_INLINE_FUNCTION
 void AdvanceToInitializedNeighbor(const NeighborViewType &nghbr, const int m, int *indx) {
-  while ((*indx) < kMaxParticleNeighbors && nghbr(m, *indx).gid < 0) {
+  const int neighbor_count = nghbr.extent_int(1);
+  int group_end = *indx + 1;
+  if (*indx >= 0 && *indx < 16) {
+    group_end = 4*((*indx)/4 + 1);
+  } else if (*indx >= 16 && *indx < 24) {
+    group_end = 16 + 2*(((*indx) - 16)/2 + 1);
+  } else if (*indx >= 24 && *indx < 32) {
+    group_end = 24 + 4*(((*indx) - 24)/4 + 1);
+  } else if (*indx >= 32 && *indx < 48) {
+    group_end = 32 + 2*(((*indx) - 32)/2 + 1);
+  }
+  if (group_end > neighbor_count) group_end = neighbor_count;
+  while ((*indx) < group_end && nghbr(m, *indx).gid < 0) {
     ++(*indx);
   }
+  if (*indx >= group_end) *indx = -1;
 }
 
 template <typename NeighborViewType>
 KOKKOS_INLINE_FUNCTION
 bool HasValidNeighbor(const NeighborViewType &nghbr, const int m, const int indx,
                       const int nranks) {
-  if (indx < 0 || indx >= kMaxParticleNeighbors) {
+  if (m < 0 || m >= nghbr.extent_int(0) ||
+      indx < 0 || indx >= nghbr.extent_int(1)) {
     return false;
   }
   const auto nbr = nghbr(m, indx);
@@ -202,47 +214,6 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
     // only update particle GID if it has crossed MeshBlock boundary
     if (abs(ix) + abs(iy) + abs(iz) != 0) {
-      bool send_to_coarser = false;
-      if (ix < 0) {
-        // level might be initizialized to -1 on some neighbours
-        for (int iop = 0; iop <= 3; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
-            send_to_coarser = true;
-          }
-        }
-      } else if (ix > 0) {
-         for (int iop = 4; iop <= 7; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
-            send_to_coarser = true;
-          }
-         }
-      }
-      if (iy < 0) {
-        for (int iop = 8; iop <= 11; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
-            send_to_coarser = true;
-          }
-        }
-      } else if (iy > 0) {
-        for (int iop = 12; iop <= 15; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
-            send_to_coarser = true;
-          }
-        }
-      }
-      if (iz < 0) {
-        for (int iop = 24; iop <= 27; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
-            send_to_coarser = true;
-          }
-        }
-      } else if (iz > 0) {
-          for (int iop = 28; iop <= 31; ++iop) {
-            if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
-              send_to_coarser = true;
-            }
-        }
-      }
       int indx = 0;
       const BoundaryFlag ix1_bc = mb_bcs.d_view(m,BoundaryFace::inner_x1);
       const BoundaryFlag ox1_bc = mb_bcs.d_view(m,BoundaryFace::outer_x1);
@@ -315,11 +286,10 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
               indx = NeighborIndex(ix,iy,0,fz,0);
             }
             AdvanceToInitializedNeighbor(nghbr.d_view, m, &indx);
-            // Using SMR some edge and corner neighbours are uninitialized,
-            // thus check if the index has increased over the appropriate range
-            // and try to communicate through faces to a coarser meshblock
-            // Communication to coarser meshblocks should always go through faces
-            if (indx > 23 || send_to_coarser) {
+            // A valid edge is the exact geometric destination, including across
+            // periodic and fine-to-coarse boundaries. Fall back to a crossed
+            // face only when SMR leaves that edge uninitialized.
+            if (!HasValidNeighbor(nghbr.d_view, m, indx, nranks)) {
               bool found_coarser = false;
               // First try through x face
               indx = NeighborIndex(ix,0,0,0,0);
@@ -361,7 +331,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
               indx = NeighborIndex(ix,0,iz,fy,0);
             }
             AdvanceToInitializedNeighbor(nghbr.d_view, m, &indx);
-            if (indx > 39 || send_to_coarser) {
+            if (!HasValidNeighbor(nghbr.d_view, m, indx, nranks)) {
               bool found_coarser = false;
               indx = NeighborIndex(ix,0,0,0,0);
               AdvanceToInitializedNeighbor(nghbr.d_view, m, &indx);
@@ -390,7 +360,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
               indx = NeighborIndex(0,iy,iz,fx,0);
             }
             AdvanceToInitializedNeighbor(nghbr.d_view, m, &indx);
-            if (indx > 47 || send_to_coarser) {
+            if (!HasValidNeighbor(nghbr.d_view, m, indx, nranks)) {
               bool found_coarser = false;
               indx = NeighborIndex(0,iy,0,0,0);
               AdvanceToInitializedNeighbor(nghbr.d_view, m, &indx);
@@ -413,7 +383,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
           } else {
             // corners
             indx = NeighborIndex(ix,iy,iz,0,0);
-            if (nghbr.d_view(m,indx).gid < 0 || send_to_coarser) {
+            if (!HasValidNeighbor(nghbr.d_view, m, indx, nranks)) {
               bool found_coarser = false;
               indx = NeighborIndex(ix,0,0,0,0);
               AdvanceToInitializedNeighbor(nghbr.d_view, m, &indx);

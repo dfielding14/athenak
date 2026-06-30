@@ -125,6 +125,10 @@ class MeshRefinement {
   // functions
   void CheckForRefinement(MeshBlockPack* pmbp);
   void AdaptiveMeshRefinement(Driver *pdrive, ParameterInput *pin);
+  void RedistributeAndReinitializeMeshBlocks(Driver *pdrive, ParameterInput *pin,
+                                             int nnew, int ndel);
+  void RedistributeStaticMeshBlocks(Driver *pdrive, ParameterInput *pin,
+                                    Real cost_per_particle);
   void UpdateMeshBlockTree(int &nnew, int &ndel);
   void RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, int ndel);
 
@@ -162,7 +166,7 @@ class MeshRefinement {
   void UnpackAMRBuffersParticles();
   void InitPartRecv();
   void RefineParticles();
-  void AssignParticleAwareCosts(float *costs, int new_nmb);
+  void AssignParticleAwareCosts(float *costs, int new_nmb, Real cost_per_particle);
 
   std::uint64_t Q017OwnedKokkosViewAllocationBytes() const;
   void ObserveQ017OwnedKokkosViewAllocationBytes(std::uint64_t transient_bytes=0);
@@ -175,5 +179,12 @@ class MeshRefinement {
   Mesh *pmy_mesh;
   Real d_threshold_, dd_threshold_, dp_threshold_, dv_threshold_, chi_threshold_;
   bool check_cons_;
+
+  void RedistributeAndReinitializeMeshBlocks(Driver *pdrive, ParameterInput *pin,
+                                             int nnew, int ndel,
+                                             Real cost_per_particle);
+  void RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, int ndel,
+                                 Real cost_per_particle);
+  void ReinitializeAfterRedistribution(Driver *pdrive);
 };
 #endif // MESH_MESH_REFINEMENT_HPP_

@@ -122,7 +122,12 @@ def _velocity_from_chi(chi: np.ndarray) -> np.ndarray:
     ).astype(np.float32).astype(np.float64)
 
 
-def _particles(time: float, *, scale: float = 1.0) -> ParticleVTKData:
+def _particles(
+    time: float,
+    *,
+    scale: float = 1.0,
+    selected_chi: np.ndarray | None = None,
+) -> ParticleVTKData:
     count = 18
     surface = 10.0 * time
     x1 = np.full(count, surface - 100.0)
@@ -137,6 +142,11 @@ def _particles(time: float, *, scale: float = 1.0) -> ParticleVTKData:
     weights = np.linspace(1.0, 2.7, count).astype(np.float32).astype(np.float64)
     weights[2] = 0.0
     chi = np.geomspace(2.0, 256.0 * scale, count)
+    if selected_chi is not None:
+        selected_values = np.asarray(selected_chi, dtype=np.float64)
+        if selected_values.shape != (count - 5,):
+            raise ValueError("selected_chi must contain 13 values")
+        chi[5:] = selected_values
     return ParticleVTKData(
         points=points,
         scalars={
@@ -169,7 +179,7 @@ def _sha256(path: Path) -> str:
 
 
 class Q011Section54DSASpectrumV1Tests(unittest.TestCase):
-    def test_analysis_filters_particles_and_uses_physical_energy_weights(self) -> None:
+    def test_analysis_uses_fixed_chi_spectrum_and_preserves_energy_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             early_particle = root / "early.vtk"
@@ -208,7 +218,20 @@ class Q011Section54DSASpectrumV1Tests(unittest.TestCase):
             ["time/tlim"],
         )
         self.assertTrue(metrics["runtime_model"]["backreaction"]["energy_feedback"])
-        self.assertEqual(metrics["reference_power_law"]["f_epsilon_exponent"], -1.5)
+        self.assertEqual(metrics["reference_power_law"]["f_chi_exponent"], -1.5)
+        self.assertFalse(
+            metrics["spectrum_definition"]["common_data_bound_energy_bins"]
+        )
+        self.assertEqual(
+            metrics["spectrum_definition"]["fixed_bin_edges"],
+            list(spectrum_tool.particle_primitives.CHI_BIN_EDGES),
+        )
+        self.assertEqual(
+            metrics["spectrum_definition"]["legacy_energy_bin_count_argument"][
+                "requested"
+            ],
+            24,
+        )
         for record in metrics["spectra"]:
             census = record["particle_filter"]["disjoint_census"]
             self.assertEqual(census["rejected_wrong_source"]["particle_count"], 1)
@@ -220,12 +243,21 @@ class Q011Section54DSASpectrumV1Tests(unittest.TestCase):
             self.assertEqual(census["rejected_on_ideal_surface"]["particle_count"], 1)
             self.assertEqual(record["selected_particle_count"], 13)
             self.assertEqual(record["histogrammed_particle_count"], 13)
+            self.assertEqual(record["accounted_particle_count"], 13)
             self.assertAlmostEqual(record["histogram_closure_fraction"], 1.0)
-            self.assertEqual(len(record["epsilon_squared_f_epsilon"]), 24)
+            self.assertEqual(
+                record["chi_bin_edges"],
+                list(spectrum_tool.particle_primitives.CHI_BIN_EDGES),
+            )
+            self.assertEqual(len(record["normalized_chi_f_chi"]), 40)
+            self.assertEqual(
+                record["normalized_chi_f_chi"],
+                record["weighted_spectrum"]["normalized_chi_f_chi"],
+            )
             self.assertGreater(record["selected_physical_kinetic_energy"], 0.0)
         self.assertEqual(
-            metrics["spectra"][0]["specific_energy_bin_edges"],
-            metrics["spectra"][1]["specific_energy_bin_edges"],
+            metrics["spectra"][0]["chi_bin_edges"],
+            metrics["spectra"][1]["chi_bin_edges"],
         )
 
         selected = np.arange(18) >= 5
@@ -244,6 +276,121 @@ class Q011Section54DSASpectrumV1Tests(unittest.TestCase):
                 rel_tol=1.0e-12,
             )
         )
+
+    def test_fixed_reducer_accounts_for_underflow_and_overflow(self) -> None:
+        selected_chi = np.asarray(
+            [
+                0.0,
+                2.0,
+                3.0,
+                5.0,
+                9.0,
+                17.0,
+                33.0,
+                65.0,
+                129.0,
+                257.0,
+                513.0,
+                900.0,
+                4096.0,
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            early_particle = root / "early.vtk"
+            late_particle = root / "late.vtk"
+            _write_particle_header(early_particle, time=500.0, cycle=50)
+            _write_particle_header(late_particle, time=1200.0, cycle=120)
+            particle_data = (
+                _particles(500.0, selected_chi=selected_chi),
+                _particles(1200.0, selected_chi=selected_chi),
+            )
+            reducer = spectrum_tool.particle_primitives.weighted_spectrum_record
+            with mock.patch.object(
+                spectrum_tool.output_primitives,
+                "read_athenak_binary",
+                side_effect=(_dataset(500.0, 50), _dataset(1200.0, 120)),
+            ), mock.patch.object(
+                spectrum_tool, "read_particle_vtk", side_effect=particle_data
+            ), mock.patch.object(
+                spectrum_tool.particle_primitives,
+                "weighted_spectrum_record",
+                wraps=reducer,
+            ) as reduce_spectrum:
+                reduction = spectrum_tool.analyze_dsa_spectrum(
+                    root / "early.bin",
+                    early_particle,
+                    root / "late.bin",
+                    late_particle,
+                    energy_bin_count=24,
+                    minimum_particles=1,
+                )
+
+        self.assertEqual(reduce_spectrum.call_count, 2)
+        selected_weights = particle_data[0].scalars["macro_weight"][5:]
+        for record in reduction["metrics"]["spectra"]:
+            fixed = record["weighted_spectrum"]
+            self.assertEqual(
+                fixed["bin_edges"],
+                list(spectrum_tool.particle_primitives.CHI_BIN_EDGES),
+            )
+            self.assertEqual(record["underflow_count"], 1)
+            self.assertEqual(record["overflow_count"], 1)
+            self.assertAlmostEqual(
+                record["underflow_macro_weight"], selected_weights[0]
+            )
+            self.assertAlmostEqual(
+                record["overflow_macro_weight"], selected_weights[-1]
+            )
+            self.assertEqual(record["histogrammed_particle_count"], 11)
+            self.assertEqual(record["accounted_particle_count"], 13)
+            self.assertAlmostEqual(
+                record["accounted_macro_weight"], np.sum(selected_weights)
+            )
+            self.assertAlmostEqual(record["histogram_closure_fraction"], 1.0)
+            self.assertFalse(record["overflow_gate"]["passed"])
+            self.assertEqual(len(record["normalized_chi_f_chi"]), 40)
+
+    def test_render_plots_dimensionless_chi_f_chi(self) -> None:
+        centers = [math.sqrt(2.0), math.sqrt(8.0)]
+        spectra = []
+        for time, displayed in ((500.0, [0.1, 0.2]), (1200.0, [0.3, 0.4])):
+            spectra.append(
+                {
+                    "snapshot": {"particle_time_omega0_inverse": time},
+                    "chi_bin_edges": [1.0, 2.0, 4.0],
+                    "chi_bin_centers": centers,
+                    "normalized_chi_f_chi": displayed,
+                    "epsilon_squared_f_epsilon": [100.0, 200.0],
+                    "underflow_count": 0,
+                    "underflow_macro_weight_fraction": 0.0,
+                    "overflow_count": 0,
+                    "overflow_macro_weight_fraction": 0.0,
+                }
+            )
+        reduction = {
+            "metrics": {
+                "spectra": spectra,
+                "reference_power_law": {
+                    "line_chi_range": [1.0, 4.0],
+                    "anchor_chi": 2.0,
+                    "anchor_normalized_chi_f_chi": 0.2,
+                    "displayed_chi_f_chi_exponent": -0.5,
+                },
+                "deposit_qscale": {"canonical_run": True},
+            }
+        }
+        with mock.patch.object(spectrum_tool.plt, "close") as close:
+            spectrum_tool.render_dsa_spectrum(reduction, (), 72)
+        figure = close.call_args.args[0]
+        try:
+            axis = figure.axes[0]
+            np.testing.assert_allclose(axis.lines[0].get_xdata(), centers)
+            np.testing.assert_allclose(axis.lines[0].get_ydata(), [0.1, 0.2])
+            self.assertIn("chi", axis.get_xlabel())
+            self.assertIn("chi", axis.get_ylabel())
+        finally:
+            spectrum_tool.plt.close(figure)
 
     def test_noncanonical_qscale_is_rejected_without_explicit_override(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -432,7 +579,12 @@ class Q011Section54DSASpectrumV1Tests(unittest.TestCase):
                 self.assertEqual(artifact["byte_count"], path.stat().st_size)
             self.assertEqual(
                 manifest["analysis_parameters"]["displayed_quantity"],
-                "epsilon^2 f(epsilon)",
+                "chi * f_chi / total_post_filter_macro_weight",
+            )
+            self.assertEqual(manifest["analysis_parameters"]["energy_bin_count"], 24)
+            self.assertEqual(manifest["analysis_parameters"]["fixed_chi_bin_count"], 40)
+            self.assertTrue(
+                manifest["analysis_parameters"]["underflow_overflow_accounting"]
             )
 
     def test_cli_passes_explicit_expected_qscale(self) -> None:
@@ -453,10 +605,13 @@ class Q011Section54DSASpectrumV1Tests(unittest.TestCase):
                     "figures",
                     "--expected-deposit-qscale",
                     "0.0144",
+                    "--energy-bin-count",
+                    "24",
                 ]
             )
         self.assertEqual(result, 0)
         self.assertEqual(make.call_args.kwargs["expected_deposit_qscale"], 0.0144)
+        self.assertEqual(make.call_args.kwargs["energy_bin_count"], 24)
 
 
 if __name__ == "__main__":

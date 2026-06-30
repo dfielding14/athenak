@@ -1,0 +1,131 @@
+# Regression for diagonal particle routing across a 2D fine-to-coarse SMR corner.
+
+<comment>
+problem = 2D SMR particle corner routing
+
+<job>
+basename = pic_particle_2d_smr_corner_routing
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = -4.0
+x1max = 4.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 4
+x2min = -2.0
+x2max = 2.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 1
+
+<mesh_refinement>
+refinement = static
+num_levels = 2
+
+<refinement1>
+level = 1
+x1min = -4.0
+x1max = 0.0
+x2min = -2.0
+x2max = 0.0
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim = 4
+tlim = 1.0
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.66666666667
+
+<coord>
+special_rel = false
+general_rel = false
+
+<particles>
+particle_type = cosmic_ray
+ppc = 0.0
+pusher = boris_tsc
+pic_enable_2d3v = true
+nspecies = 1
+cr_distribution = center
+deposit_moments = true
+deposit_order = 2
+deposit_qscale = 1.0
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_moments_momentum_coeff = 1.0
+couple_moments_energy_coeff = 1.0
+cr_vx0 = 0.0
+cr_vy0 = 0.0
+cr_vz0 = 0.0
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_cr_light_speed = 10.0
+pic_cr_initial_state = momentum
+pic_cr_hall_mode = off
+pic_wave_damping_mode = off
+pic_max_cell_cross = 2
+pic_theta_max = 0.3
+pic_boundary_conservation_ledger = true
+pic_deltaf_mode = off
+pic_deltaf_f0 =
+pic_expanding_box_mode = off
+
+<species0>
+mass = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = pic_paper_smooth_tsc_interface
+particle_x = -0.001
+particle_y = -0.001
+particle_z = 0.0
+particle_df_weight = 0.0
+particle_vx = 1.0
+particle_vy = 1.0
+particle_vz = 0.0
+particle_dpxdt = 0.0
+particle_dpydt = 0.0
+particle_dpzdt = 0.0
+particle_dedt = 0.0
+particle_ebdot = 0.0
+duplicate_ptag_pair = false
+deposit_manual_records_at_startup = false
+require_interface_mpi_split = false
+required_remote_receiver_mpi_split = none
+wave_flag = 0
+amp = 0.0
+vflow = 0.0
+along_x1 = true
+along_x2 = false
+along_x3 = false
+
+<output1>
+file_type = pvtk
+variable = prtcl_all
+id = prtcl_all
+dcycle = 4

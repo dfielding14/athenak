@@ -21,16 +21,21 @@ set -euo pipefail
 repo_root="${PIC_SOURCE_ROOT:-/autofs/nccs-svm1_home2/dfielding/athenak-pic}"
 shared_root="${PIC_SHARED_ROOT:-/lustre/orion/ast207/proj-shared/dfielding/PIC}"
 source_commit="$(git -C "${repo_root}" rev-parse HEAD)"
+source_status="$(git -C "${repo_root}" status --porcelain=v1)"
 commit_key="${source_commit:0:12}"
 executable="${PIC_EXECUTABLE:-${shared_root}/bin/${commit_key}/hip-mpi-release-paper-pic/athena}"
 deck="${Q011_DECK:-${repo_root}/inputs/q011_section54_static_dx3_final_v1_vl2_tsc.athinput}"
 target_time="${Q011_TLIM:-1200}"
 grid_mode="${Q011_GRID_MODE:-static_dx3}"
 basename="${Q011_BASENAME:-q011_section54_dsa}"
+static_lb_interval="${Q011_STATIC_LB_INTERVAL:-0}"
+static_lb_cost_per_particle="${Q011_STATIC_LB_COST_PER_PARTICLE:-0.0}"
+history_python="${Q011_HISTORY_PYTHON:-/opt/cray/pe/python/3.11.7/bin/python3}"
+restart_override_deck="${Q011_RESTART_OVERRIDE_DECK:-${repo_root}/inputs/q011_static_pic_load_balance_restart_override_v1.athinput}"
 
-if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
+if [[ -n "${source_status}" ]]; then
   printf 'Refusing to run from a dirty or untracked source tree:\n' >&2
-  git -C "${repo_root}" status --short >&2
+  printf '%s\n' "${source_status}" >&2
   exit 2
 fi
 if [[ ! -x "${executable}" ]]; then
@@ -39,6 +44,15 @@ if [[ ! -x "${executable}" ]]; then
 fi
 if [[ ! -f "${deck}" ]]; then
   printf 'Q011 deck is absent: %s\n' "${deck}" >&2
+  exit 2
+fi
+if [[ ! -x "${history_python}" ]]; then
+  printf 'Q011 restart-history Python is absent or not executable: %s\n' \
+    "${history_python}" >&2
+  exit 2
+fi
+if [[ ! -f "${restart_override_deck}" ]]; then
+  printf 'Q011 restart override deck is absent: %s\n' "${restart_override_deck}" >&2
   exit 2
 fi
 
@@ -50,7 +64,14 @@ else
   run_root="${Q011_RUN_ROOT}"
   restart_file="$({
     find "${run_root}/rst" -maxdepth 1 -type f -name '*.rst.complete' -print0
-  } | sort -zV | tail -z -n 1 | tr -d '\0')"
+  } | while IFS= read -r -d '' complete_marker; do
+    restart_payload="${complete_marker%.complete}"
+    if [[ -f "${restart_payload}" &&
+          -f "${restart_payload}.manifest" &&
+          -f "${restart_payload}.manifest.complete" ]]; then
+      printf '%s\0' "${complete_marker}"
+    fi
+  done | sort -zV | tail -z -n 1 | tr -d '\0')"
   if [[ -z "${restart_file}" ]]; then
     printf 'No complete restart is available below %s/rst\n' "${run_root}" >&2
     exit 1
@@ -82,6 +103,7 @@ trap finish_segment EXIT
 sha256sum \
   "${executable}" \
   "${deck}" \
+  "${restart_override_deck}" \
   "${repo_root}/src/pgen/tests/pic_parallel_shock.cpp" \
   "${repo_root}/tst/publication/frontier_q011_section54_long_dsa_v1.sh" \
   "${repo_root}/tst/publication/prepare_q011_restart_history_v1.py" \
@@ -90,7 +112,7 @@ sha256sum \
   "${repo_root}/tst/publication/make_q011_section54_dsa_spectrum_v1.py" \
   >"${segment_root}/bindings.sha256"
 printf '%s\n' "${source_commit}" >"${segment_root}/source_commit.txt"
-git -C "${repo_root}" status --porcelain=v1 >"${segment_root}/source_status.txt"
+printf '%s' "${source_status}" >"${segment_root}/source_status.txt"
 printf '%s\n' \
   "job_id=${SLURM_JOB_ID}" \
   "run_root=${run_root}" \
@@ -98,6 +120,10 @@ printf '%s\n' \
   "grid_mode=${grid_mode}" \
   "deck=${deck}" \
   "restart_file=${restart_file:-fresh}" \
+  "static_lb_interval=${static_lb_interval}" \
+  "static_lb_cost_per_particle=${static_lb_cost_per_particle}" \
+  "history_python=${history_python}" \
+  "restart_override_deck=${restart_override_deck}" \
   "nodes=${SLURM_JOB_NUM_NODES}" \
   "ranks=$((SLURM_JOB_NUM_NODES * 8))" \
   >"${segment_root}/invocation.txt"
@@ -108,7 +134,7 @@ if [[ -n "${restart_file}" ]]; then
     printf 'Continuation history is absent: %s\n' "${history_file}" >&2
     exit 1
   fi
-  python3 "${repo_root}/tst/publication/prepare_q011_restart_history_v1.py" \
+  "${history_python}" "${repo_root}/tst/publication/prepare_q011_restart_history_v1.py" \
     --restart "${restart_file}" \
     --history "${history_file}" \
     --archive "${segment_root}/${basename}.mhd.hst.pre-continuation" \
@@ -123,6 +149,8 @@ athena_args=(
   "time/nlim=200000"
   "time/ndiag=500"
   "particles/pic_load_balance_cost_per_particle=0.0"
+  "particles/pic_static_load_balance_interval=${static_lb_interval}"
+  "particles/pic_static_load_balance_cost_per_particle=${static_lb_cost_per_particle}"
   "problem/ps_feedback_diag_dcycle=5000"
 )
 case "${grid_mode}" in
@@ -156,7 +184,7 @@ case "${grid_mode}" in
     ;;
 esac
 if [[ -n "${restart_file}" ]]; then
-  athena_args=(-r "${restart_file}" "${athena_args[@]}")
+  athena_args=(-r "${restart_file}" -i "${restart_override_deck}" "${athena_args[@]}")
 else
   athena_args=(-i "${deck}" "${athena_args[@]}")
 fi
