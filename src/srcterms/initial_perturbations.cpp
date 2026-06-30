@@ -47,7 +47,8 @@ bool ListContains(std::string list, const std::string &needle) {
   while (ss >> item) {
     if (item == needle) return true;
     if (needle == "density" && item == "rho") return true;
-    if (needle == "magnetic" && (item == "b" || item == "field" || item == "magnetic_field")) {
+    if (needle == "magnetic" &&
+        (item == "b" || item == "field" || item == "magnetic_field")) {
       return true;
     }
     if (needle == "velocity" && (item == "v" || item == "vel")) return true;
@@ -55,8 +56,15 @@ bool ListContains(std::string list, const std::string &needle) {
   return false;
 }
 
-Real GetRealAny(ParameterInput *pin, const std::string &block, const std::string &primary,
-                const Real def, std::initializer_list<const char *> aliases = {}) {
+bool IsCanonicalMode(const int nkx, const int nky, const int nkz) {
+  if (nkx != 0) return nkx > 0;
+  if (nky != 0) return nky > 0;
+  return nkz > 0;
+}
+
+Real GetRealAny(ParameterInput *pin, const std::string &block,
+                const std::string &primary, const Real def,
+                std::initializer_list<const char *> aliases = {}) {
   if (pin->DoesParameterExist(block, primary)) return pin->GetReal(block, primary);
   for (const char *alias : aliases) {
     if (pin->DoesParameterExist(block, alias)) return pin->GetReal(block, alias);
@@ -64,8 +72,9 @@ Real GetRealAny(ParameterInput *pin, const std::string &block, const std::string
   return pin->GetOrAddReal(block, primary, def);
 }
 
-int GetIntegerAny(ParameterInput *pin, const std::string &block, const std::string &primary,
-                  const int def, std::initializer_list<const char *> aliases = {}) {
+int GetIntegerAny(ParameterInput *pin, const std::string &block,
+                  const std::string &primary, const int def,
+                  std::initializer_list<const char *> aliases = {}) {
   if (pin->DoesParameterExist(block, primary)) return pin->GetInteger(block, primary);
   for (const char *alias : aliases) {
     if (pin->DoesParameterExist(block, alias)) return pin->GetInteger(block, alias);
@@ -73,8 +82,9 @@ int GetIntegerAny(ParameterInput *pin, const std::string &block, const std::stri
   return pin->GetOrAddInteger(block, primary, def);
 }
 
-bool GetBooleanAny(ParameterInput *pin, const std::string &block, const std::string &primary,
-                   const bool def, std::initializer_list<const char *> aliases = {}) {
+bool GetBooleanAny(ParameterInput *pin, const std::string &block,
+                   const std::string &primary, const bool def,
+                   std::initializer_list<const char *> aliases = {}) {
   if (pin->DoesParameterExist(block, primary)) return pin->GetBoolean(block, primary);
   for (const char *alias : aliases) {
     if (pin->DoesParameterExist(block, alias)) return pin->GetBoolean(block, alias);
@@ -246,11 +256,11 @@ InitialPerturbations::InitialPerturbations(MeshBlockPack *pp, ParameterInput *pi
 
   nlow = GetIntegerAny(pin, block_name_, "nlow", 1, {"kmin"});
   nhigh = GetIntegerAny(pin, block_name_, "nhigh", 3, {"kmax"});
-  min_kx = GetIntegerAny(pin, block_name_, "min_kx", 0);
+  min_kx = GetIntegerAny(pin, block_name_, "min_kx", -nhigh);
   max_kx = GetIntegerAny(pin, block_name_, "max_kx", nhigh);
-  min_ky = GetIntegerAny(pin, block_name_, "min_ky", 0);
+  min_ky = GetIntegerAny(pin, block_name_, "min_ky", -nhigh);
   max_ky = GetIntegerAny(pin, block_name_, "max_ky", nhigh);
-  min_kz = GetIntegerAny(pin, block_name_, "min_kz", 0);
+  min_kz = GetIntegerAny(pin, block_name_, "min_kz", -nhigh);
   max_kz = GetIntegerAny(pin, block_name_, "max_kz", nhigh);
   spectral_slope = GetRealAny(pin, block_name_, "spectral_slope", 5.0/3.0,
                               {"slope", "expo"});
@@ -296,6 +306,9 @@ InitialPerturbations::InitialPerturbations(MeshBlockPack *pp, ParameterInput *pi
   }
 
   Validate();
+  if (!AnyEnabled()) {
+    return;
+  }
   InitializeModes();
 
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -304,14 +317,20 @@ InitialPerturbations::InitialPerturbations(MeshBlockPack *pp, ParameterInput *pi
   const int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*indcs.ng) : 1;
   const int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*indcs.ng) : 1;
 
-  Kokkos::realloc(rho_pert, nmb, ncells3, ncells2, ncells1);
-  Kokkos::realloc(vel_pert, nmb, 3, ncells3, ncells2, ncells1);
-  Kokkos::realloc(avec.x1e, nmb, ncells3 + 1, ncells2 + 1, ncells1);
-  Kokkos::realloc(avec.x2e, nmb, ncells3 + 1, ncells2, ncells1 + 1);
-  Kokkos::realloc(avec.x3e, nmb, ncells3, ncells2 + 1, ncells1 + 1);
-  Kokkos::realloc(b_pert.x1f, nmb, ncells3, ncells2, ncells1 + 1);
-  Kokkos::realloc(b_pert.x2f, nmb, ncells3, ncells2 + 1, ncells1);
-  Kokkos::realloc(b_pert.x3f, nmb, ncells3 + 1, ncells2, ncells1);
+  if (DensityEnabled()) {
+    Kokkos::realloc(rho_pert, nmb, ncells3, ncells2, ncells1);
+  }
+  if (VelocityEnabled()) {
+    Kokkos::realloc(vel_pert, nmb, 3, ncells3, ncells2, ncells1);
+  }
+  if (MagneticEnabled()) {
+    Kokkos::realloc(avec.x1e, nmb, ncells3 + 1, ncells2 + 1, ncells1);
+    Kokkos::realloc(avec.x2e, nmb, ncells3 + 1, ncells2, ncells1 + 1);
+    Kokkos::realloc(avec.x3e, nmb, ncells3, ncells2 + 1, ncells1 + 1);
+    Kokkos::realloc(b_pert.x1f, nmb, ncells3, ncells2, ncells1 + 1);
+    Kokkos::realloc(b_pert.x2f, nmb, ncells3, ncells2 + 1, ncells1);
+    Kokkos::realloc(b_pert.x3f, nmb, ncells3 + 1, ncells2, ncells1);
+  }
 
   const int seed = (rseed > 0) ? rseed : 1;
   rstate.idum = -static_cast<int64_t>(seed);
@@ -319,27 +338,49 @@ InitialPerturbations::InitialPerturbations(MeshBlockPack *pp, ParameterInput *pi
 }
 
 void InitialPerturbations::Validate() const {
+  if (!std::isfinite(density_rms) || !std::isfinite(velocity_rms) ||
+      !std::isfinite(magnetic_rms)) {
+    FatalInitialPerturbationError("rms amplitudes must be finite");
+  }
+  if (density_rms < 0.0 || velocity_rms < 0.0 || magnetic_rms < 0.0) {
+    FatalInitialPerturbationError("rms amplitudes must be non-negative");
+  }
   if (!AnyEnabled()) return;
-  if (pmy_pack->pcoord->is_special_relativistic || pmy_pack->pcoord->is_general_relativistic) {
+  if (pmy_pack->pcoord->is_special_relativistic ||
+      pmy_pack->pcoord->is_general_relativistic) {
     FatalInitialPerturbationError("non-relativistic hydro/MHD is required");
   }
   if (pmy_pack->phydro == nullptr && pmy_pack->pmhd == nullptr) {
     FatalInitialPerturbationError("requires an active <hydro> or <mhd> block");
   }
   if (pmy_pack->pionn != nullptr) {
-    FatalInitialPerturbationError("ion-neutral initial perturbations are not implemented");
+    FatalInitialPerturbationError("ion-neutral initial perturbations are not "
+                                  "implemented");
   }
-  if (perturb_magnetic && pmy_pack->pmhd == nullptr) {
+  if (MagneticEnabled() && pmy_pack->pmhd == nullptr) {
     FatalInitialPerturbationError("magnetic perturbations require an active <mhd> block");
-  }
-  if (density_rms < 0.0 || velocity_rms < 0.0 || magnetic_rms < 0.0) {
-    FatalInitialPerturbationError("rms amplitudes must be non-negative");
   }
   if (nlow < 0 || nhigh < nlow) {
     FatalInitialPerturbationError("require 0 <= nlow <= nhigh");
   }
-  if (f_solenoidal < 0.0 || f_solenoidal > 1.0) {
+  if (min_kx > max_kx || min_ky > max_ky || min_kz > max_kz) {
+    FatalInitialPerturbationError("each min_k* must be <= the corresponding max_k*");
+  }
+  if (!std::isfinite(spectral_slope)) {
+    FatalInitialPerturbationError("spectral_slope must be finite");
+  }
+  if (VelocityEnabled() && (!std::isfinite(f_solenoidal) ||
+                           f_solenoidal < 0.0 || f_solenoidal > 1.0)) {
     FatalInitialPerturbationError("f_solenoidal must lie in [0, 1]");
+  }
+  if (localization_mode != 0) {
+    const bool active_scale = x1_scale > 0.0 ||
+        (pmy_pack->pmesh->multi_d && x2_scale > 0.0) ||
+        (pmy_pack->pmesh->three_d && x3_scale > 0.0);
+    if (!active_scale) {
+      FatalInitialPerturbationError("localization requires a positive scale in an active "
+                                    "mesh dimension");
+    }
   }
 }
 
@@ -357,6 +398,7 @@ void InitialPerturbations::InitializeModes() {
     for (int nky = min_ky; nky <= max_ky; ++nky) {
       for (int nkz = min_kz; nkz <= max_kz; ++nkz) {
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
+        if (!IsCanonicalMode(nkx, nky, nkz)) continue;
         const int nsqr = nkx*nkx + nky*nky + nkz*nkz;
         if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr) ++mode_count;
       }
@@ -375,6 +417,7 @@ void InitialPerturbations::InitializeModes() {
     for (int nky = min_ky; nky <= max_ky; ++nky) {
       for (int nkz = min_kz; nkz <= max_kz; ++nkz) {
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
+        if (!IsCanonicalMode(nkx, nky, nkz)) continue;
         const int nsqr = nkx*nkx + nky*nky + nkz*nkz;
         if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr) {
           kx_mode.h_view(nmode) = dkx*static_cast<Real>(nkx);
@@ -463,8 +506,6 @@ void InitialPerturbations::BuildDensityField() {
   auto ar = rho_amp_real.d_view;
   auto ai = rho_amp_imag.d_view;
   auto mb_size = pmy_pack->pmb->mb_size;
-  mb_size.template modify<HostMemSpace>();
-  mb_size.template sync<DevExeSpace>();
 
   const int nmode = mode_count;
   const int loc_mode = localization_mode;
@@ -506,8 +547,6 @@ void InitialPerturbations::BuildVelocityField() {
   auto ar = vel_amp_real.d_view;
   auto ai = vel_amp_imag.d_view;
   auto mb_size = pmy_pack->pmb->mb_size;
-  mb_size.template modify<HostMemSpace>();
-  mb_size.template sync<DevExeSpace>();
 
   const int nmode = mode_count;
   const int loc_mode = localization_mode;
@@ -555,8 +594,6 @@ void InitialPerturbations::BuildVectorPotential() {
   auto ar = avec_amp_real.d_view;
   auto ai = avec_amp_imag.d_view;
   auto mb_size = pmy_pack->pmb->mb_size;
-  mb_size.template modify<HostMemSpace>();
-  mb_size.template sync<DevExeSpace>();
 
   const int nmode = mode_count;
   const int loc_mode = localization_mode;
@@ -628,8 +665,6 @@ void InitialPerturbations::CurlVectorPotential() {
   auto b2 = b_pert.x2f;
   auto b3 = b_pert.x3f;
   auto mb_size = pmy_pack->pmb->mb_size;
-  mb_size.template modify<HostMemSpace>();
-  mb_size.template sync<DevExeSpace>();
 
   par_for("initial_bpert_x1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie + 1,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -677,13 +712,12 @@ Real InitialPerturbations::CellScalarRMS(const DvceArray4D<Real> &field,
   const int nji = nx2*nx1;
 
   auto mb_size = pmy_pack->pmb->mb_size;
-  mb_size.template modify<HostMemSpace>();
-  mb_size.template sync<DevExeSpace>();
 
   Real sum = 0.0;
   Real vol = 0.0;
   if (remove_mean) {
-    Kokkos::parallel_reduce("initial_scalar_mean", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    Kokkos::parallel_reduce("initial_scalar_mean",
+    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int idx, Real &sum_, Real &vol_) {
       const int m = idx/nkji;
       const int k0 = (idx - m*nkji)/nji;
@@ -691,7 +725,8 @@ Real InitialPerturbations::CellScalarRMS(const DvceArray4D<Real> &field,
       const int i = (idx - m*nkji - k0*nji - j0*nx1) + is;
       const int j = j0 + js;
       const int k = k0 + ks;
-      const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*mb_size.d_view(m).dx3;
+      const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*
+                      mb_size.d_view(m).dx3;
       sum_ += field(m,k,j,i)*dv;
       vol_ += dv;
     }, Kokkos::Sum<Real>(sum), Kokkos::Sum<Real>(vol));
@@ -708,7 +743,8 @@ Real InitialPerturbations::CellScalarRMS(const DvceArray4D<Real> &field,
 
   sum = 0.0;
   vol = 0.0;
-  Kokkos::parallel_reduce("initial_scalar_rms", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  Kokkos::parallel_reduce("initial_scalar_rms",
+  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int idx, Real &sum_, Real &vol_) {
     const int m = idx/nkji;
     const int k0 = (idx - m*nkji)/nji;
@@ -716,7 +752,8 @@ Real InitialPerturbations::CellScalarRMS(const DvceArray4D<Real> &field,
     const int i = (idx - m*nkji - k0*nji - j0*nx1) + is;
     const int j = j0 + js;
     const int k = k0 + ks;
-    const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*mb_size.d_view(m).dx3;
+    const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*
+                    mb_size.d_view(m).dx3;
     sum_ += SQR(field(m,k,j,i))*dv;
     vol_ += dv;
   }, Kokkos::Sum<Real>(sum), Kokkos::Sum<Real>(vol));
@@ -740,12 +777,11 @@ Real InitialPerturbations::CellVectorRMS(const DvceArray5D<Real> &field,
   const int nji = nx2*nx1;
 
   auto mb_size = pmy_pack->pmb->mb_size;
-  mb_size.template modify<HostMemSpace>();
-  mb_size.template sync<DevExeSpace>();
 
   if (remove_mean) {
     Real s0 = 0.0, s1 = 0.0, s2 = 0.0, vol = 0.0;
-    Kokkos::parallel_reduce("initial_vector_mean", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    Kokkos::parallel_reduce("initial_vector_mean",
+    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int idx, Real &sx, Real &sy, Real &sz, Real &vol_) {
       const int m = idx/nkji;
       const int k0 = (idx - m*nkji)/nji;
@@ -753,7 +789,8 @@ Real InitialPerturbations::CellVectorRMS(const DvceArray5D<Real> &field,
       const int i = (idx - m*nkji - k0*nji - j0*nx1) + is;
       const int j = j0 + js;
       const int k = k0 + ks;
-      const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*mb_size.d_view(m).dx3;
+      const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*
+                      mb_size.d_view(m).dx3;
       sx += field(m,0,k,j,i)*dv;
       sy += field(m,1,k,j,i)*dv;
       sz += field(m,2,k,j,i)*dv;
@@ -777,7 +814,8 @@ Real InitialPerturbations::CellVectorRMS(const DvceArray5D<Real> &field,
 
   Real sum = 0.0;
   Real vol = 0.0;
-  Kokkos::parallel_reduce("initial_vector_rms", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  Kokkos::parallel_reduce("initial_vector_rms",
+  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int idx, Real &sum_, Real &vol_) {
     const int m = idx/nkji;
     const int k0 = (idx - m*nkji)/nji;
@@ -785,7 +823,8 @@ Real InitialPerturbations::CellVectorRMS(const DvceArray5D<Real> &field,
     const int i = (idx - m*nkji - k0*nji - j0*nx1) + is;
     const int j = j0 + js;
     const int k = k0 + ks;
-    const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*mb_size.d_view(m).dx3;
+    const Real dv = mb_size.d_view(m).dx1*mb_size.d_view(m).dx2*
+                    mb_size.d_view(m).dx3;
     sum_ += (SQR(field(m,0,k,j,i)) + SQR(field(m,1,k,j,i)) +
              SQR(field(m,2,k,j,i)))*dv;
     vol_ += dv;
@@ -812,8 +851,6 @@ Real InitialPerturbations::FaceCenteredBRMS(const DvceFaceFld4D<Real> &field) {
   auto b2 = field.x2f;
   auto b3 = field.x3f;
   auto mb_size = pmy_pack->pmb->mb_size;
-  mb_size.template modify<HostMemSpace>();
-  mb_size.template sync<DevExeSpace>();
 
   Real sum = 0.0;
   Real vol = 0.0;
@@ -1037,15 +1074,15 @@ void InitialPerturbations::ApplyMagneticField() {
 void InitialPerturbations::Apply() {
   if (!AnyEnabled()) return;
 
-  if (perturb_density) {
+  if (DensityEnabled()) {
     GenerateAmplitudes(rho_amp_real, rho_amp_imag, 1, false, false);
     ApplyDensityField();
   }
-  if (perturb_velocity) {
+  if (VelocityEnabled()) {
     GenerateAmplitudes(vel_amp_real, vel_amp_imag, 3, true, false);
     ApplyVelocityField();
   }
-  if (perturb_magnetic) {
+  if (MagneticEnabled()) {
     GenerateAmplitudes(avec_amp_real, avec_amp_imag, 3, false, true);
     ApplyMagneticField();
   }
@@ -1057,11 +1094,16 @@ void ApplyInitialPerturbations(Mesh *pm, ParameterInput *pin) {
     return;
   }
 
-  if (pin->DoesBlockExist("initial_perturbations")) {
+  const bool has_plural = pin->DoesBlockExist("initial_perturbations");
+  const bool has_singular = pin->DoesBlockExist("initial_perturbation");
+  if (has_plural && has_singular) {
+    FatalInitialPerturbationError("use only one of <initial_perturbations> or "
+                                  "<initial_perturbation>");
+  }
+  if (has_plural) {
     InitialPerturbations perturbations(pm->pmb_pack, pin, "initial_perturbations");
     perturbations.Apply();
-  }
-  if (pin->DoesBlockExist("initial_perturbation")) {
+  } else if (has_singular) {
     InitialPerturbations perturbation(pm->pmb_pack, pin, "initial_perturbation");
     perturbation.Apply();
   }
