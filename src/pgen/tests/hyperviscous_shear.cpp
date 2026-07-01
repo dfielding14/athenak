@@ -101,6 +101,7 @@ void ProblemGenerator::HyperViscousShear(ParameterInput *pin, const bool restart
     auto &b0 = pmbp->pmhd->b0;
     auto &bcc0 = pmbp->pmhd->bcc0;
     const Real gm1 = eos.gamma - 1.0;
+    const bool initialize_magnetic_state = !create_reference_state;
     par_for("hypervisc_shear_mhd", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       const Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
@@ -112,7 +113,7 @@ void ProblemGenerator::HyperViscousShear(ParameterInput *pin, const bool restart
       if (eos.is_ideal) {
         u(m,IEN,k,j,i) = pressure/gm1 + 0.5*rho*vy*vy;
       }
-      if (!create_reference_state) {
+      if (initialize_magnetic_state) {
         b0.x1f(m,k,j,i) = 0.0;
         b0.x2f(m,k,j,i) = 0.0;
         b0.x3f(m,k,j,i) = 0.0;
