@@ -52,12 +52,12 @@ power in the controller-artifact band at frequencies 1.5--2.0 fell from 80.8% to
 
 ## X3 boundary conditions
 
-The lower x3 boundary uses AthenaK's standard outflow condition, which copies every
-conserved hydro and passive-scalar variable from the first active cell into each ghost
-layer. The upper x3 boundary remains a custom hot reservoir with fixed density,
-pressure, and zero cold-material fraction. The canonical
-`problem/zero_gradient_vx=false` holds its `vx` at the imposed hot-side shear value.
-Set it to `true` to copy `vx` from the upper boundary-adjacent active cell instead.
+Both x3 boundaries use frame-aware user reservoirs. The lower reservoir supplies
+fixed cold gas with fixed pressure and cold-material fraction one; the upper reservoir
+supplies fixed hot gas with fixed pressure and cold-material fraction zero. The
+canonical `problem/zero_gradient_vx=false` holds `vx` at the imposed cold- and
+hot-side shear values. Set it to `true` to copy `vx` from each boundary-adjacent
+active cell instead.
 
 ## Frame and particle coordinates
 
@@ -111,9 +111,9 @@ the x3 domain, or the root x3 resolution is changed, update `tracer_seed2/end_ti
 ## Passive scalar convention
 
 The pgen stores cold-material fraction in `scalar0` as a conserved scalar:
-`rho * cold_fraction`. The lower outflow boundary copies the adjacent active scalar,
-while the upper reservoir supplies fraction zero. When frame tracking is active, the
-upper reservoir is transformed from its lab velocity using the current frame velocity.
+`rho * cold_fraction`. The lower reservoir supplies fraction one, while the upper
+reservoir supplies fraction zero. When frame tracking is active, both reservoirs are
+transformed from their lab velocities using the current frame velocity.
 
 The canonical frame tracker volume-weights cells with cold fraction from 0.05 to 0.2.
 This band marks the visible hot-side density/temperature front and is present in the

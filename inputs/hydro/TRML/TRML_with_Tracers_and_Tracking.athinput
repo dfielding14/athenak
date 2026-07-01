@@ -28,9 +28,10 @@ ox2_bc = periodic
 nx3 = 96
 x3min = -1.0
 x3max = 1.0
-# The lower boundary copies the adjacent active state; the upper user boundary
-# maintains the hot reservoir.
-ix3_bc = outflow
+# Both x3 faces use frame-aware user reservoirs: cold at the lower boundary
+# and hot at the upper boundary. This avoids moving-frame drainage of dense
+# cold gas through a grid-frame outflow boundary.
+ix3_bc = user
 ox3_bc = user
 
 <meshblock>
