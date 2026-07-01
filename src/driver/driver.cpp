@@ -317,8 +317,6 @@ void Driver::ResetSTSController() {
 void Driver::ValidateSTSConfiguration(Mesh *pm) {
   int nsts_processes = 0;
   const parabolic::ParabolicProcessDescriptor *first_sts_process = nullptr;
-  bool has_hydro_sts = false;
-  bool has_mhd_sts = false;
   const bool has_explicit_cgl_lf =
       (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->has_explicit_cgl_lf);
 
@@ -327,11 +325,6 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
       ++nsts_processes;
       if (first_sts_process == nullptr) {
         first_sts_process = &process;
-      }
-      if (process.owner == parabolic::ParabolicProcessOwner::hydro) {
-        has_hydro_sts = true;
-      } else if (process.owner == parabolic::ParabolicProcessOwner::mhd) {
-        has_mhd_sts = true;
       }
     }
   }
@@ -363,33 +356,6 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
     DriverFatalError(__FILE__, __LINE__,
                      "STS is not yet supported for <ion-neutral> runs. Disable STS for "
                      "Hydro/MHD or remove the two-fluid ion-neutral configuration.");
-  }
-
-  if (has_hydro_sts) {
-    hydro::Hydro *phydro = pm->pmb_pack->phydro;
-    if (phydro == nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "Hydro STS was requested, but no Hydro module is active.");
-    }
-    if (phydro->porb_u != nullptr || phydro->psbox_u != nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "Hydro STS is not yet supported with shearing-box or orbital "
-                       "advection.");
-    }
-  }
-
-  if (has_mhd_sts) {
-    mhd::MHD *pmhd = pm->pmb_pack->pmhd;
-    if (pmhd == nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "MHD STS was requested, but no MHD module is active.");
-    }
-    if (pmhd->porb_u != nullptr || pmhd->porb_b != nullptr ||
-        pmhd->psbox_u != nullptr || pmhd->psbox_b != nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "MHD STS is not yet supported with shearing-box or orbital "
-                       "advection.");
-    }
   }
 }
 

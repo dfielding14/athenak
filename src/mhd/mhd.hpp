@@ -21,6 +21,7 @@
 class EquationOfState;
 class Coordinates;
 class Viscosity;
+class HyperViscosity;
 class Resistivity;
 class Conduction;
 class CGLLandauFluid;
@@ -69,6 +70,8 @@ struct MHDTaskIDs {
   TaskID efldsrc;
   TaskID sende;
   TaskID recve;
+  TaskID sende_shr;
+  TaskID recve_shr;
   TaskID ct;
   TaskID sendb_oa;
   TaskID recvb_oa;
@@ -135,8 +138,9 @@ class MHD {
   ShearingBoxFC *psbox_b = nullptr;
 
   // Object(s) for extra physics
-  // (viscosity, resistivity, thermal/scalar diffusion, source terms)
+  // (viscosity, hyperviscosity, resistivity, thermal/scalar diffusion, source terms)
   Viscosity *pvisc = nullptr;
+  HyperViscosity *phypervisc = nullptr;
   Resistivity *presist = nullptr;
   Conduction *pcond = nullptr;
   CGLLandauFluid *pcgl_lf = nullptr;
@@ -173,10 +177,12 @@ class MHD {
   bool use_fofc = false;   // flag to enable FOFC
 
   bool has_explicit_viscosity = false;
+  bool has_explicit_hyperviscosity = false;
   bool has_explicit_conduction = false;
   bool has_explicit_resistivity = false;
   bool has_explicit_scalar_diffusion = false;
   bool has_sts_viscosity = false;
+  bool has_sts_hyperviscosity = false;
   bool has_sts_conduction = false;
   bool has_sts_cgl_lf = false;
   bool has_explicit_cgl_lf = false;
@@ -212,6 +218,8 @@ class MHD {
   TaskStatus SendCGLPressureFlux(Driver *d, int stage);
   TaskStatus RecvCGLPressureFlux(Driver *d, int stage);
   TaskStatus CGLPressureWork(Driver *d, int stage);
+  TaskStatus SendFlux_Shr(Driver *d, int stage);
+  TaskStatus RecvFlux_Shr(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
   TaskStatus MHDSrcTerms(Driver *d, int stage);
   TaskStatus SendU_OA(Driver *d, int stage);
@@ -225,6 +233,8 @@ class MHD {
   TaskStatus EFieldSrc(Driver *d, int stage);
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);
+  TaskStatus SendE_Shr(Driver *d, int stage);
+  TaskStatus RecvE_Shr(Driver *d, int stage);
   TaskStatus CT(Driver *d, int stage);
   TaskStatus SendB_OA(Driver *d, int stage);
   TaskStatus RecvB_OA(Driver *d, int stage);
@@ -253,6 +263,8 @@ class MHD {
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
   TaskStatus ClearCGLPressureFlux(Driver *d, int stage);
+  TaskStatus ClearSendParabolic(Driver *d, int stage);
+  TaskStatus ClearRecvParabolic(Driver *d, int stage);
 
   // CalculateFluxes function templated over Riemann Solvers
   template <MHD_RSolver T>

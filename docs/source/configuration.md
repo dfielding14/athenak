@@ -68,8 +68,8 @@ Presence of `<hydro>` enables the non-relativistic solver, `<mhd>` enables MHD (
 | `reconstruct` | `dc`, `plm`, `ppm4`, `ppmx`, `wenoz` | Spatial reconstruction |
 | `rsolver` (hydro) | `llf`, `hlle`, `hllc`, `roe`, `advect` | Riemann solver |
 | `rsolver` (MHD) | `llf`, `hlle`, `hlld`, `advect` | MHD flux solver |
-| `viscosity`, `conductivity` | float | Optional hydro diffusion coefficients |
-| `ohmic_resistivity`, `viscosity`, `conductivity` | float | Optional MHD diffusion coefficients |
+| `viscosity`, `hyperviscosity`, `conductivity` | float | Optional hydro diffusion coefficients |
+| `ohmic_resistivity`, `viscosity`, `hyperviscosity`, `conductivity` | float | Optional MHD diffusion coefficients |
 
 Relativistic or GR modules (`<dyn_grmhd>`, `<z4c>`, `<radiation>`) follow the same pattern: adding the block activates the module, and each block documents its specific parameters.
 

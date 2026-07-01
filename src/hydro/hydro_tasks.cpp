@@ -84,17 +84,27 @@ void Hydro::AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>> 
     TaskID pflux = tl["parabolic_stagen"]->AddTask(&Hydro::STSFluxes, this, pclearf);
     TaskID psendf = tl["parabolic_stagen"]->AddTask(&Hydro::SendFlux, this, pflux);
     TaskID precvf = tl["parabolic_stagen"]->AddTask(&Hydro::RecvFlux, this, psendf);
-    TaskID pupdt = tl["parabolic_stagen"]->AddTask(&Hydro::STSUpdate, this, precvf);
+    TaskID psendf_shr = tl["parabolic_stagen"]->AddTask(&Hydro::SendFlux_Shr, this,
+                                                       precvf);
+    TaskID precvf_shr = tl["parabolic_stagen"]->AddTask(&Hydro::RecvFlux_Shr, this,
+                                                       psendf_shr);
+    TaskID pupdt = tl["parabolic_stagen"]->AddTask(&Hydro::STSUpdate, this, precvf_shr);
     TaskID prestu = tl["parabolic_stagen"]->AddTask(&Hydro::RestrictU, this, pupdt);
     TaskID psendu = tl["parabolic_stagen"]->AddTask(&Hydro::SendU, this, prestu);
     TaskID precvu = tl["parabolic_stagen"]->AddTask(&Hydro::RecvU, this, psendu);
-    TaskID pbcs = tl["parabolic_stagen"]->AddTask(&Hydro::ApplyPhysicalBCs, this, precvu);
+    TaskID psendu_shr = tl["parabolic_stagen"]->AddTask(&Hydro::SendU_Shr, this, precvu);
+    TaskID precvu_shr = tl["parabolic_stagen"]->AddTask(&Hydro::RecvU_Shr, this,
+                                                       psendu_shr);
+    TaskID pbcs = tl["parabolic_stagen"]->AddTask(&Hydro::ApplyPhysicalBCs, this,
+                                                 precvu_shr);
     TaskID pprol = tl["parabolic_stagen"]->AddTask(&Hydro::Prolongate, this, pbcs);
     TaskID pc2p = tl["parabolic_stagen"]->AddTask(&Hydro::ConToPrim, this, pprol);
     (void) tl["parabolic_stagen"]->AddTask(&Hydro::STSRefreshTimeStep, this, pc2p);
 
-    TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&Hydro::ClearSend, this, none);
-    (void) tl["after_parabolic_stagen"]->AddTask(&Hydro::ClearRecv, this, pcsend);
+    TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&Hydro::ClearSendParabolic,
+                                                         this, none);
+    (void) tl["after_parabolic_stagen"]->AddTask(&Hydro::ClearRecvParabolic, this,
+                                                pcsend);
   }
 
   return;
@@ -148,12 +158,66 @@ TaskStatus Hydro::InitRecv(Driver *pdrive, int stage) {
 //! \brief Post receive operations required for one STS parabolic stage.
 
 TaskStatus Hydro::InitRecvParabolic(Driver *pdrive, int stage) {
-  (void) pdrive;
   (void) stage;
   TaskStatus tstat = pbval_u->InitRecv(nhydro+nscalars);
   if (tstat != TaskStatus::complete) return tstat;
   if (pmy_pack->pmesh->multilevel) {
     tstat = pbval_u->InitFluxRecv(nhydro+nscalars);
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    Real time = pmy_pack->pmesh->time;
+    if (pdrive->sts.sweep == Driver::STSSweep::post) {
+      time += pmy_pack->pmesh->dt;
+    }
+    tstat = psbox_u->InitRecv(time);
+    if (tstat != TaskStatus::complete) return tstat;
+    tstat = psbox_u->InitFluxRecv();
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Hydro::ClearSendParabolic
+//! \brief Complete only the sends posted by one STS parabolic stage.
+
+TaskStatus Hydro::ClearSendParabolic(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = pbval_u->ClearSend();
+  if (tstat != TaskStatus::complete) return tstat;
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxSend();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->ClearSend();
+    if (tstat != TaskStatus::complete) return tstat;
+    tstat = psbox_u->ClearFluxSend();
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Hydro::ClearRecvParabolic
+//! \brief Complete only the receives posted by one STS parabolic stage.
+
+TaskStatus Hydro::ClearRecvParabolic(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = pbval_u->ClearRecv();
+  if (tstat != TaskStatus::complete) return tstat;
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->ClearRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+    tstat = psbox_u->ClearFluxRecv();
   }
   return tstat;
 }
@@ -255,6 +319,32 @@ TaskStatus Hydro::RecvFlux(Driver *pdrive, int stage) {
   // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel) {
     tstat = pbval_u->RecvAndUnpackFluxCC(uflx);
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Hydro::SendFlux_Shr
+//! \brief Send radial STS fluxes to the opposite shearing boundary.
+
+TaskStatus Hydro::SendFlux_Shr(Driver *pdrive, int stage) {
+  TaskStatus tstat = TaskStatus::complete;
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->PackAndSendFluxCC(uflx);
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Hydro::RecvFlux_Shr
+//! \brief Remap and reconcile radial STS fluxes across the shearing boundary.
+
+TaskStatus Hydro::RecvFlux_Shr(Driver *pdrive, int stage) {
+  TaskStatus tstat = TaskStatus::complete;
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->RecvAndCorrectFluxCC(uflx,recon_method);
   }
   return tstat;
 }
