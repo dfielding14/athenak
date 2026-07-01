@@ -278,6 +278,7 @@ class Particles {
   Real pic_theta_max = 0.3;       // Boris gyro-angle timestep limit
   int pic_sort_interval = 0;      // staged sorting cadence (0 disables re-sorting)
   int pic_random_seed = 0;        // deterministic seed for random CR placement
+  bool pic_allow_restart_injection_without_particle_section = false;
   Real pic_load_balance_cost_per_particle = 0.0; // optional AMR balancing cost weight
   bool pic_q017_sync_kernel_timers = false; // opt-in fences for device elapsed timing
   bool pic_boundary_conservation_ledger = false;

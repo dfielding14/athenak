@@ -225,6 +225,34 @@ void ValidateRestoredParticleIDData(const particles::Particles *ppart,
   }
 }
 
+bool AllowParticleInjectionFromParticleFreeRestart(Mesh *pm) {
+  auto *ppart = pm->pmb_pack->ppart;
+  return ppart != nullptr &&
+         ppart->pic_allow_restart_injection_without_particle_section;
+}
+
+void KeepInitializedParticlesForRestartInjection(Mesh *pm) {
+  auto *ppart = pm->pmb_pack->ppart;
+  if (ppart == nullptr) return;
+  if (global_variable::my_rank == 0) {
+    std::cout << "PIC restart injection: source restart has no particle section; "
+              << "keeping particles initialized from the input deck at t="
+              << pm->time << "." << std::endl;
+  }
+  if (ppart->moments.size() > 0) {
+    Kokkos::deep_copy(ppart->moments, static_cast<Real>(0.0));
+  }
+  if (ppart->coarse_moments.size() > 0) {
+    Kokkos::deep_copy(ppart->coarse_moments, static_cast<Real>(0.0));
+  }
+  if (ppart->j_edge_x1e.size() > 0) {
+    Kokkos::deep_copy(ppart->j_edge_x1e, static_cast<Real>(0.0));
+    Kokkos::deep_copy(ppart->j_edge_x2e, static_cast<Real>(0.0));
+    Kokkos::deep_copy(ppart->j_edge_x3e, static_cast<Real>(0.0));
+  }
+  pm->CountParticles();
+}
+
 void LoadParticleRestartDataSingleFile(Mesh *pm,
                                        IOWrapperSizeT headeroffset,
                                        IOWrapperSizeT data_stride,
@@ -320,6 +348,10 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
   Real ref_cr_light_speed = 0.0;
   std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> ref_model_ints;
   std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> ref_model_reals;
+  int missing_pic_sections = 0;
+  int present_pic_sections = 0;
+  const bool allow_particle_restart_injection =
+      AllowParticleInjectionFromParticleFreeRestart(pm);
 
   for (int r=0; r<meta.original_nranks; ++r) {
     auto &reqs = requests[r];
@@ -335,6 +367,11 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
     std::uint64_t pic_magic = 0;
     if (srcfile.Read_bytes_at(&pic_magic, 1, sizeof(std::uint64_t), section_offset,
                               true) != sizeof(std::uint64_t)) {
+      if (allow_particle_restart_injection) {
+        ++missing_pic_sections;
+        srcfile.Close(true);
+        continue;
+      }
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
               << "Particle restart state is missing from source restart "
@@ -349,6 +386,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << std::endl;
       restart_utils::AbortOnFatalError();
     }
+    ++present_pic_sections;
 
     ParticleRestartSectionMeta sm;
     IOWrapperSizeT rd_offset = section_offset;
@@ -780,6 +818,18 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
     }
 
     srcfile.Close(true);
+  }
+
+  if (missing_pic_sections > 0) {
+    if (present_pic_sections == 0) {
+      KeepInitializedParticlesForRestartInjection(pm);
+      return;
+    }
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle restart injection found a mixed set of source restart "
+              << "files: some have particle sections and some do not." << std::endl;
+    restart_utils::AbortOnFatalError();
   }
 
   HostArray2D<Real> h_pr("rst_pr", nrdata, local_npart);
@@ -1225,6 +1275,10 @@ void LoadParticleRestartData(Mesh *pm,
   MPI_Bcast(&pic_magic, sizeof(std::uint64_t), MPI_BYTE, 0, MPI_COMM_WORLD);
 #endif
   if (!has_pic_section) {
+    if (AllowParticleInjectionFromParticleFreeRestart(pm)) {
+      KeepInitializedParticlesForRestartInjection(pm);
+      return;
+    }
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Particle restart state is missing from restart file."

@@ -1,0 +1,99 @@
+# 64^3 gas-only forcing calibration for the 128^3 turbulent-dynamo pilot.
+# Override turb_driving/dedt with 0.03, 0.06, and 0.12 in separate directories.
+
+<comment>
+problem = gas-only turbulent-dynamo forcing calibration
+
+<job>
+basename = pic_turbulent_dynamo_calibration_64
+
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 64
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 64
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<mesh_refinement>
+refinement = none
+num_levels = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim = -1
+tlim = 5.0
+ndiag = 100
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+gamma = 1.6666666666666667
+
+<eos>
+iso_sound_speed = 1.0
+
+<coord>
+special_rel = false
+general_rel = false
+
+<problem>
+pgen_name = turb
+d_i = 1.0
+d_n = 1.0
+beta = 1.0
+ifield = 0
+user_hist = true
+
+<initial_perturbations>
+variables = magnetic
+magnetic_rms = 1.0e-3
+spectral_slope = 1.6666666666666667
+nlow = 1
+nhigh = 4
+rseed = 271828
+localization = none
+
+<turb_driving>
+turb_flag = 2
+constant_edot = true
+tcorr = 1.0
+dedt = 0.06
+spect_form = 1
+npeak = 2
+nlow = 1
+nhigh = 3
+driving_type = 0
+sol_fraction = 1.0
+dt_turb_update = 0.01
+rseed = 314159
+
+<output1>
+file_type = hst
+dt = 0.01
+
+<output2>
+file_type = bin
+variable = mhd_w_bcc
+id = mhd_w_bcc
+dt = 5.0
+ghost_zones = false
+

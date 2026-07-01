@@ -774,6 +774,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "<particles>/pic_random_seed must be >= 0" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  pic_allow_restart_injection_without_particle_section = pin->GetOrAddBoolean(
+      "particles", "pic_allow_restart_injection_without_particle_section", false);
 
   std::string pic_intermediate_arrays_mode_str = pin->GetOrAddString(
       "particles", "pic_intermediate_arrays", "auto");
