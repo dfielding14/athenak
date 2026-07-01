@@ -344,7 +344,9 @@ void TRMLZBoundary(Mesh *pm) {
             }
             if (frame_tracking) {
               u0(m, IM2, ghost_inner_k, j, i) = -rho_cold * frame_v2;
-              u0(m, IM3, ghost_inner_k, j, i) = -rho_cold * frame_v3;
+              // Fixed cold reservoir wall: reflect normal velocity to prevent drainage.
+              u0(m, IM3, ghost_inner_k, j, i) =
+                  -rho_cold * u0(m, IM3, ks + k, j, i) / u0(m, IDN, ks + k, j, i);
             } else {
               u0(m, IM2, ghost_inner_k, j, i) =
                   rho_cold * u0(m, IM2, ks, j, i) / u0(m, IDN, ks, j, i);
