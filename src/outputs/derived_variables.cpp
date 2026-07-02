@@ -45,6 +45,23 @@ int ParticleDiagnosticCellIndex(const Real x, const Real xmin, const Real dx,
   return ClampDerivedCellIndex(idx, is, ie);
 }
 
+KOKKOS_INLINE_FUNCTION
+Real ParticleDiagnosticInvCellVolume(const Real dx1, const Real dx2, const Real dx3,
+                                     const bool multi_d, const bool three_d) {
+  Real vol = dx1;
+  if (multi_d) vol *= dx2;
+  if (three_d) vol *= dx3;
+  return 1.0/vol;
+}
+
+constexpr int kParticleCREnergyDensity = 0;
+constexpr int kParticleCRPressure = 1;
+constexpr int kParticleCREnthalpy = 2;
+constexpr int kParticleCREnergyFluxX = 3;
+constexpr int kParticleCREnergyFluxY = 4;
+constexpr int kParticleCREnergyFluxZ = 5;
+constexpr int kParticleCRPressureAnisotropy = 6;
+
 }  // namespace
 
 //----------------------------------------------------------------------------------------
@@ -2707,6 +2724,151 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_EBDOT,k,j,i);
     });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_ecr") == 0 ||
+      name.compare("prtcl_pcr") == 0 ||
+      name.compare("prtcl_wcr") == 0 ||
+      name.compare("prtcl_ekin_flux_x") == 0 ||
+      name.compare("prtcl_ekin_flux_y") == 0 ||
+      name.compare("prtcl_ekin_flux_z") == 0 ||
+      name.compare("prtcl_pcr_aniso") == 0) {
+    if (pm->pmb_pack->ppart == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << name << " output requested but no particle "
+                << "module constructed." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+
+    int mode = kParticleCREnergyDensity;
+    if (name.compare("prtcl_pcr") == 0) {
+      mode = kParticleCRPressure;
+    } else if (name.compare("prtcl_wcr") == 0) {
+      mode = kParticleCREnthalpy;
+    } else if (name.compare("prtcl_ekin_flux_x") == 0) {
+      mode = kParticleCREnergyFluxX;
+    } else if (name.compare("prtcl_ekin_flux_y") == 0) {
+      mode = kParticleCREnergyFluxY;
+    } else if (name.compare("prtcl_ekin_flux_z") == 0) {
+      mode = kParticleCREnergyFluxZ;
+    } else if (name.compare("prtcl_pcr_aniso") == 0) {
+      mode = kParticleCRPressureAnisotropy;
+      if (pm->pmb_pack->pmhd == nullptr) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << name << " output requested but no MHD "
+                  << "module constructed." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+
+    auto dv = derived_var;
+    auto ppart = pm->pmb_pack->ppart;
+    auto pr = ppart->prtcl_rdata;
+    auto pi = ppart->prtcl_idata;
+    auto mspecies = ppart->species_mass;
+    const Real qscale = ppart->deposit_qscale;
+    const Real light_speed = ppart->pic_cr_light_speed;
+    const bool momentum_state = ppart->UsesRelativisticCRState();
+    int &npart = pm->nprtcl_thisrank;
+    int gids = pm->pmb_pack->gids;
+
+    par_for("prtcl_cr_grid0", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = 0.0;
+    });
+
+    if (mode == kParticleCRPressureAnisotropy) {
+      auto bcc = pm->pmb_pack->pmhd->bcc0;
+      par_for("prtcl_pcr_aniso", DevExeSpace(), 0, (npart-1),
+      KOKKOS_LAMBDA(const int p) {
+        int m = pi(PGID,p) - gids;
+        if (m < 0 || m >= nmb) return;
+
+        int ip = ParticleDiagnosticCellIndex(pr(IPX,p), size.d_view(m).x1min,
+                                             size.d_view(m).dx1, is, ie);
+        int jp = ParticleDiagnosticCellIndex(pr(IPY,p), size.d_view(m).x2min,
+                                             size.d_view(m).dx2, js, je);
+        int kp = ks;
+        if (three_d) {
+          kp = ParticleDiagnosticCellIndex(pr(IPZ,p), size.d_view(m).x3min,
+                                           size.d_view(m).dx3, ks, ke);
+        }
+
+        Real vx, vy, vz;
+        particles::CRVelocityFromState(momentum_state, light_speed,
+                                       pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p),
+                                       vx, vy, vz);
+        const Real bx = bcc(m,IBX,kp,jp,ip);
+        const Real by = bcc(m,IBY,kp,jp,ip);
+        const Real bz = bcc(m,IBZ,kp,jp,ip);
+        const Real bsq = bx*bx + by*by + bz*bz;
+        if (bsq <= 0.0) return;
+
+        const Real inv_b = 1.0/sqrt(bsq);
+        const Real state_par = (pr(IPVX,p)*bx + pr(IPVY,p)*by + pr(IPVZ,p)*bz)*inv_b;
+        const Real vel_par = (vx*bx + vy*by + vz*bz)*inv_b;
+        const Real stress_trace = pr(IPVX,p)*vx + pr(IPVY,p)*vy + pr(IPVZ,p)*vz;
+        const Real stress_par = state_par*vel_par;
+        const Real stress_perp = 0.5*(stress_trace - stress_par);
+        const int sp = pi(PSP,p);
+        const Real macro_mass = qscale*pr(IPWT,p)*mspecies(sp);
+        const Real inv_vol = ParticleDiagnosticInvCellVolume(size.d_view(m).dx1,
+                                                             size.d_view(m).dx2,
+                                                             size.d_view(m).dx3,
+                                                             multi_d, three_d);
+        Kokkos::atomic_add(&dv(m,i_dv,kp,jp,ip),
+                           macro_mass*(stress_par - stress_perp)*inv_vol);
+      });
+    } else {
+      par_for("prtcl_cr_grid", DevExeSpace(), 0, (npart-1),
+      KOKKOS_LAMBDA(const int p) {
+        int m = pi(PGID,p) - gids;
+        if (m < 0 || m >= nmb) return;
+
+        int ip = ParticleDiagnosticCellIndex(pr(IPX,p), size.d_view(m).x1min,
+                                             size.d_view(m).dx1, is, ie);
+        int jp = ParticleDiagnosticCellIndex(pr(IPY,p), size.d_view(m).x2min,
+                                             size.d_view(m).dx2, js, je);
+        int kp = ks;
+        if (three_d) {
+          kp = ParticleDiagnosticCellIndex(pr(IPZ,p), size.d_view(m).x3min,
+                                           size.d_view(m).dx3, ks, ke);
+        }
+
+        Real vx, vy, vz;
+        particles::CRVelocityFromState(momentum_state, light_speed,
+                                       pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p),
+                                       vx, vy, vz);
+        const Real ekin =
+            particles::CRKineticEnergy(momentum_state, light_speed,
+                                       pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p));
+        const Real stress_trace = pr(IPVX,p)*vx + pr(IPVY,p)*vy + pr(IPVZ,p)*vz;
+        const Real pcr = stress_trace/3.0;
+        const int sp = pi(PSP,p);
+        const Real macro_mass = qscale*pr(IPWT,p)*mspecies(sp);
+        const Real inv_vol = ParticleDiagnosticInvCellVolume(size.d_view(m).dx1,
+                                                             size.d_view(m).dx2,
+                                                             size.d_view(m).dx3,
+                                                             multi_d, three_d);
+        Real value = ekin;
+        if (mode == kParticleCRPressure) {
+          value = pcr;
+        } else if (mode == kParticleCREnthalpy) {
+          value = ekin + pcr;
+        } else if (mode == kParticleCREnergyFluxX) {
+          value = ekin*vx;
+        } else if (mode == kParticleCREnergyFluxY) {
+          value = ekin*vy;
+        } else if (mode == kParticleCREnergyFluxZ) {
+          value = ekin*vz;
+        }
+        Kokkos::atomic_add(&dv(m,i_dv,kp,jp,ip), macro_mass*value*inv_vol);
+      });
+    }
     i_dv += 1;
   }
 

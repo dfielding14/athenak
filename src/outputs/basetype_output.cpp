@@ -951,6 +951,48 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     int i_derived = out_params.n_derived - 1;
     outvars.emplace_back("prtcl_ebdot",i_derived,&(derived_var));
   }
+  if (variable.compare("prtcl_ecr") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_ecr",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_pcr") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_pcr",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_wcr") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_wcr",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_ekin_flux_x") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_ekin_flux_x",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_ekin_flux_y") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_ekin_flux_y",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_ekin_flux_z") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_ekin_flux_z",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_pcr_aniso") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_pcr_aniso",i_derived,&(derived_var));
+  }
   if (variable.compare("prtcl_jx_edge") == 0) {
     out_params.contains_derived = true;
     out_params.n_derived += 1;
