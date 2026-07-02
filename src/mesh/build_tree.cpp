@@ -6,8 +6,9 @@
 //! \file build_tree.cpp
 //! \brief Functions to build MeshBlock, both for new runs and restarts
 
-#include <iostream>
 #include <cinttypes>
+#include <cmath>  // isfinite
+#include <iostream>
 #include <limits> // numeric_limits<>
 #include <memory> // make_unique<>
 
@@ -448,6 +449,14 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       if (lloc_eachmb[i].level > current_level) current_level = lloc_eachmb[i].level;
     }
   };
+  auto valid_cost_list = [&]() {
+    for (int i=0; i<nmb_total; ++i) {
+      if (!std::isfinite(cost_eachmb[i]) || cost_eachmb[i] < 1.0e-20f) {
+        return false;
+      }
+    }
+    return true;
+  };
 
   // everyone sets the logical location and cost lists based on bradcasted data
   unpack_idlist();
@@ -486,6 +495,48 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     if (global_variable::my_rank == 0) {
       std::cout << "Detected legacy restart MeshBlock header padding; skipping 4 bytes."
                 << std::endl;
+    }
+  }
+
+  // Some legacy production restarts store two int arrays between LogicalLocation[] and
+  // cost[]. If costs decoded from the current layout are impossible, reread just cost[].
+  bool reread_legacy_costs = !valid_cost_list();
+#if MPI_PARALLEL_ENABLED
+  if (!single_file_per_rank) {
+    MPI_Bcast(&reread_legacy_costs, sizeof(bool), MPI_CHAR, 0, MPI_COMM_WORLD);
+  }
+#endif
+  if (reread_legacy_costs) {
+    IOWrapperSizeT legacy_cost_offset = headeroffset + headersize;
+    if (reread_legacy_idlist) {legacy_cost_offset += sizeof(int);}
+    legacy_cost_offset += nmb_total*sizeof(LogicalLocation);
+    legacy_cost_offset += 2*nmb_total*sizeof(int);
+
+    if (global_variable::my_rank == 0 || single_file_per_rank) {
+      resfile.Seek(legacy_cost_offset, single_file_per_rank);
+      if (resfile.Read_bytes(cost_eachmb, sizeof(float), nmb_total,
+                             single_file_per_rank) !=
+          static_cast<unsigned int>(nmb_total)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Incorrect number of MeshBlock costs in legacy "
+                  << "restart file; restart file is broken." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      MPI_Bcast(cost_eachmb, nmb_total*sizeof(float), MPI_CHAR, 0, MPI_COMM_WORLD);
+    }
+#endif
+    if (!valid_cost_list()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "MeshBlock cost list in restart file is invalid."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (global_variable::my_rank == 0) {
+      std::cout << "Detected legacy restart MeshBlock rank/gid lists; skipping "
+                << 2*nmb_total*sizeof(int) << " bytes." << std::endl;
     }
   }
   delete [] idlist;
