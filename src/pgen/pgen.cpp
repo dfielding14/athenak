@@ -121,6 +121,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   radiation::Radiation* prad=pm->pmb_pack->prad;
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
+  bool may_have_turbulence_payload =
+      (pturb != nullptr) || pin->DoesBlockExist("turb_driving");
+  bool restart_has_turbulence_payload = (pturb != nullptr);
   int nrad = 0, nhydro = 0, nmhd = 0, nforce = 3, nadm = 0, nz4c = 0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
@@ -194,6 +197,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
 #endif
     std::memcpy(&(pturb->rstate), &(rng_data[0]), sizeof(RNG_State));
+    delete [] rng_data;
   }
 
   // root process reads size of CC and FC data arrays from restart file
@@ -230,34 +234,93 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
 #endif
 
-  IOWrapperSizeT data_size_ = 0;
+  IOWrapperSizeT data_size_without_turb = 0;
   if (phydro != nullptr) {
-    data_size_ += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
+    data_size_without_turb += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
   }
   if (pmhd != nullptr) {
-    data_size_ += nout1*nout2*nout3*nmhd*sizeof(Real);   // mhd u0
-    data_size_ += (nout1+1)*nout2*nout3*sizeof(Real);    // mhd b0.x1f
-    data_size_ += nout1*(nout2+1)*nout3*sizeof(Real);    // mhd b0.x2f
-    data_size_ += nout1*nout2*(nout3+1)*sizeof(Real);    // mhd b0.x3f
+    data_size_without_turb += nout1*nout2*nout3*nmhd*sizeof(Real);   // mhd u0
+    data_size_without_turb += (nout1+1)*nout2*nout3*sizeof(Real);    // mhd b0.x1f
+    data_size_without_turb += nout1*(nout2+1)*nout3*sizeof(Real);    // mhd b0.x2f
+    data_size_without_turb += nout1*nout2*(nout3+1)*sizeof(Real);    // mhd b0.x3f
   }
   if (prad != nullptr) {
-    data_size_ += nout1*nout2*nout3*nrad*sizeof(Real);   // rad i0
-  }
-  if (pturb != nullptr) {
-    data_size_ += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
+    data_size_without_turb += nout1*nout2*nout3*nrad*sizeof(Real);   // rad i0
   }
   if (pz4c != nullptr) {
-    data_size_ += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
+    data_size_without_turb += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
   } else if (padm != nullptr) {
-    data_size_ += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
+    data_size_without_turb += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
   }
+  IOWrapperSizeT turbulence_data_size = nout1*nout2*nout3*nforce*sizeof(Real);
+  IOWrapperSizeT data_size_with_turb = data_size_without_turb + turbulence_data_size;
+  IOWrapperSizeT data_size_ = data_size_without_turb +
+      (restart_has_turbulence_payload ? turbulence_data_size : 0);
 
   if (data_size_ != data_size) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "CC data size read from restart file not equal to size "
-              << "of Hydro, MHD, Rad, and/or Z4c arrays, restart file is broken."
-              << std::endl;
-    exit(EXIT_FAILURE);
+    bool recovered_legacy_state = false;
+    bool recovered_turbulence_payload = restart_has_turbulence_payload;
+    IOWrapperSizeT recovered_headeroffset = headeroffset;
+    IOWrapperSizeT recovered_data_size = data_size_;
+    IOWrapperSizeT marker_offset = headeroffset - variablesize;
+    constexpr IOWrapperSizeT scan_bytes = 64*1024;
+
+    if (may_have_turbulence_payload) {
+      char *scan = new char[scan_bytes];
+      IOWrapperSizeT nscan = 0;
+      if (global_variable::my_rank == 0 || single_file_per_rank) {
+        nscan = resfile.Read_bytes_at(scan, 1, scan_bytes, marker_offset,
+                                      single_file_per_rank);
+        for (IOWrapperSizeT os=0; os + variablesize <= nscan; ++os) {
+          IOWrapperSizeT candidate;
+          std::memcpy(&candidate, &(scan[os]), variablesize);
+          if (candidate == data_size_with_turb) {
+            recovered_headeroffset = marker_offset + os + variablesize;
+            recovered_data_size = data_size_with_turb;
+            recovered_turbulence_payload = true;
+            recovered_legacy_state = true;
+            break;
+          }
+          if (candidate == data_size_without_turb) {
+            recovered_headeroffset = marker_offset + os + variablesize;
+            recovered_data_size = data_size_without_turb;
+            recovered_turbulence_payload = false;
+            recovered_legacy_state = true;
+            break;
+          }
+        }
+      }
+#if MPI_PARALLEL_ENABLED
+      if (!single_file_per_rank) {
+        MPI_Bcast(&recovered_legacy_state, sizeof(bool), MPI_CHAR, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&recovered_turbulence_payload, sizeof(bool), MPI_CHAR, 0,
+                  MPI_COMM_WORLD);
+        MPI_Bcast(&recovered_headeroffset, sizeof(IOWrapperSizeT), MPI_CHAR, 0,
+                  MPI_COMM_WORLD);
+        MPI_Bcast(&recovered_data_size, sizeof(IOWrapperSizeT), MPI_CHAR, 0,
+                  MPI_COMM_WORLD);
+      }
+#endif
+      delete [] scan;
+    }
+
+    if (recovered_legacy_state) {
+      restart_has_turbulence_payload = recovered_turbulence_payload;
+      data_size_ = recovered_data_size;
+      data_size = data_size_;
+      headeroffset = recovered_headeroffset;
+      if (global_variable::my_rank == 0) {
+        std::cout << "Detected restart variable payload marker at offset "
+                  << (headeroffset - variablesize) << "; turbulence_payload="
+                  << restart_has_turbulence_payload << "." << std::endl;
+      }
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "CC data size read from restart file not equal to size "
+                << "of Hydro, MHD, Rad, and/or Z4c arrays, restart file is broken."
+                << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
 
   // read CC data into host array
@@ -270,6 +333,21 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 
   HostArray5D<Real> ccin("rst-cc-in", 1, 1, 1, 1, 1);
   HostFaceFld4D<Real> fcin("rst-fc-in", 1, 1, 1, 1);
+  auto mark_restart_stage = [](const char *stage) {
+    Kokkos::fence();
+#if MPI_PARALLEL_ENABLED
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+    if (global_variable::my_rank == 0) {
+      std::cout << "Restart stage complete: " << stage << std::endl;
+    }
+  };
+  if (global_variable::my_rank == 0) {
+    std::cout << "Restart payload layout: data_size=" << data_size_
+              << " bytes_per_meshblock, nmb_thisrank=" << pm->nmb_thisrank
+              << ", frozen_mhd=" << pm->pmb_pack->frozen_mhd << std::endl;
+  }
+  mark_restart_stage("payload layout resolved");
 
   // calculate max/min number of MeshBlocks across all ranks
   int noutmbs_max = pm->nmb_eachrank[0];
@@ -317,6 +395,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     offset_myrank += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
     myoffset = offset_myrank;
+    mark_restart_stage("hydro u0 loaded");
   }
 
   if (pmhd != nullptr) {
@@ -356,6 +435,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     offset_myrank += nout1*nout2*nout3*nmhd*sizeof(Real);   // mhd u0
     myoffset = offset_myrank;
+    mark_restart_stage("mhd u0 loaded");
 
     Kokkos::realloc(fcin.x1f, nmb, nout3, nout2, nout1+1);
     Kokkos::realloc(fcin.x2f, nmb, nout3, nout2+1, nout1);
@@ -457,6 +537,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     offset_myrank += nout1*(nout2+1)*nout3*sizeof(Real);    // mhd b0.x2f
     offset_myrank += nout1*nout2*(nout3+1)*sizeof(Real);    // mhd b0.x3f
     myoffset = offset_myrank;
+    mark_restart_stage("mhd b0 loaded");
   }
 
   if (prad != nullptr) {
@@ -497,46 +578,55 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     offset_myrank += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
     myoffset = offset_myrank;
+    mark_restart_stage("radiation i0 loaded");
   }
 
-  if (pturb != nullptr) {
-    Kokkos::realloc(ccin, nmb, nforce, nout3, nout2, nout1);
-    for (int m=0;  m<noutmbs_max; ++m) {
-      // every rank has a MB to read, so read collectively
-      if (m < noutmbs_min) {
-        // get ptr to cell-centered MeshBlock data
-        auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset,
-                                      single_file_per_rank) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC turb data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
-
-      // some ranks are finished writing, so use non-collective write
-      } else if (m < pm->nmb_thisrank) {
-        // get ptr to MeshBlock data
-        auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
-                                      single_file_per_rank) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC turb data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
+  if (restart_has_turbulence_payload) {
+    if (pm->pmb_pack->frozen_mhd || pturb == nullptr) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "Skipping turbulence forcing payload copy for particle restart."
+                  << std::endl;
       }
+    } else {
+      Kokkos::realloc(ccin, nmb, nforce, nout3, nout2, nout1);
+      for (int m=0;  m<noutmbs_max; ++m) {
+        // every rank has a MB to read, so read collectively
+        if (m < noutmbs_min) {
+          // get ptr to cell-centered MeshBlock data
+          auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                       Kokkos::ALL);
+          int mbcnt = mbptr.size();
+          if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset,
+                                        single_file_per_rank) != mbcnt) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "CC turb data not read correctly from rst file, "
+                      << "restart file is broken." << std::endl;
+            exit(EXIT_FAILURE);
+          }
+          myoffset += data_size;
+
+        // some ranks are finished writing, so use non-collective write
+        } else if (m < pm->nmb_thisrank) {
+          // get ptr to MeshBlock data
+          auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                       Kokkos::ALL);
+          int mbcnt = mbptr.size();
+          if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
+                                    single_file_per_rank) != mbcnt) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "CC turb data not read correctly from rst file, "
+                      << "restart file is broken." << std::endl;
+            exit(EXIT_FAILURE);
+          }
+          myoffset += data_size;
+        }
+      }
+      Kokkos::deep_copy(Kokkos::subview(pturb->force, std::make_pair(0,nmb), Kokkos::ALL,
+                        Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     }
-    Kokkos::deep_copy(Kokkos::subview(pturb->force, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     offset_myrank += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
     myoffset = offset_myrank;
+    mark_restart_stage("turbulence forcing handled");
   }
 
   if (pz4c != nullptr) {
@@ -577,9 +667,11 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     offset_myrank += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
     myoffset = offset_myrank;
+    mark_restart_stage("z4c u0 loaded");
 
     // We also need to reinitialize the ADM data.
     pz4c->Z4cToADM(pmy_mesh_->pmb_pack);
+    mark_restart_stage("z4c adm refreshed");
   } else if (padm != nullptr) {
     Kokkos::realloc(ccin, nmb, nadm, nout3, nout2, nout1);
     for (int m=0;  m<noutmbs_max; ++m) {
@@ -618,14 +710,18 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     offset_myrank += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
     myoffset = offset_myrank;
+    mark_restart_stage("adm data loaded");
   }
 
   // call problem generator again to re-initialize data, fn ptrs, as needed
   // second argument true since this IS a restart
+  mark_restart_stage("before restart problem generator");
   CallProblemGenerator(pin, true);
+  mark_restart_stage("restart problem generator complete");
   if (pm->pmb_pack->ppart != nullptr) {
     pm->pmb_pack->ppart->SetConsistencyReference();
     pm->pmb_pack->ppart->CheckConsistency("restart problem generator");
+    mark_restart_stage("restart particle consistency complete");
   }
 
   // Check that user defined BCs were enrolled if needed
@@ -938,6 +1034,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     Z4cLinearWave(pin, is_restart);
   } else if (pgen_fun_name.compare("spherical_collapse") == 0) {
     SphericalCollapse(pin, is_restart);
+  } else if (pgen_fun_name.compare("turb_timed_amr") == 0) {
+    TurbTimedAMR(pin, is_restart);
   } else if (pgen_fun_name.compare("diffusion") == 0) {
     Diffusion(pin, is_restart);
   // else, name not set on command line or input file, print warning and quit

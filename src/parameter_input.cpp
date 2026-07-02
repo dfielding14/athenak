@@ -103,7 +103,7 @@ void ParameterInput::CheckBlockNames() {
     "comment", "job",
     "mesh", "meshblock", "mesh_refinement", "refined_region", "amr_criterion",
     "coord", "adm", "shearing_box",
-    "time", "problem", "output", "units",
+    "time", "problem", "output", "units", "eos",
     "hydro", "mhd", "ion-neutral", "radiation", "z4c", "z4c_amr", "cce",
     "rad_srcterms", "hydro_srcterms", "mhd_srcterms", "particles", "turb_driving"
     };
@@ -212,6 +212,7 @@ void ParameterInput::LoadFromStream(std::istream &is) {
 void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
   std::stringstream par;
   constexpr int kBufSize = 4096;
+  constexpr IOWrapperSizeT kMaxParameterBytes = 16*1024*1024;
   char buf[kBufSize];
   IOWrapperSizeT header = 0, ret, loc;
 
@@ -238,9 +239,10 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
       header = loc + 10; // store the header length
       break;
     }
-    if (header > kBufSize*10) {
+    if (header > kMaxParameterBytes) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<par_end> is not found in the first 40KBytes."
+                << std::endl << "<par_end> is not found in the first "
+                << kMaxParameterBytes << " bytes."
                 << std::endl << "Probably the file is broken or the wrong file is "
                 << "specified" << std::endl;
       std::exit(EXIT_FAILURE);

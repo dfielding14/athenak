@@ -403,18 +403,22 @@ void ParticlesBoundaryValues::EnsureBufferCapacity(int nsend, int nrecv) {
   int irecv_needed = std::max(1, (pmy_part->nidata)*nrecv);
   if (rsend_needed > rsend_capacity) {
     Kokkos::realloc(prtcl_rsendbuf, rsend_needed);
+    Kokkos::realloc(prtcl_rsendbuf_h, rsend_needed);
     rsend_capacity = rsend_needed;
   }
   if (isend_needed > isend_capacity) {
     Kokkos::realloc(prtcl_isendbuf, isend_needed);
+    Kokkos::realloc(prtcl_isendbuf_h, isend_needed);
     isend_capacity = isend_needed;
   }
   if (rrecv_needed > rrecv_capacity) {
     Kokkos::realloc(prtcl_rrecvbuf, rrecv_needed);
+    Kokkos::realloc(prtcl_rrecvbuf_h, rrecv_needed);
     rrecv_capacity = rrecv_needed;
   }
   if (irecv_needed > irecv_capacity) {
     Kokkos::realloc(prtcl_irecvbuf, irecv_needed);
+    Kokkos::realloc(prtcl_irecvbuf_h, irecv_needed);
     irecv_capacity = irecv_needed;
   }
 #endif
@@ -429,9 +433,11 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
   // Sort sendlist on host by destrank.
   namespace KE = Kokkos::Experimental;
   std::sort(KE::begin(sendlist.h_view), KE::end(sendlist.h_view), SortByRank);
-  // sync sendlist host array with device.  This results in sorted array on device
-  sendlist.template modify<HostMemSpace>();
-  sendlist.template sync<DevExeSpace>();
+  if (pmy_part->amr_remap_mode != ParticlesAMRRemapMode::host_tree) {
+    // sync sendlist host array with device.  This results in sorted array on device
+    sendlist.template modify<HostMemSpace>();
+    sendlist.template sync<DevExeSpace>();
+  }
 
   // load STL::vector of ParticleMessageData with <sendrank, recvrank, nprtcls> for sends
   // from this rank. Length will be nsends; initially this length is unknown
@@ -551,13 +557,22 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
     // calculate amount of data to be passed, get pointer to variables
     int data_size = (pmy_part->nrdata)*(recvs_thisrank[n].nprtcls);
     int data_end = data_start + (pmy_part->nrdata)*recvs_thisrank[n].nprtcls;
-    auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf, std::make_pair(data_start, data_end));
     int drank = recvs_thisrank[n].sendrank;
     int tag = 0; // 0 for Reals, 1 for ints
 
     // Post non-blocking receive
-    int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                         mpi_comm_part, &(rrecv_req[n]));
+    int ierr;
+    if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+      auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf_h,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                       mpi_comm_part, &(rrecv_req[n]));
+    } else {
+      auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                       mpi_comm_part, &(rrecv_req[n]));
+    }
     if (ierr != MPI_SUCCESS) {no_errors=false;}
     data_start += data_size;
   }
@@ -567,13 +582,22 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
     // calculate amount of data to be passed, get pointer to variables
     int data_size = (pmy_part->nidata)*(recvs_thisrank[n].nprtcls);
     int data_end = data_start + (pmy_part->nidata)*recvs_thisrank[n].nprtcls;
-    auto recv_ptr = Kokkos::subview(prtcl_irecvbuf, std::make_pair(data_start, data_end));
     int drank = recvs_thisrank[n].sendrank;
     int tag = 1; // 0 for Reals, 1 for ints
 
     // Post non-blocking receive
-    int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
-                         mpi_comm_part, &(irecv_req[n]));
+    int ierr;
+    if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+      auto recv_ptr = Kokkos::subview(prtcl_irecvbuf_h,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
+                       mpi_comm_part, &(irecv_req[n]));
+    } else {
+      auto recv_ptr = Kokkos::subview(prtcl_irecvbuf,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
+                       mpi_comm_part, &(irecv_req[n]));
+    }
     if (ierr != MPI_SUCCESS) {no_errors=false;}
     data_start += data_size;
   }
@@ -607,19 +631,35 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
     // Use sendlist on device to load particles into send buffer ordered by dest_rank
     int nrdata = pmy_part->nrdata;
     int nidata = pmy_part->nidata;
-    auto &pr = pmy_part->prtcl_rdata;
-    auto &pi = pmy_part->prtcl_idata;
-    auto &rsendbuf = prtcl_rsendbuf;
-    auto &isendbuf = prtcl_isendbuf;
-    par_for("ppack",DevExeSpace(),0,(nprtcl_send-1), KOKKOS_LAMBDA(const int n) {
-      int p = sendlist.d_view(n).prtcl_indx;
-      for (int i=0; i<nidata; ++i) {
-        isendbuf(nidata*n + i) = pi(i,p);
+    if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+      auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                      pmy_part->prtcl_rdata);
+      auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                      pmy_part->prtcl_idata);
+      for (int n=0; n<nprtcl_send; ++n) {
+        int p = sendlist.h_view(n).prtcl_indx;
+        for (int i=0; i<nidata; ++i) {
+          prtcl_isendbuf_h(nidata*n + i) = pi_h(i,p);
+        }
+        for (int i=0; i<nrdata; ++i) {
+          prtcl_rsendbuf_h(nrdata*n + i) = pr_h(i,p);
+        }
       }
-      for (int i=0; i<nrdata; ++i) {
-        rsendbuf(nrdata*n + i) = pr(i,p);
-      }
-    });
+    } else {
+      auto &pr = pmy_part->prtcl_rdata;
+      auto &pi = pmy_part->prtcl_idata;
+      auto &rsendbuf = prtcl_rsendbuf;
+      auto &isendbuf = prtcl_isendbuf;
+      par_for("ppack",DevExeSpace(),0,(nprtcl_send-1), KOKKOS_LAMBDA(const int n) {
+        int p = sendlist.d_view(n).prtcl_indx;
+        for (int i=0; i<nidata; ++i) {
+          isendbuf(nidata*n + i) = pi(i,p);
+        }
+        for (int i=0; i<nrdata; ++i) {
+          rsendbuf(nrdata*n + i) = pr(i,p);
+        }
+      });
+    }
 
     // Post non-blocking sends
     Kokkos::fence();
@@ -636,13 +676,22 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
       // calculate amount of data to be passed, get pointer to variables
       int data_size = nrdata*(sends_thisrank[n].nprtcls);
       int data_end = data_start + nrdata*sends_thisrank[n].nprtcls;
-      auto send_ptr = Kokkos::subview(prtcl_rsendbuf,std::make_pair(data_start,data_end));
       int drank = sends_thisrank[n].recvrank;
       int tag = 0; // 0 for Reals, 1 for ints
 
       // Post non-blocking sends
-      int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                           mpi_comm_part, &(rsend_req[n]));
+      int ierr;
+      if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+        auto send_ptr = Kokkos::subview(prtcl_rsendbuf_h,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                         mpi_comm_part, &(rsend_req[n]));
+      } else {
+        auto send_ptr = Kokkos::subview(prtcl_rsendbuf,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                         mpi_comm_part, &(rsend_req[n]));
+      }
       if (ierr != MPI_SUCCESS) {no_errors=false;}
       data_start += data_size;
     }
@@ -652,13 +701,22 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
       // calculate amount of data to be passed, get pointer to variables
       int data_size = nidata*(sends_thisrank[n].nprtcls);
       int data_end = data_start + nidata*sends_thisrank[n].nprtcls;
-      auto send_ptr = Kokkos::subview(prtcl_isendbuf,std::make_pair(data_start,data_end));
       int drank = sends_thisrank[n].recvrank;
       int tag = 1; // 0 for Reals, 1 for ints
 
       // Post non-blocking sends
-      int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_INT, drank, tag,
-                           mpi_comm_part, &(isend_req[n]));
+      int ierr;
+      if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+        auto send_ptr = Kokkos::subview(prtcl_isendbuf_h,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_INT, drank, tag,
+                         mpi_comm_part, &(isend_req[n]));
+      } else {
+        auto send_ptr = Kokkos::subview(prtcl_isendbuf,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_INT, drank, tag,
+                         mpi_comm_part, &(isend_req[n]));
+      }
       if (ierr != MPI_SUCCESS) {no_errors=false;}
       data_start += data_size;
     }
@@ -683,9 +741,11 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   // Sort sendlist on host by index in particle array
   namespace KE = Kokkos::Experimental;
   std::sort(KE::begin(sendlist.h_view), KE::end(sendlist.h_view), SortByIndex);
-  // sync sendlist host array with device.  This results in sorted array on device
-  sendlist.template modify<HostMemSpace>();
-  sendlist.template sync<DevExeSpace>();
+  if (pmy_part->amr_remap_mode != ParticlesAMRRemapMode::host_tree) {
+    // sync sendlist host array with device.  This results in sorted array on device
+    sendlist.template modify<HostMemSpace>();
+    sendlist.template sync<DevExeSpace>();
+  }
 
   // increase size of particle arrays if needed
   int old_npart = pmy_part->nprtcl_thispack;
@@ -720,6 +780,68 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   }
   // exit if particle communications have not completed
   if (bflag) {return TaskStatus::incomplete;}
+
+  if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+    int nrdata = pmy_part->nrdata;
+    int nidata = pmy_part->nidata;
+    auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                    pmy_part->prtcl_rdata);
+    auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                    pmy_part->prtcl_idata);
+    if (nprtcl_recv > 0) {
+      for (int n=0; n<nprtcl_recv; ++n) {
+        int p = (n < nprtcl_send) ? sendlist.h_view(n).prtcl_indx :
+                old_npart + (n - nprtcl_send);
+        for (int i=0; i<nidata; ++i) {
+          pi_h(i,p) = prtcl_irecvbuf_h(nidata*n + i);
+        }
+        for (int i=0; i<nrdata; ++i) {
+          pr_h(i,p) = prtcl_rrecvbuf_h(nrdata*n + i);
+        }
+      }
+    }
+
+    int nremain = nprtcl_send - nprtcl_recv;
+    if (nremain > 0) {
+      std::vector<char> drop(old_npart, 0);
+      for (int n=nprtcl_recv; n<nprtcl_send; ++n) {
+        drop[sendlist.h_view(n).prtcl_indx] = 1;
+      }
+      HostArray2D<Real> new_pr_h("particle_compact_rdata_h", nrdata, new_npart);
+      HostArray2D<int> new_pi_h("particle_compact_idata_h", nidata, new_npart);
+      int offset = 0;
+      for (int p=0; p<old_npart; ++p) {
+        if (drop[p] == 0) {
+          for (int i=0; i<nidata; ++i) {
+            new_pi_h(i,offset) = pi_h(i,p);
+          }
+          for (int i=0; i<nrdata; ++i) {
+            new_pr_h(i,offset) = pr_h(i,p);
+          }
+          ++offset;
+        }
+      }
+      DvceArray2D<Real> new_pr("particle_compact_rdata", nrdata, new_npart);
+      DvceArray2D<int> new_pi("particle_compact_idata", nidata, new_npart);
+      Kokkos::deep_copy(new_pr, new_pr_h);
+      Kokkos::deep_copy(new_pi, new_pi_h);
+      pmy_part->prtcl_rdata = new_pr;
+      pmy_part->prtcl_idata = new_pi;
+    } else {
+      Kokkos::deep_copy(pmy_part->prtcl_rdata, pr_h);
+      Kokkos::deep_copy(pmy_part->prtcl_idata, pi_h);
+    }
+
+    pmy_part->nprtcl_thispack = new_npart;
+    pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+    int64_t bytes_sent = static_cast<int64_t>(nprtcl_send)*
+                         (static_cast<int64_t>(pmy_part->nrdata)*sizeof(Real) +
+                          static_cast<int64_t>(pmy_part->nidata)*sizeof(int));
+    pmy_part->LogPerformance("particle_mpi_exchange", 0, nprtcl_send, nprtcl_recv,
+                             0, 0, static_cast<int64_t>(2*nsends), bytes_sent);
+    pmy_part->CheckConsistency("particle MPI exchange");
+    return TaskStatus::complete;
+  }
 
   // unpack particles into positions of sent particles
   if (nprtcl_recv > 0) {

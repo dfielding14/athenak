@@ -267,6 +267,8 @@ class ParticlesBoundaryValues {
 #if MPI_PARALLEL_ENABLED
   DvceArray1D<Real> prtcl_rsendbuf, prtcl_rrecvbuf;
   DvceArray1D<int>  prtcl_isendbuf, prtcl_irecvbuf;
+  HostArray1D<Real> prtcl_rsendbuf_h, prtcl_rrecvbuf_h;
+  HostArray1D<int>  prtcl_isendbuf_h, prtcl_irecvbuf_h;
   std::vector<MPI_Request> rrecv_req, rsend_req;  // vectors of requests for Reals
   std::vector<MPI_Request> irecv_req, isend_req;  // vectors of requests for ints
   MPI_Comm mpi_comm_part;                       // unique MPI communicators for particles

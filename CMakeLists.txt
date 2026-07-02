@@ -79,13 +79,14 @@ else()
 endif()
 
 #set user problem generator flag
-if (NOT ${PROBLEM} STREQUAL "built_in_pgens")
+if ((NOT "${PROBLEM}" STREQUAL "built_in_pgens") AND
+    (NOT "${PROBLEM}" STREQUAL "turb_timed_amr"))
   message(STATUS "Including user-specified problem generator file: ${PROBLEM}")
   set(USER_PROBLEM_ENABLED 1)
 else()
   set(USER_PROBLEM_ENABLED 0)
 endif()
-if (${PROBLEM} STREQUAL "part_random")
+if ("${PROBLEM}" STREQUAL "part_random")
   set(PART_RANDOM_USER_PROBLEM_ENABLED 1)
 else()
   set(PART_RANDOM_USER_PROBLEM_ENABLED 0)

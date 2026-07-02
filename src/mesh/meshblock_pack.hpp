@@ -74,6 +74,7 @@ class MeshBlockPack {
   radiation::Radiation *prad=nullptr;
   std::vector<z4c::CCE *> pz4c_cce;
   particles::Particles *ppart=nullptr;
+  bool frozen_mhd=false;
 
   // units (needed to convert code units to cgs for, e.g., cooling or radiation)
   units::Units *punit=nullptr;

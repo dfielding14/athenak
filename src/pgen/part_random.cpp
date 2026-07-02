@@ -205,7 +205,14 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   }
 
   int prtcl_rst_flag = pmbp->ppart->prtcl_rst_flag;
-  if (restart && !prtcl_rst_flag) return;
+  bool seed_on_restart = pin->GetOrAddBoolean("particles", "seed_on_restart", false);
+  if (restart && !prtcl_rst_flag && !seed_on_restart) return;
+  auto mark_particle_stage = [](const char *stage) {
+    Kokkos::fence();
+    if (global_variable::my_rank == 0) {
+      std::cout << "Particle stage complete: " << stage << std::endl;
+    }
+  };
 
   // capture variables for the kernel
   auto &mbsize = pmbp->pmb->mb_size;
@@ -217,6 +224,13 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   auto gids = pmbp->gids;
   auto gide = pmbp->gide;
   auto nmb_thispack = pmbp->nmb_thispack;
+  if (global_variable::my_rank == 0) {
+    std::cout << "PartRandom restart=" << restart
+              << ", seed_on_restart=" << seed_on_restart
+              << ", particles_thispack=" << npart
+              << ", particles_per_species=" << npart_spec << std::endl;
+  }
+  mark_particle_stage("part_random entered");
 
   if (prtcl_rst_flag) {
     std::string prst_fname = pin->GetString("problem","prtcl_res_file");
@@ -314,6 +328,7 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
         (particle_position.compare("meshblock_center") == 0);
     bool block_center_particles = center_particles || meshblock_center_particles;
     bool fixed_particles = (particle_position.compare("fixed") == 0);
+    bool random_particles = (particle_position.compare("random") == 0);
     bool tag_random_particles = (particle_position.compare("tag_random") == 0);
     Real fixed_x1 = pin->GetOrAddReal("problem","particle_x1",0.0);
     Real fixed_x2 = pin->GetOrAddReal("problem","particle_x2",0.0);
@@ -341,97 +356,165 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
         pin->GetOrAddInteger("problem","particle_seed",0));
     RegionSize mesh_size = pmy_mesh_->mesh_size;
 
-    // initialize particles
-    Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
-    par_for("part_update",DevExeSpace(),0,(npart-1),
-    KOKKOS_LAMBDA(const int p) {
-      auto rand_gen = rand_pool64.get_state();  // get random number state this thread
-      int spec = (npart_spec > 0) ? p/npart_spec : 0;
-      spec = (spec < 0) ? 0 : spec;
-      spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
-      int p_in_spec = (npart_spec > 0) ? p - spec*npart_spec : p;
-      int tag = pi(PTAG,p);
+    bool host_seed_particles = restart && seed_on_restart && pmbp->frozen_mhd &&
+                               (tag_random_particles || random_particles) &&
+                               (tag_isotropic_velocity || uniform_velocity);
+    if (host_seed_particles) {
+      auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pr);
+      auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pi);
+      for (int p=0; p<npart; ++p) {
+        int spec = (npart_spec > 0) ? p/npart_spec : 0;
+        spec = (spec < 0) ? 0 : spec;
+        spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
+        int p_in_spec = (npart_spec > 0) ? p - spec*npart_spec : p;
+        int tag = pi_h(PTAG,p);
+        int m = (nmb_thispack > 0) ? (p_in_spec % nmb_thispack) : 0;
+        m = (m < 0) ? 0 : m;
+        m = (m > nmb_thispack - 1) ? nmb_thispack - 1 : m;
+        pi_h(PGID,p) = gids + m;
+        pi_h(PSP,p) = spec;
 
-      // choose parent MeshBlock randomly unless a deterministic layout is requested
-      int m = static_cast<int>(rand_gen.frand()*(gide - gids + 1.0));
-      if ((meshblock_center_particles || tag_random_particles) && nmb_thispack > 0) {
-        m = p_in_spec % nmb_thispack;
+        if (tag_random_particles) {
+          pr_h(IPX,p) = mesh_size.x1min +
+                        TagRandomUnit(particle_seed, spec, tag, 0)*
+                        (mesh_size.x1max - mesh_size.x1min);
+          pr_h(IPY,p) = mesh_size.x2min +
+                        TagRandomUnit(particle_seed, spec, tag, 1)*
+                        (mesh_size.x2max - mesh_size.x2min);
+          pr_h(IPZ,p) = mesh_size.x3min +
+                        TagRandomUnit(particle_seed, spec, tag, 2)*
+                        (mesh_size.x3max - mesh_size.x3min);
+        } else {
+          RegionSize block_size = mbsize.h_view(m);
+          pr_h(IPX,p) = block_size.x1min +
+                        TagRandomUnit(particle_seed, spec, tag, 0)*
+                        (block_size.x1max - block_size.x1min);
+          pr_h(IPY,p) = block_size.x2min +
+                        TagRandomUnit(particle_seed, spec, tag, 1)*
+                        (block_size.x2max - block_size.x2min);
+          pr_h(IPZ,p) = block_size.x3min +
+                        TagRandomUnit(particle_seed, spec, tag, 2)*
+                        (block_size.x3max - block_size.x3min);
+        }
+
+        if (uniform_velocity) {
+          pr_h(IPVX,p) = v0x;
+          pr_h(IPVY,p) = v0y;
+          pr_h(IPVZ,p) = v0z;
+        } else {
+          Real mu = 2.0*TagRandomUnit(particle_seed, spec, tag, 3) - 1.0;
+          Real phi = kTwoPi*TagRandomUnit(particle_seed, spec, tag, 4);
+          Real sintheta = std::sqrt(std::fmax(0.0, 1.0 - mu*mu));
+          pr_h(IPVX,p) = v0*sintheta*std::cos(phi);
+          pr_h(IPVY,p) = v0*sintheta*std::sin(phi);
+          pr_h(IPVZ,p) = v0*mu;
+        }
+        pr_h(IPM,p) = min_mass*std::pow(mass_log_spacing, spec);
+        pr_h(IPBX,p) = B0x;
+        pr_h(IPBY,p) = B0y;
+        pr_h(IPBZ,p) = B0z;
+        pr_h(IPDX,p) = 0.0;
+        pr_h(IPDY,p) = 0.0;
+        pr_h(IPDZ,p) = 0.0;
+        pr_h(IPDB,p) = 0.0;
       }
-      m = (m < 0) ? 0 : m;
-      m = (m > nmb_thispack - 1) ? nmb_thispack - 1 : m;
-      pi(PGID,p) = gids + m;
-      pi(PSP,p) = spec;
+      Kokkos::deep_copy(pr, pr_h);
+      Kokkos::deep_copy(pi, pi_h);
+    } else {
+      // initialize particles
+      Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
+      par_for("part_update",DevExeSpace(),0,(npart-1),
+      KOKKOS_LAMBDA(const int p) {
+        auto rand_gen = rand_pool64.get_state();  // get random number state this thread
+        int spec = (npart_spec > 0) ? p/npart_spec : 0;
+        spec = (spec < 0) ? 0 : spec;
+        spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
+        int p_in_spec = (npart_spec > 0) ? p - spec*npart_spec : p;
+        int tag = pi(PTAG,p);
 
-      Real rand = rand_gen.frand();
-      pr(IPX,p) = tag_random_particles ?
-                  mesh_size.x1min + TagRandomUnit(particle_seed, spec, tag, 0)*
-                  (mesh_size.x1max - mesh_size.x1min) :
-                  fixed_particles ? fixed_x1 :
-                  block_center_particles ?
-                  0.5*(mbsize.d_view(m).x1min + mbsize.d_view(m).x1max) :
-                  (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
-      if (!tag_random_particles) {
-        pr(IPX,p) = fmin(pr(IPX,p),mbsize.d_view(m).x1max);
-        pr(IPX,p) = fmax(pr(IPX,p),mbsize.d_view(m).x1min);
-      }
+        // choose parent MeshBlock randomly unless a deterministic layout is requested
+        int m = static_cast<int>(rand_gen.frand()*(gide - gids + 1.0));
+        if ((meshblock_center_particles || tag_random_particles) && nmb_thispack > 0) {
+          m = p_in_spec % nmb_thispack;
+        }
+        m = (m < 0) ? 0 : m;
+        m = (m > nmb_thispack - 1) ? nmb_thispack - 1 : m;
+        pi(PGID,p) = gids + m;
+        pi(PSP,p) = spec;
 
-      rand = rand_gen.frand();
-      pr(IPY,p) = tag_random_particles ?
-                  mesh_size.x2min + TagRandomUnit(particle_seed, spec, tag, 1)*
-                  (mesh_size.x2max - mesh_size.x2min) :
-                  fixed_particles ? fixed_x2 :
-                  block_center_particles ?
-                  0.5*(mbsize.d_view(m).x2min + mbsize.d_view(m).x2max) :
-                  (1. - rand)*mbsize.d_view(m).x2min + rand*mbsize.d_view(m).x2max;
-      if (!tag_random_particles) {
-        pr(IPY,p) = fmin(pr(IPY,p),mbsize.d_view(m).x2max);
-        pr(IPY,p) = fmax(pr(IPY,p),mbsize.d_view(m).x2min);
-      }
+        Real rand = rand_gen.frand();
+        pr(IPX,p) = tag_random_particles ?
+                    mesh_size.x1min + TagRandomUnit(particle_seed, spec, tag, 0)*
+                    (mesh_size.x1max - mesh_size.x1min) :
+                    fixed_particles ? fixed_x1 :
+                    block_center_particles ?
+                    0.5*(mbsize.d_view(m).x1min + mbsize.d_view(m).x1max) :
+                    (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
+        if (!tag_random_particles) {
+          pr(IPX,p) = fmin(pr(IPX,p),mbsize.d_view(m).x1max);
+          pr(IPX,p) = fmax(pr(IPX,p),mbsize.d_view(m).x1min);
+        }
 
-      rand = rand_gen.frand();
-      pr(IPZ,p) = tag_random_particles ?
-                  mesh_size.x3min + TagRandomUnit(particle_seed, spec, tag, 2)*
-                  (mesh_size.x3max - mesh_size.x3min) :
-                  fixed_particles ? fixed_x3 :
-                  block_center_particles ?
-                  0.5*(mbsize.d_view(m).x3min + mbsize.d_view(m).x3max) :
-                  (1. - rand)*mbsize.d_view(m).x3min + rand*mbsize.d_view(m).x3max;
-      if (!tag_random_particles) {
-        pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
-        pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
-      }
+        rand = rand_gen.frand();
+        pr(IPY,p) = tag_random_particles ?
+                    mesh_size.x2min + TagRandomUnit(particle_seed, spec, tag, 1)*
+                    (mesh_size.x2max - mesh_size.x2min) :
+                    fixed_particles ? fixed_x2 :
+                    block_center_particles ?
+                    0.5*(mbsize.d_view(m).x2min + mbsize.d_view(m).x2max) :
+                    (1. - rand)*mbsize.d_view(m).x2min + rand*mbsize.d_view(m).x2max;
+        if (!tag_random_particles) {
+          pr(IPY,p) = fmin(pr(IPY,p),mbsize.d_view(m).x2max);
+          pr(IPY,p) = fmax(pr(IPY,p),mbsize.d_view(m).x2min);
+        }
 
-      if (uniform_velocity) {
-        pr(IPVX,p) = v0x;
-        pr(IPVY,p) = v0y;
-        pr(IPVZ,p) = v0z;
-      } else if (isotropic_velocity || tag_isotropic_velocity) {
-        Real mu = tag_isotropic_velocity ?
-                  2.0*TagRandomUnit(particle_seed, spec, tag, 3) - 1.0 :
-                  2.0*rand_gen.frand() - 1.0;
-        Real phi = tag_isotropic_velocity ?
-                   kTwoPi*TagRandomUnit(particle_seed, spec, tag, 4) :
-                   kTwoPi*rand_gen.frand();
-        Real sintheta = sqrt(fmax(0.0, 1.0 - mu*mu));
-        pr(IPVX,p) = v0*sintheta*cos(phi);
-        pr(IPVY,p) = v0*sintheta*sin(phi);
-        pr(IPVZ,p) = v0*mu;
-      } else {
-        pr(IPVX,p) = 2.0*(rand_gen.frand() - 0.5);
-        pr(IPVY,p) = 2.0*(rand_gen.frand() - 0.5);
-        pr(IPVZ,p) = 2.0*(rand_gen.frand() - 0.5);
-      }
-      pr(IPM,p) = min_mass*pow(mass_log_spacing, spec);
-      pr(IPBX,p) = B0x;
-      pr(IPBY,p) = B0y;
-      pr(IPBZ,p) = B0z;
-      pr(IPDX,p) = 0.0;
-      pr(IPDY,p) = 0.0;
-      pr(IPDZ,p) = 0.0;
-      pr(IPDB,p) = 0.0;
+        rand = rand_gen.frand();
+        pr(IPZ,p) = tag_random_particles ?
+                    mesh_size.x3min + TagRandomUnit(particle_seed, spec, tag, 2)*
+                    (mesh_size.x3max - mesh_size.x3min) :
+                    fixed_particles ? fixed_x3 :
+                    block_center_particles ?
+                    0.5*(mbsize.d_view(m).x3min + mbsize.d_view(m).x3max) :
+                    (1. - rand)*mbsize.d_view(m).x3min + rand*mbsize.d_view(m).x3max;
+        if (!tag_random_particles) {
+          pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
+          pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
+        }
 
-      rand_pool64.free_state(rand_gen);  // free state for use by other threads
-    });
+        if (uniform_velocity) {
+          pr(IPVX,p) = v0x;
+          pr(IPVY,p) = v0y;
+          pr(IPVZ,p) = v0z;
+        } else if (isotropic_velocity || tag_isotropic_velocity) {
+          Real mu = tag_isotropic_velocity ?
+                    2.0*TagRandomUnit(particle_seed, spec, tag, 3) - 1.0 :
+                    2.0*rand_gen.frand() - 1.0;
+          Real phi = tag_isotropic_velocity ?
+                     kTwoPi*TagRandomUnit(particle_seed, spec, tag, 4) :
+                     kTwoPi*rand_gen.frand();
+          Real sintheta = sqrt(fmax(0.0, 1.0 - mu*mu));
+          pr(IPVX,p) = v0*sintheta*cos(phi);
+          pr(IPVY,p) = v0*sintheta*sin(phi);
+          pr(IPVZ,p) = v0*mu;
+        } else {
+          pr(IPVX,p) = 2.0*(rand_gen.frand() - 0.5);
+          pr(IPVY,p) = 2.0*(rand_gen.frand() - 0.5);
+          pr(IPVZ,p) = 2.0*(rand_gen.frand() - 0.5);
+        }
+        pr(IPM,p) = min_mass*pow(mass_log_spacing, spec);
+        pr(IPBX,p) = B0x;
+        pr(IPBY,p) = B0y;
+        pr(IPBZ,p) = B0z;
+        pr(IPDX,p) = 0.0;
+        pr(IPDY,p) = 0.0;
+        pr(IPDZ,p) = 0.0;
+        pr(IPDB,p) = 0.0;
+
+        rand_pool64.free_state(rand_gen);  // free state for use by other threads
+      });
+    }
+    mark_particle_stage(host_seed_particles ? "host particle seed complete" :
+                                             "device particle seed complete");
   }
 
   Real B0x = pin->GetOrAddReal("problem","B0x",0.0);
@@ -462,7 +545,7 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   Real Bwave = pin->GetOrAddReal("problem","Bwave_number",1.0);
   Real cfl_part = pin->GetOrAddReal("particles","cfl_part",0.05);
 
-  if (pmbp->pmhd != nullptr) {
+  if (pmbp->pmhd != nullptr && !(restart && seed_on_restart)) {
     EOS_Data &eos = pmbp->pmhd->peos->eos_data;
     Real gm1 = eos.gamma - 1.0;
     Real p0 = 1.0/eos.gamma;
@@ -545,8 +628,10 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   }
   std::string particle_position =
       pin->GetOrAddString("problem","particle_position","random");
-  if ((!restart) && particle_position.compare("tag_random") == 0) {
+  if ((!restart || seed_on_restart) && particle_position.compare("tag_random") == 0) {
+    mark_particle_stage("before particle AMR remap");
     pmbp->ppart->RemapAfterAMR();
+    mark_particle_stage("particle AMR remap complete");
   }
 
   return;

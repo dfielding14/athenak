@@ -321,7 +321,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                                                      bool single_file_per_rank) {
   // At this point, the restartfile is already open and the ParameterInput (input file)
   // data has already been read in main(). Thus the file pointer is set to after <par_end>
-  IOWrapperSizeT headeroffset = resfile.GetPosition();
+  IOWrapperSizeT headeroffset = resfile.GetPosition(single_file_per_rank);
 
   // following must be identical to calculation of headeroffset (excluding size of
   // ParameterInput data) in restart.cpp
@@ -402,6 +402,19 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   gids_eachrank = new int[global_variable::nranks];
   nmb_eachrank = new int[global_variable::nranks];
 
+  auto valid_lloc_list = [&]() {
+    int allowed_max_level = adaptive ? max_level : 31;
+    for (int i=0; i<nmb_total; ++i) {
+      LogicalLocation &loc = lloc_eachmb[i];
+      if (loc.level < root_level || loc.level > allowed_max_level) {return false;}
+      int levfac = 1 << (loc.level - root_level);
+      if (loc.lx1 < 0 || loc.lx1 >= nmb_rootx1*levfac) {return false;}
+      if (multi_d && (loc.lx2 < 0 || loc.lx2 >= nmb_rootx2*levfac)) {return false;}
+      if (three_d && (loc.lx3 < 0 || loc.lx3 >= nmb_rootx3*levfac)) {return false;}
+    }
+    return true;
+  };
+
   // allocate idlist buffer and read list of logical locations and cost
   IOWrapperSizeT listsize = sizeof(LogicalLocation) + sizeof(float);
   char *idlist = new char[listsize*nmb_total];
@@ -422,16 +435,58 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   }
 #endif
 
+  auto unpack_idlist = [&]() {
+    current_level = root_level;
+    int os = 0;
+    for (int i=0; i<nmb_total; i++) {
+      std::memcpy(&(lloc_eachmb[i]), &(idlist[os]), sizeof(LogicalLocation));
+      os += sizeof(LogicalLocation);
+    }
+    for (int i=0; i<nmb_total; i++) {
+      std::memcpy(&(cost_eachmb[i]), &(idlist[os]), sizeof(float));
+      os += sizeof(float);
+      if (lloc_eachmb[i].level > current_level) current_level = lloc_eachmb[i].level;
+    }
+  };
+
   // everyone sets the logical location and cost lists based on bradcasted data
-  int os = 0;
-  for (int i=0; i<nmb_total; i++) {
-    std::memcpy(&(lloc_eachmb[i]), &(idlist[os]), sizeof(LogicalLocation));
-    os += sizeof(LogicalLocation);
+  unpack_idlist();
+
+  // Some legacy production restarts store one extra 4-byte field after the mesh header.
+  // If the logical-location list is impossible, reread it shifted past that field.
+  bool reread_legacy_idlist = !valid_lloc_list();
+#if MPI_PARALLEL_ENABLED
+  if (!single_file_per_rank) {
+    MPI_Bcast(&reread_legacy_idlist, sizeof(bool), MPI_CHAR, 0, MPI_COMM_WORLD);
   }
-  for (int i=0; i<nmb_total; i++) {
-    std::memcpy(&(cost_eachmb[i]), &(idlist[os]), sizeof(float));
-    os += sizeof(float);
-    if (lloc_eachmb[i].level > current_level) current_level = lloc_eachmb[i].level;
+#endif
+  if (reread_legacy_idlist) {
+    if (global_variable::my_rank == 0 || single_file_per_rank) {
+      resfile.Seek(headeroffset + headersize + sizeof(int), single_file_per_rank);
+      if (resfile.Read_bytes(idlist,listsize,nmb_total,single_file_per_rank) !=
+          static_cast<unsigned int>(nmb_total)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Incorrect number of MeshBlocks in legacy restart "
+                  << "file; restart file is broken." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      MPI_Bcast(idlist, listsize*nmb_total, MPI_CHAR, 0, MPI_COMM_WORLD);
+    }
+#endif
+    unpack_idlist();
+    if (!valid_lloc_list()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "LogicalLocation list in restart file is invalid."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (global_variable::my_rank == 0) {
+      std::cout << "Detected legacy restart MeshBlock header padding; skipping 4 bytes."
+                << std::endl;
+    }
   }
   delete [] idlist;
   if (!adaptive) max_level = current_level;

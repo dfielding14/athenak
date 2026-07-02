@@ -154,7 +154,7 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
     if (pmbp->phydro != nullptr) {
       (void) pmbp->phydro->NewTimeStep(pdriver, pdriver->nexp_stages);
     }
-    if (pmbp->pmhd != nullptr) {
+    if (pmbp->pmhd != nullptr && !pmbp->frozen_mhd) {
       (void) pmbp->pmhd->NewTimeStep(pdriver, pdriver->nexp_stages);
     }
     if (pmbp->prad != nullptr) {

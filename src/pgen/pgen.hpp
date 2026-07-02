@@ -71,6 +71,7 @@ class ProblemGenerator {
   void ShockTube(ParameterInput *pin, const bool restart);
   void Shwave(ParameterInput *pin, const bool restart);
   void SphericalCollapse(ParameterInput *pin, const bool restart);
+  void TurbTimedAMR(ParameterInput *pin, const bool restart);
   void RadiationLinearWave(ParameterInput *pin, const bool restart);
   void RadiationBeam(ParameterInput *pin, const bool restart);
   void Z4cBoostedPuncture(ParameterInput *pin, const bool restart);

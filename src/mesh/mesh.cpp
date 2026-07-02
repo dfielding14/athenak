@@ -598,7 +598,7 @@ void Mesh::NewTimeStep(const Real tlim) {
     }
   }
   // MHD timestep
-  if (pmb_pack->pmhd != nullptr) {
+  if (pmb_pack->pmhd != nullptr && !pmb_pack->frozen_mhd) {
     dt = std::min(dt, (cfl_no)*(pmb_pack->pmhd->dtnew) );
     // viscosity timestep
     if (pmb_pack->pmhd->pvisc != nullptr) {

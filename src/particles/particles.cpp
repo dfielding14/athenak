@@ -764,6 +764,19 @@ void Particles::RemapAfterAMR() {
   pb->nprtcl_send = 0;
   pb->nprtcl_recv = 0;
   int nremapped = nprtcl_thispack;
+  auto mark_remap_stage = [](const char *stage) {
+    Kokkos::fence();
+    if (global_variable::my_rank == 0) {
+      std::cout << "Particle AMR remap stage complete: " << stage << std::endl;
+    }
+  };
+  if (global_variable::my_rank == 0) {
+    std::cout << "Particle AMR remap entered: particles_thispack="
+              << nprtcl_thispack << ", mode="
+              << (amr_remap_mode == ParticlesAMRRemapMode::device_table ?
+                  "device_table" : "host_tree") << std::endl;
+  }
+  mark_remap_stage("sendlist allocated");
 
   if (nprtcl_thispack > 0 &&
       amr_remap_mode == ParticlesAMRRemapMode::device_table) {
@@ -848,35 +861,27 @@ void Particles::RemapAfterAMR() {
 
   if (nprtcl_thispack > 0 &&
       amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
-    auto x1_d = Kokkos::subview(prtcl_rdata, static_cast<int>(IPX), Kokkos::ALL());
-    auto x2_d = Kokkos::subview(prtcl_rdata, static_cast<int>(IPY), Kokkos::ALL());
-    auto x3_d = Kokkos::subview(prtcl_rdata, static_cast<int>(IPZ), Kokkos::ALL());
-    auto gid_d = Kokkos::subview(prtcl_idata, static_cast<int>(PGID), Kokkos::ALL());
-    HostArray1D<Real> x1_h("prtcl_remap_x1", nprtcl_thispack);
-    HostArray1D<Real> x2_h("prtcl_remap_x2", nprtcl_thispack);
-    HostArray1D<Real> x3_h("prtcl_remap_x3", nprtcl_thispack);
-    HostArray1D<int> gid_h("prtcl_remap_gid", nprtcl_thispack);
-    Kokkos::deep_copy(x1_h, x1_d);
-    Kokkos::deep_copy(x2_h, x2_d);
-    Kokkos::deep_copy(x3_h, x3_d);
-    Kokkos::deep_copy(gid_h, gid_d);
+    auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
+    auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+    mark_remap_stage("host_tree copied particles to host");
 
     int myrank = global_variable::my_rank;
     for (int p=0; p<nprtcl_thispack; ++p) {
-      WrapCoordinate(x1_h(p), pm->mesh_size.x1min, pm->mesh_size.x1max);
+      WrapCoordinate(pr_h(IPX,p), pm->mesh_size.x1min, pm->mesh_size.x1max);
       if (pm->multi_d) {
-        WrapCoordinate(x2_h(p), pm->mesh_size.x2min, pm->mesh_size.x2max);
+        WrapCoordinate(pr_h(IPY,p), pm->mesh_size.x2min, pm->mesh_size.x2max);
       }
       if (pm->three_d) {
-        WrapCoordinate(x3_h(p), pm->mesh_size.x3min, pm->mesh_size.x3max);
+        WrapCoordinate(pr_h(IPZ,p), pm->mesh_size.x3min, pm->mesh_size.x3max);
       }
 
-      int dest_gid = pm->FindMeshBlockContainingPosition(x1_h(p), x2_h(p), x3_h(p));
+      int dest_gid = pm->FindMeshBlockContainingPosition(pr_h(IPX,p), pr_h(IPY,p),
+                                                         pr_h(IPZ,p));
       if (dest_gid < 0) {
         FatalAMRRemapError("could not map particle " + std::to_string(p) +
                            " after AMR");
       }
-      gid_h(p) = dest_gid;
+      pi_h(PGID,p) = dest_gid;
 #if MPI_PARALLEL_ENABLED
       int dest_rank = pm->rank_eachmb[dest_gid];
       if (dest_rank != myrank) {
@@ -887,14 +892,13 @@ void Particles::RemapAfterAMR() {
       }
 #endif
     }
+    mark_remap_stage("host_tree mapped particles on host");
 
-    Kokkos::deep_copy(x1_d, x1_h);
-    Kokkos::deep_copy(x2_d, x2_h);
-    Kokkos::deep_copy(x3_d, x3_h);
-    Kokkos::deep_copy(gid_d, gid_h);
+    Kokkos::deep_copy(prtcl_rdata, pr_h);
+    Kokkos::deep_copy(prtcl_idata, pi_h);
     Kokkos::resize(pb->sendlist, pb->nprtcl_send);
     pb->sendlist.template modify<HostMemSpace>();
-    pb->sendlist.template sync<DevExeSpace>();
+    mark_remap_stage("host_tree copied particles to device");
   }
 
   if (validate_amr_lookup ||
@@ -931,11 +935,16 @@ void Particles::RemapAfterAMR() {
 
 #if MPI_PARALLEL_ENABLED
   pb->CountSendsAndRecvs();
+  mark_remap_stage("counted particle sends and receives");
   pb->InitPrtclRecv();
+  mark_remap_stage("initialized particle receives");
   pb->PackAndSendPrtcls();
+  mark_remap_stage("packed and sent particles");
   while (pb->RecvAndUnpackPrtcls() == TaskStatus::incomplete) {}
+  mark_remap_stage("received and unpacked particles");
   pb->ClearPrtclRecv();
   pb->ClearPrtclSend();
+  mark_remap_stage("cleared particle exchange buffers");
 #else
   pm->UpdateParticleCounts();
 #endif

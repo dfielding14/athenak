@@ -81,6 +81,14 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     }
   } // extra brace to limit scope of string
 
+  if (time_evolution == TimeEvolution::tstatic && pin->DoesBlockExist("particles") &&
+      pin->GetOrAddBoolean("particles", "frozen_mhd", false)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<particles>/frozen_mhd requires a non-static "
+              << "<time>/evolution so particle tasks can advance" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   // read <time> parameters controlling driver if run requires time-evolution
   if (time_evolution != TimeEvolution::tstatic) {
     integrator = pin->GetOrAddString("time", "integrator", "rk2");
@@ -322,7 +330,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
     if (phydro != nullptr) {
       (void) pmesh->pmb_pack->phydro->NewTimeStep(this, nexp_stages);
     }
-    if (pmhd != nullptr) {
+    if (pmhd != nullptr && !pmesh->pmb_pack->frozen_mhd) {
       (void) pmesh->pmb_pack->pmhd->NewTimeStep(this, nexp_stages);
     }
     if (prad != nullptr) {

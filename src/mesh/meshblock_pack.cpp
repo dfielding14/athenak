@@ -101,6 +101,10 @@ void MeshBlockPack::AddCoordinates(ParameterInput *pin) {
 void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   int nphysics = 0;
   TaskID none(0);
+  frozen_mhd = false;
+  if (pin->DoesBlockExist("particles")) {
+    frozen_mhd = pin->GetOrAddBoolean("particles", "frozen_mhd", false);
+  }
 
   // (1) Units.  Create first so that they can be used in other physics constructors
   // Default units are simply code units
@@ -129,7 +133,8 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   if (pin->DoesBlockExist("mhd")) {
     pmhd = new mhd::MHD(this, pin);
     nphysics++;
-    if (!(pin->DoesBlockExist("hydro")) && !(pin->DoesBlockExist("radiation")) &&
+    if (!frozen_mhd &&
+        !(pin->DoesBlockExist("hydro")) && !(pin->DoesBlockExist("radiation")) &&
         !(pin->DoesBlockExist("adm")) && !(pin->DoesBlockExist("z4c")) ) {
       pmhd->AssembleMHDTasks(tl_map);
     }
@@ -179,7 +184,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // Instead, TurbulenceDriver object is stored in MeshBlockPack and tasks for evolving
   // force and adding force to fluid are included in operator_split and stage_run
   // task lists respectively.
-  if (pin->DoesBlockExist("turb_driving")) {
+  if (pin->DoesBlockExist("turb_driving") && !frozen_mhd) {
     pturb = new TurbulenceDriver(this, pin);
     pturb->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);
     pturb->IncludeAddForcingTask(tl_map["stagen"], none);

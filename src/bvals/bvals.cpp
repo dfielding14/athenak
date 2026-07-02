@@ -242,6 +242,10 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
     prtcl_rrecvbuf("rrecv",1),
     prtcl_isendbuf("isend",1),
     prtcl_irecvbuf("irecv",1),
+    prtcl_rsendbuf_h("rsend_h",1),
+    prtcl_rrecvbuf_h("rrecv_h",1),
+    prtcl_isendbuf_h("isend_h",1),
+    prtcl_irecvbuf_h("irecv_h",1),
 #endif
     rsend_capacity(1),
     isend_capacity(1),
