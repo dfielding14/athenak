@@ -263,7 +263,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     IOWrapperSizeT recovered_headeroffset = headeroffset;
     IOWrapperSizeT recovered_data_size = data_size_;
     IOWrapperSizeT marker_offset = headeroffset - variablesize;
-    constexpr IOWrapperSizeT scan_bytes = 64*1024;
+    constexpr IOWrapperSizeT scan_bytes = 1024*1024;
 
     if (data_size == data_size_with_turb) {
       recovered_data_size = data_size_with_turb;
