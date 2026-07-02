@@ -265,7 +265,15 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     IOWrapperSizeT marker_offset = headeroffset - variablesize;
     constexpr IOWrapperSizeT scan_bytes = 64*1024;
 
-    if (may_have_turbulence_payload) {
+    if (may_have_turbulence_payload && data_size == data_size_with_turb) {
+      recovered_data_size = data_size_with_turb;
+      recovered_turbulence_payload = true;
+      recovered_legacy_state = true;
+    } else if (may_have_turbulence_payload && data_size == data_size_without_turb) {
+      recovered_data_size = data_size_without_turb;
+      recovered_turbulence_payload = false;
+      recovered_legacy_state = true;
+    } else if (may_have_turbulence_payload) {
       char *scan = new char[scan_bytes];
       IOWrapperSizeT nscan = 0;
       if (global_variable::my_rank == 0 || single_file_per_rank) {
