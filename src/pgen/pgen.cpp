@@ -265,11 +265,11 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     IOWrapperSizeT marker_offset = headeroffset - variablesize;
     constexpr IOWrapperSizeT scan_bytes = 64*1024;
 
-    if (may_have_turbulence_payload && data_size == data_size_with_turb) {
+    if (data_size == data_size_with_turb) {
       recovered_data_size = data_size_with_turb;
       recovered_turbulence_payload = true;
       recovered_legacy_state = true;
-    } else if (may_have_turbulence_payload && data_size == data_size_without_turb) {
+    } else if (data_size == data_size_without_turb) {
       recovered_data_size = data_size_without_turb;
       recovered_turbulence_payload = false;
       recovered_legacy_state = true;
@@ -326,6 +326,11 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "CC data size read from restart file not equal to size "
                 << "of Hydro, MHD, Rad, and/or Z4c arrays, restart file is broken."
+                << std::endl << "Read data_size=" << data_size
+                << ", expected_without_turb=" << data_size_without_turb
+                << ", expected_with_turb=" << data_size_with_turb
+                << ", may_have_turbulence_payload=" << may_have_turbulence_payload
+                << ", restart_has_turbulence_payload=" << restart_has_turbulence_payload
                 << std::endl;
       exit(EXIT_FAILURE);
     }
