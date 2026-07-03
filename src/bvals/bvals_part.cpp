@@ -141,15 +141,39 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
   if (pm->multilevel) {
     if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::device_table) {
-      DvceArray1D<int> gid_table;
-      DvceArray1D<int> rank_table;
-      int nloc1, nloc2, nloc3;
-      bool built_table = BuildParticleLookupTable(pm, pmy_part->amr_lookup_max_cells,
-                                                  gid_table, rank_table, nloc1, nloc2,
-                                                  nloc3);
-      if (built_table) {
+      bool table_matches_mesh =
+          particle_lookup_valid &&
+          particle_lookup_nmb_total == pm->nmb_total &&
+          particle_lookup_max_level == pm->max_level &&
+          particle_lookup_root_level == pm->root_level &&
+          particle_lookup_rootx1 == pm->nmb_rootx1 &&
+          particle_lookup_rootx2 == pm->nmb_rootx2 &&
+          particle_lookup_rootx3 == pm->nmb_rootx3;
+      if (!table_matches_mesh) {
+        particle_lookup_valid =
+            BuildParticleLookupTable(pm, pmy_part->amr_lookup_max_cells,
+                                     particle_lookup_gid_table,
+                                     particle_lookup_rank_table,
+                                     particle_lookup_nloc1,
+                                     particle_lookup_nloc2,
+                                     particle_lookup_nloc3);
+        if (particle_lookup_valid) {
+          particle_lookup_nmb_total = pm->nmb_total;
+          particle_lookup_max_level = pm->max_level;
+          particle_lookup_root_level = pm->root_level;
+          particle_lookup_rootx1 = pm->nmb_rootx1;
+          particle_lookup_rootx2 = pm->nmb_rootx2;
+          particle_lookup_rootx3 = pm->nmb_rootx3;
+        }
+      }
+      if (particle_lookup_valid) {
         Kokkos::realloc(sendlist, std::max(1,npart));
         auto &slist = sendlist;
+        auto gid_table = particle_lookup_gid_table;
+        auto rank_table = particle_lookup_rank_table;
+        int nloc1 = particle_lookup_nloc1;
+        int nloc2 = particle_lookup_nloc2;
+        int nloc3 = particle_lookup_nloc3;
         DvceArray1D<int> atom_count("particle_lookup_send_count", 2);
         Kokkos::deep_copy(atom_count, 0);
         int myrank = global_variable::my_rank;
@@ -389,6 +413,20 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   sendlist.template sync<HostMemSpace>();
 
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void ParticlesBoundaryValues::InvalidateLookupCache()
+//! \brief Invalidate cached AMR ownership table after mesh topology or rank ownership changes.
+
+void ParticlesBoundaryValues::InvalidateLookupCache() {
+  particle_lookup_valid = false;
+  particle_lookup_nmb_total = -1;
+  particle_lookup_max_level = -1;
+  particle_lookup_root_level = -1;
+  particle_lookup_rootx1 = -1;
+  particle_lookup_rootx2 = -1;
+  particle_lookup_rootx3 = -1;
 }
 
 //----------------------------------------------------------------------------------------
@@ -650,8 +688,9 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
       auto &pi = pmy_part->prtcl_idata;
       auto &rsendbuf = prtcl_rsendbuf;
       auto &isendbuf = prtcl_isendbuf;
+      auto &slist = sendlist;
       par_for("ppack",DevExeSpace(),0,(nprtcl_send-1), KOKKOS_LAMBDA(const int n) {
-        int p = sendlist.d_view(n).prtcl_indx;
+        int p = slist.d_view(n).prtcl_indx;
         for (int i=0; i<nidata; ++i) {
           isendbuf(nidata*n + i) = pi(i,p);
         }
@@ -833,7 +872,11 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
     }
 
     pmy_part->nprtcl_thispack = new_npart;
-    pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+    if (pmy_part->update_global_counts_each_exchange) {
+      pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+    } else {
+      pmy_part->pmy_pack->pmesh->UpdateParticleCountsLocal();
+    }
     int64_t bytes_sent = static_cast<int64_t>(nprtcl_send)*
                          (static_cast<int64_t>(pmy_part->nrdata)*sizeof(Real) +
                           static_cast<int64_t>(pmy_part->nidata)*sizeof(int));
@@ -852,12 +895,14 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
     auto &rrecvbuf = prtcl_rrecvbuf;
     auto &irecvbuf = prtcl_irecvbuf;
     int npart = old_npart;
+    int nsend = nprtcl_send;
+    auto &slist = sendlist;
     par_for("punpack",DevExeSpace(),0,(nprtcl_recv-1), KOKKOS_LAMBDA(const int n) {
       int p;
-      if (n < nprtcl_send) {
-        p = sendlist.d_view(n).prtcl_indx; // place particles in holes created by sends
+      if (n < nsend) {
+        p = slist.d_view(n).prtcl_indx; // place particles in holes created by sends
       } else {
-        p = npart + (n - nprtcl_send);     // place particle at end of arrays
+        p = npart + (n - nsend);        // place particle at end of arrays
       }
       for (int i=0; i<nidata; ++i) {
         pi(i,p) = irecvbuf(nidata*n + i);
@@ -876,9 +921,10 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
     DvceArray1D<int> drop("particle_drop_mask", old_npart);
     Kokkos::deep_copy(drop, 0);
     auto &slist = sendlist;
+    int nrecv = nprtcl_recv;
     par_for("particle_mark_drops",DevExeSpace(),0,(nremain-1),
     KOKKOS_LAMBDA(const int n) {
-      int send_index = nprtcl_recv + n;
+      int send_index = nrecv + n;
       drop(slist.d_view(send_index).prtcl_indx) = 1;
     });
 
@@ -909,7 +955,11 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
 
   // Update nparticles_thisrank.  Update cost array (use npart_thismb[nmb]?)
   pmy_part->nprtcl_thispack = new_npart;
-  pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+  if (pmy_part->update_global_counts_each_exchange) {
+    pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+  } else {
+    pmy_part->pmy_pack->pmesh->UpdateParticleCountsLocal();
+  }
   int64_t bytes_sent = static_cast<int64_t>(nprtcl_send)*
                        (static_cast<int64_t>(pmy_part->nrdata)*sizeof(Real) +
                         static_cast<int64_t>(pmy_part->nidata)*sizeof(int));

@@ -669,9 +669,9 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
 }
 
 //----------------------------------------------------------------------------------------
-// \fn Mesh::UpdateParticleCounts
+// \fn Mesh::UpdateParticleCountsLocal
 
-void Mesh::UpdateParticleCounts() {
+void Mesh::UpdateParticleCountsLocal() {
   particles::Particles *ppart = pmb_pack->ppart;
   if (ppart == nullptr) {return;}
 
@@ -679,11 +679,22 @@ void Mesh::UpdateParticleCounts() {
   for (int n=0; n<nmb_packs_thisrank; ++n) {
     nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
   }
+  if (nprtcl_eachrank != nullptr) {
+    nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::UpdateParticleCounts
+
+void Mesh::UpdateParticleCounts() {
+  particles::Particles *ppart = pmb_pack->ppart;
+  if (ppart == nullptr) {return;}
 
   if (nprtcl_eachrank == nullptr) {
     nprtcl_eachrank = new int[global_variable::nranks];
   }
-  nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
+  UpdateParticleCountsLocal();
 #if MPI_PARALLEL_ENABLED
   MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
 #endif

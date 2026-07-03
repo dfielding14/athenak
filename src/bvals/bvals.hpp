@@ -264,6 +264,13 @@ class ParticlesBoundaryValues {
   std::vector<ParticleMessageData> recvs_thisrank; // length nrecvs
   std::vector<ParticleMessageData> sends_allranks; // length ncounts summed over ranks
 
+  DvceArray1D<int> particle_lookup_gid_table;
+  DvceArray1D<int> particle_lookup_rank_table;
+  bool particle_lookup_valid;
+  int particle_lookup_nloc1, particle_lookup_nloc2, particle_lookup_nloc3;
+  int particle_lookup_nmb_total, particle_lookup_max_level, particle_lookup_root_level;
+  int particle_lookup_rootx1, particle_lookup_rootx2, particle_lookup_rootx3;
+
 #if MPI_PARALLEL_ENABLED
   DvceArray1D<Real> prtcl_rsendbuf, prtcl_rrecvbuf;
   DvceArray1D<int>  prtcl_isendbuf, prtcl_irecvbuf;
@@ -283,6 +290,7 @@ class ParticlesBoundaryValues {
   TaskStatus ClearPrtclSend();
   TaskStatus RecvAndUnpackPrtcls();
   void EnsureBufferCapacity(int nsend, int nrecv);
+  void InvalidateLookupCache();
 
  protected:
   particles::Particles* pmy_part;

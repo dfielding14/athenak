@@ -29,6 +29,16 @@
 #include <mpi.h>
 #endif
 
+namespace {
+
+void RefreshParticleCountsForOutputBatch(Mesh *pmesh) {
+  if (pmesh->pmb_pack != nullptr && pmesh->pmb_pack->ppart != nullptr) {
+    pmesh->UpdateParticleCounts();
+  }
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 //
@@ -345,6 +355,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
 
   //---- Step 3.  Cycle through output Types and load data / write files.
   if (!res_flag) { // only write outputs at the beginning of the run
+    RefreshParticleCountsForOutputBatch(pmesh);
     for (auto &out : pout->pout_list) {
       out->LoadOutputData(pmesh);
       out->WriteOutputFile(pmesh, pin);
@@ -431,6 +442,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       }
 
       // Test for/make outputs
+      bool refreshed_particle_counts_for_outputs = false;
       for (auto &out : pout->pout_list) {
         // compare at floating point (32-bit) precision to reduce effect of round off
         float time_32 = static_cast<float>(pmesh->time);
@@ -440,6 +452,10 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+          if (!refreshed_particle_counts_for_outputs) {
+            RefreshParticleCountsForOutputBatch(pmesh);
+            refreshed_particle_counts_for_outputs = true;
+          }
           out->LoadOutputData(pmesh);
           out->WriteOutputFile(pmesh, pin);
         }
@@ -467,6 +483,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
+  RefreshParticleCountsForOutputBatch(pmesh);
   for (auto &out : pout->pout_list) {
     out->LoadOutputData(pmesh);
     out->WriteOutputFile(pmesh, pin);

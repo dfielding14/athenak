@@ -83,6 +83,7 @@ class Particles {
   bool check_motion_bounds;
   bool log_performance;
   bool validate_amr_lookup;
+  bool update_global_counts_each_exchange;
   bool subcycle;
   bool subcycle_strict;
   int amr_lookup_max_cells;

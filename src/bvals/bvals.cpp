@@ -236,7 +236,27 @@ void MeshBoundaryValues::InitializeBuffers(const int nvar) {
 
 particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
   particles::Particles *pp, ParameterInput *pin) :
+    nprtcl_send(0),
+    nprtcl_recv(0),
     sendlist("sendlist",1),
+    rsend_capacity(1),
+    isend_capacity(1),
+    rrecv_capacity(1),
+    irecv_capacity(1),
+    nsends(0),
+    nrecvs(0),
+    particle_lookup_gid_table("particle_lookup_gid",1),
+    particle_lookup_rank_table("particle_lookup_rank",1),
+    particle_lookup_valid(false),
+    particle_lookup_nloc1(0),
+    particle_lookup_nloc2(0),
+    particle_lookup_nloc3(0),
+    particle_lookup_nmb_total(-1),
+    particle_lookup_max_level(-1),
+    particle_lookup_root_level(-1),
+    particle_lookup_rootx1(-1),
+    particle_lookup_rootx2(-1),
+    particle_lookup_rootx3(-1),
 #if MPI_PARALLEL_ENABLED
     prtcl_rsendbuf("rsend",1),
     prtcl_rrecvbuf("rrecv",1),
@@ -247,10 +267,6 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
     prtcl_isendbuf_h("isend_h",1),
     prtcl_irecvbuf_h("irecv_h",1),
 #endif
-    rsend_capacity(1),
-    isend_capacity(1),
-    rrecv_capacity(1),
-    irecv_capacity(1),
     pmy_part(pp) {
 #if MPI_PARALLEL_ENABLED
   //resize vectors over number of ranks

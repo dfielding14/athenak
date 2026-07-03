@@ -36,6 +36,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     check_motion_bounds(false),
     log_performance(false),
     validate_amr_lookup(false),
+    update_global_counts_each_exchange(true),
     subcycle(false),
     subcycle_strict(true),
     amr_lookup_max_cells(20000000),
@@ -99,6 +100,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   check_motion_bounds = pin->GetOrAddBoolean("particles","check_motion_bounds",false);
   log_performance = pin->GetOrAddBoolean("particles","log_performance",false);
   validate_amr_lookup = pin->GetOrAddBoolean("particles","validate_amr_lookup",false);
+  update_global_counts_each_exchange =
+      pin->GetOrAddBoolean("particles","update_global_counts_each_exchange",true);
   amr_lookup_max_cells = pin->GetOrAddInteger("particles","amr_lookup_max_cells",
                                               20000000);
   subcycle = pin->GetOrAddBoolean("particles","subcycle",false);
@@ -757,6 +760,7 @@ void Particles::LogPerformance(const std::string &label, int64_t npushed,
 // off-rank particles.  This is intentionally separate from face-centered AMR repair.
 
 void Particles::RemapAfterAMR() {
+  pbval_part->InvalidateLookupCache();
   Mesh *pm = pmy_pack->pmesh;
   ParticlesBoundaryValues *pb = pbval_part;
   int send_capacity = std::max(1, nprtcl_thispack);
