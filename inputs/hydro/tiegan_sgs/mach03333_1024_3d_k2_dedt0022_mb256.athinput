@@ -6,7 +6,9 @@
 #   L_drive = L_box/npeak = 0.5
 #   t_eddy = L_drive/v_rms = 1.50015
 #   tlim = 2 t_eddy = 3.0003
-#   SGS and full-resolution slice cadence = 0.25 t_eddy = 0.3750375
+#   SGS cadence = 0.25 t_eddy = 0.3750375
+#   full-resolution primitive cadence = 0.5 t_eddy = 0.750075
+#   full-resolution slice cadence = 0.125
 #   dedt = 0.022, calibrated from 256^3 no-drag 3D runs.
 
 <comment>
@@ -92,46 +94,52 @@ dt = 3.0003
 <output3>
 file_type = bin
 variable = hydro_w
-id = slice_x1
-slice_x1 = 0.0
-dt = 0.3750375
+id = prim
+dt = 0.750075
 
 <output4>
 file_type = bin
 variable = hydro_w
-id = slice_x2
-slice_x2 = 0.0
-dt = 0.3750375
+id = slice_x1
+slice_x1 = 0.0
+dt = 0.125
 
 <output5>
 file_type = bin
 variable = hydro_w
-id = slice_x3
-slice_x3 = 0.0
-dt = 0.3750375
+id = slice_x2
+slice_x2 = 0.0
+dt = 0.125
 
 <output6>
+file_type = bin
+variable = hydro_w
+id = slice_x3
+slice_x3 = 0.0
+dt = 0.125
+
+<output7>
 file_type = cbin
 variable = hydro_sgs_3d
 id = sgs_f004
 coarsen_factor = 4
 dt = 0.3750375
 
-<output7>
+<output8>
 file_type = cbin
 variable = hydro_sgs_3d
 id = sgs_f008
 coarsen_factor = 8
 dt = 0.3750375
 
-<output8>
+<output9>
 file_type = cbin
 variable = hydro_sgs_3d
 id = sgs_f016
 coarsen_factor = 16
 dt = 0.3750375
 
-<output9>
+<output10>
 file_type = cbin
 variable = hydro_sgs_3d
 id = sgs_f032
