@@ -57,10 +57,11 @@ CoarsenedBinaryOutput::CoarsenedBinaryOutput(ParameterInput *pin, Mesh *pm,
     FatalCoarsenedBinaryError(
         "Every active MeshBlock dimension must be divisible by coarsen_factor.");
   }
-  if (out_params.variable.compare("hydro_sgs_2d") == 0 &&
+  if ((out_params.variable.compare("hydro_sgs_2d") == 0 ||
+       out_params.variable.compare("hydro_sgs_3d") == 0) &&
       out_params.compute_moments) {
     FatalCoarsenedBinaryError(
-        "hydro_sgs_2d does not support compute_moments=true.");
+        "hydro_sgs output does not support compute_moments=true.");
   }
   // create directories for outputs
   // useful for mpiio-based outputs because on some supercomputers you may need to
@@ -339,6 +340,34 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
             outarray(3,m,k,j,i) -= mx*mx/rho;
             outarray(4,m,k,j,i) -= mx*my/rho;
             outarray(5,m,k,j,i) -= my*my/rho;
+          }
+        }
+      }
+    }
+  }
+
+  if (out_params.variable.compare("hydro_sgs_3d") == 0) {
+    for (int m=0; m<nout_mbs; ++m) {
+      for (int k=0; k<outarray.extent_int(2); ++k) {
+        for (int j=0; j<outarray.extent_int(3); ++j) {
+          for (int i=0; i<outarray.extent_int(4); ++i) {
+            Real rho = outarray(0,m,k,j,i);
+            if (rho <= 0.0) {
+              FatalCoarsenedBinaryError(
+                  "hydro_sgs_3d encountered non-positive filtered density.");
+            }
+            Real mx = outarray(1,m,k,j,i);
+            Real my = outarray(2,m,k,j,i);
+            Real mz = outarray(3,m,k,j,i);
+            outarray(1,m,k,j,i) = mx/rho;
+            outarray(2,m,k,j,i) = my/rho;
+            outarray(3,m,k,j,i) = mz/rho;
+            outarray(4,m,k,j,i) -= mx*mx/rho;
+            outarray(5,m,k,j,i) -= mx*my/rho;
+            outarray(6,m,k,j,i) -= mx*mz/rho;
+            outarray(7,m,k,j,i) -= my*my/rho;
+            outarray(8,m,k,j,i) -= my*mz/rho;
+            outarray(9,m,k,j,i) -= mz*mz/rho;
           }
         }
       }
