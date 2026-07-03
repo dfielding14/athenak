@@ -10,7 +10,7 @@
 #   dedt = 0.022, calibrated down from the first no-drag 3D pass.
 
 <comment>
-problem = Tiegan SGS 3D Mach-0.3333 256^3 kpeak2 dedt=0.022 calibration mb256
+problem = Tiegan SGS 3D Mach-0.3333 256^3 kpeak2 dedt 0.022 calibration mb256
 
 <job>
 basename = tiegan_sgs3d_m03333_256_k2_cal_dedt0022_mb256
