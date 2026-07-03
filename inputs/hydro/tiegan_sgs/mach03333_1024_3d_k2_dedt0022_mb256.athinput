@@ -1,0 +1,139 @@
+# Tiegan SGS 3D Mach-0.3333 production-scale 1024^3 run.
+#
+# Nominal scales:
+#   c_s = 1, target v_rms = 0.3333, target Mach = 0.3333
+#   parabolic forcing 1 <= |n| <= 3, npeak = 2
+#   L_drive = L_box/npeak = 0.5
+#   t_eddy = L_drive/v_rms = 1.50015
+#   tlim = 2 t_eddy = 3.0003
+#   SGS and full-resolution slice cadence = 0.25 t_eddy = 0.3750375
+#   dedt = 0.022, calibrated from 256^3 no-drag 3D runs.
+
+<comment>
+problem = Tiegan SGS 3D Mach-0.3333 1024^3 kpeak2 dedt 0.022 mb256
+
+<job>
+basename = tiegan_sgs3d_m03333_1024_k2_dedt0022_mb256
+
+<mesh>
+nghost = 3
+nx1 = 1024
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1024
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1024
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 256
+nx2 = 256
+nx3 = 256
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.4
+nlim = -1
+tlim = 3.0003
+ndiag = 1
+
+<hydro>
+eos = isothermal
+reconstruct = wenoz
+rsolver = roe
+iso_sound_speed = 1.0
+
+<hydro_srcterms>
+linear_drag = false
+drag_rate = 0.0
+
+<problem>
+d_n = 1.0
+
+<turb_driving>
+turb_flag = 2
+tcorr = 1.50015
+dt_update = 0.0150015
+normalization = edot
+dedt = 0.022
+nlow = 1
+nhigh = 3
+npeak = 2
+spectrum = parabolic
+mode_sampling = cartesian
+sparse_mode_count = 0
+driving_type = 0
+min_kx = 0
+max_kx = 3
+min_ky = 0
+max_ky = 3
+min_kz = 0
+max_kz = 3
+sol_fraction = 1.0
+rseed = 314159
+
+<output1>
+file_type = hst
+dt = 0.0150015
+
+<output2>
+file_type = rst
+dt = 3.0003
+
+<output3>
+file_type = bin
+variable = hydro_w
+id = slice_x1
+slice_x1 = 0.0
+dt = 0.3750375
+
+<output4>
+file_type = bin
+variable = hydro_w
+id = slice_x2
+slice_x2 = 0.0
+dt = 0.3750375
+
+<output5>
+file_type = bin
+variable = hydro_w
+id = slice_x3
+slice_x3 = 0.0
+dt = 0.3750375
+
+<output6>
+file_type = cbin
+variable = hydro_sgs_3d
+id = sgs_f004
+coarsen_factor = 4
+dt = 0.3750375
+
+<output7>
+file_type = cbin
+variable = hydro_sgs_3d
+id = sgs_f008
+coarsen_factor = 8
+dt = 0.3750375
+
+<output8>
+file_type = cbin
+variable = hydro_sgs_3d
+id = sgs_f016
+coarsen_factor = 16
+dt = 0.3750375
+
+<output9>
+file_type = cbin
+variable = hydro_sgs_3d
+id = sgs_f032
+coarsen_factor = 32
+dt = 0.3750375
