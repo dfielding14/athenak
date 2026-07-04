@@ -626,15 +626,30 @@ class EventLogOutput : public BaseTypeOutput {
 class TrackedParticleOutput : public BaseTypeOutput {
  public:
   TrackedParticleOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  ~TrackedParticleOutput() override;
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
  protected:
+  void FlushTrackBuffer(const std::string &fname);
+  void LogTrackCacheProbe(Mesh *pm, bool have_probe_stats, int prev_local,
+                          int hits, int stale_oob, int stale_mismatch,
+                          double probe_ms, double scan_ms);
   int ntrack;           // total number of tracked particles across all ranks
+  int ntrack_total;     // total tracked records written per output
   int ntrack_thisrank;  // number of tracked particles this rank (guess)
   int npout;            // number of tracked particles to be written this rank
   bool header_written;
+  bool track_per_species;
+  bool track_cache_probe;
+  bool track_cache_probe_initialized;
+  int last_output_cycle;
+  int track_buffer_size;
+  int track_ncycle_buffer;
+  int track_cycles_buffered;
   std::vector<int> npout_eachrank;
+  std::vector<char> track_buffer;
   HostArray1D<TrackedParticleData> outpart;
+  DvceArray1D<int> track_cache_indices;
 };
 
 //----------------------------------------------------------------------------------------

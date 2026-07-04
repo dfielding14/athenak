@@ -84,6 +84,7 @@ subcycle_cell_fraction = 0.5
 subcycle_meshblock_fraction = 0.5
 subcycle_gyro_fraction = 0.25
 subcycle_strict = true
+exchange_gyro_only_substeps = true
 
 <problem>
 pgen_name = part_random

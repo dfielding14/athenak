@@ -111,6 +111,8 @@ The shipped smoke and stress inputs are:
 | `subcycle_meshblock_fraction` | `0.5` | Limits per-substep motion to this fraction of the local MeshBlock size. |
 | `subcycle_gyro_fraction` | `0.25` | Limits Boris gyro angle per substep in radians. |
 | `subcycle_strict` | `true` | If true, fail when the requested constraints need more than `subcycle_max_steps`. |
+| `exchange_gyro_only_substeps` | `true` | If true, run ownership exchange between gyro-only substeps. |
+| `subcycle_per_particle_gyro` | `false` | If true, use per-particle gyro substeps when cell and MeshBlock constraints do not require intermediate exchange. |
 
 ### `<problem>` for `part_random`
 
@@ -202,6 +204,14 @@ same particle MPI exchange used by the normal task list.  This keeps the next
 field gather tied to the current owning MeshBlock instead of waiting until the
 end of the full mesh timestep.  The final substep still hands off to the normal
 `NewGID`/exchange tasks.
+
+For frozen-field production pushes where the cell and MeshBlock constraints are
+both one, `subcycle_per_particle_gyro = true` avoids applying the smallest
+gyro-radius particle's substep count to every species.  In that mode each
+particle computes its own Boris gyro substep count and advances through those
+substeps inside one kernel.  The code automatically falls back to the global
+substep path when cell or MeshBlock motion requires intermediate ownership
+exchange, or when `exchange_gyro_only_substeps = true`.
 
 With `subcycle_strict = true`, the run fails fast if the constraints require
 more than `subcycle_max_steps`.  With `subcycle_strict = false`, the run caps at

@@ -52,6 +52,8 @@ ParticleRestartOutput::ParticleRestartOutput(ParameterInput *pin, Mesh *pm,
       out_params.file_number = std::stoi(outnumber_str) + 1;
       out_params.last_time = pm->time;
     }
+  } else if (out_params.last_time < 0.0) {
+    out_params.last_time = pm->time;
   }
 }
 

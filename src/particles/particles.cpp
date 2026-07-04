@@ -39,6 +39,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     update_global_counts_each_exchange(true),
     subcycle(false),
     subcycle_strict(true),
+    exchange_gyro_only_substeps(true),
+    subcycle_per_particle_gyro(false),
     amr_lookup_max_cells(20000000),
     subcycle_max_steps(8),
     subcycle_cell_fraction(0.5),
@@ -111,6 +113,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       pin->GetOrAddReal("particles","subcycle_meshblock_fraction",0.5);
   subcycle_gyro_fraction = pin->GetOrAddReal("particles","subcycle_gyro_fraction",0.25);
   subcycle_strict = pin->GetOrAddBoolean("particles","subcycle_strict",true);
+  exchange_gyro_only_substeps =
+      pin->GetOrAddBoolean("particles","exchange_gyro_only_substeps",true);
+  subcycle_per_particle_gyro =
+      pin->GetOrAddBoolean("particles","subcycle_per_particle_gyro",false);
   if (subcycle_max_steps < 1) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "<particles>/subcycle_max_steps must be >= 1"

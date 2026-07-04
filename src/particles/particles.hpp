@@ -86,6 +86,8 @@ class Particles {
   bool update_global_counts_each_exchange;
   bool subcycle;
   bool subcycle_strict;
+  bool exchange_gyro_only_substeps;
+  bool subcycle_per_particle_gyro;
   int amr_lookup_max_cells;
   int subcycle_max_steps;
   Real subcycle_cell_fraction;

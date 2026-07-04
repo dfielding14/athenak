@@ -292,6 +292,52 @@ void RunBorisGather(const std::string &label, MeshBlockPack *pmy_pack,
   });
 }
 
+template<typename GatherPolicy>
+void RunBorisGatherPerParticleGyro(const std::string &label, MeshBlockPack *pmy_pack,
+                                   DvceArray2D<Real> &pr, DvceArray2D<int> &pi,
+                                   int npart, int gids, int is, int js, int ks,
+                                   int nx1, int nx2, int nx3, bool multi_d,
+                                   bool three_d, Real dt, int base_steps,
+                                   int max_steps, Real gyro_fraction) {
+  auto mbsize = pmy_pack->pmb->mb_size;
+  auto b0 = pmy_pack->pmhd->b0;
+  auto bcc = pmy_pack->pmhd->bcc0;
+  Real abs_dt = (dt >= 0.0) ? dt : -dt;
+
+  par_for(label,DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
+    int nsub = base_steps;
+    if (pr(IPM,p) > 0.0) {
+      Real bmag = Kokkos::sqrt(pr(IPBX,p)*pr(IPBX,p) + pr(IPBY,p)*pr(IPBY,p) +
+                               pr(IPBZ,p)*pr(IPBZ,p));
+      int gyro_steps = StepsForRatio(abs_dt*bmag/(pr(IPM,p)*gyro_fraction));
+      if (gyro_steps > nsub) {nsub = gyro_steps;}
+    }
+    if (nsub > max_steps) {nsub = max_steps;}
+    if (nsub < 1) {nsub = 1;}
+
+    Real dt_sub = dt/static_cast<Real>(nsub);
+    for (int sub=0; sub<nsub; ++sub) {
+      int m = pi(PGID,p) - gids;
+
+      Real x1_old = pr(IPX,p);
+      Real x2_old = pr(IPY,p);
+      Real x3_old = pr(IPZ,p);
+
+      Real x1 = x1_old + 0.5*dt_sub*pr(IPVX,p);
+      Real x2 = x2_old;
+      Real x3 = x3_old;
+      if (multi_d) {x2 += 0.5*dt_sub*pr(IPVY,p);}
+      if (three_d) {x3 += 0.5*dt_sub*pr(IPVZ,p);}
+
+      ParticleBField bf = GatherPolicy::Gather(b0, bcc, mbsize, m, x1, x2, x3,
+                                               is, js, ks, nx1, nx2, nx3,
+                                               multi_d, three_d);
+      FinishBorisPush(pr, p, dt_sub, multi_d, three_d, x1_old, x2_old, x3_old,
+                      x1, x2, x3, bf);
+    }
+  });
+}
+
 void RunDriftStep(MeshBlockPack *pmy_pack, DvceArray2D<Real> &pr, int npart,
                   bool multi_d, bool three_d, Real dt) {
   (void)pmy_pack;
@@ -479,6 +525,47 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
   int nsub = ComputeSubcycleSteps(dt, cell_steps, block_steps, gyro_steps);
   LogSubcycle(nsub, cell_steps, block_steps, gyro_steps);
   Real dt_sub = dt/static_cast<Real>(nsub);
+  bool exchange_between_substeps = (cell_steps > 1 || block_steps > 1 ||
+                                    exchange_gyro_only_substeps);
+  bool use_per_particle_gyro = (subcycle && subcycle_per_particle_gyro &&
+                                pusher == ParticlesPusher::boris &&
+                                cell_steps <= 1 && block_steps <= 1 &&
+                                !exchange_between_substeps);
+
+  if (use_per_particle_gyro) {
+    int npart = nprtcl_thispack;
+    if (npart > 0) {
+      int base_steps = std::max(1, std::max(cell_steps, block_steps));
+      if (log_performance && global_variable::my_rank == 0) {
+        std::cout << "Particle subcycling: mode=per_particle_gyro"
+                  << " base_steps=" << base_steps
+                  << " global_gyro_steps=" << gyro_steps << std::endl;
+      }
+      switch (interpolation) {
+        case ParticleInterpolation::lin_legacy:
+          RunBorisGatherPerParticleGyro<LinLegacyGather>(
+              "part_boris_lin_ppgyro", pmy_pack, prtcl_rdata, prtcl_idata, npart,
+              gids, is, js, ks, nx1, nx2, nx3, multi_d, three_d, dt, base_steps,
+              subcycle_max_steps, subcycle_gyro_fraction);
+          break;
+        case ParticleInterpolation::trilinear:
+          RunBorisGatherPerParticleGyro<TrilinearGather>(
+              "part_boris_trilinear_ppgyro", pmy_pack, prtcl_rdata, prtcl_idata,
+              npart, gids, is, js, ks, nx1, nx2, nx3, multi_d, three_d, dt,
+              base_steps, subcycle_max_steps, subcycle_gyro_fraction);
+          break;
+        case ParticleInterpolation::tsc:
+          RunBorisGatherPerParticleGyro<TSCGather>(
+              "part_boris_tsc_ppgyro", pmy_pack, prtcl_rdata, prtcl_idata, npart,
+              gids, is, js, ks, nx1, nx2, nx3, multi_d, three_d, dt, base_steps,
+              subcycle_max_steps, subcycle_gyro_fraction);
+          break;
+      }
+    }
+    CheckMotionBounds("particle push");
+    LogPerformance("push", nprtcl_thispack, 0, 0, 0, 0);
+    return TaskStatus::complete;
+  }
 
   for (int sub=0; sub<nsub; ++sub) {
     int npart = nprtcl_thispack;
@@ -513,7 +600,7 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
           break;
         }
     }
-    if (sub < nsub - 1) {
+    if (sub < nsub - 1 && exchange_between_substeps) {
       ExchangeAfterSubcycle();
       CheckMotionBounds("particle subcycle exchange");
     }
