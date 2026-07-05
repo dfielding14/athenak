@@ -44,6 +44,8 @@ struct DivBAMRConfig {
   Real field_k = 2.0;
   Real divb_bnorm = 1.0;
   Real uniform_refine_time = 0.0;
+  Real current_refine_threshold = 1.0;
+  Real current_derefine_fraction = 0.5;
   Real x1min = 0.0;
   Real x1max = 1.0;
   Real x2min = 0.0;
@@ -198,13 +200,32 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
     divb_amr.refinement_mode = 0;
   } else if (refinement_mode == "uniform_after_time") {
     divb_amr.refinement_mode = 1;
+  } else if (refinement_mode == "current_threshold") {
+    divb_amr.refinement_mode = 2;
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "<problem>/refinement_mode = '" << refinement_mode
               << "' is not implemented; valid choices are "
-              << "[moving_pattern,uniform_after_time]." << std::endl;
+              << "[moving_pattern,uniform_after_time,current_threshold]." << std::endl;
     exit(EXIT_FAILURE);
+  }
+  divb_amr.current_refine_threshold =
+      pin->GetOrAddReal("problem", "current_refine_threshold", 1.0);
+  divb_amr.current_derefine_fraction =
+      pin->GetOrAddReal("problem", "current_derefine_fraction", 0.5);
+  if (divb_amr.refinement_mode == 2) {
+    if (!(divb_amr.current_refine_threshold > 0.0) ||
+        divb_amr.current_derefine_fraction < 0.0 ||
+        divb_amr.current_derefine_fraction > 1.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "current_threshold refinement requires "
+                << "<problem>/current_refine_threshold > 0 and "
+                << "0 <= <problem>/current_derefine_fraction <= 1."
+                << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
   divb_amr.x1min = pmy_mesh_->mesh_size.x1min;
   divb_amr.x1max = pmy_mesh_->mesh_size.x1max;
@@ -348,10 +369,71 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
   const bool multi_d = pmesh->multi_d;
   const bool three_d = pmesh->three_d;
   const RegionSize mesh_size = pmesh->mesh_size;
+  auto &indcs = pmesh->mb_indcs;
+  auto &bcc = pmbp->pmhd->bcc0;
   const auto cfg = divb_amr;
   const Real phase = pmesh->time + static_cast<Real>(pmesh->ncycle);
 
-  par_for("divb_amr_refinement", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
+  if (cfg.refinement_mode == 2) {
+    const int is = indcs.is;
+    const int js = indcs.js;
+    const int ks = indcs.ks;
+    const int nx1 = indcs.nx1;
+    const int nx2 = indcs.nx2;
+    const int nx3 = indcs.nx3;
+    const int nkji = nx3*nx2*nx1;
+    const int nji = nx2*nx1;
+    const Real derefine_threshold =
+        cfg.current_derefine_fraction*cfg.current_refine_threshold;
+    par_for_outer("divb_amr_current_refinement", DevExeSpace(), 0, 0, 0, nmb-1,
+    KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
+      Real jmax = 0.0;
+      Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+      [=](const int idx, Real &team_jmax) {
+        int k = idx/nji;
+        int j = (idx - k*nji)/nx1;
+        int i = (idx - k*nji - j*nx1) + is;
+        j += js;
+        k += ks;
+
+        const RegionSize block_size = mb_size.d_view(m);
+        const Real dbz_dx =
+            (bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*block_size.dx1);
+        const Real dby_dx =
+            (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*block_size.dx1);
+        Real dbz_dy = 0.0;
+        Real dbx_dy = 0.0;
+        if (multi_d) {
+          dbz_dy =
+              (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*block_size.dx2);
+          dbx_dy =
+              (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*block_size.dx2);
+        }
+        Real dby_dz = 0.0;
+        Real dbx_dz = 0.0;
+        if (three_d) {
+          dby_dz =
+              (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*block_size.dx3);
+          dbx_dz =
+              (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*block_size.dx3);
+        }
+
+        const Real j1 = dbz_dy - dby_dz;
+        const Real j2 = dbx_dz - dbz_dx;
+        const Real j3 = dby_dx - dbx_dy;
+        team_jmax = fmax(team_jmax, sqrt(SQR(j1) + SQR(j2) + SQR(j3)));
+      }, Kokkos::Max<Real>(jmax));
+
+      const int level = mblev.d_view(m);
+      int &flag = refine_flag.d_view(m + mbs);
+      if (jmax > cfg.current_refine_threshold && level < cfg.target_level) {
+        flag = 1;
+      } else if (jmax < derefine_threshold && level > root_level) {
+        flag = -1;
+      }
+    });
+  } else {
+    par_for("divb_amr_refinement", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
     bool refine_region = false;
     if (cfg.refinement_mode == 1) {
       refine_region = (pmesh->time >= cfg.uniform_refine_time);
@@ -365,7 +447,8 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
     } else if ((!refine_region) && (level > root_level)) {
       refine_flag.d_view(m + mbs) = -1;
     }
-  });
+    });
+  }
 
   refine_flag.template modify<DevExeSpace>();
   refine_flag.template sync<HostMemSpace>();
