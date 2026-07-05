@@ -1,6 +1,6 @@
 # Rich Track Merge
 
-`merge_rich_trk.py` converts AthenaK `trk_format=rich_v1` tracked-particle shards into one particle-major HDF5 file. It is intentionally specific to the rich format with magnetic-field, curvature, gradient, and current-magnitude fields; older or leaner track formats need a separate schema-aware merger. The raw `trk` files are written by the rank or node that owns each particle at each output time, so one particle's history can be spread across many files. The merger parses each frame, redistributes records by `output_tag` with MPI, sorts each owned trajectory by cycle, and assembles `/values[particle, time, field]` along with `/particles`, `/times`, and `/cycles`.
+`merge_rich_trk.py` converts AthenaK `trk_format=rich_v1` tracked-particle shards into one particle-major HDF5 file (`rich_v1` is the default format for any `trk` files written by the `feature/CR_tracers_followup_architecture` version of the code). It is intentionally specific to the rich format with magnetic-field, curvature, gradient, and current-magnitude fields; older or leaner track formats need a separate schema-aware merger. The raw `trk` files are written by the rank or node that owns each particle at each output time, so one particle's history can be spread across many files. The merger parses each frame, redistributes records by `output_tag` with MPI, sorts each owned trajectory by cycle, and assembles `/values[particle, time, field]` along with `/particles`, `/times`, and `/cycles`.
 
 Example workflow:
 
