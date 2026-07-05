@@ -287,13 +287,14 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     has_cgl_lf_split = (has_sts_cgl_lf || has_explicit_cgl_lf);
     record_cgl_pressure_work =
         pin->GetOrAddBoolean("mhd", "cgl_lf_record_pressure_work", false);
-    if (pmy_pack->pmesh->multilevel && pmy_pack->pmesh->pmr != nullptr &&
-        pmy_pack->pmesh->pmr->prolong_prims) {
+    if (record_cgl_pressure_work && pmy_pack->pmesh->multilevel &&
+        pmy_pack->pmesh->pmr != nullptr && pmy_pack->pmesh->pmr->prolong_prims) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "CGL Landau-fluid transport does not support "
-                << "<mesh_refinement>/prolong_primitives = true; use conserved "
-                << "prolongation for LF AMR runs." << std::endl;
+                << "CGL Landau-fluid pressure-work recording is not supported with "
+                << "AMR primitive prolongation. Set "
+                << "<mhd>/cgl_lf_record_pressure_work = false for LF/STS AMR runs."
+                << std::endl;
       std::exit(EXIT_FAILURE);
     }
     ppack->RegisterParabolicProcess({"mhd/cgl_heat_flux",

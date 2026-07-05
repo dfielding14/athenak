@@ -882,13 +882,17 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
     pbval_b->FillCoarseInBndryFC(b0, coarse_b0);
     if (pmy_pack->pmesh->pmr->prolong_prims) {
-      if (peos->eos_data.is_cgl) {
+      const bool cgl_magnetic_moment =
+          peos->eos_data.is_cgl &&
+          cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
+      if (peos->eos_data.is_cgl && !cgl_magnetic_moment) {
         RequireCGLAnisotropyRepresentation("CGL AMR primitive prolongation");
       }
-      pbval_u->ConsToPrimCoarseBndry(coarse_u0, coarse_b0, coarse_w0);
+      pbval_u->ConsToPrimCoarseBndry(coarse_u0, coarse_b0, coarse_w0,
+                                     cgl_magnetic_moment);
       pbval_u->ProlongateCC(w0, coarse_w0);
       pbval_b->ProlongateFC(b0, coarse_b0);
-      pbval_u->PrimToConsFineBndry(w0, b0, u0);
+      pbval_u->PrimToConsFineBndry(w0, b0, u0, cgl_magnetic_moment);
     } else {
       pbval_u->ProlongateCC(u0, coarse_u0);
       pbval_b->ProlongateFC(b0, coarse_b0);

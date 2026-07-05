@@ -149,6 +149,17 @@ void RefinementCriteria::SetRefinementData(MeshBlockPack* pmbp, bool count_deriv
           int n = static_cast<int>(IDN);
           it->rdata = Kokkos::subview(pmbp->pmhd->w0, ALL, n, ALL, ALL, ALL);
         }
+      // mhd current-density magnitude |curl B|
+      } else if (it->rvariable.compare("mhd_current") == 0) {
+        if (count_derived) {
+          nderived += 1;
+        } else if (load_derived) {
+          ComputeDerivedVariable(it->rvariable, iderived, pmbp, dvars);
+          iderived += 1;
+        } else {
+          it->rdata = Kokkos::subview(dvars, ALL, iderived, ALL, ALL, ALL);
+          iderived += 1;
+        }
       // radiation coordinate frame energy density R^0^0
       } else if (it->rvariable.compare("rad_coord_e") == 0) {
         if (count_derived) {

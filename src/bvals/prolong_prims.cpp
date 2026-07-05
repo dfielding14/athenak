@@ -301,7 +301,8 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
 //! Only works for MHD, the same function for hydro has different argument list.
 
 void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
-                                 const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim) {
+                                 const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim,
+                                 bool cgl_magnetic_moment) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -379,8 +380,14 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         bool dfloor_used=false, efloor_used=false, tfloor_used=false;
         if (is_cgl) {
           bool bfloor_used=false;
-          SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used,
-                           bfloor_used);
+          if (cgl_magnetic_moment) {
+            SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used,
+                                               efloor_used, tfloor_used,
+                                               bfloor_used);
+          } else {
+            SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used,
+                             bfloor_used);
+          }
           const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
           const Real bmag = sqrt(bsqr);
           if (eos.hardwall_lim && bmag > eos.bfloor) {
@@ -480,7 +487,8 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
 //! Note same function for Hydrodynamics has different argument list.
 
 void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
-                               const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &cons) {
+                               const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &cons,
+                               bool cgl_magnetic_moment) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -565,6 +573,12 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
                                       eos.firehose_threshold);
           }
           SingleP2C_CGLMHD(w, eos.bfloor, u);
+          if (cgl_magnetic_moment) {
+            const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+            const Real bmag = sqrt(bsqr);
+            const Real bmag_inv = (bmag > eos.bfloor) ? bmag : eos.bfloor;
+            u.mu = w.pp/bmag_inv;
+          }
         } else if (is_gr) {
           Real &x1min = size.d_view(m).x1min;
           Real &x1max = size.d_view(m).x1max;

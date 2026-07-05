@@ -212,8 +212,17 @@ Current restrictions are intentionally conservative:
 - CGL LF STS cannot be combined with another MHD STS process in the same run.
 - Explicit LF is a reference mode and cannot be combined with another active
   MHD parabolic process.
-- CGL LF with AMR requires conserved prolongation; primitive prolongation is
-  rejected.
+- CGL LF with AMR supports primitive fine/coarse boundary prolongation in both
+  the ordinary anisotropy representation and the temporary LF STS magnetic-
+  moment representation. Mesh creation still prolongates conserved data, so
+  strict LF AMR validation should include partial-refinement churn tests.
+- Current-threshold LF/STS AMR refine-up smokes have passed on GPUs with
+  strict admissibility, but forced moving-pattern refine/derefine churn is not
+  yet production-qualified; the remaining fix is true primitive/admissibility-
+  preserving interpolation in the new-MeshBlock creation path.
+- CGL LF pressure-work recording is disabled for AMR primitive prolongation.
+  Keep `<mhd>/cgl_lf_record_pressure_work = false` for LF/STS AMR runs until
+  the diagnostic flux-communication path is separately audited.
 
 ## Validation Hooks
 

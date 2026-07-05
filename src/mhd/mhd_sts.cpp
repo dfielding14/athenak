@@ -125,7 +125,7 @@ TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
     auto flx1 = uflx.x1f;
     auto flx2 = uflx.x2f;
     auto flx3 = uflx.x3f;
-    const int nmb = static_cast<int>(flx1.extent(0));
+    const int nmb = pmy_pack->nmb_thispack;
     const int n31 = static_cast<int>(flx1.extent(2));
     const int n21 = static_cast<int>(flx1.extent(3));
     const int n11 = static_cast<int>(flx1.extent(4));
@@ -260,7 +260,7 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_update_copies);
     if (lf_only_sts_cell_update) {
-      const int nmb = static_cast<int>(u0.extent(0));
+      const int nmb = pmy_pack->nmb_thispack;
       const int n3 = static_cast<int>(u0.extent(2));
       const int n2 = static_cast<int>(u0.extent(3));
       const int n1 = static_cast<int>(u0.extent(4));

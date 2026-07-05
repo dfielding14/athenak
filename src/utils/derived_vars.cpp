@@ -8,6 +8,7 @@
 //! Variables are only calculated over active zones (ghost zones excluded).
 
 #include <iostream>
+#include <cmath>
 #include <sstream>
 #include <string>   // std::string, to_string()
 
@@ -93,6 +94,42 @@ void ComputeDerivedVariable(std::string name, int index, MeshBlockPack* pmbp,
         }
         dvars(m,index,k,j,i) += (nmun1*nmun2*(i0_(m,n,k,j,i)/(n0*n_0))*domega.d_view(n));
       }
+    });
+  }
+  // Newtonian MHD current-density magnitude |curl B| from cell-centered fields.
+  if (name.compare("mhd_current") == 0) {
+    auto dv = dvars;
+    auto &bcc = pmbp->pmhd->bcc0;
+    par_for("derived_mhd_current", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      const Real dx1 = size.d_view(m).dx1;
+      const Real dbz_dx =
+          (bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*dx1);
+      const Real dby_dx =
+          (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*dx1);
+      Real dbz_dy = 0.0;
+      Real dbx_dy = 0.0;
+      if (multi_d) {
+        const Real dx2 = size.d_view(m).dx2;
+        dbz_dy =
+            (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*dx2);
+        dbx_dy =
+            (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*dx2);
+      }
+      Real dby_dz = 0.0;
+      Real dbx_dz = 0.0;
+      if (three_d) {
+        const Real dx3 = size.d_view(m).dx3;
+        dby_dz =
+            (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*dx3);
+        dbx_dz =
+            (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*dx3);
+      }
+
+      const Real j1 = dbz_dy - dby_dz;
+      const Real j2 = dbx_dz - dbz_dx;
+      const Real j3 = dby_dx - dbx_dy;
+      dv(m,index,k,j,i) = sqrt(fmax(0.0, SQR(j1) + SQR(j2) + SQR(j3)));
     });
   }
   return;

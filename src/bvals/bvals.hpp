@@ -177,9 +177,11 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
   void ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons, DvceArray5D<Real> &prim);
   void PrimToConsFineBndry(const DvceArray5D<Real> &prim, DvceArray5D<Real> &cons);
   void ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
-                             DvceArray5D<Real> &prim);
+                             DvceArray5D<Real> &prim,
+                             bool cgl_magnetic_moment=false);
   void PrimToConsFineBndry(const DvceArray5D<Real> &prim, const DvceFaceFld4D<Real> &b,
-                           DvceArray5D<Real> &cons);
+                           DvceArray5D<Real> &cons,
+                           bool cgl_magnetic_moment=false);
 };
 
 //----------------------------------------------------------------------------------------
