@@ -12,6 +12,7 @@
 #include <cmath>      // fabs(), sin(), cos()
 #include <cstdlib>    // exit()
 #include <iostream>   // endl
+#include <string>
 
 // Athena++ headers
 #include "athena.hpp"
@@ -42,6 +43,7 @@ struct DivBAMRConfig {
   Real field_amp = 0.25;
   Real field_k = 2.0;
   Real divb_bnorm = 1.0;
+  Real uniform_refine_time = 0.0;
   Real x1min = 0.0;
   Real x1max = 1.0;
   Real x2min = 0.0;
@@ -49,6 +51,7 @@ struct DivBAMRConfig {
   Real x3min = 0.0;
   Real x3max = 1.0;
   int target_level = 0;
+  int refinement_mode = 0;
 };
 
 DivBAMRConfig divb_amr;
@@ -187,6 +190,22 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   divb_amr.guide_b3 = pin->GetOrAddReal("problem", "guide_b3", -0.15);
   divb_amr.field_amp = pin->GetOrAddReal("problem", "field_amp", 0.25);
   divb_amr.field_k = pin->GetOrAddReal("problem", "field_k", 2.0);
+  divb_amr.uniform_refine_time =
+      pin->GetOrAddReal("problem", "uniform_refine_time", 0.0);
+  const std::string refinement_mode =
+      pin->GetOrAddString("problem", "refinement_mode", "moving_pattern");
+  if (refinement_mode == "moving_pattern") {
+    divb_amr.refinement_mode = 0;
+  } else if (refinement_mode == "uniform_after_time") {
+    divb_amr.refinement_mode = 1;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<problem>/refinement_mode = '" << refinement_mode
+              << "' is not implemented; valid choices are "
+              << "[moving_pattern,uniform_after_time]." << std::endl;
+    exit(EXIT_FAILURE);
+  }
   divb_amr.x1min = pmy_mesh_->mesh_size.x1min;
   divb_amr.x1max = pmy_mesh_->mesh_size.x1max;
   divb_amr.x2min = pmy_mesh_->mesh_size.x2min;
@@ -333,8 +352,13 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
   const Real phase = pmesh->time + static_cast<Real>(pmesh->ncycle);
 
   par_for("divb_amr_refinement", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
-    const bool refine_region = InRefinementPattern(
-        mb_size.d_view(m), mesh_size, phase, multi_d, three_d);
+    bool refine_region = false;
+    if (cfg.refinement_mode == 1) {
+      refine_region = (pmesh->time >= cfg.uniform_refine_time);
+    } else {
+      refine_region = InRefinementPattern(
+          mb_size.d_view(m), mesh_size, phase, multi_d, three_d);
+    }
     const int level = mblev.d_view(m);
     if (refine_region && (level < cfg.target_level)) {
       refine_flag.d_view(m + mbs) = 1;

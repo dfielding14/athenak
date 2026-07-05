@@ -882,6 +882,9 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
     pbval_b->FillCoarseInBndryFC(b0, coarse_b0);
     if (pmy_pack->pmesh->pmr->prolong_prims) {
+      if (peos->eos_data.is_cgl) {
+        RequireCGLAnisotropyRepresentation("CGL AMR primitive prolongation");
+      }
       pbval_u->ConsToPrimCoarseBndry(coarse_u0, coarse_b0, coarse_w0);
       pbval_u->ProlongateCC(w0, coarse_w0);
       pbval_b->ProlongateFC(b0, coarse_b0);

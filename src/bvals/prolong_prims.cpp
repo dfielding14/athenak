@@ -320,6 +320,7 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
   auto &eos = pmy_pack->pmhd->peos->eos_data;
   int &nmhd  = pmy_pack->pmhd->nmhd;
   int &nscal = pmy_pack->pmhd->nscalars;
+  const bool is_cgl = eos.is_cgl;
 
   // Outer loop over (# of MeshBlocks)*(# of buffers)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr), Kokkos::AUTO);
@@ -366,6 +367,9 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         u.my = cons(m,IM2,k,j,i);
         u.mz = cons(m,IM3,k,j,i);
         u.e  = cons(m,IEN,k,j,i);
+        if (is_cgl) {
+          u.mu = cons(m,IAN,k,j,i);
+        }
         // use simple linear average of face-centered fields
         u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
         u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
@@ -373,7 +377,17 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         HydPrim1D w;
 
         bool dfloor_used=false, efloor_used=false, tfloor_used=false;
-        if (is_gr) {
+        if (is_cgl) {
+          bool bfloor_used=false;
+          SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used,
+                           bfloor_used);
+          const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+          const Real bmag = sqrt(bsqr);
+          if (eos.hardwall_lim && bmag > eos.bfloor) {
+            cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
+                                      eos.firehose_threshold);
+          }
+        } else if (is_gr) {
           Real &x1min = size.d_view(m).x1min;
           Real &x1max = size.d_view(m).x1max;
           // Note indices refer to coarse arrays, so use cis, cnx1
@@ -440,6 +454,9 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         prim(m,IVY,k,j,i) = w.vy;
         prim(m,IVZ,k,j,i) = w.vz;
         prim(m,IEN,k,j,i) = w.e;
+        if (is_cgl) {
+          prim(m,IPP,k,j,i) = w.pp;
+        }
         // No need to store cell-centered fields since they will not be prolongated
         // convert scalars (if any)
         for (int n=nmhd; n<(nmhd+nscal); ++n) {
@@ -479,9 +496,11 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
   auto &spin = pmy_pack->pcoord->coord_data.bh_spin;
   bool &is_sr = pmy_pack->pcoord->is_special_relativistic;
   bool &is_gr = pmy_pack->pcoord->is_general_relativistic;
-  Real &gamma = pmy_pack->pmhd->peos->eos_data.gamma;
+  auto &eos = pmy_pack->pmhd->peos->eos_data;
+  Real &gamma = eos.gamma;
   int &nmhd  = pmy_pack->pmhd->nmhd;
   int &nscal = pmy_pack->pmhd->nscalars;
+  const bool is_cgl = eos.is_cgl;
 
   // Outer loop over (# of MeshBlocks)*(# of buffers)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr), Kokkos::AUTO);
@@ -526,13 +545,27 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
         w.vy = prim(m,IVY,k,j,i);
         w.vz = prim(m,IVZ,k,j,i);
         w.e  = prim(m,IEN,k,j,i);
+        if (is_cgl) {
+          w.pp = prim(m,IPP,k,j,i);
+        }
         // use simple linear average of face-centered fields
         w.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
         w.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
         w.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
         HydCons1D u;
 
-        if (is_gr) {
+        if (is_cgl) {
+          w.d = fmax(w.d, eos.dfloor);
+          w.e = fmax(w.e, eos.pfloor);
+          w.pp = fmax(w.pp, eos.pfloor);
+          const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+          const Real bmag = sqrt(bsqr);
+          if (eos.hardwall_lim && bmag > eos.bfloor) {
+            cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
+                                      eos.firehose_threshold);
+          }
+          SingleP2C_CGLMHD(w, eos.bfloor, u);
+        } else if (is_gr) {
           Real &x1min = size.d_view(m).x1min;
           Real &x1max = size.d_view(m).x1max;
           Real x1v = CellCenterX(i-indcs.is, indcs.nx1, x1min, x1max);
@@ -560,6 +593,9 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
         cons(m,IM2,k,j,i) = u.my;
         cons(m,IM3,k,j,i) = u.mz;
         cons(m,IEN,k,j,i) = u.e;
+        if (is_cgl) {
+          cons(m,IAN,k,j,i) = u.mu;
+        }
 
         // convert scalars (if any)
         for (int n=nmhd; n<(nmhd+nscal); ++n) {
