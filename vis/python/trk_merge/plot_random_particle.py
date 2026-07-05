@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import glob
 from pathlib import Path
 import re
+import sys
 
 import h5py
 import matplotlib
@@ -15,10 +15,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 
 
-DEFAULT_HISTORY_GLOB = (
-    "/lustre/orion/ast207/proj-shared/dfielding/AMR/data/"
-    "Pm1_4096_eta1e-6/*hst"
-)
+# Parse Athena history labels like "# [6]=B^2" into column indices.
 HEADER_RE = re.compile(r"\[(\d+)\]=([^\s]+)")
 
 
@@ -29,7 +26,7 @@ def args() -> argparse.Namespace:
     parser.add_argument("--row", type=int)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--b-rms", type=float)
-    parser.add_argument("--history-glob", default=DEFAULT_HISTORY_GLOB)
+    parser.add_argument("--history-file", type=Path)
     parser.add_argument("--min-mass", type=float)
     parser.add_argument("--mass-log-spacing", type=float)
     parser.add_argument("--smooth", type=int, default=256)
@@ -76,20 +73,35 @@ def history_columns(path: Path) -> dict[str, int]:
     return columns
 
 
-def brms_from_history(pattern: str, target_time: float) -> tuple[float, Path, float]:
-    paths = sorted(Path(item) for item in glob.glob(pattern))
-    paths.sort(key=lambda path: (".user." not in path.name, str(path)))
-    for path in paths:
-        columns = history_columns(path)
-        data = np.loadtxt(path, comments="#")
-        data = np.atleast_2d(data)
-        row = data[np.argmin(np.abs(data[:, 0] - target_time))]
-        if "B^2" in columns:
-            return float(np.sqrt(row[columns["B^2"]])), path, float(row[0])
-        if {"1-ME", "2-ME", "3-ME"} <= set(columns):
-            magnetic_energy = row[columns["1-ME"]] + row[columns["2-ME"]] + row[columns["3-ME"]]
-            return float(np.sqrt(2.0 * magnetic_energy)), path, float(row[0])
-    raise SystemExit(f"could not infer B_rms from history files matching {pattern!r}")
+def brms_from_history(path: Path, target_time: float) -> tuple[float, Path, float]:
+    columns = history_columns(path)
+    data = np.loadtxt(path, comments="#")
+    data = np.atleast_2d(data)
+    row = data[np.argmin(np.abs(data[:, 0] - target_time))]
+    if "B^2" in columns:
+        return float(np.sqrt(row[columns["B^2"]])), path, float(row[0])
+    if {"1-ME", "2-ME", "3-ME"} <= set(columns):
+        magnetic_energy = (
+            row[columns["1-ME"]] + row[columns["2-ME"]] + row[columns["3-ME"]]
+        )
+        return float(np.sqrt(2.0 * magnetic_energy)), path, float(row[0])
+    raise SystemExit(f"could not infer B_rms from {path}")
+
+
+def choose_brms(
+    opt: argparse.Namespace, target_time: float
+) -> tuple[float, Path | None, float | None]:
+    if opt.b_rms is not None:
+        return opt.b_rms, None, None
+    if opt.history_file is not None:
+        return brms_from_history(opt.history_file, target_time)
+    print(
+        "WARNING: no --history-file or --b-rms supplied; using B_rms=1.0. "
+        "The curvature normalization is not physically scaled.",
+        file=sys.stderr,
+        flush=True,
+    )
+    return 1.0, None, None
 
 
 def rolling_mean(y: np.ndarray, width: int) -> np.ndarray:
@@ -128,10 +140,7 @@ def main() -> None:
     v2 = np.sum(v * v, axis=1)
     vpar = np.sum(v * b, axis=1) / np.maximum(bmag, 1.0e-30)
     mu_m = np.maximum(v2 - vpar * vpar, 1.0e-30) / np.maximum(2.0 * bmag, 1.0e-30)
-    brms, history_path, history_time = (
-        (opt.b_rms, None, None) if opt.b_rms is not None
-        else brms_from_history(opt.history_glob, float(time_abs[0]))
-    )
+    brms, history_path, history_time = choose_brms(opt, float(time_abs[0]))
     mass = species_mass(int(particle["species"]), run_dir, opt)
     gyro_period_length = 2.0 * np.pi * mass / brms
     kappa_scaled = np.maximum(np.linalg.norm(k, axis=1) * gyro_period_length, 1.0e-30)
