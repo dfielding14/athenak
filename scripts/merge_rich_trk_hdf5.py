@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import shutil
 import sys
@@ -73,6 +74,7 @@ class FileEntry:
 class Header:
     time: float
     cycle: int
+    trk_format: str
     ntracked: int
     ntrack_per_species: int
     track_per_species: bool
@@ -84,6 +86,7 @@ class Header:
 
 @dataclass
 class RunMeta:
+    trk_format: str
     ntracked: int
     ntrack_per_species: int
     track_per_species: bool
@@ -200,10 +203,13 @@ def parse_header(header_lines: Sequence[str], path: Path) -> Header:
         return int(values[key])
 
     cycle = need_int("cycle")
+    if "trk_format" not in values:
+        raise MergeError(f"{path}: missing header key trk_format")
+    trk_format = values["trk_format"]
     ntracked = need_int("ntracked_prtcls")
-    ntrack_per_species = int(values.get("ntrack_per_species", ntracked))
-    track_per_species = bool(int(values.get("track_per_species", "1")))
-    record_count = int(values.get("record_count", str(ntracked)))
+    ntrack_per_species = need_int("ntrack_per_species")
+    track_per_species = bool(need_int("track_per_species"))
+    record_count = need_int("record_count")
     nfields = need_int("nfields")
     layout = values.get("layout", "unknown")
     fields = tuple(values.get("fields", "").split(","))
@@ -212,6 +218,7 @@ def parse_header(header_lines: Sequence[str], path: Path) -> Header:
     return Header(
         time=float(time_match.group(1)),
         cycle=cycle,
+        trk_format=trk_format,
         ntracked=ntracked,
         ntrack_per_species=ntrack_per_species,
         track_per_species=track_per_species,
@@ -223,6 +230,8 @@ def parse_header(header_lines: Sequence[str], path: Path) -> Header:
 
 
 def strict_header_check(header: Header, path: Path) -> None:
+    if header.trk_format != "rich_v1":
+        raise MergeError(f"{path}: expected trk_format=rich_v1, got {header.trk_format!r}")
     if header.nfields != N_SOURCE_FIELDS:
         raise MergeError(f"{path}: expected nfields=18, got {header.nfields}")
     if header.fields != RICH_FIELDS:
@@ -314,6 +323,7 @@ def first_header(path: Path) -> Header:
 
 def run_meta_from_header(header: Header) -> RunMeta:
     return RunMeta(
+        trk_format=header.trk_format,
         ntracked=header.ntracked,
         ntrack_per_species=header.ntrack_per_species,
         track_per_species=header.track_per_species,
@@ -324,8 +334,8 @@ def run_meta_from_header(header: Header) -> RunMeta:
 
 
 def meta_key(meta: RunMeta) -> Tuple[object, ...]:
-    return (meta.ntracked, meta.ntrack_per_species, meta.track_per_species,
-            meta.nfields, meta.fields)
+    return (meta.trk_format, meta.ntracked, meta.ntrack_per_species,
+            meta.track_per_species, meta.nfields, meta.fields)
 
 
 def owner_range(rank: int, size: int, ntracked: int) -> Tuple[int, int]:
@@ -488,6 +498,7 @@ def parse_and_redistribute(comm: MPI.Comm, files: Sequence[FileEntry], tmp_dir: 
     local_meta: Optional[RunMeta] = None
     parsed_files = 0
     parsed_frames = 0
+    empty_frames = 0
     parsed_records = 0
     received_records = 0
 
@@ -529,6 +540,8 @@ def parse_and_redistribute(comm: MPI.Comm, files: Sequence[FileEntry], tmp_dir: 
                 update_frame_meta(frame_meta, header, records)
                 parsed_frames += 1
                 parsed_records += int(header.record_count)
+                if header.record_count == 0:
+                    empty_frames += 1
                 if header.record_count:
                     temp = records_to_temp(header, records)
                     batch.append(temp)
@@ -543,6 +556,7 @@ def parse_and_redistribute(comm: MPI.Comm, files: Sequence[FileEntry], tmp_dir: 
     stats = {
         "parsed_files": parsed_files,
         "parsed_frames": parsed_frames,
+        "empty_frames": empty_frames,
         "parsed_records": parsed_records,
         "received_records": received_records,
     }
@@ -605,6 +619,9 @@ def process_owner_shard(rank: int, size: int, tmp_dir: Path, meta: RunMeta,
                 if np.any(group["cycle"][1:] <= group["cycle"][:-1]):
                     raise MergeError(
                         f"output_tag={output_tag} cycles are not strictly increasing")
+                if np.any(group["time"][1:] <= group["time"][:-1]):
+                    raise MergeError(
+                        f"output_tag={output_tag} times are not strictly increasing")
                 if require_complete and not np.array_equal(group["cycle"], cycles):
                     missing = np.setdiff1d(cycles, group["cycle"], assume_unique=True)
                     extra = np.setdiff1d(group["cycle"], cycles, assume_unique=True)
@@ -657,8 +674,9 @@ def assemble_hdf5(output: Path, tmp_dir: Path, run_dir: Path, entries: Sequence[
                   source_layout: str, meta: RunMeta, cycles: np.ndarray,
                   times: np.ndarray, mpi_size: int, args: argparse.Namespace) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
-    if output.exists():
-        output.unlink()
+    work_output = output.with_name(f".{output.name}.tmp.{os.getpid()}")
+    if work_output.exists():
+        work_output.unlink()
 
     all_index_parts = []
     for owner in range(mpi_size):
@@ -683,9 +701,9 @@ def assemble_hdf5(output: Path, tmp_dir: Path, run_dir: Path, entries: Sequence[
         value_chunks = (1, min(32768, int(cycles.size)), N_VALUE_FIELDS)
 
     source_bytes = sum(entry.size for entry in entries)
-    with h5py.File(output, "w") as handle:
+    with h5py.File(work_output, "w") as handle:
         handle.attrs["format"] = FORMAT_NAME
-        handle.attrs["source_trk_format"] = "rich_v1"
+        handle.attrs["source_trk_format"] = meta.trk_format
         handle.attrs["source_run_dir"] = str(run_dir)
         handle.attrs["source_commit"] = source_commit(run_dir)
         handle.attrs["source_layout"] = source_layout
@@ -736,21 +754,30 @@ def assemble_hdf5(output: Path, tmp_dir: Path, run_dir: Path, entries: Sequence[
                 row1 = int(index["row"][end - 1]) + 1
                 values[row0:row1, :, :] = mmap[begin:end, :, :]
             del mmap
+    os.replace(work_output, output)
 
 
 def validate_hdf5_readback(output: Path, tmp_dir: Path, meta: RunMeta,
                            cycles: np.ndarray, mpi_size: int) -> None:
     ntimes = int(cycles.size)
+    sample_tags = {0, max(0, meta.ntracked - 1)}
+    if meta.track_per_species:
+        for species in range(meta.nspecies):
+            sample_tags.add(species * meta.ntrack_per_species)
+            sample_tags.add(min(meta.ntracked - 1,
+                                (species + 1) * meta.ntrack_per_species - 1))
+    rng = np.random.default_rng(8675309)
+    if meta.ntracked > 0:
+        random_count = min(32, meta.ntracked)
+        sample_tags.update(int(tag) for tag in rng.choice(
+            meta.ntracked, size=random_count, replace=False))
+
     samples: List[Tuple[int, int]] = []
-    for owner in range(mpi_size):
-        index_path = tmp_dir / f"owner_{owner:06d}.index.npy"
-        values_path = tmp_dir / f"owner_{owner:06d}.values.f32"
-        index = np.load(index_path)
-        if index.size == 0:
-            continue
-        candidates = sorted({0, index.size // 2, index.size - 1})
-        for local_row in candidates:
-            samples.append((owner, local_row))
+    for output_tag in sorted(sample_tags):
+        owner = int((output_tag * mpi_size) // meta.ntracked)
+        owner = min(owner, mpi_size - 1)
+        start_tag, _end_tag = owner_range(owner, mpi_size, meta.ntracked)
+        samples.append((owner, output_tag - start_tag))
 
     with h5py.File(output, "r") as handle:
         if handle.attrs.get("format", "") != FORMAT_NAME:
@@ -791,6 +818,7 @@ def dry_run_summary(comm: MPI.Comm, run_dir: Path, layout: str,
             "source_nfiles": len(entries),
             "source_bytes": source_bytes,
             "first_file": entries[0].path,
+            "trk_format": meta.trk_format,
             "ntracked_prtcls": meta.ntracked,
             "ntrack_per_species": meta.ntrack_per_species,
             "track_per_species": int(meta.track_per_species),
@@ -931,9 +959,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             else:
                 print("validation-only path complete; HDF5 assembly skipped", flush=True)
 
-            if args.delete_temp and not args.dry_run:
+            if args.delete_temp and not args.dry_run and not args.validate_only:
                 shutil.rmtree(args.tmp_dir)
                 print(f"deleted temp directory: {args.tmp_dir}", flush=True)
+            elif args.delete_temp and args.validate_only:
+                print("--delete-temp ignored for --validate-only; no HDF5 read-back "
+                      "validation was performed", flush=True)
         comm.Barrier()
         return 0
     except Exception as exc:  # noqa: BLE001 - propagate through MPI_Abort.
