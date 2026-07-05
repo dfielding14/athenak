@@ -19,3 +19,20 @@ For large production runs, use `--layout rank`. `--tmp-dir` is scratch space for
 ```text
 x,y,z,vx,vy,vz,bx,by,bz,k1,k2,k3,db1,db2,db3,jmag
 ```
+
+## Plot One Particle
+
+`plot_random_particle.py` is a small example script for inspecting one trajectory from a merged `.tracks.h5` file. It picks `--row` if supplied, otherwise a reproducible random particle from `--seed`, then plots the magnetic moment proxy `mu_M = v_perp^2 / 2B` and the curvature scaled by `2 pi c / Omega`.
+
+```bash
+python3 vis/python/trk_merge/plot_random_particle.py \
+  /path/to/Pm1_4096_eta3e-6_static19_richtrk_ppc1e-4_t6_to_t106.tracks.h5 \
+  --row 1024 \
+  --tmax 5 \
+  --history-file /lustre/orion/ast207/proj-shared/dfielding/AMR/data/Pm1_4096_eta1e-6/Pm1_S4_eta1e-6.user.hst \
+  --out particle_track.png
+```
+
+The script needs `B_rms` to normalize `2 pi c / Omega`. Prefer `--history-file`, pointing at the matching MHD `.hst` file; the script reads the nearest-time `B^2` history column and uses `B_rms = sqrt(B^2)`. You can override this with `--b-rms`. If neither is supplied, the script loudly warns and uses `B_rms = 1`, which is only useful for a quick shape check.
+
+The merged HDF5 stores particle `species`, but not the actual particle mass. For these production runs the mass is inferred from the run directory recorded in the HDF5 metadata, specifically the nearby `*.runtime_overrides.txt` file with `particles/min_mass` and `particles/mass_log_spacing`. If that file is absent, pass those two values explicitly with `--min-mass` and `--mass-log-spacing`.
