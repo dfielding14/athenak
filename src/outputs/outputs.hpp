@@ -14,6 +14,7 @@
 #include "Kokkos_ScatterView.hpp"
 
 #include "athena.hpp"
+#include "file_sharding.hpp"
 #include "io_wrapper.hpp"
 
 #define NHISTORY_VARIABLES 100
@@ -144,6 +145,7 @@ struct OutputParameters {
   bool logscale=true, logscale2=true;
   bool mass_weighted=false;
   bool single_file_per_rank=false; // DBF: parameter for single file per rank
+  FileShardMode file_shard_mode = FileShardMode::shared;
 };
 
 //----------------------------------------------------------------------------------------
@@ -198,6 +200,10 @@ struct TrackedParticleData {
   int tag;
   Real x,y,z;
   Real vx,vy,vz;
+  Real Bx, By, Bz;
+  Real K1, K2, K3;
+  Real dB1, dB2, dB3;
+  Real jmag;
 };
 
 //----------------------------------------------------------------------------------------
@@ -630,7 +636,14 @@ class TrackedParticleOutput : public BaseTypeOutput {
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
  protected:
+  std::string TrackFilename() const;
+  std::string TrackHeader(Mesh *pm, int record_count) const;
+  std::vector<float> PackLocalTrackRecords(Mesh *pm) const;
+  void AppendTrackBuffer(Mesh *pm, const std::vector<float> &records);
   void FlushTrackBuffer(const std::string &fname);
+  void ValidateTrackedRecords();
+  void WriteSharedTrackFrame(Mesh *pm, const std::vector<float> &records);
+  void WriteNodeTrackFrame(Mesh *pm, const std::vector<float> &records);
   void LogTrackCacheProbe(Mesh *pm, bool have_probe_stats, int prev_local,
                           int hits, int stale_oob, int stale_mismatch,
                           double probe_ms, double scan_ms);
@@ -641,6 +654,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool header_written;
   bool track_per_species;
   bool track_cache_probe;
+  bool track_validate_global_tags;
   bool track_cache_probe_initialized;
   int last_output_cycle;
   int track_buffer_size;

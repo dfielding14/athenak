@@ -349,6 +349,12 @@ The spectrum histogram uses `pspec_single_file_per_rank = 1`, scalar histograms
 use `drh_single_file_per_rank = 1` and `dparh_single_file_per_rank = 1`, and
 particle moments use `pmom_single_file_per_rank = 1`.
 
+`trk` writes rich PK-compatible binary `float` records with explicit
+`tag,time,x,y,z,vx,vy,vz,bx,by,bz,k1,k2,k3,db1,db2,db3,jmag` fields.  Use
+`single_file_per_rank = true` for production high-cadence tracking, or
+`single_file_per_node = true` to shard by node.  Leaving both false writes one
+shared MPI-IO file, which is intended only for small tests.
+
 `pspec` uses stored particle velocity and sampled pusher fields.  The `p`
 quantity is the tracer speed proxy `sqrt(vx^2 + vy^2 + vz^2)`, `E` is the
 nonrelativistic proxy `0.5 p^2`, `logE` is `log10(E)`, `mu` is the pitch-angle
@@ -618,6 +624,14 @@ work:
 - [CR Tracer Accuracy Test Implementation Plan](cr_tracer_accuracy_test_plan.md)
   lays out the proposed analytic, AMR, MPI, and ensemble accuracy tests and the
   documentation figures they should produce.
+- [CR Pusher Accuracy Test Plan](cr_pusher_accuracy_test_plan.md)
+  lays out the GPU pusher checks for the per-particle gyro subcycling path.
+- [CR Pusher Accuracy Test Results](cr_pusher_accuracy_test_results.md)
+  records the completed clean-field pusher sweep and current recommended
+  production setting.
+- [CR Rich TRK Recovery Implementation Guide](cr_rich_trk_recovery_implementation_guide.md)
+  specifies the required PK-compatible rich tracking payload, rank/node/shared
+  file layouts, validation ladder, and PM-suite rerun plan.
 - [CR Tracer Feature-Branch Hardening Plan](cr_tracer_feature_branch_plan.md)
   covers changes that fit naturally in `feature/CR_tracers`.
 - [CR Tracer Follow-Up Architecture Plan](cr_tracer_followup_architecture_plan.md)

@@ -30,6 +30,8 @@
 #include <memory>
 #include <cstdio> // sscanf
 #include <fstream>  // Include this for std::ifstream
+#include <unordered_map>
+#include <vector>
 
 // Athena headers
 #include "athena.hpp"
@@ -52,6 +54,25 @@
 #if defined(KOKKOS_ENABLE_HIP)
 #include <hip/hip_runtime.h>
 #endif
+
+namespace {
+void FinalizeMpi() {
+#if MPI_PARALLEL_ENABLED
+  int initialized = 0;
+  MPI_Initialized(&initialized);
+  if (initialized == 0) {return;}
+  if (global_variable::node_comm != MPI_COMM_NULL) {
+    MPI_Comm_free(&global_variable::node_comm);
+    global_variable::node_comm = MPI_COMM_NULL;
+  }
+  int finalized = 0;
+  MPI_Finalized(&finalized);
+  if (finalized == 0) {
+    MPI_Finalize();
+  }
+#endif
+}
+} // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn int main(int argc, char *argv[])
@@ -87,7 +108,7 @@ int main(int argc, char *argv[]) {
               << "MPI_THREAD_MULTIPLE must be supported for hybrid parallelization. "
               << MPI_THREAD_MULTIPLE << " : " << mpiprv
               << std::endl;
-    MPI_Finalize();
+    FinalizeMpi();
     return(0);
   }
 #else  // no OpenMP
@@ -101,7 +122,7 @@ int main(int argc, char *argv[]) {
   if (MPI_SUCCESS != MPI_Comm_rank(MPI_COMM_WORLD, &(global_variable::my_rank))) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "MPI_Comm_rank failed." << std::endl;
-    MPI_Finalize();
+    FinalizeMpi();
     return(0);
   }
 
@@ -109,12 +130,47 @@ int main(int argc, char *argv[]) {
   if (MPI_SUCCESS != MPI_Comm_size(MPI_COMM_WORLD, &global_variable::nranks)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "MPI_Comm_size failed." << std::endl;
-    MPI_Finalize();
+    FinalizeMpi();
     return(0);
   }
+  if (MPI_SUCCESS != MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED,
+                                         global_variable::my_rank,
+                                         MPI_INFO_NULL,
+                                         &global_variable::node_comm)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "MPI_Comm_split_type(MPI_COMM_TYPE_SHARED) failed."
+              << std::endl;
+    FinalizeMpi();
+    return(0);
+  }
+  MPI_Comm_rank(global_variable::node_comm, &global_variable::rank_in_node);
+  MPI_Comm_size(global_variable::node_comm, &global_variable::ranks_per_node);
+
+  int node_leader_world_rank = global_variable::my_rank;
+  MPI_Bcast(&node_leader_world_rank, 1, MPI_INT, 0, global_variable::node_comm);
+  std::vector<int> node_leader_for_rank(global_variable::nranks, 0);
+  MPI_Allgather(&node_leader_world_rank, 1, MPI_INT,
+                node_leader_for_rank.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+  std::unordered_map<int, int> leader_to_node;
+  global_variable::rank_to_node.assign(global_variable::nranks, 0);
+  for (int r = 0; r < global_variable::nranks; ++r) {
+    auto result = leader_to_node.emplace(
+        node_leader_for_rank[r], static_cast<int>(leader_to_node.size()));
+    global_variable::rank_to_node[r] = result.first->second;
+  }
+  global_variable::node_id =
+      global_variable::rank_to_node[global_variable::my_rank];
+  global_variable::nnodes = static_cast<int>(leader_to_node.size());
 #else  // no MPI
   global_variable::my_rank = 0;
   global_variable::nranks  = 1;
+  global_variable::node_id = 0;
+  global_variable::rank_in_node = 0;
+  global_variable::ranks_per_node = 1;
+  global_variable::nnodes = 1;
+  global_variable::rank_to_node.assign(1, 0);
 #endif  // MPI_PARALLEL_ENABLED
 
   Kokkos::initialize(argc, argv);
@@ -142,7 +198,7 @@ int main(int argc, char *argv[]) {
                         << " must be followed by a valid argument" << std::endl;
               Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-              MPI_Finalize();
+              FinalizeMpi();
 #endif
               return(0);
             }
@@ -177,7 +233,7 @@ int main(int argc, char *argv[]) {
           if (global_variable::my_rank == 0) ShowConfig();
           Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-          MPI_Finalize();
+          FinalizeMpi();
 #endif
           return(0);
           break;
@@ -200,7 +256,7 @@ int main(int argc, char *argv[]) {
           }
           Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-          MPI_Finalize();
+          FinalizeMpi();
 #endif
           return(0);
           break;
@@ -216,7 +272,7 @@ int main(int argc, char *argv[]) {
               << "See " << argv[0] << " -h for options and usage." << std::endl;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
+    FinalizeMpi();
 #endif
     return(0);
   }
@@ -281,7 +337,7 @@ int main(int argc, char *argv[]) {
     delete pinput;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
+    FinalizeMpi();
 #endif
     return(0);
   }
@@ -306,7 +362,7 @@ int main(int argc, char *argv[]) {
     delete pinput;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
+    FinalizeMpi();
 #endif
     return(0);
   }
@@ -358,7 +414,7 @@ int main(int argc, char *argv[]) {
   delete pinput;
   Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-  MPI_Finalize();
+  FinalizeMpi();
 #endif
   return(0);
 }

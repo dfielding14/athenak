@@ -47,7 +47,14 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
         break;
       case FileMode::write:
         mpi_mode = MPI_MODE_WRONLY | MPI_MODE_CREATE;
-        MPI_File_delete(fname, MPI_INFO_NULL); // truncation
+        {
+          int comm_rank = 0;
+          MPI_Comm_rank(comm_, &comm_rank);
+          if (comm_rank == 0) {
+            MPI_File_delete(fname, MPI_INFO_NULL); // truncation; ignore missing file
+          }
+          MPI_Barrier(comm_);
+        }
         break;
       case FileMode::append:
         mpi_mode = MPI_MODE_WRONLY | MPI_MODE_APPEND;

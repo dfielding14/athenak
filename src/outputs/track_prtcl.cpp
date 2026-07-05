@@ -4,11 +4,11 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file track_prtcl.cpp
-//! \brief writes data for tracked particles in unformatted binary
+//! \brief writes rich tracked-particle records in unformatted binary
 
 #include <algorithm>
 #include <chrono>
-#include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
+#include <cstdio>      // fwrite(), fclose(), fopen(), snprintf()
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -19,10 +19,49 @@
 #include <vector>
 
 #include "athena.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
-#include "particles/particles.hpp"
+#include "mhd/mhd.hpp"
 #include "outputs.hpp"
+#include "particles/particles.hpp"
+
+namespace {
+constexpr int kTrackRecordFields = 18;
+
+KOKKOS_INLINE_FUNCTION
+Real SafeBmag(Real bx, Real by, Real bz) {
+  return Kokkos::sqrt(bx*bx + by*by + bz*bz);
+}
+
+KOKKOS_INLINE_FUNCTION
+void SafeBhat(Real bx, Real by, Real bz, Real &b1, Real &b2, Real &b3) {
+  Real bmag = SafeBmag(bx, by, bz);
+  if (bmag > 0.0) {
+    Real inv_bmag = 1.0/bmag;
+    b1 = bx*inv_bmag;
+    b2 = by*inv_bmag;
+    b3 = bz*inv_bmag;
+  } else {
+    b1 = 0.0;
+    b2 = 0.0;
+    b3 = 0.0;
+  }
+}
+
+template <typename T>
+bool WriteBytes(FILE *pfile, const T *data, std::size_t count,
+                const char *error_context) {
+  if (count == 0) {return true;}
+  if (std::fwrite(data, sizeof(T), count, pfile) != count) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << error_context << " not written correctly"
+              << std::endl;
+    return false;
+  }
+  return true;
+}
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
@@ -33,21 +72,42 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   track_cache_probe_initialized(false),
   last_output_cycle(-1),
   track_cycles_buffered(0) {
-  // create new directory for this output. Comments in binary.cpp constructor explain why
+  if (pm->pmb_pack == nullptr || pm->pmb_pack->ppart == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Tracked particle output requires particles"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pm->pmb_pack->pmhd == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Rich tracked particle output requires MHD fields"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   mkdir("trk",0775);
-  // allocate arrays
-  npout_eachrank.resize(global_variable::nranks);
+  if (out_params.file_shard_mode != FileShardMode::shared && IsShardWriter(
+          out_params.file_shard_mode)) {
+    std::string dirname("trk/");
+    dirname.append(ShardDirectoryName(out_params.file_shard_mode));
+    mkdir(dirname.c_str(),0775);
+  }
+
+  npout_eachrank.resize(global_variable::nranks, 0);
   ntrack = pin->GetInteger(op.block_name,"nparticles");
   track_per_species = pin->GetOrAddBoolean(op.block_name,"track_per_species",true);
   track_cache_probe = pin->GetOrAddBoolean(op.block_name,"cache_probe",false);
+  track_validate_global_tags = pin->GetOrAddBoolean(op.block_name,
+                                                    "validate_global_tags",false);
   track_buffer_size = pin->GetOrAddInteger(op.block_name,"buffer_size",0);
   track_ncycle_buffer = pin->GetOrAddInteger(op.block_name,"ncycle",1);
   track_ncycle_buffer = std::max(track_ncycle_buffer, 1);
   int nspecies = pm->pmb_pack->ppart->nspecies;
   ntrack_total = track_per_species ? ntrack*nspecies : ntrack;
-  // TODO(@user) improve guess below?
   ntrack_thisrank = ntrack_total;
-  if (track_buffer_size > 0 && global_variable::my_rank == 0) {
+  if (track_buffer_size > 0 && out_params.file_shard_mode != FileShardMode::shared &&
+      IsShardWriter(out_params.file_shard_mode)) {
     track_buffer.reserve(static_cast<std::size_t>(track_buffer_size));
   }
   if (track_cache_probe) {
@@ -58,17 +118,15 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
 }
 
 TrackedParticleOutput::~TrackedParticleOutput() {
-  if (global_variable::my_rank == 0) {
-    std::string fname("trk/");
-    fname.append(out_params.file_basename);
-    fname.append(".trk");
-    FlushTrackBuffer(fname);
+  if (out_params.file_shard_mode != FileShardMode::shared &&
+      IsShardWriter(out_params.file_shard_mode)) {
+    FlushTrackBuffer(TrackFilename());
   }
 }
 
 //----------------------------------------------------------------------------------------
 // TrackedParticleOutput::LoadOutputData()
-// Copies data for tracked particles on this rank to host outpart array
+// Copies rich data for tracked particles on this rank to host outpart array.
 
 void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   double probe_ms = 0.0;
@@ -78,7 +136,6 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   int probe_stale_mismatch = 0;
   bool have_probe_stats = false;
 
-  // Load data for tracked particles on this rank into new device array
   DualArray1D<TrackedParticleData> tracked_prtcl("d_trked",ntrack_thisrank);
   int npart = pm->nprtcl_thisrank;
   auto &pr = pm->pmb_pack->ppart->prtcl_rdata;
@@ -127,10 +184,24 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
     }
     Kokkos::deep_copy(cache_indices, -1);
   }
+
   auto scan_start = std::chrono::steady_clock::now();
   DvceArray1D<int> counter("tracked_particle_counter",1);
   Kokkos::deep_copy(counter, 0);
-  par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
+
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const int nmb = pm->pmb_pack->nmb_thispack;
+  const int gids = pm->pmb_pack->gids;
+  auto &mbsize = pm->pmb_pack->pmb->mb_size;
+  auto &bcc = pm->pmb_pack->pmhd->bcc0;
+
+  par_for("part_trackout",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int tag = pi(PTAG,p);
     int spec = pi(PSP,p);
     int track_tag = tag;
@@ -146,6 +217,8 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
         cache_indices(output_tag) = p;
       }
       int index = Kokkos::atomic_fetch_add(&counter(0),1);
+      if (index >= ntrack_total_local) {return;}
+
       tracked_prtcl.d_view(index).tag = output_tag;
       tracked_prtcl.d_view(index).x   = pr(IPX,p);
       tracked_prtcl.d_view(index).y   = pr(IPY,p);
@@ -153,6 +226,105 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
       tracked_prtcl.d_view(index).vx  = pr(IPVX,p);
       tracked_prtcl.d_view(index).vy  = pr(IPVY,p);
       tracked_prtcl.d_view(index).vz  = pr(IPVZ,p);
+      tracked_prtcl.d_view(index).Bx  = pr(IPBX,p);
+      tracked_prtcl.d_view(index).By  = pr(IPBY,p);
+      tracked_prtcl.d_view(index).Bz  = pr(IPBZ,p);
+
+      Real k1 = 0.0;
+      Real k2 = 0.0;
+      Real k3 = 0.0;
+      Real db1 = 0.0;
+      Real db2 = 0.0;
+      Real db3 = 0.0;
+      Real jmag = 0.0;
+
+      int m = pi(PGID,p) - gids;
+      if (m >= 0 && m < nmb) {
+        int i = static_cast<int>((pr(IPX,p) - mbsize.d_view(m).x1min)/
+                                 mbsize.d_view(m).dx1) + is;
+        int j = static_cast<int>((pr(IPY,p) - mbsize.d_view(m).x2min)/
+                                 mbsize.d_view(m).dx2) + js;
+        int k = static_cast<int>((pr(IPZ,p) - mbsize.d_view(m).x3min)/
+                                 mbsize.d_view(m).dx3) + ks;
+        i = (i < is) ? is : ((i > ie) ? ie : i);
+        j = (j < js) ? js : ((j > je) ? je : j);
+        k = (k < ks) ? ks : ((k > ke) ? ke : k);
+
+        Real b1c, b2c, b3c;
+        SafeBhat(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i),
+                 b1c, b2c, b3c);
+
+        Real b1_ip1, b2_ip1, b3_ip1;
+        Real b1_im1, b2_im1, b3_im1;
+        Real b1_jp1, b2_jp1, b3_jp1;
+        Real b1_jm1, b2_jm1, b3_jm1;
+        Real b1_kp1, b2_kp1, b3_kp1;
+        Real b1_km1, b2_km1, b3_km1;
+        SafeBhat(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
+                 bcc(m,IBZ,k,j,i+1), b1_ip1, b2_ip1, b3_ip1);
+        SafeBhat(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
+                 bcc(m,IBZ,k,j,i-1), b1_im1, b2_im1, b3_im1);
+        SafeBhat(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
+                 bcc(m,IBZ,k,j+1,i), b1_jp1, b2_jp1, b3_jp1);
+        SafeBhat(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
+                 bcc(m,IBZ,k,j-1,i), b1_jm1, b2_jm1, b3_jm1);
+        SafeBhat(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
+                 bcc(m,IBZ,k+1,j,i), b1_kp1, b2_kp1, b3_kp1);
+        SafeBhat(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
+                 bcc(m,IBZ,k-1,j,i), b1_km1, b2_km1, b3_km1);
+
+        Real dbhat1_dx1 = (b1_ip1 - b1_im1)/(2.0*mbsize.d_view(m).dx1);
+        Real dbhat2_dx1 = (b2_ip1 - b2_im1)/(2.0*mbsize.d_view(m).dx1);
+        Real dbhat3_dx1 = (b3_ip1 - b3_im1)/(2.0*mbsize.d_view(m).dx1);
+        Real dbhat1_dx2 = (b1_jp1 - b1_jm1)/(2.0*mbsize.d_view(m).dx2);
+        Real dbhat2_dx2 = (b2_jp1 - b2_jm1)/(2.0*mbsize.d_view(m).dx2);
+        Real dbhat3_dx2 = (b3_jp1 - b3_jm1)/(2.0*mbsize.d_view(m).dx2);
+        Real dbhat1_dx3 = (b1_kp1 - b1_km1)/(2.0*mbsize.d_view(m).dx3);
+        Real dbhat2_dx3 = (b2_kp1 - b2_km1)/(2.0*mbsize.d_view(m).dx3);
+        Real dbhat3_dx3 = (b3_kp1 - b3_km1)/(2.0*mbsize.d_view(m).dx3);
+
+        k1 = b1c*dbhat1_dx1 + b2c*dbhat1_dx2 + b3c*dbhat1_dx3;
+        k2 = b1c*dbhat2_dx1 + b2c*dbhat2_dx2 + b3c*dbhat2_dx3;
+        k3 = b1c*dbhat3_dx1 + b2c*dbhat3_dx2 + b3c*dbhat3_dx3;
+
+        Real bmag_ip1 = SafeBmag(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
+                                 bcc(m,IBZ,k,j,i+1));
+        Real bmag_im1 = SafeBmag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
+                                 bcc(m,IBZ,k,j,i-1));
+        Real bmag_jp1 = SafeBmag(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
+                                 bcc(m,IBZ,k,j+1,i));
+        Real bmag_jm1 = SafeBmag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
+                                 bcc(m,IBZ,k,j-1,i));
+        Real bmag_kp1 = SafeBmag(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
+                                 bcc(m,IBZ,k+1,j,i));
+        Real bmag_km1 = SafeBmag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
+                                 bcc(m,IBZ,k-1,j,i));
+        db1 = (bmag_ip1 - bmag_im1)/(2.0*mbsize.d_view(m).dx1);
+        db2 = (bmag_jp1 - bmag_jm1)/(2.0*mbsize.d_view(m).dx2);
+        db3 = (bmag_kp1 - bmag_km1)/(2.0*mbsize.d_view(m).dx3);
+
+        Real j1 = (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/
+                  (2.0*mbsize.d_view(m).dx2);
+        Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/
+                  (2.0*mbsize.d_view(m).dx1);
+        Real j3 = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/
+                  (2.0*mbsize.d_view(m).dx1);
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/
+              (2.0*mbsize.d_view(m).dx3);
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/
+              (2.0*mbsize.d_view(m).dx3);
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/
+              (2.0*mbsize.d_view(m).dx2);
+        jmag = Kokkos::sqrt(j1*j1 + j2*j2 + j3*j3);
+      }
+
+      tracked_prtcl.d_view(index).K1 = k1;
+      tracked_prtcl.d_view(index).K2 = k2;
+      tracked_prtcl.d_view(index).K3 = k3;
+      tracked_prtcl.d_view(index).dB1 = db1;
+      tracked_prtcl.d_view(index).dB2 = db2;
+      tracked_prtcl.d_view(index).dB3 = db3;
+      tracked_prtcl.d_view(index).jmag = jmag;
     }
   });
   auto counter_host = Kokkos::create_mirror_view_and_copy(HostMemSpace(), counter);
@@ -164,17 +336,13 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
               << ntrack_thisrank << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  // share number of tracked particles to be output across all ranks
+
+  std::fill(npout_eachrank.begin(), npout_eachrank.end(), 0);
   npout_eachrank[global_variable::my_rank] = npout;
-#if MPI_PARALLEL_ENABLED
-  MPI_Allgather(&npout, 1, MPI_INT, npout_eachrank.data(), 1, MPI_INT, MPI_COMM_WORLD);
-#endif
   tracked_prtcl.resize(npout);
-  // sync tracked particle device array with host
   tracked_prtcl.template modify<DevExeSpace>();
   tracked_prtcl.template sync<HostMemSpace>();
 
-  // copy host view into host outpart array
   Kokkos::realloc(outpart, npout);
   Kokkos::deep_copy(outpart, tracked_prtcl.h_view);
   if (cache_probe_local) {
@@ -188,109 +356,28 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
 
 //----------------------------------------------------------------------------------------
 //! \fn void TrackedParticleOutput:::WriteOutputFile(Mesh *pm)
-//! \brief Cycles over all tracked particles on this rank and writes ouput data
-//! With MPI, all particles are written to the same file.
+//! \brief Writes rich tracked-particle records.  Production mode writes one file per rank.
 
 void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (last_output_cycle == pm->ncycle) {
-    if (global_variable::my_rank == 0) {
-      std::string fname("trk/");
-      fname.append(out_params.file_basename);
-      fname.append(".trk");
-      FlushTrackBuffer(fname);
+    if (out_params.file_shard_mode != FileShardMode::shared &&
+        IsShardWriter(out_params.file_shard_mode)) {
+      FlushTrackBuffer(TrackFilename());
     }
     return;
   }
 
-  // create filename: "trk/file_basename".trk
-  std::string fname;
-  fname.assign("trk/");
-  fname.append(out_params.file_basename);
-  fname.append(".trk");
+  ValidateTrackedRecords();
+  std::vector<float> records = PackLocalTrackRecords(pm);
 
-  int nout_total = 0;
-  for (int count : npout_eachrank) {
-    nout_total += count;
-  }
-  if (nout_total != ntrack_total) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Tracked particle output found " << nout_total
-              << " global records, but expected " << ntrack_total << std::endl;
-    std::exit(EXIT_FAILURE);
+  if (out_params.file_shard_mode == FileShardMode::per_rank) {
+    AppendTrackBuffer(pm, records);
+  } else if (out_params.file_shard_mode == FileShardMode::per_node) {
+    WriteNodeTrackFrame(pm, records);
+  } else {
+    WriteSharedTrackFrame(pm, records);
   }
 
-#if MPI_PARALLEL_ENABLED
-  std::vector<int> recv_counts;
-  std::vector<int> displs;
-  std::vector<TrackedParticleData> gathered;
-  if (global_variable::my_rank == 0) {
-    recv_counts.resize(global_variable::nranks);
-    displs.resize(global_variable::nranks);
-    int offset = 0;
-    for (int n=0; n<global_variable::nranks; ++n) {
-      recv_counts[n] = npout_eachrank[n]*static_cast<int>(sizeof(TrackedParticleData));
-      displs[n] = offset;
-      offset += recv_counts[n];
-    }
-    gathered.resize(nout_total);
-  }
-  int send_count = npout*static_cast<int>(sizeof(TrackedParticleData));
-  void *send_buffer = (npout > 0) ? static_cast<void*>(outpart.data()) : nullptr;
-  void *recv_buffer = gathered.empty() ? nullptr : static_cast<void*>(gathered.data());
-  MPI_Gatherv(send_buffer, send_count, MPI_BYTE,
-              recv_buffer, recv_counts.data(), displs.data(), MPI_BYTE,
-              0, MPI_COMM_WORLD);
-#else
-  std::vector<TrackedParticleData> gathered(nout_total);
-  for (int p=0; p<npout; ++p) {
-    gathered[p] = outpart(p);
-  }
-#endif
-
-  if (global_variable::my_rank == 0) {
-    std::vector<float> data(6*ntrack_total,
-                            std::numeric_limits<float>::quiet_NaN());
-    std::vector<unsigned char> seen(ntrack_total, 0);
-    for (const auto &record : gathered) {
-      if (record.tag < 0 || record.tag >= ntrack_total) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Tracked particle tag " << record.tag
-                  << " is outside [0," << ntrack_total << ")" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      if (seen[record.tag] != 0) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Duplicate tracked particle tag "
-                  << record.tag << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      seen[record.tag] = 1;
-      int base = 6*record.tag;
-      data[base    ] = static_cast<float>(record.x);
-      data[base + 1] = static_cast<float>(record.y);
-      data[base + 2] = static_cast<float>(record.z);
-      data[base + 3] = static_cast<float>(record.vx);
-      data[base + 4] = static_cast<float>(record.vy);
-      data[base + 5] = static_cast<float>(record.vz);
-    }
-
-    std::stringstream msg;
-    msg << std::endl << "# AthenaK tracked particle data at time= " << pm->time
-        << "  nranks= " << global_variable::nranks
-        << "  cycle=" << pm->ncycle
-        << "  ntracked_prtcls=" << ntrack_total
-        << "  ntrack_per_species=" << ntrack
-        << "  track_per_species=" << (track_per_species ? 1 : 0) << std::endl;
-    std::string header = msg.str();
-    header.append(" \n");
-    track_buffer.insert(track_buffer.end(), header.begin(), header.end());
-    const char *payload = reinterpret_cast<const char*>(data.data());
-    track_buffer.insert(track_buffer.end(), payload,
-                        payload + data.size()*sizeof(float));
-    track_cycles_buffered += 1;
-  }
-
-  // increment counters
   float time_32 = static_cast<float>(pm->time);
   float next_32 = static_cast<float>(out_params.last_time + out_params.dt);
   bool final_forced_output = (out_params.dt > 0.0 && out_params.last_time >= 0.0 &&
@@ -301,15 +388,85 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     out_params.last_time += out_params.dt;
   }
   last_output_cycle = pm->ncycle;
-  if (global_variable::my_rank == 0 &&
+  if (out_params.file_shard_mode != FileShardMode::shared &&
+      IsShardWriter(out_params.file_shard_mode) &&
       (final_forced_output ||
        track_buffer_size <= 0 ||
        static_cast<int>(track_buffer.size()) >= track_buffer_size ||
        track_cycles_buffered >= track_ncycle_buffer)) {
-    FlushTrackBuffer(fname);
+    FlushTrackBuffer(TrackFilename());
   }
   pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
-  return;
+}
+
+std::string TrackedParticleOutput::TrackFilename() const {
+  std::string fname("trk/");
+  fname.append(ShardDirectoryName(out_params.file_shard_mode));
+  fname.append(out_params.file_basename);
+  fname.append(".trk");
+  return fname;
+}
+
+std::string TrackedParticleOutput::TrackHeader(Mesh *pm, int record_count) const {
+  std::stringstream msg;
+  msg << std::endl << "# AthenaK tracked particle data at time= " << pm->time
+      << "  nranks= " << global_variable::nranks
+      << "  nnodes= " << global_variable::nnodes
+      << "  cycle=" << pm->ncycle
+      << "  ntracked_prtcls=" << ntrack_total
+      << "  ntrack_per_species=" << ntrack
+      << "  track_per_species=" << (track_per_species ? 1 : 0)
+      << "  record_count=" << record_count
+      << std::endl;
+  msg << "# trk_format=rich_v1"
+      << "  nfields=" << kTrackRecordFields
+      << "  layout=" << ShardDistributionName(out_params.file_shard_mode)
+      << "  rank=" << global_variable::my_rank
+      << "  node=" << global_variable::node_id
+      << "  ranks_per_node=" << global_variable::ranks_per_node
+      << std::endl;
+  msg << "# fields=tag,time,x,y,z,vx,vy,vz,bx,by,bz,k1,k2,k3,db1,db2,db3,jmag"
+      << std::endl;
+  msg << " " << std::endl;
+  return msg.str();
+}
+
+std::vector<float> TrackedParticleOutput::PackLocalTrackRecords(Mesh *pm) const {
+  std::vector<float> records(static_cast<std::size_t>(npout)*kTrackRecordFields);
+  for (int p=0; p<npout; ++p) {
+    const int base = p*kTrackRecordFields;
+    records[base     ] = static_cast<float>(outpart(p).tag);
+    records[base +  1] = static_cast<float>(pm->time);
+    records[base +  2] = static_cast<float>(outpart(p).x);
+    records[base +  3] = static_cast<float>(outpart(p).y);
+    records[base +  4] = static_cast<float>(outpart(p).z);
+    records[base +  5] = static_cast<float>(outpart(p).vx);
+    records[base +  6] = static_cast<float>(outpart(p).vy);
+    records[base +  7] = static_cast<float>(outpart(p).vz);
+    records[base +  8] = static_cast<float>(outpart(p).Bx);
+    records[base +  9] = static_cast<float>(outpart(p).By);
+    records[base + 10] = static_cast<float>(outpart(p).Bz);
+    records[base + 11] = static_cast<float>(outpart(p).K1);
+    records[base + 12] = static_cast<float>(outpart(p).K2);
+    records[base + 13] = static_cast<float>(outpart(p).K3);
+    records[base + 14] = static_cast<float>(outpart(p).dB1);
+    records[base + 15] = static_cast<float>(outpart(p).dB2);
+    records[base + 16] = static_cast<float>(outpart(p).dB3);
+    records[base + 17] = static_cast<float>(outpart(p).jmag);
+  }
+  return records;
+}
+
+void TrackedParticleOutput::AppendTrackBuffer(Mesh *pm,
+                                              const std::vector<float> &records) {
+  if (!IsShardWriter(out_params.file_shard_mode)) {return;}
+  int record_count = static_cast<int>(records.size()/kTrackRecordFields);
+  std::string header = TrackHeader(pm, record_count);
+  track_buffer.insert(track_buffer.end(), header.begin(), header.end());
+  const char *payload = reinterpret_cast<const char*>(records.data());
+  track_buffer.insert(track_buffer.end(), payload,
+                      payload + records.size()*sizeof(float));
+  track_cycles_buffered += 1;
 }
 
 void TrackedParticleOutput::FlushTrackBuffer(const std::string &fname) {
@@ -320,16 +477,223 @@ void TrackedParticleOutput::FlushTrackBuffer(const std::string &fname) {
       << std::endl << "Output file '" << fname << "' could not be opened" <<std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if (std::fwrite(track_buffer.data(), 1, track_buffer.size(), pfile) !=
-      track_buffer.size()) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Tracked particle buffer not written correctly"
-              << std::endl;
+  if (!WriteBytes(pfile, track_buffer.data(), track_buffer.size(),
+                  "Tracked particle buffer")) {
+    std::fclose(pfile);
     std::exit(EXIT_FAILURE);
   }
   std::fclose(pfile);
   track_buffer.clear();
   track_cycles_buffered = 0;
+}
+
+void TrackedParticleOutput::ValidateTrackedRecords() {
+  int local_errors = 0;
+  std::vector<int> local_seen;
+  if (track_validate_global_tags) {
+    local_seen.assign(ntrack_total, 0);
+  }
+  std::vector<int> local_tags;
+  local_tags.reserve(npout);
+  for (int p=0; p<npout; ++p) {
+    int tag = outpart(p).tag;
+    if (tag < 0 || tag >= ntrack_total) {
+      local_errors += 1;
+      continue;
+    }
+    local_tags.push_back(tag);
+    if (track_validate_global_tags) {
+      local_seen[tag] += 1;
+    }
+  }
+  std::sort(local_tags.begin(), local_tags.end());
+  for (std::size_t n=1; n<local_tags.size(); ++n) {
+    if (local_tags[n] == local_tags[n-1]) {
+      local_errors += 1;
+    }
+  }
+
+  int nout_total = npout;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(&npout, &nout_total, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+
+  int fatal_error = 0;
+  if (nout_total != ntrack_total) {
+    if (global_variable::my_rank == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Tracked particle output found " << nout_total
+                << " global records, but expected " << ntrack_total << std::endl;
+    }
+    fatal_error = 1;
+  }
+
+  int global_local_errors = local_errors;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(&local_errors, &global_local_errors, 1, MPI_INT, MPI_SUM,
+                MPI_COMM_WORLD);
+#endif
+  if (global_local_errors != 0) {
+    if (global_variable::my_rank == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Tracked particle output found "
+                << global_local_errors
+                << " local duplicate or out-of-range tags" << std::endl;
+    }
+    fatal_error = 1;
+  }
+
+  if (track_validate_global_tags) {
+    std::vector<int> global_seen(ntrack_total, 0);
+#if MPI_PARALLEL_ENABLED
+    MPI_Reduce(local_seen.data(), global_seen.data(), ntrack_total, MPI_INT,
+               MPI_SUM, 0, MPI_COMM_WORLD);
+#else
+    global_seen = local_seen;
+#endif
+    if (global_variable::my_rank == 0) {
+      int first_bad_tag = -1;
+      int first_bad_count = 0;
+      for (int t=0; t<ntrack_total; ++t) {
+        if (global_seen[t] != 1) {
+          first_bad_tag = t;
+          first_bad_count = global_seen[t];
+          break;
+        }
+      }
+      if (first_bad_tag >= 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Tracked particle tag " << first_bad_tag
+                  << " appears " << first_bad_count
+                  << " times globally; expected exactly once" << std::endl;
+        fatal_error = 1;
+      }
+    }
+#if MPI_PARALLEL_ENABLED
+    MPI_Bcast(&fatal_error, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+  }
+
+  if (fatal_error != 0) {
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+void TrackedParticleOutput::WriteSharedTrackFrame(Mesh *pm,
+                                                  const std::vector<float> &records) {
+  const std::string fname = TrackFilename();
+  std::vector<int> counts = GatherShardCounts(npout, FileShardMode::shared);
+  int prefix_records = PrefixCountBeforeMe(counts, FileShardMode::shared);
+  int record_count = 0;
+  for (int count : counts) {
+    record_count += count;
+  }
+
+#if MPI_PARALLEL_ENABLED
+  if (global_variable::my_rank == 0) {
+    FILE *pfile;
+    if ((pfile = std::fopen(fname.c_str(),"ab")) == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Output file '" << fname
+                << "' could not be opened" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    std::string header = TrackHeader(pm, record_count);
+    if (!WriteBytes(pfile, header.data(), header.size(), "Tracked particle header")) {
+      std::fclose(pfile);
+      std::exit(EXIT_FAILURE);
+    }
+    std::fclose(pfile);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  MPI_File fh;
+  int errcode = MPI_File_open(MPI_COMM_WORLD, fname.c_str(), MPI_MODE_WRONLY,
+                              MPI_INFO_NULL, &fh);
+  if (errcode != MPI_SUCCESS) {
+    char msg[MPI_MAX_ERROR_STRING];
+    int resultlen;
+    MPI_Error_string(errcode, msg, &resultlen);
+    Kokkos::printf("%.*s\n", resultlen, msg);
+    MPI_Abort(MPI_COMM_WORLD, 1);
+  }
+  MPI_Offset payload_offset = 0;
+  errcode = MPI_File_get_size(fh, &payload_offset);
+  if (errcode != MPI_SUCCESS) {
+    char msg[MPI_MAX_ERROR_STRING];
+    int resultlen;
+    MPI_Error_string(errcode, msg, &resultlen);
+    Kokkos::printf("%.*s\n", resultlen, msg);
+    MPI_Abort(MPI_COMM_WORLD, 1);
+  }
+  MPI_Offset myoffset = payload_offset +
+      static_cast<MPI_Offset>(prefix_records)*kTrackRecordFields*sizeof(float);
+  MPI_Status status;
+  errcode = MPI_File_write_at_all(fh, myoffset,
+                                  const_cast<float*>(records.data()),
+                                  static_cast<int>(records.size()), MPI_FLOAT, &status);
+  if (errcode != MPI_SUCCESS) {
+    char msg[MPI_MAX_ERROR_STRING];
+    int resultlen;
+    MPI_Error_string(errcode, msg, &resultlen);
+    Kokkos::printf("%.*s\n", resultlen, msg);
+    MPI_Abort(MPI_COMM_WORLD, 1);
+  }
+  MPI_File_close(&fh);
+#else
+  FILE *pfile;
+  if ((pfile = std::fopen(fname.c_str(),"ab")) == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Output file '" << fname
+              << "' could not be opened" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  std::string header = TrackHeader(pm, record_count);
+  if (!WriteBytes(pfile, header.data(), header.size(), "Tracked particle header") ||
+      !WriteBytes(pfile, records.data(), records.size(), "Tracked particle data")) {
+    std::fclose(pfile);
+    std::exit(EXIT_FAILURE);
+  }
+  std::fclose(pfile);
+#endif
+}
+
+void TrackedParticleOutput::WriteNodeTrackFrame(Mesh *pm,
+                                                const std::vector<float> &records) {
+#if MPI_PARALLEL_ENABLED
+  std::vector<int> counts = GatherShardCounts(npout, FileShardMode::per_node);
+  std::vector<int> recv_counts(counts.size(), 0);
+  std::vector<int> displs(counts.size(), 0);
+  int record_count = 0;
+  int float_count = 0;
+  for (std::size_t n=0; n<counts.size(); ++n) {
+    recv_counts[n] = counts[n]*kTrackRecordFields;
+    displs[n] = float_count;
+    float_count += recv_counts[n];
+    record_count += counts[n];
+  }
+
+  std::vector<float> node_records;
+  if (IsShardWriter(FileShardMode::per_node)) {
+    node_records.resize(float_count);
+  }
+  MPI_Gatherv(const_cast<float*>(records.data()), static_cast<int>(records.size()),
+              MPI_FLOAT,
+              node_records.empty() ? nullptr : node_records.data(),
+              recv_counts.data(), displs.data(), MPI_FLOAT, 0,
+              global_variable::node_comm);
+  if (IsShardWriter(FileShardMode::per_node)) {
+    AppendTrackBuffer(pm, node_records);
+    if (record_count != static_cast<int>(node_records.size()/kTrackRecordFields)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Node tracked-particle gather produced an "
+                << "inconsistent record count" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#else
+  AppendTrackBuffer(pm, records);
+#endif
 }
 
 void TrackedParticleOutput::LogTrackCacheProbe(Mesh *pm, bool have_probe_stats,
