@@ -18,18 +18,29 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 Vec3 = Tuple[float, float, float]
 ParticleKey = Tuple[int, int]
+TrackRecord = Tuple[float, ...]
+RICH_FIELDS = ("tag", "time", "x", "y", "z", "vx", "vy", "vz",
+               "bx", "by", "bz", "k1", "k2", "k3", "db1", "db2", "db3",
+               "jmag")
+RICH_RECORD_FIELDS = RICH_FIELDS[2:]
+RICH_DIAGNOSTIC_SLICE = slice(6, 16)
+TRACK_HEADER_MARKER = b"# AthenaK tracked particle data at time="
 
 
 class TrackFrame:
     def __init__(self, time: float, cycle: int, ntracked: int,
                  ntrack_per_species: int, track_per_species: bool,
-                 particles: Dict[ParticleKey, Tuple[float, float, float, float, float, float]]):
+                 particles: Dict[ParticleKey, TrackRecord],
+                 nfields: int = 6,
+                 fields: Tuple[str, ...] = ()):
         self.time = time
         self.cycle = cycle
         self.ntracked = ntracked
         self.ntrack_per_species = ntrack_per_species
         self.track_per_species = track_per_species
         self.particles = particles
+        self.nfields = nfields
+        self.fields = fields
 
 
 def _norm(values: Sequence[float]) -> float:
@@ -185,14 +196,13 @@ def _phase_error(actual: Vec3, initial: Vec3, mass: float, bfield: Vec3,
 
 def read_trk_file(path: Path) -> List[TrackFrame]:
     blob = path.read_bytes()
-    marker = b"# AthenaK tracked particle data at time="
     time_pattern = re.compile(
         r"# AthenaK tracked particle data at time=\s*([0-9.eE+-]+)")
     key_pattern = re.compile(r"([A-Za-z_]+)=\s*([^ \t\n]+)")
     frames: List[TrackFrame] = []
     offset = 0
     while True:
-        start = blob.find(marker, offset)
+        start = blob.find(TRACK_HEADER_MARKER, offset)
         if start < 0:
             break
         cursor = start
@@ -218,11 +228,20 @@ def read_trk_file(path: Path) -> List[TrackFrame]:
         ntracked = int(header_values["ntracked_prtcls"])
         ntrack_per_species = int(header_values.get("ntrack_per_species", ntracked))
         track_per_species = bool(int(header_values.get("track_per_species", "1")))
-        nfields = int(header_values.get("nfields", "6"))
         record_count = int(header_values.get("record_count", str(ntracked)))
+        if "nfields" in header_values:
+            nfields = int(header_values["nfields"])
+        else:
+            nfields = _infer_track_nfields(path, blob, cursor, record_count)
 
         if nfields not in (6, 18):
             raise ValueError(f"{path} has unsupported trk nfields={nfields}")
+        fields = tuple(header_values.get(
+            "fields", ",".join(RICH_FIELDS if nfields == 18 else ())).split(","))
+        if fields == ("",):
+            fields = ()
+        if nfields == 18 and fields and fields != RICH_FIELDS:
+            raise ValueError(f"{path} has unsupported rich trk fields={fields}")
         payload_start = cursor
         payload_bytes = nfields * record_count * struct.calcsize("<f")
         payload_end = payload_start + payload_bytes
@@ -230,12 +249,21 @@ def read_trk_file(path: Path) -> List[TrackFrame]:
             raise ValueError(f"{path} has an incomplete track payload at t={time}")
         values = struct.unpack_from("<" + str(nfields * record_count) + "f", blob,
                                     payload_start)
-        particles: Dict[ParticleKey, Tuple[float, float, float, float, float, float]] = {}
+        particles: Dict[ParticleKey, TrackRecord] = {}
         for index in range(record_count):
             base = nfields * index
             if nfields == 18:
-                output_tag = int(round(values[base]))
-                record = tuple(float(value) for value in values[base + 2:base + 8])
+                record_tag = float(values[base])
+                record_time = float(values[base + 1])
+                if not math.isfinite(record_tag) or not math.isfinite(record_time):
+                    raise ValueError(f"{path} has non-finite rich tag/time at t={time}")
+                output_tag = int(round(record_tag))
+                record = tuple(float(value) for value in values[base + 2:base + 18])
+                if len(record) != len(RICH_RECORD_FIELDS):
+                    raise ValueError(f"{path} has malformed rich record at t={time}")
+                if not _finite_record(record[RICH_DIAGNOSTIC_SLICE]):
+                    raise ValueError(
+                        f"{path} has non-finite rich diagnostics at t={time}")
             else:
                 output_tag = index
                 record = tuple(float(value) for value in values[base:base + 6])
@@ -245,25 +273,64 @@ def read_trk_file(path: Path) -> List[TrackFrame]:
             else:
                 species = 0
                 tag = output_tag
-            particles[(species, tag)] = record  # type: ignore[assignment]
+            particles[(species, tag)] = record
         frames.append(TrackFrame(time, cycle, ntracked, ntrack_per_species,
-                                 track_per_species, particles))
+                                 track_per_species, particles, nfields, fields))
         offset = payload_end
     if not frames:
         raise ValueError(f"No tracked-particle frames found in {path}")
     return frames
 
 
-def _case_track_path(run_dir: Path) -> Path:
+def _track_payload_boundary_ok(blob: bytes, payload_end: int) -> bool:
+    cursor = payload_end
+    while cursor < len(blob) and blob[cursor:cursor + 1] in b" \t\r\n":
+        cursor += 1
+    return cursor == len(blob) or blob.startswith(TRACK_HEADER_MARKER, cursor)
+
+
+def _infer_track_nfields(path: Path, blob: bytes, payload_start: int,
+                         record_count: int) -> int:
+    for nfields in (18, 6):
+        payload_end = payload_start + nfields * record_count * struct.calcsize("<f")
+        if payload_end <= len(blob) and _track_payload_boundary_ok(blob, payload_end):
+            return nfields
+    raise ValueError(f"{path} is missing nfields and payload size is not 6- or 18-field")
+
+
+def _case_track_files(run_dir: Path) -> List[Path]:
     trk_dir = run_dir / "trk"
     files = sorted(trk_dir.glob("*.trk"))
     if not files:
         files = sorted(trk_dir.glob("*/*.trk"))
     if not files:
         raise FileNotFoundError(f"No .trk file under {trk_dir}")
-    if len(files) != 1:
-        raise ValueError(f"Expected one .trk file under {trk_dir}, found {len(files)}")
-    return files[0]
+    return files
+
+
+def _read_case_tracks(run_dir: Path) -> List[TrackFrame]:
+    merged: Dict[Tuple[float, int], TrackFrame] = {}
+    for path in _case_track_files(run_dir):
+        for frame in read_trk_file(path):
+            key = (round(frame.time, 12), frame.cycle)
+            if key not in merged:
+                merged[key] = TrackFrame(frame.time, frame.cycle, frame.ntracked,
+                                         frame.ntrack_per_species,
+                                         frame.track_per_species, {},
+                                         frame.nfields, frame.fields)
+            target = merged[key]
+            if (target.ntracked != frame.ntracked or
+                    target.ntrack_per_species != frame.ntrack_per_species or
+                    target.track_per_species != frame.track_per_species):
+                raise ValueError(f"Inconsistent trk metadata for frame t={frame.time}")
+            if target.nfields != frame.nfields:
+                raise ValueError(f"Inconsistent nfields for frame t={frame.time}")
+            duplicates = sorted(set(target.particles) & set(frame.particles))
+            if duplicates:
+                raise ValueError(
+                    f"Duplicate tracked particle keys at t={frame.time}: {duplicates[:3]}")
+            target.particles.update(frame.particles)
+    return [merged[key] for key in sorted(merged)]
 
 
 def _read_time_file(run_dir: Path) -> Optional[float]:
@@ -425,6 +492,10 @@ def _complete_track(frames: Sequence[TrackFrame], meta: Dict) -> bool:
         for record in frame.particles.values():
             if not all(math.isfinite(value) for value in record):
                 return False
+            if frame.nfields == 18 and len(record) != len(RICH_RECORD_FIELDS):
+                return False
+            if frame.nfields == 18 and not _finite_record(record[RICH_DIAGNOSTIC_SLICE]):
+                return False
     return True
 
 
@@ -468,7 +539,7 @@ def analyze_cases(cases: Sequence[Dict]) -> Tuple[List[Dict], Dict]:
     for meta in cases:
         run_dir = Path(meta["run_dir"])
         try:
-            frames_by_case[meta["case"]] = read_trk_file(_case_track_path(run_dir))
+            frames_by_case[meta["case"]] = _read_case_tracks(run_dir)
         except Exception as exc:  # noqa: BLE001
             hard_errors.append(f"{meta['case']}: {exc}")
             frames_by_case[meta["case"]] = []

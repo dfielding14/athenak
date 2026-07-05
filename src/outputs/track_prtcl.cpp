@@ -196,6 +196,11 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   const int je = indcs.je;
   const int ks = indcs.ks;
   const int ke = indcs.ke;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int ncells1 = indcs.nx1 + 2*indcs.ng;
+  const int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*indcs.ng) : 1;
+  const int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*indcs.ng) : 1;
   const int nmb = pm->pmb_pack->nmb_thispack;
   const int gids = pm->pmb_pack->gids;
   auto &mbsize = pm->pmb_pack->pmb->mb_size;
@@ -253,68 +258,113 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
         Real b1c, b2c, b3c;
         SafeBhat(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i),
                  b1c, b2c, b3c);
+        const bool have_x1_stencil = (i > 0 && i + 1 < ncells1 &&
+                                      mbsize.d_view(m).dx1 > 0.0);
+        const bool have_x2_stencil = (nx2 > 1 && j > 0 && j + 1 < ncells2 &&
+                                      mbsize.d_view(m).dx2 > 0.0);
+        const bool have_x3_stencil = (nx3 > 1 && k > 0 && k + 1 < ncells3 &&
+                                      mbsize.d_view(m).dx3 > 0.0);
 
-        Real b1_ip1, b2_ip1, b3_ip1;
-        Real b1_im1, b2_im1, b3_im1;
-        Real b1_jp1, b2_jp1, b3_jp1;
-        Real b1_jm1, b2_jm1, b3_jm1;
-        Real b1_kp1, b2_kp1, b3_kp1;
-        Real b1_km1, b2_km1, b3_km1;
-        SafeBhat(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
-                 bcc(m,IBZ,k,j,i+1), b1_ip1, b2_ip1, b3_ip1);
-        SafeBhat(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
-                 bcc(m,IBZ,k,j,i-1), b1_im1, b2_im1, b3_im1);
-        SafeBhat(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
-                 bcc(m,IBZ,k,j+1,i), b1_jp1, b2_jp1, b3_jp1);
-        SafeBhat(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
-                 bcc(m,IBZ,k,j-1,i), b1_jm1, b2_jm1, b3_jm1);
-        SafeBhat(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
-                 bcc(m,IBZ,k+1,j,i), b1_kp1, b2_kp1, b3_kp1);
-        SafeBhat(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
-                 bcc(m,IBZ,k-1,j,i), b1_km1, b2_km1, b3_km1);
+        Real b1_ip1 = b1c, b2_ip1 = b2c, b3_ip1 = b3c;
+        Real b1_im1 = b1c, b2_im1 = b2c, b3_im1 = b3c;
+        Real b1_jp1 = b1c, b2_jp1 = b2c, b3_jp1 = b3c;
+        Real b1_jm1 = b1c, b2_jm1 = b2c, b3_jm1 = b3c;
+        Real b1_kp1 = b1c, b2_kp1 = b2c, b3_kp1 = b3c;
+        Real b1_km1 = b1c, b2_km1 = b2c, b3_km1 = b3c;
+        if (have_x1_stencil) {
+          SafeBhat(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
+                   bcc(m,IBZ,k,j,i+1), b1_ip1, b2_ip1, b3_ip1);
+          SafeBhat(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
+                   bcc(m,IBZ,k,j,i-1), b1_im1, b2_im1, b3_im1);
+        }
+        if (have_x2_stencil) {
+          SafeBhat(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
+                   bcc(m,IBZ,k,j+1,i), b1_jp1, b2_jp1, b3_jp1);
+          SafeBhat(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
+                   bcc(m,IBZ,k,j-1,i), b1_jm1, b2_jm1, b3_jm1);
+        }
+        if (have_x3_stencil) {
+          SafeBhat(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
+                   bcc(m,IBZ,k+1,j,i), b1_kp1, b2_kp1, b3_kp1);
+          SafeBhat(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
+                   bcc(m,IBZ,k-1,j,i), b1_km1, b2_km1, b3_km1);
+        }
 
-        Real dbhat1_dx1 = (b1_ip1 - b1_im1)/(2.0*mbsize.d_view(m).dx1);
-        Real dbhat2_dx1 = (b2_ip1 - b2_im1)/(2.0*mbsize.d_view(m).dx1);
-        Real dbhat3_dx1 = (b3_ip1 - b3_im1)/(2.0*mbsize.d_view(m).dx1);
-        Real dbhat1_dx2 = (b1_jp1 - b1_jm1)/(2.0*mbsize.d_view(m).dx2);
-        Real dbhat2_dx2 = (b2_jp1 - b2_jm1)/(2.0*mbsize.d_view(m).dx2);
-        Real dbhat3_dx2 = (b3_jp1 - b3_jm1)/(2.0*mbsize.d_view(m).dx2);
-        Real dbhat1_dx3 = (b1_kp1 - b1_km1)/(2.0*mbsize.d_view(m).dx3);
-        Real dbhat2_dx3 = (b2_kp1 - b2_km1)/(2.0*mbsize.d_view(m).dx3);
-        Real dbhat3_dx3 = (b3_kp1 - b3_km1)/(2.0*mbsize.d_view(m).dx3);
+        Real dbhat1_dx1 = 0.0, dbhat2_dx1 = 0.0, dbhat3_dx1 = 0.0;
+        Real dbhat1_dx2 = 0.0, dbhat2_dx2 = 0.0, dbhat3_dx2 = 0.0;
+        Real dbhat1_dx3 = 0.0, dbhat2_dx3 = 0.0, dbhat3_dx3 = 0.0;
+        if (have_x1_stencil) {
+          dbhat1_dx1 = (b1_ip1 - b1_im1)/(2.0*mbsize.d_view(m).dx1);
+          dbhat2_dx1 = (b2_ip1 - b2_im1)/(2.0*mbsize.d_view(m).dx1);
+          dbhat3_dx1 = (b3_ip1 - b3_im1)/(2.0*mbsize.d_view(m).dx1);
+        }
+        if (have_x2_stencil) {
+          dbhat1_dx2 = (b1_jp1 - b1_jm1)/(2.0*mbsize.d_view(m).dx2);
+          dbhat2_dx2 = (b2_jp1 - b2_jm1)/(2.0*mbsize.d_view(m).dx2);
+          dbhat3_dx2 = (b3_jp1 - b3_jm1)/(2.0*mbsize.d_view(m).dx2);
+        }
+        if (have_x3_stencil) {
+          dbhat1_dx3 = (b1_kp1 - b1_km1)/(2.0*mbsize.d_view(m).dx3);
+          dbhat2_dx3 = (b2_kp1 - b2_km1)/(2.0*mbsize.d_view(m).dx3);
+          dbhat3_dx3 = (b3_kp1 - b3_km1)/(2.0*mbsize.d_view(m).dx3);
+        }
 
         k1 = b1c*dbhat1_dx1 + b2c*dbhat1_dx2 + b3c*dbhat1_dx3;
         k2 = b1c*dbhat2_dx1 + b2c*dbhat2_dx2 + b3c*dbhat2_dx3;
         k3 = b1c*dbhat3_dx1 + b2c*dbhat3_dx2 + b3c*dbhat3_dx3;
 
-        Real bmag_ip1 = SafeBmag(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
-                                 bcc(m,IBZ,k,j,i+1));
-        Real bmag_im1 = SafeBmag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
-                                 bcc(m,IBZ,k,j,i-1));
-        Real bmag_jp1 = SafeBmag(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
-                                 bcc(m,IBZ,k,j+1,i));
-        Real bmag_jm1 = SafeBmag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
-                                 bcc(m,IBZ,k,j-1,i));
-        Real bmag_kp1 = SafeBmag(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
-                                 bcc(m,IBZ,k+1,j,i));
-        Real bmag_km1 = SafeBmag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
-                                 bcc(m,IBZ,k-1,j,i));
-        db1 = (bmag_ip1 - bmag_im1)/(2.0*mbsize.d_view(m).dx1);
-        db2 = (bmag_jp1 - bmag_jm1)/(2.0*mbsize.d_view(m).dx2);
-        db3 = (bmag_kp1 - bmag_km1)/(2.0*mbsize.d_view(m).dx3);
+        Real bmag_c = SafeBmag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
+                               bcc(m,IBZ,k,j,i));
+        Real bmag_ip1 = bmag_c, bmag_im1 = bmag_c;
+        Real bmag_jp1 = bmag_c, bmag_jm1 = bmag_c;
+        Real bmag_kp1 = bmag_c, bmag_km1 = bmag_c;
+        if (have_x1_stencil) {
+          bmag_ip1 = SafeBmag(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
+                              bcc(m,IBZ,k,j,i+1));
+          bmag_im1 = SafeBmag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
+                              bcc(m,IBZ,k,j,i-1));
+          db1 = (bmag_ip1 - bmag_im1)/(2.0*mbsize.d_view(m).dx1);
+        }
+        if (have_x2_stencil) {
+          bmag_jp1 = SafeBmag(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
+                              bcc(m,IBZ,k,j+1,i));
+          bmag_jm1 = SafeBmag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
+                              bcc(m,IBZ,k,j-1,i));
+          db2 = (bmag_jp1 - bmag_jm1)/(2.0*mbsize.d_view(m).dx2);
+        }
+        if (have_x3_stencil) {
+          bmag_kp1 = SafeBmag(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
+                              bcc(m,IBZ,k+1,j,i));
+          bmag_km1 = SafeBmag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
+                              bcc(m,IBZ,k-1,j,i));
+          db3 = (bmag_kp1 - bmag_km1)/(2.0*mbsize.d_view(m).dx3);
+        }
 
-        Real j1 = (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/
-                  (2.0*mbsize.d_view(m).dx2);
-        Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/
-                  (2.0*mbsize.d_view(m).dx1);
-        Real j3 = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/
-                  (2.0*mbsize.d_view(m).dx1);
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/
-              (2.0*mbsize.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/
-              (2.0*mbsize.d_view(m).dx3);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/
-              (2.0*mbsize.d_view(m).dx2);
+        Real dBx_dx2 = 0.0, dBx_dx3 = 0.0;
+        Real dBy_dx1 = 0.0, dBy_dx3 = 0.0;
+        Real dBz_dx1 = 0.0, dBz_dx2 = 0.0;
+        if (have_x1_stencil) {
+          dBy_dx1 = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/
+                    (2.0*mbsize.d_view(m).dx1);
+          dBz_dx1 = (bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/
+                    (2.0*mbsize.d_view(m).dx1);
+        }
+        if (have_x2_stencil) {
+          dBx_dx2 = (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/
+                    (2.0*mbsize.d_view(m).dx2);
+          dBz_dx2 = (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/
+                    (2.0*mbsize.d_view(m).dx2);
+        }
+        if (have_x3_stencil) {
+          dBx_dx3 = (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/
+                    (2.0*mbsize.d_view(m).dx3);
+          dBy_dx3 = (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/
+                    (2.0*mbsize.d_view(m).dx3);
+        }
+
+        Real j1 = dBz_dx2 - dBy_dx3;
+        Real j2 = dBx_dx3 - dBz_dx1;
+        Real j3 = dBy_dx1 - dBx_dx2;
         jmag = Kokkos::sqrt(j1*j1 + j2*j2 + j3*j3);
       }
 

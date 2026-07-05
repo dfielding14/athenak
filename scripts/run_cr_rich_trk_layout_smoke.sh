@@ -34,6 +34,7 @@ fi
 export MPICH_GPU_SUPPORT_ENABLED=${MPICH_GPU_SUPPORT_ENABLED:-1}
 export MPICH_SMP_SINGLE_COPY_MODE=${MPICH_SMP_SINGLE_COPY_MODE:-NONE}
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
+export PYTHONDONTWRITEBYTECODE=1
 export HSA_ENABLE_DEBUG=0
 ulimit -c 0 || true
 
@@ -89,13 +90,14 @@ run_mode node false true
 
 python3 - "${RUN_ROOT}" "${REPO}" "${RANKS}" <<'PY'
 import sys
+import math
 from pathlib import Path
 
 run_root = Path(sys.argv[1])
 repo = Path(sys.argv[2])
 ranks = int(sys.argv[3])
 sys.path.insert(0, str(repo / "scripts"))
-from analyze_cr_pusher_accuracy import read_trk_file  # noqa: E402
+from analyze_cr_pusher_accuracy import RICH_DIAGNOSTIC_SLICE, read_trk_file  # noqa: E402
 
 expected_counts = {
     "shared": 1,
@@ -123,7 +125,14 @@ for mode, expected_file_count in expected_counts.items():
             raise SystemExit(f"{mode}: {path} is not a rich_v1 nfields=18 file")
         if b"fields=tag,time,x,y,z,vx,vy,vz,bx,by,bz,k1,k2,k3,db1,db2,db3,jmag" not in data:
             raise SystemExit(f"{mode}: {path} has the wrong fields header")
-        frames.extend(read_trk_file(path))
+        new_frames = read_trk_file(path)
+        frames.extend(new_frames)
+        for frame in new_frames:
+            if frame.nfields != 18:
+                raise SystemExit(f"{mode}: {path} parsed as nfields={frame.nfields}")
+            for record in frame.particles.values():
+                if not all(math.isfinite(value) for value in record[RICH_DIAGNOSTIC_SLICE]):
+                    raise SystemExit(f"{mode}: {path} has non-finite rich diagnostics")
 
     latest_time = max(frame.time for frame in frames)
     latest = [frame for frame in frames if abs(frame.time - latest_time) < 1.0e-7]
