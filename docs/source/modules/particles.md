@@ -355,6 +355,22 @@ particle moments use `pmom_single_file_per_rank = 1`.
 `single_file_per_node = true` to shard by node.  Leaving both false writes one
 shared MPI-IO file, which is intended only for small tests.
 
+Rank- or node-sharded `trk` files are ownership shards, not complete
+trajectories.  To build a particle-major HDF5 file for analysis, use:
+
+```bash
+srun -N <nodes> -n <ranks> python scripts/merge_rich_trk_hdf5.py \
+  --run-dir <run-dir> \
+  --layout rank \
+  --output <run-dir>/<basename>.tracks.h5 \
+  --tmp-dir <scratch>/merge_<basename> \
+  --require-complete
+```
+
+The merged HDF5 stores `/particles`, `/times`, `/cycles`, and
+`/values[nparticle, ntime, field]`, with the value field order recorded in
+`/values.attrs["fields"]`.
+
 `pspec` uses stored particle velocity and sampled pusher fields.  The `p`
 quantity is the tracer speed proxy `sqrt(vx^2 + vy^2 + vz^2)`, `E` is the
 nonrelativistic proxy `0.5 p^2`, `logE` is `log10(E)`, `mu` is the pitch-angle
