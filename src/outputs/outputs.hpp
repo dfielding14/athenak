@@ -636,11 +636,17 @@ class TrackedParticleOutput : public BaseTypeOutput {
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
  protected:
+  enum class TrackHeaderFormat {legacy, compact};
   std::string TrackFilename() const;
   std::string TrackHeader(Mesh *pm, int record_count) const;
+  std::vector<char> CompactTrackPrologue() const;
+  std::vector<char> CompactTrackFrame(Mesh *pm, const std::vector<float> &records) const;
   std::vector<float> PackLocalTrackRecords(Mesh *pm) const;
   void AppendTrackBuffer(Mesh *pm, const std::vector<float> &records);
   void FlushTrackBuffer(const std::string &fname);
+  bool TrackFileHasBytes(const std::string &fname) const;
+  bool TrackFileStartsWithCompactMagic(const std::string &fname) const;
+  void ValidateTrackFileAppendFormat(const std::string &fname) const;
   void ValidateTrackedRecords();
   void WriteSharedTrackFrame(Mesh *pm, const std::vector<float> &records);
   void WriteNodeTrackFrame(Mesh *pm, const std::vector<float> &records);
@@ -656,6 +662,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool track_cache_probe;
   bool track_validate_global_tags;
   bool track_cache_probe_initialized;
+  TrackHeaderFormat track_header_format;
   int last_output_cycle;
   int track_buffer_size;
   int track_ncycle_buffer;

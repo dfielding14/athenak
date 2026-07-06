@@ -93,6 +93,9 @@ class Particles {
   Real subcycle_cell_fraction;
   Real subcycle_meshblock_fraction;
   Real subcycle_gyro_fraction;
+  int field_line_species;
+  int field_line_direction;
+  Real field_line_speed;
   ParticlesConsistencyMode consistency_mode;
   ParticlesAMRRemapMode amr_remap_mode;
   ParticlesExchangeMode exchange_mode;

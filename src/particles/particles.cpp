@@ -46,6 +46,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     subcycle_cell_fraction(0.5),
     subcycle_meshblock_fraction(0.5),
     subcycle_gyro_fraction(0.25),
+    field_line_species(-1),
+    field_line_direction(1),
+    field_line_speed(1.0),
     consistency_mode(ParticlesConsistencyMode::none),
     amr_remap_mode(ParticlesAMRRemapMode::device_table),
     exchange_mode(ParticlesExchangeMode::alltoall_counts),
@@ -117,6 +120,27 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       pin->GetOrAddBoolean("particles","exchange_gyro_only_substeps",true);
   subcycle_per_particle_gyro =
       pin->GetOrAddBoolean("particles","subcycle_per_particle_gyro",false);
+  field_line_species = pin->GetOrAddInteger("particles","field_line_species",-1);
+  field_line_speed = pin->GetOrAddReal("particles","field_line_speed",1.0);
+  field_line_direction = pin->GetOrAddInteger("particles","field_line_direction",1);
+  if (field_line_species < -1 || field_line_species >= nspecies) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<particles>/field_line_species = "
+              << field_line_species << " is outside [0, nspecies)" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (field_line_speed < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<particles>/field_line_speed must be non-negative"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (field_line_direction != 1 && field_line_direction != -1) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<particles>/field_line_direction must be 1 or -1"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (subcycle_max_steps < 1) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "<particles>/subcycle_max_steps must be >= 1"
@@ -236,6 +260,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
                 <<std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (field_line_species >= 0 && pusher != ParticlesPusher::boris) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<particles>/field_line_species requires "
+                << "<particles>/pusher = boris" << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }

@@ -113,6 +113,9 @@ The shipped smoke and stress inputs are:
 | `subcycle_strict` | `true` | If true, fail when the requested constraints need more than `subcycle_max_steps`. |
 | `exchange_gyro_only_substeps` | `true` | If true, run ownership exchange between gyro-only substeps. |
 | `subcycle_per_particle_gyro` | `false` | If true, use per-particle gyro substeps when cell and MeshBlock constraints do not require intermediate exchange. |
+| `field_line_species` | `-1` | If non-negative, this species is initialized with `IPM = 0` and is advanced as a massless field-line tracer inside the Boris pusher. |
+| `field_line_speed` | `1.0` | Speed used by the massless field-line tracer: `dx/dt = +/- field_line_speed B/|B|`. |
+| `field_line_direction` | `1` | Sign of field-line tracing direction; must be `1` or `-1`. |
 
 ### `<problem>` for `part_random`
 
@@ -173,8 +176,15 @@ Real fields:
 The Boris pusher requires MHD because it samples magnetic fields.  The
 interpolation choice is made through `<particles>/interpolation`.  All Boris
 modes share the same pusher update; only the field-gather policy changes.  Use
-`lin` for backward comparisons, `trilinear` for a low-cost point-centered
-gather, and `tsc` for the smoother default.
+`field_line_species` to reserve one species as a massless field-line tracer in
+mixed CR runs.  That species uses the same interpolation as the CRs, stores
+`IPM = 0`, moves with a midpoint field-line step along `B/|B|`, and remains
+visible to `trk`, `df`, `dxh`, `pmom`, and `pspec` as an ordinary species index.
+It is valid only with `pusher = boris`.  On particle restart, repeat any
+non-default `field_line_speed` and `field_line_direction` in the restart input;
+the restart file stores particle state, not these runtime tracing controls.
+Choose `lin` for backward comparisons, `trilinear` for a low-cost
+point-centered gather, and `tsc` for the smoother default.
 
 The regression suite includes a smooth-field convergence check using
 `B_profile = linear_cross`.  In that test, `trilinear` recovers the analytic
@@ -353,7 +363,12 @@ particle moments use `pmom_single_file_per_rank = 1`.
 `tag,time,x,y,z,vx,vy,vz,bx,by,bz,k1,k2,k3,db1,db2,db3,jmag` fields.  Use
 `single_file_per_rank = true` for production high-cadence tracking, or
 `single_file_per_node = true` to shard by node.  Leaving both false writes one
-shared MPI-IO file, which is intended only for small tests.
+shared MPI-IO file, which is intended only for small tests.  The default
+`trk_header_format = legacy` writes self-describing ASCII frame headers
+compatible with older tools.  Use `trk_header_format = compact` for new
+large-scale runs; it writes one compact `rich_v2` prologue per shard file and
+small binary frame headers while preserving the same 18-field payload and merged
+HDF5 schema.
 
 Rank- or node-sharded `trk` files are ownership shards, not complete
 trajectories.  To build a particle-major HDF5 file for analysis, use:

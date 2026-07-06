@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>      // fwrite(), fclose(), fopen(), snprintf()
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -28,6 +30,37 @@
 
 namespace {
 constexpr int kTrackRecordFields = 18;
+constexpr char kCompactTrackFileMagic[8] = {'A','K','T','R','K','2','F','\0'};
+constexpr char kCompactTrackFrameMagic[8] = {'A','K','T','R','K','2','R','\0'};
+constexpr std::uint16_t kCompactTrackVersion = 2;
+constexpr std::uint16_t kCompactTrackPrologueBytes = 68;
+constexpr std::uint16_t kCompactTrackFrameBytes = 40;
+constexpr const char *kTrackFieldList =
+    "tag,time,x,y,z,vx,vy,vz,bx,by,bz,k1,k2,k3,db1,db2,db3,jmag";
+
+template <typename T>
+void AppendScalar(std::vector<char> &buffer, const T &value) {
+  const char *data = reinterpret_cast<const char*>(&value);
+  buffer.insert(buffer.end(), data, data + sizeof(T));
+}
+
+void AppendBytes(std::vector<char> &buffer, const void *data, std::size_t bytes) {
+  const char *ptr = reinterpret_cast<const char*>(data);
+  buffer.insert(buffer.end(), ptr, ptr + bytes);
+}
+
+std::uint32_t CompactLayoutCode(FileShardMode mode) {
+  switch (mode) {
+    case FileShardMode::shared:
+      return 0;
+    case FileShardMode::per_node:
+      return 1;
+    case FileShardMode::per_rank:
+      return 2;
+    default:
+      return 0;
+  }
+}
 
 KOKKOS_INLINE_FUNCTION
 Real SafeBmag(Real bx, Real by, Real bz) {
@@ -100,6 +133,19 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   track_cache_probe = pin->GetOrAddBoolean(op.block_name,"cache_probe",false);
   track_validate_global_tags = pin->GetOrAddBoolean(op.block_name,
                                                     "validate_global_tags",false);
+  std::string header_format = pin->GetOrAddString(op.block_name, "trk_header_format",
+                                                  "legacy");
+  if (header_format.compare("legacy") == 0 || header_format.compare("rich_v1") == 0) {
+    track_header_format = TrackHeaderFormat::legacy;
+  } else if (header_format.compare("compact") == 0 ||
+             header_format.compare("rich_v2") == 0) {
+    track_header_format = TrackHeaderFormat::compact;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Unknown trk_header_format = '" << header_format
+              << "' in output block '" << op.block_name << "'" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   track_buffer_size = pin->GetOrAddInteger(op.block_name,"buffer_size",0);
   track_ncycle_buffer = pin->GetOrAddInteger(op.block_name,"ncycle",1);
   track_ncycle_buffer = std::max(track_ncycle_buffer, 1);
@@ -475,10 +521,52 @@ std::string TrackedParticleOutput::TrackHeader(Mesh *pm, int record_count) const
       << "  node=" << global_variable::node_id
       << "  ranks_per_node=" << global_variable::ranks_per_node
       << std::endl;
-  msg << "# fields=tag,time,x,y,z,vx,vy,vz,bx,by,bz,k1,k2,k3,db1,db2,db3,jmag"
-      << std::endl;
+  msg << "# fields=" << kTrackFieldList << std::endl;
   msg << " " << std::endl;
   return msg.str();
+}
+
+std::vector<char> TrackedParticleOutput::CompactTrackPrologue() const {
+  std::vector<char> buffer;
+  const std::string fields(kTrackFieldList);
+  buffer.reserve(kCompactTrackPrologueBytes + fields.size());
+  AppendBytes(buffer, kCompactTrackFileMagic, sizeof(kCompactTrackFileMagic));
+  AppendScalar(buffer, kCompactTrackVersion);
+  AppendScalar(buffer, kCompactTrackPrologueBytes);
+  AppendScalar(buffer, static_cast<std::uint32_t>(kTrackRecordFields));
+  AppendScalar(buffer, static_cast<std::int64_t>(ntrack_total));
+  AppendScalar(buffer, static_cast<std::int64_t>(ntrack));
+  AppendScalar(buffer, static_cast<std::uint32_t>(track_per_species ? 1 : 0));
+  AppendScalar(buffer, CompactLayoutCode(out_params.file_shard_mode));
+  AppendScalar(buffer, static_cast<std::int32_t>(global_variable::my_rank));
+  AppendScalar(buffer, static_cast<std::int32_t>(global_variable::node_id));
+  AppendScalar(buffer, static_cast<std::int32_t>(global_variable::nranks));
+  AppendScalar(buffer, static_cast<std::int32_t>(global_variable::nnodes));
+  AppendScalar(buffer, static_cast<std::int32_t>(global_variable::ranks_per_node));
+  AppendScalar(buffer, static_cast<std::uint32_t>(fields.size()));
+  AppendScalar(buffer, static_cast<std::uint32_t>(0));
+  AppendBytes(buffer, fields.data(), fields.size());
+  return buffer;
+}
+
+std::vector<char> TrackedParticleOutput::CompactTrackFrame(
+    Mesh *pm, const std::vector<float> &records) const {
+  std::vector<char> buffer;
+  const std::uint32_t record_count =
+      static_cast<std::uint32_t>(records.size()/kTrackRecordFields);
+  const std::uint32_t payload_bytes =
+      static_cast<std::uint32_t>(records.size()*sizeof(float));
+  buffer.reserve(kCompactTrackFrameBytes + payload_bytes);
+  AppendBytes(buffer, kCompactTrackFrameMagic, sizeof(kCompactTrackFrameMagic));
+  AppendScalar(buffer, kCompactTrackVersion);
+  AppendScalar(buffer, kCompactTrackFrameBytes);
+  AppendScalar(buffer, record_count);
+  AppendScalar(buffer, static_cast<std::int64_t>(pm->ncycle));
+  AppendScalar(buffer, static_cast<double>(pm->time));
+  AppendScalar(buffer, payload_bytes);
+  AppendScalar(buffer, static_cast<std::uint32_t>(0));
+  AppendBytes(buffer, records.data(), records.size()*sizeof(float));
+  return buffer;
 }
 
 std::vector<float> TrackedParticleOutput::PackLocalTrackRecords(Mesh *pm) const {
@@ -510,22 +598,68 @@ std::vector<float> TrackedParticleOutput::PackLocalTrackRecords(Mesh *pm) const 
 void TrackedParticleOutput::AppendTrackBuffer(Mesh *pm,
                                               const std::vector<float> &records) {
   if (!IsShardWriter(out_params.file_shard_mode)) {return;}
-  int record_count = static_cast<int>(records.size()/kTrackRecordFields);
-  std::string header = TrackHeader(pm, record_count);
-  track_buffer.insert(track_buffer.end(), header.begin(), header.end());
-  const char *payload = reinterpret_cast<const char*>(records.data());
-  track_buffer.insert(track_buffer.end(), payload,
-                      payload + records.size()*sizeof(float));
+  if (track_header_format == TrackHeaderFormat::compact) {
+    std::vector<char> frame = CompactTrackFrame(pm, records);
+    track_buffer.insert(track_buffer.end(), frame.begin(), frame.end());
+  } else {
+    int record_count = static_cast<int>(records.size()/kTrackRecordFields);
+    std::string header = TrackHeader(pm, record_count);
+    track_buffer.insert(track_buffer.end(), header.begin(), header.end());
+    const char *payload = reinterpret_cast<const char*>(records.data());
+    track_buffer.insert(track_buffer.end(), payload,
+                        payload + records.size()*sizeof(float));
+  }
   track_cycles_buffered += 1;
+}
+
+bool TrackedParticleOutput::TrackFileHasBytes(const std::string &fname) const {
+  struct stat st;
+  if (stat(fname.c_str(), &st) != 0) {return false;}
+  return st.st_size > 0;
+}
+
+bool TrackedParticleOutput::TrackFileStartsWithCompactMagic(const std::string &fname) const {
+  char magic[sizeof(kCompactTrackFileMagic)] = {};
+  FILE *pfile = std::fopen(fname.c_str(), "rb");
+  if (pfile == nullptr) {return false;}
+  std::size_t nread = std::fread(magic, 1, sizeof(magic), pfile);
+  std::fclose(pfile);
+  return nread == sizeof(magic) &&
+         std::memcmp(magic, kCompactTrackFileMagic, sizeof(magic)) == 0;
+}
+
+void TrackedParticleOutput::ValidateTrackFileAppendFormat(
+    const std::string &fname) const {
+  if (!TrackFileHasBytes(fname)) {return;}
+  bool existing_compact = TrackFileStartsWithCompactMagic(fname);
+  bool requested_compact = (track_header_format == TrackHeaderFormat::compact);
+  if (existing_compact == requested_compact) {return;}
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "Tracked particle output file '" << fname
+            << "' already exists with a different trk_header_format. "
+            << "Use a new basename or run directory before changing "
+            << "trk_header_format." << std::endl;
+  std::exit(EXIT_FAILURE);
 }
 
 void TrackedParticleOutput::FlushTrackBuffer(const std::string &fname) {
   if (track_buffer.empty()) {return;}
+  ValidateTrackFileAppendFormat(fname);
+  bool write_compact_prologue =
+      (track_header_format == TrackHeaderFormat::compact && !TrackFileHasBytes(fname));
   FILE *pfile;
   if ((pfile = std::fopen(fname.c_str(),"ab")) == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
       << std::endl << "Output file '" << fname << "' could not be opened" <<std::endl;
     std::exit(EXIT_FAILURE);
+  }
+  if (write_compact_prologue) {
+    std::vector<char> prologue = CompactTrackPrologue();
+    if (!WriteBytes(pfile, prologue.data(), prologue.size(),
+                    "Compact tracked particle prologue")) {
+      std::fclose(pfile);
+      std::exit(EXIT_FAILURE);
+    }
   }
   if (!WriteBytes(pfile, track_buffer.data(), track_buffer.size(),
                   "Tracked particle buffer")) {
@@ -641,6 +775,9 @@ void TrackedParticleOutput::WriteSharedTrackFrame(Mesh *pm,
 
 #if MPI_PARALLEL_ENABLED
   if (global_variable::my_rank == 0) {
+    ValidateTrackFileAppendFormat(fname);
+    bool write_compact_prologue =
+        (track_header_format == TrackHeaderFormat::compact && !TrackFileHasBytes(fname));
     FILE *pfile;
     if ((pfile = std::fopen(fname.c_str(),"ab")) == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -648,10 +785,33 @@ void TrackedParticleOutput::WriteSharedTrackFrame(Mesh *pm,
                 << "' could not be opened" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    std::string header = TrackHeader(pm, record_count);
-    if (!WriteBytes(pfile, header.data(), header.size(), "Tracked particle header")) {
-      std::fclose(pfile);
-      std::exit(EXIT_FAILURE);
+    if (write_compact_prologue) {
+      std::vector<char> prologue = CompactTrackPrologue();
+      if (!WriteBytes(pfile, prologue.data(), prologue.size(),
+                      "Compact tracked particle prologue")) {
+        std::fclose(pfile);
+        std::exit(EXIT_FAILURE);
+      }
+    }
+    if (track_header_format == TrackHeaderFormat::compact) {
+      std::vector<float> empty_records;
+      std::vector<char> frame = CompactTrackFrame(pm, empty_records);
+      std::uint32_t global_records = static_cast<std::uint32_t>(record_count);
+      std::uint32_t payload_bytes = static_cast<std::uint32_t>(
+          record_count*kTrackRecordFields*sizeof(float));
+      std::memcpy(frame.data() + 12, &global_records, sizeof(global_records));
+      std::memcpy(frame.data() + 32, &payload_bytes, sizeof(payload_bytes));
+      if (!WriteBytes(pfile, frame.data(), kCompactTrackFrameBytes,
+                      "Compact tracked particle frame header")) {
+        std::fclose(pfile);
+        std::exit(EXIT_FAILURE);
+      }
+    } else {
+      std::string header = TrackHeader(pm, record_count);
+      if (!WriteBytes(pfile, header.data(), header.size(), "Tracked particle header")) {
+        std::fclose(pfile);
+        std::exit(EXIT_FAILURE);
+      }
     }
     std::fclose(pfile);
   }
@@ -691,6 +851,9 @@ void TrackedParticleOutput::WriteSharedTrackFrame(Mesh *pm,
   }
   MPI_File_close(&fh);
 #else
+  ValidateTrackFileAppendFormat(fname);
+  bool write_compact_prologue =
+      (track_header_format == TrackHeaderFormat::compact && !TrackFileHasBytes(fname));
   FILE *pfile;
   if ((pfile = std::fopen(fname.c_str(),"ab")) == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -698,11 +861,27 @@ void TrackedParticleOutput::WriteSharedTrackFrame(Mesh *pm,
               << "' could not be opened" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  std::string header = TrackHeader(pm, record_count);
-  if (!WriteBytes(pfile, header.data(), header.size(), "Tracked particle header") ||
-      !WriteBytes(pfile, records.data(), records.size(), "Tracked particle data")) {
-    std::fclose(pfile);
-    std::exit(EXIT_FAILURE);
+  if (write_compact_prologue) {
+    std::vector<char> prologue = CompactTrackPrologue();
+    if (!WriteBytes(pfile, prologue.data(), prologue.size(),
+                    "Compact tracked particle prologue")) {
+      std::fclose(pfile);
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  if (track_header_format == TrackHeaderFormat::compact) {
+    std::vector<char> frame = CompactTrackFrame(pm, records);
+    if (!WriteBytes(pfile, frame.data(), frame.size(), "Tracked particle data")) {
+      std::fclose(pfile);
+      std::exit(EXIT_FAILURE);
+    }
+  } else {
+    std::string header = TrackHeader(pm, record_count);
+    if (!WriteBytes(pfile, header.data(), header.size(), "Tracked particle header") ||
+        !WriteBytes(pfile, records.data(), records.size(), "Tracked particle data")) {
+      std::fclose(pfile);
+      std::exit(EXIT_FAILURE);
+    }
   }
   std::fclose(pfile);
 #endif

@@ -15,6 +15,7 @@ import math
 import os
 import re
 import shutil
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,11 @@ import numpy as np
 
 
 TRACK_HEADER_MARKER = b"# AthenaK tracked particle data at time="
+COMPACT_FILE_MAGIC = b"AKTRK2F\0"
+COMPACT_FRAME_MAGIC = b"AKTRK2R\0"
+COMPACT_VERSION = 2
+COMPACT_PROLOGUE = struct.Struct("<8sHHIqqIIiiiiiII")
+COMPACT_FRAME = struct.Struct("<8sHHIqdII")
 RICH_FIELDS = (
     "tag", "time", "x", "y", "z", "vx", "vy", "vz",
     "bx", "by", "bz", "k1", "k2", "k3", "db1", "db2", "db3", "jmag",
@@ -230,8 +236,9 @@ def parse_header(header_lines: Sequence[str], path: Path) -> Header:
 
 
 def strict_header_check(header: Header, path: Path) -> None:
-    if header.trk_format != "rich_v1":
-        raise MergeError(f"{path}: expected trk_format=rich_v1, got {header.trk_format!r}")
+    if header.trk_format not in ("rich_v1", "rich_v2"):
+        raise MergeError(
+            f"{path}: expected trk_format=rich_v1/rich_v2, got {header.trk_format!r}")
     if header.nfields != N_SOURCE_FIELDS:
         raise MergeError(f"{path}: expected nfields=18, got {header.nfields}")
     if header.fields != RICH_FIELDS:
@@ -249,8 +256,36 @@ def strict_header_check(header: Header, path: Path) -> None:
             f"ntrack_per_species={header.ntrack_per_species}")
 
 
-def iter_trk_frames(path: Path, check_finite: bool = True) -> Iterator[Tuple[Header, np.ndarray]]:
-    blob = path.read_bytes()
+def check_records(path: Path, header: Header, records: np.ndarray, check_finite: bool) -> None:
+    if not header.record_count:
+        return
+    tags = records[:, 0]
+    times = records[:, 1]
+    rounded_tags = np.rint(tags)
+    if not np.all(np.isfinite(tags)) or not np.all(np.isfinite(times)):
+        raise MergeError(f"{path}: non-finite tag/time at cycle={header.cycle}")
+    if not np.allclose(tags, rounded_tags, rtol=0.0, atol=1.0e-4):
+        raise MergeError(f"{path}: non-integral output_tag at cycle={header.cycle}")
+    if np.any(rounded_tags < 0) or np.any(rounded_tags >= header.ntracked):
+        raise MergeError(
+            f"{path}: output_tag outside [0,{header.ntracked}) at cycle={header.cycle}")
+    time_min = float(np.min(times))
+    time_max = float(np.max(times))
+    if abs(time_max - time_min) > 1.0e-6 * max(1.0, abs(time_min)):
+        raise MergeError(
+            f"{path}: payload time is not constant at cycle={header.cycle}: "
+            f"{time_min:g}-{time_max:g}")
+    if abs(time_min - header.time) > 1.0e-4 * max(1.0, abs(header.time)):
+        raise MergeError(
+            f"{path}: payload time {time_min:g} differs too much from "
+            f"header time {header.time:g} at cycle={header.cycle}")
+    if check_finite and not np.all(np.isfinite(records[:, 2:])):
+        raise MergeError(f"{path}: non-finite rich values at cycle={header.cycle}")
+
+
+def iter_legacy_trk_frames(
+    path: Path, blob: bytes, check_finite: bool = True
+) -> Iterator[Tuple[Header, np.ndarray]]:
     offset = 0
     found = False
     while True:
@@ -282,37 +317,85 @@ def iter_trk_frames(path: Path, check_finite: bool = True) -> Iterator[Tuple[Hea
         records = np.frombuffer(blob, dtype="<f4", count=payload_values,
                                 offset=cursor).reshape(header.record_count,
                                                        N_SOURCE_FIELDS)
-        if header.record_count:
-            tags = records[:, 0]
-            times = records[:, 1]
-            rounded_tags = np.rint(tags)
-            if not np.all(np.isfinite(tags)) or not np.all(np.isfinite(times)):
-                raise MergeError(
-                    f"{path}: non-finite tag/time at cycle={header.cycle}")
-            if not np.allclose(tags, rounded_tags, rtol=0.0, atol=1.0e-4):
-                raise MergeError(
-                    f"{path}: non-integral output_tag at cycle={header.cycle}")
-            if np.any(rounded_tags < 0) or np.any(rounded_tags >= header.ntracked):
-                raise MergeError(
-                    f"{path}: output_tag outside [0,{header.ntracked}) "
-                    f"at cycle={header.cycle}")
-            time_min = float(np.min(times))
-            time_max = float(np.max(times))
-            if abs(time_max - time_min) > 1.0e-6 * max(1.0, abs(time_min)):
-                raise MergeError(
-                    f"{path}: payload time is not constant at cycle={header.cycle}: "
-                    f"{time_min:g}-{time_max:g}")
-            if abs(time_min - header.time) > 1.0e-4 * max(1.0, abs(header.time)):
-                raise MergeError(
-                    f"{path}: payload time {time_min:g} differs too much from "
-                    f"header time {header.time:g} at cycle={header.cycle}")
-            if check_finite and not np.all(np.isfinite(records[:, 2:])):
-                raise MergeError(
-                    f"{path}: non-finite rich values at cycle={header.cycle}")
+        check_records(path, header, records, check_finite)
         yield header, records
         offset = payload_end
     if not found:
         raise MergeError(f"{path}: no tracked-particle frames found")
+
+
+def compact_layout_name(code: int) -> str:
+    return {0: "shared", 1: "node", 2: "rank"}.get(code, "unknown")
+
+
+def iter_compact_trk_frames(
+    path: Path, blob: bytes, check_finite: bool = True
+) -> Iterator[Tuple[Header, np.ndarray]]:
+    if len(blob) < COMPACT_PROLOGUE.size:
+        raise MergeError(f"{path}: truncated compact trk prologue")
+    unpacked = COMPACT_PROLOGUE.unpack_from(blob, 0)
+    (magic, version, prologue_bytes, nfields, ntracked, ntrack_per_species,
+     track_per_species, layout_code, _rank, _node, _nranks, _nnodes,
+     _ranks_per_node, fields_bytes, _reserved) = unpacked
+    if magic != COMPACT_FILE_MAGIC or version != COMPACT_VERSION:
+        raise MergeError(f"{path}: invalid compact trk prologue")
+    if prologue_bytes != COMPACT_PROLOGUE.size:
+        raise MergeError(f"{path}: unsupported compact prologue size {prologue_bytes}")
+    fields_start = prologue_bytes
+    fields_end = fields_start + fields_bytes
+    if fields_end > len(blob):
+        raise MergeError(f"{path}: truncated compact trk field list")
+    fields = tuple(blob[fields_start:fields_end].decode("ascii").split(","))
+    layout = compact_layout_name(layout_code)
+    cursor = fields_end
+    found = False
+    while cursor < len(blob):
+        if cursor + COMPACT_FRAME.size > len(blob):
+            raise MergeError(f"{path}: truncated compact frame header")
+        (frame_magic, frame_version, frame_bytes, record_count, cycle, time,
+         payload_bytes, _frame_reserved) = COMPACT_FRAME.unpack_from(blob, cursor)
+        if frame_magic != COMPACT_FRAME_MAGIC or frame_version != COMPACT_VERSION:
+            raise MergeError(f"{path}: invalid compact frame magic/version at {cursor}")
+        if frame_bytes != COMPACT_FRAME.size:
+            raise MergeError(f"{path}: unsupported compact frame size {frame_bytes}")
+        cursor += frame_bytes
+        expected_payload = record_count * N_SOURCE_FIELDS * np.dtype("<f4").itemsize
+        if payload_bytes != expected_payload:
+            raise MergeError(
+                f"{path}: compact payload_bytes={payload_bytes}, expected "
+                f"{expected_payload} at cycle={cycle}")
+        payload_end = cursor + payload_bytes
+        if payload_end > len(blob):
+            raise MergeError(f"{path}: truncated compact payload at cycle={cycle}")
+        header = Header(
+            time=float(time),
+            cycle=int(cycle),
+            trk_format="rich_v2",
+            ntracked=int(ntracked),
+            ntrack_per_species=int(ntrack_per_species),
+            track_per_species=bool(track_per_species),
+            record_count=int(record_count),
+            nfields=int(nfields),
+            fields=fields,
+            layout=layout,
+        )
+        strict_header_check(header, path)
+        records = np.frombuffer(blob, dtype="<f4", count=record_count*N_SOURCE_FIELDS,
+                                offset=cursor).reshape(record_count, N_SOURCE_FIELDS)
+        check_records(path, header, records, check_finite)
+        yield header, records
+        found = True
+        cursor = payload_end
+    if not found:
+        raise MergeError(f"{path}: no compact tracked-particle frames found")
+
+
+def iter_trk_frames(path: Path, check_finite: bool = True) -> Iterator[Tuple[Header, np.ndarray]]:
+    blob = path.read_bytes()
+    if blob.startswith(COMPACT_FILE_MAGIC):
+        yield from iter_compact_trk_frames(path, blob, check_finite)
+    else:
+        yield from iter_legacy_trk_frames(path, blob, check_finite)
 
 
 def first_header(path: Path) -> Header:

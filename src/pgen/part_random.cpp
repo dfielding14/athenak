@@ -300,6 +300,16 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     Real B0x = pin->GetOrAddReal("problem","B0x",0.0);
     Real B0y = pin->GetOrAddReal("problem","B0y",0.0);
     Real B0z = pin->GetOrAddReal("problem","B0z",1.0);
+    int field_line_species = pin->GetOrAddInteger("particles","field_line_species",-1);
+    Real field_line_speed = pin->GetOrAddReal("particles","field_line_speed",1.0);
+    int field_line_direction = pin->GetOrAddInteger("particles","field_line_direction",1);
+    Real b0mag = std::sqrt(B0x*B0x + B0y*B0y + B0z*B0z);
+    Real field_line_vx = (b0mag > 0.0) ?
+        field_line_direction*field_line_speed*B0x/b0mag : 0.0;
+    Real field_line_vy = (b0mag > 0.0) ?
+        field_line_direction*field_line_speed*B0y/b0mag : 0.0;
+    Real field_line_vz = (b0mag > 0.0) ?
+        field_line_direction*field_line_speed*B0z/b0mag : 0.0;
     std::string particle_position =
         pin->GetOrAddString("problem","particle_position","random");
     std::string particle_velocity =
@@ -397,7 +407,11 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
                         (block_size.x3max - block_size.x3min);
         }
 
-        if (uniform_velocity) {
+        if (spec == field_line_species) {
+          pr_h(IPVX,p) = field_line_vx;
+          pr_h(IPVY,p) = field_line_vy;
+          pr_h(IPVZ,p) = field_line_vz;
+        } else if (uniform_velocity) {
           pr_h(IPVX,p) = v0x;
           pr_h(IPVY,p) = v0y;
           pr_h(IPVZ,p) = v0z;
@@ -409,7 +423,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
           pr_h(IPVY,p) = v0*sintheta*std::sin(phi);
           pr_h(IPVZ,p) = v0*mu;
         }
-        pr_h(IPM,p) = min_mass*std::pow(mass_log_spacing, spec);
+        pr_h(IPM,p) = (spec == field_line_species) ?
+                      0.0 : min_mass*std::pow(mass_log_spacing, spec);
         pr_h(IPBX,p) = B0x;
         pr_h(IPBY,p) = B0y;
         pr_h(IPBZ,p) = B0z;
@@ -481,7 +496,11 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
           pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
         }
 
-        if (uniform_velocity) {
+        if (spec == field_line_species) {
+          pr(IPVX,p) = field_line_vx;
+          pr(IPVY,p) = field_line_vy;
+          pr(IPVZ,p) = field_line_vz;
+        } else if (uniform_velocity) {
           pr(IPVX,p) = v0x;
           pr(IPVY,p) = v0y;
           pr(IPVZ,p) = v0z;
@@ -501,7 +520,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
           pr(IPVY,p) = 2.0*(rand_gen.frand() - 0.5);
           pr(IPVZ,p) = 2.0*(rand_gen.frand() - 0.5);
         }
-        pr(IPM,p) = min_mass*pow(mass_log_spacing, spec);
+        pr(IPM,p) = (spec == field_line_species) ?
+                    0.0 : min_mass*pow(mass_log_spacing, spec);
         pr(IPBX,p) = B0x;
         pr(IPBY,p) = B0y;
         pr(IPBZ,p) = B0z;
@@ -544,6 +564,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   Real Bamp = pin->GetOrAddReal("problem","Bamp",0.05);
   Real Bwave = pin->GetOrAddReal("problem","Bwave_number",1.0);
   Real cfl_part = pin->GetOrAddReal("particles","cfl_part",0.05);
+  int field_line_species = pin->GetOrAddInteger("particles","field_line_species",-1);
+  Real field_line_speed = pin->GetOrAddReal("particles","field_line_speed",1.0);
 
   if (pmbp->pmhd != nullptr && !(restart && seed_on_restart)) {
     EOS_Data &eos = pmbp->pmhd->peos->eos_data;
@@ -621,6 +643,10 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   Real &dtnew_ = pmbp->ppart->dtnew;
   dtnew_ = std::min(mbsize.h_view(0).dx1, mbsize.h_view(0).dx2);
   dtnew_ = std::min(dtnew_, mbsize.h_view(0).dx3);
+  if (field_line_species >= 0 && field_line_speed > 1.0) {
+    Real dxmin = dtnew_;
+    dtnew_ = std::min(dtnew_, cfl_part*dxmin/field_line_speed);
+  }
   Real min_mass = pin->GetOrAddReal("particles","min_mass",1.0);
   Real bmag = std::sqrt(B0x*B0x + B0y*B0y + B0z*B0z);
   if (bmag > 0.0) {

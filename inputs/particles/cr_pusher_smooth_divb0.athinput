@@ -69,6 +69,9 @@ subcycle_gyro_fraction = 0.01
 subcycle_strict = true
 exchange_gyro_only_substeps = false
 subcycle_per_particle_gyro = true
+field_line_species = -1
+field_line_speed = 1.0
+field_line_direction = 1
 
 <problem>
 pgen_name = part_random
@@ -97,6 +100,7 @@ ncycle = 64
 single_file_per_rank = false
 single_file_per_node = false
 validate_global_tags = false
+trk_header_format = legacy
 
 <output2>
 file_type = prst

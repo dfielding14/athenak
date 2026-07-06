@@ -219,7 +219,7 @@ void FinishBorisPush(const RealView &pr, int p, Real dt, bool multi_d, bool thre
   pr(IPBZ,p) = bf.z;
 
   Real bmag = Kokkos::sqrt(bf.x*bf.x + bf.y*bf.y + bf.z*bf.z);
-  if (pr(IPM,p) < 0.0) {
+  if (pr(IPM,p) <= 0.0) {
     if (bmag > 0.0) {
       pr(IPVX,p) = bf.x/bmag;
       pr(IPVY,p) = bf.y/bmag;
@@ -262,11 +262,75 @@ void FinishBorisPush(const RealView &pr, int p, Real dt, bool multi_d, bool thre
   }
 }
 
+template<typename GatherPolicy, typename RealView, typename B0View, typename BccView,
+         typename MeshBlockSizeView>
+KOKKOS_INLINE_FUNCTION
+void AdvanceFieldLineTracer(const RealView &pr, int p, Real dt, bool multi_d,
+                            bool three_d, Real x1_old, Real x2_old, Real x3_old,
+                            const B0View &b0, const BccView &bcc,
+                            const MeshBlockSizeView &mbsize, int m, int is, int js,
+                            int ks, int nx1, int nx2, int nx3,
+                            Real field_line_speed, int field_line_direction) {
+  ParticleBField bf0 = GatherPolicy::Gather(b0, bcc, mbsize, m, x1_old, x2_old,
+                                            x3_old, is, js, ks, nx1, nx2, nx3,
+                                            multi_d, three_d);
+  Real bmag0 = Kokkos::sqrt(bf0.x*bf0.x + bf0.y*bf0.y + bf0.z*bf0.z);
+  Real signed_speed = static_cast<Real>(field_line_direction)*field_line_speed;
+  Real vx0 = 0.0;
+  Real vy0 = 0.0;
+  Real vz0 = 0.0;
+  if (bmag0 > 0.0) {
+    vx0 = signed_speed*bf0.x/bmag0;
+    vy0 = signed_speed*bf0.y/bmag0;
+    vz0 = signed_speed*bf0.z/bmag0;
+  }
+
+  Real x1_mid = x1_old + 0.5*dt*vx0;
+  Real x2_mid = x2_old;
+  Real x3_mid = x3_old;
+  if (multi_d) {x2_mid += 0.5*dt*vy0;}
+  if (three_d) {x3_mid += 0.5*dt*vz0;}
+
+  ParticleBField bf = GatherPolicy::Gather(b0, bcc, mbsize, m, x1_mid, x2_mid,
+                                           x3_mid, is, js, ks, nx1, nx2, nx3,
+                                           multi_d, three_d);
+  Real bmag = Kokkos::sqrt(bf.x*bf.x + bf.y*bf.y + bf.z*bf.z);
+  Real vx = 0.0;
+  Real vy = 0.0;
+  Real vz = 0.0;
+  if (bmag > 0.0) {
+    vx = signed_speed*bf.x/bmag;
+    vy = signed_speed*bf.y/bmag;
+    vz = signed_speed*bf.z/bmag;
+  }
+
+  pr(IPBX,p) = bf.x;
+  pr(IPBY,p) = bf.y;
+  pr(IPBZ,p) = bf.z;
+  pr(IPVX,p) = vx;
+  pr(IPVY,p) = vy;
+  pr(IPVZ,p) = vz;
+  pr(IPX,p) = x1_old + dt*vx;
+  if (multi_d) {pr(IPY,p) = x2_old + dt*vy;}
+  if (three_d) {pr(IPZ,p) = x3_old + dt*vz;}
+
+  Real dx1 = pr(IPX,p) - x1_old;
+  Real dx2 = pr(IPY,p) - x2_old;
+  Real dx3 = pr(IPZ,p) - x3_old;
+  pr(IPDX,p) += dx1;
+  if (multi_d) {pr(IPDY,p) += dx2;}
+  if (three_d) {pr(IPDZ,p) += dx3;}
+  if (bmag > 0.0) {
+    pr(IPDB,p) += (dx1*bf.x + dx2*bf.y + dx3*bf.z)/bmag;
+  }
+}
+
 template<typename GatherPolicy>
 void RunBorisGather(const std::string &label, MeshBlockPack *pmy_pack,
                     DvceArray2D<Real> &pr, DvceArray2D<int> &pi, int npart,
                     int gids, int is, int js, int ks, int nx1, int nx2, int nx3,
-                    bool multi_d, bool three_d, Real dt) {
+                    bool multi_d, bool three_d, Real dt, Real field_line_speed,
+                    int field_line_direction) {
   auto mbsize = pmy_pack->pmb->mb_size;
   auto b0 = pmy_pack->pmhd->b0;
   auto bcc = pmy_pack->pmhd->bcc0;
@@ -277,6 +341,13 @@ void RunBorisGather(const std::string &label, MeshBlockPack *pmy_pack,
     Real x1_old = pr(IPX,p);
     Real x2_old = pr(IPY,p);
     Real x3_old = pr(IPZ,p);
+
+    if (pr(IPM,p) <= 0.0) {
+      AdvanceFieldLineTracer<GatherPolicy>(
+          pr, p, dt, multi_d, three_d, x1_old, x2_old, x3_old, b0, bcc, mbsize,
+          m, is, js, ks, nx1, nx2, nx3, field_line_speed, field_line_direction);
+      return;
+    }
 
     Real x1 = x1_old + 0.5*dt*pr(IPVX,p);
     Real x2 = x2_old;
@@ -298,7 +369,8 @@ void RunBorisGatherPerParticleGyro(const std::string &label, MeshBlockPack *pmy_
                                    int npart, int gids, int is, int js, int ks,
                                    int nx1, int nx2, int nx3, bool multi_d,
                                    bool three_d, Real dt, int base_steps,
-                                   int max_steps, Real gyro_fraction) {
+                                   int max_steps, Real gyro_fraction,
+                                   Real field_line_speed, int field_line_direction) {
   auto mbsize = pmy_pack->pmb->mb_size;
   auto b0 = pmy_pack->pmhd->b0;
   auto bcc = pmy_pack->pmhd->bcc0;
@@ -322,6 +394,14 @@ void RunBorisGatherPerParticleGyro(const std::string &label, MeshBlockPack *pmy_
       Real x1_old = pr(IPX,p);
       Real x2_old = pr(IPY,p);
       Real x3_old = pr(IPZ,p);
+
+      if (pr(IPM,p) <= 0.0) {
+        AdvanceFieldLineTracer<GatherPolicy>(
+            pr, p, dt_sub, multi_d, three_d, x1_old, x2_old, x3_old, b0, bcc,
+            mbsize, m, is, js, ks, nx1, nx2, nx3, field_line_speed,
+            field_line_direction);
+        continue;
+      }
 
       Real x1 = x1_old + 0.5*dt_sub*pr(IPVX,p);
       Real x2 = x2_old;
@@ -546,19 +626,22 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
           RunBorisGatherPerParticleGyro<LinLegacyGather>(
               "part_boris_lin_ppgyro", pmy_pack, prtcl_rdata, prtcl_idata, npart,
               gids, is, js, ks, nx1, nx2, nx3, multi_d, three_d, dt, base_steps,
-              subcycle_max_steps, subcycle_gyro_fraction);
+              subcycle_max_steps, subcycle_gyro_fraction, field_line_speed,
+              field_line_direction);
           break;
         case ParticleInterpolation::trilinear:
           RunBorisGatherPerParticleGyro<TrilinearGather>(
               "part_boris_trilinear_ppgyro", pmy_pack, prtcl_rdata, prtcl_idata,
               npart, gids, is, js, ks, nx1, nx2, nx3, multi_d, three_d, dt,
-              base_steps, subcycle_max_steps, subcycle_gyro_fraction);
+              base_steps, subcycle_max_steps, subcycle_gyro_fraction,
+              field_line_speed, field_line_direction);
           break;
         case ParticleInterpolation::tsc:
           RunBorisGatherPerParticleGyro<TSCGather>(
               "part_boris_tsc_ppgyro", pmy_pack, prtcl_rdata, prtcl_idata, npart,
               gids, is, js, ks, nx1, nx2, nx3, multi_d, three_d, dt, base_steps,
-              subcycle_max_steps, subcycle_gyro_fraction);
+              subcycle_max_steps, subcycle_gyro_fraction, field_line_speed,
+              field_line_direction);
           break;
       }
     }
@@ -580,18 +663,21 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
             case ParticleInterpolation::lin_legacy:
               RunBorisGather<LinLegacyGather>("part_boris_lin", pmy_pack, prtcl_rdata,
                                               prtcl_idata, npart, gids, is, js, ks,
-                                              nx1, nx2, nx3, multi_d, three_d, dt_sub);
+                                              nx1, nx2, nx3, multi_d, three_d, dt_sub,
+                                              field_line_speed, field_line_direction);
               break;
             case ParticleInterpolation::trilinear:
               RunBorisGather<TrilinearGather>("part_boris_trilinear", pmy_pack,
                                               prtcl_rdata, prtcl_idata, npart, gids,
                                               is, js, ks, nx1, nx2, nx3, multi_d,
-                                              three_d, dt_sub);
+                                              three_d, dt_sub, field_line_speed,
+                                              field_line_direction);
               break;
             case ParticleInterpolation::tsc:
               RunBorisGather<TSCGather>("part_boris_tsc", pmy_pack, prtcl_rdata,
                                         prtcl_idata, npart, gids, is, js, ks, nx1,
-                                        nx2, nx3, multi_d, three_d, dt_sub);
+                                        nx2, nx3, multi_d, three_d, dt_sub,
+                                        field_line_speed, field_line_direction);
               break;
           }
           break;

@@ -9,6 +9,7 @@ import math
 import os
 import re
 import shutil
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,11 @@ import numpy as np
 
 
 HEADER_MARKER = b"# AthenaK tracked particle data at time="
+COMPACT_FILE_MAGIC = b"AKTRK2F\0"
+COMPACT_FRAME_MAGIC = b"AKTRK2R\0"
+COMPACT_VERSION = 2
+COMPACT_PROLOGUE = struct.Struct("<8sHHIqqIIiiiiiII")
+COMPACT_FRAME = struct.Struct("<8sHHIqdII")
 RICH_FIELDS = (
     "tag", "time", "x", "y", "z", "vx", "vy", "vz",
     "bx", "by", "bz", "k1", "k2", "k3", "db1", "db2", "db3", "jmag",
@@ -67,6 +73,7 @@ class FileEntry:
 class Header:
     time: float
     cycle: int
+    trk_format: str
     ntracked: int
     ntrack_per_species: int
     track_per_species: bool
@@ -76,6 +83,7 @@ class Header:
 
 @dataclass(frozen=True)
 class RunMeta:
+    trk_format: str
     ntracked: int
     ntrack_per_species: int
     track_per_species: bool
@@ -154,7 +162,8 @@ def parse_header(lines: list[str], path: Path) -> Header:
 
     values = {key: value for key, value in KEY_RE.findall(text)}
     fields = tuple(values.get("fields", "").split(","))
-    if values.get("trk_format") != "rich_v1":
+    trk_format = values.get("trk_format")
+    if trk_format != "rich_v1":
         raise MergeError(f"{path}: expected trk_format=rich_v1")
     if int(values["nfields"]) != N_SOURCE_FIELDS or fields != RICH_FIELDS:
         raise MergeError(f"{path}: unexpected rich trk field list")
@@ -162,6 +171,7 @@ def parse_header(lines: list[str], path: Path) -> Header:
     return Header(
         time=float(time_match.group(1)),
         cycle=int(values["cycle"]),
+        trk_format=trk_format,
         ntracked=int(values["ntracked_prtcls"]),
         ntrack_per_species=int(values["ntrack_per_species"]),
         track_per_species=bool(int(values["track_per_species"])),
@@ -170,8 +180,23 @@ def parse_header(lines: list[str], path: Path) -> Header:
     )
 
 
-def iter_frames(path: Path):
-    blob = path.read_bytes()
+def check_frame(path: Path, header: Header, frame: np.ndarray) -> None:
+    if not header.record_count:
+        return
+    tags = frame[:, 0]
+    rounded = np.rint(tags)
+    if not np.allclose(tags, rounded, rtol=0.0, atol=1.0e-4):
+        raise MergeError(f"{path}: non-integral output_tag at cycle {header.cycle}")
+    if np.any(rounded < 0) or np.any(rounded >= header.ntracked):
+        raise MergeError(f"{path}: output_tag outside range at cycle {header.cycle}")
+    times = frame[:, 1]
+    if not np.all(np.isfinite(frame)):
+        raise MergeError(f"{path}: non-finite rich trk payload at cycle {header.cycle}")
+    if abs(float(np.max(times)) - float(np.min(times))) > 1.0e-6:
+        raise MergeError(f"{path}: non-constant payload time at cycle {header.cycle}")
+
+
+def iter_legacy_frames(path: Path, blob: bytes):
     offset = 0
     while True:
         start = blob.find(HEADER_MARKER, offset)
@@ -197,12 +222,79 @@ def iter_frames(path: Path):
             raise MergeError(f"{path}: incomplete payload at cycle {header.cycle}")
 
         values = np.frombuffer(blob, dtype="<f4", count=nvalues, offset=cursor)
-        yield header, values.reshape(header.record_count, N_SOURCE_FIELDS)
+        frame = values.reshape(header.record_count, N_SOURCE_FIELDS)
+        check_frame(path, header, frame)
+        yield header, frame
         offset = payload_end
+
+
+def compact_layout_name(code: int) -> str:
+    return {0: "shared", 1: "node", 2: "rank"}.get(code, "unknown")
+
+
+def iter_compact_frames(path: Path, blob: bytes):
+    if len(blob) < COMPACT_PROLOGUE.size:
+        raise MergeError(f"{path}: truncated compact trk prologue")
+    (magic, version, prologue_bytes, nfields, ntracked, ntrack_per_species,
+     track_per_species, layout_code, _rank, _node, _nranks, _nnodes,
+     _ranks_per_node, fields_bytes, _reserved) = COMPACT_PROLOGUE.unpack_from(blob, 0)
+    if magic != COMPACT_FILE_MAGIC or version != COMPACT_VERSION:
+        raise MergeError(f"{path}: invalid compact trk prologue")
+    if prologue_bytes != COMPACT_PROLOGUE.size:
+        raise MergeError(f"{path}: unsupported compact prologue size {prologue_bytes}")
+    fields_start = prologue_bytes
+    fields_end = fields_start + fields_bytes
+    if fields_end > len(blob):
+        raise MergeError(f"{path}: truncated compact field list")
+    fields = tuple(blob[fields_start:fields_end].decode("ascii").split(","))
+    if nfields != N_SOURCE_FIELDS or fields != RICH_FIELDS:
+        raise MergeError(f"{path}: unexpected compact rich trk field list")
+
+    cursor = fields_end
+    while cursor < len(blob):
+        if cursor + COMPACT_FRAME.size > len(blob):
+            raise MergeError(f"{path}: truncated compact frame header")
+        (frame_magic, frame_version, frame_bytes, record_count, cycle, time,
+         payload_bytes, _frame_reserved) = COMPACT_FRAME.unpack_from(blob, cursor)
+        if frame_magic != COMPACT_FRAME_MAGIC or frame_version != COMPACT_VERSION:
+            raise MergeError(f"{path}: invalid compact frame at offset {cursor}")
+        if frame_bytes != COMPACT_FRAME.size:
+            raise MergeError(f"{path}: unsupported compact frame size {frame_bytes}")
+        cursor += frame_bytes
+        expected = record_count * N_SOURCE_FIELDS * np.dtype("<f4").itemsize
+        if payload_bytes != expected:
+            raise MergeError(f"{path}: compact payload size mismatch at cycle {cycle}")
+        payload_end = cursor + payload_bytes
+        if payload_end > len(blob):
+            raise MergeError(f"{path}: truncated compact payload at cycle {cycle}")
+        header = Header(
+            time=float(time),
+            cycle=int(cycle),
+            trk_format="rich_v2",
+            ntracked=int(ntracked),
+            ntrack_per_species=int(ntrack_per_species),
+            track_per_species=bool(track_per_species),
+            record_count=int(record_count),
+            layout=compact_layout_name(layout_code),
+        )
+        frame = np.frombuffer(blob, dtype="<f4", count=record_count*N_SOURCE_FIELDS,
+                              offset=cursor).reshape(record_count, N_SOURCE_FIELDS)
+        check_frame(path, header, frame)
+        yield header, frame
+        cursor = payload_end
+
+
+def iter_frames(path: Path):
+    blob = path.read_bytes()
+    if blob.startswith(COMPACT_FILE_MAGIC):
+        yield from iter_compact_frames(path, blob)
+    else:
+        yield from iter_legacy_frames(path, blob)
 
 
 def meta_from_header(header: Header) -> RunMeta:
     return RunMeta(
+        trk_format=header.trk_format,
         ntracked=header.ntracked,
         ntrack_per_species=header.ntrack_per_species,
         track_per_species=header.track_per_species,
@@ -211,7 +303,7 @@ def meta_from_header(header: Header) -> RunMeta:
 
 
 def meta_key(meta: RunMeta) -> tuple[object, ...]:
-    return (meta.ntracked, meta.ntrack_per_species, meta.track_per_species)
+    return (meta.trk_format, meta.ntracked, meta.ntrack_per_species, meta.track_per_species)
 
 
 def records_to_owner_rows(header: Header, frame: np.ndarray) -> np.ndarray:
@@ -433,7 +525,7 @@ def assemble_hdf5(output: Path, tmp_dir: Path, run_dir: Path,
 
     with h5py.File(work, "w") as handle:
         handle.attrs["format"] = FORMAT_NAME
-        handle.attrs["source_trk_format"] = "rich_v1"
+        handle.attrs["source_trk_format"] = meta.trk_format
         handle.attrs["source_run_dir"] = str(run_dir)
         handle.attrs["source_commit"] = source_commit(run_dir)
         handle.attrs["source_layout"] = layout
