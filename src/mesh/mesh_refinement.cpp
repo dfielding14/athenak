@@ -10,6 +10,7 @@
 //! are used both here for AMR and in the BVals class at fine/coarse boundaries).
 
 #include <cstdint>   // int32_t
+#include <cstdlib>   // getenv
 #include <iostream>
 #include <cmath>     // abs
 #include <algorithm> // sort
@@ -23,6 +24,8 @@
 #include "refinement_criteria.hpp"
 
 #include "dyn_grmhd/dyn_grmhd.hpp"
+#include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "radiation/radiation.hpp"
@@ -35,6 +38,31 @@
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
+
+namespace {
+
+bool AMRTraceEnabled() {
+  const char *env = std::getenv("ATHENAK_CGL_AMR_TRACE");
+  return env != nullptr && env[0] != '\0' && env[0] != '0';
+}
+
+void TraceAMRStep(Mesh *pm, const char *step, int nnew, int ndel, int old_nmb,
+                  int new_nmb) {
+  if (!AMRTraceEnabled()) return;
+  Kokkos::fence();
+  std::cout << "[amr_trace] rank=" << global_variable::my_rank
+            << " cycle=" << pm->ncycle
+            << " time=" << pm->time
+            << " step=" << step
+            << " nnew=" << nnew
+            << " ndel=" << ndel
+            << " old_total=" << old_nmb
+            << " new_total=" << new_nmb
+            << " old_local=" << pm->nmb_thisrank
+            << std::endl;
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // MeshRefinement constructor:
@@ -55,6 +83,8 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   recvbuf("lb recv buff",1),
   send_data("lb send data",1),
   recv_data("lb recv data",1),
+  send_data_host("lb send data host",1),
+  recv_data_host("lb recv data host",1),
 #endif
   prolong_prims(false) {
   if (pin->DoesBlockExist("mesh_refinement")) {
@@ -401,6 +431,9 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
 
 void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, int ndel) {
   Mesh* pm = pmy_mesh;
+  // AMR rewrites meshblock metadata and may move/reuse storage that was touched by the
+  // just-finished timestep.  Complete outstanding device work before starting data motion.
+  Kokkos::fence();
   int old_nmb = pm->nmb_total;
   int new_nmb = old_nmb + nnew - ndel;
   // compute nleaf = number of leaf MeshBlocks per refined block
@@ -488,18 +521,30 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   radiation::Radiation* prad = pm->pmb_pack->prad;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   adm::ADM* padm = pm->pmb_pack->padm;
+  TraceAMRStep(pm, "begin_data_motion", nnew, ndel, old_nmb, new_nmb);
   if ((ndel > 0) && (pmhd != nullptr)) {
     RestrictFC(pmhd->b0, pmhd->coarse_b0);
+    if (prolong_prims && pmhd->peos->eos_data.is_cgl) {
+      Kokkos::fence();
+      RestrictCGLMHDPrimitivesToCons(pmhd);
+    }
   }
+  TraceAMRStep(pm, "after_restrict", nnew, ndel, old_nmb, new_nmb);
 
   // Step 4.
   // Allocate send/recv buffers for load balancing, post receives.
   // Pack send buffers for load blancing and send data
+  bool amr_sends_cleared = false;
 #if MPI_PARALLEL_ENABLED
   InitRecvAMR(nleaf);
   PackAndSendAMR(nleaf);
   nmb_sent_thisrank += nmb_send;
+  if (nmb_send > 0) {
+    ClearSendAMR();
+    amr_sends_cleared = true;
+  }
 #endif
+  TraceAMRStep(pm, "after_pack_send", nnew, ndel, old_nmb, new_nmb);
 
   // Step 5.
   // De-refine (restrict) evolved physics variables for MeshBlocks within this rank.
@@ -520,7 +565,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     if (pz4c != nullptr) {
       DerefineCCSameRank(pz4c->u0, pz4c->coarse_u0);
     }
+    Kokkos::fence();
   }
+  TraceAMRStep(pm, "after_derefine_same_rank", nnew, ndel, old_nmb, new_nmb);
 
   // Step 6.
   // Copy evolved physics variables to new MB index within View for MeshBlocks that stay
@@ -540,6 +587,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   } else if (padm != nullptr) {
     CopyCC(padm->u_adm);
   }
+  Kokkos::fence();
+  TraceAMRStep(pm, "after_same_level_copy", nnew, ndel, old_nmb, new_nmb);
+
   // Step 7.
   // Copy evolved physics variables for MBs flagged for refinement from source fine array
   // to target coarse array, when both are on same rank.
@@ -558,13 +608,16 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
       CopyForRefinementCC(pz4c->u0, pz4c->coarse_u0);
     }
   }
+  TraceAMRStep(pm, "after_copy_for_refinement", nnew, ndel, old_nmb, new_nmb);
 
   // Step 8.
   // Wait for all MPI load balancing communications to finish.  Unpack data.
 #if MPI_PARALLEL_ENABLED
-  if (nmb_send > 0) {ClearSendAMR();}
+  if (!amr_sends_cleared && nmb_send > 0) {ClearSendAMR();}
   if (nmb_recv > 0) {ClearRecvAndUnpackAMR();}
 #endif
+  Kokkos::fence();
+  TraceAMRStep(pm, "after_mpi_unpack", nnew, ndel, old_nmb, new_nmb);
 
   // copy newtoold array to DualView so that it can be accessed in kernel
   DualArray1D<int> new_to_old("newtoold",new_nmb_total);
@@ -579,12 +632,19 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   // So prolongate (refine) evolved physics variables for all MBs flagged for refinement.
 
   if (nnew > 0) {
+    TraceAMRStep(pm, "before_refine", nnew, ndel, old_nmb, new_nmb);
     if (phydro != nullptr) {
       RefineCC(new_to_old, phydro->u0, phydro->coarse_u0);
     }
     if (pmhd != nullptr) {
-      RefineCC(new_to_old, pmhd->u0, pmhd->coarse_u0);
-      RefineFC(new_to_old, pmhd->b0, pmhd->coarse_b0);
+      if (prolong_prims && pmhd->peos->eos_data.is_cgl) {
+        RefineFC(new_to_old, pmhd->b0, pmhd->coarse_b0);
+        Kokkos::fence();
+        RefineCGLMHDPrimitives(new_to_old, pmhd);
+      } else {
+        RefineCC(new_to_old, pmhd->u0, pmhd->coarse_u0);
+        RefineFC(new_to_old, pmhd->b0, pmhd->coarse_b0);
+      }
     }
     if (prad != nullptr) {
       RefineCC(new_to_old, prad->i0, prad->coarse_i0);
@@ -592,7 +652,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     if (pz4c != nullptr) {
       RefineCC(new_to_old, pz4c->u0, pz4c->coarse_u0, true);
     }
+    TraceAMRStep(pm, "after_refine", nnew, ndel, old_nmb, new_nmb);
   }
+  Kokkos::fence();
 
   // Step 10.
   // General housekeeping
@@ -1013,21 +1075,22 @@ void MeshRefinement::CopyForRefinementFC(DvceFaceFld4D<Real> &b,DvceFaceFld4D<Re
 void MeshRefinement::RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
                               DvceArray5D<Real> &ca, bool is_z4c) {
   int nvar = a.extent_int(1);  // TODO(@user): 2nd index from L of in array must be NVAR
-  auto &new_nmb = new_nmb_eachrank[global_variable::my_rank];
+  const int new_nmb = new_nmb_eachrank[global_variable::my_rank];
   auto &indcs = pmy_mesh->mb_indcs;
-  auto &cis = indcs.cis, &cie = indcs.cie;
-  auto &cjs = indcs.cjs, &cje = indcs.cje;
-  auto &cks = indcs.cks, &cke = indcs.cke;
-  auto &nx1 = indcs.nx1;
-  auto &nx2 = indcs.nx2;
-  auto &nx3 = indcs.nx3;
-  auto& prolong_2nd = weights.prolong_2nd;
-  auto& prolong_4th = weights.prolong_4th;
+  const int cis = indcs.cis, cie = indcs.cie;
+  const int cjs = indcs.cjs, cje = indcs.cje;
+  const int cks = indcs.cks, cke = indcs.cke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int ng = indcs.ng;
+  auto prolong_2nd = weights.prolong_2nd;
+  auto prolong_4th = weights.prolong_4th;
 
-  auto &refine_flag_ = refine_flag;
-  bool &multi_d = pmy_mesh->multi_d;
-  bool &three_d = pmy_mesh->three_d;
-  auto &ngids_ = new_gids_eachrank[global_variable::my_rank];
+  auto refine_flag_ = refine_flag;
+  const bool multi_d = pmy_mesh->multi_d;
+  const bool three_d = pmy_mesh->three_d;
+  const int ngids_ = new_gids_eachrank[global_variable::my_rank];
   // Outer loop over (# of MeshBlocks sent)*(# of variables)
   int nmv = new_nmb*nvar;
   Kokkos::TeamPolicy<> policy(DevExeSpace(), nmv, Kokkos::AUTO);
@@ -1059,7 +1122,7 @@ void MeshRefinement::RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
         if (!is_z4c) {
           ProlongCC(m,v,k,j,i,fk,fj,fi,multi_d,three_d,ca,a);
         } else {
-          switch (indcs.ng) {
+          switch (ng) {
             case 2: HighOrderProlongCC<2>(m,v,k,j,i,fk,fj,fi,nx1,nx2,nx3,
                                           ca,a,prolong_2nd);
                     break;
@@ -1076,25 +1139,222 @@ void MeshRefinement::RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RestrictCGLMHDPrimitivesToCons
+//! \brief Restrict CGL primitive variables during derefinement, then rebuild the coarse
+//! conserved state from the already restricted face-centered magnetic field.  This avoids
+//! averaging the nonlinear CGL total-energy/anisotropy representation directly.
+
+void MeshRefinement::RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd) {
+  RestrictCC(pmhd->w0, pmhd->coarse_w0);
+  Kokkos::fence();
+
+  const int nmb = pmy_mesh->nmb_eachrank[global_variable::my_rank];
+  auto &indcs = pmy_mesh->mb_indcs;
+  const int cis = indcs.cis, cie = indcs.cie;
+  const int cjs = indcs.cjs, cje = indcs.cje;
+  const int cks = indcs.cks, cke = indcs.cke;
+  auto prim = pmhd->coarse_w0;
+  auto cons = pmhd->coarse_u0;
+  auto b = pmhd->coarse_b0;
+  const EOS_Data eos = pmhd->peos->eos_data;
+  const int nmhd = pmhd->nmhd;
+  const int nscal = pmhd->nscalars;
+  const bool cgl_magnetic_moment =
+      pmhd->cgl_slot_representation == mhd::CGLSlotRepresentation::magnetic_moment;
+
+  par_for("cgl_amr_restrict_prim_to_cons", DevExeSpace(),
+  0, nmb-1, cks, cke, cjs, cje, cis, cie,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    MHDPrim1D w;
+    w.d  = fmax(prim(m,IDN,k,j,i), eos.dfloor);
+    w.vx = prim(m,IVX,k,j,i);
+    w.vy = prim(m,IVY,k,j,i);
+    w.vz = prim(m,IVZ,k,j,i);
+    w.e  = fmax(prim(m,IEN,k,j,i), eos.pfloor);
+    w.pp = fmax(prim(m,IPP,k,j,i), eos.pfloor);
+    w.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
+    w.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
+    w.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+
+    const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+    const Real bmag = sqrt(bsqr);
+    if (eos.hardwall_lim && bmag > eos.bfloor) {
+      cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
+                                eos.firehose_threshold);
+    }
+
+    HydCons1D u;
+    SingleP2C_CGLMHD(w, eos.bfloor, u);
+    if (cgl_magnetic_moment) {
+      const Real bmag_den = (bmag > eos.bfloor) ? bmag : eos.bfloor;
+      u.mu = w.pp/bmag_den;
+    }
+
+    cons(m,IDN,k,j,i) = u.d;
+    cons(m,IM1,k,j,i) = u.mx;
+    cons(m,IM2,k,j,i) = u.my;
+    cons(m,IM3,k,j,i) = u.mz;
+    cons(m,IEN,k,j,i) = u.e;
+    cons(m,IAN,k,j,i) = u.mu;
+    for (int n=nmhd; n<(nmhd+nscal); ++n) {
+      cons(m,n,k,j,i) = u.d*prim(m,n,k,j,i);
+    }
+  });
+  Kokkos::fence();
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RefineCGLMHDPrimitives
+//! \brief Convert coarse CGL conserved states to primitives, prolong primitives into new
+//! fine MeshBlocks, then rebuild conserved states using the refined face-centered field.
+
+void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmhd) {
+  const int new_nmb = new_nmb_eachrank[global_variable::my_rank];
+  const int ngids = new_gids_eachrank[global_variable::my_rank];
+  auto &indcs = pmy_mesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const int cis = indcs.cis, cie = indcs.cie;
+  const int cjs = indcs.cjs, cje = indcs.cje;
+  const int cks = indcs.cks, cke = indcs.cke;
+  int cil = cis - 1, ciu = cie + 1;
+  int cjl = cjs, cju = cje;
+  int ckl = cks, cku = cke;
+  if (pmy_mesh->multi_d) {
+    cjl -= 1;
+    cju += 1;
+  }
+  if (pmy_mesh->three_d) {
+    ckl -= 1;
+    cku += 1;
+  }
+
+  auto refine_flag_ = refine_flag;
+  auto coarse_cons = pmhd->coarse_u0;
+  auto coarse_prim = pmhd->coarse_w0;
+  auto coarse_b = pmhd->coarse_b0;
+  const EOS_Data eos = pmhd->peos->eos_data;
+  const int nmhd = pmhd->nmhd;
+  const int nscal = pmhd->nscalars;
+  const bool cgl_magnetic_moment =
+      pmhd->cgl_slot_representation == mhd::CGLSlotRepresentation::magnetic_moment;
+
+  par_for("cgl_amr_coarse_cons_to_prim", DevExeSpace(),
+  0, new_nmb-1, ckl, cku, cjl, cju, cil, ciu,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    if (refine_flag_.d_view(n2o.d_view(m + ngids)) <= 0) return;
+
+    MHDCons1D u;
+    u.d  = coarse_cons(m,IDN,k,j,i);
+    u.mx = coarse_cons(m,IM1,k,j,i);
+    u.my = coarse_cons(m,IM2,k,j,i);
+    u.mz = coarse_cons(m,IM3,k,j,i);
+    u.e  = coarse_cons(m,IEN,k,j,i);
+    u.mu = coarse_cons(m,IAN,k,j,i);
+    u.bx = 0.5*(coarse_b.x1f(m,k,j,i) + coarse_b.x1f(m,k,j,i+1));
+    u.by = 0.5*(coarse_b.x2f(m,k,j,i) + coarse_b.x2f(m,k,j+1,i));
+    u.bz = 0.5*(coarse_b.x3f(m,k,j,i) + coarse_b.x3f(m,k+1,j,i));
+
+    HydPrim1D w;
+    bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
+    if (cgl_magnetic_moment) {
+      SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                         tfloor_used, bfloor_used);
+    } else {
+      SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used,
+                       bfloor_used);
+    }
+
+    const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+    const Real bmag = sqrt(bsqr);
+    if (eos.hardwall_lim && bmag > eos.bfloor) {
+      cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
+                                eos.firehose_threshold);
+    }
+
+    coarse_prim(m,IDN,k,j,i) = w.d;
+    coarse_prim(m,IVX,k,j,i) = w.vx;
+    coarse_prim(m,IVY,k,j,i) = w.vy;
+    coarse_prim(m,IVZ,k,j,i) = w.vz;
+    coarse_prim(m,IEN,k,j,i) = w.e;
+    coarse_prim(m,IPP,k,j,i) = w.pp;
+    for (int n=nmhd; n<(nmhd+nscal); ++n) {
+      const Real scalar_cons = fmax(coarse_cons(m,n,k,j,i), 0.0);
+      coarse_prim(m,n,k,j,i) = scalar_cons/u.d;
+    }
+  });
+  Kokkos::fence();
+
+  RefineCC(n2o, pmhd->w0, pmhd->coarse_w0);
+  Kokkos::fence();
+
+  auto fine_prim = pmhd->w0;
+  auto fine_cons = pmhd->u0;
+  auto fine_b = pmhd->b0;
+  par_for("cgl_amr_fine_prim_to_cons", DevExeSpace(),
+  0, new_nmb-1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    if (refine_flag_.d_view(n2o.d_view(m + ngids)) <= 0) return;
+
+    MHDPrim1D w;
+    w.d  = fmax(fine_prim(m,IDN,k,j,i), eos.dfloor);
+    w.vx = fine_prim(m,IVX,k,j,i);
+    w.vy = fine_prim(m,IVY,k,j,i);
+    w.vz = fine_prim(m,IVZ,k,j,i);
+    w.e  = fmax(fine_prim(m,IEN,k,j,i), eos.pfloor);
+    w.pp = fmax(fine_prim(m,IPP,k,j,i), eos.pfloor);
+    w.bx = 0.5*(fine_b.x1f(m,k,j,i) + fine_b.x1f(m,k,j,i+1));
+    w.by = 0.5*(fine_b.x2f(m,k,j,i) + fine_b.x2f(m,k,j+1,i));
+    w.bz = 0.5*(fine_b.x3f(m,k,j,i) + fine_b.x3f(m,k+1,j,i));
+
+    const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+    const Real bmag = sqrt(bsqr);
+    if (eos.hardwall_lim && bmag > eos.bfloor) {
+      cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
+                                eos.firehose_threshold);
+    }
+
+    HydCons1D u;
+    SingleP2C_CGLMHD(w, eos.bfloor, u);
+    if (cgl_magnetic_moment) {
+      const Real bmag_den = (bmag > eos.bfloor) ? bmag : eos.bfloor;
+      u.mu = w.pp/bmag_den;
+    }
+
+    fine_cons(m,IDN,k,j,i) = u.d;
+    fine_cons(m,IM1,k,j,i) = u.mx;
+    fine_cons(m,IM2,k,j,i) = u.my;
+    fine_cons(m,IM3,k,j,i) = u.mz;
+    fine_cons(m,IEN,k,j,i) = u.e;
+    fine_cons(m,IAN,k,j,i) = u.mu;
+    for (int n=nmhd; n<(nmhd+nscal); ++n) {
+      fine_cons(m,n,k,j,i) = u.d*fine_prim(m,n,k,j,i);
+    }
+  });
+  Kokkos::fence();
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void MeshRefinement::RefineFC
 //! \brief Same as RefineCC, except for face-centered arrays
 
 void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
                               DvceFaceFld4D<Real> &cb) {
-  auto &new_nmb = new_nmb_eachrank[global_variable::my_rank];;
+  const int new_nmb = new_nmb_eachrank[global_variable::my_rank];
   auto &indcs = pmy_mesh->mb_indcs;
-  auto &is = indcs.is;
-  auto &js = indcs.js;
-  auto &ks = indcs.ks;
-  auto &cis = indcs.cis, &cie = indcs.cie;
-  auto &cjs = indcs.cjs, &cje = indcs.cje;
-  auto &cks = indcs.cks, &cke = indcs.cke;
+  const int is = indcs.is;
+  const int js = indcs.js;
+  const int ks = indcs.ks;
+  const int cis = indcs.cis, cie = indcs.cie;
+  const int cjs = indcs.cjs, cje = indcs.cje;
+  const int cks = indcs.cks, cke = indcs.cke;
 
   // First prolongate face-centered fields at shared faces betwen fine and coarse cells
-  auto &refine_flag_ = refine_flag;
-  bool &multi_d = pmy_mesh->multi_d;
-  bool &three_d = pmy_mesh->three_d;
-  auto &ngids_ = new_gids_eachrank[global_variable::my_rank];
+  auto refine_flag_ = refine_flag;
+  const bool multi_d = pmy_mesh->multi_d;
+  const bool three_d = pmy_mesh->three_d;
+  const int ngids_ = new_gids_eachrank[global_variable::my_rank];
 
   // Prolongate x1f
   par_for("RefineFC1",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje, cis,cie+1,
@@ -1134,7 +1394,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
 
   // Second prolongate face-centered fields at internal faces of fine cells using
   // divergence-preserving operator of Toth & Roe (2002)
-  bool &one_d = pmy_mesh->one_d;
+  const bool one_d = pmy_mesh->one_d;
   par_for("RefineFC-int",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (refine_flag_.d_view(n2o.d_view(m+ngids_)) > 0) {
@@ -1163,18 +1423,18 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
 
 void MeshRefinement::RepairAMRFC(DvceFaceFld4D<Real> &b) {
   auto &indcs = pmy_mesh->mb_indcs;
-  auto &is = indcs.is;
-  auto &js = indcs.js;
-  auto &ks = indcs.ks;
-  auto &cis = indcs.cis, &cie = indcs.cie;
-  auto &cjs = indcs.cjs, &cje = indcs.cje;
-  auto &cks = indcs.cks, &cke = indcs.cke;
+  const int is = indcs.is;
+  const int js = indcs.js;
+  const int ks = indcs.ks;
+  const int cis = indcs.cis, cie = indcs.cie;
+  const int cjs = indcs.cjs, cje = indcs.cje;
+  const int cks = indcs.cks, cke = indcs.cke;
 
   const int nmb = pmy_mesh->pmb_pack->nmb_thispack;
   const int mbs = pmy_mesh->gids_eachrank[global_variable::my_rank];
-  bool &one_d = pmy_mesh->one_d;
-  bool &three_d = pmy_mesh->three_d;
-  auto &repair = fc_amr_repair;
+  const bool one_d = pmy_mesh->one_d;
+  const bool three_d = pmy_mesh->three_d;
+  auto repair = fc_amr_repair;
 
   par_for("RepairAMRFC",DevExeSpace(), 0,(nmb-1), cks,cke, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1204,15 +1464,16 @@ void MeshRefinement::RestrictCC(DvceArray5D<Real> &u, DvceArray5D<Real> &cu,
   int nvar = u.extent_int(1);  // TODO(@user): 2nd index from L of in array must be NVAR
 
   auto &indcs = pmy_mesh->mb_indcs;
-  auto &cis = indcs.cis, &cie = indcs.cie;
-  auto &cjs = indcs.cjs, &cje = indcs.cje;
-  auto &cks = indcs.cks, &cke = indcs.cke;
-  auto &nx1 = indcs.nx1;
-  auto &nx2 = indcs.nx2;
-  auto &nx3 = indcs.nx3;
-  auto& restrict_2nd = weights.restrict_2nd;
-  auto& restrict_4th = weights.restrict_4th;
-  auto& restrict_4th_edge = weights.restrict_4th_edge;
+  const int cis = indcs.cis, cie = indcs.cie;
+  const int cjs = indcs.cjs, cje = indcs.cje;
+  const int cks = indcs.cks, cke = indcs.cke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int ng = indcs.ng;
+  auto restrict_2nd = weights.restrict_2nd;
+  auto restrict_4th = weights.restrict_4th;
+  auto restrict_4th_edge = weights.restrict_4th_edge;
   // restrict in 1D
   if (pmy_mesh->one_d) {
     par_for("restrictCC-1D",DevExeSpace(), 0,nmb-1, 0,nvar-1, cis,cie,
@@ -1244,7 +1505,7 @@ void MeshRefinement::RestrictCC(DvceArray5D<Real> &u, DvceArray5D<Real> &cu,
                 + u(m,n,finek+1,finej,  finei) + u(m,n,finek+1,finej,  finei+1)
                 + u(m,n,finek+1,finej+1,finei) + u(m,n,finek+1,finej+1,finei+1));
       } else {
-        switch (indcs.ng) {
+        switch (ng) {
           case 2: cu(m,n,k,j,i) = RestrictInterpolation<2>(m,n,finek,finej,finei,
                           nx1,nx2,nx3,u,restrict_2nd,restrict_4th,restrict_4th_edge);
                   break;
@@ -1265,12 +1526,12 @@ void MeshRefinement::RestrictCC(DvceArray5D<Real> &u, DvceArray5D<Real> &cu,
 void MeshRefinement::RestrictFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb) {
   int nmb  = b.x1f.extent_int(0);  // TODO(@user): 1st idx from L of in array must be NMB
 
-  auto &cis = pmy_mesh->mb_indcs.cis;
-  auto &cie = pmy_mesh->mb_indcs.cie;
-  auto &cjs = pmy_mesh->mb_indcs.cjs;
-  auto &cje = pmy_mesh->mb_indcs.cje;
-  auto &cks = pmy_mesh->mb_indcs.cks;
-  auto &cke = pmy_mesh->mb_indcs.cke;
+  const int cis = pmy_mesh->mb_indcs.cis;
+  const int cie = pmy_mesh->mb_indcs.cie;
+  const int cjs = pmy_mesh->mb_indcs.cjs;
+  const int cje = pmy_mesh->mb_indcs.cje;
+  const int cks = pmy_mesh->mb_indcs.cks;
+  const int cke = pmy_mesh->mb_indcs.cke;
 
   // restrict in 1D
   if (pmy_mesh->one_d) {

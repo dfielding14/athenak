@@ -36,6 +36,9 @@ struct AMRBuffer {
 
 // Forward declaration
 class RefinementCriteria;
+namespace mhd {
+class MHD;
+} // namespace mhd
 
 //----------------------------------------------------------------------------------------
 //! \class MeshRefinement
@@ -95,6 +98,7 @@ class MeshRefinement {
   DualArray1D<AMRBuffer> sendbuf, recvbuf; // send/recv buffers
   MPI_Request *send_req, *recv_req;
   DvceArray1D<Real> send_data, recv_data;    // send/recv device data
+  HostArray1D<Real> send_data_host, recv_data_host; // host-staged AMR MPI buffers
 #endif
 
   // functions
@@ -115,6 +119,8 @@ class MeshRefinement {
   void RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
                 bool is_z4c=false);
   void RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
+  void RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd);
+  void RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmhd);
   void RepairAMRFC(DvceFaceFld4D<Real> &b);
 
   void RestrictCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, bool is_z4c=false);

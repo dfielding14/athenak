@@ -700,9 +700,10 @@ void CGLLandauFluid::ResetHeatFluxDiagnostics() {
 
 void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                                    const DvceArray5D<Real> &bcc,
-                                   const EOS_Data &eos, Real dt_sweep,
+                                   const EOS_Data &eos_in, Real dt_sweep,
                                    Real rkl_weight, DvceFaceFld5D<Real> &f) {
   CGLLFProfileRegion heat_flux_profile(this, CGLLFProfileBucket::heat_flux_total);
+  const EOS_Data eos = eos_in;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, ie = indcs.ie;
   const int js = indcs.js, je = indcs.je;
@@ -742,8 +743,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   const bool three_d = pmy_pack->pmesh->three_d;
   const bool multilevel = pmy_pack->pmesh->multilevel;
   auto size = pmy_pack->pmb->mb_size;
-  auto &nghbr = pmy_pack->pmb->nghbr;
-  auto &mblev = pmy_pack->pmb->mb_lev;
+  auto nghbr = pmy_pack->pmb->nghbr;
+  auto mblev = pmy_pack->pmb->mb_lev;
   const Real lf_k = lf_k_parallel;
   const bool local = lf_coeff_local;
   const Real cpar0 = lf_c_parallel0;
@@ -759,7 +760,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   if (!collect_heat_flux_diagnostics) {
     ResetHeatFluxDiagnostics();
   }
-  auto &f1 = f.x1f;
+  auto f1 = f.x1f;
   const int ni1 = ie - is + 2;
   const int nj1 = je - js + 1;
   const int nk1 = ke - ks + 1;
@@ -1018,7 +1019,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     return;
   }
 
-  auto &f2 = f.x2f;
+  auto f2 = f.x2f;
   const int ni2 = ie - is + 1;
   const int nj2 = je - js + 2;
   const int nk2 = ke - ks + 1;
@@ -1275,7 +1276,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     return;
   }
 
-  auto &f3 = f.x3f;
+  auto f3 = f.x3f;
   const int ni3 = ie - is + 1;
   const int nj3 = je - js + 1;
   const int nk3 = ke - ks + 2;
@@ -1589,8 +1590,9 @@ void CGLLandauFluid::AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Rea
       + beta_dt*anisotropic_power;
 }
 
-void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos) {
+void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_in) {
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::timestep_reduction);
+  const EOS_Data eos = eos_in;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;
   const int js = indcs.js, nx2 = indcs.nx2;
@@ -1628,11 +1630,12 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos
 void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const DvceArray5D<Real> &w,
                                          const DvceArray5D<Real> &bcc,
-                                         const EOS_Data &eos,
+                                         const EOS_Data &eos_in,
                                          int dfloor_delta, int pfloor_delta,
                                          const char *sweep_name,
                                          int stage, int nstages) {
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
+  const EOS_Data eos = eos_in;
   if (profile_enabled_) {
     profile_last_nstages_ = nstages;
     if (nstages > profile_max_nstages_) {

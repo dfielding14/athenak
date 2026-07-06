@@ -104,11 +104,11 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
                           const bool only_testfloors,
                           const int il, const int iu, const int jl, const int ju,
                           const int kl, const int ku) {
-  int &nmhd  = pmy_pack->pmhd->nmhd;
-  int &nscal = pmy_pack->pmhd->nscalars;
-  int &nmb = pmy_pack->nmb_thispack;
-  auto &eos = eos_data;
-  auto &fofc_ = pmy_pack->pmhd->fofc;
+  const int nmhd  = pmy_pack->pmhd->nmhd;
+  const int nscal = pmy_pack->pmhd->nscalars;
+  const int nmb = pmy_pack->nmb_thispack;
+  const EOS_Data eos = eos_data;
+  auto fofc_ = pmy_pack->pmhd->fofc;
 
   const int ni   = (iu - il + 1);
   const int nji  = (ju - jl + 1)*ni;
@@ -240,10 +240,10 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
                                      const int il, const int iu,
                                      const int jl, const int ju,
                                      const int kl, const int ku) {
-  int &nmhd  = pmy_pack->pmhd->nmhd;
-  int &nscal = pmy_pack->pmhd->nscalars;
-  int &nmb = pmy_pack->nmb_thispack;
-  auto &eos = eos_data;
+  const int nmhd  = pmy_pack->pmhd->nmhd;
+  const int nscal = pmy_pack->pmhd->nscalars;
+  const int nmb = pmy_pack->nmb_thispack;
+  const EOS_Data eos = eos_data;
 
   const int ni   = (iu - il + 1);
   const int nji  = (ju - jl + 1)*ni;
@@ -345,8 +345,8 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
                                               const int il, const int iu,
                                               const int jl, const int ju,
                                               const int kl, const int ku) {
-  int &nmb = pmy_pack->nmb_thispack;
-  auto &eos = eos_data;
+  const int nmb = pmy_pack->nmb_thispack;
+  const EOS_Data eos = eos_data;
 
   const int ni   = (iu - il + 1);
   const int nji  = (ju - jl + 1)*ni;
@@ -402,7 +402,6 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
       cons(m,IAN,k,j,i) = w.pp/bmag;
       sumh++;
     }
-
     prim(m,IDN,k,j,i) = w.d;
     prim(m,IVX,k,j,i) = w.vx;
     prim(m,IVY,k,j,i) = w.vy;
@@ -433,10 +432,10 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
 void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku) {
-  int &nmhd  = pmy_pack->pmhd->nmhd;
-  int &nscal = pmy_pack->pmhd->nscalars;
-  int &nmb = pmy_pack->nmb_thispack;
-  auto &bfloor = eos_data.bfloor;
+  const int nmhd  = pmy_pack->pmhd->nmhd;
+  const int nscal = pmy_pack->pmhd->nscalars;
+  const int nmb = pmy_pack->nmb_thispack;
+  const Real bfloor = eos_data.bfloor;
 
   par_for("mhd_p2c", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -486,7 +485,7 @@ void CGLMHD::CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
                                             const int il, const int iu,
                                             const int jl, const int ju,
                                             const int kl, const int ku) {
-  int &nmb = pmy_pack->nmb_thispack;
+  const int nmb = pmy_pack->nmb_thispack;
   const Real pfloor = eos_data.pfloor;
   const Real bfloor = eos_data.bfloor;
 
@@ -517,7 +516,7 @@ void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
                                             const int il, const int iu,
                                             const int jl, const int ju,
                                             const int kl, const int ku) {
-  int &nmb = pmy_pack->nmb_thispack;
+  const int nmb = pmy_pack->nmb_thispack;
   const Real pfloor = eos_data.pfloor;
   const Real bfloor = eos_data.bfloor;
 
@@ -551,16 +550,16 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const Real dtc,
                           const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku) {
-  int &nmhd  = pmy_pack->pmhd->nmhd;
-  int &nscal = pmy_pack->pmhd->nscalars;
-  int &nmb = pmy_pack->nmb_thispack;
-  auto &nu_coll = eos_data.nu_coll;
-  auto &lim_coll = eos_data.lim_coll;
-  auto &flim = eos_data.flim;
-  auto &mlim = eos_data.mlim;
-  auto &hardwall = eos_data.hardwall_lim;
-  auto &bfloor = eos_data.bfloor;
-  auto &firehose_threshold = eos_data.firehose_threshold;
+  const int nmhd  = pmy_pack->pmhd->nmhd;
+  const int nscal = pmy_pack->pmhd->nscalars;
+  const int nmb = pmy_pack->nmb_thispack;
+  const Real nu_coll = eos_data.nu_coll;
+  const Real lim_coll = eos_data.lim_coll;
+  const bool flim = eos_data.flim;
+  const bool mlim = eos_data.mlim;
+  const bool hardwall = eos_data.hardwall_lim;
+  const Real bfloor = eos_data.bfloor;
+  const Real firehose_threshold = eos_data.firehose_threshold;
   const auto *pcgl_lf = pmy_pack->pmhd->pcgl_lf;
   const bool landau_fluid_active = (pcgl_lf != nullptr);
   const bool backup = landau_fluid_active

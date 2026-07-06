@@ -6,6 +6,9 @@
 //! \file mhd_sts.cpp
 //! \brief MHD-owned helpers and task wrappers for super time stepping.
 
+#include <cstdlib>
+#include <iostream>
+
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
@@ -17,9 +20,30 @@
 #include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/hyperviscosity.hpp"
+#include "globals.hpp"
 #include "mhd.hpp"
 
 namespace {
+
+bool CGLLFTaskTraceEnabled() {
+  const char *env = std::getenv("ATHENAK_CGL_LF_TASK_TRACE");
+  return env != nullptr && env[0] != '\0' && env[0] != '0';
+}
+
+void TraceCGLLFTask(MeshBlockPack *pmbp, const char *task, const char *point,
+                    int stage) {
+  if (!CGLLFTaskTraceEnabled()) return;
+  Kokkos::fence();
+  auto *pm = pmbp->pmesh;
+  std::cout << "[cgl_lf_task] rank=" << global_variable::my_rank
+            << " cycle=" << pm->ncycle
+            << " time=" << pm->time
+            << " task=" << task
+            << " point=" << point
+            << " stage=" << stage
+            << " nmb=" << pmbp->nmb_thispack
+            << std::endl;
+}
 
 KOKKOS_INLINE_FUNCTION
 bool UpdateSTSMHDVariable(const int n, const bool update_momentum,
@@ -45,6 +69,27 @@ const char *STSSweepName(const Driver *pdrive) {
   if (pdrive->sts.sweep == Driver::STSSweep::pre) return "pre";
   if (pdrive->sts.sweep == Driver::STSSweep::post) return "post";
   return "none";
+}
+
+void RefreshCellCenteredBFromFace(const MeshBlockPack *pmbp,
+                                  const DvceFaceFld4D<Real> &b,
+                                  DvceArray5D<Real> &bcc,
+                                  const int il, const int iu,
+                                  const int jl, const int ju,
+                                  const int kl, const int ku) {
+  const int nmb = pmbp->nmb_thispack;
+  auto b1 = b.x1f;
+  auto b2 = b.x2f;
+  auto b3 = b.x3f;
+  auto bcc_ = bcc;
+
+  par_for("mhd_refresh_bcc_from_face", DevExeSpace(), 0, nmb - 1,
+          kl, ku, jl, ju, il, iu,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    bcc_(m,IBX,k,j,i) = 0.5*(b1(m,k,j,i) + b1(m,k,j,i+1));
+    bcc_(m,IBY,k,j,i) = 0.5*(b2(m,k,j,i) + b2(m,k,j+1,i));
+    bcc_(m,IBZ,k,j,i) = 0.5*(b3(m,k,j,i) + b3(m,k+1,j,i));
+  });
 }
 
 } // namespace
@@ -116,6 +161,7 @@ void MHD::AddSelectedDiffusionEMF(DiffusionSelection selection) {
 TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
+  TraceCGLLFTask(pmy_pack, "ClearSTSFlux", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_clear_flux);
   const bool lf_only_sts_cell_update =
       has_sts_cgl_lf && pcgl_lf != nullptr && !has_sts_viscosity &&
@@ -156,11 +202,13 @@ TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
       const int n = (q == 0) ? IEN : IAN;
       flx3(m,n,k,j,i) = 0.0;
     });
+    TraceCGLLFTask(pmy_pack, "ClearSTSFlux", "end", stage);
     return TaskStatus::complete;
   }
   Kokkos::deep_copy(DevExeSpace(), uflx.x1f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x2f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x3f, 0.0);
+  TraceCGLLFTask(pmy_pack, "ClearSTSFlux", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -182,14 +230,16 @@ TaskStatus MHD::ClearSTSEField(Driver *pdrive, int stage) {
 //! \brief Accumulate only the STS-managed MHD diffusion operators that contribute to U.
 
 TaskStatus MHD::STSFluxes(Driver *pdrive, int stage) {
-  (void) stage;
+  TraceCGLLFTask(pmy_pack, "STSFluxes", "begin", stage);
   if (!has_any_parabolic_cell_update) {
+    TraceCGLLFTask(pmy_pack, "STSFluxes", "skip", stage);
     return TaskStatus::complete;
   }
 
   AddSelectedDiffusionFluxes(
       DiffusionSelection::sts_only, pdrive->sts.dt_sweep,
       pdrive->sts.coeffs.muj_tilde);
+  TraceCGLLFTask(pmy_pack, "STSFluxes", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -198,7 +248,9 @@ TaskStatus MHD::STSFluxes(Driver *pdrive, int stage) {
 //! \brief Switch the CGL extra state from anisotropy to magnetic moment for LF STS.
 
 TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
+  TraceCGLLFTask(pmy_pack, "BeginCGLLandauFluidSTSSweep", "begin", stage);
   if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != 1) {
+    TraceCGLLFTask(pmy_pack, "BeginCGLLandauFluidSTSSweep", "skip", stage);
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
@@ -220,6 +272,7 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);
   }
+  TraceCGLLFTask(pmy_pack, "BeginCGLLandauFluidSTSSweep", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -243,7 +296,9 @@ TaskStatus MHD::STSEField(Driver *pdrive, int stage) {
 //! \brief Apply one MHD-owned RKL2 STS stage over the enrolled conserved variables.
 
 TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
+  TraceCGLLFTask(pmy_pack, "STSUpdateU", "begin", stage);
   if (!has_any_parabolic_cell_update || !(pdrive->sts.enabled)) {
+    TraceCGLLFTask(pmy_pack, "STSUpdateU", "skip", stage);
     return TaskStatus::complete;
   }
 
@@ -296,6 +351,7 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   const bool update_cgl_moment = has_cgl_lf_split;
   const bool update_scalars = has_sts_scalar_diffusion;
   if (!(update_momentum || update_energy || update_cgl_moment || update_scalars)) {
+    TraceCGLLFTask(pmy_pack, "STSUpdateU", "skip", stage);
     return TaskStatus::complete;
   }
 
@@ -326,7 +382,7 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   auto flx1 = uflx.x1f;
   auto flx2 = uflx.x2f;
   auto flx3 = uflx.x3f;
-  auto &mbsize = pmy_pack->pmb->mb_size;
+  auto mbsize = pmy_pack->pmb->mb_size;
 
   int scr_level = 0;
   size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1);
@@ -451,6 +507,7 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
                               "magnetic-moment", u0);
   }
 
+  TraceCGLLFTask(pmy_pack, "STSUpdateU", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -481,8 +538,8 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
   int ks = indcs.ks, ke = indcs.ke;
   int nmb1 = pmy_pack->nmb_thispack - 1;
 
-  const bool &multi_d = pmy_pack->pmesh->multi_d;
-  const bool &three_d = pmy_pack->pmesh->three_d;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
   Real dt_sweep = pdrive->sts.dt_sweep;
   auto coeffs = pdrive->sts.coeffs;
   auto e1 = efld.x1e;
@@ -503,7 +560,7 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
   auto bx1f_rhs = b_sts_rhs.x1f;
   auto bx2f_rhs = b_sts_rhs.x2f;
   auto bx3f_rhs = b_sts_rhs.x3f;
-  auto &mbsize = pmy_pack->pmb->mb_size;
+  auto mbsize = pmy_pack->pmb->mb_size;
 
   par_for("mhd_sts_update_b1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -564,6 +621,7 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
 //! \brief Recover CGL primitives between LF STS stages while IAN stores magnetic moment.
 
 TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
+  TraceCGLLFTask(pmy_pack, "CGLLandauFluidPrimitiveRefresh", "begin", stage);
   RequireCGLMagneticMomentRepresentation("CGL Landau-fluid primitive refresh");
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "primitive-refresh", "pre",
@@ -574,12 +632,22 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
+  const int il = (indcs.is > 0) ? indcs.is - 1 : 0;
+  const int iu = (indcs.ie < n1m1) ? indcs.ie + 1 : n1m1;
+  const int jl = (indcs.nx2 > 1 && indcs.js > 0) ? indcs.js - 1 : 0;
+  const int ju = (indcs.nx2 > 1 && indcs.je < n2m1) ? indcs.je + 1 : n2m1;
+  const int kl = (indcs.nx3 > 1 && indcs.ks > 0) ? indcs.ks - 1 : 0;
+  const int ku = (indcs.nx3 > 1 && indcs.ke < n3m1) ? indcs.ke + 1 : n3m1;
   const int dfloor_before = pmy_pack->pmesh->ecounter.neos_dfloor;
   const int pfloor_before = pmy_pack->pmesh->ecounter.neos_efloor;
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::primitive_refresh);
-    peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, 0, n1m1, 0, n2m1,
-                                           0, n3m1);
+    if (pmy_pack->pmesh->multilevel) {
+      RefreshCellCenteredBFromFace(pmy_pack, b0, bcc0, il, iu, jl, ju,
+                                   kl, ku);
+    }
+    peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju,
+                                           kl, ku);
   }
   pcgl_lf->RecordAdmissibility(
       u0, w0, bcc0, peos->eos_data,
@@ -591,6 +659,7 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
     DiagnoseNonfiniteCGLState(stage, "primitive-refresh", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);
   }
+  TraceCGLLFTask(pmy_pack, "CGLLandauFluidPrimitiveRefresh", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -599,7 +668,9 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
 //! \brief Restore conserved anisotropy after the final LF STS stage.
 
 TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
+  TraceCGLLFTask(pmy_pack, "EndCGLLandauFluidSTSSweep", "begin", stage);
   if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != pdrive->sts.nstages) {
+    TraceCGLLFTask(pmy_pack, "EndCGLLandauFluidSTSSweep", "skip", stage);
     return TaskStatus::complete;
   }
   RequireCGLMagneticMomentRepresentation("CGL Landau-fluid sweep end");
@@ -621,6 +692,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "post",
                               STSSweepName(pdrive), "anisotropy", u0);
   }
+  TraceCGLLFTask(pmy_pack, "EndCGLLandauFluidSTSSweep", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -632,7 +704,9 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 //! interval here so both source updates together advance exactly one cycle.
 
 TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
+  TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "begin", stage);
   if (!has_cgl_lf_split || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
+    TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "skip", stage);
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid post-sweep collisions");
@@ -654,6 +728,7 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
     DiagnoseNonfiniteCGLState(stage, "post-sweep-collisions", "post",
                               STSSweepName(pdrive), "anisotropy", u0);
   }
+  TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -662,12 +737,15 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
 //! \brief Refresh MHD-local timestep estimates after the final post sweep stage.
 
 TaskStatus MHD::STSRefreshTimeStep(Driver *pdrive, int stage) {
+  TraceCGLLFTask(pmy_pack, "STSRefreshTimeStep", "begin", stage);
   if (!has_any_parabolic_split || !(pdrive->sts.enabled)) {
+    TraceCGLLFTask(pmy_pack, "STSRefreshTimeStep", "skip", stage);
     return TaskStatus::complete;
   }
   if (pdrive->sts.sweep == Driver::STSSweep::post && stage == pdrive->sts.nstages) {
     RecomputeTimeStepFromCurrentState(pdrive);
   }
+  TraceCGLLFTask(pmy_pack, "STSRefreshTimeStep", "end", stage);
   return TaskStatus::complete;
 }
 

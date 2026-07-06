@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <cstdlib>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -29,6 +30,30 @@
 #include "shearing_box/orbital_advection.hpp"
 #include "mhd/mhd.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
+
+namespace {
+
+bool CGLLFTaskListTraceEnabled() {
+  const char *env = std::getenv("ATHENAK_CGL_LF_TASK_TRACE");
+  return env != nullptr && env[0] != '\0' && env[0] != '0';
+}
+
+void TraceCGLLFTaskList(MeshBlockPack *pmbp, const char *task, const char *point,
+                        int stage) {
+  if (!CGLLFTaskListTraceEnabled()) return;
+  Kokkos::fence();
+  auto *pm = pmbp->pmesh;
+  std::cout << "[cgl_lf_task] rank=" << global_variable::my_rank
+            << " cycle=" << pm->ncycle
+            << " time=" << pm->time
+            << " task=" << task
+            << " point=" << point
+            << " stage=" << stage
+            << " nmb=" << pmbp->nmb_thispack
+            << std::endl;
+}
+
+} // namespace
 
 namespace mhd {
 //----------------------------------------------------------------------------------------
@@ -254,19 +279,31 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 //! \brief Post receive operations required for one STS parabolic stage.
 
 TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
-  (void) stage;
+  TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_init_recv);
   TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
-  if (tstat != TaskStatus::complete) return tstat;
+  if (tstat != TaskStatus::complete) {
+    TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_u", stage);
+    return tstat;
+  }
   if (pmy_pack->pmesh->multilevel) {
     tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_flux_u", stage);
+      return tstat;
+    }
   }
   if (has_any_parabolic_field_update) {
     tstat = pbval_b->InitRecv(3);
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_b", stage);
+      return tstat;
+    }
     tstat = pbval_b->InitFluxRecv(3);
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_flux_b", stage);
+      return tstat;
+    }
   }
   if (psbox_u != nullptr &&
       (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
@@ -275,17 +312,27 @@ TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
       time += pmy_pack->pmesh->dt;
     }
     tstat = psbox_u->InitRecv(time);
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_sbox_u", stage);
+      return tstat;
+    }
     if (has_any_parabolic_cell_update) {
       tstat = psbox_u->InitFluxRecv();
-      if (tstat != TaskStatus::complete) return tstat;
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_sbox_flux_u", stage);
+        return tstat;
+      }
     }
     if (has_any_parabolic_field_update) {
       tstat = psbox_b->InitRecv(time);
-      if (tstat != TaskStatus::complete) return tstat;
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_sbox_b", stage);
+        return tstat;
+      }
       tstat = psbox_b->InitEMFRecv();
     }
   }
+  TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "end", stage);
   return tstat;
 }
 
@@ -295,35 +342,57 @@ TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
 
 TaskStatus MHD::ClearSendParabolic(Driver *pdrive, int stage) {
   (void) pdrive;
-  (void) stage;
+  TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "begin", stage);
   TaskStatus tstat = pbval_u->ClearSend();
-  if (tstat != TaskStatus::complete) return tstat;
+  if (tstat != TaskStatus::complete) {
+    TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_u", stage);
+    return tstat;
+  }
   if (has_any_parabolic_field_update) {
     tstat = pbval_b->ClearSend();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_b", stage);
+      return tstat;
+    }
   }
   if (pmy_pack->pmesh->multilevel) {
     tstat = pbval_u->ClearFluxSend();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_flux_u", stage);
+      return tstat;
+    }
   }
   if (has_any_parabolic_field_update) {
     tstat = pbval_b->ClearFluxSend();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_flux_b", stage);
+      return tstat;
+    }
   }
   if (psbox_u != nullptr &&
       (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
     tstat = psbox_u->ClearSend();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_sbox_u", stage);
+      return tstat;
+    }
     if (has_any_parabolic_cell_update) {
       tstat = psbox_u->ClearFluxSend();
-      if (tstat != TaskStatus::complete) return tstat;
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_sbox_flux_u", stage);
+        return tstat;
+      }
     }
     if (has_any_parabolic_field_update) {
       tstat = psbox_b->ClearSend();
-      if (tstat != TaskStatus::complete) return tstat;
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_sbox_b", stage);
+        return tstat;
+      }
       tstat = psbox_b->ClearEMFSend();
     }
   }
+  TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "end", stage);
   return tstat;
 }
 
@@ -333,35 +402,57 @@ TaskStatus MHD::ClearSendParabolic(Driver *pdrive, int stage) {
 
 TaskStatus MHD::ClearRecvParabolic(Driver *pdrive, int stage) {
   (void) pdrive;
-  (void) stage;
+  TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "begin", stage);
   TaskStatus tstat = pbval_u->ClearRecv();
-  if (tstat != TaskStatus::complete) return tstat;
+  if (tstat != TaskStatus::complete) {
+    TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_u", stage);
+    return tstat;
+  }
   if (has_any_parabolic_field_update) {
     tstat = pbval_b->ClearRecv();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_b", stage);
+      return tstat;
+    }
   }
   if (pmy_pack->pmesh->multilevel) {
     tstat = pbval_u->ClearFluxRecv();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_flux_u", stage);
+      return tstat;
+    }
   }
   if (has_any_parabolic_field_update) {
     tstat = pbval_b->ClearFluxRecv();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_flux_b", stage);
+      return tstat;
+    }
   }
   if (psbox_u != nullptr &&
       (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
     tstat = psbox_u->ClearRecv();
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_sbox_u", stage);
+      return tstat;
+    }
     if (has_any_parabolic_cell_update) {
       tstat = psbox_u->ClearFluxRecv();
-      if (tstat != TaskStatus::complete) return tstat;
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_sbox_flux_u", stage);
+        return tstat;
+      }
     }
     if (has_any_parabolic_field_update) {
       tstat = psbox_b->ClearRecv();
-      if (tstat != TaskStatus::complete) return tstat;
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_sbox_b", stage);
+        return tstat;
+      }
       tstat = psbox_b->ClearEMFRecv();
     }
   }
+  TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "end", stage);
   return tstat;
 }
 
@@ -639,8 +730,40 @@ TaskStatus MHD::RecvU_OA(Driver *pdrive, int stage) {
 TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
   // Only execute Mesh function with SMR/AMR
   if (pmy_pack->pmesh->multilevel) {
+    TraceCGLLFTaskList(pmy_pack, "RestrictU", "begin", stage);
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_restrict_u);
-    pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
+    if (pmy_pack->pmesh->pmr->prolong_prims && peos->eos_data.is_cgl) {
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      const int is = indcs.is, ie = indcs.ie;
+      const int js = indcs.js, je = indcs.je;
+      const int ks = indcs.ks, ke = indcs.ke;
+
+      if (cgl_slot_representation == CGLSlotRepresentation::magnetic_moment) {
+        const int dfloor_before = pmy_pack->pmesh->ecounter.neos_dfloor;
+        const int pfloor_before = pmy_pack->pmesh->ecounter.neos_efloor;
+        peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, is, ie, js, je,
+                                               ks, ke);
+        const int dfloor_delta =
+            pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before;
+        const int pfloor_delta =
+            pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before;
+        if (pcgl_lf != nullptr && (dfloor_delta > 0 || pfloor_delta > 0)) {
+          pcgl_lf->RecordAdmissibility(
+              u0, w0, bcc0, peos->eos_data, dfloor_delta, pfloor_delta,
+              pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
+              stage, pdrive->sts.nstages);
+        }
+      } else {
+        RequireCGLAnisotropyRepresentation("CGL AMR primitive restriction");
+        peos->ConsToPrim(u0, b0, w0, bcc0, false, is, ie, js, je, ks, ke);
+      }
+
+      pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
+      pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(this);
+    } else {
+      pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
+    }
+    TraceCGLLFTaskList(pmy_pack, "RestrictU", "end", stage);
   }
   return TaskStatus::complete;
 }
@@ -857,6 +980,7 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
   // do not apply BCs if domain is strictly periodic
   if (pmy_pack->pmesh->strictly_periodic) return TaskStatus::complete;
 
+  TraceCGLLFTaskList(pmy_pack, "ApplyPhysicalBCs", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_physical_bcs);
 
   // physical BCs
@@ -868,6 +992,7 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
     (pmy_pack->pmesh->pgen->user_bcs_func)(pmy_pack->pmesh);
   }
 
+  TraceCGLLFTaskList(pmy_pack, "ApplyPhysicalBCs", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -878,6 +1003,7 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
 
 TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {  // only prolongate with SMR/AMR
+    TraceCGLLFTaskList(pmy_pack, "Prolongate", "begin", stage);
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_prolongate);
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
     pbval_b->FillCoarseInBndryFC(b0, coarse_b0);
@@ -897,6 +1023,7 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
       pbval_u->ProlongateCC(u0, coarse_u0);
       pbval_b->ProlongateFC(b0, coarse_b0);
     }
+    TraceCGLLFTaskList(pmy_pack, "Prolongate", "end", stage);
   }
   return TaskStatus::complete;
 }
@@ -908,6 +1035,7 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
 TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
+  TraceCGLLFTaskList(pmy_pack, "ConToPrim", "begin", stage);
   RequireCGLAnisotropyRepresentation("MHD conserved-to-primitive conversion");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &ng = indcs.ng;
@@ -915,6 +1043,7 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
   peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  TraceCGLLFTaskList(pmy_pack, "ConToPrim", "end", stage);
   return TaskStatus::complete;
 }
 

@@ -360,9 +360,9 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
 
 void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
   Mesh *pmesh = pmbp->pmesh;
-  auto &refine_flag = pmesh->pmr->refine_flag;
-  auto &mblev = pmbp->pmb->mb_lev;
-  auto &mb_size = pmbp->pmb->mb_size;
+  auto refine_flag = pmesh->pmr->refine_flag;
+  auto mblev = pmbp->pmb->mb_lev;
+  auto mb_size = pmbp->pmb->mb_size;
   const int nmb = pmbp->nmb_thispack;
   const int mbs = pmesh->gids_eachrank[global_variable::my_rank];
   const int root_level = pmesh->root_level;
@@ -370,9 +370,10 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
   const bool three_d = pmesh->three_d;
   const RegionSize mesh_size = pmesh->mesh_size;
   auto &indcs = pmesh->mb_indcs;
-  auto &bcc = pmbp->pmhd->bcc0;
+  auto bcc = pmbp->pmhd->bcc0;
   const auto cfg = divb_amr;
-  const Real phase = pmesh->time + static_cast<Real>(pmesh->ncycle);
+  const Real mesh_time = pmesh->time;
+  const Real phase = mesh_time + static_cast<Real>(pmesh->ncycle);
 
   if (cfg.refinement_mode == 2) {
     const int is = indcs.is;
@@ -425,18 +426,17 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
       }, Kokkos::Max<Real>(jmax));
 
       const int level = mblev.d_view(m);
-      int &flag = refine_flag.d_view(m + mbs);
       if (jmax > cfg.current_refine_threshold && level < cfg.target_level) {
-        flag = 1;
+        refine_flag.d_view(m + mbs) = 1;
       } else if (jmax < derefine_threshold && level > root_level) {
-        flag = -1;
+        refine_flag.d_view(m + mbs) = -1;
       }
     });
   } else {
     par_for("divb_amr_refinement", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
     bool refine_region = false;
     if (cfg.refinement_mode == 1) {
-      refine_region = (pmesh->time >= cfg.uniform_refine_time);
+      refine_region = (mesh_time >= cfg.uniform_refine_time);
     } else {
       refine_region = InRefinementPattern(
           mb_size.d_view(m), mesh_size, phase, multi_d, three_d);
