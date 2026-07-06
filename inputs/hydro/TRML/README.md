@@ -2,8 +2,7 @@
 
 This directory contains inputs for the `simple_TRML` AthenaK problem generator.
 The current `simple_TRML` pgen is intentionally clean: it initializes the
-original smooth turbulent radiative mixing layer and does not contain the
-experimental 1D-front/table initialization path.
+original smooth turbulent radiative mixing layer.
 
 ## Build target
 
@@ -80,17 +79,6 @@ init_perturb_vel_frac = ...
 
 Most current inputs set `init_perturb_vel_frac = 0.0` and use the shared
 `<initial_perturbations>` block instead.
-
-The following old 1D-front options have been removed from this pgen:
-
-```ini
-front_j = ...
-front_step_x3 = ...
-initial_profile = front_step
-```
-
-`initial_profile = tanh` and `initial_profile = smooth_tanh` are accepted only
-as compatibility aliases for the current smooth IC.
 
 ## Velocity-frame convention
 
