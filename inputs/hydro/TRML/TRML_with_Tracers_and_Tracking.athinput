@@ -1,5 +1,5 @@
-# Canonical simple-TRML run with perturbations, thermodynamic Monte-Carlo tracers,
-# and one low-bandwidth interface-frame controller active for 50 shear times.
+# Canonical clean simple-TRML run with perturbations and thermodynamic
+# Monte-Carlo tracers. Frame tracking is present as an optional disabled block.
 # t_shear = (x1max - x1min)/velocity = 1.5491933384829668.
 # Validated locally on 8 MPI ranks at 48 x 48 x 96. No timed retuning is used.
 
@@ -83,9 +83,34 @@ rho_hot = 1.0
 rho_cold = 56.23413251903491
 # Relative shear Mach number is 0.5 for the pressure and gamma below.
 velocity = 0.6454972243679028
+# The cleaned simple_TRML pgen uses the original smooth tanh density/shear
+# interface. There is no physical initial z velocity in the original lab frame.
+initial_profile = tanh
+fixed_frame_velocity_x3 = 0.0
 # Hold the imposed shear vx in the upper reservoir. Set true to copy vx from the
 # upper boundary-adjacent active cell instead.
 zero_gradient_vx = false
+# Lower user-x3 boundary mode. Options:
+#   reflect: fixed cold reservoir wall with reflected normal velocity.
+#   outflow: copy the adjacent active conserved state into the lower ghost zones.
+#   mass_balance: fixed-density cold reservoir with explicit vz, or with live
+#                 top-Mdot balancing when a frame tracker has a valid average.
+lower_x3_user_bc = reflect
+# For lower_x3_user_bc=mass_balance:
+#   fixed:          P=P0.
+#   total_pressure: P=P0 + rho_hot*(v_hot_lab - v_cold_lab)^2, using the
+#                   top-Mdot average and mass-balanced lower velocity.
+lower_x3_mass_balance_pressure_mode = fixed
+# For lower_x3_user_bc=mass_balance:
+#   zero_gradient: copy vx,vy from the lower active layer, but at rho_cold.
+#   reservoir:     use fixed cold-stream lab velocities transformed to the frame.
+lower_x3_mass_balance_tangential_mode = zero_gradient
+# Used by lower_x3_user_bc=mass_balance before any live top-Mdot average is
+# available. Interpreted in lower_x3_mass_balance_velocity_frame.
+lower_x3_mass_balance_vz = 0.0
+lower_x3_mass_balance_velocity_frame = grid
+# Negative disables the cap.
+lower_x3_mass_balance_max_abs_vz = -1.0
 pres = 1.0
 # Minimum cooling time chosen for xi = 100.
 t_cool_min = 0.015491933384829668
@@ -93,6 +118,10 @@ T_cutoff_over_T_cold = 20.0
 T_ci_over_T_cold = 10.0
 T_ih_over_T_cold = 30.0
 beta = 0.0
+# Negative disables the optional smooth startup ramp. Set to one shear time
+# for the outflow comparison matrix.
+cooling_ramp_time = -1.0
+cooling_ramp_min_factor = 0.0
 
 user_srcs = true
 user_dt = true
@@ -125,29 +154,25 @@ x3_center = 0.0
 x3_scale = 0.1414213562373095
 
 <frame_tracking>
-# Track the volume-weighted centroid of the hot-side scalar band along x3.
-enabled = true
+# Optional finite-window top-Mdot frame tracking. Leave disabled for the clean
+# baseline. Sign convention:
+#   Mdot_top = integral rho*v3*dA at upper x3, positive outward/+x3.
+#   v_grid = v_lab - V_frame.
+enabled = false
 tracked_fluid = hydro
 start_time = 0.0
 apply_every = 1
 diagnostic_every = 2000
 axes = x3
-x3_target = 0.0
-target = scalar0
-target_min = 0.05
-target_max = 0.2
-weight = volume
-mode = pd
-position_signal = centroid
-velocity_signal = position_rate
-# One nominally critically damped, low-bandwidth controller is used for the entire run.
-# The long response time removes secular drift without chasing turbulent fluctuations.
-tau_avg = 1.0
-tau_relax = 5.0
-tau_vel = 2.5
+mode = top_mdot_window
+mdot_velocity_sign = flipped
+mdot_velocity_factor = 1.0
+mdot_density_mode = geometric_mean
+mdot_area = -1.0
+mdot_start_time = 0.5
+mdot_window_time = 1.5491933384829668
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-# Limit frame acceleration; this suppresses boundary-flux and cooling oscillations.
 max_boost_change_rate = 0.02
 
 <particles>

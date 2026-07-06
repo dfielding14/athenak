@@ -46,7 +46,10 @@ namespace {
 enum FrameTrackingMode {
   kFTVelocity = 0,
   kFTPosition = 1,
-  kFTPD = 2
+  kFTPD = 2,
+  kFTTopMdot = 3,
+  kFTTopMdotAuto = 4,
+  kFTTopMdotWindow = 5
 };
 
 enum FrameTrackingPositionSignal {
@@ -85,7 +88,7 @@ enum FrameTrackingWeightMode {
   kFTWeightTracerMass = 3
 };
 
-constexpr int kFrameTrackingStateVersion = 1;
+constexpr int kFrameTrackingStateVersion = 3;
 
 const std::vector<std::pair<std::string, std::string>> &RemovedAliases() {
   static const std::vector<std::pair<std::string, std::string>> aliases = {
@@ -251,9 +254,42 @@ int ParseFrameTrackingMode(const std::string &mode_raw) {
   if (mode == "velocity") return kFTVelocity;
   if (mode == "position") return kFTPosition;
   if (mode == "pd" || mode == "position_velocity") return kFTPD;
+  if (mode == "top_mdot" || mode == "mdot_top" ||
+      mode == "delayed_top_mdot" || mode == "vtop") {
+    return kFTTopMdot;
+  }
+  if (mode == "top_mdot_auto" || mode == "auto_top_mdot" ||
+      mode == "settled_top_mdot") {
+    return kFTTopMdotAuto;
+  }
+  if (mode == "top_mdot_window" || mode == "window_top_mdot" ||
+      mode == "running_top_mdot" || mode == "finite_window_top_mdot") {
+    return kFTTopMdotWindow;
+  }
   FatalFrameTrackingInput("Invalid <frame_tracking>/mode '" + mode_raw +
-                          "'. Expected one of: velocity, position, pd.");
+                          "'. Expected one of: velocity, position, pd, "
+                          "top_mdot, top_mdot_auto, top_mdot_window.");
   return kFTPD;
+}
+
+Real ParseMdotVelocitySign(const std::string &sign_raw) {
+  const std::string sign = NormalizeToken(sign_raw);
+  if (sign == "normal" || sign == "same" || sign == "positive" ||
+      sign == "plus" || sign == "+1") {
+    return 1.0;
+  }
+  if (sign == "flipped" || sign == "flip" || sign == "opposite" ||
+      sign == "negative" || sign == "minus" || sign == "-1") {
+    return -1.0;
+  }
+  FatalFrameTrackingInput("Invalid <frame_tracking>/mdot_velocity_sign '" +
+                          sign_raw + "'. Expected normal or flipped.");
+  return 1.0;
+}
+
+Real SmoothStep01(Real x) {
+  x = std::max(static_cast<Real>(0.0), std::min(static_cast<Real>(1.0), x));
+  return x*x*(static_cast<Real>(3.0) - static_cast<Real>(2.0)*x);
 }
 
 int ParseFrameTrackingPositionSignal(const std::string &signal_raw) {
@@ -533,6 +569,110 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
   max_abs_boost_ = pin->GetOrAddReal(block_name_, "max_abs_boost", 0.0);
   max_boost_change_ = pin->GetOrAddReal(block_name_, "max_boost_change", 0.0);
   max_boost_change_rate_ = pin->GetOrAddReal(block_name_, "max_boost_change_rate", -1.0);
+  mdot_average_start_time_ =
+      pin->GetOrAddReal(block_name_, "mdot_average_start_time", 0.0);
+  mdot_average_end_time_ =
+      pin->GetOrAddReal(block_name_, "mdot_average_end_time",
+                        (start_time_ > 0.0) ? start_time_ : -1.0);
+  mdot_ramp_time_ = pin->GetOrAddReal(block_name_, "mdot_ramp_time", 0.0);
+  mdot_window_start_time_ =
+      pin->DoesParameterExist(block_name_, "mdot_start_time") ?
+      pin->GetReal(block_name_, "mdot_start_time") :
+      pin->GetOrAddReal(block_name_, "mdot_window_start_time", 0.5);
+  mdot_window_time_ =
+      pin->GetOrAddReal(block_name_, "mdot_window_time", 1.0);
+  mdot_density_mode_name_ =
+      pin->GetOrAddString(block_name_, "mdot_density_mode", "fixed");
+  mdot_velocity_sign_name_ =
+      pin->GetOrAddString(block_name_, "mdot_velocity_sign", "normal");
+  mdot_velocity_sign_ = ParseMdotVelocitySign(mdot_velocity_sign_name_);
+  mdot_velocity_factor_ =
+      pin->GetOrAddReal(block_name_, "mdot_velocity_factor", 1.0);
+  mdot_flux_frame_name_ =
+      pin->GetOrAddString(block_name_, "mdot_flux_frame", "grid");
+  const std::string mdot_flux_frame = NormalizeToken(mdot_flux_frame_name_);
+  if (mdot_flux_frame == "lab" || mdot_flux_frame == "laboratory" ||
+      mdot_flux_frame == "inertial" || mdot_flux_frame == "physical") {
+    mdot_flux_lab_frame_ = true;
+  } else if (mdot_flux_frame == "grid" || mdot_flux_frame == "frame" ||
+             mdot_flux_frame == "moving_frame" ||
+             mdot_flux_frame == "comoving") {
+    mdot_flux_lab_frame_ = false;
+  } else {
+    FatalFrameTrackingInput("Invalid <frame_tracking>/mdot_flux_frame '" +
+                            mdot_flux_frame_name_ + "'. Expected grid or lab.");
+  }
+  if (pin->DoesParameterExist(block_name_, "mdot_density")) {
+    mdot_density_ = pin->GetReal(block_name_, "mdot_density");
+  } else if (pin->DoesBlockExist("problem") &&
+             pin->DoesParameterExist("problem", "rho_cold")) {
+    mdot_density_ = pin->GetReal("problem", "rho_cold");
+  } else if (pin->DoesParameterExist(block_name_, "mdot_chi")) {
+    Real rho_hot = 1.0;
+    if (pin->DoesBlockExist("problem") &&
+        pin->DoesParameterExist("problem", "rho_hot")) {
+      rho_hot = pin->GetReal("problem", "rho_hot");
+    }
+    mdot_density_ = pin->GetReal(block_name_, "mdot_chi")*rho_hot;
+  } else {
+    mdot_density_ = 1.0;
+  }
+  const std::string mdot_density_mode = NormalizeToken(mdot_density_mode_name_);
+  if (mdot_density_mode == "fixed" || mdot_density_mode == "explicit" ||
+      mdot_density_mode == "rho_cold" || mdot_density_mode == "cold") {
+    // Keep the density chosen above. This preserves the pre-existing top_mdot
+    // and top_mdot_auto defaults unless the user explicitly selects another mode.
+  } else if (mdot_density_mode == "geometric_mean" ||
+             mdot_density_mode == "sqrt_hot_cold" ||
+             mdot_density_mode == "interface") {
+    if (!pin->DoesBlockExist("problem") ||
+        !pin->DoesParameterExist("problem", "rho_hot") ||
+        !pin->DoesParameterExist("problem", "rho_cold")) {
+      FatalFrameTrackingInput("mdot_density_mode=geometric_mean requires "
+                              "<problem>/rho_hot and <problem>/rho_cold.");
+    }
+    const Real rho_hot = pin->GetReal("problem", "rho_hot");
+    const Real rho_cold = pin->GetReal("problem", "rho_cold");
+    if (rho_hot <= 0.0 || rho_cold <= 0.0) {
+      FatalFrameTrackingInput("mdot_density_mode=geometric_mean requires "
+                              "positive rho_hot and rho_cold.");
+    }
+    mdot_density_ = std::sqrt(rho_hot*rho_cold);
+  } else if (mdot_density_mode == "hot" || mdot_density_mode == "rho_hot") {
+    if (!pin->DoesBlockExist("problem") ||
+        !pin->DoesParameterExist("problem", "rho_hot")) {
+      FatalFrameTrackingInput("mdot_density_mode=hot requires <problem>/rho_hot.");
+    }
+    mdot_density_ = pin->GetReal("problem", "rho_hot");
+  } else {
+    FatalFrameTrackingInput("Invalid <frame_tracking>/mdot_density_mode '" +
+                            mdot_density_mode_name_ + "'. Expected fixed, "
+                            "geometric_mean, rho_cold, or rho_hot.");
+  }
+  mdot_area_ = pin->GetOrAddReal(block_name_, "mdot_area", -1.0);
+  if (mdot_area_ <= 0.0 && pmy_pack != nullptr && pmy_pack->pmesh != nullptr) {
+    const RegionSize &mesh_size = pmy_pack->pmesh->mesh_size;
+    mdot_area_ = (mesh_size.x1max - mesh_size.x1min)*
+                 (mesh_size.x2max - mesh_size.x2min);
+  }
+  mdot_auto_detect_start_time_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_detect_start_time", 0.5);
+  mdot_auto_fast_tau_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_fast_tau", 0.5);
+  mdot_auto_slow_tau_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_slow_tau", 1.5);
+  mdot_auto_rel_tol_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_rel_tol", 0.075);
+  mdot_auto_abs_floor_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_abs_floor", 1.0e-12);
+  mdot_auto_hold_time_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_hold_time", 0.5);
+  mdot_auto_ramp_fraction_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_ramp_fraction", 0.25);
+  mdot_auto_ramp_min_time_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_ramp_min_time", 0.25);
+  mdot_auto_ramp_max_time_ =
+      pin->GetOrAddReal(block_name_, "mdot_auto_ramp_max_time", 5.0);
   reacquire_expand_factor_ =
       pin->GetOrAddReal(block_name_, "reacquire_expand_factor", 1.0);
   reacquire_max_expand_ = pin->GetOrAddReal(block_name_, "reacquire_max_expand", 1.0);
@@ -627,6 +767,44 @@ void FrameTracker::RestoreFrameState(ParameterInput *pin) {
     (void) ReadRealAny(pin, block_name_, {"state_last_apply_time"}, last_apply_time_);
     (void) ReadIntegerAny(pin, block_name_, {"state_miss_streak"}, miss_streak_);
     (void) ReadIntegerAny(pin, block_name_, {"state_recover_streak"}, recover_streak_);
+    (void) ReadRealAny(pin, block_name_, {"state_mdot_integral"}, mdot_integral_);
+    (void) ReadRealAny(pin, block_name_, {"state_mdot_weight_time"}, mdot_weight_time_);
+    (void) ReadRealAny(pin, block_name_, {"state_mdot_last_top"}, mdot_last_top_);
+    (void) ReadRealAny(pin, block_name_, {"state_mdot_last_average"},
+                       mdot_last_average_);
+    (void) ReadRealAny(pin, block_name_, {"state_mdot_last_vtop"}, mdot_last_vtop_);
+    (void) ReadRealAny(pin, block_name_, {"state_mdot_last_ramp_factor"},
+                       mdot_last_ramp_factor_);
+    if (state_version >= 3) {
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_fast"},
+                         mdot_auto_fast_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_slow"},
+                         mdot_auto_slow_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_rel"},
+                         mdot_auto_rel_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_hold_elapsed"},
+                         mdot_auto_hold_elapsed_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_settle_time"},
+                         mdot_auto_settle_time_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_locked_mdot"},
+                         mdot_auto_locked_mdot_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_locked_vframe"},
+                         mdot_auto_locked_vframe_);
+      (void) ReadRealAny(pin, block_name_,
+                         {"state_mdot_auto_frame_velocity_at_lock"},
+                         mdot_auto_frame_velocity_at_lock_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_ramp_duration"},
+                         mdot_auto_ramp_duration_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_target_vframe"},
+                         mdot_auto_target_vframe_);
+      (void) ReadRealAny(pin, block_name_, {"state_mdot_auto_ramp_factor"},
+                         mdot_auto_ramp_factor_);
+      (void) ReadBooleanAny(pin, block_name_,
+                            {"state_mdot_auto_filter_initialized"},
+                            mdot_auto_filter_initialized_);
+      (void) ReadBooleanAny(pin, block_name_, {"state_mdot_auto_locked"},
+                            mdot_auto_locked_);
+    }
   } else if (has_legacy_state) {
     restored_state_kind_ = 2;
     if (global_variable::my_rank == 0) {
@@ -649,6 +827,35 @@ void FrameTracker::StoreStateInParameterInput(ParameterInput *pin) const {
   pin->SetRealPrecise(block_name_, "state_last_apply_time", last_apply_time_);
   pin->SetInteger(block_name_, "state_miss_streak", miss_streak_);
   pin->SetInteger(block_name_, "state_recover_streak", recover_streak_);
+  pin->SetRealPrecise(block_name_, "state_mdot_integral", mdot_integral_);
+  pin->SetRealPrecise(block_name_, "state_mdot_weight_time", mdot_weight_time_);
+  pin->SetRealPrecise(block_name_, "state_mdot_last_top", mdot_last_top_);
+  pin->SetRealPrecise(block_name_, "state_mdot_last_average", mdot_last_average_);
+  pin->SetRealPrecise(block_name_, "state_mdot_last_vtop", mdot_last_vtop_);
+  pin->SetRealPrecise(block_name_, "state_mdot_last_ramp_factor",
+                      mdot_last_ramp_factor_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_fast", mdot_auto_fast_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_slow", mdot_auto_slow_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_rel", mdot_auto_rel_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_hold_elapsed",
+                      mdot_auto_hold_elapsed_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_settle_time",
+                      mdot_auto_settle_time_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_locked_mdot",
+                      mdot_auto_locked_mdot_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_locked_vframe",
+                      mdot_auto_locked_vframe_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_frame_velocity_at_lock",
+                      mdot_auto_frame_velocity_at_lock_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_ramp_duration",
+                      mdot_auto_ramp_duration_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_target_vframe",
+                      mdot_auto_target_vframe_);
+  pin->SetRealPrecise(block_name_, "state_mdot_auto_ramp_factor",
+                      mdot_auto_ramp_factor_);
+  pin->SetBoolean(block_name_, "state_mdot_auto_filter_initialized",
+                  mdot_auto_filter_initialized_);
+  pin->SetBoolean(block_name_, "state_mdot_auto_locked", mdot_auto_locked_);
   for (int axis = 0; axis < 3; ++axis) {
     const std::string name = AxisName(axis);
     const AxisState &state = axes_[axis];
@@ -701,6 +908,13 @@ int FrameTracker::FillHistoryData(std::string labels[], Real values[],
       required += 5;
     }
   }
+  if (mode_ == kFTTopMdot) {
+    required += 4;
+  } else if (mode_ == kFTTopMdotAuto) {
+    required += 11;
+  } else if (mode_ == kFTTopMdotWindow) {
+    required += 7;
+  }
   if (required > max_values) {
     FatalFrameTrackingInput("FrameTracker history data exceed configured output "
                             "capacity.");
@@ -744,6 +958,54 @@ int FrameTracker::FillHistoryData(std::string labels[], Real values[],
   values[n++] = limited ? 1.0 : 0.0;
   labels[n] = "ft_skip";
   values[n++] = skipped ? 1.0 : 0.0;
+  if (mode_ == kFTTopMdot) {
+    labels[n] = "ft_mdot_top";
+    values[n++] = mdot_last_top_;
+    labels[n] = "ft_mdot_avg";
+    values[n++] = mdot_last_average_;
+    labels[n] = "ft_vtop";
+    values[n++] = mdot_last_vtop_;
+    labels[n] = "ft_ramp";
+    values[n++] = mdot_last_ramp_factor_;
+  } else if (mode_ == kFTTopMdotAuto) {
+    labels[n] = "ft_mtop";
+    values[n++] = mdot_last_top_;
+    labels[n] = "ft_mfast";
+    values[n++] = mdot_auto_fast_;
+    labels[n] = "ft_mslow";
+    values[n++] = mdot_auto_slow_;
+    labels[n] = "ft_mrel";
+    values[n++] = mdot_auto_rel_;
+    labels[n] = "ft_hold";
+    values[n++] = mdot_auto_hold_elapsed_;
+    labels[n] = "ft_settle";
+    values[n++] = mdot_auto_locked_ ? 1.0 : 0.0;
+    labels[n] = "ft_tset";
+    values[n++] = mdot_auto_settle_time_;
+    labels[n] = "ft_mlock";
+    values[n++] = mdot_auto_locked_mdot_;
+    labels[n] = "ft_vlock";
+    values[n++] = mdot_auto_locked_vframe_;
+    labels[n] = "ft_vtgt";
+    values[n++] = mdot_auto_target_vframe_;
+    labels[n] = "ft_ramp";
+    values[n++] = mdot_auto_ramp_factor_;
+  } else if (mode_ == kFTTopMdotWindow) {
+    labels[n] = "ft_mtop";
+    values[n++] = mdot_last_top_;
+    labels[n] = "ft_mavg";
+    values[n++] = mdot_last_average_;
+    labels[n] = "ft_vtgt";
+    values[n++] = mdot_window_target_vframe_;
+    labels[n] = "ft_wtime";
+    values[n++] = mdot_weight_time_;
+    labels[n] = "ft_wlo";
+    values[n++] = mdot_window_low_time_;
+    labels[n] = "ft_rho";
+    values[n++] = mdot_density_;
+    labels[n] = "ft_fac";
+    values[n++] = mdot_velocity_factor_;
+  }
   return n;
 }
 
@@ -822,6 +1084,58 @@ void FrameTracker::PrintConfigurationSummary() const {
             << " velocity_signal=" << NormalizeToken(velocity_signal_name_)
             << " slew=" << NormalizeToken(boost_change_mode_name_)
             << " state=" << state_name << std::endl;
+  if (mode_ == kFTTopMdot) {
+    std::cout << "FrameTracker top_mdot: average_window=["
+              << mdot_average_start_time_ << "," << mdot_average_end_time_
+              << "] ramp_time=" << mdot_ramp_time_
+              << " density=" << mdot_density_
+              << " area=" << mdot_area_
+              << " flux_frame=" << NormalizeToken(mdot_flux_frame_name_)
+              << std::endl;
+    std::cout << "FrameTracker top_mdot sign: Mdot_top=integral rho*v3*dA "
+              << "at upper x3 with v3 measured in the "
+              << NormalizeToken(mdot_flux_frame_name_)
+              << " frame; positive is +x3/outward. "
+              << "v_frame_target=Mdot_top/(rho_cold*A); "
+              << "fluid_boost=-Delta v_frame." << std::endl;
+  } else if (mode_ == kFTTopMdotAuto) {
+    std::cout << "FrameTracker top_mdot_auto: detect_start="
+              << mdot_auto_detect_start_time_
+              << " fast_tau=" << mdot_auto_fast_tau_
+              << " slow_tau=" << mdot_auto_slow_tau_
+              << " rel_tol=" << mdot_auto_rel_tol_
+              << " hold_time=" << mdot_auto_hold_time_
+              << " ramp_fraction=" << mdot_auto_ramp_fraction_
+              << " ramp_bounds=[" << mdot_auto_ramp_min_time_ << ","
+              << mdot_auto_ramp_max_time_ << "] density=" << mdot_density_
+              << " area=" << mdot_area_
+              << " flux_frame=" << NormalizeToken(mdot_flux_frame_name_)
+              << std::endl;
+    std::cout << "FrameTracker top_mdot_auto sign: Mdot_top=integral "
+              << "rho*v3*dA at upper x3 with v3 measured in the "
+              << NormalizeToken(mdot_flux_frame_name_)
+              << " frame; positive is +x3/outward. "
+              << "v_frame_target=Mdot_top/(rho_cold*A); "
+              << "fluid_boost=-Delta v_frame." << std::endl;
+  } else if (mode_ == kFTTopMdotWindow) {
+    std::cout << "FrameTracker top_mdot_window: start="
+              << mdot_window_start_time_
+              << " window=" << mdot_window_time_
+              << " density_mode=" << NormalizeToken(mdot_density_mode_name_)
+              << " density=" << mdot_density_
+              << " area=" << mdot_area_
+              << " velocity_sign=" << NormalizeToken(mdot_velocity_sign_name_)
+              << " velocity_factor=" << mdot_velocity_factor_
+              << " flux_frame=" << NormalizeToken(mdot_flux_frame_name_)
+              << std::endl;
+    std::cout << "FrameTracker top_mdot_window sign: Mdot_top=integral "
+              << "rho*v3*dA at upper x3 with v3 measured in the "
+              << NormalizeToken(mdot_flux_frame_name_)
+              << " frame; positive is +x3/outward. "
+              << "v_frame_target=sign*<Mdot_top>_window/(rho_frame*A); "
+              << "sign=" << mdot_velocity_sign_
+              << " and fluid_boost=-Delta v_frame." << std::endl;
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -938,9 +1252,25 @@ void FrameTracker::ValidateConfiguration() {
     FatalFrameTrackingInput("Require <frame_tracking>/target_max >= target_min.");
   }
   if (weight_floor_ < 0.0 || min_global_weight_ < 0.0 || max_abs_boost_ < 0.0 ||
-      max_boost_change_ < 0.0 || int_max_abs_ < 0.0) {
+      max_boost_change_ < 0.0 || int_max_abs_ < 0.0 || mdot_ramp_time_ < 0.0 ||
+      mdot_auto_detect_start_time_ < 0.0 || mdot_auto_abs_floor_ < 0.0 ||
+      mdot_auto_hold_time_ < 0.0 || mdot_auto_ramp_fraction_ < 0.0 ||
+      mdot_auto_ramp_min_time_ < 0.0 || mdot_auto_ramp_max_time_ < 0.0 ||
+      mdot_window_start_time_ < 0.0 || mdot_window_time_ <= 0.0 ||
+      mdot_velocity_factor_ <= 0.0) {
     FatalFrameTrackingInput("Frame-tracking floors and boost/integral limits "
-                            "must be non-negative.");
+                            "must be non-negative; mdot_window_time and "
+                            "mdot_velocity_factor must be positive.");
+  }
+  if (mdot_auto_fast_tau_ <= 0.0 || mdot_auto_slow_tau_ <= 0.0 ||
+      mdot_auto_rel_tol_ < 0.0) {
+    FatalFrameTrackingInput("Require positive mdot_auto_fast_tau and "
+                            "mdot_auto_slow_tau, and non-negative "
+                            "mdot_auto_rel_tol.");
+  }
+  if (mdot_auto_ramp_max_time_ < mdot_auto_ramp_min_time_) {
+    FatalFrameTrackingInput("Require mdot_auto_ramp_max_time >= "
+                            "mdot_auto_ramp_min_time.");
   }
   if (boost_change_mode_ == kFTBoostPerTime && max_boost_change_rate_ <= 0.0) {
     FatalFrameTrackingInput("Require max_boost_change_rate > 0 when "
@@ -962,6 +1292,24 @@ void FrameTracker::ValidateConfiguration() {
       boundary_guard_min_scale_ > 1.0) {
     FatalFrameTrackingInput("Require boundary_guard_cells >= 1 and "
                             "0 <= boundary_guard_min_scale <= 1.");
+  }
+  if (mode_ == kFTTopMdot || mode_ == kFTTopMdotAuto ||
+      mode_ == kFTTopMdotWindow) {
+    if (!axes_[2].active || axes_[0].active || axes_[1].active) {
+      FatalFrameTrackingInput("<frame_tracking>/mode=top_mdot, top_mdot_auto, "
+                              "or top_mdot_window supports only axes=x3.");
+    }
+    if (mdot_density_ <= 0.0 || mdot_area_ <= 0.0) {
+      FatalFrameTrackingInput("Require positive mdot_density and mdot_area for "
+                              "<frame_tracking>/mode=top_mdot, top_mdot_auto, "
+                              "or top_mdot_window.");
+    }
+    if (mode_ == kFTTopMdot &&
+        mdot_average_end_time_ >= mdot_average_start_time_ &&
+        mdot_average_end_time_ <= 0.0) {
+      FatalFrameTrackingInput("Require mdot_average_end_time > 0, or set it below "
+                              "mdot_average_start_time for an open-ended average.");
+    }
   }
 
   const RegionIndcs &mesh_indcs = pmy_pack->pmesh->mesh_indcs;
@@ -1022,7 +1370,9 @@ TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
   Mesh *pm = pmy_pack->pmesh;
   const bool displacement_changed = AdvanceFrameDisplacement(pm->dt);
   bool boost_changed = false;
-  if (pm->time > start_time_ && pm->ncycle % apply_every_ == 0) {
+  if (((mode_ == kFTTopMdot) || (mode_ == kFTTopMdotAuto) ||
+       pm->time > start_time_) &&
+      pm->ncycle % apply_every_ == 0) {
     boost_changed = ApplyTracking();
   }
 
@@ -1050,7 +1400,6 @@ TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
   return TaskStatus::complete;
 }
 
-//----------------------------------------------------------------------------------------
 //! \fn void FrameTracker::SetActiveTargetRange()
 //! \brief Expand the tracked target interval while reacquiring missed material.
 
@@ -1230,6 +1579,485 @@ bool FrameTracker::SampleMoments(std::array<MomentSample, 3> &samples) const {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn Real FrameTracker::SampleTopMassFlux()
+//! \brief Compute the signed mass flux through the upper x3 active-cell layer.
+
+Real FrameTracker::SampleTopMassFlux(const bool lab_frame) const {
+  MeshBlockPack *pmbp = pmy_pack;
+  Mesh *pm = pmbp->pmesh;
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int js = indcs.js;
+  const int ke = indcs.ke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nmb = pmbp->nmb_thispack;
+  if (nmb <= 0) {
+    return 0.0;
+  }
+
+  const bool is_mhd = track_mhd_;
+  auto &w0 = is_mhd ? pmbp->pmhd->w0 : pmbp->phydro->w0;
+  auto &size = pmbp->pmb->mb_size;
+  const Real mesh_x3max = pm->mesh_size.x3max;
+  const int nmji = nmb*nx2*nx1;
+  const int nji = nx2*nx1;
+  const Real frame_v3 = lab_frame ? frame_velocity_[2] : 0.0;
+  Real rank_flux = 0.0;
+
+  Kokkos::parallel_reduce("frame_tracking_top_mdot",
+  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmji),
+  KOKKOS_LAMBDA(const int idx, Real &flux_) {
+    const int m = idx/nji;
+    const int j = ((idx - m*nji)/nx1) + js;
+    const int i = (idx - m*nji - (j - js)*nx1) + is;
+    const RegionSize block_size = size.d_view(m);
+    if (fabs(block_size.x3max - mesh_x3max) >
+        static_cast<Real>(0.5)*block_size.dx3) {
+      return;
+    }
+    // Signed top flux convention:
+    //   Mdot_top = integral rho*v3*dA in the upper active-cell layer.
+    // Positive is +x3/outward through the top boundary; negative is -x3/inward.
+    // Stored velocities are grid-frame velocities.  If lab_frame is requested,
+    // add the frame velocity so this samples the physical/lab mass flux.
+    const Real dA = block_size.dx1*block_size.dx2;
+    flux_ += w0(m, IDN, ke, j, i)*(w0(m, IVZ, ke, j, i) + frame_v3)*dA;
+  }, Kokkos::Sum<Real>(rank_flux));
+
+  Real global_flux = rank_flux;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &global_flux, 1, MPI_ATHENA_REAL, MPI_SUM,
+                MPI_COMM_WORLD);
+#endif
+  return global_flux;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool FrameTracker::ApplyX3FrameVelocityTarget()
+//! \brief Move the x3 frame velocity toward a target lab-frame velocity.
+
+bool FrameTracker::ApplyX3FrameVelocityTarget(const Real target_frame_velocity,
+                                              const Real dt_boost) {
+  Mesh *pm = pmy_pack->pmesh;
+  AxisState &state = axes_[2];
+
+  // Stored fluid velocities are frame-relative. If the lab-frame coordinate frame
+  // changes by Delta v_frame, every stored fluid velocity receives the opposite
+  // Galilean boost:
+  //   fluid_boost = -Delta v_frame.
+  const Real requested_frame_delta = target_frame_velocity - frame_velocity_[2];
+  Real frame_delta = requested_frame_delta;
+  state.last_slew_limited = false;
+
+  Real dv_allowed = 0.0;
+  if (boost_change_mode_ == kFTBoostPerApply) {
+    dv_allowed = max_boost_change_;
+  } else if (boost_change_mode_ == kFTBoostPerTime && max_boost_change_rate_ > 0.0) {
+    dv_allowed = max_boost_change_rate_*dt_boost;
+  }
+  if (dv_allowed > 0.0 && std::fabs(frame_delta) > dv_allowed) {
+    frame_delta = std::copysign(dv_allowed, frame_delta);
+    state.last_slew_limited = true;
+  }
+
+  Real boost = -frame_delta;
+  if (max_abs_boost_ > 0.0 && std::fabs(boost) > max_abs_boost_) {
+    boost = std::copysign(max_abs_boost_, boost);
+    frame_delta = -boost;
+    state.last_slew_limited = true;
+  }
+
+  state.last_vel_cmd_pre = -requested_frame_delta;
+  state.last_vel_cmd_post = boost;
+  state.last_boost = boost;
+  state.cumulative_boost += boost;
+  frame_velocity_[2] = -state.cumulative_boost;
+  state.last_x_err = frame_velocity_[2] - target_frame_velocity;
+  state.last_skip_flag = (boost == 0.0);
+
+  const bool is_mhd = track_mhd_;
+  auto &u0 = is_mhd ? pmy_pack->pmhd->u0 : pmy_pack->phydro->u0;
+  auto &w0 = is_mhd ? pmy_pack->pmhd->w0 : pmy_pack->phydro->w0;
+  const EOS_Data eos = is_mhd ? pmy_pack->pmhd->peos->eos_data :
+                                pmy_pack->phydro->peos->eos_data;
+  const bool use_energy = eos.is_ideal;
+  auto &indcs = pm->mb_indcs;
+  const int ng = indcs.ng;
+  const int n1 = indcs.nx1 + 2*ng;
+  const int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*ng) : 1;
+  const int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng) : 1;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  const bool state_changed = (boost != 0.0);
+  if (state_changed && nmb1 >= 0) {
+    par_for("frame_tracking_x3_target_boost", DevExeSpace(), 0, nmb1, 0, n3-1,
+            0, n2-1, 0, n1-1, KOKKOS_LAMBDA(const int m, const int k,
+                                             const int j, const int i) {
+      const Real rho = w0(m, IDN, k, j, i);
+      if (rho <= 0.0) {
+        return;
+      }
+      const Real mom_old3 = u0(m, IM3, k, j, i);
+      w0(m, IVZ, k, j, i) += boost;
+      u0(m, IM3, k, j, i) += rho*boost;
+      if (use_energy) {
+        u0(m, IEN, k, j, i) += mom_old3*boost +
+                                static_cast<Real>(0.5)*rho*SQR(boost);
+      }
+    });
+  }
+  return state_changed;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool FrameTracker::ApplyTopMdotTracking()
+//! \brief Drive the x3 frame velocity from the time-averaged top mass flux only.
+
+bool FrameTracker::ApplyTopMdotTracking(const Real dt_boost) {
+  Mesh *pm = pmy_pack->pmesh;
+  if (!axes_[2].active) {
+    return false;
+  }
+
+  const Real top_mdot = SampleTopMassFlux(mdot_flux_lab_frame_);
+  mdot_last_top_ = top_mdot;
+
+  const Real interval_end = pm->time;
+  Real interval_start = (last_apply_time_ >= 0.0) ? last_apply_time_ :
+      (interval_end - dt_boost);
+  interval_start = std::max(static_cast<Real>(0.0), interval_start);
+  const Real avg_end = (mdot_average_end_time_ >= mdot_average_start_time_) ?
+      mdot_average_end_time_ : interval_end;
+  const Real overlap_start = std::max(interval_start, mdot_average_start_time_);
+  const Real overlap_end = std::min(interval_end, avg_end);
+  const Real overlap = std::max(static_cast<Real>(0.0), overlap_end - overlap_start);
+  if (overlap > 0.0) {
+    mdot_integral_ += top_mdot*overlap;
+    mdot_weight_time_ += overlap;
+  }
+
+  mdot_last_average_ =
+      (mdot_weight_time_ > 0.0) ? (mdot_integral_/mdot_weight_time_) : 0.0;
+  const Real raw_vtop = (mdot_area_ > 0.0 && mdot_density_ > 0.0) ?
+      (mdot_last_average_/(mdot_area_*mdot_density_)) : 0.0;
+
+  if (pm->time <= start_time_) {
+    mdot_last_ramp_factor_ = 0.0;
+  } else if (mdot_ramp_time_ > 0.0) {
+    mdot_last_ramp_factor_ = SmoothStep01((pm->time - start_time_)/mdot_ramp_time_);
+  } else {
+    mdot_last_ramp_factor_ = 1.0;
+  }
+  mdot_last_vtop_ = mdot_last_ramp_factor_*raw_vtop;
+
+  AxisState &state = axes_[2];
+  state.last_global_weight = mdot_weight_time_;
+  state.last_mean_x = 0.0;
+  state.last_mean_v = mdot_last_average_;
+  state.last_filtered_x = 0.0;
+  state.last_filtered_v = mdot_last_vtop_;
+  state.last_x_centroid = 0.0;
+  state.last_x_midpoint = 0.0;
+  state.last_x_ctrl = 0.0;
+  state.last_x_err = frame_velocity_[2] - mdot_last_vtop_;
+  state.last_skip_flag = (pm->time <= start_time_ || mdot_weight_time_ <= 0.0);
+  state.last_slew_limited = false;
+
+  if (state.last_skip_flag) {
+    state.last_vel_cmd_pre = 0.0;
+    state.last_vel_cmd_post = 0.0;
+    state.last_boost = 0.0;
+    last_apply_time_ = pm->time;
+    PrintTopMdotMessage(top_mdot, mdot_last_average_, mdot_last_vtop_,
+                        mdot_last_ramp_factor_, 0.0);
+    return false;
+  }
+
+  const bool state_changed = ApplyX3FrameVelocityTarget(mdot_last_vtop_, dt_boost);
+  state.last_skip_flag = false;  // Preserve the existing fixed-window top_mdot semantics.
+  last_apply_time_ = pm->time;
+  PrintTopMdotMessage(top_mdot, mdot_last_average_, mdot_last_vtop_,
+                      mdot_last_ramp_factor_, state.last_boost);
+  return state_changed;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool FrameTracker::ApplyTopMdotAutoTracking()
+//! \brief Auto-lock the top-Mdot frame velocity after flux EMAs settle.
+
+bool FrameTracker::ApplyTopMdotAutoTracking(const Real dt_boost) {
+  Mesh *pm = pmy_pack->pmesh;
+  if (!axes_[2].active) {
+    return false;
+  }
+
+  const Real top_mdot = SampleTopMassFlux(mdot_flux_lab_frame_);
+  mdot_last_top_ = top_mdot;
+
+  AxisState &state = axes_[2];
+  state.last_global_weight = mdot_weight_time_;
+  state.last_mean_x = 0.0;
+  state.last_mean_v = mdot_auto_slow_;
+  state.last_filtered_x = 0.0;
+  state.last_filtered_v = mdot_auto_target_vframe_;
+  state.last_x_centroid = 0.0;
+  state.last_x_midpoint = 0.0;
+  state.last_x_ctrl = 0.0;
+  state.last_x_err = frame_velocity_[2] - mdot_auto_target_vframe_;
+  state.last_slew_limited = false;
+
+  if (pm->time < mdot_auto_detect_start_time_) {
+    mdot_auto_ramp_factor_ = 0.0;
+    mdot_auto_target_vframe_ = frame_velocity_[2];
+    mdot_last_average_ = mdot_auto_slow_;
+    mdot_last_vtop_ = mdot_auto_target_vframe_;
+    mdot_last_ramp_factor_ = mdot_auto_ramp_factor_;
+    state.last_filtered_v = mdot_auto_target_vframe_;
+    state.last_x_err = frame_velocity_[2] - mdot_auto_target_vframe_;
+    state.last_skip_flag = true;
+    state.last_vel_cmd_pre = 0.0;
+    state.last_vel_cmd_post = 0.0;
+    state.last_boost = 0.0;
+    last_apply_time_ = pm->time;
+    PrintTopMdotAutoMessage(0.0);
+    return false;
+  }
+
+  if (!mdot_auto_locked_) {
+    if (!mdot_auto_filter_initialized_) {
+      mdot_auto_fast_ = top_mdot;
+      mdot_auto_slow_ = top_mdot;
+      mdot_auto_rel_ = 0.0;
+      mdot_auto_hold_elapsed_ = 0.0;
+      mdot_auto_filter_initialized_ = true;
+      mdot_auto_ramp_factor_ = 0.0;
+      mdot_auto_target_vframe_ = frame_velocity_[2];
+      mdot_last_average_ = mdot_auto_slow_;
+      mdot_last_vtop_ = mdot_auto_target_vframe_;
+      mdot_last_ramp_factor_ = mdot_auto_ramp_factor_;
+      state.last_skip_flag = true;
+      state.last_vel_cmd_pre = 0.0;
+      state.last_vel_cmd_post = 0.0;
+      state.last_boost = 0.0;
+      state.last_global_weight = mdot_weight_time_;
+      state.last_mean_v = mdot_auto_slow_;
+      state.last_filtered_v = mdot_auto_target_vframe_;
+      state.last_x_err = frame_velocity_[2] - mdot_auto_target_vframe_;
+      last_apply_time_ = pm->time;
+      PrintTopMdotAutoMessage(0.0);
+      return false;
+    }
+
+    Real alpha_fast = 1.0 - std::exp(-dt_boost/mdot_auto_fast_tau_);
+    Real alpha_slow = 1.0 - std::exp(-dt_boost/mdot_auto_slow_tau_);
+    alpha_fast = std::max(static_cast<Real>(0.0),
+                          std::min(static_cast<Real>(1.0), alpha_fast));
+    alpha_slow = std::max(static_cast<Real>(0.0),
+                          std::min(static_cast<Real>(1.0), alpha_slow));
+    mdot_auto_fast_ += alpha_fast*(top_mdot - mdot_auto_fast_);
+    mdot_auto_slow_ += alpha_slow*(top_mdot - mdot_auto_slow_);
+    mdot_weight_time_ += dt_boost;
+    const Real rel_denom = std::max(std::fabs(mdot_auto_slow_),
+                                    mdot_auto_abs_floor_);
+    mdot_auto_rel_ = std::fabs(mdot_auto_fast_ - mdot_auto_slow_)/rel_denom;
+
+    if (mdot_auto_rel_ <= mdot_auto_rel_tol_) {
+      mdot_auto_hold_elapsed_ += dt_boost;
+    } else {
+      mdot_auto_hold_elapsed_ = 0.0;
+    }
+
+    if (mdot_auto_hold_elapsed_ >= mdot_auto_hold_time_) {
+      mdot_auto_locked_ = true;
+      mdot_auto_settle_time_ = pm->time;
+      mdot_auto_locked_mdot_ = mdot_auto_slow_;
+      mdot_auto_locked_vframe_ = mdot_auto_locked_mdot_/(mdot_density_*mdot_area_);
+      mdot_auto_frame_velocity_at_lock_ = frame_velocity_[2];
+      mdot_auto_ramp_duration_ =
+          mdot_auto_ramp_fraction_*std::max(static_cast<Real>(0.0),
+                                            mdot_auto_settle_time_);
+      mdot_auto_ramp_duration_ =
+          std::max(mdot_auto_ramp_min_time_,
+                   std::min(mdot_auto_ramp_max_time_, mdot_auto_ramp_duration_));
+    }
+  }
+
+  bool state_changed = false;
+  if (mdot_auto_locked_) {
+    if (mdot_auto_ramp_duration_ > 0.0) {
+      mdot_auto_ramp_factor_ =
+          SmoothStep01((pm->time - mdot_auto_settle_time_)/
+                       mdot_auto_ramp_duration_);
+    } else {
+      mdot_auto_ramp_factor_ = 1.0;
+    }
+    mdot_auto_target_vframe_ =
+        mdot_auto_frame_velocity_at_lock_ +
+        mdot_auto_ramp_factor_*
+        (mdot_auto_locked_vframe_ - mdot_auto_frame_velocity_at_lock_);
+    state.last_filtered_v = mdot_auto_target_vframe_;
+    state.last_mean_v = mdot_auto_slow_;
+    state.last_global_weight = mdot_weight_time_;
+    state_changed = ApplyX3FrameVelocityTarget(mdot_auto_target_vframe_, dt_boost);
+    state.last_skip_flag = !state_changed;
+  } else {
+    mdot_auto_ramp_factor_ = 0.0;
+    mdot_auto_target_vframe_ = frame_velocity_[2];
+    state.last_filtered_v = mdot_auto_target_vframe_;
+    state.last_mean_v = mdot_auto_slow_;
+    state.last_global_weight = mdot_weight_time_;
+    state.last_x_err = frame_velocity_[2] - mdot_auto_target_vframe_;
+    state.last_skip_flag = true;
+    state.last_vel_cmd_pre = 0.0;
+    state.last_vel_cmd_post = 0.0;
+    state.last_boost = 0.0;
+  }
+
+  mdot_last_average_ = mdot_auto_slow_;
+  mdot_last_vtop_ = mdot_auto_target_vframe_;
+  mdot_last_ramp_factor_ = mdot_auto_ramp_factor_;
+  last_apply_time_ = pm->time;
+  PrintTopMdotAutoMessage(state.last_boost);
+  return state_changed;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool FrameTracker::ApplyTopMdotWindowTracking()
+//! \brief Drive x3 frame velocity from a finite-memory signed top-Mdot average.
+
+bool FrameTracker::ApplyTopMdotWindowTracking(const Real dt_boost) {
+  Mesh *pm = pmy_pack->pmesh;
+  if (!axes_[2].active) {
+    return false;
+  }
+
+  const Real top_mdot = SampleTopMassFlux(mdot_flux_lab_frame_);
+  mdot_last_top_ = top_mdot;
+
+  AxisState &state = axes_[2];
+  state.last_mean_x = 0.0;
+  state.last_filtered_x = 0.0;
+  state.last_x_centroid = 0.0;
+  state.last_x_midpoint = 0.0;
+  state.last_x_ctrl = 0.0;
+  state.last_slew_limited = false;
+
+  if (pm->time < mdot_window_start_time_) {
+    mdot_integral_ = 0.0;
+    mdot_weight_time_ = 0.0;
+    mdot_last_average_ = 0.0;
+    mdot_window_low_time_ = mdot_window_start_time_;
+    mdot_window_target_vframe_ = frame_velocity_[2];
+    mdot_last_vtop_ = mdot_window_target_vframe_;
+    mdot_last_ramp_factor_ = 0.0;
+    state.last_global_weight = 0.0;
+    state.last_mean_v = mdot_last_average_;
+    state.last_filtered_v = mdot_window_target_vframe_;
+    state.last_x_err = frame_velocity_[2] - mdot_window_target_vframe_;
+    state.last_skip_flag = true;
+    state.last_vel_cmd_pre = 0.0;
+    state.last_vel_cmd_post = 0.0;
+    state.last_boost = 0.0;
+    last_apply_time_ = pm->time;
+    PrintTopMdotWindowMessage(0.0);
+    return false;
+  }
+
+  if (!mdot_window_times_.empty() && pm->time <= mdot_window_times_.back()) {
+    mdot_window_times_.back() = pm->time;
+    mdot_window_values_.back() = top_mdot;
+  } else {
+    mdot_window_times_.push_back(pm->time);
+    mdot_window_values_.push_back(top_mdot);
+  }
+
+  const Real window_low =
+      std::max(mdot_window_start_time_, pm->time - mdot_window_time_);
+  mdot_window_low_time_ = window_low;
+  while (mdot_window_times_.size() > 2 &&
+         mdot_window_times_[1] <= window_low) {
+    mdot_window_times_.pop_front();
+    mdot_window_values_.pop_front();
+  }
+
+  auto interpolate_mdot = [&](const Real t_sample) {
+    if (mdot_window_times_.empty()) {
+      return top_mdot;
+    }
+    if (t_sample <= mdot_window_times_.front()) {
+      return mdot_window_values_.front();
+    }
+    for (std::size_t n = 1; n < mdot_window_times_.size(); ++n) {
+      if (t_sample <= mdot_window_times_[n]) {
+        const Real t0 = mdot_window_times_[n - 1];
+        const Real t1 = mdot_window_times_[n];
+        const Real y0 = mdot_window_values_[n - 1];
+        const Real y1 = mdot_window_values_[n];
+        if (t1 <= t0) {
+          return y1;
+        }
+        const Real f = (t_sample - t0)/(t1 - t0);
+        return y0 + f*(y1 - y0);
+      }
+    }
+    return mdot_window_values_.back();
+  };
+
+  const Real duration = std::max(static_cast<Real>(0.0), pm->time - window_low);
+  Real integral = 0.0;
+  if (duration > 0.0) {
+    Real prev_time = window_low;
+    Real prev_mdot = interpolate_mdot(window_low);
+    for (std::size_t n = 0; n < mdot_window_times_.size(); ++n) {
+      const Real sample_time = mdot_window_times_[n];
+      if (sample_time <= window_low) {
+        continue;
+      }
+      if (sample_time >= pm->time) {
+        break;
+      }
+      const Real sample_mdot = mdot_window_values_[n];
+      integral += static_cast<Real>(0.5)*(prev_mdot + sample_mdot)*
+                  (sample_time - prev_time);
+      prev_time = sample_time;
+      prev_mdot = sample_mdot;
+    }
+    integral += static_cast<Real>(0.5)*(prev_mdot + top_mdot)*
+                (pm->time - prev_time);
+  }
+
+  mdot_integral_ = integral;
+  mdot_weight_time_ = duration;
+  mdot_last_average_ = (duration > 0.0) ? (integral/duration) : 0.0;
+  mdot_window_target_vframe_ =
+      mdot_velocity_factor_*mdot_velocity_sign_*mdot_last_average_/
+      (mdot_density_*mdot_area_);
+  mdot_last_vtop_ = mdot_window_target_vframe_;
+  mdot_last_ramp_factor_ = (duration > 0.0) ? 1.0 : 0.0;
+
+  state.last_global_weight = mdot_weight_time_;
+  state.last_mean_v = mdot_last_average_;
+  state.last_filtered_v = mdot_window_target_vframe_;
+  state.last_x_err = frame_velocity_[2] - mdot_window_target_vframe_;
+  state.last_skip_flag = (duration <= 0.0);
+  if (state.last_skip_flag) {
+    state.last_vel_cmd_pre = 0.0;
+    state.last_vel_cmd_post = 0.0;
+    state.last_boost = 0.0;
+    last_apply_time_ = pm->time;
+    PrintTopMdotWindowMessage(0.0);
+    return false;
+  }
+
+  const bool state_changed =
+      ApplyX3FrameVelocityTarget(mdot_window_target_vframe_, dt_boost);
+  state.last_skip_flag = !state_changed;
+  last_apply_time_ = pm->time;
+  PrintTopMdotWindowMessage(state.last_boost);
+  return state_changed;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn bool FrameTracker::ApplyTracking()
 //! \brief Apply the configured frame-tracking boost and report whether the
 //! fluid state changed.
@@ -1258,6 +2086,14 @@ bool FrameTracker::ApplyTracking() {
   }
   if (dt_boost <= 0.0) {
     dt_boost = std::max(pm->dt, static_cast<Real>(1.0e-20));
+  }
+
+  if (mode_ == kFTTopMdot) {
+    return ApplyTopMdotTracking(dt_boost);
+  } else if (mode_ == kFTTopMdotAuto) {
+    return ApplyTopMdotAutoTracking(dt_boost);
+  } else if (mode_ == kFTTopMdotWindow) {
+    return ApplyTopMdotWindowTracking(dt_boost);
   }
 
   SetActiveTargetRange();
@@ -1552,7 +2388,6 @@ bool FrameTracker::AdvanceFrameDisplacement(const Real dt) {
   return changed;
 }
 
-//----------------------------------------------------------------------------------------
 //! \fn void FrameTracker::PrintSkipMessage()
 //! \brief Print diagnostic information for skipped updates.
 
@@ -1669,4 +2504,107 @@ void FrameTracker::PrintApplyMessage(const std::array<MomentSample, 3> &samples,
   std::cout << " target_min_active=" << target_min_active_ << std::endl;
   std::cout << " target_max_active=" << target_max_active_ << std::endl;
   std::cout << " ft_miss_streak=" << miss_streak_ << std::endl;
+}
+
+void FrameTracker::PrintTopMdotMessage(const Real top_mdot, const Real avg_mdot,
+                                       const Real target_frame_velocity,
+                                       const Real ramp_factor,
+                                       const Real boost) const {
+  if (global_variable::my_rank != 0 || diagnostic_every_ <= 0 ||
+      pmy_pack->pmesh->ncycle % diagnostic_every_ != 0) {
+    return;
+  }
+  const AxisState &state = axes_[2];
+  std::cout << "FrameTracker top_mdot update" << std::endl;
+  std::cout << " sign_contract=Mdot_top_integral_rho_v3_dA_upper_x3;"
+            << "positive_plus_x3_outward;"
+            << "v_frame_target=Mdot_top/(rho_cold*A);"
+            << "fluid_boost=-Delta_v_frame" << std::endl;
+  std::cout << " x3_mdot_top=" << top_mdot << std::endl;
+  std::cout << " x3_mdot_average=" << avg_mdot << std::endl;
+  std::cout << " x3_mdot_average_time=" << mdot_weight_time_ << std::endl;
+  std::cout << " x3_mdot_area=" << mdot_area_ << std::endl;
+  std::cout << " x3_mdot_density=" << mdot_density_ << std::endl;
+  std::cout << " x3_mdot_ramp_factor=" << ramp_factor << std::endl;
+  std::cout << " x3_target_frame_velocity=" << target_frame_velocity << std::endl;
+  std::cout << " x3_boost=" << boost << std::endl;
+  std::cout << " x3_frame_velocity=" << frame_velocity_[2] << std::endl;
+  std::cout << " x3_frame_displacement=" << frame_displacement_[2] << std::endl;
+  std::cout << " x3_velocity_error=" << state.last_x_err << std::endl;
+  std::cout << " x3_slew_limited=" << state.last_slew_limited << std::endl;
+  std::cout << " x3_skip=" << state.last_skip_flag << std::endl;
+}
+
+void FrameTracker::PrintTopMdotAutoMessage(const Real boost) const {
+  if (global_variable::my_rank != 0 || diagnostic_every_ <= 0 ||
+      pmy_pack->pmesh->ncycle % diagnostic_every_ != 0) {
+    return;
+  }
+  const AxisState &state = axes_[2];
+  std::cout << "FrameTracker top_mdot_auto update" << std::endl;
+  std::cout << " sign_contract=Mdot_top_integral_rho_v3_dA_upper_x3;"
+            << "positive_plus_x3_outward;"
+            << "v_frame_target=Mdot_top/(rho_cold*A);"
+            << "fluid_boost=-Delta_v_frame" << std::endl;
+  std::cout << " x3_mdot_top=" << mdot_last_top_ << std::endl;
+  std::cout << " x3_mdot_fast=" << mdot_auto_fast_ << std::endl;
+  std::cout << " x3_mdot_slow=" << mdot_auto_slow_ << std::endl;
+  std::cout << " x3_mdot_rel=" << mdot_auto_rel_ << std::endl;
+  std::cout << " x3_mdot_hold_elapsed=" << mdot_auto_hold_elapsed_ << std::endl;
+  std::cout << " x3_mdot_hold_required=" << mdot_auto_hold_time_ << std::endl;
+  std::cout << " x3_mdot_settled=" << mdot_auto_locked_ << std::endl;
+  std::cout << " x3_mdot_settle_time=" << mdot_auto_settle_time_ << std::endl;
+  std::cout << " x3_mdot_locked=" << mdot_auto_locked_mdot_ << std::endl;
+  std::cout << " x3_mdot_area=" << mdot_area_ << std::endl;
+  std::cout << " x3_mdot_density=" << mdot_density_ << std::endl;
+  std::cout << " x3_locked_frame_velocity=" << mdot_auto_locked_vframe_
+            << std::endl;
+  std::cout << " x3_target_frame_velocity=" << mdot_auto_target_vframe_
+            << std::endl;
+  std::cout << " x3_ramp_duration=" << mdot_auto_ramp_duration_ << std::endl;
+  std::cout << " x3_ramp_factor=" << mdot_auto_ramp_factor_ << std::endl;
+  std::cout << " x3_frame_delta_applied=" << -boost << std::endl;
+  std::cout << " x3_fluid_boost=" << boost << std::endl;
+  std::cout << " x3_frame_velocity=" << frame_velocity_[2] << std::endl;
+  std::cout << " x3_frame_displacement=" << frame_displacement_[2] << std::endl;
+  std::cout << " x3_velocity_error=" << state.last_x_err << std::endl;
+  std::cout << " x3_slew_limited=" << state.last_slew_limited << std::endl;
+  std::cout << " x3_skip=" << state.last_skip_flag << std::endl;
+}
+
+void FrameTracker::PrintTopMdotWindowMessage(const Real boost) const {
+  if (global_variable::my_rank != 0 || diagnostic_every_ <= 0 ||
+      pmy_pack->pmesh->ncycle % diagnostic_every_ != 0) {
+    return;
+  }
+  const AxisState &state = axes_[2];
+  std::cout << "FrameTracker top_mdot_window update" << std::endl;
+  std::cout << " sign_contract=Mdot_top_integral_rho_v3_dA_upper_x3;"
+            << "v3_frame=" << NormalizeToken(mdot_flux_frame_name_) << ";"
+            << "positive_plus_x3_outward;"
+            << "v_frame_target=sign*window_avg_Mdot/(rho_frame*A);"
+            << "fluid_boost=-Delta_v_frame" << std::endl;
+  std::cout << " x3_mdot_top=" << mdot_last_top_ << std::endl;
+  std::cout << " x3_mdot_window_average=" << mdot_last_average_ << std::endl;
+  std::cout << " x3_mdot_window_start_time=" << mdot_window_start_time_ << std::endl;
+  std::cout << " x3_mdot_window_time=" << mdot_window_time_ << std::endl;
+  std::cout << " x3_mdot_window_low_time=" << mdot_window_low_time_ << std::endl;
+  std::cout << " x3_mdot_window_weight_time=" << mdot_weight_time_ << std::endl;
+  std::cout << " x3_mdot_area=" << mdot_area_ << std::endl;
+  std::cout << " x3_mdot_density_mode=" << NormalizeToken(mdot_density_mode_name_)
+            << std::endl;
+  std::cout << " x3_mdot_density=" << mdot_density_ << std::endl;
+  std::cout << " x3_mdot_velocity_sign=" << mdot_velocity_sign_ << std::endl;
+  std::cout << " x3_mdot_velocity_factor=" << mdot_velocity_factor_ << std::endl;
+  std::cout << " x3_mdot_flux_frame=" << NormalizeToken(mdot_flux_frame_name_)
+            << std::endl;
+  std::cout << " x3_target_frame_velocity=" << mdot_window_target_vframe_
+            << std::endl;
+  std::cout << " x3_frame_delta_applied=" << -boost << std::endl;
+  std::cout << " x3_fluid_boost=" << boost << std::endl;
+  std::cout << " x3_frame_velocity=" << frame_velocity_[2] << std::endl;
+  std::cout << " x3_frame_displacement=" << frame_displacement_[2] << std::endl;
+  std::cout << " x3_velocity_error=" << state.last_x_err << std::endl;
+  std::cout << " x3_slew_limited=" << state.last_slew_limited << std::endl;
+  std::cout << " x3_skip=" << state.last_skip_flag << std::endl;
 }

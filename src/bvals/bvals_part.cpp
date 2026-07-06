@@ -45,6 +45,17 @@ void UpdateGID(int &newgid, NeighborBlock nghbr, int myrank,
   return;
 }
 
+KOKKOS_INLINE_FUNCTION
+void MarkPrtclForRemoval(int &newgid, DvceArray1D<int> send_count,
+                         DvceArray1D<ParticleLocationData> slist, int p) {
+  newgid = -1;
+  int index = Kokkos::atomic_fetch_add(&send_count(0),1);
+  slist(index).prtcl_indx = p;
+  slist(index).dest_gid   = -1;
+  slist(index).dest_rank  = -1;
+  return;
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void ParticlesBoundaryValues::SetNewGID()
 //! \brief
@@ -60,6 +71,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   auto &meshsize = pmy_part->pmy_pack->pmesh->mesh_size;
   auto myrank = global_variable::my_rank;
   auto &nghbr = pmy_part->pmy_pack->pmb->nghbr;
+  int nnghbr = pmy_part->pmy_pack->pmb->nnghbr;
   bool &multi_d = pmy_part->pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_part->pmy_pack->pmesh->three_d;
 
@@ -95,74 +107,125 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
     // only update particle GID if it has crossed MeshBlock boundary
     if ((abs(ix) + abs(iy) + abs(iz)) != 0) {
+      bool remove_particle = false;
       if (iz == 0) {
         if (iy == 0) {
           // x1 face
           int indx = NeighborIndex(ix,0,0,0,0);           // neighbor at same level
+          int group_end = indx + 4;
           if (nghbr.d_view(m,indx).lev > mylevel) {       // neighbor at finer level
             indx = NeighborIndex(ix,0,0,fy,fz);
           }
-          while (nghbr.d_view(m,indx).gid < 0) {indx++;}  // neighbor at coarser level
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
-                    d_send_count, d_sendlist, p);
+          while ((indx < group_end) && (indx < nnghbr) &&
+                 (nghbr.d_view(m,indx).gid < 0)) {indx++;}  // neighbor at coarser level
+          if ((indx < group_end) && (indx < nnghbr) && (nghbr.d_view(m,indx).gid >= 0)) {
+            UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
+                      d_send_count, d_sendlist, p);
+          } else {
+            MarkPrtclForRemoval(pi(PGID,p), d_send_count, d_sendlist, p);
+            remove_particle = true;
+          }
         } else if (ix == 0) {
           // x2 face
           int indx = NeighborIndex(0,iy,0,0,0);
+          int group_end = indx + 4;
           if (nghbr.d_view(m,indx).lev > mylevel) {
             indx = NeighborIndex(0,iy,0,fx,fz);
           }
-          while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
-                    d_send_count, d_sendlist, p);
+          while ((indx < group_end) && (indx < nnghbr) &&
+                 (nghbr.d_view(m,indx).gid < 0)) {indx++;}
+          if ((indx < group_end) && (indx < nnghbr) && (nghbr.d_view(m,indx).gid >= 0)) {
+            UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
+                      d_send_count, d_sendlist, p);
+          } else {
+            MarkPrtclForRemoval(pi(PGID,p), d_send_count, d_sendlist, p);
+            remove_particle = true;
+          }
         } else {
           // x1x2 edge
           int indx = NeighborIndex(ix,iy,0,0,0);
+          int group_end = indx + 2;
           if (nghbr.d_view(m,indx).lev > mylevel) {
             indx = NeighborIndex(ix,iy,0,fz,0);
           }
-          while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
-                    d_send_count, d_sendlist, p);
+          while ((indx < group_end) && (indx < nnghbr) &&
+                 (nghbr.d_view(m,indx).gid < 0)) {indx++;}
+          if ((indx < group_end) && (indx < nnghbr) && (nghbr.d_view(m,indx).gid >= 0)) {
+            UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
+                      d_send_count, d_sendlist, p);
+          } else {
+            MarkPrtclForRemoval(pi(PGID,p), d_send_count, d_sendlist, p);
+            remove_particle = true;
+          }
         }
       } else if (iy == 0) {
         if (ix == 0) {
           // x3 face
           int indx = NeighborIndex(0,0,iz,0,0);
+          int group_end = indx + 4;
           if (nghbr.d_view(m,indx).lev > mylevel) {
             indx = NeighborIndex(0,0,iz,fx,fy);
           }
-          while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
-                    d_send_count, d_sendlist, p);
+          while ((indx < group_end) && (indx < nnghbr) &&
+                 (nghbr.d_view(m,indx).gid < 0)) {indx++;}
+          if ((indx < group_end) && (indx < nnghbr) && (nghbr.d_view(m,indx).gid >= 0)) {
+            UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
+                      d_send_count, d_sendlist, p);
+          } else {
+            MarkPrtclForRemoval(pi(PGID,p), d_send_count, d_sendlist, p);
+            remove_particle = true;
+          }
         } else {
           // x3x1 edge
           int indx = NeighborIndex(ix,0,iz,0,0);
+          int group_end = indx + 2;
           if (nghbr.d_view(m,indx).lev > mylevel) {
             indx = NeighborIndex(ix,0,iz,fy,0);
           }
-          while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
-                    d_send_count, d_sendlist, p);
+          while ((indx < group_end) && (indx < nnghbr) &&
+                 (nghbr.d_view(m,indx).gid < 0)) {indx++;}
+          if ((indx < group_end) && (indx < nnghbr) && (nghbr.d_view(m,indx).gid >= 0)) {
+            UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
+                      d_send_count, d_sendlist, p);
+          } else {
+            MarkPrtclForRemoval(pi(PGID,p), d_send_count, d_sendlist, p);
+            remove_particle = true;
+          }
         }
       } else {
         if (ix == 0) {
           // x2x3 edge
           int indx = NeighborIndex(0,iy,iz,0,0);
+          int group_end = indx + 2;
           if (nghbr.d_view(m,indx).lev > mylevel) {
             indx = NeighborIndex(0,iy,iz,fx,0);
           }
-          while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
-                    d_send_count, d_sendlist, p);
+          while ((indx < group_end) && (indx < nnghbr) &&
+                 (nghbr.d_view(m,indx).gid < 0)) {indx++;}
+          if ((indx < group_end) && (indx < nnghbr) && (nghbr.d_view(m,indx).gid >= 0)) {
+            UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
+                      d_send_count, d_sendlist, p);
+          } else {
+            MarkPrtclForRemoval(pi(PGID,p), d_send_count, d_sendlist, p);
+            remove_particle = true;
+          }
         } else {
           // corners
           int indx = NeighborIndex(ix,iy,iz,0,0);
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
-                    d_send_count, d_sendlist, p);
+          if ((indx >= 0) && (indx < nnghbr) && (nghbr.d_view(m,indx).gid >= 0)) {
+            UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank,
+                      d_send_count, d_sendlist, p);
+          } else {
+            MarkPrtclForRemoval(pi(PGID,p), d_send_count, d_sendlist, p);
+            remove_particle = true;
+          }
         }
       }
 
       // reset x,y,z positions if particle crosses Mesh boundary using periodic BCs
+      if (remove_particle) {
+        return;
+      }
       if (x1 < meshsize.x1min) {
         pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
       } else if (x1 > meshsize.x1max) {
@@ -209,19 +272,21 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
   sends_thisrank.clear();
   if (nprtcl_send > 0) {
     int &myrank = global_variable::my_rank;
-    int rank = sendlist.h_view(0).dest_rank;
-    int nprtcl = 1;
-
-    for (int n=1; n<nprtcl_send; ++n) {
-      if (sendlist.h_view(n).dest_rank == rank) {
-        ++nprtcl;
-      } else {
-        sends_thisrank.emplace_back(ParticleMessageData(myrank,rank,nprtcl));
-        rank = sendlist.h_view(n).dest_rank;
-        nprtcl = 1;
+    int n = 0;
+    while (n < nprtcl_send) {
+      int rank = sendlist.h_view(n).dest_rank;
+      if (rank < 0) {
+        ++n;  // particles escaping a physical boundary are removed locally
+        continue;
       }
+      int nprtcl = 1;
+      ++n;
+      while ((n < nprtcl_send) && (sendlist.h_view(n).dest_rank == rank)) {
+        ++nprtcl;
+        ++n;
+      }
+      sends_thisrank.emplace_back(ParticleMessageData(myrank,rank,nprtcl));
     }
-    sends_thisrank.emplace_back(ParticleMessageData(myrank,rank,nprtcl));
   }
   nsends = sends_thisrank.size();
 
@@ -343,16 +408,22 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
 TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
 #if MPI_PARALLEL_ENABLED
   // Figure out how many particles will be sent from this ranks
-  nprtcl_send=0;
+  int nprtcl_mpi_send = 0;
   for (int n=0; n<nsends; ++n) {
-    nprtcl_send += sends_thisrank[n].nprtcls;
+    nprtcl_mpi_send += sends_thisrank[n].nprtcls;
   }
 
   bool no_errors=true;
-  if (nprtcl_send > 0) {
+  if (nprtcl_mpi_send > 0) {
     // Allocate send buffer
-    Kokkos::realloc(prtcl_rsendbuf, (pmy_part->nrdata)*nprtcl_send);
-    Kokkos::realloc(prtcl_isendbuf, (pmy_part->nidata)*nprtcl_send);
+    Kokkos::realloc(prtcl_rsendbuf, (pmy_part->nrdata)*nprtcl_mpi_send);
+    Kokkos::realloc(prtcl_isendbuf, (pmy_part->nidata)*nprtcl_mpi_send);
+
+    int first_mpi_send = 0;
+    while ((first_mpi_send < nprtcl_send) &&
+           (sendlist.h_view(first_mpi_send).dest_rank < 0)) {
+      ++first_mpi_send;
+    }
 
     // sendlist on device is already sorted by destrank in CountSendAndRecvs()
     // Use sendlist on device to load particles into send buffer ordered by dest_rank
@@ -363,8 +434,8 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
     auto &rsendbuf = prtcl_rsendbuf;
     auto &isendbuf = prtcl_isendbuf;
     auto d_sendlist = sendlist.d_view;
-    par_for("ppack",DevExeSpace(),0,(nprtcl_send-1), KOKKOS_LAMBDA(const int n) {
-      int p = d_sendlist(n).prtcl_indx;
+    par_for("ppack",DevExeSpace(),0,(nprtcl_mpi_send-1), KOKKOS_LAMBDA(const int n) {
+      int p = d_sendlist(first_mpi_send+n).prtcl_indx;
       for (int i=0; i<nidata; ++i) {
         isendbuf(nidata*n + i) = pi(i,p);
       }

@@ -1,0 +1,149 @@
+# Clean simple_TRML outflow-z run.
+# chi = 10^1.75, Mach_rel = 0.5, xi = 1.
+# t_shear = (x1max - x1min)/velocity = 1.5491933384829668.
+# tlim = 31 t_shear = 48.02499349297197.
+
+<comment>
+problem = Clean simple_TRML outflow-z xi=1 cooling-ramp test
+
+<job>
+basename = TRML_xi1_M0p5_chi10p1p75_outflowz_coolramp1ts_128x128x256
+
+<mesh>
+nghost = 4
+
+nx1 = 128
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 256
+x3min = -1.0
+x3max = 1.0
+ix3_bc = outflow
+ox3_bc = user
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 128
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = -1
+tlim = 48.02499349297197
+ndiag = 2000
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666667
+nscalars = 1
+fofc = true
+dfloor = 1.0e-4
+pfloor = 1.0e-5
+
+<units>
+length_cgs = 1.0
+mass_cgs = 1.0
+time_cgs = 1.0
+mu = 0.6
+
+<problem>
+rho_hot = 1.0
+rho_cold = 56.23413251903491
+velocity = 0.6454972243679028
+fixed_frame_velocity_x3 = 0.0
+zero_gradient_vx = false
+lower_x3_user_bc = outflow
+lower_x3_mass_balance_pressure_mode = fixed
+lower_x3_mass_balance_tangential_mode = zero_gradient
+lower_x3_mass_balance_vz = 0.0
+lower_x3_mass_balance_velocity_frame = grid
+lower_x3_mass_balance_max_abs_vz = -1.0
+pres = 1.0
+t_cool_min = 1.5491933384829668
+cooling_ramp_time = 1.5491933384829668
+cooling_ramp_min_factor = 0.0
+T_cutoff_over_T_cold = 20.0
+T_ci_over_T_cold = 10.0
+T_ih_over_T_cold = 30.0
+beta = 0.0
+
+user_srcs = true
+user_dt = true
+user_hist = true
+user_bcs = true
+
+phase_sharpness = 96
+
+max_init_perturb_log2freq = 5
+min_init_perturb_log2freq = 2
+init_perturb_sharpness = 50.0
+init_perturb_vel_frac = 0.0
+
+<initial_perturbations>
+variables = velocity
+velocity_rms = 0.02
+remove_velocity_mean = true
+spectral_slope = 1.666666666666667
+nlow = 2
+nhigh = 4
+min_kz = 0
+max_kz = 0
+f_solenoidal = 1.0
+rseed = 24680
+localization = include
+x3_center = 0.0
+x3_scale = 0.1414213562373095
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dt = 0.25
+
+<output2>
+file_type = bin
+id = state
+variable = hydro_w
+ghost_zones = false
+dt = 7.745966692414834
+
+<output3>
+file_type = bin
+id = slice_x1
+variable = hydro_w
+slice_x1 = 0.0
+ghost_zones = false
+dt = 1.5491933384829668
+
+<output4>
+file_type = bin
+id = slice_x2
+variable = hydro_w
+slice_x2 = 0.0
+ghost_zones = false
+dt = 1.5491933384829668
+
+<output5>
+file_type = bin
+id = slice_x3
+variable = hydro_w
+slice_x3 = 0.0
+ghost_zones = false
+dt = 1.5491933384829668
+
+<output6>
+file_type = rst
+dt = 15.491933384829668
+single_file_per_rank = true

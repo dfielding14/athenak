@@ -1,5 +1,9 @@
 # Simple TRML with tracers and frame tracking
 
+Current option documentation lives in [`README.md`](README.md). This file is a
+historical note for the older tracer/frame-tracking workflow and should not be
+treated as the authoritative reference for the cleaned `simple_TRML` pgen.
+
 Build this problem with:
 
 ```bash
