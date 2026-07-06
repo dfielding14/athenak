@@ -5042,7 +5042,7 @@ def test_cgl_lf_explicit_reference_rejects_sts_configuration():
     assert "explicit reference integration requires" in result.stdout
 
 
-def test_cgl_lf_amr_rejects_primitive_prolongation():
+def test_cgl_lf_amr_primitive_prolongation_rejects_pressure_work_recording():
     command = [
         "./athena",
         "-i",
@@ -5051,4 +5051,7 @@ def test_cgl_lf_amr_rejects_primitive_prolongation():
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
-    assert "use conserved prolongation for LF AMR runs" in result.stdout
+    assert "pressure-work recording is not supported with AMR primitive prolongation" in (
+        result.stdout
+    )
+    assert "<mhd>/cgl_lf_record_pressure_work = false" in result.stdout
