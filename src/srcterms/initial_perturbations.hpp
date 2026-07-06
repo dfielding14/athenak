@@ -58,6 +58,7 @@ class InitialPerturbations {
   bool perturb_density, perturb_velocity, perturb_magnetic;
   bool density_fractional;
   bool remove_density_mean, remove_velocity_mean;
+  bool magnetic_in_plane_2d;
   Real density_rms, velocity_rms, magnetic_rms;
 
   int nlow, nhigh;

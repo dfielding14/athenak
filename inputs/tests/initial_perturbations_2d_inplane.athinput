@@ -1,0 +1,89 @@
+# AthenaK input file for 2D in-plane magnetic initial perturbation validation.
+
+<comment>
+problem = one-time 2D in-plane zero-net-flux magnetic perturbation
+
+<job>
+basename = InitialPerturbations2DInPlane
+
+<mesh>
+nghost = 2
+nx1    = 128
+x1min  = -0.5
+x1max  = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 128
+x2min  = -0.5
+x2max  = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 1
+x3min  = -0.5
+x3max  = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 1
+tlim       = 1.0e-12
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<eos>
+iso_sound_speed = 1.0
+
+<coord>
+special_rel = false
+general_rel = false
+
+<problem>
+pgen_name = turb
+d_i       = 1.0
+d_n       = 1.0
+beta      = 1.0
+ifield    = 0
+user_hist = true
+
+<initial_perturbations>
+variables           = magnetic
+magnetic_rms        = 1.0e-3
+magnetic_geometry   = in_plane_2d
+spectral_slope      = 1.0
+nlow                = 1
+nhigh               = 8
+rseed               = 13579
+localization        = none
+
+<output1>
+file_type = hst
+dt        = 1.0
+
+<output2>
+file_type   = bin
+variable    = mhd_w_bcc
+id          = mhd_w_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output3>
+file_type   = bin
+variable    = mhd_divb
+id          = mhd_divb
+dcycle      = 1
+ghost_zones = false

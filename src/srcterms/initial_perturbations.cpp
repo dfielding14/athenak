@@ -168,6 +168,7 @@ InitialPerturbations::InitialPerturbations(MeshBlockPack *pp, ParameterInput *pi
     density_fractional(true),
     remove_density_mean(false),
     remove_velocity_mean(false),
+    magnetic_in_plane_2d(false),
     density_rms(0.0),
     velocity_rms(0.0),
     magnetic_rms(0.0),
@@ -246,6 +247,20 @@ InitialPerturbations::InitialPerturbations(MeshBlockPack *pp, ParameterInput *pi
   if (density_rms > 0.0) perturb_density = true;
   if (velocity_rms > 0.0) perturb_velocity = true;
   if (magnetic_rms > 0.0) perturb_magnetic = true;
+
+  const std::string magnetic_geometry =
+      Lower(pin->GetOrAddString(block_name_, "magnetic_geometry", "full"));
+  if (magnetic_geometry == "full" || magnetic_geometry == "default" ||
+      magnetic_geometry == "generic" || magnetic_geometry == "all_components") {
+    magnetic_in_plane_2d = false;
+  } else if (magnetic_geometry == "in_plane_2d" ||
+             magnetic_geometry == "in-plane-2d" ||
+             magnetic_geometry == "in_plane" ||
+             magnetic_geometry == "in-plane") {
+    magnetic_in_plane_2d = true;
+  } else {
+    FatalInitialPerturbationError("magnetic_geometry must be full or in_plane_2d");
+  }
 
   density_fractional = GetBooleanAny(pin, block_name_, "density_fractional", true,
                                      {"rho_fractional"});
@@ -359,6 +374,9 @@ void InitialPerturbations::Validate() const {
   }
   if (MagneticEnabled() && pmy_pack->pmhd == nullptr) {
     FatalInitialPerturbationError("magnetic perturbations require an active <mhd> block");
+  }
+  if (magnetic_in_plane_2d && MagneticEnabled() && !pmy_pack->pmesh->two_d) {
+    FatalInitialPerturbationError("magnetic_geometry=in_plane_2d requires a 2D mesh");
   }
   if (nlow < 0 || nhigh < nlow) {
     FatalInitialPerturbationError("require 0 <= nlow <= nhigh");
@@ -599,6 +617,7 @@ void InitialPerturbations::BuildVectorPotential() {
   const int loc_mode = localization_mode;
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
+  const bool in_plane_2d = magnetic_in_plane_2d;
   const Real c1 = x1_center, c2 = x2_center, c3 = x3_center;
   const Real s1 = x1_scale, s2 = x2_scale, s3 = x3_scale;
   const Real o1 = domain_x1min, o2 = domain_x2min, o3 = domain_x3min;
@@ -614,8 +633,9 @@ void InitialPerturbations::BuildVectorPotential() {
                               mb_size.d_view(m).x3max);
     const Real win = PerturbationWindow(x1, x2, x3, loc_mode, c1, c2, c3,
                                         s1, s2, s3, multi_d, three_d);
-    a1(m,k,j,i) = win*FourierComponent(kx, ky, kz, ar, ai, 0, nmode,
-                                       x1, x2, x3, o1, o2, o3);
+    a1(m,k,j,i) = in_plane_2d ? static_cast<Real>(0.0) :
+        win*FourierComponent(kx, ky, kz, ar, ai, 0, nmode,
+                             x1, x2, x3, o1, o2, o3);
   });
 
   par_for("initial_vector_potential_a2", DevExeSpace(),
@@ -629,8 +649,9 @@ void InitialPerturbations::BuildVectorPotential() {
                               mb_size.d_view(m).x3max);
     const Real win = PerturbationWindow(x1, x2, x3, loc_mode, c1, c2, c3,
                                         s1, s2, s3, multi_d, three_d);
-    a2(m,k,j,i) = win*FourierComponent(kx, ky, kz, ar, ai, 1, nmode,
-                                       x1, x2, x3, o1, o2, o3);
+    a2(m,k,j,i) = in_plane_2d ? static_cast<Real>(0.0) :
+        win*FourierComponent(kx, ky, kz, ar, ai, 1, nmode,
+                             x1, x2, x3, o1, o2, o3);
   });
 
   par_for("initial_vector_potential_a3", DevExeSpace(),
