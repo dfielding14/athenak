@@ -14,6 +14,7 @@
 #include <iostream>
 #include <cmath>     // abs
 #include <algorithm> // sort
+#include <limits>
 #include <utility>   // pair
 
 #include "athena.hpp"
@@ -25,6 +26,7 @@
 
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_amr_projection.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -60,6 +62,27 @@ void TraceAMRStep(Mesh *pm, const char *step, int nnew, int ndel, int old_nmb,
             << " new_total=" << new_nmb
             << " old_local=" << pm->nmb_thisrank
             << std::endl;
+}
+
+void AccumulateCGLAMRRepairCounters(MeshRefinement *pmr, const int cells,
+                                    const int nonfinite, const int density,
+                                    const int energy, const int parallel,
+                                    const int perpendicular, const int lowb,
+                                    const int firehose, const int mirror,
+                                    const int anisotropy, const int interval,
+                                    const int slope) {
+  pmr->cgl_amr_cells_repaired += cells;
+  pmr->cgl_amr_nonfinite_repairs += nonfinite;
+  pmr->cgl_amr_density_repairs += density;
+  pmr->cgl_amr_energy_repairs += energy;
+  pmr->cgl_amr_parallel_repairs += parallel;
+  pmr->cgl_amr_perp_repairs += perpendicular;
+  pmr->cgl_amr_lowb_repairs += lowb;
+  pmr->cgl_amr_firehose_repairs += firehose;
+  pmr->cgl_amr_mirror_repairs += mirror;
+  pmr->cgl_amr_anisotropy_repairs += anisotropy;
+  pmr->cgl_amr_interval_repairs += interval;
+  pmr->cgl_amr_slope_repairs += slope;
 }
 
 } // namespace
@@ -1140,12 +1163,11 @@ void MeshRefinement::RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
 
 //----------------------------------------------------------------------------------------
 //! \fn void MeshRefinement::RestrictCGLMHDPrimitivesToCons
-//! \brief Restrict CGL primitive variables during derefinement, then rebuild the coarse
-//! conserved state from the already restricted face-centered magnetic field.  This avoids
-//! averaging the nonlinear CGL total-energy/anisotropy representation directly.
+//! \brief Conservatively restrict CGL states, then rebuild the derived CGL slot from an
+//! admissible U/Delta thermodynamic state and the already restricted magnetic field.
 
 void MeshRefinement::RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd) {
-  RestrictCC(pmhd->w0, pmhd->coarse_w0);
+  RestrictCC(pmhd->u0, pmhd->coarse_u0);
   Kokkos::fence();
 
   const int nmb = pmy_mesh->nmb_eachrank[global_variable::my_rank];
@@ -1153,53 +1175,114 @@ void MeshRefinement::RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd) {
   const int cis = indcs.cis, cie = indcs.cie;
   const int cjs = indcs.cjs, cje = indcs.cje;
   const int cks = indcs.cks, cke = indcs.cke;
-  auto prim = pmhd->coarse_w0;
+  const int ni = cie - cis + 1;
+  const int nj = cje - cjs + 1;
+  const int nk = cke - cks + 1;
+  const int nji = nj*ni;
+  const int nkji = nk*nji;
+  const int nmkji = nmb*nkji;
+  const int nchild_j = pmy_mesh->multi_d ? 2 : 1;
+  const int nchild_k = pmy_mesh->three_d ? 2 : 1;
+  auto fine_prim = pmhd->w0;
   auto cons = pmhd->coarse_u0;
   auto b = pmhd->coarse_b0;
   const EOS_Data eos = pmhd->peos->eos_data;
-  const int nmhd = pmhd->nmhd;
-  const int nscal = pmhd->nscalars;
-  const bool cgl_magnetic_moment =
-      pmhd->cgl_slot_representation == mhd::CGLSlotRepresentation::magnetic_moment;
+  const cgl::amr::SlotRepresentation slot =
+      (pmhd->cgl_slot_representation == mhd::CGLSlotRepresentation::magnetic_moment)
+          ? cgl::amr::magnetic_moment
+          : cgl::amr::anisotropy;
 
-  par_for("cgl_amr_restrict_prim_to_cons", DevExeSpace(),
-  0, nmb-1, cks, cke, cjs, cje, cis, cie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    MHDPrim1D w;
-    w.d  = fmax(prim(m,IDN,k,j,i), eos.dfloor);
-    w.vx = prim(m,IVX,k,j,i);
-    w.vy = prim(m,IVY,k,j,i);
-    w.vz = prim(m,IVZ,k,j,i);
-    w.e  = fmax(prim(m,IEN,k,j,i), eos.pfloor);
-    w.pp = fmax(prim(m,IPP,k,j,i), eos.pfloor);
-    w.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
-    w.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
-    w.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+  int cells=0, nonfinite=0, density=0, energy=0, parallel=0, perpendicular=0;
+  int lowb=0, firehose=0, mirror=0, anisotropy=0, interval=0, slope=0;
+  Kokkos::parallel_reduce(
+      "cgl_amr_restrict_project",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int idx, int &cells_count, int &nonfinite_count,
+                    int &density_count, int &energy_count, int &parallel_count,
+                    int &perpendicular_count, int &lowb_count,
+                    int &firehose_count, int &mirror_count,
+                    int &anisotropy_count, int &interval_count,
+                    int &slope_count) {
+        const int m = idx / nkji;
+        int k = (idx - m*nkji) / nji;
+        int j = (idx - m*nkji - k*nji) / ni;
+        const int i = idx - m*nkji - k*nji - j*ni + cis;
+        k += cks;
+        j += cjs;
 
-    const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
-    const Real bmag = sqrt(bsqr);
-    if (eos.hardwall_lim && bmag > eos.bfloor) {
-      cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
-                                eos.firehose_threshold);
-    }
+        const int finei = 2*i - cis;
+        const int finej = 2*j - cjs;
+        const int finek = 2*k - cks;
+        Real delta_sum = 0.0;
+        int nchild = 0;
+        for (int kk=0; kk<nchild_k; ++kk) {
+          for (int jj=0; jj<nchild_j; ++jj) {
+            for (int ii=0; ii<2; ++ii) {
+              delta_sum += fine_prim(m,IPP,finek+kk,finej+jj,finei+ii) -
+                           fine_prim(m,IEN,finek+kk,finej+jj,finei+ii);
+              ++nchild;
+            }
+          }
+        }
+        const Real delta = delta_sum/static_cast<Real>(nchild);
 
-    HydCons1D u;
-    SingleP2C_CGLMHD(w, eos.bfloor, u);
-    if (cgl_magnetic_moment) {
-      const Real bmag_den = (bmag > eos.bfloor) ? bmag : eos.bfloor;
-      u.mu = w.pp/bmag_den;
-    }
+        const Real rho_cons = cons(m,IDN,k,j,i);
+        const Real rho_vel = (Kokkos::isfinite(rho_cons) && rho_cons > 0.0)
+                                 ? rho_cons
+                                 : eos.dfloor;
+        const Real vx = cons(m,IM1,k,j,i)/rho_vel;
+        const Real vy = cons(m,IM2,k,j,i)/rho_vel;
+        const Real vz = cons(m,IM3,k,j,i)/rho_vel;
+        const Real bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
+        const Real by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
+        const Real bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+        const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+        const Real ke = 0.5*(SQR(cons(m,IM1,k,j,i)) +
+                             SQR(cons(m,IM2,k,j,i)) +
+                             SQR(cons(m,IM3,k,j,i)))/rho_vel;
+        const Real U = cons(m,IEN,k,j,i) - ke - 0.5*bsqr;
 
-    cons(m,IDN,k,j,i) = u.d;
-    cons(m,IM1,k,j,i) = u.mx;
-    cons(m,IM2,k,j,i) = u.my;
-    cons(m,IM3,k,j,i) = u.mz;
-    cons(m,IEN,k,j,i) = u.e;
-    cons(m,IAN,k,j,i) = u.mu;
-    for (int n=nmhd; n<(nmhd+nscal); ++n) {
-      cons(m,n,k,j,i) = u.d*prim(m,n,k,j,i);
-    }
-  });
+        MHDPrim1D w;
+        HydCons1D u;
+        const auto report = cgl::amr::ProjectUDeltaToCGL(
+            rho_cons, vx, vy, vz, bx, by, bz, U, delta, eos, slot, w, u);
+
+        cons(m,IDN,k,j,i) = u.d;
+        cons(m,IM1,k,j,i) = u.mx;
+        cons(m,IM2,k,j,i) = u.my;
+        cons(m,IM3,k,j,i) = u.mz;
+        cons(m,IEN,k,j,i) = u.e;
+        cons(m,IAN,k,j,i) = u.mu;
+
+        const auto mask = report.repairs;
+        if (mask != cgl::amr::kNone) ++cells_count;
+        nonfinite_count += cgl::amr::MaskBit(mask, cgl::amr::kNonfiniteThermo);
+        density_count += cgl::amr::MaskBit(mask, cgl::amr::kDensityFloor);
+        energy_count += cgl::amr::MaskBit(mask, cgl::amr::kInternalEnergyFloor);
+        parallel_count += cgl::amr::MaskBit(mask, cgl::amr::kParallelPressureFloor);
+        perpendicular_count += cgl::amr::MaskBit(mask, cgl::amr::kPerpPressureFloor);
+        lowb_count += cgl::amr::MaskBit(mask, cgl::amr::kLowFieldIsotropized);
+        firehose_count += cgl::amr::MaskBit(mask, cgl::amr::kFirehoseHardwall);
+        mirror_count += cgl::amr::MaskBit(mask, cgl::amr::kMirrorHardwall);
+        anisotropy_count += cgl::amr::MaskBit(mask, cgl::amr::kAnisotropyChanged);
+        interval_count += cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
+        slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
+      },
+      Kokkos::Sum<int>(cells),
+      Kokkos::Sum<int>(nonfinite),
+      Kokkos::Sum<int>(density),
+      Kokkos::Sum<int>(energy),
+      Kokkos::Sum<int>(parallel),
+      Kokkos::Sum<int>(perpendicular),
+      Kokkos::Sum<int>(lowb),
+      Kokkos::Sum<int>(firehose),
+      Kokkos::Sum<int>(mirror),
+      Kokkos::Sum<int>(anisotropy),
+      Kokkos::Sum<int>(interval),
+      Kokkos::Sum<int>(slope));
+  AccumulateCGLAMRRepairCounters(this, cells, nonfinite, density, energy, parallel,
+                                 perpendicular, lowb, firehose, mirror, anisotropy,
+                                 interval, slope);
   Kokkos::fence();
 }
 
@@ -1237,53 +1320,92 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
   const EOS_Data eos = pmhd->peos->eos_data;
   const int nmhd = pmhd->nmhd;
   const int nscal = pmhd->nscalars;
-  const bool cgl_magnetic_moment =
-      pmhd->cgl_slot_representation == mhd::CGLSlotRepresentation::magnetic_moment;
+  const cgl::amr::SlotRepresentation slot =
+      (pmhd->cgl_slot_representation == mhd::CGLSlotRepresentation::magnetic_moment)
+          ? cgl::amr::magnetic_moment
+          : cgl::amr::anisotropy;
 
-  par_for("cgl_amr_coarse_cons_to_prim", DevExeSpace(),
-  0, new_nmb-1, ckl, cku, cjl, cju, cil, ciu,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    if (refine_flag_.d_view(n2o.d_view(m + ngids)) <= 0) return;
+  const int cnx1 = ciu - cil + 1;
+  const int cnx2 = cju - cjl + 1;
+  const int cnx3 = cku - ckl + 1;
+  const int cnji = cnx2*cnx1;
+  const int cnkji = cnx3*cnji;
+  const int cnmkji = new_nmb*cnkji;
+  int ccells=0, cnonfinite=0, cdensity=0, cenergy=0, cparallel=0, cperpendicular=0;
+  int clowb=0, cfirehose=0, cmirror=0, canisotropy=0, cinterval=0, cslope=0;
+  Kokkos::parallel_reduce(
+      "cgl_amr_coarse_cons_to_udelta",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, cnmkji),
+      KOKKOS_LAMBDA(const int idx, int &cells_count, int &nonfinite_count,
+                    int &density_count, int &energy_count, int &parallel_count,
+                    int &perpendicular_count, int &lowb_count,
+                    int &firehose_count, int &mirror_count,
+                    int &anisotropy_count, int &interval_count,
+                    int &slope_count) {
+        const int m = idx / cnkji;
+        int k = (idx - m*cnkji) / cnji;
+        int j = (idx - m*cnkji - k*cnji) / cnx1;
+        const int i = idx - m*cnkji - k*cnji - j*cnx1 + cil;
+        k += ckl;
+        j += cjl;
+        if (refine_flag_.d_view(n2o.d_view(m + ngids)) <= 0) return;
 
-    MHDCons1D u;
-    u.d  = coarse_cons(m,IDN,k,j,i);
-    u.mx = coarse_cons(m,IM1,k,j,i);
-    u.my = coarse_cons(m,IM2,k,j,i);
-    u.mz = coarse_cons(m,IM3,k,j,i);
-    u.e  = coarse_cons(m,IEN,k,j,i);
-    u.mu = coarse_cons(m,IAN,k,j,i);
-    u.bx = 0.5*(coarse_b.x1f(m,k,j,i) + coarse_b.x1f(m,k,j,i+1));
-    u.by = 0.5*(coarse_b.x2f(m,k,j,i) + coarse_b.x2f(m,k,j+1,i));
-    u.bz = 0.5*(coarse_b.x3f(m,k,j,i) + coarse_b.x3f(m,k+1,j,i));
+        MHDCons1D cstate;
+        cstate.d  = coarse_cons(m,IDN,k,j,i);
+        cstate.mx = coarse_cons(m,IM1,k,j,i);
+        cstate.my = coarse_cons(m,IM2,k,j,i);
+        cstate.mz = coarse_cons(m,IM3,k,j,i);
+        cstate.e  = coarse_cons(m,IEN,k,j,i);
+        cstate.mu = coarse_cons(m,IAN,k,j,i);
+        cstate.bx = 0.5*(coarse_b.x1f(m,k,j,i) + coarse_b.x1f(m,k,j,i+1));
+        cstate.by = 0.5*(coarse_b.x2f(m,k,j,i) + coarse_b.x2f(m,k,j+1,i));
+        cstate.bz = 0.5*(coarse_b.x3f(m,k,j,i) + coarse_b.x3f(m,k+1,j,i));
 
-    HydPrim1D w;
-    bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
-    if (cgl_magnetic_moment) {
-      SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
-                                         tfloor_used, bfloor_used);
-    } else {
-      SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used,
-                       bfloor_used);
-    }
+        MHDPrim1D w;
+        HydCons1D u;
+        const auto report =
+            cgl::amr::ProjectConservedToCGL(cstate, eos, slot, w, u);
 
-    const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
-    const Real bmag = sqrt(bsqr);
-    if (eos.hardwall_lim && bmag > eos.bfloor) {
-      cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
-                                eos.firehose_threshold);
-    }
+        coarse_prim(m,IDN,k,j,i) = w.d;
+        coarse_prim(m,IVX,k,j,i) = w.vx;
+        coarse_prim(m,IVY,k,j,i) = w.vy;
+        coarse_prim(m,IVZ,k,j,i) = w.vz;
+        coarse_prim(m,IEN,k,j,i) = report.U;
+        coarse_prim(m,IPP,k,j,i) = report.delta;
+        for (int n=nmhd; n<(nmhd+nscal); ++n) {
+          const Real scalar_cons = fmax(coarse_cons(m,n,k,j,i), 0.0);
+          coarse_prim(m,n,k,j,i) = scalar_cons/u.d;
+        }
 
-    coarse_prim(m,IDN,k,j,i) = w.d;
-    coarse_prim(m,IVX,k,j,i) = w.vx;
-    coarse_prim(m,IVY,k,j,i) = w.vy;
-    coarse_prim(m,IVZ,k,j,i) = w.vz;
-    coarse_prim(m,IEN,k,j,i) = w.e;
-    coarse_prim(m,IPP,k,j,i) = w.pp;
-    for (int n=nmhd; n<(nmhd+nscal); ++n) {
-      const Real scalar_cons = fmax(coarse_cons(m,n,k,j,i), 0.0);
-      coarse_prim(m,n,k,j,i) = scalar_cons/u.d;
-    }
-  });
+        const auto mask = report.repairs;
+        if (mask != cgl::amr::kNone) ++cells_count;
+        nonfinite_count += cgl::amr::MaskBit(mask, cgl::amr::kNonfiniteThermo);
+        density_count += cgl::amr::MaskBit(mask, cgl::amr::kDensityFloor);
+        energy_count += cgl::amr::MaskBit(mask, cgl::amr::kInternalEnergyFloor);
+        parallel_count += cgl::amr::MaskBit(mask, cgl::amr::kParallelPressureFloor);
+        perpendicular_count += cgl::amr::MaskBit(mask, cgl::amr::kPerpPressureFloor);
+        lowb_count += cgl::amr::MaskBit(mask, cgl::amr::kLowFieldIsotropized);
+        firehose_count += cgl::amr::MaskBit(mask, cgl::amr::kFirehoseHardwall);
+        mirror_count += cgl::amr::MaskBit(mask, cgl::amr::kMirrorHardwall);
+        anisotropy_count += cgl::amr::MaskBit(mask, cgl::amr::kAnisotropyChanged);
+        interval_count += cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
+        slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
+      },
+      Kokkos::Sum<int>(ccells),
+      Kokkos::Sum<int>(cnonfinite),
+      Kokkos::Sum<int>(cdensity),
+      Kokkos::Sum<int>(cenergy),
+      Kokkos::Sum<int>(cparallel),
+      Kokkos::Sum<int>(cperpendicular),
+      Kokkos::Sum<int>(clowb),
+      Kokkos::Sum<int>(cfirehose),
+      Kokkos::Sum<int>(cmirror),
+      Kokkos::Sum<int>(canisotropy),
+      Kokkos::Sum<int>(cinterval),
+      Kokkos::Sum<int>(cslope));
+  AccumulateCGLAMRRepairCounters(this, ccells, cnonfinite, cdensity, cenergy,
+                                 cparallel, cperpendicular, clowb, cfirehose,
+                                 cmirror, canisotropy, cinterval, cslope);
   Kokkos::fence();
 
   RefineCC(n2o, pmhd->w0, pmhd->coarse_w0);
@@ -1292,46 +1414,181 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
   auto fine_prim = pmhd->w0;
   auto fine_cons = pmhd->u0;
   auto fine_b = pmhd->b0;
-  par_for("cgl_amr_fine_prim_to_cons", DevExeSpace(),
-  0, new_nmb-1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    if (refine_flag_.d_view(n2o.d_view(m + ngids)) <= 0) return;
+  const int fnx1 = ie - is + 1;
+  const int fnx2 = je - js + 1;
+  const int fnx3 = ke - ks + 1;
+  const int fnji = fnx2*fnx1;
+  const int fnkji = fnx3*fnji;
+  const int fnmkji = new_nmb*fnkji;
+  const int fsib_j = pmy_mesh->multi_d ? 2 : 1;
+  const int fsib_k = pmy_mesh->three_d ? 2 : 1;
+  int fcells=0, fnonfinite=0, fdensity=0, fenergy=0, fparallel=0, fperpendicular=0;
+  int flowb=0, ffirehose=0, fmirror=0, fanisotropy=0, finterval=0, fslope=0;
+  Kokkos::parallel_reduce(
+      "cgl_amr_fine_udelta_to_cons",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, fnmkji),
+      KOKKOS_LAMBDA(const int idx, int &cells_count, int &nonfinite_count,
+                    int &density_count, int &energy_count, int &parallel_count,
+                    int &perpendicular_count, int &lowb_count,
+                    int &firehose_count, int &mirror_count,
+                    int &anisotropy_count, int &interval_count,
+                    int &slope_count) {
+        const int m = idx / fnkji;
+        int k = (idx - m*fnkji) / fnji;
+        int j = (idx - m*fnkji - k*fnji) / fnx1;
+        const int i = idx - m*fnkji - k*fnji - j*fnx1 + is;
+        k += ks;
+        j += js;
+        if (refine_flag_.d_view(n2o.d_view(m + ngids)) <= 0) return;
 
-    MHDPrim1D w;
-    w.d  = fmax(fine_prim(m,IDN,k,j,i), eos.dfloor);
-    w.vx = fine_prim(m,IVX,k,j,i);
-    w.vy = fine_prim(m,IVY,k,j,i);
-    w.vz = fine_prim(m,IVZ,k,j,i);
-    w.e  = fmax(fine_prim(m,IEN,k,j,i), eos.pfloor);
-    w.pp = fmax(fine_prim(m,IPP,k,j,i), eos.pfloor);
-    w.bx = 0.5*(fine_b.x1f(m,k,j,i) + fine_b.x1f(m,k,j,i+1));
-    w.by = 0.5*(fine_b.x2f(m,k,j,i) + fine_b.x2f(m,k,j+1,i));
-    w.bz = 0.5*(fine_b.x3f(m,k,j,i) + fine_b.x3f(m,k+1,j,i));
+        const int ci = (i + cis) / 2;
+        const int cj = (fsib_j == 2) ? (j + cjs) / 2 : cjs;
+        const int ck = (fsib_k == 2) ? (k + cks) / 2 : cks;
+        const int base_i = 2*ci - cis;
+        const int base_j = 2*cj - cjs;
+        const int base_k = 2*ck - cks;
 
-    const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
-    const Real bmag = sqrt(bsqr);
-    if (eos.hardwall_lim && bmag > eos.bfloor) {
-      cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
-                                eos.firehose_threshold);
-    }
+        const Real parent_rho = coarse_prim(m,IDN,ck,cj,ci);
+        const Real parent_vx = coarse_prim(m,IVX,ck,cj,ci);
+        const Real parent_vy = coarse_prim(m,IVY,ck,cj,ci);
+        const Real parent_vz = coarse_prim(m,IVZ,ck,cj,ci);
+        const Real parent_U = coarse_prim(m,IEN,ck,cj,ci);
+        const Real parent_delta = coarse_prim(m,IPP,ck,cj,ci);
 
-    HydCons1D u;
-    SingleP2C_CGLMHD(w, eos.bfloor, u);
-    if (cgl_magnetic_moment) {
-      const Real bmag_den = (bmag > eos.bfloor) ? bmag : eos.bfloor;
-      u.mu = w.pp/bmag_den;
-    }
+        Real alpha = 1.0;
+        bool admissible = true;
+        for (int kk=0; kk<fsib_k; ++kk) {
+          for (int jj=0; jj<fsib_j; ++jj) {
+            for (int ii=0; ii<2; ++ii) {
+              const int child_k = base_k + kk;
+              const int child_j = base_j + jj;
+              const int child_i = base_i + ii;
+              const Real rho = fine_prim(m,IDN,child_k,child_j,child_i);
+              const Real vx = fine_prim(m,IVX,child_k,child_j,child_i);
+              const Real vy = fine_prim(m,IVY,child_k,child_j,child_i);
+              const Real vz = fine_prim(m,IVZ,child_k,child_j,child_i);
+              const Real U = fine_prim(m,IEN,child_k,child_j,child_i);
+              const Real delta = fine_prim(m,IPP,child_k,child_j,child_i);
+              const Real bx = 0.5*(fine_b.x1f(m,child_k,child_j,child_i) +
+                                   fine_b.x1f(m,child_k,child_j,child_i+1));
+              const Real by = 0.5*(fine_b.x2f(m,child_k,child_j,child_i) +
+                                   fine_b.x2f(m,child_k,child_j+1,child_i));
+              const Real bz = 0.5*(fine_b.x3f(m,child_k,child_j,child_i) +
+                                   fine_b.x3f(m,child_k+1,child_j,child_i));
+              admissible = admissible &&
+                  cgl::amr::IsAdmissibleUDelta(rho, vx, vy, vz, bx, by, bz,
+                                                U, delta, eos);
+            }
+          }
+        }
+        if (!admissible) {
+          Real lo = 0.0;
+          Real hi = 1.0;
+          for (int iter=0; iter<24; ++iter) {
+            const Real amid = 0.5*(lo + hi);
+            bool ok = true;
+            for (int kk=0; kk<fsib_k; ++kk) {
+              for (int jj=0; jj<fsib_j; ++jj) {
+                for (int ii=0; ii<2; ++ii) {
+                  const int child_k = base_k + kk;
+                  const int child_j = base_j + jj;
+                  const int child_i = base_i + ii;
+                  const Real rho =
+                      parent_rho + amid*(fine_prim(m,IDN,child_k,child_j,child_i) -
+                                         parent_rho);
+                  const Real vx =
+                      parent_vx + amid*(fine_prim(m,IVX,child_k,child_j,child_i) -
+                                        parent_vx);
+                  const Real vy =
+                      parent_vy + amid*(fine_prim(m,IVY,child_k,child_j,child_i) -
+                                        parent_vy);
+                  const Real vz =
+                      parent_vz + amid*(fine_prim(m,IVZ,child_k,child_j,child_i) -
+                                        parent_vz);
+                  const Real U =
+                      parent_U + amid*(fine_prim(m,IEN,child_k,child_j,child_i) -
+                                       parent_U);
+                  const Real delta =
+                      parent_delta + amid*(fine_prim(m,IPP,child_k,child_j,child_i) -
+                                           parent_delta);
+                  const Real bx = 0.5*(fine_b.x1f(m,child_k,child_j,child_i) +
+                                       fine_b.x1f(m,child_k,child_j,child_i+1));
+                  const Real by = 0.5*(fine_b.x2f(m,child_k,child_j,child_i) +
+                                       fine_b.x2f(m,child_k,child_j+1,child_i));
+                  const Real bz = 0.5*(fine_b.x3f(m,child_k,child_j,child_i) +
+                                       fine_b.x3f(m,child_k+1,child_j,child_i));
+                  ok = ok && cgl::amr::IsAdmissibleUDelta(
+                      rho, vx, vy, vz, bx, by, bz, U, delta, eos);
+                }
+              }
+            }
+            if (ok) {
+              lo = amid;
+            } else {
+              hi = amid;
+            }
+          }
+          alpha = lo;
+        }
 
-    fine_cons(m,IDN,k,j,i) = u.d;
-    fine_cons(m,IM1,k,j,i) = u.mx;
-    fine_cons(m,IM2,k,j,i) = u.my;
-    fine_cons(m,IM3,k,j,i) = u.mz;
-    fine_cons(m,IEN,k,j,i) = u.e;
-    fine_cons(m,IAN,k,j,i) = u.mu;
-    for (int n=nmhd; n<(nmhd+nscal); ++n) {
-      fine_cons(m,n,k,j,i) = u.d*fine_prim(m,n,k,j,i);
-    }
-  });
+        const Real rho = parent_rho + alpha*(fine_prim(m,IDN,k,j,i) - parent_rho);
+        const Real vx = parent_vx + alpha*(fine_prim(m,IVX,k,j,i) - parent_vx);
+        const Real vy = parent_vy + alpha*(fine_prim(m,IVY,k,j,i) - parent_vy);
+        const Real vz = parent_vz + alpha*(fine_prim(m,IVZ,k,j,i) - parent_vz);
+        const Real U = parent_U + alpha*(fine_prim(m,IEN,k,j,i) - parent_U);
+        const Real delta =
+            parent_delta + alpha*(fine_prim(m,IPP,k,j,i) - parent_delta);
+        const Real bx = 0.5*(fine_b.x1f(m,k,j,i) + fine_b.x1f(m,k,j,i+1));
+        const Real by = 0.5*(fine_b.x2f(m,k,j,i) + fine_b.x2f(m,k,j+1,i));
+        const Real bz = 0.5*(fine_b.x3f(m,k,j,i) + fine_b.x3f(m,k+1,j,i));
+
+        MHDPrim1D w;
+        HydCons1D u;
+        auto report = cgl::amr::ProjectUDeltaToCGL(
+            rho, vx, vy, vz, bx, by, bz, U, delta, eos, slot, w, u);
+        if (alpha < 1.0 - 16.0*std::numeric_limits<Real>::epsilon()) {
+          report.repairs |= cgl::amr::kSlopeScaled;
+        }
+
+        fine_cons(m,IDN,k,j,i) = u.d;
+        fine_cons(m,IM1,k,j,i) = u.mx;
+        fine_cons(m,IM2,k,j,i) = u.my;
+        fine_cons(m,IM3,k,j,i) = u.mz;
+        fine_cons(m,IEN,k,j,i) = u.e;
+        fine_cons(m,IAN,k,j,i) = u.mu;
+        for (int n=nmhd; n<(nmhd+nscal); ++n) {
+          fine_cons(m,n,k,j,i) = u.d*fine_prim(m,n,k,j,i);
+        }
+
+        const auto mask = report.repairs;
+        if (mask != cgl::amr::kNone) ++cells_count;
+        nonfinite_count += cgl::amr::MaskBit(mask, cgl::amr::kNonfiniteThermo);
+        density_count += cgl::amr::MaskBit(mask, cgl::amr::kDensityFloor);
+        energy_count += cgl::amr::MaskBit(mask, cgl::amr::kInternalEnergyFloor);
+        parallel_count += cgl::amr::MaskBit(mask, cgl::amr::kParallelPressureFloor);
+        perpendicular_count += cgl::amr::MaskBit(mask, cgl::amr::kPerpPressureFloor);
+        lowb_count += cgl::amr::MaskBit(mask, cgl::amr::kLowFieldIsotropized);
+        firehose_count += cgl::amr::MaskBit(mask, cgl::amr::kFirehoseHardwall);
+        mirror_count += cgl::amr::MaskBit(mask, cgl::amr::kMirrorHardwall);
+        anisotropy_count += cgl::amr::MaskBit(mask, cgl::amr::kAnisotropyChanged);
+        interval_count += cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
+        slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
+      },
+      Kokkos::Sum<int>(fcells),
+      Kokkos::Sum<int>(fnonfinite),
+      Kokkos::Sum<int>(fdensity),
+      Kokkos::Sum<int>(fenergy),
+      Kokkos::Sum<int>(fparallel),
+      Kokkos::Sum<int>(fperpendicular),
+      Kokkos::Sum<int>(flowb),
+      Kokkos::Sum<int>(ffirehose),
+      Kokkos::Sum<int>(fmirror),
+      Kokkos::Sum<int>(fanisotropy),
+      Kokkos::Sum<int>(finterval),
+      Kokkos::Sum<int>(fslope));
+  AccumulateCGLAMRRepairCounters(this, fcells, fnonfinite, fdensity, fenergy,
+                                 fparallel, fperpendicular, flowb, ffirehose,
+                                 fmirror, fanisotropy, finterval, fslope);
   Kokkos::fence();
 }
 

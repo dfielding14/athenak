@@ -56,6 +56,18 @@ class MeshRefinement {
   int ncyc_check_amr;        // # of cycles between checking mesh for ref/derefinement
   int refinement_interval;   // # of cycles between allowing successive ref/derefinement
   bool prolong_prims;        // flag to enable prolongation of primitive vars
+  long long cgl_amr_cells_repaired = 0;       // CGL AMR cells with any repair
+  long long cgl_amr_nonfinite_repairs = 0;    // nonfinite thermodynamic repairs
+  long long cgl_amr_density_repairs = 0;      // density-floor repairs
+  long long cgl_amr_energy_repairs = 0;       // internal-energy repairs
+  long long cgl_amr_parallel_repairs = 0;     // parallel-pressure-floor repairs
+  long long cgl_amr_perp_repairs = 0;         // perpendicular-pressure-floor repairs
+  long long cgl_amr_lowb_repairs = 0;         // low-field isotropization repairs
+  long long cgl_amr_firehose_repairs = 0;     // firehose hard-wall repairs
+  long long cgl_amr_mirror_repairs = 0;       // mirror hard-wall repairs
+  long long cgl_amr_anisotropy_repairs = 0;   // anisotropy-clipping repairs
+  long long cgl_amr_interval_repairs = 0;     // empty admissible-interval repairs
+  long long cgl_amr_slope_repairs = 0;        // slope scaling before projection
   RefinementCriteria* pmrc=nullptr;   // object to control various refinement criteria
 
   // following 2x Views are dimensioned [nmb_total]
