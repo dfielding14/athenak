@@ -186,8 +186,17 @@ pressures are not applied to flow momentum.
   LF split lifecycle with a one-stage Euler half-sweep. It requires
   `sts_integrator = none` and cannot yet be combined with another active MHD
   parabolic process.
-- CGL LF with mesh refinement currently requires conserved prolongation;
-  `<mesh_refinement>/prolong_primitives = true` is rejected.
+- CGL LF with mesh refinement supports both conserved prolongation and
+  CGL-aware primitive prolongation. With
+  `<mesh_refinement>/prolong_primitives = true`, fine/coarse primitive
+  boundaries and active block creation/deletion rebuild the CGL thermodynamic
+  state instead of treating `IAN` as a passive scalar. During LF STS stages the
+  AMR path is explicit about the temporary magnetic-moment representation
+  `IAN = p_perp/|B|`.
+- CGL LF pressure-work recording remains disabled with AMR primitive
+  prolongation because that diagnostic flux-communication path has not been
+  separately audited. Keep `<mhd>/cgl_lf_record_pressure_work = false` for
+  LF/STS AMR primitive-prolongation runs.
 - CGL LF STS is compatible with three-dimensional shearing-periodic
   boundaries on uniform grids. Each parabolic stage reconciles radial heat
   fluxes across the shearing seam, updates and remaps the conserved CGL state

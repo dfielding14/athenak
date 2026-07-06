@@ -214,12 +214,16 @@ Current restrictions are intentionally conservative:
   MHD parabolic process.
 - CGL LF with AMR supports primitive fine/coarse boundary prolongation in both
   the ordinary anisotropy representation and the temporary LF STS magnetic-
-  moment representation. Mesh creation still prolongates conserved data, so
-  strict LF AMR validation should include partial-refinement churn tests.
-- Current-threshold LF/STS AMR refine-up smokes have passed on GPUs with
-  strict admissibility, but forced moving-pattern refine/derefine churn is not
-  yet production-qualified; the remaining fix is true primitive/admissibility-
-  preserving interpolation in the new-MeshBlock creation path.
+  moment representation. Mesh creation and deletion use CGL-specific primitive
+  rebuild wrappers rather than treating `IAN` as a passive scalar. Active block
+  creation now prolongates `rho`, velocity, CGL internal energy `U`, and
+  pressure anisotropy `Delta`, then slope-scales child states before final
+  admissibility projection.
+- Current-threshold LF/STS AMR refine-up and forced moving-pattern
+  refine/derefine churn smokes have passed on GPUs with strict admissibility.
+  Dedicated CGL AMR repair counters report whether AMR transfer needed density,
+  energy, pressure, low-field, hard-wall, anisotropy, interval, or slope-scaling
+  repairs.
 - CGL LF pressure-work recording is disabled for AMR primitive prolongation.
   Keep `<mhd>/cgl_lf_record_pressure_work = false` for LF/STS AMR runs until
   the diagnostic flux-communication path is separately audited.
