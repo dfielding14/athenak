@@ -42,9 +42,13 @@ struct DivBAMRConfig {
   Real guide_b3 = -0.15;
   Real field_amp = 0.25;
   Real field_k = 2.0;
+  Real pressure_amp = 0.0;
+  Real pressure_k = 1.0;
   Real divb_bnorm = 1.0;
   Real uniform_refine_time = 0.0;
   Real current_refine_threshold = 1.0;
+  Real current_refine_threshold_after = 1.0;
+  Real current_threshold_switch_time = -1.0;
   Real current_derefine_fraction = 0.5;
   Real x1min = 0.0;
   Real x1max = 1.0;
@@ -54,6 +58,7 @@ struct DivBAMRConfig {
   Real x3max = 1.0;
   int target_level = 0;
   int refinement_mode = 0;
+  int pressure_mode = 0;
 };
 
 DivBAMRConfig divb_amr;
@@ -106,6 +111,16 @@ KOKKOS_INLINE_FUNCTION
 Real PeriodicDistance(const Real a, const Real b) {
   const Real d = fabs(a - b);
   return fmin(d, 1.0 - d);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PressureDeltaPattern(const Real x1, const Real x2, const Real x3,
+                          const DivBAMRConfig cfg) {
+  const Real x = Phase(x1, cfg.x1min, cfg.x1max, cfg.pressure_k);
+  const Real y = Phase(x2, cfg.x2min, cfg.x2max, cfg.pressure_k);
+  const Real z = Phase(x3, cfg.x3min, cfg.x3max, cfg.pressure_k);
+  return 0.5*std::sin(x + 0.35) + 0.3*std::cos(y - 0.20) +
+         0.2*std::sin(z + x - y);
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -192,6 +207,22 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   divb_amr.guide_b3 = pin->GetOrAddReal("problem", "guide_b3", -0.15);
   divb_amr.field_amp = pin->GetOrAddReal("problem", "field_amp", 0.25);
   divb_amr.field_k = pin->GetOrAddReal("problem", "field_k", 2.0);
+  divb_amr.pressure_amp = pin->GetOrAddReal("problem", "pressure_amp", 0.0);
+  divb_amr.pressure_k = pin->GetOrAddReal("problem", "pressure_k", 1.0);
+  const std::string pressure_mode =
+      pin->GetOrAddString("problem", "pressure_mode", "uniform");
+  if (pressure_mode == "uniform") {
+    divb_amr.pressure_mode = 0;
+  } else if (pressure_mode == "sinusoidal_delta") {
+    divb_amr.pressure_mode = 1;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<problem>/pressure_mode = '" << pressure_mode
+              << "' is not implemented; valid choices are "
+              << "[uniform,sinusoidal_delta]." << std::endl;
+    exit(EXIT_FAILURE);
+  }
   divb_amr.uniform_refine_time =
       pin->GetOrAddReal("problem", "uniform_refine_time", 0.0);
   const std::string refinement_mode =
@@ -212,16 +243,23 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   }
   divb_amr.current_refine_threshold =
       pin->GetOrAddReal("problem", "current_refine_threshold", 1.0);
+  divb_amr.current_refine_threshold_after =
+      pin->GetOrAddReal("problem", "current_refine_threshold_after",
+                        divb_amr.current_refine_threshold);
+  divb_amr.current_threshold_switch_time =
+      pin->GetOrAddReal("problem", "current_threshold_switch_time", -1.0);
   divb_amr.current_derefine_fraction =
       pin->GetOrAddReal("problem", "current_derefine_fraction", 0.5);
   if (divb_amr.refinement_mode == 2) {
     if (!(divb_amr.current_refine_threshold > 0.0) ||
+        !(divb_amr.current_refine_threshold_after > 0.0) ||
         divb_amr.current_derefine_fraction < 0.0 ||
         divb_amr.current_derefine_fraction > 1.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "current_threshold refinement requires "
-                << "<problem>/current_refine_threshold > 0 and "
+                << "<problem>/current_refine_threshold > 0, "
+                << "<problem>/current_refine_threshold_after > 0, and "
                 << "0 <= <problem>/current_derefine_fraction <= 1."
                 << std::endl;
       exit(EXIT_FAILURE);
@@ -256,6 +294,7 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   int nmb = pmbp->nmb_thispack;
   EOS_Data &eos = pmbp->pmhd->peos->eos_data;
   const Real gm1 = eos.gamma - 1.0;
+  const Real cgl_pfloor = eos.pfloor;
   const bool is_cgl = eos.is_cgl;
   auto &u0 = pmbp->pmhd->u0;
   auto &w0 = pmbp->pmhd->w0;
@@ -329,12 +368,25 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
     const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
     const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
     if (is_cgl) {
+      const Real U0 = cfg.pperp0 + 0.5*cfg.ppar0;
+      Real delta = cfg.pperp0 - cfg.ppar0;
+      if (cfg.pressure_mode == 1) {
+        const Real x1 = CellCenterX(i - is, nx1, size.d_view(m).x1min,
+                                    size.d_view(m).x1max);
+        const Real x2 = CellCenterX(j - js, nx2, size.d_view(m).x2min,
+                                    size.d_view(m).x2max);
+        const Real x3 = CellCenterX(k - ks, nx3, size.d_view(m).x3min,
+                                    size.d_view(m).x3max);
+        delta += cfg.pressure_amp*PressureDeltaPattern(x1, x2, x3, cfg);
+      }
+      const Real ppar = fmax(TWO_3RDS*(U0 - delta), cgl_pfloor);
+      const Real pperp = fmax(TWO_3RDS*U0 + ONE_3RD*delta, cgl_pfloor);
       w0(m,IDN,k,j,i) = rho;
       w0(m,IVX,k,j,i) = cfg.vx0;
       w0(m,IVY,k,j,i) = multi_d ? cfg.vy0 : 0.0;
       w0(m,IVZ,k,j,i) = three_d ? cfg.vz0 : 0.0;
-      w0(m,IPR,k,j,i) = cfg.ppar0;
-      w0(m,IPP,k,j,i) = cfg.pperp0;
+      w0(m,IPR,k,j,i) = ppar;
+      w0(m,IPP,k,j,i) = pperp;
       bcc0(m,IBX,k,j,i) = bx;
       bcc0(m,IBY,k,j,i) = by;
       bcc0(m,IBZ,k,j,i) = bz;
@@ -384,8 +436,13 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
     const int nx3 = indcs.nx3;
     const int nkji = nx3*nx2*nx1;
     const int nji = nx2*nx1;
+    const Real current_threshold =
+        (cfg.current_threshold_switch_time >= 0.0 &&
+         mesh_time >= cfg.current_threshold_switch_time)
+            ? cfg.current_refine_threshold_after
+            : cfg.current_refine_threshold;
     const Real derefine_threshold =
-        cfg.current_derefine_fraction*cfg.current_refine_threshold;
+        cfg.current_derefine_fraction*current_threshold;
     par_for_outer("divb_amr_current_refinement", DevExeSpace(), 0, 0, 0, nmb-1,
     KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
       Real jmax = 0.0;
@@ -426,7 +483,7 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
       }, Kokkos::Max<Real>(jmax));
 
       const int level = mblev.d_view(m);
-      if (jmax > cfg.current_refine_threshold && level < cfg.target_level) {
+      if (jmax > current_threshold && level < cfg.target_level) {
         refine_flag.d_view(m + mbs) = 1;
       } else if (jmax < derefine_threshold && level > root_level) {
         refine_flag.d_view(m + mbs) = -1;
@@ -461,7 +518,7 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
 void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   const bool is_cgl = pmhd->peos->eos_data.is_cgl;
-  pdata->nhist = is_cgl ? 10 : 8;
+  pdata->nhist = is_cgl ? 22 : 8;
   pdata->label[0] = "max_divb";
   pdata->label[1] = "max_ndiv";
   pdata->label[2] = "sum_divb";
@@ -473,6 +530,18 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   if (is_cgl) {
     pdata->label[8] = "bad_state";
     pdata->label[9] = "abs_anis";
+    pdata->label[10] = "amr_cell";
+    pdata->label[11] = "amr_nan";
+    pdata->label[12] = "amr_rho";
+    pdata->label[13] = "amr_U";
+    pdata->label[14] = "amr_ppar";
+    pdata->label[15] = "amr_pperp";
+    pdata->label[16] = "amr_lowB";
+    pdata->label[17] = "amr_fh";
+    pdata->label[18] = "amr_mirr";
+    pdata->label[19] = "amr_dlt";
+    pdata->label[20] = "amr_int";
+    pdata->label[21] = "amr_slp";
     pmhd->RequireCGLAnisotropyRepresentation("divB AMR history output");
   }
 
@@ -554,5 +623,43 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   pdata->hdata[1] = max_norm_divb;
   for (int n=2; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
+  if (is_cgl) {
+    pdata->hdata[10] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_cells_repaired)
+                           : 0.0;
+    pdata->hdata[11] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_nonfinite_repairs)
+                           : 0.0;
+    pdata->hdata[12] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_density_repairs)
+                           : 0.0;
+    pdata->hdata[13] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_energy_repairs)
+                           : 0.0;
+    pdata->hdata[14] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_parallel_repairs)
+                           : 0.0;
+    pdata->hdata[15] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_perp_repairs)
+                           : 0.0;
+    pdata->hdata[16] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_lowb_repairs)
+                           : 0.0;
+    pdata->hdata[17] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_firehose_repairs)
+                           : 0.0;
+    pdata->hdata[18] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_mirror_repairs)
+                           : 0.0;
+    pdata->hdata[19] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_anisotropy_repairs)
+                           : 0.0;
+    pdata->hdata[20] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_interval_repairs)
+                           : 0.0;
+    pdata->hdata[21] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_slope_repairs)
+                           : 0.0;
   }
 }

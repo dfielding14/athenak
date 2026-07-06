@@ -167,6 +167,11 @@ void RequireOneDimensionalSingleBlock(Mesh *pm) {
           "this unit test currently expects a 1D mesh");
 }
 
+void RequireOneDimensionalMesh(Mesh *pm) {
+  Require(pm->mb_indcs.nx2 == 1 && pm->mb_indcs.nx3 == 1,
+          "this unit test currently expects a 1D mesh");
+}
+
 void RequireSingleBlock(Mesh *pm) {
   Require(pm->pmb_pack->nmb_thispack == 1,
           "this unit test currently expects one MeshBlock on one rank");
@@ -284,58 +289,74 @@ Projection ProjectRotatedTemperature(const HostView &w, ParameterInput *pin, Mes
 template <typename HostView>
 Projection ProjectPrimitive(const HostView &w, ParameterInput *pin, Mesh *pm,
                             const int idx) {
-  RequireOneDimensionalSingleBlock(pm);
+  RequireOneDimensionalMesh(pm);
   const int is = pm->mb_indcs.is;
   const int js = pm->mb_indcs.js;
   const int ks = pm->mb_indcs.ks;
   const int nx1 = pm->mb_indcs.nx1;
   const Real k_wave = Wavenumber(pin, pm);
   const Real xmin = pm->mesh_size.x1min;
+  const Real length = pm->mesh_size.x1max - pm->mesh_size.x1min;
+  auto &size = pm->pmb_pack->pmb->mb_size;
+  size.template sync<HostMemSpace>();
 
   Projection p;
-  for (int q = 0; q < nx1; ++q) {
-    p.mean += w(0,idx,ks,js,is + q);
+  for (int m = 0; m < pm->pmb_pack->nmb_thispack; ++m) {
+    for (int q = 0; q < nx1; ++q) {
+      p.mean += w(m,idx,ks,js,is + q)*size.h_view(m).dx1;
+    }
   }
-  p.mean /= static_cast<Real>(nx1);
+  p.mean /= length;
 
-  for (int q = 0; q < nx1; ++q) {
-    const Real x = XCenter(pm, q);
-    const Real phase = k_wave*(x - xmin);
-    const Real value = w(0,idx,ks,js,is + q) - p.mean;
-    p.sin_amp += value*std::sin(phase);
-    p.cos_amp += value*std::cos(phase);
+  for (int m = 0; m < pm->pmb_pack->nmb_thispack; ++m) {
+    for (int q = 0; q < nx1; ++q) {
+      const Real x = CellCenterX(q, nx1, size.h_view(m).x1min,
+                                 size.h_view(m).x1max);
+      const Real phase = k_wave*(x - xmin);
+      const Real value = w(m,idx,ks,js,is + q) - p.mean;
+      p.sin_amp += value*std::sin(phase)*size.h_view(m).dx1;
+      p.cos_amp += value*std::cos(phase)*size.h_view(m).dx1;
+    }
   }
-  p.sin_amp *= 2.0/static_cast<Real>(nx1);
-  p.cos_amp *= 2.0/static_cast<Real>(nx1);
+  p.sin_amp *= 2.0/length;
+  p.cos_amp *= 2.0/length;
   return p;
 }
 
 template <typename HostView>
 Projection ProjectCellField(const HostView &bcc, ParameterInput *pin, Mesh *pm,
                             const int idx) {
-  RequireOneDimensionalSingleBlock(pm);
+  RequireOneDimensionalMesh(pm);
   const int is = pm->mb_indcs.is;
   const int js = pm->mb_indcs.js;
   const int ks = pm->mb_indcs.ks;
   const int nx1 = pm->mb_indcs.nx1;
   const Real k_wave = Wavenumber(pin, pm);
   const Real xmin = pm->mesh_size.x1min;
+  const Real length = pm->mesh_size.x1max - pm->mesh_size.x1min;
+  auto &size = pm->pmb_pack->pmb->mb_size;
+  size.template sync<HostMemSpace>();
 
   Projection p;
-  for (int q = 0; q < nx1; ++q) {
-    p.mean += bcc(0,idx,ks,js,is + q);
+  for (int m = 0; m < pm->pmb_pack->nmb_thispack; ++m) {
+    for (int q = 0; q < nx1; ++q) {
+      p.mean += bcc(m,idx,ks,js,is + q)*size.h_view(m).dx1;
+    }
   }
-  p.mean /= static_cast<Real>(nx1);
+  p.mean /= length;
 
-  for (int q = 0; q < nx1; ++q) {
-    const Real x = XCenter(pm, q);
-    const Real phase = k_wave*(x - xmin);
-    const Real value = bcc(0,idx,ks,js,is + q) - p.mean;
-    p.sin_amp += value*std::sin(phase);
-    p.cos_amp += value*std::cos(phase);
+  for (int m = 0; m < pm->pmb_pack->nmb_thispack; ++m) {
+    for (int q = 0; q < nx1; ++q) {
+      const Real x = CellCenterX(q, nx1, size.h_view(m).x1min,
+                                 size.h_view(m).x1max);
+      const Real phase = k_wave*(x - xmin);
+      const Real value = bcc(m,idx,ks,js,is + q) - p.mean;
+      p.sin_amp += value*std::sin(phase)*size.h_view(m).dx1;
+      p.cos_amp += value*std::cos(phase)*size.h_view(m).dx1;
+    }
   }
-  p.sin_amp *= 2.0/static_cast<Real>(nx1);
-  p.cos_amp *= 2.0/static_cast<Real>(nx1);
+  p.sin_amp *= 2.0/length;
+  p.cos_amp *= 2.0/length;
   return p;
 }
 
@@ -1420,6 +1441,10 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay) {
     RequireSingleBlock(pm);
+  } else if (mode == TestMode::field_aligned_wave ||
+             mode == TestMode::paper_oblique_wave ||
+             mode == TestMode::paper_eigen_wave) {
+    RequireOneDimensionalMesh(pm);
   } else {
     RequireOneDimensionalSingleBlock(pm);
   }
@@ -1462,6 +1487,10 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay) {
     RequireSingleBlock(pmy_mesh_);
+  } else if (mode == TestMode::field_aligned_wave ||
+             mode == TestMode::paper_oblique_wave ||
+             mode == TestMode::paper_eigen_wave) {
+    RequireOneDimensionalMesh(pmy_mesh_);
   } else {
     RequireOneDimensionalSingleBlock(pmy_mesh_);
   }
@@ -1516,13 +1545,17 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   auto w0 = pmhd->w0;
   auto bcc0 = pmhd->bcc0;
   auto b0 = pmhd->b0;
+  auto size = pmbp->pmb->mb_size;
 
   par_for("cgl_lf_quant_init_prim", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const int q = i - is;
-    const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
-    const Real y = CellCenterX(j - js, indcs.nx2, ymin, ymax);
-    const Real z = CellCenterX(k - ks, indcs.nx3, zmin, zmax);
+    const RegionSize block_size = size.d_view(m);
+    const Real x = CellCenterX(q, indcs.nx1, block_size.x1min, block_size.x1max);
+    const Real y = CellCenterX(j - js, indcs.nx2, block_size.x2min,
+                               block_size.x2max);
+    const Real z = CellCenterX(k - ks, indcs.nx3, block_size.x3min,
+                               block_size.x3max);
     Real phase = k_wave*(x - xmin);
     if (mode == TestMode::rotated_decay) {
       phase = rotated_wave.kx*(x - xmin) + rotated_wave.ky*(y - ymin)
