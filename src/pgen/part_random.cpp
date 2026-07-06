@@ -564,6 +564,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   Real Bamp = pin->GetOrAddReal("problem","Bamp",0.05);
   Real Bwave = pin->GetOrAddReal("problem","Bwave_number",1.0);
   Real cfl_part = pin->GetOrAddReal("particles","cfl_part",0.05);
+  bool outer_timestep_gyro_cap =
+      pin->GetOrAddBoolean("particles","outer_timestep_gyro_cap",true);
   int field_line_species = pin->GetOrAddInteger("particles","field_line_species",-1);
   Real field_line_speed = pin->GetOrAddReal("particles","field_line_speed",1.0);
 
@@ -649,7 +651,7 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   }
   Real min_mass = pin->GetOrAddReal("particles","min_mass",1.0);
   Real bmag = std::sqrt(B0x*B0x + B0y*B0y + B0z*B0z);
-  if (bmag > 0.0) {
+  if (outer_timestep_gyro_cap && bmag > 0.0) {
     dtnew_ = std::min(dtnew_, cfl_part*min_mass/bmag);
   }
   std::string particle_position =
