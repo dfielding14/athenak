@@ -3,10 +3,15 @@
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import numpy as np
 
-import test_suite.testutils as testutils
+VIS_PYTHON = Path(__file__).resolve().parents[3] / "vis" / "python"
+sys.path.insert(0, str(VIS_PYTHON))
+
+import bin_convert  # noqa: E402
+import test_suite.testutils as testutils  # noqa: E402
 
 
 INPUT_ROOT = "../../../inputs/tests"
@@ -36,6 +41,7 @@ def _run(input_name, basename, *flags):
 def _cleanup(prefix="cgl_amr_gpu"):
     for path in Path(".").glob(f"{prefix}*.hst"):
         path.unlink()
+    shutil.rmtree("bin", ignore_errors=True)
     shutil.rmtree("rst", ignore_errors=True)
     testutils.cleanup()
 
@@ -53,6 +59,38 @@ def _restart(restart_file, basename, *flags):
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stdout + result.stderr)
+
+
+def _latest_state(basename):
+    paths = sorted(Path("bin").glob(f"{basename}.state.*.bin"))
+    assert paths, f"no state output found for {basename}"
+    return bin_convert.read_binary(str(paths[-1]))
+
+
+def _assert_same_state(reference, candidate):
+    assert candidate["time"] == reference["time"]
+    assert candidate["cycle"] == reference["cycle"]
+    assert candidate["var_names"] == reference["var_names"]
+    assert candidate["n_mbs"] == reference["n_mbs"]
+    reference_order = sorted(
+        range(reference["n_mbs"]),
+        key=lambda block: tuple(reference["mb_logical"][block]),
+    )
+    candidate_order = sorted(
+        range(candidate["n_mbs"]),
+        key=lambda block: tuple(candidate["mb_logical"][block]),
+    )
+    for reference_block, candidate_block in zip(reference_order, candidate_order):
+        np.testing.assert_array_equal(
+            reference["mb_logical"][reference_block],
+            candidate["mb_logical"][candidate_block],
+        )
+        for variable in reference["var_names"]:
+            np.testing.assert_array_equal(
+                reference["mb_data"][variable][reference_block],
+                candidate["mb_data"][variable][candidate_block],
+                err_msg=f"restart changed {variable}",
+            )
 
 
 def _assert_clean_user(history, max_ndiv=1.0e-10):
@@ -210,26 +248,34 @@ def test_cgl_amr_restart_through_regrid_gpu():
         _run(
             "cgl_amr_primitive_current_churn_restart.athinput",
             "cgl_amr_gpu_restart_ref",
+            "time/tlim=0.002",
+            "time/nlim=-1",
         )
-        _run(
-            "cgl_amr_primitive_current_churn_restart.athinput",
-            "cgl_amr_gpu_restart_split",
-            "time/nlim=3",
-        )
-        restarts = sorted(Path("rst").rglob("cgl_amr_gpu_restart_split*.rst"))
-        assert restarts
-        _restart(restarts[-1], "cgl_amr_gpu_restart_resume", "time/nlim=8")
-
         reference = _user_history("cgl_amr_gpu_restart_ref")
-        resumed = _user_history("cgl_amr_gpu_restart_resume")
+        reference_state = _latest_state("cgl_amr_gpu_restart_ref")
         _assert_clean_user(reference)
-        _assert_clean_user(resumed)
         _assert_no_amr_repairs(reference)
-        _assert_no_amr_repairs(resumed)
         assert np.max(reference["ncell"]) > reference["ncell"][0]
         assert reference["ncell"][-1] < np.max(reference["ncell"])
-        assert np.isclose(resumed["time"][-1], reference["time"][-1], atol=1.0e-5)
-        assert resumed["ncell"][-1] == reference["ncell"][-1]
+
+        for split_cycle in (2, 3):
+            split_basename = f"cgl_amr_gpu_restart_split_{split_cycle}"
+            resumed_basename = f"cgl_amr_gpu_restart_resume_{split_cycle}"
+            _run(
+                "cgl_amr_primitive_current_churn_restart.athinput",
+                split_basename,
+                "time/tlim=0.002",
+                f"time/nlim={split_cycle}",
+            )
+            restarts = sorted(Path("rst").rglob(f"{split_basename}*.rst"))
+            assert restarts
+            _restart(restarts[-1], resumed_basename, "time/nlim=-1")
+
+            resumed = _user_history(resumed_basename)
+            _assert_clean_user(resumed)
+            _assert_no_amr_repairs(resumed)
+            assert resumed["ncell"][-1] == reference["ncell"][-1]
+            _assert_same_state(reference_state, _latest_state(resumed_basename))
     finally:
         _cleanup()
 
@@ -334,8 +380,37 @@ def test_cgl_lf_amr_primitive_churn_gpu():
         mhd = _mhd_history("cgl_amr_gpu_lf_churn")
         _assert_clean_user(user)
         _assert_clean_lf(mhd)
-        assert np.max(user["ncell"]) > user["ncell"][0]
-        assert user["ncell"][-1] < np.max(user["ncell"])
+        _assert_no_amr_repairs(user)
+        transitions = np.diff(user["ncell"])
+        assert np.any(transitions > 0.0)
+        assert np.any(transitions < 0.0)
+        _assert_conserved(
+            mhd,
+            ("mass", "1-mom", "2-mom", "3-mom", "tot-E"),
+        )
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_amr_3d_churn_gpu():
+    try:
+        _run("cgl_lf_amr_3d_current.athinput", "cgl_amr_gpu_lf_3d_churn")
+        user = _user_history("cgl_amr_gpu_lf_3d_churn")
+        mhd = _mhd_history("cgl_amr_gpu_lf_3d_churn")
+        _assert_clean_user(user, max_ndiv=1.0e-12)
+        _assert_clean_lf(mhd)
+        _assert_no_amr_repairs(user)
+        assert user["ncell"][0] == 13824.0
+        assert np.max(user["ncell"]) == 110592.0
+        assert user["ncell"][-1] == user["ncell"][0]
+        assert np.count_nonzero(user["ncell"] == np.max(user["ncell"])) >= 2
+        assert np.count_nonzero(user["ncell"] == user["ncell"][0]) >= 4
+        for column in ("lf_mirror", "lf_firehs", "lf_hwproj"):
+            assert mhd[column][-1] == 0.0
+        _assert_conserved(
+            mhd,
+            ("mass", "1-mom", "2-mom", "3-mom", "tot-E"),
+        )
     finally:
         _cleanup()
 

@@ -91,3 +91,9 @@ user_hist_only = false
 file_type = rst
 dcycle = 3
 id = restart
+
+<output3>
+file_type = bin
+variable = mhd_w_bcc
+dcycle = 1000
+id = state

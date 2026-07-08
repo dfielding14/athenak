@@ -1,4 +1,4 @@
-# Three-dimensional CGL Landau-fluid STS AMR smoke with current-threshold refinement.
+# Three-dimensional CGL Landau-fluid STS AMR refine/derefine churn.
 
 <job>
 basename = cgl_lf_amr_3d_current
@@ -43,7 +43,7 @@ integrator = rk2
 sts_integrator = rkl2
 sts_max_dt_ratio = 1.0
 cfl_number = 0.1
-nlim = 6
+nlim = 7
 tlim = 0.02
 ndiag = 1
 
@@ -71,10 +71,15 @@ user_hist = true
 refine_levels = 1
 refinement_mode = current_threshold
 current_refine_threshold = 0.25
+current_refine_threshold_after = 100.0
+current_threshold_switch_time = 2.70e-4
 current_derefine_fraction = 0.5
 rho0 = 1.0
 ppar0 = 10.0
-pperp0 = 10.01
+pperp0 = 10.1
+pressure_mode = sinusoidal_delta
+pressure_amp = 0.5
+pressure_k = 2.0
 vx0 = 0.08
 vy0 = 0.05
 vz0 = 0.03

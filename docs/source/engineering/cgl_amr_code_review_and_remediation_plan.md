@@ -109,7 +109,7 @@ Every use of `IAN` must have an explicit representation:
 | F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Implemented 2026-07-08 |
 | F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Implemented 2026-07-08 |
 | F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Implemented 2026-07-08 |
-| F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Expand after F1-F4 |
+| F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Implemented; worker qualification pending |
 | F12 | Low | Style | Changed files do not fully pass the repository C++ style check | Fix with touched code |
 
 ## Detailed Findings
@@ -802,10 +802,20 @@ Fourier amplitudes.
 
 ### F11: regression completeness
 
-Add state comparisons to restart testing, conservation checks to regrid tests,
-repair assertions to LF churn and passive-scalar cases, and checked-in
-MPI+GPU primitive-AMR coverage. Add a clean three-dimensional LF AMR churn
-case before claiming exhaustive three-dimensional production validation.
+F11 now includes full-field restart comparisons, conservation checks at every
+history sample through refine/derefine, repair assertions for pure CGL, LF,
+and passive-scalar cases, and a clean 24-cubed three-dimensional LF churn. The
+restart regression sorts MeshBlocks by logical location and requires every
+primitive and cell-centered magnetic field to replay bit-for-bit from both a
+checkpoint one cycle before derefinement and the terminal checkpoint directly
+after derefinement.
+
+The opt-in MPI+GPU module runs the restart/conservation case on four ranks and
+the three-dimensional LF churn on 16 ranks, with one GPU per rank. It is
+skipped unless `ATHENAK_RUN_MPI_GPU=1` and requires an allocation-specific
+launcher in `ATHENAK_MPI_GPU_LAUNCHER`, so ordinary CPU and single-GPU CI do
+not pretend to provide multi-GPU evidence. Target-worker qualification remains
+required before F11 is considered accepted.
 
 The first full refine/derefine conservation gate exposed a separate stale-halo
 defect after `RepairAMRFC`: the repair ran after boundary exchange, so the next
