@@ -807,6 +807,14 @@ repair assertions to LF churn and passive-scalar cases, and checked-in
 MPI+GPU primitive-AMR coverage. Add a clean three-dimensional LF AMR churn
 case before claiming exhaustive three-dimensional production validation.
 
+The first full refine/derefine conservation gate exposed a separate stale-halo
+defect after `RepairAMRFC`: the repair ran after boundary exchange, so the next
+step could reconstruct from neighboring ghost fields and primitives created
+from the pre-repair face field. AMR now reruns the established boundary and
+primitive initialization after face repair. The focused churn regression
+checks mass, all momentum components, and total energy at every history row;
+the previous first-coarse-step errors were as large as `8.7e-7`.
+
 ### F12: style
 
 Correct the changed-file C++ style failures, including fixed-width counter

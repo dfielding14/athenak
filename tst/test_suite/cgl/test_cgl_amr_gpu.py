@@ -192,10 +192,15 @@ def test_cgl_amr_current_churn_gpu():
     try:
         _run("cgl_amr_primitive_current_churn.athinput", "cgl_amr_gpu_churn")
         history = _user_history("cgl_amr_gpu_churn")
+        mhd = _mhd_history("cgl_amr_gpu_churn")
         _assert_clean_user(history)
         _assert_no_amr_repairs(history)
         assert np.max(history["ncell"]) > history["ncell"][0]
         assert history["ncell"][-1] < np.max(history["ncell"])
+        _assert_conserved(
+            mhd,
+            ("mass", "1-mom", "2-mom", "3-mom", "tot-E"),
+        )
     finally:
         _cleanup()
 
