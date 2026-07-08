@@ -109,7 +109,7 @@ Every use of `IAN` must have an explicit representation:
 | F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Implemented 2026-07-08 |
 | F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Implemented 2026-07-08 |
 | F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Implemented 2026-07-08 |
-| F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Implemented; worker qualification pending |
+| F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Implemented and qualified 2026-07-08 |
 | F12 | Low | Style | Changed files do not fully pass the repository C++ style check | Implemented 2026-07-08 |
 
 ## Detailed Findings
@@ -814,8 +814,18 @@ The opt-in MPI+GPU module runs the restart/conservation case on four ranks and
 the three-dimensional LF churn on 16 ranks, with one GPU per rank. It is
 skipped unless `ATHENAK_RUN_MPI_GPU=1` and requires an allocation-specific
 launcher in `ATHENAK_MPI_GPU_LAUNCHER`, so ordinary CPU and single-GPU CI do
-not pretend to provide multi-GPU evidence. Target-worker qualification remains
-required before F11 is considered accepted.
+not pretend to provide multi-GPU evidence.
+
+Frontier job `4959125` qualified commit `167c37412547` with CPE 25.09,
+CCE 20.0.0, Cray MPICH 9.0.1, and ROCm 6.4.2. Both MPI CPU and MPI+HIP Release
+builds completed. The CPU/MPI phase passed 23 tests, the single-GPU HIP phase
+passed all 11 AMR tests, and the two-node 16-rank MPI+GPU phase passed the
+restart/conservation and three-dimensional LF churn tests. The allocation used
+2 nodes for 6 minutes 26 seconds, or approximately 0.214 node-hours. Build
+caches, module/environment captures, executable hashes, scheduler accounting,
+and test logs are retained under
+`/lustre/orion/ast207/proj-shared/dfielding/CGL/amr_f11_qualification/`
+`f11-167c37412547/`.
 
 The first full refine/derefine conservation gate exposed a separate stale-halo
 defect after `RepairAMRFC`: the repair ran after boundary exchange, so the next
