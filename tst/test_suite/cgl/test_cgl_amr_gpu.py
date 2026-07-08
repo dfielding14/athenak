@@ -136,6 +136,7 @@ def test_cgl_amr_primitive_stage_order_gpu():
         )
         _assert_no_amr_repairs(primitive_user)
         _assert_no_amr_repairs(conserved_user)
+        assert np.max(primitive_user["crs_d_err"]) < 1.0e-12
 
         # With no coarse/fine transfer, selecting primitive AMR must not alter the
         # hyperbolic stage state before CornerE and CT.
@@ -278,6 +279,7 @@ def test_cgl_amr_3d_and_passive_gpu():
         _run("cgl_amr_primitive_3d_current.athinput", "cgl_amr_gpu_3d")
         three_d = _user_history("cgl_amr_gpu_3d")
         _assert_clean_user(three_d, max_ndiv=1.0e-9)
+        assert np.max(three_d["crs_d_err"]) < 1.0e-12
         assert np.max(three_d["ncell"]) > three_d["ncell"][0]
 
         _run(

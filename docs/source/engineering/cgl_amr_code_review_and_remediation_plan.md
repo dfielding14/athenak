@@ -1,6 +1,6 @@
 # CGL+LF+STS AMR Code Review and Remediation Plan
 
-- Status: review complete; F1 and F2 implemented
+- Status: review complete; F1, F2, and F3 implemented
 - Review date: 2026-07-08
 - Reviewed source: `40fe047f9ffe74795acea3116caad1cb94e6a796`
 - Review range: `f2d0a2597..40fe047f9`
@@ -19,9 +19,9 @@ after the findings and remediation plan were established.
 ## Review Decision
 
 The CGL primitive-AMR path should not be treated as production-ready until the
-remaining F3 and F4 numerical corrections and their acceptance tests pass. F1
-and F2 are implemented. The F1 task reorder addresses the coarse restriction
-part of F3; active-regrid face repair still needs final-field re-encoding.
+remaining F4 numerical correction and its acceptance tests pass. F1, F2, and
+F3 are implemented. F1 and F3 intentionally share one guarded task reorder;
+F3 has a separate semantic regression for the coarse field encoding.
 
 The original four highest-severity findings were:
 
@@ -101,7 +101,7 @@ Every use of `IAN` must have an explicit representation:
 | --- | --- | --- | --- | --- |
 | F1 | Critical | Hyperbolic AMR task order | `RestrictU` mutates live primitives before `CornerE` and CT | Implemented 2026-07-08 |
 | F2 | High | Active refinement | Primitive reconstruction is not conservative | Implemented 2026-07-08 |
-| F3 | High | Field consistency | CGL thermodynamics can be encoded against a provisional magnetic field | Coarse path fixed by F1; active-regrid seam remains |
+| F3 | High | Coarse restriction | CGL thermodynamics use pre-CT `B` and are paired with post-CT `B` | Implemented 2026-07-08 by the F1 task reorder |
 | F4 | High | LF STS lifecycle | Final refresh leaves reconstruction ghost cells stale | Detailed fix below |
 | F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Follow-up patch |
 | F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Follow-up design guard |
@@ -337,8 +337,8 @@ generic child state is itself inadmissible.
 The focused single-refinement regression conserves mass, all momentum
 components, and total energy to roundoff with zero CGL repairs. A real passive
 scalar with correlated density and concentration slopes also conserves scalar
-mass exactly. Final re-encoding after active-regrid face repair remains scoped
-to F3.
+mass exactly. One-level, mixed-topology, and deep-AMR audits found no change to
+the selected thermodynamics across `RepairAMRFC`.
 
 ### Target behavior
 
@@ -457,12 +457,25 @@ must not merely move to derefinement or restart.
 - Common `Delta` slope scaling does not change those conserved totals.
 - Passive scalar mass is conserved independently of density variation.
 - Child pressures remain finite, positive, and inside enabled hard-wall bounds.
-- Final `IAN` is encoded against the field after `RepairAMRFC`.
+- Final `IAN` remains consistent with the field after `RepairAMRFC`.
 - An infeasible primary state cannot be reported as an ordinary slope repair.
 - The implementation continues to use the existing generic face-field AMR
   machinery.
 
 ## Remediation Plan for F3
+
+### Implementation update
+
+F3 is implemented by the same post-CT task dependency committed for F1. A
+separate numerical rewrite is neither necessary nor desirable: serial audits
+covering one-level, mixed-topology, and deep refinement found no additional
+thermodynamic change across `RepairAMRFC`, while a late active-state rewrite
+would occur after boundary communication.
+
+The F3-specific regression decodes every restricted `coarse_u0(IAN)` using the
+current `coarse_b0` and compares its `Delta` with the final child average. The
+pre-fix task order produces a maximum error of `1.0016e-03`; the corrected
+post-CT order reduces it to `4.4e-15` in the focused two-dimensional run.
 
 ### Target behavior
 

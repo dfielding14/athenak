@@ -21,6 +21,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen/pgen.hpp"
 
@@ -543,7 +544,7 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
 void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   const bool is_cgl = pmhd->peos->eos_data.is_cgl;
-  pdata->nhist = is_cgl ? 22 : 8;
+  pdata->nhist = is_cgl ? 23 : 8;
   pdata->label[0] = "max_divb";
   pdata->label[1] = "max_ndiv";
   pdata->label[2] = "sum_divb";
@@ -567,6 +568,7 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
     pdata->label[19] = "amr_dlt";
     pdata->label[20] = "amr_int";
     pdata->label[21] = "amr_slp";
+    pdata->label[22] = "crs_d_err";
     pmhd->RequireCGLAnisotropyRepresentation("divB AMR history output");
   }
 
@@ -644,6 +646,62 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   }, Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb),
      Kokkos::Max<Real>(max_abs_divb), Kokkos::Max<Real>(max_norm_divb));
 
+  Real max_coarse_delta_error = 0.0;
+  if (is_cgl && pm->multilevel && !pmhd->has_cgl_lf_split) {
+    // Decode the restricted anisotropy with its current field and compare it with
+    // the child Delta selected by primitive restriction.
+    auto &cu = pmhd->coarse_u0;
+    auto &cb = pmhd->coarse_b0;
+    const int cis = indcs.cis, cie = indcs.cie;
+    const int cjs = indcs.cjs, cje = indcs.cje;
+    const int cks = indcs.cks, cke = indcs.cke;
+    const int cnx1 = cie - cis + 1;
+    const int cnx2 = cje - cjs + 1;
+    const int cnx3 = cke - cks + 1;
+    const int cnji = cnx2*cnx1;
+    const int cnkji = cnx3*cnji;
+    const int cnmkji = pm->pmb_pack->nmb_thispack*cnkji;
+    const int nchild_j = multi_d ? 2 : 1;
+    const int nchild_k = three_d ? 2 : 1;
+    const Real bfloor = pmhd->peos->eos_data.bfloor;
+    Kokkos::parallel_reduce(
+        "divb_amr_coarse_delta", Kokkos::RangePolicy<>(DevExeSpace(), 0, cnmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &max_error) {
+      const int m = idx/cnkji;
+      int k = (idx - m*cnkji)/cnji;
+      int j = (idx - m*cnkji - k*cnji)/cnx1;
+      const int i = (idx - m*cnkji - k*cnji - j*cnx1) + cis;
+      j += cjs;
+      k += cks;
+
+      const int fine_i = 2*i - cis;
+      const int fine_j = 2*j - cjs;
+      const int fine_k = 2*k - cks;
+      Real fine_delta = 0.0;
+      int nchild = 0;
+      for (int kk=0; kk<nchild_k; ++kk) {
+        for (int jj=0; jj<nchild_j; ++jj) {
+          for (int ii=0; ii<2; ++ii) {
+            fine_delta += w(m,IPP,fine_k+kk,fine_j+jj,fine_i+ii) -
+                          w(m,IEN,fine_k+kk,fine_j+jj,fine_i+ii);
+            ++nchild;
+          }
+        }
+      }
+      fine_delta /= static_cast<Real>(nchild);
+
+      const Real bx = 0.5*(cb.x1f(m,k,j,i) + cb.x1f(m,k,j,i+1));
+      const Real by = 0.5*(cb.x2f(m,k,j,i) + cb.x2f(m,k,j+1,i));
+      const Real bz = 0.5*(cb.x3f(m,k,j,i) + cb.x3f(m,k+1,j,i));
+      Real p_parallel, p_perp;
+      CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+          cu(m,IDN,k,j,i), cu(m,IM1,k,j,i), cu(m,IM2,k,j,i),
+          cu(m,IM3,k,j,i), cu(m,IEN,k,j,i), cu(m,IAN,k,j,i),
+          bx, by, bz, bfloor, p_parallel, p_perp);
+      max_error = fmax(max_error, fabs((p_perp - p_parallel) - fine_delta));
+    }, Kokkos::Max<Real>(max_coarse_delta_error));
+  }
+
   pdata->hdata[0] = max_abs_divb;
   pdata->hdata[1] = max_norm_divb;
   for (int n=2; n<pdata->nhist; ++n) {
@@ -686,5 +744,6 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
     pdata->hdata[21] = (pm->pmr != nullptr)
                            ? static_cast<Real>(pm->pmr->cgl_amr_slope_repairs)
                            : 0.0;
+    pdata->hdata[22] = max_coarse_delta_error;
   }
 }
