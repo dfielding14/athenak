@@ -104,7 +104,7 @@ Every use of `IAN` must have an explicit representation:
 | F3 | High | Coarse restriction | CGL thermodynamics use pre-CT `B` and are paired with post-CT `B` | Implemented 2026-07-08 by the F1 task reorder |
 | F4 | High | LF STS lifecycle | Final refresh leaves reconstruction ghost cells stale | Implemented 2026-07-08 |
 | F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Implemented 2026-07-08 |
-| F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Follow-up design guard |
+| F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Implemented 2026-07-08 |
 | F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Implemented 2026-07-08 |
 | F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Implemented 2026-07-08 |
 | F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Follow-up test patch |
@@ -723,10 +723,18 @@ also verifies that relaxation advanced exactly one physical timestep.
 
 ### F6: LF-aware physical and user boundaries
 
-Reject fixed-inflow and user boundaries during LF moment stages unless they
-explicitly declare moment-aware behavior, or extend the callback contract with
-the active slot representation. Periodic, reflecting, and pure-copy paths
-should be audited separately rather than rejected broadly.
+F6 was implemented on 2026-07-08 as a configuration-time guard. Both STS and
+explicit LF split integration now reject fixed-inflow and user boundaries on
+any active mesh face. During LF stages `IAN` temporarily stores magnetic
+moment, while fixed-inflow data has the ordinary conserved-state contract and
+user callbacks receive no active-representation argument. There is therefore
+no truthful opt-in until one of those boundary contracts is extended.
+
+The guard deliberately permits periodic/shear exchange, reflection, outflow,
+diode, and vacuum boundaries because those paths copy, sign-adjust unrelated
+components, or zero `IAN` without interpreting it as anisotropy. Focused tests
+cover STS inflow rejection, explicit user-boundary rejection, and one-cycle
+STS/explicit smokes for reflection, outflow, and diode boundaries.
 
 ### F7: trustworthy repair accounting
 

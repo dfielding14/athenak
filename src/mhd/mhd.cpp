@@ -285,6 +285,24 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     has_explicit_cgl_lf =
         (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
     has_cgl_lf_split = (has_sts_cgl_lf || has_explicit_cgl_lf);
+    if (has_cgl_lf_split) {
+      const char *boundary_parameters[6] = {
+          "ix1_bc", "ox1_bc", "ix2_bc", "ox2_bc", "ix3_bc", "ox3_bc"};
+      for (int face = 0; face < 6; ++face) {
+        const BoundaryFlag boundary = pmy_pack->pmesh->mesh_bcs[face];
+        if (boundary == BoundaryFlag::inflow || boundary == BoundaryFlag::user) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "CGL Landau-fluid split integration does not support <mesh>/"
+                    << boundary_parameters[face] << " = "
+                    << pmy_pack->pmesh->GetBoundaryString(boundary) << "." << std::endl
+                    << "During LF stages the CGL IAN slot temporarily stores magnetic "
+                    << "moment; fixed-inflow data and user callbacks do not have a "
+                    << "magnetic-moment-aware boundary contract." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+    }
     record_cgl_pressure_work =
         pin->GetOrAddBoolean("mhd", "cgl_lf_record_pressure_work", false);
     if (record_cgl_pressure_work && pmy_pack->pmesh->multilevel &&
