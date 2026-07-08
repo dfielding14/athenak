@@ -222,20 +222,20 @@ def test_cgl_lf_profile_summary_reports_core_buckets():
 def test_cgl_lf_profile_detail_reports_directional_probe_buckets():
     try:
         result = subprocess.run(
-                [
-                    "./athena",
-                    "-i",
-                    PAPER_INPUT,
-                    "job/basename=cgl_ci_profile_detail",
-                    "time/nlim=1",
-                    "time/tlim=1.0e-5",
-                    "mesh/nx1=8",
-                    "mesh/nx2=8",
-                    "mesh/nx3=8",
-                    "meshblock/nx1=8",
-                    "meshblock/nx2=8",
-                    "meshblock/nx3=8",
-                ],
+            [
+                "./athena",
+                "-i",
+                PAPER_INPUT,
+                "job/basename=cgl_ci_profile_detail",
+                "time/nlim=1",
+                "time/tlim=1.0e-5",
+                "mesh/nx1=8",
+                "mesh/nx2=8",
+                "mesh/nx3=8",
+                "meshblock/nx1=8",
+                "meshblock/nx2=8",
+                "meshblock/nx3=8",
+            ],
             capture_output=True,
             env={
                 **os.environ,
@@ -3037,7 +3037,9 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
         "paths": {"batch_script": str(batch_script)},
     }
     monkeypatch.setattr(stage_i, "validate_prepared_continuation_target", lambda _: None)
-    monkeypatch.setattr(stage_i, "validate_prepared_resources", lambda *_args, **_kw: None)
+    monkeypatch.setattr(
+        stage_i, "validate_prepared_resources", lambda *_args, **_kw: None
+    )
     monkeypatch.setattr(stage_i, "normalized_batch_script_sha256", lambda _: batch_digest)
     monkeypatch.setattr(
         stage_i, "generated_batch_script",
@@ -3139,9 +3141,10 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
         stage_i.require_case_node_count("R16", 4)
     with pytest.raises(ValueError, match="R17 canonical Stage I preparation"):
         stage_i.require_case_node_count("R17", 1)
-    active = lambda case_id, state="submitted", nodes=1: {
-        "case_id": case_id, "state": state, "nodes": nodes,
-    }
+
+    def active(case_id, state="submitted", nodes=1):
+        return {"case_id": case_id, "state": state, "nodes": nodes}
+
     stage_i.require_active_reservation_policy([
         active("R03"), active("R04", nodes=4), active("R05", nodes=4),
     ], "R06", 1)

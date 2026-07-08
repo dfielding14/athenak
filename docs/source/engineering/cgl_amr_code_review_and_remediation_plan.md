@@ -110,7 +110,7 @@ Every use of `IAN` must have an explicit representation:
 | F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Implemented 2026-07-08 |
 | F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Implemented 2026-07-08 |
 | F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Implemented; worker qualification pending |
-| F12 | Low | Style | Changed files do not fully pass the repository C++ style check | Fix with touched code |
+| F12 | Low | Style | Changed files do not fully pass the repository C++ style check | Implemented 2026-07-08 |
 
 ## Detailed Findings
 
@@ -827,9 +827,12 @@ the previous first-coarse-step errors were as large as `8.7e-7`.
 
 ### F12: style
 
-Correct the changed-file C++ style failures, including fixed-width counter
-types and line wrapping, as part of the patches that touch those lines. Do not
-create a broad unrelated formatting diff.
+F12 was completed on 2026-07-08 without a broad formatting diff. All C++ files
+touched by F5--F11 pass the repository `cpplint` filter and custom whitespace,
+brace, pragma, and permission checks. The Python files touched by those
+patches pass the configured 90-column `flake8` check; the final style-only
+changes were confined to pre-existing violations in a file already modified
+by F5, F6, and F9.
 
 ## Positive Review Results
 
