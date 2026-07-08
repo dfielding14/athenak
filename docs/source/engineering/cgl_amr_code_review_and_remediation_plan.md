@@ -1,6 +1,6 @@
 # CGL+LF+STS AMR Code Review and Remediation Plan
 
-- Status: review complete; F1 through F5 implemented
+- Status: review complete; F1 through F5 and F8 implemented
 - Review date: 2026-07-08
 - Reviewed source: `40fe047f9ffe74795acea3116caad1cb94e6a796`
 - Review range: `f2d0a2597..40fe047f9`
@@ -106,7 +106,7 @@ Every use of `IAN` must have an explicit representation:
 | F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Implemented 2026-07-08 |
 | F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Follow-up design guard |
 | F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Follow-up diagnostics patch |
-| F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Follow-up safety patch |
+| F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Implemented 2026-07-08 |
 | F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Follow-up test patch |
 | F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Follow-up test patch |
 | F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Expand after F1-F4 |
@@ -737,9 +737,17 @@ AMR projection paths or only active regridding.
 
 ### F8: nonfinite face-field handling
 
-Do not report a magnetic-field repair when only a local cell-centered copy was
-sanitized and the evolved face field remains nonfinite. Either repair the face
-field through a divergence-aware mechanism or fail explicitly.
+F8 was implemented on 2026-07-08 with an explicit fail-fast contract. The
+shared CGL AMR projection helper now aborts before projection or state writes
+when a face-derived magnetic component, squared magnitude, or magnitude is
+nonfinite. It no longer replaces a local copy of the field with zero or
+reports that substitution as a thermodynamic repair while the evolved face
+field remains invalid.
+
+A focused CPU death test covers NaN and infinite components as well as finite
+components whose squared magnitude overflows. Its finite controls verify that
+ordinary projection remains unchanged and that nonfinite thermodynamic inputs
+continue through the separately reported repair path.
 
 ### F9 and F10: quantitative pgen correctness
 

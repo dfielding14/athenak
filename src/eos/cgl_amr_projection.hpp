@@ -151,14 +151,15 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
   ProjectionReport report;
   RepairMask repairs = kNone;
 
-  Real bx = bx_in;
-  Real by = by_in;
-  Real bz = bz_in;
-  if (!Finite3(bx, by, bz)) {
-    bx = 0.0;
-    by = 0.0;
-    bz = 0.0;
-    repairs |= kNonfiniteThermo;
+  const Real bx = bx_in;
+  const Real by = by_in;
+  const Real bz = bz_in;
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  const Real bmag = sqrt(bsqr);
+  if (!Finite3(bx, by, bz) || !Kokkos::isfinite(bsqr) ||
+      !Kokkos::isfinite(bmag)) {
+    Kokkos::abort(
+        "CGL AMR projection requires a finite face-centered magnetic field");
   }
 
   Real rho = rho_in;
@@ -195,8 +196,6 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
     repairs |= kNonfiniteThermo | kAnisotropyChanged;
   }
 
-  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  const Real bmag = sqrt(bsqr);
   const Real b_eff = (bmag > eos.bfloor) ? bmag : eos.bfloor;
   report.bmag = bmag;
   report.b_eff = b_eff;
