@@ -1,6 +1,6 @@
 # CGL+LF+STS AMR Code Review and Remediation Plan
 
-- Status: review complete; F1 through F5 and F8 implemented
+- Status: review complete; F1 through F5, F7, and F8 implemented
 - Review date: 2026-07-08
 - Reviewed source: `40fe047f9ffe74795acea3116caad1cb94e6a796`
 - Review range: `f2d0a2597..40fe047f9`
@@ -105,7 +105,7 @@ Every use of `IAN` must have an explicit representation:
 | F4 | High | LF STS lifecycle | Final refresh leaves reconstruction ghost cells stale | Implemented 2026-07-08 |
 | F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Implemented 2026-07-08 |
 | F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Follow-up design guard |
-| F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Follow-up diagnostics patch |
+| F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Implemented 2026-07-08 |
 | F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Implemented 2026-07-08 |
 | F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Follow-up test patch |
 | F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Follow-up test patch |
@@ -730,10 +730,30 @@ should be audited separately rather than rejected broadly.
 
 ### F7: trustworthy repair accounting
 
-Count fine/coarse boundary projection repairs, preserve cumulative counters
-through restart, retain density/nonfinite repair bits, and count only states
-that participate in an actual transfer. Clarify whether the counters cover all
-AMR projection paths or only active regridding.
+F7 was implemented on 2026-07-08. The fixed-width cumulative counters now
+cover repair-bearing CGL projections that participate in coarse-boundary
+packing, derefinement, active-refinement coarse stencils and fine children,
+and fine/coarse boundary prolongation. Rectangular scratch cells outside the
+actual axial interpolation stencil are not counted, and restriction scratch
+is counted only for a real coarse-boundary or derefinement transfer.
+
+The counters are cumulative projection-event counts, not unique physical-cell
+counts. A cell projected on multiple stages or boundary exchanges therefore
+contributes once per participating invocation. Boundary kernels accumulate
+into a persistent device buffer and synchronize it only for history or restart
+output. The shared projection path also retains nonfinite and density repair
+bits from the original conserved density and uses the repaired density for
+passive-scalar conversion.
+
+Restart files carry a versioned array of 12 exact `uint64_t` values. Shared
+MPI checkpoints store the global sum and restore that baseline on rank zero
+only, so later history reductions do not multiply it by the rank count;
+rank-local checkpoints preserve each rank's local values. Files without the
+version marker retain the legacy layout and initialize the counters to zero.
+
+Focused tests cover retained conserved-density repair bits, zero accounting
+when no transfer occurs, active-refinement accounting, static coarse/fine
+boundary accounting, and exact restoration of a nonzero 12-counter vector.
 
 ### F8: nonfinite face-field handling
 

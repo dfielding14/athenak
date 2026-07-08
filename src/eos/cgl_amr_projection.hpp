@@ -293,9 +293,11 @@ KOKKOS_INLINE_FUNCTION
 ProjectionReport ProjectConservedToCGL(const MHDCons1D &u_in, const EOS_Data &eos,
                                        const SlotRepresentation slot,
                                        MHDPrim1D &w_out, HydCons1D &u_out) {
-  Real rho = u_in.d;
-  if (!Kokkos::isfinite(rho) || rho < eos.dfloor) rho = eos.dfloor;
-  const Real di = 1.0/rho;
+  Real rho_safe = u_in.d;
+  if (!Kokkos::isfinite(rho_safe) || rho_safe < eos.dfloor) {
+    rho_safe = eos.dfloor;
+  }
+  const Real di = 1.0/rho_safe;
   const Real vx = u_in.mx*di;
   const Real vy = u_in.my*di;
   const Real vz = u_in.mz*di;
@@ -316,14 +318,14 @@ ProjectionReport ProjectConservedToCGL(const MHDCons1D &u_in, const EOS_Data &eo
       p_perp = p_parallel;
     }
   } else if (bmag > eos.bfloor) {
-    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(rho, U, u_in.mu, b_eff,
+    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(rho_safe, U, u_in.mu, b_eff,
                                                        p_parallel, p_perp);
   } else {
     p_parallel = TWO_3RDS*U;
     p_perp = p_parallel;
   }
   const Real delta = DeltaFromPressures(p_parallel, p_perp);
-  return ProjectUDeltaToCGL(rho, vx, vy, vz, u_in.bx, u_in.by, u_in.bz, U,
+  return ProjectUDeltaToCGL(u_in.d, vx, vy, vz, u_in.bx, u_in.by, u_in.bz, U,
                             delta, eos, slot, w_out, u_out);
 }
 

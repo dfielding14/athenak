@@ -1,16 +1,16 @@
-# Pure-CGL AMR primitive-prolongation low-field fallback stress.
+# Pure-CGL static coarse/fine low-field case for boundary repair accounting.
 
 <job>
-basename = cgl_amr_primitive_low_b
+basename = cgl_amr_primitive_low_b_static
 
 <mesh>
 nghost = 2
-nx1 = 16
+nx1 = 32
 x1min = 0.0
 x1max = 1.0
 ix1_bc = periodic
 ox1_bc = periodic
-nx2 = 16
+nx2 = 1
 x2min = 0.0
 x2max = 1.0
 ix2_bc = periodic
@@ -23,25 +23,28 @@ ox3_bc = periodic
 
 <meshblock>
 nx1 = 8
-nx2 = 8
+nx2 = 1
 nx3 = 1
 
 <mesh_refinement>
-refinement = adaptive
-num_levels = 2
-ncycle_check = 1
-refinement_interval = 1
+refinement = static
 prolong_primitives = true
-max_nmb_per_rank = 256
+max_nmb_per_rank = 128
 
-<amr_criterion1>
-method = user
+<refined_region1>
+level = 1
+x1min = 0.25
+x1max = 0.75
+x2min = 0.0
+x2max = 1.0
+x3min = 0.0
+x3max = 1.0
 
 <time>
 evolution = dynamic
 integrator = rk2
 cfl_number = 0.1
-nlim = 3
+nlim = 1
 tlim = 0.01
 ndiag = 1
 
@@ -60,14 +63,11 @@ bfloor = 1.0e-10
 <problem>
 pgen_name = divb_amr
 user_hist = true
-refine_levels = 1
-refinement_mode = uniform_after_time
-uniform_refine_time = 0.0
 rho0 = 1.0
 ppar0 = 8.0
 pperp0 = 12.0
 vx0 = 0.02
-vy0 = 0.01
+vy0 = 0.0
 vz0 = 0.0
 guide_b1 = 0.0
 guide_b2 = 0.0
@@ -80,10 +80,3 @@ file_type = hst
 data_format = %24.16e
 dcycle = 1
 user_hist_only = false
-
-# Disabled by default; focused restart tests enable this stream with dcycle=2.
-<output2>
-file_type = rst
-dcycle = 0
-id = restart
-single_file_per_rank = false

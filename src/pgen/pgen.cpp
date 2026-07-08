@@ -20,6 +20,7 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/mesh_refinement.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -285,6 +286,39 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     if (pmhd->pcgl_lf->diagnostics_mode == CGLLFDiagnosticsMode::none) {
       pmhd->pcgl_lf->ResetHeatFluxDiagnostics();
     }
+  }
+
+  if (pin->DoesParameterExist("mesh_refinement",
+                              "cgl_amr_repair_restart_version")) {
+    const int version = pin->GetInteger(
+        "mesh_refinement", "cgl_amr_repair_restart_version");
+    if (version != MeshRefinement::cgl_amr_repair_restart_version ||
+        pm->pmr == nullptr || pmhd == nullptr || !pmhd->peos->eos_data.is_cgl) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Unsupported or inconsistent CGL AMR repair counter restart "
+                << "metadata version " << version << "." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    MeshRefinement::CGLAMRRepairCounterArray counters{};
+    if (global_variable::my_rank == 0 || single_file_per_rank) {
+      if (resfile.Read_bytes(counters.data(), 1, sizeof(counters),
+                             single_file_per_rank) != sizeof(counters)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "CGL AMR repair counter data size read from restart file is "
+                  << "incorrect, restart file is broken." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      MPI_Bcast(counters.data(), MeshRefinement::cgl_amr_repair_counter_count,
+                MPI_UINT64_T, 0, MPI_COMM_WORLD);
+      if (global_variable::my_rank != 0) counters.fill(0u);
+    }
+#endif
+    pm->pmr->ImportCGLAMRRepairCounters(counters);
   }
 
   // root process reads size of CC and FC data arrays from restart file

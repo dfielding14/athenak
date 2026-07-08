@@ -544,6 +544,9 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
 void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   const bool is_cgl = pmhd->peos->eos_data.is_cgl;
+  if (is_cgl && pm->pmr != nullptr) {
+    pm->pmr->FlushCGLAMRRepairCounters();
+  }
   pdata->nhist = is_cgl ? 23 : 8;
   pdata->label[0] = "max_divb";
   pdata->label[1] = "max_ndiv";

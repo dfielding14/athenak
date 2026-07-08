@@ -64,27 +64,6 @@ void TraceAMRStep(Mesh *pm, const char *step, int nnew, int ndel, int old_nmb,
             << std::endl;
 }
 
-void AccumulateCGLAMRRepairCounters(MeshRefinement *pmr, const int cells,
-                                    const int nonfinite, const int density,
-                                    const int energy, const int parallel,
-                                    const int perpendicular, const int lowb,
-                                    const int firehose, const int mirror,
-                                    const int anisotropy, const int interval,
-                                    const int slope) {
-  pmr->cgl_amr_cells_repaired += cells;
-  pmr->cgl_amr_nonfinite_repairs += nonfinite;
-  pmr->cgl_amr_density_repairs += density;
-  pmr->cgl_amr_energy_repairs += energy;
-  pmr->cgl_amr_parallel_repairs += parallel;
-  pmr->cgl_amr_perp_repairs += perpendicular;
-  pmr->cgl_amr_lowb_repairs += lowb;
-  pmr->cgl_amr_firehose_repairs += firehose;
-  pmr->cgl_amr_mirror_repairs += mirror;
-  pmr->cgl_amr_anisotropy_repairs += anisotropy;
-  pmr->cgl_amr_interval_repairs += interval;
-  pmr->cgl_amr_slope_repairs += slope;
-}
-
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -101,6 +80,8 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   nmb_sent_thisrank(0),
   ncyc_check_amr(1),
   refinement_interval(5),
+  cgl_amr_pending_repair_counters("cgl_amr_pending_repair_counters",
+                                  cgl_amr_repair_counter_count),
 #if MPI_PARALLEL_ENABLED
   sendbuf("lb send buff",1),
   recvbuf("lb recv buff",1),
@@ -110,6 +91,8 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   recv_data_host("lb recv data host",1),
 #endif
   prolong_prims(false) {
+  Kokkos::deep_copy(cgl_amr_pending_repair_counters,
+                    static_cast<std::uint64_t>(0));
   if (pin->DoesBlockExist("mesh_refinement")) {
     // read interval (in cycles) between check of AMR and derefinement
     ncyc_check_amr = pin->GetOrAddReal("mesh_refinement", "ncycle_check", 1);
@@ -160,6 +143,89 @@ MeshRefinement::~MeshRefinement() {
     delete [] nref_rsum;
     delete [] nderef_rsum;
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn MeshRefinement::FlushCGLAMRRepairCounters()
+//! \brief Move pending device-side boundary projection counts into host diagnostics.
+
+void MeshRefinement::FlushCGLAMRRepairCounters() {
+  const auto pending = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), cgl_amr_pending_repair_counters);
+  CGLAMRRepairCounterArray counters{};
+  bool have_pending = false;
+  for (int n=0; n<cgl_amr_repair_counter_count; ++n) {
+    counters[n] = pending(n);
+    have_pending = have_pending || (counters[n] != 0u);
+  }
+  if (have_pending) {
+    AccumulateCGLAMRRepairCounters(counters);
+    Kokkos::deep_copy(cgl_amr_pending_repair_counters,
+                      static_cast<std::uint64_t>(0));
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn MeshRefinement::ExportCGLAMRRepairCounters()
+//! \brief Return cumulative CGL AMR projection-event counters in restart-stable order.
+
+MeshRefinement::CGLAMRRepairCounterArray
+MeshRefinement::ExportCGLAMRRepairCounters() {
+  FlushCGLAMRRepairCounters();
+  return {cgl_amr_cells_repaired,
+          cgl_amr_nonfinite_repairs,
+          cgl_amr_density_repairs,
+          cgl_amr_energy_repairs,
+          cgl_amr_parallel_repairs,
+          cgl_amr_perp_repairs,
+          cgl_amr_lowb_repairs,
+          cgl_amr_firehose_repairs,
+          cgl_amr_mirror_repairs,
+          cgl_amr_anisotropy_repairs,
+          cgl_amr_interval_repairs,
+          cgl_amr_slope_repairs};
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn MeshRefinement::ImportCGLAMRRepairCounters()
+//! \brief Restore cumulative CGL AMR projection-event counters.
+
+void MeshRefinement::ImportCGLAMRRepairCounters(
+    const CGLAMRRepairCounterArray &counters) {
+  Kokkos::deep_copy(cgl_amr_pending_repair_counters,
+                    static_cast<std::uint64_t>(0));
+  cgl_amr_cells_repaired = counters[cgl_amr_cells_repaired_index];
+  cgl_amr_nonfinite_repairs = counters[cgl_amr_nonfinite_repairs_index];
+  cgl_amr_density_repairs = counters[cgl_amr_density_repairs_index];
+  cgl_amr_energy_repairs = counters[cgl_amr_energy_repairs_index];
+  cgl_amr_parallel_repairs = counters[cgl_amr_parallel_repairs_index];
+  cgl_amr_perp_repairs = counters[cgl_amr_perp_repairs_index];
+  cgl_amr_lowb_repairs = counters[cgl_amr_lowb_repairs_index];
+  cgl_amr_firehose_repairs = counters[cgl_amr_firehose_repairs_index];
+  cgl_amr_mirror_repairs = counters[cgl_amr_mirror_repairs_index];
+  cgl_amr_anisotropy_repairs = counters[cgl_amr_anisotropy_repairs_index];
+  cgl_amr_interval_repairs = counters[cgl_amr_interval_repairs_index];
+  cgl_amr_slope_repairs = counters[cgl_amr_slope_repairs_index];
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn MeshRefinement::AccumulateCGLAMRRepairCounters()
+//! \brief Add local CGL AMR projection-event counts to the cumulative diagnostics.
+
+void MeshRefinement::AccumulateCGLAMRRepairCounters(
+    const CGLAMRRepairCounterArray &counters) {
+  cgl_amr_cells_repaired += counters[cgl_amr_cells_repaired_index];
+  cgl_amr_nonfinite_repairs += counters[cgl_amr_nonfinite_repairs_index];
+  cgl_amr_density_repairs += counters[cgl_amr_density_repairs_index];
+  cgl_amr_energy_repairs += counters[cgl_amr_energy_repairs_index];
+  cgl_amr_parallel_repairs += counters[cgl_amr_parallel_repairs_index];
+  cgl_amr_perp_repairs += counters[cgl_amr_perp_repairs_index];
+  cgl_amr_lowb_repairs += counters[cgl_amr_lowb_repairs_index];
+  cgl_amr_firehose_repairs += counters[cgl_amr_firehose_repairs_index];
+  cgl_amr_mirror_repairs += counters[cgl_amr_mirror_repairs_index];
+  cgl_amr_anisotropy_repairs += counters[cgl_amr_anisotropy_repairs_index];
+  cgl_amr_interval_repairs += counters[cgl_amr_interval_repairs_index];
+  cgl_amr_slope_repairs += counters[cgl_amr_slope_repairs_index];
 }
 
 //----------------------------------------------------------------------------------------
@@ -455,7 +521,8 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
 void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, int ndel) {
   Mesh* pm = pmy_mesh;
   // AMR rewrites meshblock metadata and may move/reuse storage that was touched by the
-  // just-finished timestep.  Complete outstanding device work before starting data motion.
+  // just-finished timestep. Complete outstanding device work before starting data
+  // motion.
   Kokkos::fence();
   int old_nmb = pm->nmb_total;
   int new_nmb = old_nmb + nnew - ndel;
@@ -549,7 +616,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     RestrictFC(pmhd->b0, pmhd->coarse_b0);
     if (prolong_prims && pmhd->peos->eos_data.is_cgl) {
       Kokkos::fence();
-      RestrictCGLMHDPrimitivesToCons(pmhd);
+      RestrictCGLMHDPrimitivesToCons(pmhd, CGLAMRRestrictionScope::derefinement);
     }
   }
   TraceAMRStep(pm, "after_restrict", nnew, ndel, old_nmb, new_nmb);
@@ -1167,7 +1234,8 @@ void MeshRefinement::RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
 //! \brief Conservatively restrict CGL states, then rebuild the derived CGL slot from an
 //! admissible U/Delta thermodynamic state and the already restricted magnetic field.
 
-void MeshRefinement::RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd) {
+void MeshRefinement::RestrictCGLMHDPrimitivesToCons(
+    mhd::MHD *pmhd, const CGLAMRRestrictionScope scope) {
   RestrictCC(pmhd->u0, pmhd->coarse_u0);
   Kokkos::fence();
 
@@ -1192,18 +1260,29 @@ void MeshRefinement::RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd) {
       (pmhd->cgl_slot_representation == mhd::CGLSlotRepresentation::magnetic_moment)
           ? cgl::amr::magnetic_moment
           : cgl::amr::anisotropy;
+  const bool count_derefinement =
+      (scope == CGLAMRRestrictionScope::derefinement);
+  auto refine_flag_ = refine_flag;
+  const int mbs = pmy_mesh->gids_eachrank[global_variable::my_rank];
+  const int nnghbr = pmy_mesh->pmb_pack->pmb->nnghbr;
+  auto &nghbr = pmy_mesh->pmb_pack->pmb->nghbr;
+  auto &mblev = pmy_mesh->pmb_pack->pmb->mb_lev;
+  auto &sbuf = pmhd->pbval_u->sendbuf;
 
-  int cells=0, nonfinite=0, density=0, energy=0, parallel=0, perpendicular=0;
-  int lowb=0, firehose=0, mirror=0, anisotropy=0, interval=0, slope=0;
+  std::uint64_t cells=0, nonfinite=0, density=0, energy=0, parallel=0;
+  std::uint64_t perpendicular=0, lowb=0, firehose=0, mirror=0;
+  std::uint64_t anisotropy=0, interval=0, slope=0;
   Kokkos::parallel_reduce(
       "cgl_amr_restrict_project",
       Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-      KOKKOS_LAMBDA(const int idx, int &cells_count, int &nonfinite_count,
-                    int &density_count, int &energy_count, int &parallel_count,
-                    int &perpendicular_count, int &lowb_count,
-                    int &firehose_count, int &mirror_count,
-                    int &anisotropy_count, int &interval_count,
-                    int &slope_count) {
+      KOKKOS_LAMBDA(const int idx, std::uint64_t &cells_count,
+                    std::uint64_t &nonfinite_count,
+                    std::uint64_t &density_count, std::uint64_t &energy_count,
+                    std::uint64_t &parallel_count,
+                    std::uint64_t &perpendicular_count,
+                    std::uint64_t &lowb_count, std::uint64_t &firehose_count,
+                    std::uint64_t &mirror_count, std::uint64_t &anisotropy_count,
+                    std::uint64_t &interval_count, std::uint64_t &slope_count) {
         const int m = idx / nkji;
         int k = (idx - m*nkji) / nji;
         int j = (idx - m*nkji - k*nji) / ni;
@@ -1256,34 +1335,67 @@ void MeshRefinement::RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd) {
         cons(m,IAN,k,j,i) = u.mu;
 
         const auto mask = report.repairs;
-        if (mask != cgl::amr::kNone) ++cells_count;
-        nonfinite_count += cgl::amr::MaskBit(mask, cgl::amr::kNonfiniteThermo);
-        density_count += cgl::amr::MaskBit(mask, cgl::amr::kDensityFloor);
-        energy_count += cgl::amr::MaskBit(mask, cgl::amr::kInternalEnergyFloor);
-        parallel_count += cgl::amr::MaskBit(mask, cgl::amr::kParallelPressureFloor);
-        perpendicular_count += cgl::amr::MaskBit(mask, cgl::amr::kPerpPressureFloor);
-        lowb_count += cgl::amr::MaskBit(mask, cgl::amr::kLowFieldIsotropized);
-        firehose_count += cgl::amr::MaskBit(mask, cgl::amr::kFirehoseHardwall);
-        mirror_count += cgl::amr::MaskBit(mask, cgl::amr::kMirrorHardwall);
-        anisotropy_count += cgl::amr::MaskBit(mask, cgl::amr::kAnisotropyChanged);
-        interval_count += cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
-        slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
+        bool count_report = false;
+        if (mask != cgl::amr::kNone) {
+          if (count_derefinement) {
+            count_report = (refine_flag_.d_view(m + mbs) < 0);
+          } else {
+            for (int n=0; n<nnghbr; ++n) {
+              if (nghbr.d_view(m,n).gid >= 0 &&
+                  nghbr.d_view(m,n).lev < mblev.d_view(m)) {
+                const auto bounds = sbuf[n].icoar[0];
+                count_report = count_report ||
+                    (i >= bounds.bis && i <= bounds.bie &&
+                     j >= bounds.bjs && j <= bounds.bje &&
+                     k >= bounds.bks && k <= bounds.bke);
+              }
+            }
+          }
+        }
+        if (count_report) {
+          ++cells_count;
+          nonfinite_count += cgl::amr::MaskBit(mask, cgl::amr::kNonfiniteThermo);
+          density_count += cgl::amr::MaskBit(mask, cgl::amr::kDensityFloor);
+          energy_count += cgl::amr::MaskBit(mask, cgl::amr::kInternalEnergyFloor);
+          parallel_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kParallelPressureFloor);
+          perpendicular_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kPerpPressureFloor);
+          lowb_count += cgl::amr::MaskBit(mask, cgl::amr::kLowFieldIsotropized);
+          firehose_count += cgl::amr::MaskBit(mask, cgl::amr::kFirehoseHardwall);
+          mirror_count += cgl::amr::MaskBit(mask, cgl::amr::kMirrorHardwall);
+          anisotropy_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kAnisotropyChanged);
+          interval_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
+          slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
+        }
       },
-      Kokkos::Sum<int>(cells),
-      Kokkos::Sum<int>(nonfinite),
-      Kokkos::Sum<int>(density),
-      Kokkos::Sum<int>(energy),
-      Kokkos::Sum<int>(parallel),
-      Kokkos::Sum<int>(perpendicular),
-      Kokkos::Sum<int>(lowb),
-      Kokkos::Sum<int>(firehose),
-      Kokkos::Sum<int>(mirror),
-      Kokkos::Sum<int>(anisotropy),
-      Kokkos::Sum<int>(interval),
-      Kokkos::Sum<int>(slope));
-  AccumulateCGLAMRRepairCounters(this, cells, nonfinite, density, energy, parallel,
-                                 perpendicular, lowb, firehose, mirror, anisotropy,
-                                 interval, slope);
+      Kokkos::Sum<std::uint64_t>(cells),
+      Kokkos::Sum<std::uint64_t>(nonfinite),
+      Kokkos::Sum<std::uint64_t>(density),
+      Kokkos::Sum<std::uint64_t>(energy),
+      Kokkos::Sum<std::uint64_t>(parallel),
+      Kokkos::Sum<std::uint64_t>(perpendicular),
+      Kokkos::Sum<std::uint64_t>(lowb),
+      Kokkos::Sum<std::uint64_t>(firehose),
+      Kokkos::Sum<std::uint64_t>(mirror),
+      Kokkos::Sum<std::uint64_t>(anisotropy),
+      Kokkos::Sum<std::uint64_t>(interval),
+      Kokkos::Sum<std::uint64_t>(slope));
+  AccumulateCGLAMRRepairCounters(
+      {static_cast<std::uint64_t>(cells),
+       static_cast<std::uint64_t>(nonfinite),
+       static_cast<std::uint64_t>(density),
+       static_cast<std::uint64_t>(energy),
+       static_cast<std::uint64_t>(parallel),
+       static_cast<std::uint64_t>(perpendicular),
+       static_cast<std::uint64_t>(lowb),
+       static_cast<std::uint64_t>(firehose),
+       static_cast<std::uint64_t>(mirror),
+       static_cast<std::uint64_t>(anisotropy),
+       static_cast<std::uint64_t>(interval),
+       static_cast<std::uint64_t>(slope)});
   Kokkos::fence();
 }
 
@@ -1332,17 +1444,22 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
   const int cnji = cnx2*cnx1;
   const int cnkji = cnx3*cnji;
   const int cnmkji = new_nmb*cnkji;
-  int ccells=0, cnonfinite=0, cdensity=0, cenergy=0, cparallel=0, cperpendicular=0;
-  int clowb=0, cfirehose=0, cmirror=0, canisotropy=0, cinterval=0, cslope=0;
+  const bool multi_d = pmy_mesh->multi_d;
+  const bool three_d = pmy_mesh->three_d;
+  std::uint64_t ccells=0, cnonfinite=0, cdensity=0, cenergy=0, cparallel=0;
+  std::uint64_t cperpendicular=0, clowb=0, cfirehose=0, cmirror=0;
+  std::uint64_t canisotropy=0, cinterval=0, cslope=0;
   Kokkos::parallel_reduce(
       "cgl_amr_coarse_cons_to_udelta",
       Kokkos::RangePolicy<>(DevExeSpace(), 0, cnmkji),
-      KOKKOS_LAMBDA(const int idx, int &cells_count, int &nonfinite_count,
-                    int &density_count, int &energy_count, int &parallel_count,
-                    int &perpendicular_count, int &lowb_count,
-                    int &firehose_count, int &mirror_count,
-                    int &anisotropy_count, int &interval_count,
-                    int &slope_count) {
+      KOKKOS_LAMBDA(const int idx, std::uint64_t &cells_count,
+                    std::uint64_t &nonfinite_count,
+                    std::uint64_t &density_count, std::uint64_t &energy_count,
+                    std::uint64_t &parallel_count,
+                    std::uint64_t &perpendicular_count,
+                    std::uint64_t &lowb_count, std::uint64_t &firehose_count,
+                    std::uint64_t &mirror_count, std::uint64_t &anisotropy_count,
+                    std::uint64_t &interval_count, std::uint64_t &slope_count) {
         const int m = idx / cnkji;
         int k = (idx - m*cnkji) / cnji;
         int j = (idx - m*cnkji - k*cnji) / cnx1;
@@ -1379,34 +1496,58 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
         }
 
         const auto mask = report.repairs;
-        if (mask != cgl::amr::kNone) ++cells_count;
-        nonfinite_count += cgl::amr::MaskBit(mask, cgl::amr::kNonfiniteThermo);
-        density_count += cgl::amr::MaskBit(mask, cgl::amr::kDensityFloor);
-        energy_count += cgl::amr::MaskBit(mask, cgl::amr::kInternalEnergyFloor);
-        parallel_count += cgl::amr::MaskBit(mask, cgl::amr::kParallelPressureFloor);
-        perpendicular_count += cgl::amr::MaskBit(mask, cgl::amr::kPerpPressureFloor);
-        lowb_count += cgl::amr::MaskBit(mask, cgl::amr::kLowFieldIsotropized);
-        firehose_count += cgl::amr::MaskBit(mask, cgl::amr::kFirehoseHardwall);
-        mirror_count += cgl::amr::MaskBit(mask, cgl::amr::kMirrorHardwall);
-        anisotropy_count += cgl::amr::MaskBit(mask, cgl::amr::kAnisotropyChanged);
-        interval_count += cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
-        slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
+        const bool in_i = (i >= cis && i <= cie);
+        const bool in_j = (j >= cjs && j <= cje);
+        const bool in_k = (k >= cks && k <= cke);
+        const bool axial_i = (i == cis - 1 || i == cie + 1) && in_j && in_k;
+        const bool axial_j = multi_d &&
+                             (j == cjs - 1 || j == cje + 1) && in_i && in_k;
+        const bool axial_k = three_d &&
+                             (k == cks - 1 || k == cke + 1) && in_i && in_j;
+        if ((in_i && in_j && in_k) || axial_i || axial_j || axial_k) {
+          if (mask != cgl::amr::kNone) ++cells_count;
+          nonfinite_count += cgl::amr::MaskBit(mask, cgl::amr::kNonfiniteThermo);
+          density_count += cgl::amr::MaskBit(mask, cgl::amr::kDensityFloor);
+          energy_count += cgl::amr::MaskBit(mask, cgl::amr::kInternalEnergyFloor);
+          parallel_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kParallelPressureFloor);
+          perpendicular_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kPerpPressureFloor);
+          lowb_count += cgl::amr::MaskBit(mask, cgl::amr::kLowFieldIsotropized);
+          firehose_count += cgl::amr::MaskBit(mask, cgl::amr::kFirehoseHardwall);
+          mirror_count += cgl::amr::MaskBit(mask, cgl::amr::kMirrorHardwall);
+          anisotropy_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kAnisotropyChanged);
+          interval_count +=
+              cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
+          slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
+        }
       },
-      Kokkos::Sum<int>(ccells),
-      Kokkos::Sum<int>(cnonfinite),
-      Kokkos::Sum<int>(cdensity),
-      Kokkos::Sum<int>(cenergy),
-      Kokkos::Sum<int>(cparallel),
-      Kokkos::Sum<int>(cperpendicular),
-      Kokkos::Sum<int>(clowb),
-      Kokkos::Sum<int>(cfirehose),
-      Kokkos::Sum<int>(cmirror),
-      Kokkos::Sum<int>(canisotropy),
-      Kokkos::Sum<int>(cinterval),
-      Kokkos::Sum<int>(cslope));
-  AccumulateCGLAMRRepairCounters(this, ccells, cnonfinite, cdensity, cenergy,
-                                 cparallel, cperpendicular, clowb, cfirehose,
-                                 cmirror, canisotropy, cinterval, cslope);
+      Kokkos::Sum<std::uint64_t>(ccells),
+      Kokkos::Sum<std::uint64_t>(cnonfinite),
+      Kokkos::Sum<std::uint64_t>(cdensity),
+      Kokkos::Sum<std::uint64_t>(cenergy),
+      Kokkos::Sum<std::uint64_t>(cparallel),
+      Kokkos::Sum<std::uint64_t>(cperpendicular),
+      Kokkos::Sum<std::uint64_t>(clowb),
+      Kokkos::Sum<std::uint64_t>(cfirehose),
+      Kokkos::Sum<std::uint64_t>(cmirror),
+      Kokkos::Sum<std::uint64_t>(canisotropy),
+      Kokkos::Sum<std::uint64_t>(cinterval),
+      Kokkos::Sum<std::uint64_t>(cslope));
+  AccumulateCGLAMRRepairCounters(
+      {static_cast<std::uint64_t>(ccells),
+       static_cast<std::uint64_t>(cnonfinite),
+       static_cast<std::uint64_t>(cdensity),
+       static_cast<std::uint64_t>(cenergy),
+       static_cast<std::uint64_t>(cparallel),
+       static_cast<std::uint64_t>(cperpendicular),
+       static_cast<std::uint64_t>(clowb),
+       static_cast<std::uint64_t>(cfirehose),
+       static_cast<std::uint64_t>(cmirror),
+       static_cast<std::uint64_t>(canisotropy),
+       static_cast<std::uint64_t>(cinterval),
+       static_cast<std::uint64_t>(cslope)});
   Kokkos::fence();
 
   RefineCC(n2o, pmhd->w0, pmhd->coarse_w0);
@@ -1423,17 +1564,20 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
   const int fnmkji = new_nmb*fnkji;
   const int fsib_j = pmy_mesh->multi_d ? 2 : 1;
   const int fsib_k = pmy_mesh->three_d ? 2 : 1;
-  int fcells=0, fnonfinite=0, fdensity=0, fenergy=0, fparallel=0, fperpendicular=0;
-  int flowb=0, ffirehose=0, fmirror=0, fanisotropy=0, finterval=0, fslope=0;
+  std::uint64_t fcells=0, fnonfinite=0, fdensity=0, fenergy=0, fparallel=0;
+  std::uint64_t fperpendicular=0, flowb=0, ffirehose=0, fmirror=0;
+  std::uint64_t fanisotropy=0, finterval=0, fslope=0;
   Kokkos::parallel_reduce(
       "cgl_amr_fine_udelta_to_cons",
       Kokkos::RangePolicy<>(DevExeSpace(), 0, fnmkji),
-      KOKKOS_LAMBDA(const int idx, int &cells_count, int &nonfinite_count,
-                    int &density_count, int &energy_count, int &parallel_count,
-                    int &perpendicular_count, int &lowb_count,
-                    int &firehose_count, int &mirror_count,
-                    int &anisotropy_count, int &interval_count,
-                    int &slope_count) {
+      KOKKOS_LAMBDA(const int idx, std::uint64_t &cells_count,
+                    std::uint64_t &nonfinite_count,
+                    std::uint64_t &density_count, std::uint64_t &energy_count,
+                    std::uint64_t &parallel_count,
+                    std::uint64_t &perpendicular_count,
+                    std::uint64_t &lowb_count, std::uint64_t &firehose_count,
+                    std::uint64_t &mirror_count, std::uint64_t &anisotropy_count,
+                    std::uint64_t &interval_count, std::uint64_t &slope_count) {
         const int m = idx / fnkji;
         int k = (idx - m*fnkji) / fnji;
         int j = (idx - m*fnkji - k*fnji) / fnx1;
@@ -1614,21 +1758,31 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
         interval_count += cgl::amr::MaskBit(mask, cgl::amr::kIntervalEnergyExpanded);
         slope_count += cgl::amr::MaskBit(mask, cgl::amr::kSlopeScaled);
       },
-      Kokkos::Sum<int>(fcells),
-      Kokkos::Sum<int>(fnonfinite),
-      Kokkos::Sum<int>(fdensity),
-      Kokkos::Sum<int>(fenergy),
-      Kokkos::Sum<int>(fparallel),
-      Kokkos::Sum<int>(fperpendicular),
-      Kokkos::Sum<int>(flowb),
-      Kokkos::Sum<int>(ffirehose),
-      Kokkos::Sum<int>(fmirror),
-      Kokkos::Sum<int>(fanisotropy),
-      Kokkos::Sum<int>(finterval),
-      Kokkos::Sum<int>(fslope));
-  AccumulateCGLAMRRepairCounters(this, fcells, fnonfinite, fdensity, fenergy,
-                                 fparallel, fperpendicular, flowb, ffirehose,
-                                 fmirror, fanisotropy, finterval, fslope);
+      Kokkos::Sum<std::uint64_t>(fcells),
+      Kokkos::Sum<std::uint64_t>(fnonfinite),
+      Kokkos::Sum<std::uint64_t>(fdensity),
+      Kokkos::Sum<std::uint64_t>(fenergy),
+      Kokkos::Sum<std::uint64_t>(fparallel),
+      Kokkos::Sum<std::uint64_t>(fperpendicular),
+      Kokkos::Sum<std::uint64_t>(flowb),
+      Kokkos::Sum<std::uint64_t>(ffirehose),
+      Kokkos::Sum<std::uint64_t>(fmirror),
+      Kokkos::Sum<std::uint64_t>(fanisotropy),
+      Kokkos::Sum<std::uint64_t>(finterval),
+      Kokkos::Sum<std::uint64_t>(fslope));
+  AccumulateCGLAMRRepairCounters(
+      {static_cast<std::uint64_t>(fcells),
+       static_cast<std::uint64_t>(fnonfinite),
+       static_cast<std::uint64_t>(fdensity),
+       static_cast<std::uint64_t>(fenergy),
+       static_cast<std::uint64_t>(fparallel),
+       static_cast<std::uint64_t>(fperpendicular),
+       static_cast<std::uint64_t>(flowb),
+       static_cast<std::uint64_t>(ffirehose),
+       static_cast<std::uint64_t>(fmirror),
+       static_cast<std::uint64_t>(fanisotropy),
+       static_cast<std::uint64_t>(finterval),
+       static_cast<std::uint64_t>(fslope)});
   Kokkos::fence();
 
   // Generic RefineCC remains authoritative for primary conserved fields. Apply the

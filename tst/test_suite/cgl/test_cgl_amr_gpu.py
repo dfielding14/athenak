@@ -10,6 +10,20 @@ import test_suite.testutils as testutils
 
 
 INPUT_ROOT = "../../../inputs/tests"
+AMR_REPAIR_COLUMNS = (
+    "amr_cell",
+    "amr_nan",
+    "amr_rho",
+    "amr_U",
+    "amr_ppar",
+    "amr_pperp",
+    "amr_lowB",
+    "amr_fh",
+    "amr_mirr",
+    "amr_dlt",
+    "amr_int",
+    "amr_slp",
+)
 
 
 def _run(input_name, basename, *flags):
@@ -48,20 +62,7 @@ def _assert_clean_user(history, max_ndiv=1.0e-10):
 
 
 def _assert_no_amr_repairs(history):
-    for column in (
-        "amr_cell",
-        "amr_nan",
-        "amr_rho",
-        "amr_U",
-        "amr_ppar",
-        "amr_pperp",
-        "amr_lowB",
-        "amr_fh",
-        "amr_mirr",
-        "amr_dlt",
-        "amr_int",
-        "amr_slp",
-    ):
+    for column in AMR_REPAIR_COLUMNS:
         assert history[column][-1] == 0.0
 
 
@@ -252,6 +253,71 @@ def test_cgl_amr_projection_stress_gpu():
         _assert_clean_user(mirror_slope)
         assert mirror_slope["amr_mirr"][-1] > 0.0
         assert mirror_slope["amr_slp"][-1] > 0.0
+    finally:
+        _cleanup()
+
+
+def test_cgl_amr_repair_accounting_tracks_only_transferred_states_gpu():
+    try:
+        _run(
+            "cgl_amr_primitive_low_b.athinput",
+            "cgl_amr_gpu_lowb_no_transfer",
+            "problem/refine_levels=0",
+            "time/nlim=1",
+        )
+        no_transfer = _user_history("cgl_amr_gpu_lowb_no_transfer")
+        _assert_no_amr_repairs(no_transfer)
+
+        _run(
+            "cgl_amr_primitive_low_b.athinput",
+            "cgl_amr_gpu_lowb_transfer",
+            "time/nlim=1",
+        )
+        transferred = _user_history("cgl_amr_gpu_lowb_transfer")
+        assert transferred["amr_cell"][-1] > 0.0
+        assert transferred["amr_lowB"][-1] > 0.0
+
+        _run(
+            "cgl_amr_primitive_low_b_static.athinput",
+            "cgl_amr_gpu_lowb_boundary",
+        )
+        boundary = _user_history("cgl_amr_gpu_lowb_boundary")
+        assert np.all(boundary["ncell"] == boundary["ncell"][0])
+        assert boundary["amr_cell"][-1] > boundary["amr_cell"][0]
+        assert boundary["amr_lowB"][-1] > boundary["amr_lowB"][0]
+    finally:
+        _cleanup()
+
+
+def test_cgl_amr_repair_counters_survive_restart_gpu():
+    try:
+        for label, per_rank in (("shared", False), ("rank_local", True)):
+            partial_basename = f"cgl_amr_gpu_counter_{label}_partial"
+            resumed_basename = f"cgl_amr_gpu_counter_{label}_resumed"
+            flags = ["time/nlim=2", "output2/dcycle=2"]
+            if per_rank:
+                flags.append("output2/single_file_per_rank=true")
+            _run(
+                "cgl_amr_primitive_low_b.athinput",
+                partial_basename,
+                *flags,
+            )
+            partial = _user_history(partial_basename)
+            assert partial["amr_lowB"][-1] > 0.0
+            restarts = sorted(Path("rst").rglob(f"{partial_basename}*.rst"))
+            assert restarts
+            assert b"cgl_amr_repair_restart_version" in (
+                restarts[-1].read_bytes()[:40000]
+            )
+
+            _restart(
+                restarts[-1],
+                resumed_basename,
+                "time/nlim=2",
+            )
+            resumed = _user_history(resumed_basename)
+            for column in AMR_REPAIR_COLUMNS:
+                assert resumed[column][-1] == partial[column][-1]
     finally:
         _cleanup()
 

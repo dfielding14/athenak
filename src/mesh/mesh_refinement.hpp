@@ -8,6 +8,9 @@
 //! \file mesh_refinement.hpp
 //! \brief defines MeshRefinement class containing data and functions controlling SMR/AMR
 
+#include <array>
+#include <cstdint>
+
 //----------------------------------------------------------------------------------------
 //! \fn int CreateAMR_MPI_Tag(int lid, int ox1, int ox2, int ox3)
 //! \brief calculate an MPI tag for AMR communications.  Note maximum size of
@@ -46,6 +49,29 @@ class MHD;
 
 class MeshRefinement {
  public:
+  enum CGLAMRRepairCounterIndex {
+    cgl_amr_cells_repaired_index = 0,
+    cgl_amr_nonfinite_repairs_index,
+    cgl_amr_density_repairs_index,
+    cgl_amr_energy_repairs_index,
+    cgl_amr_parallel_repairs_index,
+    cgl_amr_perp_repairs_index,
+    cgl_amr_lowb_repairs_index,
+    cgl_amr_firehose_repairs_index,
+    cgl_amr_mirror_repairs_index,
+    cgl_amr_anisotropy_repairs_index,
+    cgl_amr_interval_repairs_index,
+    cgl_amr_slope_repairs_index,
+    cgl_amr_repair_counter_count
+  };
+  using CGLAMRRepairCounterArray =
+      std::array<std::uint64_t, cgl_amr_repair_counter_count>;
+  static constexpr int cgl_amr_repair_restart_version = 1;
+  enum class CGLAMRRestrictionScope {
+    coarse_boundary,
+    derefinement
+  };
+
   MeshRefinement(Mesh *pm, ParameterInput *pin);
   ~MeshRefinement();
 
@@ -56,18 +82,19 @@ class MeshRefinement {
   int ncyc_check_amr;        // # of cycles between checking mesh for ref/derefinement
   int refinement_interval;   // # of cycles between allowing successive ref/derefinement
   bool prolong_prims;        // flag to enable prolongation of primitive vars
-  long long cgl_amr_cells_repaired = 0;       // CGL AMR cells with any repair
-  long long cgl_amr_nonfinite_repairs = 0;    // nonfinite thermodynamic repairs
-  long long cgl_amr_density_repairs = 0;      // density-floor repairs
-  long long cgl_amr_energy_repairs = 0;       // internal-energy repairs
-  long long cgl_amr_parallel_repairs = 0;     // parallel-pressure-floor repairs
-  long long cgl_amr_perp_repairs = 0;         // perpendicular-pressure-floor repairs
-  long long cgl_amr_lowb_repairs = 0;         // low-field isotropization repairs
-  long long cgl_amr_firehose_repairs = 0;     // firehose hard-wall repairs
-  long long cgl_amr_mirror_repairs = 0;       // mirror hard-wall repairs
-  long long cgl_amr_anisotropy_repairs = 0;   // anisotropy-clipping repairs
-  long long cgl_amr_interval_repairs = 0;     // empty admissible-interval repairs
-  long long cgl_amr_slope_repairs = 0;        // slope scaling before projection
+  std::uint64_t cgl_amr_cells_repaired = 0;       // cells with any repair
+  std::uint64_t cgl_amr_nonfinite_repairs = 0;    // nonfinite thermodynamic repairs
+  std::uint64_t cgl_amr_density_repairs = 0;      // density-floor repairs
+  std::uint64_t cgl_amr_energy_repairs = 0;       // internal-energy repairs
+  std::uint64_t cgl_amr_parallel_repairs = 0;     // parallel-pressure-floor repairs
+  std::uint64_t cgl_amr_perp_repairs = 0;         // perpendicular-pressure-floor repairs
+  std::uint64_t cgl_amr_lowb_repairs = 0;         // low-field isotropization repairs
+  std::uint64_t cgl_amr_firehose_repairs = 0;     // firehose hard-wall repairs
+  std::uint64_t cgl_amr_mirror_repairs = 0;       // mirror hard-wall repairs
+  std::uint64_t cgl_amr_anisotropy_repairs = 0;   // anisotropy-clipping repairs
+  std::uint64_t cgl_amr_interval_repairs = 0;     // empty interval repairs
+  std::uint64_t cgl_amr_slope_repairs = 0;        // slope scaling before projection
+  DvceArray1D<std::uint64_t> cgl_amr_pending_repair_counters;
   RefinementCriteria* pmrc=nullptr;   // object to control various refinement criteria
 
   // following 2x Views are dimensioned [nmb_total]
@@ -131,9 +158,15 @@ class MeshRefinement {
   void RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
                 bool is_z4c=false);
   void RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
-  void RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd);
+  void RestrictCGLMHDPrimitivesToCons(mhd::MHD *pmhd,
+                                      CGLAMRRestrictionScope scope);
   void RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmhd);
   void RepairAMRFC(DvceFaceFld4D<Real> &b);
+
+  void FlushCGLAMRRepairCounters();
+  CGLAMRRepairCounterArray ExportCGLAMRRepairCounters();
+  void ImportCGLAMRRepairCounters(const CGLAMRRepairCounterArray &counters);
+  void AccumulateCGLAMRRepairCounters(const CGLAMRRepairCounterArray &counters);
 
   void RestrictCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, bool is_z4c=false);
   void RestrictFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);

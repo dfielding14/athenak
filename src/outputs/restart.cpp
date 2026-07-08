@@ -23,6 +23,8 @@
 #include "geodesic-grid/geodesic_grid.hpp"
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/mesh_refinement.hpp"
+#include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
@@ -200,6 +202,28 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                   << pm->time;
   pin->SetString("time", "restart_time", ss_restart_time.str());
 
+  const bool has_cgl_amr_repair_counters =
+      (pm->pmr != nullptr && pmhd != nullptr && pmhd->peos->eos_data.is_cgl);
+  MeshRefinement::CGLAMRRepairCounterArray cgl_amr_repair_counters{};
+  if (has_cgl_amr_repair_counters) {
+    cgl_amr_repair_counters = pm->pmr->ExportCGLAMRRepairCounters();
+    pin->SetInteger("mesh_refinement", "cgl_amr_repair_restart_version",
+                    MeshRefinement::cgl_amr_repair_restart_version);
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      if (global_variable::my_rank == 0) {
+        MPI_Reduce(MPI_IN_PLACE, cgl_amr_repair_counters.data(),
+                   MeshRefinement::cgl_amr_repair_counter_count, MPI_UINT64_T,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      } else {
+        MPI_Reduce(cgl_amr_repair_counters.data(), cgl_amr_repair_counters.data(),
+                   MeshRefinement::cgl_amr_repair_counter_count, MPI_UINT64_T,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      }
+    }
+#endif
+  }
+
   // create string holding input parameters (copy of input file)
   std::stringstream ost;
   pin->ParameterDump(ost);
@@ -318,6 +342,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       resfile.Write_any_type(&lf_diag[0], nlf_diag*sizeof(Real), "byte",
                              single_file_per_rank);
     }
+    if (has_cgl_amr_repair_counters) {
+      resfile.Write_any_type(cgl_amr_repair_counters.data(),
+                             sizeof(cgl_amr_repair_counters), "byte",
+                             single_file_per_rank);
+    }
   }
 
   //--- STEP 4.  All ranks write data over all MeshBlocks (5D arrays) in parallel
@@ -361,6 +390,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     if (pturb->record_injected_work) step3size += sizeof(Real);
   }
   if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) step3size += nlf_diag*sizeof(Real);
+  if (has_cgl_amr_repair_counters) {
+    step3size += sizeof(cgl_amr_repair_counters);
+  }
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank = (step1size + step2size + step3size

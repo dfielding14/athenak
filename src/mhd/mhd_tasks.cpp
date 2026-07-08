@@ -779,7 +779,8 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
       }
 
       pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
-      pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(this);
+      pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(
+          this, MeshRefinement::CGLAMRRestrictionScope::coarse_boundary);
     } else {
       pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
     }

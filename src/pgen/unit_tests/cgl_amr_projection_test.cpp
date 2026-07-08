@@ -62,6 +62,30 @@ void CheckFiniteProjection() {
           (repaired.repairs & cgl::amr::kInternalEnergyFloor) != 0u);
   Require("repaired primitive state", cgl::amr::Finite3(w.d, w.e, w.pp));
   Require("repaired conserved state", cgl::amr::Finite3(u.d, u.e, u.mu));
+
+  MHDCons1D conserved{};
+  conserved.d = -1.0;
+  conserved.e = 1.5 + 0.5*(SQR(0.7) + SQR(0.2) + SQR(-0.15));
+  conserved.mu = 1.0;
+  conserved.bx = 0.7;
+  conserved.by = 0.2;
+  conserved.bz = -0.15;
+  const auto subfloor_density = cgl::amr::ProjectConservedToCGL(
+      conserved, TestEOS(), cgl::amr::magnetic_moment, w, u);
+  Require("conserved density floor reported",
+          (subfloor_density.repairs & cgl::amr::kDensityFloor) != 0u);
+  Require("conserved density projection finite",
+          cgl::amr::Finite3(u.d, u.e, u.mu));
+
+  conserved.d = nan;
+  const auto nonfinite_density = cgl::amr::ProjectConservedToCGL(
+      conserved, TestEOS(), cgl::amr::magnetic_moment, w, u);
+  Require("conserved nonfinite density reported",
+          (nonfinite_density.repairs & cgl::amr::kNonfiniteThermo) != 0u);
+  Require("conserved nonfinite density floor reported",
+          (nonfinite_density.repairs & cgl::amr::kDensityFloor) != 0u);
+  Require("conserved nonfinite density projection finite",
+          cgl::amr::Finite3(u.d, u.e, u.mu));
   std::cout << "CGL AMR finite projection checks passed" << std::endl;
 }
 
