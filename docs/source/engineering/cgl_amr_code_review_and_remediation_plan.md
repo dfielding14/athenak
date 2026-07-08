@@ -1,6 +1,6 @@
 # CGL+LF+STS AMR Code Review and Remediation Plan
 
-- Status: review complete; F1 implemented in the working tree
+- Status: review complete; F1 and F2 implemented
 - Review date: 2026-07-08
 - Reviewed source: `40fe047f9ffe74795acea3116caad1cb94e6a796`
 - Review range: `f2d0a2597..40fe047f9`
@@ -19,9 +19,9 @@ after the findings and remediation plan were established.
 ## Review Decision
 
 The CGL primitive-AMR path should not be treated as production-ready until the
-remaining F2 and F4 numerical corrections and their acceptance tests pass. F1
-is implemented in the working tree. The same task reorder addresses the F3
-pre-/post-CT field mismatch, with multi-rank runtime validation still pending.
+remaining F3 and F4 numerical corrections and their acceptance tests pass. F1
+and F2 are implemented. The F1 task reorder addresses the coarse restriction
+part of F3; active-regrid face repair still needs final-field re-encoding.
 
 The original four highest-severity findings were:
 
@@ -100,8 +100,8 @@ Every use of `IAN` must have an explicit representation:
 | ID | Severity | Area | Finding | Disposition |
 | --- | --- | --- | --- | --- |
 | F1 | Critical | Hyperbolic AMR task order | `RestrictU` mutates live primitives before `CornerE` and CT | Implemented 2026-07-08 |
-| F2 | High | Active refinement | Primitive reconstruction is not conservative | Detailed fix below |
-| F3 | High | Coarse restriction | CGL thermodynamics use pre-CT `B` and are paired with post-CT `B` | Addressed by F1 reorder; multi-rank validation pending |
+| F2 | High | Active refinement | Primitive reconstruction is not conservative | Implemented 2026-07-08 |
+| F3 | High | Field consistency | CGL thermodynamics can be encoded against a provisional magnetic field | Coarse path fixed by F1; active-regrid seam remains |
 | F4 | High | LF STS lifecycle | Final refresh leaves reconstruction ghost cells stale | Detailed fix below |
 | F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Follow-up patch |
 | F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Follow-up design guard |
@@ -325,6 +325,20 @@ still pending an allocation.
 - Non-CGL and non-primitive AMR task paths remain unchanged.
 
 ## Remediation Plan for F2
+
+### Implementation update
+
+F2 was implemented on 2026-07-08 by making generic `RefineCC` authoritative
+for density, momentum, total energy, and scalar densities. The CGL completion
+now prolongs and limits only `Delta`, then rebuilds `IAN` at fixed conserved
+state. A separately counted fallback may change primary fields only when the
+generic child state is itself inadmissible.
+
+The focused single-refinement regression conserves mass, all momentum
+components, and total energy to roundoff with zero CGL repairs. A real passive
+scalar with correlated density and concentration slopes also conserves scalar
+mass exactly. Final re-encoding after active-regrid face repair remains scoped
+to F3.
 
 ### Target behavior
 

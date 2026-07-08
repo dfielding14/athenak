@@ -31,6 +31,7 @@ namespace {
 
 struct DivBAMRConfig {
   Real rho0 = 1.0;
+  Real density_amp = 0.0;
   Real pgas0 = 10.0;
   Real ppar0 = 10.0;
   Real pperp0 = 10.0;
@@ -44,6 +45,8 @@ struct DivBAMRConfig {
   Real field_k = 2.0;
   Real pressure_amp = 0.0;
   Real pressure_k = 1.0;
+  Real scalar0 = 0.5;
+  Real scalar_amp = 0.0;
   Real divb_bnorm = 1.0;
   Real uniform_refine_time = 0.0;
   Real current_refine_threshold = 1.0;
@@ -196,6 +199,7 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   }
 
   divb_amr.rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+  divb_amr.density_amp = pin->GetOrAddReal("problem", "density_amp", 0.0);
   divb_amr.pgas0 = pin->GetOrAddReal("problem", "pgas0", 10.0);
   divb_amr.ppar0 = pin->GetOrAddReal("problem", "ppar0", divb_amr.pgas0);
   divb_amr.pperp0 = pin->GetOrAddReal("problem", "pperp0", divb_amr.ppar0);
@@ -209,6 +213,16 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   divb_amr.field_k = pin->GetOrAddReal("problem", "field_k", 2.0);
   divb_amr.pressure_amp = pin->GetOrAddReal("problem", "pressure_amp", 0.0);
   divb_amr.pressure_k = pin->GetOrAddReal("problem", "pressure_k", 1.0);
+  divb_amr.scalar0 = pin->GetOrAddReal("problem", "scalar0", 0.5);
+  divb_amr.scalar_amp = pin->GetOrAddReal("problem", "scalar_amp", 0.0);
+  if (fabs(divb_amr.density_amp) >= 1.0 ||
+      divb_amr.scalar0 < fabs(divb_amr.scalar_amp)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "divb_amr requires |density_amp| < 1 and "
+              << "scalar0 >= |scalar_amp|." << std::endl;
+    exit(EXIT_FAILURE);
+  }
   const std::string pressure_mode =
       pin->GetOrAddString("problem", "pressure_mode", "uniform");
   if (pressure_mode == "uniform") {
@@ -293,6 +307,8 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
 
   int nmb = pmbp->nmb_thispack;
   EOS_Data &eos = pmbp->pmhd->peos->eos_data;
+  const int nmhd = pmbp->pmhd->nmhd;
+  const int nscalars = pmbp->pmhd->nscalars;
   const Real gm1 = eos.gamma - 1.0;
   const Real cgl_pfloor = eos.pfloor;
   const bool is_cgl = eos.is_cgl;
@@ -363,7 +379,14 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
 
   par_for("divb_amr_cons", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    const Real rho = cfg.rho0;
+    const Real x1 = CellCenterX(i - is, nx1, size.d_view(m).x1min,
+                                size.d_view(m).x1max);
+    const Real x2 = CellCenterX(j - js, nx2, size.d_view(m).x2min,
+                                size.d_view(m).x2max);
+    const Real x3 = CellCenterX(k - ks, nx3, size.d_view(m).x3min,
+                                size.d_view(m).x3max);
+    const Real profile = PressureDeltaPattern(x1, x2, x3, cfg);
+    const Real rho = cfg.rho0*(1.0 + cfg.density_amp*profile);
     const Real bx = 0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1));
     const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
     const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
@@ -371,13 +394,7 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
       const Real U0 = cfg.pperp0 + 0.5*cfg.ppar0;
       Real delta = cfg.pperp0 - cfg.ppar0;
       if (cfg.pressure_mode == 1) {
-        const Real x1 = CellCenterX(i - is, nx1, size.d_view(m).x1min,
-                                    size.d_view(m).x1max);
-        const Real x2 = CellCenterX(j - js, nx2, size.d_view(m).x2min,
-                                    size.d_view(m).x2max);
-        const Real x3 = CellCenterX(k - ks, nx3, size.d_view(m).x3min,
-                                    size.d_view(m).x3max);
-        delta += cfg.pressure_amp*PressureDeltaPattern(x1, x2, x3, cfg);
+        delta += cfg.pressure_amp*profile;
       }
       const Real ppar = fmax(TWO_3RDS*(U0 - delta), cgl_pfloor);
       const Real pperp = fmax(TWO_3RDS*U0 + ONE_3RD*delta, cgl_pfloor);
@@ -399,6 +416,14 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
                     + (three_d ? SQR(cfg.vz0) : 0.0);
       u0(m,IEN,k,j,i) = cfg.pgas0/gm1 + 0.5*rho*v2
                       + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    }
+    const Real scalar = fmax(cfg.scalar0 + cfg.scalar_amp*profile, 0.0);
+    for (int n=nmhd; n<(nmhd+nscalars); ++n) {
+      if (is_cgl) {
+        w0(m,n,k,j,i) = scalar;
+      } else {
+        u0(m,n,k,j,i) = rho*scalar;
+      }
     }
   });
   if (is_cgl) {

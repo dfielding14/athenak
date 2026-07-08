@@ -87,6 +87,32 @@ void DeltaInterval(const Real U, const Real bsqr, const Real bmag,
 }
 
 KOKKOS_INLINE_FUNCTION
+bool IsAdmissiblePrimaryState(const Real rho, const Real vx, const Real vy,
+                              const Real vz, const Real bx, const Real by,
+                              const Real bz, const Real U,
+                              const EOS_Data &eos) {
+  if (!Finite3(rho, vx, vy) || !Finite3(vz, bx, by) ||
+      !Kokkos::isfinite(bz) || !Kokkos::isfinite(U)) {
+    return false;
+  }
+  if (!(rho >= eos.dfloor) || !(U >= 1.5*eos.pfloor)) {
+    return false;
+  }
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  const Real bmag = sqrt(bsqr);
+  if (!(Kokkos::isfinite(bsqr)) || !(Kokkos::isfinite(bmag))) {
+    return false;
+  }
+  if (bmag <= eos.bfloor) return true;
+
+  Real delta_min, delta_max;
+  DeltaInterval(U, bsqr, bmag, eos, delta_min, delta_max);
+  const Real tol = 16.0*std::numeric_limits<Real>::epsilon()*
+                   fmax(fmax(fabs(delta_min), fabs(delta_max)), fmax(U, bsqr));
+  return delta_min <= delta_max + tol;
+}
+
+KOKKOS_INLINE_FUNCTION
 bool IsAdmissibleUDelta(const Real rho, const Real vx, const Real vy,
                         const Real vz, const Real bx, const Real by,
                         const Real bz, const Real U, const Real delta,

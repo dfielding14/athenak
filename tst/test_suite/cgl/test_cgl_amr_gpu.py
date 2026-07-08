@@ -77,6 +77,17 @@ def _assert_clean_lf(history):
         assert history[column][-1] == 0.0
 
 
+def _assert_conserved(history, columns, atol=5.0e-12):
+    for column in columns:
+        np.testing.assert_allclose(
+            history[column],
+            history[column][0],
+            rtol=0.0,
+            atol=atol,
+            err_msg=f"AMR changed conserved history column {column}",
+        )
+
+
 def test_cgl_amr_primitive_smooth_gpu():
     try:
         _run("cgl_amr_primitive_uniform.athinput", "cgl_amr_gpu_uniform")
@@ -151,6 +162,26 @@ def test_cgl_amr_primitive_stage_order_gpu():
                 atol=1.0e-12,
                 err_msg=f"primitive restriction changed {column} without regridding",
             )
+    finally:
+        _cleanup()
+
+
+def test_cgl_amr_conservative_refinement_gpu():
+    try:
+        _run(
+            "cgl_amr_primitive_current_churn.athinput",
+            "cgl_amr_gpu_conservative_refine",
+            "time/nlim=1",
+        )
+        user = _user_history("cgl_amr_gpu_conservative_refine")
+        mhd = _mhd_history("cgl_amr_gpu_conservative_refine")
+        _assert_clean_user(user)
+        _assert_no_amr_repairs(user)
+        assert user["ncell"][-1] > user["ncell"][0]
+        _assert_conserved(
+            mhd,
+            ("mass", "1-mom", "2-mom", "3-mom", "tot-E"),
+        )
     finally:
         _cleanup()
 
@@ -252,9 +283,16 @@ def test_cgl_amr_3d_and_passive_gpu():
         _run(
             "cgl_amr_passive_primitive_current.athinput",
             "cgl_amr_gpu_passive",
+            "time/nlim=1",
         )
         passive = _user_history("cgl_amr_gpu_passive")
+        passive_mhd = _mhd_history("cgl_amr_gpu_passive")
         _assert_clean_user(passive)
+        _assert_no_amr_repairs(passive)
         assert np.max(passive["ncell"]) > passive["ncell"][0]
+        _assert_conserved(
+            passive_mhd,
+            ("mass", "1-mom", "2-mom", "3-mom", "tot-E", "scal-0"),
+        )
     finally:
         _cleanup()

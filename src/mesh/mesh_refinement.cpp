@@ -661,6 +661,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     }
     if (pmhd != nullptr) {
       if (prolong_prims && pmhd->peos->eos_data.is_cgl) {
+        RefineCC(new_to_old, pmhd->u0, pmhd->coarse_u0);
         RefineFC(new_to_old, pmhd->b0, pmhd->coarse_b0);
         Kokkos::fence();
         RefineCGLMHDPrimitives(new_to_old, pmhd);
@@ -1448,14 +1449,10 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
         const int base_j = 2*cj - cjs;
         const int base_k = 2*ck - cks;
 
-        const Real parent_rho = coarse_prim(m,IDN,ck,cj,ci);
-        const Real parent_vx = coarse_prim(m,IVX,ck,cj,ci);
-        const Real parent_vy = coarse_prim(m,IVY,ck,cj,ci);
-        const Real parent_vz = coarse_prim(m,IVZ,ck,cj,ci);
-        const Real parent_U = coarse_prim(m,IEN,ck,cj,ci);
         const Real parent_delta = coarse_prim(m,IPP,ck,cj,ci);
 
         Real alpha = 1.0;
+        bool use_common_scaling = true;
         bool admissible = true;
         for (int kk=0; kk<fsib_k; ++kk) {
           for (int jj=0; jj<fsib_j; ++jj) {
@@ -1463,11 +1460,16 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
               const int child_k = base_k + kk;
               const int child_j = base_j + jj;
               const int child_i = base_i + ii;
-              const Real rho = fine_prim(m,IDN,child_k,child_j,child_i);
-              const Real vx = fine_prim(m,IVX,child_k,child_j,child_i);
-              const Real vy = fine_prim(m,IVY,child_k,child_j,child_i);
-              const Real vz = fine_prim(m,IVZ,child_k,child_j,child_i);
-              const Real U = fine_prim(m,IEN,child_k,child_j,child_i);
+              const Real rho = fine_cons(m,IDN,child_k,child_j,child_i);
+              const Real rho_vel = (Kokkos::isfinite(rho) && rho > 0.0)
+                                       ? rho
+                                       : eos.dfloor;
+              const Real mx = fine_cons(m,IM1,child_k,child_j,child_i);
+              const Real my = fine_cons(m,IM2,child_k,child_j,child_i);
+              const Real mz = fine_cons(m,IM3,child_k,child_j,child_i);
+              const Real vx = mx/rho_vel;
+              const Real vy = my/rho_vel;
+              const Real vz = mz/rho_vel;
               const Real delta = fine_prim(m,IPP,child_k,child_j,child_i);
               const Real bx = 0.5*(fine_b.x1f(m,child_k,child_j,child_i) +
                                    fine_b.x1f(m,child_k,child_j,child_i+1));
@@ -1475,6 +1477,9 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
                                    fine_b.x2f(m,child_k,child_j+1,child_i));
               const Real bz = 0.5*(fine_b.x3f(m,child_k,child_j,child_i) +
                                    fine_b.x3f(m,child_k+1,child_j,child_i));
+              const Real U = fine_cons(m,IEN,child_k,child_j,child_i) -
+                  0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho_vel -
+                  0.5*(SQR(bx) + SQR(by) + SQR(bz));
               admissible = admissible &&
                   cgl::amr::IsAdmissibleUDelta(rho, vx, vy, vz, bx, by, bz,
                                                 U, delta, eos);
@@ -1482,65 +1487,104 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
           }
         }
         if (!admissible) {
-          Real lo = 0.0;
-          Real hi = 1.0;
-          for (int iter=0; iter<24; ++iter) {
-            const Real amid = 0.5*(lo + hi);
-            bool ok = true;
-            for (int kk=0; kk<fsib_k; ++kk) {
-              for (int jj=0; jj<fsib_j; ++jj) {
-                for (int ii=0; ii<2; ++ii) {
-                  const int child_k = base_k + kk;
-                  const int child_j = base_j + jj;
-                  const int child_i = base_i + ii;
-                  const Real rho =
-                      parent_rho + amid*(fine_prim(m,IDN,child_k,child_j,child_i) -
-                                         parent_rho);
-                  const Real vx =
-                      parent_vx + amid*(fine_prim(m,IVX,child_k,child_j,child_i) -
-                                        parent_vx);
-                  const Real vy =
-                      parent_vy + amid*(fine_prim(m,IVY,child_k,child_j,child_i) -
-                                        parent_vy);
-                  const Real vz =
-                      parent_vz + amid*(fine_prim(m,IVZ,child_k,child_j,child_i) -
-                                        parent_vz);
-                  const Real U =
-                      parent_U + amid*(fine_prim(m,IEN,child_k,child_j,child_i) -
-                                       parent_U);
-                  const Real delta =
-                      parent_delta + amid*(fine_prim(m,IPP,child_k,child_j,child_i) -
-                                           parent_delta);
-                  const Real bx = 0.5*(fine_b.x1f(m,child_k,child_j,child_i) +
-                                       fine_b.x1f(m,child_k,child_j,child_i+1));
-                  const Real by = 0.5*(fine_b.x2f(m,child_k,child_j,child_i) +
-                                       fine_b.x2f(m,child_k,child_j+1,child_i));
-                  const Real bz = 0.5*(fine_b.x3f(m,child_k,child_j,child_i) +
-                                       fine_b.x3f(m,child_k+1,child_j,child_i));
-                  ok = ok && cgl::amr::IsAdmissibleUDelta(
-                      rho, vx, vy, vz, bx, by, bz, U, delta, eos);
-                }
+          for (int kk=0; kk<fsib_k; ++kk) {
+            for (int jj=0; jj<fsib_j; ++jj) {
+              for (int ii=0; ii<2; ++ii) {
+                const int child_k = base_k + kk;
+                const int child_j = base_j + jj;
+                const int child_i = base_i + ii;
+                const Real rho = fine_cons(m,IDN,child_k,child_j,child_i);
+                const Real rho_vel = (Kokkos::isfinite(rho) && rho > 0.0)
+                                         ? rho
+                                         : eos.dfloor;
+                const Real mx = fine_cons(m,IM1,child_k,child_j,child_i);
+                const Real my = fine_cons(m,IM2,child_k,child_j,child_i);
+                const Real mz = fine_cons(m,IM3,child_k,child_j,child_i);
+                const Real vx = mx/rho_vel;
+                const Real vy = my/rho_vel;
+                const Real vz = mz/rho_vel;
+                const Real bx = 0.5*(fine_b.x1f(m,child_k,child_j,child_i) +
+                                     fine_b.x1f(m,child_k,child_j,child_i+1));
+                const Real by = 0.5*(fine_b.x2f(m,child_k,child_j,child_i) +
+                                     fine_b.x2f(m,child_k,child_j+1,child_i));
+                const Real bz = 0.5*(fine_b.x3f(m,child_k,child_j,child_i) +
+                                     fine_b.x3f(m,child_k+1,child_j,child_i));
+                const Real U = fine_cons(m,IEN,child_k,child_j,child_i) -
+                    0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho_vel -
+                    0.5*(SQR(bx) + SQR(by) + SQR(bz));
+                use_common_scaling = use_common_scaling &&
+                    cgl::amr::IsAdmissibleUDelta(
+                        rho, vx, vy, vz, bx, by, bz, U, parent_delta, eos);
               }
             }
-            if (ok) {
-              lo = amid;
-            } else {
-              hi = amid;
-            }
           }
-          alpha = lo;
+          if (use_common_scaling) {
+            Real lo = 0.0;
+            Real hi = 1.0;
+            for (int iter=0; iter<24; ++iter) {
+              const Real amid = 0.5*(lo + hi);
+              bool ok = true;
+              for (int kk=0; kk<fsib_k; ++kk) {
+                for (int jj=0; jj<fsib_j; ++jj) {
+                  for (int ii=0; ii<2; ++ii) {
+                    const int child_k = base_k + kk;
+                    const int child_j = base_j + jj;
+                    const int child_i = base_i + ii;
+                    const Real rho = fine_cons(m,IDN,child_k,child_j,child_i);
+                    const Real rho_vel = (Kokkos::isfinite(rho) && rho > 0.0)
+                                             ? rho
+                                             : eos.dfloor;
+                    const Real mx = fine_cons(m,IM1,child_k,child_j,child_i);
+                    const Real my = fine_cons(m,IM2,child_k,child_j,child_i);
+                    const Real mz = fine_cons(m,IM3,child_k,child_j,child_i);
+                    const Real vx = mx/rho_vel;
+                    const Real vy = my/rho_vel;
+                    const Real vz = mz/rho_vel;
+                    const Real delta = parent_delta + amid*
+                        (fine_prim(m,IPP,child_k,child_j,child_i) - parent_delta);
+                    const Real bx = 0.5*(fine_b.x1f(m,child_k,child_j,child_i) +
+                                         fine_b.x1f(m,child_k,child_j,child_i+1));
+                    const Real by = 0.5*(fine_b.x2f(m,child_k,child_j,child_i) +
+                                         fine_b.x2f(m,child_k,child_j+1,child_i));
+                    const Real bz = 0.5*(fine_b.x3f(m,child_k,child_j,child_i) +
+                                         fine_b.x3f(m,child_k+1,child_j,child_i));
+                    const Real U = fine_cons(m,IEN,child_k,child_j,child_i) -
+                        0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho_vel -
+                        0.5*(SQR(bx) + SQR(by) + SQR(bz));
+                    ok = ok && cgl::amr::IsAdmissibleUDelta(
+                        rho, vx, vy, vz, bx, by, bz, U, delta, eos);
+                  }
+                }
+              }
+              if (ok) {
+                lo = amid;
+              } else {
+                hi = amid;
+              }
+            }
+            alpha = lo;
+          }
         }
 
-        const Real rho = parent_rho + alpha*(fine_prim(m,IDN,k,j,i) - parent_rho);
-        const Real vx = parent_vx + alpha*(fine_prim(m,IVX,k,j,i) - parent_vx);
-        const Real vy = parent_vy + alpha*(fine_prim(m,IVY,k,j,i) - parent_vy);
-        const Real vz = parent_vz + alpha*(fine_prim(m,IVZ,k,j,i) - parent_vz);
-        const Real U = parent_U + alpha*(fine_prim(m,IEN,k,j,i) - parent_U);
-        const Real delta =
-            parent_delta + alpha*(fine_prim(m,IPP,k,j,i) - parent_delta);
+        const Real rho = fine_cons(m,IDN,k,j,i);
+        const Real rho_vel = (Kokkos::isfinite(rho) && rho > 0.0)
+                                 ? rho
+                                 : eos.dfloor;
+        const Real mx = fine_cons(m,IM1,k,j,i);
+        const Real my = fine_cons(m,IM2,k,j,i);
+        const Real mz = fine_cons(m,IM3,k,j,i);
+        const Real vx = mx/rho_vel;
+        const Real vy = my/rho_vel;
+        const Real vz = mz/rho_vel;
+        const Real delta = use_common_scaling
+            ? parent_delta + alpha*(fine_prim(m,IPP,k,j,i) - parent_delta)
+            : fine_prim(m,IPP,k,j,i);
         const Real bx = 0.5*(fine_b.x1f(m,k,j,i) + fine_b.x1f(m,k,j,i+1));
         const Real by = 0.5*(fine_b.x2f(m,k,j,i) + fine_b.x2f(m,k,j+1,i));
         const Real bz = 0.5*(fine_b.x3f(m,k,j,i) + fine_b.x3f(m,k+1,j,i));
+        const Real U = fine_cons(m,IEN,k,j,i) -
+            0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho_vel -
+            0.5*(SQR(bx) + SQR(by) + SQR(bz));
 
         MHDPrim1D w;
         HydCons1D u;
@@ -1550,15 +1594,11 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
           report.repairs |= cgl::amr::kSlopeScaled;
         }
 
-        fine_cons(m,IDN,k,j,i) = u.d;
-        fine_cons(m,IM1,k,j,i) = u.mx;
-        fine_cons(m,IM2,k,j,i) = u.my;
-        fine_cons(m,IM3,k,j,i) = u.mz;
-        fine_cons(m,IEN,k,j,i) = u.e;
+        // Preserve the accepted Delta in the now-dead temporary U slot.  The sibling
+        // limiter above must continue to see every original IPP candidate until this
+        // kernel completes.
+        fine_prim(m,IEN,k,j,i) = report.delta;
         fine_cons(m,IAN,k,j,i) = u.mu;
-        for (int n=nmhd; n<(nmhd+nscal); ++n) {
-          fine_cons(m,n,k,j,i) = u.d*fine_prim(m,n,k,j,i);
-        }
 
         const auto mask = report.repairs;
         if (mask != cgl::amr::kNone) ++cells_count;
@@ -1589,6 +1629,60 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
   AccumulateCGLAMRRepairCounters(this, fcells, fnonfinite, fdensity, fenergy,
                                  fparallel, fperpendicular, flowb, ffirehose,
                                  fmirror, fanisotropy, finterval, fslope);
+  Kokkos::fence();
+
+  // Generic RefineCC remains authoritative for primary conserved fields. Apply the
+  // full projection result only for a genuinely invalid primary child state; ordinary
+  // Delta limiting and hard-wall projection change only the derived IAN slot above.
+  const cgl::amr::RepairMask primary_repair_mask =
+      cgl::amr::kDensityFloor | cgl::amr::kInternalEnergyFloor |
+      cgl::amr::kParallelPressureFloor | cgl::amr::kPerpPressureFloor |
+      cgl::amr::kIntervalEnergyExpanded;
+  Kokkos::parallel_for(
+      "cgl_amr_apply_primary_repairs",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, fnmkji),
+      KOKKOS_LAMBDA(const int idx) {
+        const int m = idx / fnkji;
+        int k = (idx - m*fnkji) / fnji;
+        int j = (idx - m*fnkji - k*fnji) / fnx1;
+        const int i = idx - m*fnkji - k*fnji - j*fnx1 + is;
+        k += ks;
+        j += js;
+        if (refine_flag_.d_view(n2o.d_view(m + ngids)) <= 0) return;
+
+        const Real rho = fine_cons(m,IDN,k,j,i);
+        const Real rho_vel = (Kokkos::isfinite(rho) && rho > 0.0)
+                                 ? rho
+                                 : eos.dfloor;
+        const Real mx = fine_cons(m,IM1,k,j,i);
+        const Real my = fine_cons(m,IM2,k,j,i);
+        const Real mz = fine_cons(m,IM3,k,j,i);
+        const Real vx = mx/rho_vel;
+        const Real vy = my/rho_vel;
+        const Real vz = mz/rho_vel;
+        const Real bx = 0.5*(fine_b.x1f(m,k,j,i) + fine_b.x1f(m,k,j,i+1));
+        const Real by = 0.5*(fine_b.x2f(m,k,j,i) + fine_b.x2f(m,k,j+1,i));
+        const Real bz = 0.5*(fine_b.x3f(m,k,j,i) + fine_b.x3f(m,k+1,j,i));
+        const Real U = fine_cons(m,IEN,k,j,i) -
+            0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho_vel -
+            0.5*(SQR(bx) + SQR(by) + SQR(bz));
+        const Real delta = fine_prim(m,IEN,k,j,i);
+
+        MHDPrim1D w;
+        HydCons1D u;
+        const auto report = cgl::amr::ProjectUDeltaToCGL(
+            rho, vx, vy, vz, bx, by, bz, U, delta, eos, slot, w, u);
+        const bool primary_valid = cgl::amr::IsAdmissiblePrimaryState(
+            rho, vx, vy, vz, bx, by, bz, U, eos);
+        if (!primary_valid || (report.repairs & primary_repair_mask) != 0u) {
+          fine_cons(m,IDN,k,j,i) = u.d;
+          fine_cons(m,IM1,k,j,i) = u.mx;
+          fine_cons(m,IM2,k,j,i) = u.my;
+          fine_cons(m,IM3,k,j,i) = u.mz;
+          fine_cons(m,IEN,k,j,i) = u.e;
+          fine_cons(m,IAN,k,j,i) = u.mu;
+        }
+      });
   Kokkos::fence();
 }
 
