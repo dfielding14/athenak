@@ -83,12 +83,21 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.srctrms   = tl["stagen"]->AddTask(&MHD::MHDSrcTerms, this, id.rkupdt);
   id.sendu_oa  = tl["stagen"]->AddTask(&MHD::SendU_OA, this, id.srctrms);
   id.recvu_oa  = tl["stagen"]->AddTask(&MHD::RecvU_OA, this, id.sendu_oa);
-  id.restu     = tl["stagen"]->AddTask(&MHD::RestrictU, this, id.recvu_oa);
-  id.sendu     = tl["stagen"]->AddTask(&MHD::SendU, this, id.restu);
-  id.recvu     = tl["stagen"]->AddTask(&MHD::RecvU, this, id.sendu);
-  id.sendu_shr = tl["stagen"]->AddTask(&MHD::SendU_Shr, this, id.recvu);
-  id.recvu_shr = tl["stagen"]->AddTask(&MHD::RecvU_Shr, this, id.sendu_shr);
-  id.efld      = tl["stagen"]->AddTask(&MHD::CornerE, this, id.recvu_shr);
+  auto *pm = pmy_pack->pmesh;
+  const bool defer_cgl_primitive_restriction =
+      peos->eos_data.is_cgl && pm->multilevel && pm->pmr != nullptr &&
+      pm->pmr->prolong_prims;
+
+  TaskID efld_dependency = id.recvu_oa;
+  if (!defer_cgl_primitive_restriction) {
+    id.restu     = tl["stagen"]->AddTask(&MHD::RestrictU, this, id.recvu_oa);
+    id.sendu     = tl["stagen"]->AddTask(&MHD::SendU, this, id.restu);
+    id.recvu     = tl["stagen"]->AddTask(&MHD::RecvU, this, id.sendu);
+    id.sendu_shr = tl["stagen"]->AddTask(&MHD::SendU_Shr, this, id.recvu);
+    id.recvu_shr = tl["stagen"]->AddTask(&MHD::RecvU_Shr, this, id.sendu_shr);
+    efld_dependency = id.recvu_shr;
+  }
+  id.efld      = tl["stagen"]->AddTask(&MHD::CornerE, this, efld_dependency);
   id.efldsrc   = tl["stagen"]->AddTask(&MHD::EFieldSrc, this, id.efld);
   id.sende     = tl["stagen"]->AddTask(&MHD::SendE, this, id.efldsrc);
   id.recve     = tl["stagen"]->AddTask(&MHD::RecvE, this, id.sende);
@@ -97,7 +106,18 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve_shr);
   id.sendb_oa  = tl["stagen"]->AddTask(&MHD::SendB_OA, this, id.ct);
   id.recvb_oa  = tl["stagen"]->AddTask(&MHD::RecvB_OA, this, id.sendb_oa);
-  id.restb     = tl["stagen"]->AddTask(&MHD::RestrictB, this, id.recvb_oa);
+  TaskID restb_dependency = id.recvb_oa;
+  if (defer_cgl_primitive_restriction) {
+    // CGL primitive restriction recovers live primitives and encodes coarse IAN using B.
+    // Run it only after CornerE/CT and orbital advection have finished with the stage.
+    id.restu     = tl["stagen"]->AddTask(&MHD::RestrictU, this, id.recvb_oa);
+    id.sendu     = tl["stagen"]->AddTask(&MHD::SendU, this, id.restu);
+    id.recvu     = tl["stagen"]->AddTask(&MHD::RecvU, this, id.sendu);
+    id.sendu_shr = tl["stagen"]->AddTask(&MHD::SendU_Shr, this, id.recvu);
+    id.recvu_shr = tl["stagen"]->AddTask(&MHD::RecvU_Shr, this, id.sendu_shr);
+    restb_dependency = id.recvu_shr;
+  }
+  id.restb     = tl["stagen"]->AddTask(&MHD::RestrictB, this, restb_dependency);
   id.sendb     = tl["stagen"]->AddTask(&MHD::SendB, this, id.restb);
   id.recvb     = tl["stagen"]->AddTask(&MHD::RecvB, this, id.sendb);
   id.sendb_shr = tl["stagen"]->AddTask(&MHD::SendB_Shr, this, id.recvb);

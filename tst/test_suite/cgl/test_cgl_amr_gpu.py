@@ -97,6 +97,64 @@ def test_cgl_amr_primitive_smooth_gpu():
         _cleanup()
 
 
+def test_cgl_amr_primitive_stage_order_gpu():
+    try:
+        common_flags = (
+            "time/nlim=1",
+            "problem/current_refine_threshold=1.0e30",
+        )
+        _run(
+            "cgl_amr_primitive_current.athinput",
+            "cgl_amr_gpu_stage_primitive",
+            *common_flags,
+        )
+        _run(
+            "cgl_amr_primitive_current.athinput",
+            "cgl_amr_gpu_stage_conserved",
+            *common_flags,
+            "mesh_refinement/prolong_primitives=false",
+        )
+
+        primitive = _mhd_history("cgl_amr_gpu_stage_primitive")
+        conserved = _mhd_history("cgl_amr_gpu_stage_conserved")
+        primitive_user = _user_history("cgl_amr_gpu_stage_primitive")
+        conserved_user = _user_history("cgl_amr_gpu_stage_conserved")
+        assert np.all(primitive_user["ncell"] == primitive_user["ncell"][0])
+        np.testing.assert_array_equal(
+            primitive_user["ncell"], conserved_user["ncell"]
+        )
+        _assert_no_amr_repairs(primitive_user)
+        _assert_no_amr_repairs(conserved_user)
+
+        # With no coarse/fine transfer, selecting primitive AMR must not alter the
+        # hyperbolic stage state before CornerE and CT.
+        for column in (
+            "time",
+            "dt",
+            "mass",
+            "1-mom",
+            "2-mom",
+            "3-mom",
+            "tot-E",
+            "aam-D",
+            "1-KE",
+            "2-KE",
+            "3-KE",
+            "1-ME",
+            "2-ME",
+            "3-ME",
+        ):
+            np.testing.assert_allclose(
+                primitive[column],
+                conserved[column],
+                rtol=0.0,
+                atol=1.0e-12,
+                err_msg=f"primitive restriction changed {column} without regridding",
+            )
+    finally:
+        _cleanup()
+
+
 def test_cgl_amr_current_churn_gpu():
     try:
         _run("cgl_amr_primitive_current_churn.athinput", "cgl_amr_gpu_churn")

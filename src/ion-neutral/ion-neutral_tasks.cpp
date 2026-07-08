@@ -56,19 +56,38 @@ void IonNeutral::AssembleIonNeutralTasks(
   id.n_srctrms   = tl["stagen"]->AddTask(&Hydro::HydroSrcTerms, phyd, id.n_rkupdt);
 
   id.impl     = tl["stagen"]->AddTask(&IonNeutral::ImpRKUpdate, this, id.n_srctrms);
-  id.i_restu  = tl["stagen"]->AddTask(&MHD::RestrictU, pmhd, id.impl);
-  id.n_restu  = tl["stagen"]->AddTask(&Hydro::RestrictU, phyd, id.i_restu);
+  auto *pm = pmy_pack->pmesh;
+  const bool defer_cgl_primitive_restriction =
+      pmhd->peos->eos_data.is_cgl && pm->multilevel && pm->pmr != nullptr &&
+      pm->pmr->prolong_prims;
 
-  id.i_sendu  = tl["stagen"]->AddTask(&MHD::SendU, pmhd, id.n_restu);
-  id.n_sendu  = tl["stagen"]->AddTask(&Hydro::SendU, phyd, id.n_restu);
-  id.i_recvu  = tl["stagen"]->AddTask(&MHD::RecvU, pmhd, id.i_sendu);
-  id.n_recvu  = tl["stagen"]->AddTask(&Hydro::RecvU, phyd, id.n_sendu);
+  TaskID efld_dependency = id.impl;
+  if (!defer_cgl_primitive_restriction) {
+    id.i_restu  = tl["stagen"]->AddTask(&MHD::RestrictU, pmhd, id.impl);
+    id.n_restu  = tl["stagen"]->AddTask(&Hydro::RestrictU, phyd, id.i_restu);
+    id.i_sendu  = tl["stagen"]->AddTask(&MHD::SendU, pmhd, id.n_restu);
+    id.n_sendu  = tl["stagen"]->AddTask(&Hydro::SendU, phyd, id.n_restu);
+    id.i_recvu  = tl["stagen"]->AddTask(&MHD::RecvU, pmhd, id.i_sendu);
+    id.n_recvu  = tl["stagen"]->AddTask(&Hydro::RecvU, phyd, id.n_sendu);
+    efld_dependency = id.i_recvu;
+  }
 
-  id.efld     = tl["stagen"]->AddTask(&MHD::CornerE, pmhd, id.i_recvu);
+  id.efld     = tl["stagen"]->AddTask(&MHD::CornerE, pmhd, efld_dependency);
   id.sende    = tl["stagen"]->AddTask(&MHD::SendE, pmhd, id.efld);
   id.recve    = tl["stagen"]->AddTask(&MHD::RecvE, pmhd, id.sende);
   id.ct       = tl["stagen"]->AddTask(&MHD::CT, pmhd, id.recve);
-  id.restb    = tl["stagen"]->AddTask(&MHD::RestrictB, pmhd, id.ct);
+  TaskID restb_dependency = id.ct;
+  if (defer_cgl_primitive_restriction) {
+    // Keep CGL primitive recovery out of the interval between fluxes and CT.
+    id.i_restu  = tl["stagen"]->AddTask(&MHD::RestrictU, pmhd, id.ct);
+    id.n_restu  = tl["stagen"]->AddTask(&Hydro::RestrictU, phyd, id.i_restu);
+    id.i_sendu  = tl["stagen"]->AddTask(&MHD::SendU, pmhd, id.n_restu);
+    id.n_sendu  = tl["stagen"]->AddTask(&Hydro::SendU, phyd, id.n_restu);
+    id.i_recvu  = tl["stagen"]->AddTask(&MHD::RecvU, pmhd, id.i_sendu);
+    id.n_recvu  = tl["stagen"]->AddTask(&Hydro::RecvU, phyd, id.n_sendu);
+    restb_dependency = id.i_recvu;
+  }
+  id.restb    = tl["stagen"]->AddTask(&MHD::RestrictB, pmhd, restb_dependency);
   id.sendb    = tl["stagen"]->AddTask(&MHD::SendB, pmhd, id.restb);
   id.recvb    = tl["stagen"]->AddTask(&MHD::RecvB, pmhd, id.sendb);
 
