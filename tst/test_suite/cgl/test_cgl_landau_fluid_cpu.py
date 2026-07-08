@@ -477,6 +477,53 @@ def test_cgl_lf_heat_flux_cap_fractions_are_meshblock_layout_independent():
         _cleanup()
 
 
+def test_cgl_lf_final_refresh_is_meshblock_layout_independent():
+    common_flags = (
+        "mesh_refinement/refinement=none",
+        "problem/refine_levels=0",
+        "time/nlim=1",
+        "time/tlim=1.0",
+    )
+    try:
+        _run(
+            "cgl_lf_amr_2d.athinput",
+            "cgl_ci_final_refresh_single",
+            *common_flags,
+            "meshblock/nx1=24",
+            "meshblock/nx2=24",
+        )
+        _run(
+            "cgl_lf_amr_2d.athinput",
+            "cgl_ci_final_refresh_split",
+            *common_flags,
+        )
+        single = testutils.athena_read.hst(
+            "cgl_ci_final_refresh_single.mhd.hst"
+        )
+        split = testutils.athena_read.hst(
+            "cgl_ci_final_refresh_split.mhd.hst"
+        )
+        _assert_clean_lf_history(single)
+        _assert_clean_lf_history(split)
+        for column in (
+            "mass",
+            "1-mom",
+            "2-mom",
+            "3-mom",
+            "tot-E",
+            "aam-D",
+        ):
+            np.testing.assert_allclose(
+                single[column][-1],
+                split[column][-1],
+                rtol=0.0,
+                atol=5.0e-13,
+                err_msg=f"final LF refresh depends on MeshBlock layout for {column}",
+            )
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_low_field_faces_disable_transport_cleanly():
     try:
         _run(

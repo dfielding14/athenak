@@ -632,12 +632,20 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
-  const int il = (indcs.is > 0) ? indcs.is - 1 : 0;
-  const int iu = (indcs.ie < n1m1) ? indcs.ie + 1 : n1m1;
-  const int jl = (indcs.nx2 > 1 && indcs.js > 0) ? indcs.js - 1 : 0;
-  const int ju = (indcs.nx2 > 1 && indcs.je < n2m1) ? indcs.je + 1 : n2m1;
-  const int kl = (indcs.nx3 > 1 && indcs.ks > 0) ? indcs.ks - 1 : 0;
-  const int ku = (indcs.nx3 > 1 && indcs.ke < n3m1) ? indcs.ke + 1 : n3m1;
+  // Intermediate LF stages need only their one-cell stencil.  The final stage must
+  // refresh every ghost consumed by the next hyperbolic reconstruction or collision.
+  const bool final_stage = (stage == pdrive->sts.nstages);
+  const int il = final_stage ? 0 : ((indcs.is > 0) ? indcs.is - 1 : 0);
+  const int iu = final_stage ? n1m1 :
+      ((indcs.ie < n1m1) ? indcs.ie + 1 : n1m1);
+  const int jl = final_stage ? 0 :
+      ((indcs.nx2 > 1 && indcs.js > 0) ? indcs.js - 1 : 0);
+  const int ju = final_stage ? n2m1 :
+      ((indcs.nx2 > 1 && indcs.je < n2m1) ? indcs.je + 1 : n2m1);
+  const int kl = final_stage ? 0 :
+      ((indcs.nx3 > 1 && indcs.ks > 0) ? indcs.ks - 1 : 0);
+  const int ku = final_stage ? n3m1 :
+      ((indcs.nx3 > 1 && indcs.ke < n3m1) ? indcs.ke + 1 : n3m1);
   const int dfloor_before = pmy_pack->pmesh->ecounter.neos_dfloor;
   const int pfloor_before = pmy_pack->pmesh->ecounter.neos_efloor;
   {

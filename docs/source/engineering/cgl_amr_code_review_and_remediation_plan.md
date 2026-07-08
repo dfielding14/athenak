@@ -1,6 +1,6 @@
 # CGL+LF+STS AMR Code Review and Remediation Plan
 
-- Status: review complete; F1, F2, and F3 implemented
+- Status: review complete; F1 through F4 implemented
 - Review date: 2026-07-08
 - Reviewed source: `40fe047f9ffe74795acea3116caad1cb94e6a796`
 - Review range: `f2d0a2597..40fe047f9`
@@ -18,10 +18,10 @@ after the findings and remediation plan were established.
 
 ## Review Decision
 
-The CGL primitive-AMR path should not be treated as production-ready until the
-remaining F4 numerical correction and its acceptance tests pass. F1, F2, and
-F3 are implemented. F1 and F3 intentionally share one guarded task reorder;
-F3 has a separate semantic regression for the coarse field encoding.
+The four highest-severity numerical corrections are implemented. F1 and F3
+intentionally share one guarded task reorder, while F2 and F4 are independent
+patches. Focused serial validation and MPI-enabled builds pass; multi-rank and
+GPU runtime acceptance still require the target execution environment.
 
 The original four highest-severity findings were:
 
@@ -102,7 +102,7 @@ Every use of `IAN` must have an explicit representation:
 | F1 | Critical | Hyperbolic AMR task order | `RestrictU` mutates live primitives before `CornerE` and CT | Implemented 2026-07-08 |
 | F2 | High | Active refinement | Primitive reconstruction is not conservative | Implemented 2026-07-08 |
 | F3 | High | Coarse restriction | CGL thermodynamics use pre-CT `B` and are paired with post-CT `B` | Implemented 2026-07-08 by the F1 task reorder |
-| F4 | High | LF STS lifecycle | Final refresh leaves reconstruction ghost cells stale | Detailed fix below |
+| F4 | High | LF STS lifecycle | Final refresh leaves reconstruction ghost cells stale | Implemented 2026-07-08 |
 | F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Follow-up patch |
 | F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Follow-up design guard |
 | F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Follow-up diagnostics patch |
@@ -559,6 +559,19 @@ Run this test:
 - The F1 live-state purity acceptance test remains satisfied.
 
 ## Remediation Plan for F4
+
+### Implementation update
+
+F4 was implemented on 2026-07-08 by retaining the active-plus-one refresh for
+intermediate LF stages and refreshing the full allocated primitive and
+cell-centered magnetic-field extent at the final stage of both split sweeps.
+No task dependency, communication path, or intermediate-stage stencil changed.
+
+The regression compares the same periodic 24-by-24 problem as one MeshBlock
+and as nine MeshBlocks. Before the fix, the one-cycle total energies differed
+by `6.3185e-11`; after the fix, the difference is `5.3291e-15`, and all tested
+conserved quantities agree within `5.0e-13`. Conserved- and
+primitive-prolongation LF AMR smoke runs remain admissible and repair-free.
 
 ### Target behavior
 
