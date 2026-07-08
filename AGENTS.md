@@ -211,3 +211,67 @@ flake8 tst/ vis/
 ## When in doubt
 Prefer the source code over documentation. If behavior is unclear, stop and ask
 for clarification rather than guessing.
+
+<!-- BEGIN build-memory-table -->
+## MHD-PIC Navigation
+
+Use `docs/source/engineering/pic_mhd_model_contract.md` to identify the intended
+runtime model, then verify every claim in the implementation and focused tests.
+The coherent selector is `<particles>/pic_physical_mode`; legacy engineering,
+paper, and separately named extension paths are not interchangeable.
+
+### Task lookup
+
+| Task | Start in | Follow or validate |
+| --- | --- | --- |
+| Change CR state, modes, initialization, or guards | `src/particles/particles.hpp`, `src/particles/particles.cpp` | Model contract, `inputs/AGENTS.md`, parser/guard regressions |
+| Change Boris integration or field interpolation | `src/particles/particles_pushers.cpp`, `src/particles/field_interpolation.hpp` | Gyro, midpoint E+B, and no-MHD focused tests |
+| Change deposition or particle moments | `src/particles/particles_moments.cpp` | `src/bvals/`, AMR/interface tests, conservation tests, output mappings |
+| Change gas feedback, induction, or stage ordering | `src/particles/particles_tasks.cpp`, `src/mhd/mhd_tasks.cpp` | VL2 stage trace, ideal-induction isolation, fluid-particle conservation |
+| Change particle MPI, physical boundaries, or AMR lifetime | `src/bvals/bvals_part.cpp`, `src/mesh/` | Decomposition, nonperiodic, refinement-interface, restart, and load-balance tests |
+| Change restart schema or PIC diagnostics | `src/outputs/restart.cpp`, `src/pgen/pgen.cpp`, `src/outputs/derived_variables.cpp` | Restart fidelity/safety plus particle VTK and gridded-output consumers |
+| Change turbulent MHD-PIC boxes | `src/pgen/turb.cpp`, `src/srcterms/initial_perturbations.*`, `src/srcterms/turb_driver.*` | `inputs/particles/AGENTS.md` and turbulent-dynamo smoke test |
+| Change Bell or non-relativistic shock setups | `src/pgen/tests/` | `src/pgen/tests/AGENTS.md`, `inputs/publication/AGENTS.md`, focused Q011/Q019/Q023/Q029/Q043 tests |
+| Add or change a PIC regression | `tst/scripts/particles/` | `tst/AGENTS.md`, `tst/scripts/particles/AGENTS.md`, paired decks in `inputs/tests/` |
+| Change campaign evidence or launch tooling | `tst/publication/` | Read `tst/publication/AGENTS.md`; keep proxies, preparations, and qualification evidence distinct |
+
+### Cross-subsystem flow
+
+1. `ParameterInput` and `MeshBlockPack::AddPhysics` construct MHD and particle
+   modules from the selected input blocks.
+2. Particle tasks push CRs, deposit moments and per-step exchange channels, and
+   synchronize those fields across block, MPI, and refinement boundaries.
+3. Coupled task insertion places the particle wrappers around the appropriate MHD
+   source/field stages; paper mode keeps constrained transport on ideal-MHD
+   induction while gas receives the documented opposite particle exchange.
+4. Particle ownership migration, AMR reconstruction, and restart loading must
+   preserve particle payload, deposited state, source cohort, and runtime-model
+   fingerprints.
+5. Outputs expose both particle records and gridded diagnostics; changes to stored
+   state often require coordinated restart, output, test, and analysis updates.
+
+### Focused validation
+
+- Run compiled regressions from `tst/` with a specific module name, for example
+  `python3 run_tests.py particles/pic_paper_coupling_conservation_vl2_tsc`.
+- Run the standalone deposition oracle from the repository root with
+  `python3 tst/scripts/particles/pic_paper_smooth_tsc_oracle.py --indent 0`.
+- Use `tst/scripts/particles/AGENTS.md` to select the nearest invariant; do not
+  assume proxy or preparation tests establish scientific qualification.
+
+### Local guides
+
+- `src/particles/AGENTS.md`: particle state, pushers, deposition, task wiring,
+  MPI exchange, and runtime controls.
+- `src/mhd/AGENTS.md`: MHD task flow, source hooks, electric fields, and CT.
+- `src/mesh/AGENTS.md`, `src/bvals/AGENTS.md`, `src/outputs/AGENTS.md`: AMR,
+  communication, restart, and diagnostics boundaries.
+- `src/pgen/tests/AGENTS.md`: built-in PIC, Bell, and shock generators.
+- `inputs/particles/AGENTS.md`, `inputs/publication/AGENTS.md`: science and
+  campaign deck families.
+- `tst/AGENTS.md`, `tst/scripts/particles/AGENTS.md`: harness and focused PIC
+  validation routing.
+
+`kokkos/` is a separate Git submodule and is outside this navigation guide's
+write scope.
+<!-- END build-memory-table -->

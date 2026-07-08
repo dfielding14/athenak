@@ -14,7 +14,10 @@ by `ParameterInput` and passed to the executable via `-i` in `src/main.cpp`.
 - `hydro/`: Newtonian hydro input decks.
 - `ion-neutral/`: two-fluid ion-neutral input decks.
 - `mhd/`: Newtonian MHD input decks.
-- `particles/`: particle-module input decks.
+- `particles/`: particle examples and turbulent MHD-PIC science decks. See
+  `inputs/particles/AGENTS.md`.
+- `publication/`: manifest-bound Bell and parallel-shock campaign decks. See
+  `inputs/publication/AGENTS.md`; names do not imply execution or claim authority.
 - `radiation/`: radiation input decks.
 - `shearing_box/`: shearing-box input decks.
 - `srhydro/`: special-relativistic hydro input decks.

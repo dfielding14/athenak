@@ -80,7 +80,13 @@ The turbulence driver is not a `SourceTerms` subclass. It is instantiated when t
 stochastic forcing field.
 
 Key behaviors (see `turb_driver.cpp`):
-- Mode selection between `nlow` and `nhigh`, with optional `npeak`/`kpeak` shaping.
+- Isotropic mode selection uses a complete signed canonical half-space between
+  `nlow` and `nhigh`; custom active-axis bounds must remain `[-nhigh, nhigh]`.
+- Restart input carrying the former exact default `[0, nhigh]` is upgraded to the
+  signed range. Other asymmetric bounds fail closed. Physical-k isotropy assumes
+  equal active-axis box/tile lengths.
+- Inactive wavevector components are zero. Isotropic 2D3V retains all three force
+  components and projects with the active two-dimensional wavevector.
 - Ornstein-Uhlenbeck evolution with `tcorr`, `dt_turb_update`.
 - Solenoidal/compressive mix via `sol_fraction`.
 - Optional spatial windowing (`x_turb_scale_height`, centers, etc.).
@@ -91,6 +97,8 @@ Tasks:
 - `IncludeInitializeModesTask` inserts mode setup and forcing update into
   `before_timeintegrator`.
 - `IncludeAddForcingTask` inserts forcing between RK update and source terms.
+  Multistage RK updates add `rho*v.a` only; RK1 and standalone impulses include the
+  exact finite-kick kinetic-energy term.
 
 ### Initial turbulence kick
 If an `<initial_turb>` block exists, `main.cpp` creates a temporary

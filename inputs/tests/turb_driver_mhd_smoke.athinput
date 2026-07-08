@@ -1,0 +1,93 @@
+# Two-cycle MHD-only forcing budget for ordinary Heun RK2.
+
+<comment>
+problem = MHD-only turbulence-driver energy and spectrum regression
+
+<job>
+basename = turb_driver_mhd_smoke
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 8
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 4
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim = 2
+tlim = 1.0
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.6666666666666667
+
+<eos>
+iso_sound_speed = 1.0
+
+<coord>
+special_rel = false
+general_rel = false
+
+<problem>
+pgen_name = turb
+d_i = 1.0
+beta = 1.0
+ifield = 0
+
+<turb_driving>
+turb_flag = 2
+constant_edot = true
+tcorr = 1.0
+dedt = 0.06
+spect_form = 1
+npeak = 2
+nlow = 1
+nhigh = 3
+min_kx = -3
+max_kx = 3
+min_ky = -3
+max_ky = 3
+min_kz = -3
+max_kz = 3
+driving_type = 0
+sol_fraction = 1.0
+dt_turb_update = 0.01
+rseed = 314159
+
+<output1>
+file_type = hst
+dcycle = 1
+data_format = %.17e
+
+<output2>
+file_type = bin
+variable = turb_force
+id = turb_force
+dcycle = 1
+ghost_zones = false
+
+<output3>
+file_type = rst
+dcycle = 1

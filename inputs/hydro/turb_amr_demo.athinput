@@ -72,13 +72,6 @@ dedt      = 0.1        # energy injection rate
 nlow      = 1          # minimum wavenumber
 nhigh     = 4          # maximum wavenumber
 rseed     = -42
-# Use multiple modes to create more complex pattern
-min_kx    = 0
-max_kx    = 4
-min_ky    = 0
-max_ky    = 4
-min_kz    = 0
-max_kz    = 2
 # Very short update time to see the initial pattern quickly
 dt_turb_update = 0.001
 

@@ -93,7 +93,7 @@ class TurbulenceDriver {
   void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }
 
  private:
-  void ApplyForcingWithStep(Real bdt);
+  void ApplyForcingWithStep(Real bdt, bool exact_impulse);
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
   const std::string block_name_;
 };

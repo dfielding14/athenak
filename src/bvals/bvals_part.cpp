@@ -24,6 +24,7 @@
 #include "outputs/restart_utils.hpp"
 #include "particles/particles.hpp"
 #include "bvals.hpp"
+#include "bvals/particle_compaction.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -885,32 +886,9 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
 //! \brief
 
 TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
-  namespace KE = Kokkos::Experimental;
-  // particle destruction must happen also for single process runs
-  std::sort(KE::begin(destroylist.h_view), KE::end(destroylist.h_view), SortByIndex);
-  // sync destroylist host array with device.  This results in sorted array on device
-  destroylist.template modify<HostMemSpace>();
-  destroylist.template sync<DevExeSpace>();
-
-  // In single process runs, size of particle arrays can only be reduced
   int &npart = pmy_part->nprtcl_thispack;
-  int new_npart = npart + (nprtcl_recv - nprtcl_send - nprtcl_destroy);
-
-  // nremain defined outside compiler instructions for end logic
-  int nremain = 0;
-  int nremain_d = nprtcl_send + nprtcl_destroy - nprtcl_recv;
 
 #if MPI_PARALLEL_ENABLED
-  std::sort(KE::begin(sendlist.h_view), KE::end(sendlist.h_view), SortByIndex);
-  // sync sendlist host array with device.  This results in sorted array on device
-  sendlist.template modify<HostMemSpace>();
-  sendlist.template sync<DevExeSpace>();
-
-  // increase size of particle arrays if needed
-  if (nprtcl_recv > nprtcl_send + nprtcl_destroy) {
-    Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
-    Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
-  }
   // check that particle communications have all completed
   bool bflag = false;
   bool no_errors=true;
@@ -937,7 +915,43 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   }
   // exit if particle communications have not completed
   if (bflag) {return TaskStatus::incomplete;}
+#endif
 
+  std::vector<int> send_indices(nprtcl_send);
+  std::vector<int> destroy_indices(nprtcl_destroy);
+  for (int n = 0; n < nprtcl_send; ++n) {
+    send_indices[n] = sendlist.h_view(n).prtcl_indx;
+  }
+  for (int n = 0; n < nprtcl_destroy; ++n) {
+    destroy_indices[n] = destroylist.h_view(n).prtcl_indx;
+  }
+  ParticleCompactionPlan compaction;
+  std::string compaction_error;
+  if (!BuildParticleCompactionPlan(npart, nprtcl_recv, send_indices, destroy_indices,
+                                   &compaction, &compaction_error)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Invalid particle compaction plan: "
+              << compaction_error << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  const int new_npart = compaction.final_size;
+  const int nholes = static_cast<int>(compaction.holes.size());
+
+  DvceArray1D<int> particle_holes("particle_holes", nholes);
+  auto particle_holes_h = Kokkos::create_mirror_view(particle_holes);
+  for (int n = 0; n < nholes; ++n) {
+    particle_holes_h(n) = compaction.holes[n];
+  }
+  Kokkos::deep_copy(particle_holes, particle_holes_h);
+
+  // Grow before appending receives.  Shrinking is deferred until all surviving tail
+  // particles have been moved below new_npart.
+  if (new_npart > npart) {
+    Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
+    Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
+  }
+
+#if MPI_PARALLEL_ENABLED
   // unpack particles into positions of sent particles or destroyed particles
   if (nprtcl_recv > 0) {
     int nrdata = pmy_part->nrdata;
@@ -946,21 +960,10 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
     auto &pi = pmy_part->prtcl_idata;
     auto &rrecvbuf = prtcl_rrecvbuf;
     auto &irecvbuf = prtcl_irecvbuf;
-    int nprtcl_send_ = nprtcl_send;
-    int nprtcl_destroy_ = nprtcl_destroy;
-    auto &sendlist_ = sendlist;
-    auto &destroylist_ = destroylist;
+    auto holes = particle_holes;
     par_for("punpack",DevExeSpace(),0,(nprtcl_recv-1), KOKKOS_LAMBDA(const int n) {
-      int p;
-      if (n < nprtcl_send_) {
-        p = sendlist_.d_view(n).prtcl_indx; // place particles in holes created by sends
-      } else if (n < nprtcl_send_ + nprtcl_destroy_ ) {
-        // place particles in holes created by destroy
-        p = destroylist_.d_view(n-nprtcl_send_).prtcl_indx;
-      } else {
-        // Place particles at end of arrays if no send/destroy hole is available.
-        p = npart + (n - nprtcl_send_ - nprtcl_destroy_);
-      }
+      // Fill the unified removal holes first, then append any excess receives.
+      int p = (n < nholes) ? holes(n) : npart + (n - nholes);
       for (int i=0; i<nidata; ++i) {
         pi(i,p) = irecvbuf(nidata*n + i);
       }
@@ -969,70 +972,47 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
       }
     });
   }
-
-  // At this point have filled npart_recv holes in particle arrays from sends
-  // If (nprtcl_recv < nprtcl_send), have to move particles from end of arrays to fill
-  // remaining holes
-  nremain = nprtcl_send - nprtcl_recv;
-  if (nremain > 0) {
-    int i_last_hole = nprtcl_send-1;
-    int i_next_hole = nprtcl_recv;
-    for (int n=1; n<=nremain; ++n) {
-      int nend = npart-n;
-      --nremain_d;
-      if (nend > sendlist.h_view(i_last_hole).prtcl_indx) {
-        // copy particle from end into hole
-        int next_hole = sendlist.h_view(i_next_hole).prtcl_indx;
-        auto rdest = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, next_hole);
-        auto rsrc  = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(rdest, rsrc);
-        auto idest = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, next_hole);
-        auto isrc  = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(idest, isrc);
-        i_next_hole += 1;
-      } else {
-        // this index contains a hole, so do nothing except find new index of last hole
-        i_last_hole -= 1;
-      }
-    }
-  }
-
-  // Update nparticles_thisrank.  Update cost array (use npart_thismb[nmb]?)
-  MPI_Allgather(&new_npart,1,MPI_INT,(pmy_part->pmy_pack->pmesh->nprtcl_eachrank),1,
-                  MPI_INT,MPI_COMM_WORLD);
 #endif
-  // If there are still holes due to particle destruction
-  // Destroy particles by moving remaining particles in their places
-  if (nremain_d > 0) {
-    int i_last_hole = nprtcl_destroy-1;
-    // If the holes left by sending have been entirely covered by receives
-    // and there are more receives left, start from where you left off in the
-    // (nprtcl_recv>0) branch, otherwise simply destroy all particles in the list
-    int i_next_hole = nprtcl_recv-nprtcl_send < 0 ? 0 : nprtcl_recv-nprtcl_send;
-    for (int n=1; n<=nremain_d; ++n) {
-      //At this point already nremain particles might have been removed, check for that
-      int nend = nremain > 0 ? npart-nremain-n : npart - n;
-      if (nend > destroylist.h_view(i_last_hole).prtcl_indx) {
-        // copy particle from end into hole
-        int next_hole = destroylist.h_view(i_next_hole).prtcl_indx;
-        auto rdest = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, next_hole);
-        auto rsrc  = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(rdest, rsrc);
-        auto idest = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, next_hole);
-        auto isrc  = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(idest, isrc);
-        i_next_hole += 1;
-      } else {
-        // this index contains a hole, so do nothing except find new index of last hole
-        i_last_hole -= 1;
-      }
+
+  const int nmoves = static_cast<int>(compaction.move_sources.size());
+  DvceArray1D<int> move_sources;
+  DvceArray1D<int> move_destinations;
+  if (nmoves > 0) {
+    move_sources = DvceArray1D<int>("particle_move_sources", nmoves);
+    move_destinations = DvceArray1D<int>("particle_move_destinations", nmoves);
+    auto move_sources_h = Kokkos::create_mirror_view(move_sources);
+    auto move_destinations_h = Kokkos::create_mirror_view(move_destinations);
+    for (int n = 0; n < nmoves; ++n) {
+      move_sources_h(n) = compaction.move_sources[n];
+      move_destinations_h(n) = compaction.move_destinations[n];
     }
+    Kokkos::deep_copy(move_sources, move_sources_h);
+    Kokkos::deep_copy(move_destinations, move_destinations_h);
+
+    const int nrdata = pmy_part->nrdata;
+    const int nidata = pmy_part->nidata;
+    auto &pr = pmy_part->prtcl_rdata;
+    auto &pi = pmy_part->prtcl_idata;
+    par_for("particle_compact_survivors", DevExeSpace(), 0, nmoves - 1,
+    KOKKOS_LAMBDA(const int n) {
+      const int source = move_sources(n);
+      const int destination = move_destinations(n);
+      for (int i = 0; i < nidata; ++i) {
+        pi(i, destination) = pi(i, source);
+      }
+      for (int i = 0; i < nrdata; ++i) {
+        pr(i, destination) = pr(i, source);
+      }
+    });
   }
-  if (nprtcl_send + nprtcl_destroy - nprtcl_recv > 0) {
-    // shrink size of particle data arrays
+
+  // Keep all temporary maps alive until the device has consumed them.
+  Kokkos::fence();
+  if (new_npart < npart) {
     Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
     Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
   }
+
   pmy_part->nprtcl_thispack = new_npart;
   pmy_part->pmy_pack->pmesh->nprtcl_thisrank = new_npart;
   pmy_part->pmy_pack->pmesh->CountParticles();

@@ -12,6 +12,7 @@
 #include <limits>
 #include <memory>
 #include <cmath>
+#include <string>
 #include <vector>
 #include <utility>
 
@@ -28,6 +29,7 @@
 #include "eos/ideal_c2p_hyd.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
 #include "turb_driver.hpp"
+#include "turb_driver_utils.hpp"
 #include "globals.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -69,6 +71,11 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
   // range of modes including, corresponding to kmin and kmax
   nlow = pin->GetOrAddInteger(block_name_, "nlow", 1);
   nhigh = pin->GetOrAddInteger(block_name_, "nhigh", 3);
+  if (nlow < 0 || nhigh < 1 || nlow > nhigh) {
+    std::cout << "### FATAL ERROR in turbulence driver: require 0 <= nlow <= "
+              << "nhigh and nhigh >= 1" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // Peak of power when spectral form is parabolic, in units of 2*(PI/L)
   // Support both npeak (wavenumber index) and kpeak (actual k value)
   if (pin->DoesParameterExist(block_name_, "npeak")) {
@@ -81,20 +88,67 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
   }
   // spect form - 1 for parabola, 2 for power-law
   spect_form = pin->GetOrAddInteger(block_name_, "spect_form", 1);
-  // driving type - 0 for 3D isotropic, 1 for planar (xy) driving
-  driving_type = pin->GetOrAddInteger(block_name_, "driving_type", 0);
-  if (driving_type == 1 && global_variable::my_rank == 0) {
-    std::cout << "WARNING: driving_type=1 (planar driving) is currently "
-              << "experimental and may leave the z-component of the forcing "
-              << "amplitudes uninitialized." << std::endl;
+  if ((spect_form != 1 && spect_form != 2) ||
+      (spect_form == 1 && nlow == nhigh) ||
+      !std::isfinite(kpeak) || kpeak <= 0.0) {
+    std::cout << "### FATAL ERROR in turbulence driver: spect_form must be 1 or 2, "
+              << "kpeak must be finite and positive, and parabolic spectra require "
+              << "nlow < nhigh" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
-  // min kz zero should be 0 for including kz modes and 1 for not including
-  min_kz = pin->GetOrAddInteger(block_name_, "min_kz", 0);
+  // Only the isotropic driver has a physically consistent mode definition.
+  driving_type = pin->GetOrAddInteger(block_name_, "driving_type", 0);
+  if (driving_type != 0) {
+    std::cout << "### FATAL ERROR in turbulence driver: only driving_type=0 is "
+              << "supported; the legacy driving_type=1 mode has an inconsistent "
+              << "wavevector projection" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  // Isotropic defaults span a signed cube; canonical filtering below retains
+  // one member of each conjugate pair.
+  const int default_mode_min = -nhigh;
+  min_kz = pin->GetOrAddInteger(block_name_, "min_kz", default_mode_min);
   max_kz = pin->GetOrAddInteger(block_name_, "max_kz", nhigh);
-  min_kx = pin->GetOrAddInteger(block_name_, "min_kx", 0);
+  min_kx = pin->GetOrAddInteger(block_name_, "min_kx", default_mode_min);
   max_kx = pin->GetOrAddInteger(block_name_, "max_kx", nhigh);
-  min_ky = pin->GetOrAddInteger(block_name_, "min_ky", 0);
+  min_ky = pin->GetOrAddInteger(block_name_, "min_ky", default_mode_min);
   max_ky = pin->GetOrAddInteger(block_name_, "max_ky", nhigh);
+  const bool multi_d = (indcs.nx2 > 1);
+  const bool three_d = (indcs.nx3 > 1);
+  // Restart headers written before signed mode enumeration persist the old
+  // constructor defaults (0..nhigh).  Interpret that exact active-axis pattern as
+  // the historical default and upgrade it to the complete signed shell.  Other
+  // asymmetric user bounds remain an error rather than silently claiming isotropy.
+  const bool legacy_nonnegative_defaults =
+      (min_kx == 0 && max_kx == nhigh) &&
+      (!multi_d || (min_ky == 0 && max_ky == nhigh)) &&
+      (!three_d || (min_kz == 0 && max_kz == nhigh));
+  if (legacy_nonnegative_defaults) {
+    min_kx = -nhigh;
+    if (multi_d) min_ky = -nhigh;
+    if (three_d) min_kz = -nhigh;
+    if (global_variable::my_rank == 0) {
+      std::cout << "WARNING: upgrading legacy nonnegative turbulence mode bounds "
+                << "to the complete signed isotropic shell; the corrected forcing "
+                << "trajectory changes after the next mode refresh" << std::endl;
+    }
+  }
+  if (!multi_d) {
+    min_ky = 0;
+    max_ky = 0;
+  }
+  if (!three_d) {
+    min_kz = 0;
+    max_kz = 0;
+  }
+  if (driving_type == 0 && !turbulence::HasCompleteIsotropicBounds(
+          nhigh, min_kx, max_kx, min_ky, max_ky, min_kz, max_kz,
+          multi_d, three_d)) {
+    std::cout << "### FATAL ERROR in turbulence driver: driving_type=0 requires "
+              << "the complete signed [-nhigh, nhigh] range on every active axis; "
+              << "remove custom min_k*/max_k* bounds" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // power-law exponent for isotropic driving
   expo = pin->GetOrAddReal(block_name_, "expo", 5.0/3.0);
   exp_prp = pin->GetOrAddReal(block_name_, "exp_prp", 5.0/3.0);
@@ -107,6 +161,15 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
   dt_turb_update = pin->GetOrAddReal(block_name_, "dt_turb_update", 0.01);
   // To store fraction of energy in solenoidal modes
   sol_fraction = pin->GetOrAddReal(block_name_, "sol_fraction", 1.0);
+  if (!std::isfinite(dedt) || dedt < 0.0 ||
+      !std::isfinite(tcorr) || tcorr < 0.0 ||
+      !std::isfinite(dt_turb_update) || dt_turb_update <= 0.0 ||
+      !std::isfinite(sol_fraction) || sol_fraction < 0.0 || sol_fraction > 1.0) {
+    std::cout << "### FATAL ERROR in turbulence driver: require finite dedt >= 0, "
+              << "tcorr >= 0, dt_turb_update > 0, and 0 <= sol_fraction <= 1"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // random seed for turbulence driving
   // Non-negative values give reproducible sequences; negative values fall back
@@ -213,12 +276,16 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
   for (nkx = min_kx; nkx <= max_kx; nkx++) {
     for (nky = min_ky; nky <= max_ky; nky++) {
       for (nkz = min_kz; nkz <= max_kz; nkz++) {
-        if (nkx == 0 && nky == 0 && nkz == 0) continue;
         nsqr = 0.0;
         bool flag_prl = true;
         if (driving_type == 0) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
+          if (turbulence::IsIsotropicMode(nkx, nky, nkz, nlow_sqr,
+                                          nhigh_sqr, multi_d, three_d)) {
+            mode_count++;
+          }
+          continue;
         } else if (driving_type == 1) {
+          if (nkx == 0 && nky == 0 && nkz == 0) continue;
           nsqr = SQR(nkx) + SQR(nky);
           Real nprlsqr = SQR(nkz);
           if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
@@ -343,24 +410,22 @@ void TurbulenceDriver::Initialize() {
     Real nsqr;
     Real nlow_sqr = nlow*nlow;
     Real nhigh_sqr = nhigh*nhigh;
+    const bool multi_d = (nx2 > 1);
+    const bool three_d = (nx3 > 1);
     for (nkx = min_kx; nkx <= max_kx; nkx++) {
       for (nky = min_ky; nky <= max_ky; nky++) {
         for (nkz = min_kz; nkz <= max_kz; nkz++) {
-          if (nkx == 0 && nky == 0 && nkz == 0) continue;
-          nsqr = 0.0;
-          bool flag_prl = true;
+          bool selected = false;
           if (driving_type == 0) {
-            nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-          } else if (driving_type == 1) {
+            selected = turbulence::IsIsotropicMode(nkx, nky, nkz, nlow_sqr,
+                                                    nhigh_sqr, multi_d, three_d);
+          } else if (!(nkx == 0 && nky == 0 && nkz == 0)) {
             nsqr = SQR(nkx) + SQR(nky);
-            Real nprlsqr = SQR(nkz);
-            if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-              flag_prl = true;
-            } else {
-              flag_prl = false;
-            }
+            const Real nprlsqr = SQR(nkz);
+            selected = (nsqr >= nlow_sqr && nsqr <= nhigh_sqr &&
+                        nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr);
           }
-          if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
+          if (selected) {
             kx = dkx*nkx;
             ky = dky*nky;
             kz = dkz*nkz;
@@ -537,8 +602,21 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
   Real &ex_prp = exp_prp;
   Real &ex_prl = exp_prl;
   Real norm, kprl, kprp, kiso;
-  Real khigh = nhigh*fmax(fmax(dkx,dky),dkz);
-  Real klow  = nlow *fmin(fmin(dkx,dky),dkz);
+  const bool multi_d = (indcs.nx2 > 1);
+  const bool three_d = (indcs.nx3 > 1);
+  const int spatial_dimension = turbulence::SpatialDimension(multi_d, three_d);
+  Real dkmax = dkx;
+  Real dkmin = dkx;
+  if (multi_d) {
+    dkmax = fmax(dkmax, dky);
+    dkmin = fmin(dkmin, dky);
+  }
+  if (three_d) {
+    dkmax = fmax(dkmax, dkz);
+    dkmin = fmin(dkmin, dkz);
+  }
+  Real khigh = nhigh*dkmax;
+  Real klow  = nlow*dkmin;
   Real parab_prefact = -4.0 / pow(khigh-klow,2.0);
   Real &k_peak = kpeak;
 
@@ -561,7 +639,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
       // if (global_variable::my_rank == 0) std::cout << "force_tmp2_ zeroed." << std::endl;
 
-      int no_dir=3;
+      const int force_components = (driving_type == 0) ? 3 : 2;
       int nmode = 0;
 
       // Cartesian mode generation
@@ -570,22 +648,20 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
         for (nkx = min_kx; nkx <= max_kx; nkx++) {
           for (nky = min_ky; nky <= max_ky; nky++) {
             for (nkz = min_kz; nkz <= max_kz; nkz++) {
-              if (nkx == 0 && nky == 0 && nkz == 0) continue;
               norm = 0.0;
               nsqr = 0.0;
-              bool flag_prl = true;
+              bool selected = false;
               if (driving_type == 0) {
-                nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-              } else if (driving_type == 1) {
+                selected = turbulence::IsIsotropicMode(nkx, nky, nkz,
+                                                        nlow_sqr, nhigh_sqr,
+                                                        multi_d, three_d);
+              } else if (!(nkx == 0 && nky == 0 && nkz == 0)) {
                 nsqr = SQR(nkx) + SQR(nky);
-                Real nprlsqr = SQR(nkz);
-                if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-                  flag_prl = true;
-                } else {
-                  flag_prl = false;
-                }
+                const Real nprlsqr = SQR(nkz);
+                selected = (nsqr >= nlow_sqr && nsqr <= nhigh_sqr &&
+                            nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr);
               }
-              if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
+              if (selected) {
                 kx = dkx*nkx;
                 ky = dky*nky;
                 kz = dkz*nkz;
@@ -598,30 +674,34 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
                 // Generate Fourier amplitudes
 
                 if (driving_type == 0) {
-                if (kiso > 1e-16) {
-                  if(spect_form==2) norm = 1.0/pow(kiso,(ex+2.0)/2.0); // power-law driving
-                  else if (spect_form==1)
-                  {
-                    norm = fabs(parab_prefact*pow(kiso-k_peak,2.0)+1.0);// parabola in k-space
-                    norm = pow(norm,0.5) * pow(k_peak/kiso, ((int)no_dir-1)/2.);
+                  if (kiso > 1e-16) {
+                    if (spect_form == 2) {
+                      const Real exponent = turbulence::PowerLawAmplitudeExponent(
+                          ex, spatial_dimension);
+                      norm = 1.0/pow(kiso, exponent);
+                    } else if (spect_form == 1) {
+                      norm = fabs(parab_prefact*pow(kiso-k_peak, 2.0) + 1.0);
+                      const Real exponent =
+                          turbulence::ShellCompensationExponent<Real>(
+                              spatial_dimension);
+                      norm = pow(norm, 0.5)*pow(k_peak/kiso, exponent);
+                    } else {
+                      norm = 0.0;
+                    }
+                  } else {
+                    norm = 0.0;
                   }
-                  else {
-                  norm = 0.0;
-                  }
-                } else {
-                  norm = 0.0;
-                }
                 } else if (driving_type == 1) {
-                  no_dir = 2;
                   kprl = sqrt(SQR(kx));
                   kprp = sqrt(SQR(ky) + SQR(kz));
                   if (kprl > 1e-16 && kprp > 1e-16) {
-                    if(spect_form==2) norm = 1.0/pow(kprp,(ex_prp+1.0)/2.0)/pow(kprl,ex_prl/2.0);
-
-                    else if (spect_form==1)
-                    {
-                      norm = fabs(parab_prefact*pow(kprp-k_peak,2.0)+1.0);// parabola in kperp-space
-                      norm = pow(norm,0.5) * pow(k_peak/kprp, ((int)no_dir-1)/2.);
+                    if (spect_form == 2) {
+                      norm = 1.0/pow(kprp, (ex_prp + 1.0)/2.0)/
+                             pow(kprl, ex_prl/2.0);
+                    } else if (spect_form == 1) {
+                      norm = fabs(parab_prefact*pow(kprp-k_peak, 2.0) + 1.0);
+                      norm = pow(norm,0.5)*pow(k_peak/kprp,
+                          (static_cast<Real>(force_components) - 1.0)/2.0);
                     }
                   } else {
                     norm = 0.0;
@@ -634,7 +714,11 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
                 Real k_dot_amp_imag = 0.0;
                 Real k_dot_amp_real = 0.0;
 
-                for (int dir = 0; dir < no_dir; dir ++) {
+                for (int dir = 0; dir < 3; ++dir) {
+                  mode_amp_real_.h_view(dir,nmode) = 0.0;
+                  mode_amp_imag_.h_view(dir,nmode) = 0.0;
+                }
+                for (int dir = 0; dir < force_components; dir ++) {
                   Real amp_real_dir = norm*RanGaussianSt(&(rstate));
                   Real amp_imag_dir = norm*RanGaussianSt(&(rstate));
                   mode_amp_real_.h_view(dir,nmode) = amp_real_dir;
@@ -646,24 +730,18 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
                 // Now decompose into solenoidal/compressive modes.
                 if (norm > 0.) {
-                  for (int dir = 0; dir < no_dir; dir ++) {
-                    // Compressible (longitudinal) projections:
-                    //   A_div = k (k·Re(A)) / |k|^2,  B_div = k (k·Im(A)) / |k|^2
-                    Real A_div = k[dir]*k_dot_amp_real/SQR(kiso);
-                    Real B_div = k[dir]*k_dot_amp_imag/SQR(kiso);
-
-                    // Solenoidal parts (divergence-free):
-                    //   A_sol = A - A_div,  B_sol = B - B_div
-                    Real A_sol = mode_amp_real_.h_view(dir,nmode) - A_div;
-                    Real B_sol = mode_amp_imag_.h_view(dir,nmode) - B_div;
-
+                  for (int dir = 0; dir < force_components; dir ++) {
                     // Blend in amplitude-space:
                     //   sol_fraction = 1.0 -> purely solenoidal,
                     //   sol_fraction = 0.0 -> purely compressive.
                     mode_amp_real_.h_view(dir,nmode) =
-                        sol_fraction*A_sol + (1.0 - sol_fraction)*A_div;
+                        turbulence::BlendProjectedModeComponent(
+                            mode_amp_real_.h_view(dir,nmode), k[dir],
+                            k_dot_amp_real, SQR(kiso), sol_fraction);
                     mode_amp_imag_.h_view(dir,nmode) =
-                        sol_fraction*B_sol + (1.0 - sol_fraction)*B_div;
+                        turbulence::BlendProjectedModeComponent(
+                            mode_amp_imag_.h_view(dir,nmode), k[dir],
+                            k_dot_amp_imag, SQR(kiso), sol_fraction);
                   }
                 }
 
@@ -954,11 +1032,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
     Real s;
     if (constant_edot) {
       // 1/2 rho (s vdot dt)^2 / dt + rho (s vdot dt).v / dt = dedt
-      if (m1 >= 0) {
-        s = -m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
-      } else {
-        s = m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
-      }
+      s = turbulence::PositiveConstantEdotScale(m0, m1, dedt);
     } else {
       // 1/2 rho (s vdot dt)^2 / dt = dedt
       // s = sqrt(dedt * dt / (1/2 rho (vdot dt)^2))
@@ -1006,7 +1080,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 // 2. Handles relativistic transformations if required.
 //
 
-void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
+void TurbulenceDriver::ApplyForcingWithStep(Real bdt, bool exact_impulse) {
 
   if (pmy_pack == nullptr) {
     return;
@@ -1060,6 +1134,11 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
   const int nji  = nx2*nx1;
 
   auto eos = peos->eos_data;      // copy-by-value (POD expected)
+  // RK stages integrate the conservative source dE/dt = rho*v.a.  The quadratic
+  // kinetic-energy term belongs only to an exact momentum impulse (including RK1).
+  // Adding it to each multistage RK update does not compose correctly and over-injects
+  // for both explicit midpoint and Heun RK2.
+  const Real finite_kick_weight = exact_impulse ? 0.5 : 0.0;
 
   if ((current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1))
@@ -1087,7 +1166,8 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
       u0(m,IM2,k,j,i) += den*a2*bdt;
       u0(m,IM3,k,j,i) += den*a3*bdt;
       if (eos.is_ideal) {
-        u0(m,IEN,k,j,i) += (Fv+0.5*(a1*a1+a2*a2+a3*a3)*bdt)*den*bdt;
+        u0(m,IEN,k,j,i) +=
+            (Fv + finite_kick_weight*(a1*a1 + a2*a2 + a3*a3)*bdt)*den*bdt;
         // u0(m,IEN,k,j,i) += Fv*den*bdt;
       }
 
@@ -1096,7 +1176,8 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
         u0_(m,IM1,k,j,i) += den*a1*bdt;
         u0_(m,IM2,k,j,i) += den*a2*bdt;
         u0_(m,IM3,k,j,i) += den*a3*bdt;
-        u0_(m,IEN,k,j,i) += (Fv+0.5*(a1*a1+a2*a2+a3*a3)*bdt)*den*bdt;
+        u0_(m,IEN,k,j,i) +=
+            (Fv + finite_kick_weight*(a1*a1 + a2*a2 + a3*a3)*bdt)*den*bdt;
         // u0_(m,IEN,k,j,i) += Fv*den*bdt;
       }
     });
@@ -1361,7 +1442,13 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
     bdt = (pdrive->beta[stage-1]) * dt;
   }
 
-  ApplyForcingWithStep(bdt);
+  // Forward Euler has no later stage at which v.a can recover the finite kinetic
+  // energy of the momentum update.  Treat that supported one-stage method as an
+  // exact impulse so constant-edot normalization remains consistent.  RK2+ stages
+  // integrate v.a with their tableau and must not receive an extra quadratic term.
+  const bool exact_single_stage =
+      (pdrive != nullptr && pdrive->nexp_stages == 1);
+  ApplyForcingWithStep(bdt, exact_single_stage);
   return TaskStatus::complete;
 }
 
@@ -1381,10 +1468,10 @@ void TurbulenceDriver::ApplyImpulse(Real kick_dt) {
   Real saved_dt = pm->dt;
   if (saved_dt != kick_dt) {
     pm->dt = kick_dt;
-    ApplyForcingWithStep(kick_dt);
+    ApplyForcingWithStep(kick_dt, true);
     pm->dt = saved_dt;
   } else {
-    ApplyForcingWithStep(kick_dt);
+    ApplyForcingWithStep(kick_dt, true);
   }
 }
 

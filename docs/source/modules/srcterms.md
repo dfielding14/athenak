@@ -126,12 +126,12 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 | `dedt` | `0.0` | Target energy injection rate (code units). |
 | `tcorr` | `0.0` | OU correlation time. |
 | `dt_turb_update` | `0.01` | Minimum cadence between OU refreshes. |
-| `driving_type` | `0` | 0=3-D isotropic, 1=planar driving. |
+| `driving_type` | `0` | Supported isotropic driver; other values are rejected. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive wavenumber bounds. |
 | `npeak` / `kpeak` | `kpeak=4π` | Spectrum peak, either as a mode index or explicit wavenumber. |
 | `spect_form` | `1` | 1=parabolic, 2=power-law weighting. |
-| `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Spectral slopes (isotropic / perpendicular / parallel). |
-| `min_k*`, `max_k*` | `0` / `nhigh` | Cartesian mode limits per axis. |
+| `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Isotropic slope; legacy anisotropic slopes are retained as parsed inputs only. |
+| `min_k*`, `max_k*` | `-nhigh` / `nhigh` | Full signed range on each active axis; inactive axes are zero. |
 | `sol_fraction` | `1.0` | Amplitude-space blend between solenoidal (divergence-free) and compressive components of each mode’s Fourier amplitudes (`1.0` = purely solenoidal, `0.0` = purely compressive). |
 | `rseed` | `-1` | RNG seed for the OU process. Non-negative values give reproducible sequences; negative values fall back to the internal default (seed = 1). |
 | `constant_edot` | `true` | Switch between fixed `dedt` and fixed acceleration. |
@@ -146,7 +146,17 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 - When both hydro and MHD modules are active (ion-neutral mode), the forcing is applied to each fluid with shared accelerations.
 - Relativistic integrations invoke the SR conservative-to-primitive and primitive-to-conservative transforms after applying forces.
 - `EnsureBasisSize` is idempotent and inexpensive when no mesh change is detected.
-- Planar driving (`driving_type = 1`) is less heavily exercised than the default isotropic mode and currently reuses the full 3-component force assembly; it should be treated as experimental.
+- The legacy planar driver (`driving_type = 1`) is rejected because its flattened
+  real-space basis and three-dimensional wavevector projection are inconsistent.
+- In reduced-dimensional isotropic runs, inactive wavevector components are zero.
+  All three acceleration components remain available, so the out-of-plane component
+  is retained as a valid divergence-free 2D3V fluctuation.
+- Isotropy in physical wavevector space currently assumes equal active-axis box and
+  tile lengths. `npeak` also uses the unit-box fundamental wavenumber; use explicit
+  `kpeak` for non-unit domains until physical-k mode selection is generalized.
+- Restart headers with the former default mode range `[0, nhigh]` are upgraded to the
+  complete signed range. The saved real-space OU field is retained, but the trajectory
+  changes after the next mode refresh. Other asymmetric custom ranges fail closed.
 
 #### Initial Turbulence Kick (`<initial_turb>`)
 - Optional block that applies a single impulsive Ornstein–Uhlenbeck update immediately after problem setup.

@@ -34,8 +34,10 @@ See `../../AGENTS.md` for repository-wide conventions and workflow.
   - Performs the same callback checks as the new-run path.
 
 ### Built-in test suite (`src/pgen/tests`)
-These are the only problems selectable with `problem/pgen_name` when
-`USER_PROBLEM_ENABLED` is not set:
+Built-in problems are registered in `src/CMakeLists.txt` and dispatched in
+`pgen.cpp` when `USER_PROBLEM_ENABLED` is not set. See
+`src/pgen/tests/AGENTS.md` for task-oriented routing and local constraints.
+Representative mappings include:
 - `advection` -> `tests/advection.cpp` (`ProblemGenerator::Advection`)
 - `cpaw` -> `tests/cpaw.cpp` (`ProblemGenerator::AlfvenWave`)
 - `gr_bondi` -> `tests/gr_bondi.cpp` (`ProblemGenerator::BondiAccretion`)

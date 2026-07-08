@@ -75,7 +75,6 @@ spect_form = 1
 npeak = 2
 nlow  = 1                  # smallest wave number
 nhigh = 3                  # largest wave number
-min_kz = 1
 sol_fraction = 1.0         # solenoidal fraction
 dt_turb_update = 0.01      # update driving pattern
 rseed = -9736342354

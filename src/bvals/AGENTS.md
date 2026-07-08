@@ -44,6 +44,8 @@ See `../../AGENTS.md` for repository-wide conventions and workflow.
 ### Particle boundary exchange
 - `bvals_part.cpp`: `ParticlesBoundaryValues` tasks, send/destroy list handling,
   MPI pack/unpack, and GID updates.
+- `particle_compaction.hpp`: validated host planner that merges send/destruction
+  holes and maps surviving tail particles into the final live prefix.
 
 ### Physics-specific BCs
 - `physics/hydro_bcs.cpp`: `HydroBCs` for reflect/inflow/outflow/diode/vacuum.
@@ -107,3 +109,5 @@ Notes:
   variables, ensure `FillCoarseInBndry` and `ConsToPrim`/`PrimToCons` coverage.
 - Particle boundary handling is separate from mesh variables; update both when
   changing mesh BC semantics.
+- Migration and physical destruction must share one compaction plan. Never compact
+  send and destruction holes in separate passes; a tail source can itself be removed.

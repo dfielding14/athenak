@@ -84,6 +84,7 @@ pic_deltaf_adapt_mode = off
 pic_deltaf_adapt_interval = 0.0
 pic_sort_interval = 0
 pic_intermediate_arrays = auto
+pic_enable_2d3v = false
 track_displacement = false
 pic_expanding_box_mode = off
 
@@ -158,6 +159,7 @@ rseed = 314159
 <output1>
 file_type = hst
 dcycle = 1
+data_format = %.17e
 
 <output2>
 file_type = bin
@@ -178,3 +180,10 @@ file_type = pvtk
 variable = prtcl_all
 id = prtcl_all
 dcycle = 1
+
+<output5>
+file_type = bin
+variable = turb_force
+id = turb_force
+dcycle = 1
+ghost_zones = false

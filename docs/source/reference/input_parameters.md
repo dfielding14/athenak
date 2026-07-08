@@ -371,11 +371,11 @@ Complete list of all input parameters by block, extracted from source code.
 | `kpeak` | Real | 4.0*M_PI | turb_driver.cpp:L78 |
 | `spect_form` | int | 1 | turb_driver.cpp:L81 |
 | `driving_type` | int | 0 | turb_driver.cpp:L83 |
-| `min_kz` | int | 0 | turb_driver.cpp:L85 |
+| `min_kz` | int | -nhigh (active axis) | turb_driver.cpp:L85 |
 | `max_kz` | int | nhigh | turb_driver.cpp:L86 |
-| `min_kx` | int | 0 | turb_driver.cpp:L87 |
+| `min_kx` | int | -nhigh | turb_driver.cpp:L87 |
 | `max_kx` | int | nhigh | turb_driver.cpp:L88 |
-| `min_ky` | int | 0 | turb_driver.cpp:L89 |
+| `min_ky` | int | -nhigh (active axis) | turb_driver.cpp:L89 |
 | `max_ky` | int | nhigh | turb_driver.cpp:L90 |
 | `expo` | Real | 5.0/3.0 | turb_driver.cpp:L92 |
 | `exp_prp` | Real | 5.0/3.0 | turb_driver.cpp:L93 |
@@ -400,6 +400,14 @@ Complete list of all input parameters by block, extracted from source code.
 | `turb_flag` | int | 2 | turb_driver.cpp:L114 |
 | `tdriv_duration` | Real | tcorr (if `turb_flag = 1`) | turb_driver.cpp:L115 |
 | `tdriv_start` | Real | 0.0 | turb_driver.cpp:L121 |
+
+`driving_type=0` is the supported mode. Its active-axis bounds must cover the full
+signed range `[-nhigh, nhigh]`; inactive-axis bounds are forced to zero. The legacy
+`driving_type=1` spectrum is rejected because its wavevector projection is inconsistent.
+Restart headers carrying the former default range `[0, nhigh]` are upgraded to the
+complete signed range when read. The saved real-space OU accumulator is retained, but
+the trajectory changes after the next mode refresh because the corrected mode set is
+larger.
 
 ## Input Block: `<units>`
 **Used by**: units.cpp
