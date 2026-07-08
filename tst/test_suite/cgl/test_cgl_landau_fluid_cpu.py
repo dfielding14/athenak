@@ -564,6 +564,31 @@ def test_cgl_lf_background_collision_advances_one_physical_timestep():
         _cleanup()
 
 
+def test_cgl_collision_refreshes_next_timestep_from_relaxed_state():
+    try:
+        _run(
+            "cgl_collision_timestep_refresh.athinput",
+            "cgl_ci_collision_timestep_refresh",
+        )
+        history = testutils.athena_read.hst(
+            "cgl_ci_collision_timestep_refresh.mhd.hst"
+        )
+        piso = (0.2 + 2.0 * 2.0) / 3.0
+        paniso = (2.0 - 0.2) * np.exp(-100.0 * history["dt"][0])
+        ppar = piso - 2.0 * paniso / 3.0
+        pperp = piso + paniso / 3.0
+        fast_speed_squared = 0.5 * (
+            1.0 + pperp + 2.0 * ppar + abs(1.0 + pperp - 4.0 * ppar)
+        )
+        expected_dt = 0.4 / (16.0 * np.sqrt(fast_speed_squared))
+        np.testing.assert_allclose(
+            history["dt"][-1], expected_dt, rtol=5.0e-13, atol=0.0
+        )
+        assert history["dt"][-1] < 0.95 * history["dt"][0]
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_firehose_threshold_policies_are_distinct():
     try:
         _run("cgl_lf_firehose_policy.athinput", "cgl_ci_firehose_oblique")

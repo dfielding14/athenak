@@ -1,6 +1,6 @@
 # CGL+LF+STS AMR Code Review and Remediation Plan
 
-- Status: review complete; F1 through F4 implemented
+- Status: review complete; F1 through F5 implemented
 - Review date: 2026-07-08
 - Reviewed source: `40fe047f9ffe74795acea3116caad1cb94e6a796`
 - Review range: `f2d0a2597..40fe047f9`
@@ -103,7 +103,7 @@ Every use of `IAN` must have an explicit representation:
 | F2 | High | Active refinement | Primitive reconstruction is not conservative | Implemented 2026-07-08 |
 | F3 | High | Coarse restriction | CGL thermodynamics use pre-CT `B` and are paired with post-CT `B` | Implemented 2026-07-08 by the F1 task reorder |
 | F4 | High | LF STS lifecycle | Final refresh leaves reconstruction ghost cells stale | Implemented 2026-07-08 |
-| F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Follow-up patch |
+| F5 | Medium | Collision lifecycle | Non-LF collision relaxation can invalidate the stored next timestep | Implemented 2026-07-08 |
 | F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Follow-up design guard |
 | F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Follow-up diagnostics patch |
 | F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Follow-up safety patch |
@@ -710,9 +710,16 @@ the four core numerical patches:
 
 ### F5: timestep refresh after ordinary collisions
 
-Move collision relaxation before the final timestep estimate or recompute the
-MHD timestep afterward. Add a state in which isotropization increases the CGL
-fast speed and assert that the next `dt` decreases accordingly.
+F5 was implemented on 2026-07-08 without moving the existing collision task.
+After ordinary non-LF relaxation, `MHD::CGLCollisions` now calls the shared
+state-based MHD timestep estimator. The later mesh-level timestep selection
+continues to own the MPI minimum, growth limit, and final-time clipping.
+
+The focused regression uses a uniform state in which isotropization increases
+the CGL fast speed. Before the fix, the stored next timestep remained
+`1.4940357616679920e-02`; after the fix it matches the analytic post-collision
+value `1.3574280209859372e-02` to roundoff. The existing collision finalizer
+also verifies that relaxation advanced exactly one physical timestep.
 
 ### F6: LF-aware physical and user boundaries
 

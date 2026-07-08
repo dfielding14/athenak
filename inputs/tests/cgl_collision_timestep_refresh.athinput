@@ -1,0 +1,63 @@
+# Uniform pure-CGL relaxation whose post-collision fast speed is larger.
+# The next-cycle timestep must therefore be recomputed after the collision update.
+
+<job>
+basename = cgl_collision_timestep_refresh
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 1
+tlim = 1.0
+ndiag = 1
+
+<mhd>
+eos = cgl
+passive = false
+nu_coll = 100.0
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+pgen_name = cgl_landau_fluid
+test_mode = collision_relaxation
+rho0 = 1.0
+ppar0 = 0.2
+pperp0 = 2.0
+b0 = 1.0
+collision_rel_tol = 1.0e-12
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

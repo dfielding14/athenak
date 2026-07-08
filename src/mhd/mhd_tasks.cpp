@@ -1072,7 +1072,6 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
 //! \brief Apply CGL pressure-anisotropy relaxation after the hyperbolic update.
 
 TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
-  (void) pdrive;
   (void) stage;
   if (!peos->eos_data.is_cgl || !peos->eos_data.coll) {
     return TaskStatus::complete;
@@ -1085,6 +1084,7 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
   peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt,
                    0, n1m1, 0, n2m1, 0, n3m1);
+  RecomputeTimeStepFromCurrentState(pdrive);
   return TaskStatus::complete;
 }
 
