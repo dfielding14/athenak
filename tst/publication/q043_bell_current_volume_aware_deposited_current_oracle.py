@@ -164,6 +164,7 @@ _RUNTIME_DEFAULTS = {
         "pic_q017_sync_kernel_timers": "0",
         "pic_boundary_conservation_ledger": "0",
         "pic_random_seed": "0",
+        "pic_allow_restart_injection_without_particle_section": "0",
         "pic_expansion_law": "linear",
         "pic_expansion_rate_x1": "0",
         "pic_expansion_rate_x2": "0",

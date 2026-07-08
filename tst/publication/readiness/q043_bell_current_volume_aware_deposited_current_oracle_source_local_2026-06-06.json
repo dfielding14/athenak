@@ -138,8 +138,8 @@
   "artifact_bindings": {
     "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json": "77d6ec862314d308c41490dde1137f6c384d1da24b6b72ad43e357545cff98b0",
     "tst/publication/analyze_q011_section54_outputs.py": "20794ed45b80843b8e75accffc2e9336fcb7da58716fb818e466e193cd346356",
-    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "6d00394caf950d7592ebe3eb38e3160a46cf789e5e579cd09ccec33e07d014dd",
-    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "bb3ce19df05e67b6d5954adbe7743ad35dfe8d6c27b0a2d621697c843550c08f"
+    "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py": "482f10cb82d6ae68609fc41f0fa45e9c54e68fa6e78820e4692ac48b98b3bf1f",
+    "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py": "81a352ca869534ae8ae333884c8fb9d2f22430de5fa73c91224a306548aff999"
   },
   "open_dependencies": [
     "integrate_and_review_the_separately_implemented_q043_bell_current_volume_aware_generator",

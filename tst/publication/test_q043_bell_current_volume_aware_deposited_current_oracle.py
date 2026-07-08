@@ -540,6 +540,12 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
             ],
             "0",
         )
+        self.assertEqual(
+            oracle.expected_runtime_parameters(case)["particles"][
+                "pic_allow_restart_injection_without_particle_section"
+            ],
+            "0",
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             paths = _write_raw_case(root / "bookkeeping", case)
