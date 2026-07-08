@@ -1524,7 +1524,6 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     rotated_wave = RotatedWavenumber(pin, pmy_mesh_);
   }
   const Real xmin = pmy_mesh_->mesh_size.x1min;
-  const Real xmax = pmy_mesh_->mesh_size.x1max;
   const Real ymin = pmy_mesh_->mesh_size.x2min;
   const Real ymax = pmy_mesh_->mesh_size.x2max;
   const Real zmin = pmy_mesh_->mesh_size.x3min;
@@ -1627,7 +1626,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   par_for("cgl_lf_quant_init_b2", DevExeSpace(), 0, nmb - 1, ks, ke, js, je + 1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const int q = i - is;
-    const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
+    const RegionSize block_size = size.d_view(m);
+    const Real x = CellCenterX(q, indcs.nx1, block_size.x1min, block_size.x1max);
     const Real s = sin(k_wave*(x - xmin));
     const Real c = cos(k_wave*(x - xmin));
     b0.x2f(m,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s :
@@ -1637,7 +1637,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   par_for("cgl_lf_quant_init_b3", DevExeSpace(), 0, nmb - 1, ks, ke + 1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const int q = i - is;
-    const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
+    const RegionSize block_size = size.d_view(m);
+    const Real x = CellCenterX(q, indcs.nx1, block_size.x1min, block_size.x1max);
     const Real s = sin(k_wave*(x - xmin));
     const Real c = cos(k_wave*(x - xmin));
     b0.x3f(m,k,j,i) = bz0 + ((mode == TestMode::paper_eigen_wave) ?

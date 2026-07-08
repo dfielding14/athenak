@@ -107,7 +107,7 @@ Every use of `IAN` must have an explicit representation:
 | F6 | Medium | Physical boundaries | LF fixed-inflow and user boundaries are representation-blind | Implemented 2026-07-08 |
 | F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Implemented 2026-07-08 |
 | F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Implemented 2026-07-08 |
-| F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Follow-up test patch |
+| F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Implemented 2026-07-08 |
 | F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Follow-up test patch |
 | F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Expand after F1-F4 |
 | F12 | Low | Style | Changed files do not fully pass the repository C++ style check | Fix with touched code |
@@ -777,9 +777,17 @@ components whose squared magnitude overflows. Its finite controls verify that
 ordinary projection remains unchanged and that nonfinite thermodynamic inputs
 continue through the separately reported repair path.
 
-### F9 and F10: quantitative pgen correctness
+### F9: quantitative pgen field initialization
 
-Use each MeshBlock's physical coordinate bounds when initializing face fields.
+F9 was implemented on 2026-07-08. The transverse face-field initializers in
+the quantitative CGL LF pgen now compute cell-center coordinates from each
+MeshBlock's physical bounds, matching the already-correct primitive
+initializer. A zero-cycle fast-eigenmode regression uses four MeshBlocks and
+checks the supplied eigenvector; before the fix its measured `By` Fourier
+amplitude was effectively zero and failed with relative error one.
+
+### F10: quantitative pgen MPI projections
+
 Use an MPI all-reduction for projection means and Fourier amplitudes before
 normalizing by the global domain length.
 
