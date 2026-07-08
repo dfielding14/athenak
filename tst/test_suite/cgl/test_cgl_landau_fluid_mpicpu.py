@@ -8,6 +8,7 @@ import test_suite.testutils as testutils
 
 
 INPUT_FILE = "../../../inputs/tests/cgl_lf_amr_2d.athinput"
+OBLIQUE_INPUT = "../../../inputs/unit_tests/cgl_pure_paper_oblique_wave.athinput"
 
 
 def _run_amr(basename, threads):
@@ -87,3 +88,22 @@ def test_cgl_lf_amr_is_reproducible_across_mpi_decomposition():
         for path in Path(".").glob("cgl_mpi_*.hst"):
             path.unlink()
         testutils.cleanup()
+
+
+def test_cgl_lf_quantitative_projection_is_global_across_mpi_ranks():
+    flags = [
+        "meshblock/nx1=32",
+        "time/nlim=0",
+        "problem/reference_steps=1",
+        "problem/wave_rel_tol=1.0e-8",
+    ]
+    testutils.mpi_run(
+        OBLIQUE_INPUT,
+        ["job/basename=cgl_mpi_projection_single", *flags],
+        threads=1,
+    )
+    testutils.mpi_run(
+        OBLIQUE_INPUT,
+        ["job/basename=cgl_mpi_projection_four", *flags],
+        threads=4,
+    )

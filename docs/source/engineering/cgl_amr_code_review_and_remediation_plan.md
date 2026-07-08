@@ -108,7 +108,7 @@ Every use of `IAN` must have an explicit representation:
 | F7 | Medium | Repair diagnostics | Repair counters omit paths and do not survive restart | Implemented 2026-07-08 |
 | F8 | Medium | Failure handling | Nonfinite face fields can remain nonfinite after a reported repair | Implemented 2026-07-08 |
 | F9 | Medium | Validation pgen | Multi-block face-field initialization uses incorrect coordinates | Implemented 2026-07-08 |
-| F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Follow-up test patch |
+| F10 | Medium | MPI validation | Quantitative Fourier projections are rank-local | Implemented 2026-07-08 |
 | F11 | Low/Medium | Regression coverage | MPI+GPU primitive AMR, restart state, and conservation gates are incomplete | Expand after F1-F4 |
 | F12 | Low | Style | Changed files do not fully pass the repository C++ style check | Fix with touched code |
 
@@ -788,8 +788,17 @@ amplitude was effectively zero and failed with relative error one.
 
 ### F10: quantitative pgen MPI projections
 
-Use an MPI all-reduction for projection means and Fourier amplitudes before
-normalizing by the global domain length.
+F10 was implemented on 2026-07-08. MPI-capable primitive and cell-field
+projections now all-reduce the raw weighted mean numerator before dividing by
+the global domain length. They then calculate local sine/cosine numerators
+using that global mean, all-reduce both harmonics together, and normalize only
+after the reduction. Every rank therefore receives the same complete
+projection before running the quantitative checks.
+
+The MPI regression runs a zero-cycle pure-CGL oblique wave on four 32-cell
+MeshBlocks with both one and four ranks. Its constant backgrounds detect a
+rank-local mean while its transverse velocity perturbation detects rank-local
+Fourier amplitudes.
 
 ### F11: regression completeness
 

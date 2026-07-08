@@ -18,6 +18,10 @@
 #include <sstream>
 #include <string>
 
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "globals.hpp"
@@ -306,6 +310,9 @@ Projection ProjectPrimitive(const HostView &w, ParameterInput *pin, Mesh *pm,
       p.mean += w(m,idx,ks,js,is + q)*size.h_view(m).dx1;
     }
   }
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &p.mean, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+#endif
   p.mean /= length;
 
   for (int m = 0; m < pm->pmb_pack->nmb_thispack; ++m) {
@@ -318,6 +325,12 @@ Projection ProjectPrimitive(const HostView &w, ParameterInput *pin, Mesh *pm,
       p.cos_amp += value*std::cos(phase)*size.h_view(m).dx1;
     }
   }
+#if MPI_PARALLEL_ENABLED
+  Real amplitudes[2] = {p.sin_amp, p.cos_amp};
+  MPI_Allreduce(MPI_IN_PLACE, amplitudes, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  p.sin_amp = amplitudes[0];
+  p.cos_amp = amplitudes[1];
+#endif
   p.sin_amp *= 2.0/length;
   p.cos_amp *= 2.0/length;
   return p;
@@ -343,6 +356,9 @@ Projection ProjectCellField(const HostView &bcc, ParameterInput *pin, Mesh *pm,
       p.mean += bcc(m,idx,ks,js,is + q)*size.h_view(m).dx1;
     }
   }
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &p.mean, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+#endif
   p.mean /= length;
 
   for (int m = 0; m < pm->pmb_pack->nmb_thispack; ++m) {
@@ -355,6 +371,12 @@ Projection ProjectCellField(const HostView &bcc, ParameterInput *pin, Mesh *pm,
       p.cos_amp += value*std::cos(phase)*size.h_view(m).dx1;
     }
   }
+#if MPI_PARALLEL_ENABLED
+  Real amplitudes[2] = {p.sin_amp, p.cos_amp};
+  MPI_Allreduce(MPI_IN_PLACE, amplitudes, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  p.sin_amp = amplitudes[0];
+  p.cos_amp = amplitudes[1];
+#endif
   p.sin_amp *= 2.0/length;
   p.cos_amp *= 2.0/length;
   return p;
