@@ -34,6 +34,7 @@ Complete documentation for all AthenaK modules, organized by category.
 | **Super Time Stepping** | `src/diffusion/`, `src/driver/` | RKL2 parabolic integration | [super_time_stepping.md](super_time_stepping.md) |
 | **CGL Method Physics Primer** | `src/eos/`, `src/mhd/` | Physics model for anisotropic CGL MHD and LF closure | [cgl_mhd_method.md](cgl_mhd_method.md) |
 | **CGL Landau-Fluid Heat Flux** | `src/eos/`, `src/diffusion/`, `src/mhd/` | Anisotropic MHD LF closure | [cgl_landau_fluid.md](cgl_landau_fluid.md) |
+| **CGL Adaptive Mesh Refinement** | `src/mesh/`, `src/eos/`, `src/mhd/` | CGL-aware refinement, restriction, restart, and validation | [cgl_amr.md](cgl_amr.md) |
 | **CGL Landau-Fluid Code Guide** | `src/eos/`, `src/diffusion/`, `src/mhd/`, `tst/` | Implementation map, runtime modes, diagnostics, and tests | [cgl_landau_fluid_code_guide.md](cgl_landau_fluid_code_guide.md) |
 | **CGL LF Validation** | `inputs/unit_tests/`, `scripts/` | Quantitative and scientific validation workflow | [cgl_landau_fluid_validation.md](cgl_landau_fluid_validation.md) |
 | **Turbulence Driving** | `src/srcterms/` | Modal OU forcing, localization, AMR, and restart | [turbulence_driving.md](turbulence_driving.md) |
@@ -144,6 +145,7 @@ diffusion
 super_time_stepping
 cgl_mhd_method
 cgl_landau_fluid
+cgl_amr
 cgl_landau_fluid_code_guide
 cgl_landau_fluid_validation
 turbulence_driving

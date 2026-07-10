@@ -1,0 +1,58 @@
+# Overlay for the exact t=1 restart produced by the paired Base input.
+
+<job>
+basename = cgl_amr192_j75_l2
+
+<mesh_refinement>
+refinement = adaptive
+num_levels = 3
+ncycle_check = 8
+refinement_interval = 16
+prolong_primitives = true
+max_nmb_per_rank = 64
+
+<amr_criterion1>
+method = min_max
+variable = mhd_current
+# Midpoint between the lower 48 and upper 16 root-block current maxima at t=1.
+# Recompute this threshold if the paired Base state or resolution is changed.
+value_max = 14.416394851879101
+
+<time>
+evolution = dynamic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = -1.0
+cfl_number = 0.3
+nlim = -1
+tlim = 2.0
+ndiag = 10
+
+<problem>
+analysis_t_start = 1.0
+analysis_t_end = 2.0
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dt = 0.01
+
+<output2>
+# The validated AMR continuation uses a fixed 64-rank layout after t=1.
+file_type = rst
+dt = 0.25
+single_file_per_rank = true
+
+<output3>
+file_type = bin
+variable = mhd_w_bcc
+dt = 0.5
+id = full_mhd_w_bcc
+single_file_per_rank = true
+
+<output4>
+file_type = bin
+variable = mhd_divb
+dt = 1.0
+id = divb
+single_file_per_rank = true

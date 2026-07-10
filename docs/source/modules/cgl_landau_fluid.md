@@ -12,7 +12,8 @@ For a physics-first explanation of the model, see
 runtime modes, and performance switches, see
 [CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md). For validation
 workflows and evidence boundaries, see
-[CGL Landau-Fluid Validation](cgl_landau_fluid_validation.md).
+[CGL Landau-Fluid Validation](cgl_landau_fluid_validation.md). For static and
+adaptive refinement, see [CGL Adaptive Mesh Refinement](cgl_amr.md).
 
 Use CGL with the HLLE solver:
 
