@@ -27,9 +27,133 @@
 #include "shearing_box/shearing_box.hpp"
 #include "mhd/mhd.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
+#include "outputs/restart_utils.hpp"
 #include "particles/particles.hpp"
 
 namespace mhd {
+
+//----------------------------------------------------------------------------------------
+//! \fn void MHD::ValidatePICFeedbackState
+//! \brief Abort before C2P can repair a non-admissible post-feedback trial state.
+
+void MHD::ValidatePICFeedbackState(const char *source_name, int stage) {
+  if (!peos->eos_data.is_ideal || nmhd <= IEN) return;
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const int ni = ie - is + 1;
+  const int nj = je - js + 1;
+  const int nk = ke - ks + 1;
+  const int nkji = nk*nj*ni;
+  const int nji = nj*ni;
+  const int ncell = pmy_pack->nmb_thispack*nkji;
+  const EOS_Data eos = peos->eos_data;
+  const Real gm1 = eos.gamma - 1.0;
+  const bool expanding = pmy_pack->ppart->UsesExpandingBox();
+  const auto geom = particles::PICExpandingBoxGeometryAt(
+      pmy_pack->ppart->pic_expansion_law,
+      pmy_pack->ppart->pic_expansion_rate_x1,
+      pmy_pack->ppart->pic_expansion_rate_x2,
+      pmy_pack->ppart->pic_expansion_rate_x3,
+      pmy_pack->pmesh->time + pmy_pack->pmesh->dt);
+  auto u = u0;
+  auto bcc = bcc0;
+  auto b1 = b0.x1f;
+  auto b2 = b0.x2f;
+  auto b3 = b0.x3f;
+  array_sum::GlobalSum violations;
+
+  Kokkos::parallel_reduce(
+      "pic_feedback_admissibility", Kokkos::RangePolicy<>(DevExeSpace(), 0, ncell),
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &sum) {
+    const int m = idx/nkji;
+    int rem = idx - m*nkji;
+    int k = rem/nji;
+    rem -= k*nji;
+    int j = rem/ni;
+    const int i = rem - j*ni + is;
+    k += ks;
+    j += js;
+
+    const Real rho = u(m, IDN, k, j, i);
+    const Real mx = u(m, IM1, k, j, i);
+    const Real my = u(m, IM2, k, j, i);
+    const Real mz = u(m, IM3, k, j, i);
+    const Real etot = u(m, IEN, k, j, i);
+    Real bx, by, bz;
+    if (expanding) {
+      bx = static_cast<Real>(0.5)*(b1(m, k, j, i) + b1(m, k, j, i + 1)) *
+           geom.inv_area1;
+      by = static_cast<Real>(0.5)*(b2(m, k, j, i) + b2(m, k, j + 1, i)) *
+           geom.inv_area2;
+      bz = static_cast<Real>(0.5)*(b3(m, k, j, i) + b3(m, k + 1, j, i)) *
+           geom.inv_area3;
+    } else {
+      bx = bcc(m, IBX, k, j, i);
+      by = bcc(m, IBY, k, j, i);
+      bz = bcc(m, IBZ, k, j, i);
+    }
+
+    const bool finite_state = Kokkos::isfinite(rho) && Kokkos::isfinite(mx) &&
+        Kokkos::isfinite(my) && Kokkos::isfinite(mz) && Kokkos::isfinite(etot) &&
+        Kokkos::isfinite(bx) && Kokkos::isfinite(by) && Kokkos::isfinite(bz);
+    bool invalid = !finite_state;
+    if (!finite_state) sum.the_array[1] += 1.0;
+
+    const bool density_floor = finite_state && (rho < eos.dfloor);
+    if (density_floor) {
+      sum.the_array[2] += 1.0;
+      invalid = true;
+    }
+    if (finite_state && rho > 0.0) {
+      const Real ekin = static_cast<Real>(0.5)*(mx*mx + my*my + mz*mz)/rho;
+      const Real emag = static_cast<Real>(0.5)*(bx*bx + by*by + bz*bz);
+      const Real eint = etot - ekin - emag;
+      const bool finite_eint = Kokkos::isfinite(eint);
+      if (!finite_eint) {
+        sum.the_array[1] += 1.0;
+        invalid = true;
+      } else {
+        const bool pressure_floor = eint < eos.pfloor/gm1;
+        const bool temperature_floor = gm1*eint/rho < eos.tfloor;
+        const bool entropy_floor = gm1*eint/pow(rho, eos.gamma) <= eos.sfloor;
+        if (pressure_floor) sum.the_array[3] += 1.0;
+        if (temperature_floor) sum.the_array[4] += 1.0;
+        if (entropy_floor) sum.the_array[5] += 1.0;
+        invalid = invalid || pressure_floor || temperature_floor || entropy_floor;
+      }
+    } else if (finite_state) {
+      invalid = true;
+    }
+    if (invalid) sum.the_array[0] += 1.0;
+  }, Kokkos::Sum<array_sum::GlobalSum>(violations));
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, violations.the_array, 6, MPI_ATHENA_REAL, MPI_SUM,
+                MPI_COMM_WORLD);
+#endif
+  if (violations.the_array[0] > 0.0) {
+    if (global_variable::my_rank == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "PIC feedback produced a non-admissible trial MHD state before "
+                << "EOS floor repair: source=" << source_name
+                << " stage=" << stage
+                << " cells=" << violations.the_array[0]
+                << " nonfinite=" << violations.the_array[1]
+                << " density_floor=" << violations.the_array[2]
+                << " energy_pressure_floor=" << violations.the_array[3]
+                << " temperature_floor=" << violations.the_array[4]
+                << " entropy_floor=" << violations.the_array[5]
+                << ". Reduce the timestep, particle macro-weight, or feedback strength."
+                << std::endl;
+    }
+    restart_utils::AbortOnFatalError();
+  }
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void MHD::AssembleMHDTasks
 //! \brief Adds mhd tasks to appropriate task lists used by time integrators.
@@ -465,6 +589,7 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
           }
         }
       });
+      ValidatePICFeedbackState("mhd_src_terms", stage);
     }
   }
 
@@ -686,6 +811,7 @@ TaskStatus MHD::ApplyPICExpandingBoxFeedback(Driver *pdrive, int stage) {
       }
     }
   });
+  ValidatePICFeedbackState("expanding_box_feedback", stage);
   return TaskStatus::complete;
 }
 
@@ -1020,6 +1146,7 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
           }
         }
       });
+      ValidatePICFeedbackState("efield_src", stage);
     }
   }
 

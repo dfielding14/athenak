@@ -3997,6 +3997,75 @@ void ParallelShockWorkInLoop(Mesh *pm) {
   CompleteParallelShockCycle(pm);
 }
 
+void LimitParallelShockInjectionTimeStep(Mesh *pm) {
+  // The first injected cohort is absent when Mesh::NewTimeStep() scans particle
+  // velocities.  Tighten the current step from the configured injection envelope
+  // before the particle count and gas-subtraction transaction consume pm->dt.
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (ps_enable_injection && pm->time >= ps_inject_t_start &&
+      pm->time <= ps_inject_t_stop && pmbp != nullptr && pmbp->ppart != nullptr) {
+    auto *ppart = pmbp->ppart;
+    auto &size = pmbp->pmb->mb_size;
+    size.template sync<HostMemSpace>();
+    const Real pinj = ps_vinj_over_u0*ps_u0;
+    const Real vinj = VelocityMagnitudeFromMomentumMagnitude(ppart, pinj);
+    const Real surface_vx = ps_shock_speed + FrameVelocityOffset(pm->time);
+    Real vmax_x1 = std::abs(surface_vx) + vinj;
+    Real vmax_x2 = vinj;
+    Real vmax_x3 = vinj;
+    if (ppart->UsesRelativisticCRState()) {
+      Real vx_plus, vy_dummy, vz_dummy;
+      Real vx_minus;
+      BoostRelativeVelocityFromSurface(
+          ppart, surface_vx, vinj, 0.0, 0.0,
+          vx_plus, vy_dummy, vz_dummy);
+      BoostRelativeVelocityFromSurface(
+          ppart, surface_vx, -vinj, 0.0, 0.0,
+          vx_minus, vy_dummy, vz_dummy);
+      vmax_x1 = std::max(std::abs(vx_plus), std::abs(vx_minus));
+
+      // Maximize v_perp = vinj*sqrt(1-mu^2)/
+      // [gamma_surface*(1 + surface_vx*vinj*mu/C^2)].
+      // Its interior maximum is at mu = -surface_vx*vinj/C^2.
+      const Real light_speed = ppart->pic_cr_light_speed;
+      const Real beta_surface = surface_vx/light_speed;
+      const Real gamma_surface =
+          1.0/std::sqrt(1.0 - beta_surface*beta_surface);
+      const Real boost_product = surface_vx*vinj/SQR(light_speed);
+      const Real transverse_denominator =
+          gamma_surface*std::sqrt(1.0 - boost_product*boost_product);
+      vmax_x2 = vinj/transverse_denominator;
+      vmax_x3 = vmax_x2;
+    }
+    const Real max_cross = static_cast<Real>(ppart->pic_max_cell_cross);
+    Real injection_dt = std::numeric_limits<Real>::max();
+    for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+      if (vmax_x1 > 0.0) {
+        injection_dt = std::min(injection_dt, max_cross*size.h_view(m).dx1/vmax_x1);
+      }
+      if (pm->multi_d && vmax_x2 > 0.0) {
+        injection_dt = std::min(injection_dt, max_cross*size.h_view(m).dx2/vmax_x2);
+      }
+      if (pm->three_d && vmax_x3 > 0.0) {
+        injection_dt = std::min(injection_dt, max_cross*size.h_view(m).dx3/vmax_x3);
+      }
+    }
+    injection_dt *= pm->cfl_no;
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, &injection_dt, 1, MPI_ATHENA_REAL, MPI_MIN,
+                  MPI_COMM_WORLD);
+#endif
+    if (!(injection_dt > 0.0) || !std::isfinite(injection_dt)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock injection velocity bound produced an invalid "
+                << "timestep." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    pm->dt = std::min(pm->dt, injection_dt);
+  }
+}
+
 void ParallelShockWorkBeforeLoop(Mesh *pm) {
   if (pm == nullptr || pm->dt <= 0.0) return;
   MeshBlockPack *pmbp = pm->pmb_pack;
@@ -4008,6 +4077,7 @@ void ParallelShockWorkBeforeLoop(Mesh *pm) {
     SeedNextTag(pmbp->ppart, pm->time);
   }
   RemoveExcludedEarlyInjectedParticles(pm);
+  LimitParallelShockInjectionTimeStep(pm);
   PrepareParallelShockInjectionTransaction(pm);
 }
 

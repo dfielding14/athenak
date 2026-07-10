@@ -49,15 +49,16 @@ and opposite gas/particle momentum and kinetic-energy exchange are mutually
 consistent on uniform grids.
 
 The implementation is not yet generally science-ready. The original P0 turbulence
-driver and mixed particle migration/destruction blockers are closed on
-`PIC_development`; AMR conservation and feedback/timestep admissibility remain open.
-The shock and Bell campaigns also have important physical-qualification gates that
-must remain separate from code-mechanics tests.
+driver, mixed particle migration/destruction blockers, feedback admissibility, and
+particle timestep blockers are closed on `PIC_development`; AMR conservation remains
+open. The shock and Bell campaigns also have important physical-qualification gates
+that must remain separate from code-mechanics tests.
 
 Until the corresponding items below are closed:
 
-- Treat pre-fix turbulent-box outputs as exploratory; retained post-fix validation
-  remains explicitly development-only until the remaining P1 safeguards close.
+- Treat pre-fix turbulent-box outputs as exploratory; retained post-P0 validation
+  remains explicitly development-only because it predates the P1 safeguards and the
+  remaining AMR/Bell/shock science gates.
 - Do not reinterpret pre-fix multi-rank shock survivor populations without provenance;
   current-branch migration, escape-ledger, restart, and survivor parity are closed.
 - Do not claim exact particle-fluid conservation on AMR/SMR meshes.
@@ -96,10 +97,23 @@ reanalysis job `4968813` passes the complete matrix in `16.1 s` of analyzer time
 
 ### 2. Add stability and admissibility protection
 
-- [ ] Implement `STAB-1`: feedback source positivity/source-timescale control.
-- [ ] Implement `DT-1`: globally safe gyrofrequency bound.
-- [ ] Implement `DT-2`: post-injection timestep validation.
-- [ ] Add fail-fast accounting for source-induced gas floors.
+- [x] Implement `STAB-1`: feedback source positivity/source-timescale control.
+- [x] Implement `DT-1`: globally safe gyrofrequency bound.
+- [x] Implement `DT-2`: pre-transaction injection timestep validation.
+- [x] Add fail-fast accounting for source-induced gas floors.
+
+Focused closure evidence (development validation, nonqualifying): the ideal-MHD
+feedback paths now inspect the post-source trial state before C2P and abort with global
+nonfinite, density, pressure/internal-energy, temperature, and entropy counts. A normal
+two-cycle coupled oscillation and a one-cycle paper-VL2 shock carrier pass; high-current
+and `deposit_qscale=1e6` cases fail at the new guard before an EOS floor can add energy.
+The particle timestep uses the maximum configured species `|q/m|` with active plus ghost
+magnetic fields even when no particles exist. Empty-pack `|q/m|=1000` tests select
+`dt=1.664101e-5` in serial and MPI2. An intentionally restrictive first shock cohort
+selects `dt=1.993355e-3`, injects and pushes six particles without an invalid crossing in
+serial and MPI2. Current-source Frontier job `4968943` completed in 17 seconds with both
+timestep checks and a valid two-rank coupled-feedback cycle; jobs `4968893` and
+`4968928` are retained as preceding equivalent timestep runs.
 
 ### 3. Resolve the AMR conservation policy
 
@@ -341,7 +355,7 @@ Required validation:
 
 ### STAB-1 — No feedback source-timescale or positivity constraint
 
-- Status: **OPEN**
+- Status: **CLOSED**
 - Severity: **P1**
 - Evidence:
   - feedback update: `src/mhd/mhd_tasks.cpp:432-443`
@@ -355,15 +369,26 @@ exact conservation.
 
 Required work:
 
-- [ ] Form a trial post-feedback gas state.
-- [ ] Add a source CFL, controlled subcycling, or a fail-fast admissibility threshold.
-- [ ] Record source-induced density, pressure, energy, and temperature floor events.
-- [ ] Make conservation-qualified runs abort on any such event.
-- [ ] Stress-test high macro-particle loading, low beta, strong currents, and shock cells.
+- [x] Form a trial post-feedback gas state.
+- [x] Add a fail-fast admissibility threshold using the configured EOS floors.
+- [x] Record global nonfinite, density, pressure/energy, temperature, and entropy counts.
+- [x] Make all ideal-MHD coupled feedback runs abort on any such event.
+- [x] Stress-test high macro-particle loading and strong currents, and pass a bounded
+  paper-VL2 shock-cell carrier without false positives.
+
+Implementation and evidence:
+
+- `MHD::ValidatePICFeedbackState` runs immediately after all three feedback locations,
+  before C2P can repair the conserved state and invalidate exact exchange.
+- A normal coupled oscillation passes two cycles. Both a `1e8` momentum-feedback stress
+  and a `deposit_qscale=1e6` Boris stress abort with pressure/energy, temperature, and
+  entropy counts and zero density/nonfinite counts.
+- `pic_parallel_shock_section54_stage_timing_acceptance_vl2_tsc` passes one cycle with
+  the guard active. Retained outputs are under `validation/pic-safety-local/`.
 
 ### DT-1 — Gyro bound combines only rank-local extrema
 
-- Status: **OPEN**
+- Status: **CLOSED**
 - Severity: **P1**
 - Evidence: `src/particles/particles.cpp:1976-2030` and `src/mesh/mesh.cpp:641-650`
 
@@ -373,13 +398,18 @@ on different ranks therefore never form the required worst-case product.
 
 Required work:
 
-- [ ] Use the maximum configured species `|q/mc|`, or reduce the extrema separately.
-- [ ] Include any ghost-field region that can be sampled during the next half drift.
-- [ ] Add a two-rank high-q/m/strong-B boundary-crossing regression.
+- [x] Use the maximum configured species `|q/mc|` on every rank.
+- [x] Include the full allocated active-plus-ghost field region.
+- [x] Add serial and MPI2 empty-pack high-q/m/strong-B regressions; the empty case is a
+  stricter distributed-extrema test because no rank can supply a particle-local q/m.
+
+The retained MPI2 result from current-source job `4968943` matches the analytic bound:
+`0.1 * 0.3 / (1000 * sqrt(3.25)) = 1.66410059e-5`, measured
+`1.664101e-5`. Species mass and charge now also reject nonfinite input.
 
 ### DT-2 — First injected shock cohort can bypass particle timestep limits
 
-- Status: **OPEN**
+- Status: **CLOSED**
 - Severity: **P1**
 - Evidence:
   - empty-particle early return: `src/particles/particles.cpp:1929-1931`
@@ -391,9 +421,17 @@ selection, the first cohort is pushed using an MHD-only timestep.
 
 Required work:
 
-- [ ] Include configured injection velocity and q/m bounds in timestep selection; or
-- [ ] Recompute/validate the timestep after injection and before the stage-1 push.
-- [ ] Add an intentionally restrictive first-cohort test.
+- [x] Include configured species q/m bounds in ordinary timestep selection, including
+  an empty particle pack.
+- [x] Limit the shock timestep from the configured injection-velocity envelope before
+  the injection count and gas-subtraction transaction consume `pm->dt`.
+- [x] Add an intentionally restrictive first-cohort test in serial and MPI2.
+
+With `ps_vinj_over_u0=100`, the old MHD-only step was `4.235803e-2` and caused invalid
+multi-cell destruction. The repaired path uses
+`0.3 * 2 / (300 + 1) = 1.99335548e-3`, measured `1.993355e-3`, and advances six newly
+injected particles without an invalid crossing. The transaction and push use the same
+bounded timestep, so injection mass accounting is not retroactively changed.
 
 ### SHOCK-1 — Incompatible startup injection histories
 
@@ -648,6 +686,9 @@ These results describe the reviewed baseline and should be updated as fixes land
 | Focused AthenaK regression harness | 2 of 2 passed | Fresh serial build ran turbulence and migration/destruction smokes |
 | Turbulence runtime smoke | serial/MPI2 passed | 3-D MHD-PIC/MHD-only budgets, 2D3V, force FFT, restart parity, and legacy-bound upgrade |
 | Migration/destruction runtime smoke | serial/MPI2 passed | Exact 180-of-192 survivor inventory and full state/metadata parity |
+| PIC feedback admissibility guard | valid coupled/shock cases pass; two stress cases abort as designed | Prevents C2P floors from silently adding energy after feedback |
+| Empty-pack gyro timestep | serial/MPI2 passed | Analytic `dt=1.66410059e-5`; configured species and ghost-field bound active without particles |
+| Restrictive first shock cohort | serial/MPI2 passed | Analytic `dt=1.99335548e-3`; six injected particles advance without invalid crossing |
 
 Additional test-infrastructure issue:
 
@@ -687,6 +728,7 @@ directories, or retained evidence as appropriate.
 | 2026-07-08 | Initial review | Created | Static/source review at `f8a56172983a1f009662af4217dcb7b52032d7dc`; no implementation edits or fresh binary run |
 | 2026-07-08 | `TURB-1`–`TURB-4` | OPEN -> FIXED, NEEDS VALIDATION | Stable normalization, RK-consistent work, dimension-aware signed modes, strict isotropic bounds, legacy-restart migration, host tests, and serial/MPI2 runtime smokes pass; the remaining item-specific closure tests stay open |
 | 2026-07-08 | `MIG-1` | OPEN -> FIXED, NEEDS VALIDATION | Unified validated compaction and one batched survivor kernel; exhaustive oracle plus exact serial/MPI2 survivor-state parity pass; restart/repeated-crossing/ledger evidence remains |
+| 2026-07-10 | `STAB-1`, `DT-1`, `DT-2` | OPEN -> CLOSED | EOS-floor-based post-feedback fail-fast guard, configured-species/full-field gyro bound, and pre-transaction shock injection-velocity bound; ten focused host tests and both Section 5.4 stage-timing carriers pass, serial stress cases abort as designed, and current-source Frontier MPI2 job `4968943` passes both analytic timestep checks plus a coupled-feedback cycle in 17 seconds |
 
 ## Final deletion checklist
 

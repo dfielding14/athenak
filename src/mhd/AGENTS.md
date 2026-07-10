@@ -149,6 +149,10 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
     deposited per-step particle deltas (`dp/dt`, `dE/dt`) with opposite sign
     for conservative exchange; non-Boris paths retain legacy `J x B` / `J dot B`
     source handling.
+  - every ideal-MHD feedback path validates the post-source trial state against
+    density, pressure/internal-energy, temperature, and entropy floors before
+    C2P; a would-be floor repair aborts with global event counts so a coupled
+    conservation run cannot silently acquire floor energy.
 
 ### PR5 Step 2 Passive-MHD Isolation Hook
 - When `<particles>/pic_background_mode=passive_mhd` is active, MHD fluid

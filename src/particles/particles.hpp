@@ -242,6 +242,7 @@ class Particles {
   DvceArray1D<Real> species_vx0;    // optional per-species vx initializer
   DvceArray1D<Real> species_vy0;    // optional per-species vy initializer
   DvceArray1D<Real> species_vz0;    // optional per-species vz initializer
+  Real pic_species_qom_max = 0.0;   // configured max |charge/mass|
   bool deposit_moments = false;     // enable particle moment deposition
   int deposit_order = 1;            // deposition shape order
   Real deposit_qscale = 1.0;        // scaling of particle macro-charge

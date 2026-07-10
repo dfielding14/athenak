@@ -10,8 +10,8 @@ _INPUT_DECK = (
 _EXPECTED_MARKERS = (
     'physical_mode=paper_mhd_pic',
     'C=10000',
-    'cycle=1 time=9.677419e-03',
-    'q017.telemetry.particles.total=3.00000000000000000e+00',
+    'cycle=1 time=5.721748e-03',
+    'q017.telemetry.particles.total=2.00000000000000000e+00',
 )
 _RESULTS = {}
 

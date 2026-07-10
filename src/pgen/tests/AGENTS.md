@@ -37,6 +37,9 @@ fixture selected with `-DPROBLEM=tests/driver_user_stop` instead.
   physical cycle, replays its gas subtraction with Runge-Kutta stage weights,
   then validates and commits conservation, provenance, and escape ledgers.
   Reordering its callbacks can double-inject particles or corrupt accounting.
+  Before preparing that transaction, the callback limits the current timestep
+  using the configured injection-velocity envelope; the injected mass budget
+  and first particle push must therefore consume the same bounded `dt`.
 - The Q019 successor restores its runtime monitor state and re-enrolls its
   work-in-loop, history, and final callbacks before returning on restart.
 - Shared Bell headers feed several generators. Trace all consumers before

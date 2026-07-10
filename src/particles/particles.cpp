@@ -1586,6 +1586,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   auto h_vy0 = Kokkos::create_mirror_view(species_vy0);
   auto h_vz0 = Kokkos::create_mirror_view(species_vz0);
 
+  pic_species_qom_max = 0.0;
   for (int s=0; s<nspecies; ++s) {
     std::string block = "species" + std::to_string(s);
     h_mass(s) = pin->GetOrAddReal(block,"mass",1.0);
@@ -1593,12 +1594,20 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     h_vx0(s) = pin->GetOrAddReal(block, "vx0", cr_vx0);
     h_vy0(s) = pin->GetOrAddReal(block, "vy0", cr_vy0);
     h_vz0(s) = pin->GetOrAddReal(block, "vz0", cr_vz0);
-    if (h_mass(s) <= 0.0) {
+    if (!std::isfinite(h_mass(s)) || h_mass(s) <= 0.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<" << block << ">/mass must be > 0" << std::endl;
+                << "<" << block << ">/mass must be finite and > 0" << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    if (!std::isfinite(h_charge(s))) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<" << block << ">/charge must be finite" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    pic_species_qom_max = std::max(
+        pic_species_qom_max, std::abs(h_charge(s)/h_mass(s)));
     if (UsesRelativisticCRState() &&
         (pic_cr_initial_state == PICCRInitialState::velocity)) {
       const Real v2 = h_vx0(s)*h_vx0(s) + h_vy0(s)*h_vy0(s) + h_vz0(s)*h_vz0(s);
@@ -1926,11 +1935,6 @@ void Particles::NewTimeStep() {
     return;
   }
 
-  if (nprtcl_thispack <= 0) {
-    dtnew = max_dt;
-    return;
-  }
-
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
   const int gids = pmy_pack->gids;
@@ -1974,14 +1978,10 @@ void Particles::NewTimeStep() {
       Kokkos::Min<Real>(dt_part));
 
   if (pusher == ParticlesPusher::boris_lin || pusher == ParticlesPusher::boris_tsc) {
-    Real qom_max = 0.0;
-    Kokkos::parallel_reduce(
-        "ParticlesNewTimeStepQom",
-        Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
-        KOKKOS_LAMBDA(const int &p, Real &max_qom) {
-          max_qom = fmax(max_qom, fabs(pr(IPM, p)));
-        },
-        Kokkos::Max<Real>(qom_max));
+    // Species properties are part of the global run configuration.  Using their
+    // maximum is safe even when this rank (or the entire initial state) has no
+    // particles, and avoids multiplying unrelated rank-local q/m and B extrema.
+    const Real qom_max = pic_species_qom_max;
 
     DvceArray5D<Real> bcc;
     if (pic_background_mode == PICBackgroundMode::no_mhd) {
@@ -1991,13 +1991,11 @@ void Particles::NewTimeStep() {
     }
 
     if (bcc.size() > 0 && qom_max > 0.0) {
-      auto &indcs = pmy_pack->pmesh->mb_indcs;
-      const int is = indcs.is;
-      const int js = indcs.js;
-      const int ks = indcs.ks;
-      const int nx1 = indcs.nx1;
-      const int nx2 = indcs.nx2;
-      const int nx3 = indcs.nx3;
+      // A particle may sample a neighboring cell during its next half drift.
+      // Bound every allocated cell, including valid ghost fields.
+      const int nx1 = bcc.extent_int(4);
+      const int nx2 = bcc.extent_int(3);
+      const int nx3 = bcc.extent_int(2);
       const int nkji = nx3*nx2*nx1;
       const int nji = nx2*nx1;
       const int nmkji = nmb*nkji;
@@ -2013,10 +2011,6 @@ void Particles::NewTimeStep() {
             rem -= k*nji;
             int j = rem/nx1;
             int i = rem - j*nx1;
-            k += ks;
-            j += js;
-            i += is;
-
             const Real bx = bcc(m, IBX, k, j, i);
             const Real by = bcc(m, IBY, k, j, i);
             const Real bz = bcc(m, IBZ, k, j, i);

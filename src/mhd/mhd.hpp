@@ -172,6 +172,7 @@ class MHD {
   TaskStatus ApplyPICExpandingBoxWaveDamping(Driver *d, int stage);
   TaskStatus ApplyPICExpandingBoxU(Driver *d, int stage);
   TaskStatus ApplyPICExpandingBoxFeedback(Driver *d, int stage);
+  void ValidatePICFeedbackState(const char *source_name, int stage);
   void RefreshPICExpandingBoxPhysicalB(Real time);
   TaskStatus SendU_OA(Driver *d, int stage);
   TaskStatus RecvU_OA(Driver *d, int stage);
