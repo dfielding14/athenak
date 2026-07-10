@@ -1,5 +1,12 @@
 # build directories
 build/
+build-gotham-pdf-*/
+__pycache__/
+*.pyc
+.pytest_cache/
+docs/explanatory_writeups/**/*.aux
+docs/explanatory_writeups/**/*.log
+docs/explanatory_writeups/**/*.out
 
 # Athena output files
 *.tab

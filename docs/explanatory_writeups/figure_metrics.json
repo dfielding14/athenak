@@ -1,0 +1,214 @@
+{
+  "analysis_reader": "/lustre/orion/ast207/proj-shared/gotham/analysis/gotham_analysis/readers/pdf.py",
+  "comparisons": {
+    "output29_full_expected_broken": {
+      "candidate_total": -18030.064660142332,
+      "e_l1": 1.9175953424932073,
+      "e_total": 8.869061191580815e-13,
+      "reference_abs_sum": 66179.66524950304,
+      "reference_total": -18030.064660083637
+    },
+    "output29_radial_marginal": {
+      "candidate_total": -18030.06466014233,
+      "e_l1": 1.6037961007158223e-11,
+      "e_total": 8.868511479098382e-13,
+      "reference_abs_sum": 66179.66524950304,
+      "reference_total": -18030.064660083637
+    },
+    "output31_full_4d": {
+      "candidate_total": -18030.064660144242,
+      "e_l1": 3.869265168184719e-07,
+      "e_total": 9.025709757481836e-13,
+      "reference_abs_sum": 66562.72319250174,
+      "reference_total": -18030.064660084165
+    },
+    "output31_geometry_costheta_radius": {
+      "candidate_total": -18030.064660144242,
+      "e_l1": 7.2314517494673725e-12,
+      "e_total": 3.331876239717546e-12,
+      "reference_abs_sum": 18030.06466008417,
+      "reference_total": -18030.06466008417
+    },
+    "output31_radial_velocity_1d": {
+      "candidate_total": -18030.064660144275,
+      "e_l1": 7.111634336486642e-08,
+      "e_total": 9.026256306455885e-13,
+      "reference_abs_sum": 66562.72319250175,
+      "reference_total": -18030.064660084194
+    },
+    "output31_temperature_1d": {
+      "candidate_total": -18030.064660144235,
+      "e_l1": 2.0686361120776285e-07,
+      "e_total": 9.026542181462795e-13,
+      "reference_abs_sum": 66548.52418023451,
+      "reference_total": -18030.064660084165
+    }
+  },
+  "control_sources": {
+    "output29": {
+      "archived_header": "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000000/gotham.header.pdf",
+      "archived_payloads": [
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000000/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000001/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000002/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000003/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000004/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000005/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000006/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_abscostheta_coord_r/node_00000007/gotham.00062.pdf"
+      ],
+      "rebuilt_header": "/lustre/orion/ast207/proj-shared/brent/gotham/pdf_rebuild_test/gpu_8pc_first8_original/output29/gotham.header.pdf",
+      "rebuilt_payload": "/lustre/orion/ast207/proj-shared/brent/gotham/pdf_rebuild_test/gpu_8pc_first8_original/output29/gotham.00062.pdf",
+      "time": 10.520002963096713
+    },
+    "output31": {
+      "archived_header": "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000000/gotham.header.pdf",
+      "archived_payloads": [
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000000/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000001/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000002/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000003/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000004/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000005/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000006/gotham.00062.pdf",
+        "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/pdf/pdf_coord_costheta_coord_r_temperature_vel_sph_r/node_00000007/gotham.00062.pdf"
+      ],
+      "rebuilt_header": "/lustre/orion/ast207/proj-shared/brent/gotham/pdf_rebuild_test/gpu_8pc_first8_original/output31/gotham.header.pdf",
+      "rebuilt_payload": "/lustre/orion/ast207/proj-shared/brent/gotham/pdf_rebuild_test/gpu_8pc_first8_original/output31/gotham.00062.pdf",
+      "time": 10.520002963096713
+    }
+  },
+  "generator": "/autofs/nccs-svm1_home2/dfielding/athenak-gotham-pdf-rebuild/docs/explanatory_writeups/scripts/generate_figures.py",
+  "golden_input_inventory": {
+    "blocks": 329846,
+    "cells": 86467149824,
+    "data_offset_bytes": 40047,
+    "meshblock_cells": 262144,
+    "record_size_bytes": 8388696,
+    "representative_source": "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/bin/node_00000000/gotham.hydro_w.00028.bin",
+    "shards": 1024,
+    "source_glob": "/lustre/orion/ast207/proj-shared/brent/gotham/res_8pc/phase2/bin/node_*/gotham.hydro_w.00028.bin",
+    "total_file_bytes": 2767018828944
+  },
+  "histogram_identity": {
+    "groups": [
+      {
+        "products": [
+          "output29",
+          "output31"
+        ],
+        "relative_spread": 1.0532546461132228e-13,
+        "weight": "edot_sph"
+      },
+      {
+        "products": [
+          "output23",
+          "output25",
+          "output26",
+          "output27",
+          "output32",
+          "output33",
+          "output34",
+          "output35",
+          "output36"
+        ],
+        "relative_spread": 6.415880453357775e-13,
+        "weight": "mass"
+      },
+      {
+        "products": [
+          "output28",
+          "output30"
+        ],
+        "relative_spread": 0.0,
+        "weight": "mdot_sph"
+      }
+    ],
+    "manifest_path": "/lustre/orion/ast207/proj-shared/brent/gotham/pdf_rebuild_test/gpu_8pc_first8_original/rebuild_manifest.json"
+  },
+  "inventory": [
+    {
+      "mapped_controls": 28,
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-gotham-pdf-rebuild/tools/gotham_pdf_rebuild/jobs/manifests/res_4pc.tsv",
+      "simulation": "res_4pc",
+      "snapshots": 29,
+      "without_control": 1
+    },
+    {
+      "mapped_controls": 28,
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-gotham-pdf-rebuild/tools/gotham_pdf_rebuild/jobs/manifests/res_4pc_highmdot.tsv",
+      "simulation": "res_4pc_highmdot",
+      "snapshots": 28,
+      "without_control": 0
+    },
+    {
+      "mapped_controls": 29,
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-gotham-pdf-rebuild/tools/gotham_pdf_rebuild/jobs/manifests/res_8pc.tsv",
+      "simulation": "res_8pc",
+      "snapshots": 49,
+      "without_control": 20
+    },
+    {
+      "mapped_controls": 30,
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-gotham-pdf-rebuild/tools/gotham_pdf_rebuild/jobs/manifests/res_8pc_highmdot.tsv",
+      "simulation": "res_8pc_highmdot",
+      "snapshots": 30,
+      "without_control": 0
+    },
+    {
+      "mapped_controls": 25,
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-gotham-pdf-rebuild/tools/gotham_pdf_rebuild/jobs/manifests/res_8pc_lowmdot.tsv",
+      "simulation": "res_8pc_lowmdot",
+      "snapshots": 25,
+      "without_control": 0
+    }
+  ],
+  "notes": [
+    "Only existing archived sparse PDF shards, rebuilt dense PDFs, logs, and manifests were read.",
+    "The pending complete-golden cell count is an exact fixed-record inventory from live source-file sizes; it is not a completed reducer run."
+  ],
+  "runtime_runs": [
+    {
+      "blocks": 320,
+      "cells": 83886080,
+      "elapsed_s": 99.685631315,
+      "gib_per_s": 0.02507910310704742,
+      "million_cells_per_s": 0.8415062320759703,
+      "path": "/lustre/orion/ast207/proj-shared/brent/gotham/pdf_rebuild_test/logs/gpu_8pc_shard.3318736.out",
+      "payload_gib": 2.50002622604,
+      "shards": 1
+    },
+    {
+      "blocks": 2560,
+      "cells": 671088640,
+      "elapsed_s": 381.626483859,
+      "gib_per_s": 0.05240781406483702,
+      "million_cells_per_s": 1.758495985954549,
+      "path": "/lustre/orion/ast207/proj-shared/brent/gotham/pdf_rebuild_test/logs/gpu_8pc_8shard.3318742.out",
+      "payload_gib": 20.0002098083,
+      "shards": 8
+    }
+  ],
+  "validation_ladder": [
+    {
+      "cells": 262144,
+      "name": "one block\nall products",
+      "status": "passed"
+    },
+    {
+      "cells": 83886080,
+      "name": "one real\n8 pc shard",
+      "status": "passed"
+    },
+    {
+      "cells": 671088640,
+      "name": "eight real\n8 pc shards",
+      "status": "passed"
+    },
+    {
+      "cells": 86467149824,
+      "name": "complete 1024-shard\nFrontier golden",
+      "status": "pending"
+    }
+  ]
+}
