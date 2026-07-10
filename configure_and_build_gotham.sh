@@ -24,9 +24,10 @@ usage() {
   printf '%s\n' \
     'Usage: ./configure_and_build_gotham.sh [OPTIONS]' \
     '' \
-    'Configure and build cgm_cooling_flow_full with Frontier HIP and MPI.' \
+    'Configure and build GOTHAM with Frontier HIP and MPI.' \
     '' \
     'Options:' \
+    '  --problem NAME      AthenaK problem generator (default: gotham)' \
     '  --build-dir DIR     Build directory (default: build)' \
     '  --build-type TYPE   Release, Debug, RelWithDebInfo, or MinSizeRel' \
     '                      (default: Release)' \
@@ -36,7 +37,7 @@ usage() {
     '  -h, --help          Show this help' \
     '' \
     'Equivalent defaults may be set with GOTHAM_BUILD_DIR,' \
-    'GOTHAM_BUILD_TYPE, and GOTHAM_BUILD_JOBS.'
+    'GOTHAM_BUILD_TYPE, GOTHAM_BUILD_JOBS, and GOTHAM_PROBLEM.'
 }
 
 # Keep only the small set of caller values needed by the build.  This prevents
@@ -55,6 +56,7 @@ if [[ "${GOTHAM_FRONTIER_CLEAN_ENV:-0}" != "1" ]]; then
     GOTHAM_BUILD_DIR="${GOTHAM_BUILD_DIR:-}" \
     GOTHAM_BUILD_TYPE="${GOTHAM_BUILD_TYPE:-}" \
     GOTHAM_BUILD_JOBS="${GOTHAM_BUILD_JOBS:-}" \
+    GOTHAM_PROBLEM="${GOTHAM_PROBLEM:-}" \
     /bin/bash "$SCRIPT_PATH" "$@"
 fi
 [[ -z "${LOADEDMODULES:-}" && -z "${INCLUDE_PATH_X86_64:-}" ]] || {
@@ -64,11 +66,17 @@ fi
 build_dir=${GOTHAM_BUILD_DIR:-build}
 build_type=${GOTHAM_BUILD_TYPE:-Release}
 build_jobs=${GOTHAM_BUILD_JOBS:-16}
+problem=${GOTHAM_PROBLEM:-gotham}
 fresh_configure=1
 configure_only=0
 
 while (( $# > 0 )); do
   case "$1" in
+    --problem)
+      (( $# >= 2 )) || die '--problem requires a value'
+      problem=$2
+      shift 2
+      ;;
     --build-dir)
       (( $# >= 2 )) || die '--build-dir requires a value'
       build_dir=$2
@@ -103,6 +111,7 @@ while (( $# > 0 )); do
 done
 
 [[ "$build_jobs" =~ ^[1-9][0-9]*$ ]] || die '--jobs must be a positive integer'
+[[ "$problem" =~ ^[A-Za-z0-9_]+$ ]] || die '--problem contains invalid characters'
 case "$build_type" in
   Release|Debug|RelWithDebInfo|MinSizeRel) ;;
   *) die "unsupported build type: $build_type" ;;
@@ -113,9 +122,11 @@ if [[ "$build_dir" != /* ]]; then
 fi
 build_dir=$(realpath -m "$build_dir")
 [[ "$build_dir" != "$REPO_ROOT" ]] || die 'the build directory cannot be the source root'
-[[ -f "${REPO_ROOT}/src/pgen/cgm_cooling_flow_full.cpp" ]] || {
-  die "GOTHAM problem generator not found beneath ${REPO_ROOT}"
-}
+if [[ "$problem" != built_in_pgens ]]; then
+  [[ -f "${REPO_ROOT}/src/pgen/${problem}.cpp" ]] || {
+    die "problem generator not found: src/pgen/${problem}.cpp"
+  }
+fi
 
 lmod_init=/opt/cray/pe/lmod/lmod/init/bash
 [[ -r "$lmod_init" ]] || die "Lmod initializer not found: $lmod_init"
@@ -178,13 +189,14 @@ cmake_args=(
   -DKokkos_ARCH_VEGA90A=ON
   -DCMAKE_EXE_LINKER_FLAGS="-L${ROCM_PATH}/lib -lamdhip64"
   -DCMAKE_CXX_FLAGS="-I${ROCM_PATH}/include -munsafe-fp-atomics"
-  -DPROBLEM=cgm_cooling_flow_full
+  -DPROBLEM="$problem"
 )
 
 printf 'Configuring GOTHAM AthenaK\n'
 printf '  source:     %s\n' "$REPO_ROOT"
 printf '  build:      %s\n' "$build_dir"
 printf '  build type: %s\n' "$build_type"
+printf '  problem:    %s\n' "$problem"
 printf '  jobs:       %s\n' "$build_jobs"
 
 if (( fresh_configure )); then

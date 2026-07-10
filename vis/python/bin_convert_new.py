@@ -364,6 +364,14 @@ def read_binary_as_athdf(filename, raw=False, data=None, quantities=None, dtype=
     if x3_max is not None:
         k_max = min(k_max, np.searchsorted(data['x3f'], x3_max))
 
+    # Keep coordinate arrays consistent with the selected subset.
+    data['x1f'] = data['x1f'][i_min:i_max+1]
+    data['x1v'] = data['x1v'][i_min:i_max]
+    data['x2f'] = data['x2f'][j_min:j_max+1]
+    data['x2v'] = data['x2v'][j_min:j_max]
+    data['x3f'] = data['x3f'][k_min:k_max+1]
+    data['x3v'] = data['x3v'][k_min:k_max]
+
     # Prepare arrays for data and bookkeeping
     if new_data:
         for q in quantities:
@@ -571,6 +579,14 @@ def read_all_ranks_binary_as_athdf(rank0_filename, raw=False, data=None, quantit
         k_min = max(k_min, np.searchsorted(data['x3f'], x3_min))
     if x3_max is not None:
         k_max = min(k_max, np.searchsorted(data['x3f'], x3_max))
+
+    # Keep coordinate arrays consistent with the selected subset.
+    data['x1f'] = data['x1f'][i_min:i_max+1]
+    data['x1v'] = data['x1v'][i_min:i_max]
+    data['x2f'] = data['x2f'][j_min:j_max+1]
+    data['x2v'] = data['x2v'][j_min:j_max]
+    data['x3f'] = data['x3f'][k_min:k_max+1]
+    data['x3v'] = data['x3v'][k_min:k_max]
 
     # Prepare arrays for data and bookkeeping
     if new_data:
@@ -1533,4 +1549,3 @@ __all__ = [
     "read_rank_binary_as_athdf",
     "athinput",
 ]
-

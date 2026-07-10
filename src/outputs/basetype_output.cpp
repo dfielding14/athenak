@@ -95,7 +95,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
         (variable == "temperature" || variable == "cooling_time" || 
 	 starts_with(variable, "mdot_") ||
          starts_with(variable, "edot_") || starts_with(variable, "vel_"));
-    const bool needs_mhd_only = (variable == "edot_sph_mag");
+    const bool needs_mhd_only = (variable == "edot_sph_mag" ||
+                                 variable == "edot_sph_out_mag" ||
+                                 variable == "edot_vert_mag");
 
     if (needs_mhd_only && !has_mhd) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -671,6 +673,14 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("vA_mag",i_derived,&(derived_var));
     }
 
+    // mhd plasma beta = gas pressure / magnetic pressure
+    if (variable.compare("mhd_beta") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("beta",i_derived,&(derived_var));
+    }
+
     // ratio of curvature to magnetic field strength
     if (variable.compare("mhd_curv_B_ratio") == 0) {
       out_params.contains_derived = true;
@@ -1121,6 +1131,42 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     out_params.n_derived += 1;
     int i_derived = out_params.n_derived - 1;
     outvars.emplace_back("edot_sph_mag", i_derived, &derived_var);
+  }
+  if (variable.compare("edot_sph_out_kin") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("edot_sph_out_kin", i_derived, &derived_var);
+  }
+  if (variable.compare("edot_sph_out_th") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("edot_sph_out_th", i_derived, &derived_var);
+  }
+  if (variable.compare("edot_sph_out_mag") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("edot_sph_out_mag", i_derived, &derived_var);
+  }
+  if (variable.compare("edot_vert_kin") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("edot_vert_kin", i_derived, &derived_var);
+  }
+  if (variable.compare("edot_vert_th") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("edot_vert_th", i_derived, &derived_var);
+  }
+  if (variable.compare("edot_vert_mag") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("edot_vert_mag", i_derived, &derived_var);
   }
   }
 
