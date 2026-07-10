@@ -405,6 +405,13 @@ def test_cgl_lf_amr_3d_churn_gpu():
         assert user["ncell"][-1] == user["ncell"][0]
         assert np.count_nonzero(user["ncell"] == np.max(user["ncell"])) >= 2
         assert np.count_nonzero(user["ncell"] == user["ncell"][0]) >= 4
+        divb_paths = sorted(Path("bin").glob("*divb_resize*.bin"))
+        assert len(divb_paths) >= 2
+        divb_states = [bin_convert.read_binary(str(path)) for path in divb_paths]
+        assert divb_states[0]["n_mbs"] == 27
+        assert max(state["n_mbs"] for state in divb_states) > 27
+        for state in divb_states:
+            assert np.all(np.isfinite(state["mb_data"]["divb"]))
         for column in ("lf_mirror", "lf_firehs", "lf_hwproj"):
             assert mhd[column][-1] == 0.0
         _assert_conserved(

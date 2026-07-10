@@ -94,3 +94,9 @@ file_type = hst
 data_format = %24.16e
 dcycle = 1
 user_hist_only = false
+
+<output2>
+file_type = bin
+variable = mhd_divb
+dcycle = 1
+id = divb_resize
