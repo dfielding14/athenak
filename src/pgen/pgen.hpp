@@ -83,6 +83,7 @@ class ProblemGenerator {
   void LWImplode(ParameterInput *pin, const bool restart);
   void Monopole(ParameterInput *pin, const bool restart);
   void OrszagTang(ParameterInput *pin, const bool restart);
+  void PICMigrationRestartLedger(ParameterInput *pin, const bool restart);
   void PICPaperSmoothTSCInterface(ParameterInput *pin, const bool restart);
   void PICParallelShock(ParameterInput *pin, const bool restart);
   void Q006PaperMultispeciesOscillation(ParameterInput *pin, const bool restart);

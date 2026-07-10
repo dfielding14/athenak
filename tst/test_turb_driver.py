@@ -209,3 +209,24 @@ def test_driver_uses_three_force_components_for_isotropic_2d() -> None:
     assert "pdrive->nexp_stages == 1" in source
     assert "ApplyForcingWithStep(bdt, exact_single_stage);" in source
     assert "ApplyForcingWithStep(kick_dt, true);" in source
+
+
+def test_uniform_acceleration_regression_is_confined_to_custom_pgen() -> None:
+    driver_source = (REPO_ROOT / "src/srcterms/turb_driver.cpp").read_text(
+        encoding="utf-8"
+    )
+    pgen_source = (
+        REPO_ROOT / "src/pgen/turb_uniform_accel_test.cpp"
+    ).read_text(encoding="utf-8")
+
+    # Normal turbulence input cannot request a spatially uniform k=0 mode.
+    assert "test_accel_x1" not in driver_source
+    assert "SetManufacturedUniformForce" not in driver_source
+
+    # The custom pgen replaces only the force register after ordinary force setup;
+    # the stage task still calls the production AddForcing implementation.
+    assert 'tl_map.at("before_timeintegrator")' in pgen_source
+    assert "task_list->GetIDLastTask()" in pgen_source
+    assert "task_list->AddTask(SetManufacturedUniformForce" in pgen_source
+    assert "test_pack->pturb->force" in pgen_source
+    assert "ApplyForcingWithStep" not in pgen_source

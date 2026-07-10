@@ -1,0 +1,95 @@
+# Test-only one-cycle constant-acceleration invariant for MHD RK1/Heun.
+
+<comment>
+problem = production turbulence source update with a manufactured uniform force
+
+<job>
+basename = turb_driver_uniform_accel_mhd
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 1
+tlim = 0.01
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.6666666666666667
+
+<eos>
+iso_sound_speed = 1.0
+
+<coord>
+special_rel = false
+general_rel = false
+
+<problem>
+pgen_name = turb_uniform_accel_test
+test_rho0 = 1.25
+test_pressure0 = 1.0
+test_vx0 = 0.25
+test_vy0 = 0.5
+test_vz0 = 0.0
+test_accel_x1 = 4.0
+test_accel_x2 = -2.0
+test_accel_x3 = 1.0
+
+<turb_driving>
+turb_flag = 2
+constant_edot = false
+tcorr = 0.0
+dedt = 0.0
+spect_form = 2
+expo = 1.6666666666666667
+nlow = 1
+nhigh = 2
+driving_type = 0
+sol_fraction = 1.0
+dt_turb_update = 0.01
+rseed = 24680
+
+<output1>
+file_type = hst
+dcycle = 1
+data_format = %.17e
+
+<output2>
+file_type = bin
+variable = mhd_u
+id = mhd_u
+dcycle = 1
+ghost_zones = false
+
+<output3>
+file_type = bin
+variable = turb_force
+id = turb_force
+dcycle = 1
+ghost_zones = false

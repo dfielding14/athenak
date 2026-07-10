@@ -117,6 +117,7 @@ add_executable(
         pgen/tests/linear_wave.cpp
         pgen/tests/lw_implode.cpp
         pgen/tests/orszag_tang.cpp
+        pgen/tests/pic_migration_restart_ledger.cpp
         pgen/tests/pic_paper_smooth_tsc_interface.cpp
         pgen/tests/pic_parallel_shock.cpp
         pgen/tests/q006_paper_multispecies_oscillation.cpp

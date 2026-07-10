@@ -11,7 +11,8 @@
 - Review date: 2026-07-08
 - Review type: source/static review, implementation remediation, and focused runtime tests
 - Fresh AthenaK build or simulation performed during review: serial and MPI-enabled
-  Debug builds plus bounded serial/MPI-singleton smoke runs
+  builds, bounded serial/two-rank regressions, focused Frontier validation, and an
+  integrated post-fix `128^3` MHD/MHD-PIC turbulent-box matrix
 - Primary implementation reviewed:
   - `src/particles/`
   - `src/mhd/mhd_tasks.cpp` and `src/mhd/mhd_update.cpp`
@@ -47,17 +48,18 @@ The explicit-midpoint chronology, relativistic Boris kick, TSC gather/deposit,
 and opposite gas/particle momentum and kinetic-energy exchange are mutually
 consistent on uniform grids.
 
-The implementation is not yet generally science-ready. The immediate blockers
-are the turbulence driver, mixed particle migration/destruction compaction,
-AMR conservation, and feedback/timestep admissibility. The shock and Bell
-campaigns also have important physical-qualification gates that must remain
-separate from code-mechanics tests.
+The implementation is not yet generally science-ready. The original P0 turbulence
+driver and mixed particle migration/destruction blockers are closed on
+`PIC_development`; AMR conservation and feedback/timestep admissibility remain open.
+The shock and Bell campaigns also have important physical-qualification gates that
+must remain separate from code-mechanics tests.
 
 Until the corresponding items below are closed:
 
-- Treat current turbulent-box outputs as exploratory.
-- Do not trust multi-rank shock survivor populations when migration and physical
-  escape can occur on the same rank and stage.
+- Treat pre-fix turbulent-box outputs as exploratory; retained post-fix validation
+  remains explicitly development-only until the remaining P1 safeguards close.
+- Do not reinterpret pre-fix multi-rank shock survivor populations without provenance;
+  current-branch migration, escape-ledger, restart, and survivor parity are closed.
 - Do not claim exact particle-fluid conservation on AMR/SMR meshes.
 - Treat current nonlinear Bell runs as engineering candidates rather than
   qualifying physical evidence.
@@ -66,10 +68,10 @@ Until the corresponding items below are closed:
 
 ### 0. Protect interpretation of existing results
 
-- [ ] Mark current turbulent-box results as exploratory pending `TURB-1` through
-  `TURB-4`.
-- [ ] Record which shock outputs could have encountered simultaneous migration and
-  physical escape pending `MIG-1`.
+- [x] Mark pre-fix turbulent-box results as exploratory and keep post-fix validation
+  explicitly development-only.
+- [x] Protect pre-fix shock interpretation and close current-branch simultaneous
+  migration/escape survivor and ledger parity under `MIG-1`.
 - [ ] Keep AMR exact-conservation and nonlinear Bell claims fail-closed.
 
 ### 1. Fix active correctness blockers
@@ -80,6 +82,17 @@ Until the corresponding items below are closed:
 - [x] Fix `TURB-4`: signed isotropic Fourier-mode enumeration.
 - [x] Fix `MIG-1`: unified migration/destruction compaction.
 - [x] Add focused regressions for all five fixes before rerunning campaigns.
+
+Integrated closure evidence (development validation, nonqualifying): the retained
+`128^3` MHD/MHD-PIC matrix reaches every terminal time, keeps forcing-power error
+between `3.78e-4` and `5.09e-4` against a `1e-3` bound, and preserves
+`max(divB) < 2.76e-13`. MHD restart is bitwise exact. CR restart metadata is exact;
+floating differences affect `2.74e-4` of particle real values and at most `1.01e-4`
+of any mesh field. Their maximum field-scale float32 errors are `1.51` and `4.38`,
+respectively, within the documented eight-epsilon bound. Raw ULP counts are retained
+for audit but are not gated because signed values crossing zero make local ULP distance
+ill-conditioned. Four/eight-rank decomposition errors are at roundoff or exact. Worker
+reanalysis job `4968813` passes the complete matrix in `16.1 s` of analyzer time.
 
 ### 2. Add stability and admissibility protection
 
@@ -122,7 +135,7 @@ Until the corresponding items below are closed:
 
 ### TURB-1 — Incorrect constant-energy normalization root
 
-- Status: **FIXED, NEEDS VALIDATION**
+- Status: **CLOSED**
 - Severity: **P0**
 - Affected workflows: all current turbulent boxes with `constant_edot=true`
 - Evidence: `src/srcterms/turb_driver.cpp:908-966`
@@ -144,19 +157,20 @@ Required work:
 - [x] Verify measured `Delta E / Delta t` against configured `dedt` in serial and MPI.
 - [x] Verify restart continuation preserves the same forcing normalization.
 
-Current evidence: serial and true two-rank MHD/MHD-PIC runtime budgets pass. A
+Closure evidence: serial and true two-rank MHD/MHD-PIC runtime budgets pass. A
 cycle-one restart continuation reproduces the uninterrupted final force exactly and
-the final history to `1e-14`. An existing 2-D campaign checkpoint carrying the old
-nonnegative default bounds also loads successfully through the compatibility upgrade;
-its trajectory intentionally changes after the next corrected signed-mode refresh.
-Runtime forcing with a deliberately negative `m1` remains the closure gap.
+the final history to `1e-14`. A deliberately anti-correlated runtime case has
+`m1=-2.74606726e-2`; its predicted power is `6.000000019e-2` with a normalization
+residual of `1.92e-10`. Measured power errors decrease monotonically from
+`4.78e-4` to `2.88e-4` as CFL is halved twice. An existing 2-D campaign checkpoint
+with legacy nonnegative bounds also loads through the compatibility upgrade.
 
 Closure criterion: the measured injection agrees with the requested value within
 a documented discretization/roundoff tolerance for both signs of `m1`.
 
 ### TURB-2 — Midpoint/VL2 forcing double-counts quadratic kinetic energy
 
-- Status: **FIXED, NEEDS VALIDATION**
+- Status: **CLOSED**
 - Severity: **P0**
 - Affected workflows: all turbulent boxes using `paper_mhd_pic_vl2_tsc`
 - Evidence:
@@ -184,15 +198,18 @@ Required work:
 - [x] Make staged forcing obey the selected RK tableau.
 - [x] Use midpoint work without the extra stage-2 quadratic term, or implement a
   consistent once-per-cycle operator-split exact kick.
-- [ ] Add a production-path uniform constant-acceleration one-cycle invariant test.
+- [x] Add a production-path uniform constant-acceleration one-cycle invariant test.
 - [x] Test MHD-only and MHD-PIC modes to ensure selecting PIC does not change the
   intended forcing power.
 
-The implementation now applies only `rho*v.a` in every multi-stage RK source update;
-the finite-kick quadratic term is retained only for RK1 and explicit standalone
-impulses. A host tableau oracle covers uniform acceleration, while serial and true
-two-rank stochastic Heun MHD and explicit-midpoint MHD-PIC runtime budgets pass. A
-production-path manufactured constant-acceleration test remains required for closure.
+The implementation applies only `rho*v.a` in multi-stage RK source updates; the
+finite-kick quadratic term is retained only for RK1 and explicit standalone impulses.
+The test-only `turb_uniform_accel_test` pgen overwrites the force register after normal
+force setup while retaining the production RK/source/C2P/PIC task path. RK1 MHD,
+Heun MHD, and PIC-VL2 midpoint cases agree with the analytic one-cycle solution:
+history error `8.88e-16`, forcing-power error `8.38e-14`, emitted-force error zero,
+and float32 binary-field error `2.38e-8`. Heun and PIC midpoint final states agree to
+`5.55e-17`; the custom force hook is unavailable in normal production builds.
 
 Closure criterion: momentum and energy match the analytic constant-force solution
 through the expected order, and measured forcing power is independent of the PIC
@@ -200,7 +217,7 @@ integrator selection.
 
 ### TURB-3 — Current 2-D forcing is not solenoidal
 
-- Status: **FIXED, NEEDS VALIDATION**
+- Status: **CLOSED**
 - Severity: **P0** for 2-D turbulent boxes
 - Evidence:
   - nonzero default `kz`: `src/srcterms/turb_driver.cpp:92-97`
@@ -221,16 +238,17 @@ Required work:
 - [x] Add an emitted-force spectral-divergence regression.
 
 The supported isotropic driver retains the out-of-plane acceleration as a valid
-2D3V solenoidal component. The inconsistent legacy `driving_type=1` path is now
-rejected rather than exposed as a physical option. Emitted 2D3V and 3-D fields pass
-spectral-divergence checks; a dedicated 1-D emitted-field case remains for closure.
+2D3V solenoidal component. The inconsistent legacy `driving_type=1` path is rejected
+rather than exposed as a physical option. Emitted 1-D, 2D3V, and 3-D fields pass
+spectral-divergence checks: the 1-D longitudinal fraction is `2.16e-17` with unit
+transverse fraction, while the sampled 2D3V and 3-D maxima are below `3.25e-8`.
 
 Closure criterion: `sol_fraction=1` produces divergence consistent with roundoff and
 the selected discrete derivative in every supported dimensionality.
 
 ### TURB-4 — Fourier mode enumeration is angularly biased
 
-- Status: **FIXED, NEEDS VALIDATION**
+- Status: **CLOSED**
 - Severity: **P0** for isotropic-turbulence claims
 - Evidence: `src/srcterms/turb_driver.cpp:210-231,570-588`
 - Reference implementation: `src/srcterms/initial_perturbations.cpp:272-279,414-444`
@@ -245,20 +263,21 @@ Required work:
 - [x] Preserve deterministic seeding and restart behavior.
 - [x] Test mode counts and absence of duplicate conjugate pairs.
 - [x] Test the unweighted mode angular tensor for isotropy.
-- [ ] Test stochastic forcing covariance over enough realizations.
+- [x] Test stochastic forcing covariance over enough realizations.
 
 Default isotropic bounds are the complete signed cube and asymmetric explicit bounds
 are rejected. Runtime FFT checks confirm mixed-sign modes in 2-D and 3-D, and a
-cycle-one restart is bitwise identical in the emitted force. Physical-k isotropy is
-currently claimed only for equal active-axis box/tile lengths; stochastic covariance
-and broader decomposition evidence remain required for closure.
+cycle-one restart is bitwise identical in the emitted force. Covariance tests over
+256 deterministic seeds in both 3-D and 2D3V satisfy the finite-sample angular-tensor
+contract; repeated-seed force fields and decomposition outputs are exact. Physical-k
+isotropy remains scoped to equal active-axis box/tile lengths.
 
 Closure criterion: shell angular moments are isotropic within a documented finite-mode
 tolerance and reproducible across decompositions and restarts.
 
 ### MIG-1 — Mixed migration and destruction corrupt particle identity
 
-- Status: **FIXED, NEEDS VALIDATION**
+- Status: **CLOSED**
 - Severity: **P0** for multi-rank nonperiodic particle runs
 - Evidence: `src/bvals/bvals_part.cpp:976-1035`
 
@@ -276,10 +295,15 @@ Required work:
 - [x] Add a two-rank test with simultaneous inter-rank migration and physical escape.
 - [x] Compare complete tag/source/species/state inventories, not only particle counts.
 
-The exhaustive planner oracle and serial/two-rank end-to-end identity tests pass. In
-the MPI fixture both ranks send and physically destroy particles in the same migration
-call; all 180 survivor tags, metadata fields, positions, and velocities match serial
-exactly. Restart, repeated crossing, and ledger parity remain closure requirements.
+The exhaustive planner oracle and serial/two-rank end-to-end identity tests pass. The
+dedicated production-path closure fixture retains 128 survivors, every survivor crosses
+rank ownership at least twice and on both sides of a cycle-12 restart, and both ranks
+simultaneously migrate survivors and destroy particles. Four 16-particle destruction
+cohorts occur at cycles 4, 10, 16, and 22. All 26 real and four integer schema-7 fields
+are bitwise identical across serial/MPI2 and full/restart runs. Per-cycle and cumulative
+boundary ledgers agree exactly within their `2e-13` arithmetic tolerance, ending with
+64 escapes, mass `0.0625`, momentum-2 `0.1`, energy `0.0799999999999488`, and zero
+reflection or ledger errors.
 
 Closure criterion: exact survivor identity and boundary ledgers agree across serial,
 MPI, restart, and repeated boundary-crossing cases.
