@@ -667,8 +667,10 @@ void MHDEigensystem(const Real d, const Real v1, const Real v2, const Real v3,
     Real bt_starsq = (gm1 - (gm1 - 1.0)*y)*btsq;
     Real vaxsq = b1*b1/d;
     Real hp = h - (vaxsq + btsq/d);
-    Real twid_asq = std::max( (gm1*(hp-0.5*vsq) - (gm1-1.0)*x),
-                              static_cast<Real>(std::numeric_limits<float>::min()) );
+    Real twid_asq = std::max(
+        gm1*(hp - static_cast<Real>(0.5)*vsq) -
+            (gm1 - static_cast<Real>(1.0))*x,
+        static_cast<Real>(std::numeric_limits<float>::min()));
 
     // Compute fast- and slow-magnetosonic speeds (eq. B18)
     Real ct2 = bt_starsq/d;

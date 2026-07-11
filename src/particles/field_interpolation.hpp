@@ -44,14 +44,16 @@ void InterpolateTSCFields(const RegionIndcs indcs, const SizeView size,
   const Real dj = fy - fjc;
   const Real dk = three_d ? (fz - fkc) : 0.0;
 
-  auto weight = [](const Real d) {
+  auto weight = [](const Real d) -> Real {
     const Real ad = fabs(d);
-    if (ad < 0.5) return 0.75 - ad * ad;
-    if (ad < 1.5) {
-      const Real t = 1.5 - ad;
-      return 0.5 * t * t;
+    if (ad < static_cast<Real>(0.5)) {
+      return static_cast<Real>(0.75) - ad*ad;
     }
-    return 0.0;
+    if (ad < static_cast<Real>(1.5)) {
+      const Real t = static_cast<Real>(1.5) - ad;
+      return static_cast<Real>(0.5)*t*t;
+    }
+    return static_cast<Real>(0.0);
   };
 
   Real wx[3] = {weight(di + 1.0), weight(di), weight(di - 1.0)};

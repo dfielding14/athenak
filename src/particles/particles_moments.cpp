@@ -19,6 +19,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/nghbr_index.hpp"
+#include "mhd/mhd.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
 
@@ -28,9 +29,10 @@ namespace {
 // PR2 coupling inserts wrappers into stagen; keep PR1 default in before_timeintegrator.
 KOKKOS_INLINE_FUNCTION
 bool RunMomentWrappersAtStage(const bool couple_to_mhd, const bool paper_vl2,
-                              const int stage) {
+                              const bool full_hall, const int stage) {
   if (couple_to_mhd) {
-    if (paper_vl2) return (stage == 1) || (stage == 2);
+    if (paper_vl2) return full_hall ? (stage == 2) :
+                                     ((stage == 1) || (stage == 2));
     return (stage == 1);
   }
   return (stage == 0);
@@ -527,7 +529,7 @@ inline bool RunEdgeCurrentWrappersAtStage(const bool deposit_moments,
   if (!UseDirectEdgeCurrentDeposit(deposit_moments, couple_to_mhd, repr, mode)) {
     return false;
   }
-  return RunMomentWrappersAtStage(couple_to_mhd, paper_vl2, stage);
+  return RunMomentWrappersAtStage(couple_to_mhd, paper_vl2, false, stage);
 }
 
 // PR4b scaffolding: trajectory-based direct deposition requires pre-push old
@@ -590,7 +592,7 @@ TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
 
@@ -616,13 +618,210 @@ TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->InitRecv(NMOM);
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Zero the rho/J predictor used to construct the staged CR-Hall drift.
+
+TaskStatus Particles::ZeroCRHallMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall()) return TaskStatus::complete;
+  Kokkos::deep_copy(cr_hall_moments, static_cast<Real>(0.0));
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Post receives for the uniform-grid CR-Hall predictor moments.
+
+TaskStatus Particles::InitRecvCRHallMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall() || pbval_hall == nullptr) return TaskStatus::complete;
+  return pbval_hall->InitRecv(NHALL_MOM);
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Deposit initial or half-step predicted Q_cr and J_cr/c for full CR-Hall.
+
+TaskStatus Particles::DepositCRHallMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (!UsesFullCRHall()) return TaskStatus::complete;
+  if (nprtcl_thispack <= 0) return TaskStatus::complete;
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const int ng = indcs.ng;
+  const int i_min = is - ng;
+  const int i_max = ie + ng;
+  const int j_min = js - ng;
+  const int j_max = je + ng;
+  const int k_min = ks - ng;
+  const int k_max = ke + ng;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const bool predicted_state = (stage == 2);
+  const int gids = pmy_pack->gids;
+  const int nmb = pmy_pack->nmb_thispack;
+  const int nspecies_local = nspecies;
+  const Real qscale = deposit_qscale;
+  const Real light_speed = pic_cr_light_speed;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
+  auto &pr = prtcl_rdata;
+  auto &pi = prtcl_idata;
+  auto &qspecies = species_charge;
+  auto &hall_mom = cr_hall_moments;
+
+  par_for("deposit_cr_hall_predictor", DevExeSpace(), 0, nprtcl_thispack - 1,
+  KOKKOS_LAMBDA(const int p) {
+    const int m = pi(PGID, p) - gids;
+    const int sp = pi(PSP, p);
+    if (m < 0 || m >= nmb || sp < 0 || sp >= nspecies_local) return;
+
+    Real weight = pr(IPWT, p);
+    if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+    const Real state_x = predicted_state ? pr(IPEX, p) : pr(IPVX, p);
+    const Real state_y = predicted_state ? pr(IPEY, p) : pr(IPVY, p);
+    const Real state_z = predicted_state ? pr(IPEZ, p) : pr(IPVZ, p);
+    Real vx, vy, vz;
+    CRVelocityFromState(true, light_speed, state_x, state_y, state_z,
+                        vx, vy, vz);
+
+    const int dep_i_min =
+        MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x1))
+        ? i_min : is;
+    const int dep_i_max =
+        MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x1))
+        ? i_max : ie;
+    const int dep_j_min =
+        (multi_d &&
+         MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x2)))
+        ? j_min : js;
+    const int dep_j_max =
+        (multi_d &&
+         MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x2)))
+        ? j_max : je;
+    const int dep_k_min =
+        (three_d &&
+         MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x3)))
+        ? k_min : ks;
+    const int dep_k_max =
+        (three_d &&
+         MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x3)))
+        ? k_max : ke;
+    const Real q_macro = qscale*weight*qspecies(sp);
+    DepositCellCenteredMomentsShape<2>(
+        hall_mom, m, pr(IPX, p), pr(IPY, p), pr(IPZ, p),
+        size.d_view(m).x1min, size.d_view(m).x2min, size.d_view(m).x3min,
+        size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
+        is, js, ks, dep_i_min, dep_i_max, dep_j_min, dep_j_max,
+        dep_k_min, dep_k_max, multi_d, three_d, false, false, q_macro,
+        vx, vy, vz, 0.0, 0.0, 0.0, 0.0, 0.0, true);
+  });
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Send CR-Hall predictor moments to neighboring MeshBlocks.
+
+TaskStatus Particles::SendCRHallMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall() || pbval_hall == nullptr) return TaskStatus::complete;
+  return pbval_hall->PackAndSendCC(cr_hall_moments, coarse_moments);
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Receive and add CR-Hall predictor moments from neighboring MeshBlocks.
+
+TaskStatus Particles::RecvCRHallMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall() || pbval_hall == nullptr) return TaskStatus::complete;
+  return pbval_hall->RecvAndUnpackCC(
+      cr_hall_moments, coarse_moments, CCRecvOp::accumulate);
+}
+
+TaskStatus Particles::ClearRecvCRHallMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall() || pbval_hall == nullptr) return TaskStatus::complete;
+  return pbval_hall->ClearRecv();
+}
+
+TaskStatus Particles::ClearSendCRHallMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall() || pbval_hall == nullptr) return TaskStatus::complete;
+  return pbval_hall->ClearSend();
+}
+
+TaskStatus Particles::ApplyCRHallMomentPhysicalBCs(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall() || pbval_hall == nullptr) return TaskStatus::complete;
+  MeshBoundaryValues::HydroBCs(
+      pmy_pack, pbval_hall->u_in, cr_hall_moments);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Build v_H=(J_cr/c-Q_cr u_g)/(alpha_i rho_g+Q_cr) on cell centers.
+
+TaskStatus Particles::BuildCRHallDrift(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
+  if (!UsesFullCRHall()) return TaskStatus::complete;
+
+  const int nmb = pmy_pack->nmb_thispack;
+  const int ncells1 = cr_hall_drift.extent_int(4);
+  const int ncells2 = cr_hall_drift.extent_int(3);
+  const int ncells3 = cr_hall_drift.extent_int(2);
+  const Real alpha_i = pic_background_ion_q_over_mc;
+  auto hall_mom = cr_hall_moments;
+  auto hall_v = cr_hall_drift;
+  auto hall_diag = cr_hall_diagnostics;
+  auto w = pmy_pack->pmhd->w0;
+  auto bcc = pmy_pack->pmhd->bcc0;
+
+  par_for("build_cr_hall_drift", DevExeSpace(), 0, nmb - 1,
+          0, ncells3 - 1, 0, ncells2 - 1, 0, ncells1 - 1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real qcr = hall_mom(m, IMOM_RHO, k, j, i);
+    const Real qe = alpha_i*w(m, IDN, k, j, i) + qcr;
+    if (!(qe > static_cast<Real>(0.0)) || !Kokkos::isfinite(qe)) {
+      Kokkos::abort("CR-Hall closure requires positive finite electron charge");
+    }
+    const Real hx =
+        (hall_mom(m, IMOM_JX, k, j, i) - qcr*w(m, IVX, k, j, i))/qe;
+    const Real hy =
+        (hall_mom(m, IMOM_JY, k, j, i) - qcr*w(m, IVY, k, j, i))/qe;
+    const Real hz =
+        (hall_mom(m, IMOM_JZ, k, j, i) - qcr*w(m, IVZ, k, j, i))/qe;
+    hall_v(m, 0, k, j, i) = hx;
+    hall_v(m, 1, k, j, i) = hy;
+    hall_v(m, 2, k, j, i) = hz;
+    const Real b2 = SQR(bcc(m, IBX, k, j, i)) +
+                    SQR(bcc(m, IBY, k, j, i)) +
+                    SQR(bcc(m, IBZ, k, j, i));
+    hall_diag(m, 0, k, j, i) = fabs(qcr/qe);
+    hall_diag(m, 1, k, j, i) = (b2 > 0.0) ?
+        sqrt((hx*hx + hy*hy + hz*hz)*w(m, IDN, k, j, i)/b2) : 0.0;
+  });
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
@@ -940,7 +1139,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -1896,7 +2095,7 @@ TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -1917,7 +2116,7 @@ TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -1934,7 +2133,7 @@ TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -1951,7 +2150,7 @@ TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -1968,7 +2167,7 @@ TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -1985,7 +2184,7 @@ TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -2004,7 +2203,7 @@ TaskStatus Particles::ProlongateMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
@@ -2488,7 +2687,7 @@ TaskStatus Particles::ConvertCoupledCurrentRepresentation(Driver *pdriver, int s
   if (!deposit_moments) return TaskStatus::complete;
   if (!couple_moments_to_mhd) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
-                                stage)) {
+                                UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
   if (couple_j_to_efield_representation != CoupledCurrentRepresentation::edge_staggered) {

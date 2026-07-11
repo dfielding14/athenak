@@ -474,7 +474,10 @@ void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS(const DvceArray5D<Real
                     &g3u[S11], &g3u[S12], &g3u[S13], &g3u[S22], &g3u[S23], &g3u[S33]);
 
     // Calculate the metric derivatives
-    Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+    const Real one = static_cast<Real>(1.0);
+    Real idx[] = {one/size.d_view(m).dx1,
+                  one/size.d_view(m).dx2,
+                  one/size.d_view(m).dx3};
     Real dalpha_d[3] = {0.};
     for (int a = 0; a < ndim; a++) {
       dalpha_d[a] = Dx<NGHOST>(a, idx, adm.alpha, m, k, j, i);

@@ -112,7 +112,10 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `particles/pic_cr_light_speed > 0` selects the artificial CR light speed in
     momentum-state modes; `particles/pic_cr_initial_state = velocity|momentum`
     controls initializer interpretation
-  - `particles/pic_cr_hall_mode = off|current_to_ct_experimental`
+  - `particles/pic_cr_hall_mode = off|full|current_to_ct_experimental`;
+    `full` is the fixed large-scale CR-Hall closure for the uniform-grid
+    VL2/TSC model, while `current_to_ct_experimental` is the legacy
+    free-coefficient extension
   - `particles/pic_wave_damping_mode = off|ion_neutral_friction` with
     non-negative `particles/pic_ion_neutral_collision_rate`
   - `particles/pic_max_cell_cross` (bounded by the smallest active MeshBlock

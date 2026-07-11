@@ -77,6 +77,7 @@ pic_interp_scheme       = tsc
 pic_cr_light_speed      = 3.0
 pic_cr_initial_state    = momentum
 pic_cr_hall_mode        = off
+pic_background_ion_q_over_mc = 0.0
 pic_wave_damping_mode   = off
 pic_ion_neutral_collision_rate = 0.0
 pic_max_cell_cross      = 2
@@ -153,3 +154,8 @@ variable    = mhd_u_e
 id          = mhd_u_e
 dcycle      = 1
 ghost_zones = false
+
+<output7>
+file_type   = hst
+dcycle      = 1
+data_format = %.17e

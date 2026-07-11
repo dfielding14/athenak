@@ -1,0 +1,173 @@
+# Compact 3D finite-rigidity Bell pilot using the full CR-Hall closure.
+# This is a nonlinear workflow pilot, not a saturation or convergence claim.
+
+<comment>
+problem = compact 3D full-CR-Hall nonlinear Bell pilot
+
+<job>
+basename = pic_cr_hall_bell_nonlinear_pilot
+
+<mesh>
+nghost = 2
+nx1 = 80
+x1min = 0
+x1max = 5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 32
+x2min = 0
+x2max = 2
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 32
+x3min = 0
+x3max = 2
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+refinement = none
+
+<meshblock>
+nx1 = 20
+nx2 = 16
+nx3 = 16
+
+<time>
+evolution = dynamic
+integrator = rk2
+# The nonlinear feedback source needs a smaller step than the linear mode;
+# The old centered CT/energy route failed at the same physical time for
+# cfl=0.2 and 0.05. The face-consistent route returns to the efficient value.
+cfl_number = 0.2
+nlim = -1
+tlim = 2
+ndiag = 20
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+gamma = 1.6666666666666667
+
+<particles>
+particle_type = cosmic_ray
+ppc = 1
+pusher = boris_tsc
+nspecies = 1
+cr_distribution = center
+deposit_moments = true
+deposit_order = 2
+deposit_qscale = 4.8828125e-7
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_coeff = 1
+couple_moments_energy_coeff = 1
+cr_vx0 = 100
+cr_vy0 = 0
+cr_vz0 = 0
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_enable_2d3v = true
+pic_cr_light_speed = 1000
+pic_cr_initial_state = velocity
+pic_cr_hall_mode = full
+pic_background_ion_q_over_mc = 12.44070690821558
+pic_wave_damping_mode = off
+pic_deltaf_mode = off
+pic_expanding_box_mode = off
+pic_max_cell_cross = 2
+pic_theta_max = 0.3
+pic_load_balance_cost_per_particle = 1
+pic_sort_interval = 0
+pic_intermediate_arrays = auto
+pic_random_seed = 0
+
+<species0>
+mass = 1
+charge = 62.83185307179586
+vx0 = 100
+vy0 = 0
+vz0 = 0
+
+<problem>
+pgen_name = q019_nonlinear_bell_saturation_engineering
+
+<q019_nonlinear_bell_saturation_engineering>
+dimension = 3
+rho = 1
+pressure = 1
+b_g = 1
+u_a = 1
+wavelength = 1
+k0 = 6.283185307179586
+epsilon = 0.01
+omega = 62.83185307179586
+eigenmode_amplitude = 1e-3
+broadband_amplitude = 5e-4
+field_seed = 39019
+current_normalization = deposited_j_over_c_equals_2_b_g_k0
+deposit_qscale_semantics = root_cell_macro_charge_volume_aware
+initial_cr_charge_fraction_R = 0.01
+initial_cr_hall_parameter_Lambda = 1
+claim_scope = compact_full_hall_nonlinear_pilot_not_saturation_or_convergence
+
+<output1>
+file_type = bin
+variable = mhd_w_bcc
+id = mhd_w_bcc
+dt = 0.05
+ghost_zones = false
+
+<output2>
+file_type = bin
+variable = prtcl_rho
+id = prtcl_rho
+dt = 0.05
+ghost_zones = false
+
+<output3>
+file_type = bin
+variable = prtcl_jx
+id = prtcl_jx
+dt = 0.05
+ghost_zones = false
+
+<output4>
+file_type = bin
+variable = prtcl_jy
+id = prtcl_jy
+dt = 0.05
+ghost_zones = false
+
+<output5>
+file_type = bin
+variable = prtcl_jz
+id = prtcl_jz
+dt = 0.05
+ghost_zones = false
+
+<output6>
+file_type = bin
+variable = prtcl_dedt
+id = prtcl_dedt
+dt = 0.05
+ghost_zones = false
+
+<output7>
+file_type = rst
+id = rst
+dt = 1
+single_file_per_rank = false
+
+<output8>
+file_type = hst
+dcycle = 1
+data_format = %.17e

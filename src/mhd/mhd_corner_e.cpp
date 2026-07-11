@@ -12,6 +12,7 @@
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "diffusion/resistivity.hpp"
+#include "particles/particles.hpp"
 #include "mhd.hpp"
 
 #include "coordinates/coordinates.hpp"
@@ -29,6 +30,11 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
   int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto *ppart = pmy_pack->ppart;
+  const bool full_cr_hall =
+      (ppart != nullptr) && ppart->UsesFullCRHall();
+  DvceArray5D<Real> hall_v;
+  if (full_cr_hall) hall_v = ppart->cr_hall_drift;
   auto &size = pmy_pack->pmb->mb_size;
   auto &flat = pmy_pack->pcoord->coord_data.is_minkowski;
   auto &spin = pmy_pack->pcoord->coord_data.bh_spin;
@@ -147,8 +153,10 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
     } else {
       par_for("e_cc_2d", DevExeSpace(), 0, nmb1, js-1, je+1, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int j, int i) {
-        e3cc_(m,ks,j,i) = w0_(m,IVY,ks,j,i)*bcc_(m,IBX,ks,j,i) -
-                          w0_(m,IVX,ks,j,i)*bcc_(m,IBY,ks,j,i);
+        const Real hx = full_cr_hall ? hall_v(m, 0, ks, j, i) : 0.0;
+        const Real hy = full_cr_hall ? hall_v(m, 1, ks, j, i) : 0.0;
+        e3cc_(m,ks,j,i) = (w0_(m,IVY,ks,j,i) + hy)*bcc_(m,IBX,ks,j,i) -
+                          (w0_(m,IVX,ks,j,i) + hx)*bcc_(m,IBY,ks,j,i);
       });
     }
 
@@ -308,12 +316,18 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
     } else {
       par_for("e_cc_3d", DevExeSpace(), 0, nmb1, ks-1, ke+1, js-1, je+1, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        e1cc_(m,k,j,i) = w0_(m,IVZ,k,j,i)*bcc_(m,IBY,k,j,i) -
-                         w0_(m,IVY,k,j,i)*bcc_(m,IBZ,k,j,i);
-        e2cc_(m,k,j,i) = w0_(m,IVX,k,j,i)*bcc_(m,IBZ,k,j,i) -
-                         w0_(m,IVZ,k,j,i)*bcc_(m,IBX,k,j,i);
-        e3cc_(m,k,j,i) = w0_(m,IVY,k,j,i)*bcc_(m,IBX,k,j,i) -
-                         w0_(m,IVX,k,j,i)*bcc_(m,IBY,k,j,i);
+        const Real h1 = full_cr_hall ? hall_v(m, 0, k, j, i) : 0.0;
+        const Real h2 = full_cr_hall ? hall_v(m, 1, k, j, i) : 0.0;
+        const Real h3 = full_cr_hall ? hall_v(m, 2, k, j, i) : 0.0;
+        const Real v1 = w0_(m,IVX,k,j,i) + h1;
+        const Real v2 = w0_(m,IVY,k,j,i) + h2;
+        const Real v3 = w0_(m,IVZ,k,j,i) + h3;
+        e1cc_(m,k,j,i) = v3*bcc_(m,IBY,k,j,i) -
+                         v2*bcc_(m,IBZ,k,j,i);
+        e2cc_(m,k,j,i) = v1*bcc_(m,IBZ,k,j,i) -
+                         v3*bcc_(m,IBX,k,j,i);
+        e3cc_(m,k,j,i) = v2*bcc_(m,IBX,k,j,i) -
+                         v1*bcc_(m,IBY,k,j,i);
       });
     }
 

@@ -162,6 +162,15 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.csend_jedge = none;
   id.bcs_jedge = none;
   id.convert_j_edge = none;
+  id.zero_hall = none;
+  id.irecv_hall = none;
+  id.dep_hall = none;
+  id.send_hall = none;
+  id.recv_hall = none;
+  id.crecv_hall = none;
+  id.csend_hall = none;
+  id.bcs_hall = none;
+  id.build_hall = none;
 
   // particle integration done in "before_timeintegrator" task list
   id.adapt_deltaf = tl["before_timeintegrator"]->AddTask(&Particles::AdaptDeltaF,
@@ -235,6 +244,45 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
 
     TaskID sid = insert_dep;
     if (paper_vl2) {
+      if (UsesFullCRHall()) {
+        auto insert_hall_task = [&](TaskStatus (Particles::*func)(Driver *, int),
+                                    TaskID dependency, const char *name) {
+          const TaskID task = stagen_tl->InsertTask(
+              func, this, dependency, insert_loc);
+          if (task == TaskID(0)) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                      << __LINE__ << std::endl
+                      << "Failed to insert Particles::" << name << " before "
+                      << insert_name << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
+          return task;
+        };
+        id.zero_hall = insert_hall_task(
+            &Particles::ZeroCRHallMoments, sid, "ZeroCRHallMoments");
+        id.irecv_hall = insert_hall_task(
+            &Particles::InitRecvCRHallMoments, id.zero_hall,
+            "InitRecvCRHallMoments");
+        id.dep_hall = insert_hall_task(
+            &Particles::DepositCRHallMoments, id.irecv_hall,
+            "DepositCRHallMoments");
+        id.send_hall = insert_hall_task(
+            &Particles::SendCRHallMoments, id.dep_hall, "SendCRHallMoments");
+        id.recv_hall = insert_hall_task(
+            &Particles::RecvCRHallMoments, id.send_hall, "RecvCRHallMoments");
+        id.crecv_hall = insert_hall_task(
+            &Particles::ClearRecvCRHallMoments, id.recv_hall,
+            "ClearRecvCRHallMoments");
+        id.csend_hall = insert_hall_task(
+            &Particles::ClearSendCRHallMoments, id.crecv_hall,
+            "ClearSendCRHallMoments");
+        id.bcs_hall = insert_hall_task(
+            &Particles::ApplyCRHallMomentPhysicalBCs, id.csend_hall,
+            "ApplyCRHallMomentPhysicalBCs");
+        id.build_hall = insert_hall_task(
+            &Particles::BuildCRHallDrift, id.bcs_hall, "BuildCRHallDrift");
+        sid = id.build_hall;
+      }
       sid = stagen_tl->InsertTask(&Particles::Push, this, sid, insert_loc);
       if (sid == TaskID(0)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -580,6 +628,9 @@ std::uint64_t Particles::Q017DirectViewAllocationBytes() const {
          static_cast<std::uint64_t>(species_vz0.span())*sizeof(Real) +
          static_cast<std::uint64_t>(moments.span())*sizeof(Real) +
          static_cast<std::uint64_t>(coarse_moments.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(cr_hall_moments.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(cr_hall_drift.span())*sizeof(Real) +
+         static_cast<std::uint64_t>(cr_hall_diagnostics.span())*sizeof(Real) +
          static_cast<std::uint64_t>(paper_smooth_mom_records.span())*
              sizeof(PaperSmoothMomentRecord) +
          static_cast<std::uint64_t>(j_edge_x1e.span())*sizeof(Real) +
@@ -595,6 +646,7 @@ std::uint64_t Particles::Q017OwnedKokkosViewAllocationBytes() const {
   std::uint64_t bytes = Q017DirectViewAllocationBytes();
   if (pbval_part != nullptr) bytes += pbval_part->Q017OwnedKokkosViewAllocationBytes();
   if (pbval_mom != nullptr) bytes += pbval_mom->Q017OwnedKokkosViewAllocationBytes();
+  if (pbval_hall != nullptr) bytes += pbval_hall->Q017OwnedKokkosViewAllocationBytes();
   if (pbval_jedge != nullptr) bytes += pbval_jedge->Q017OwnedKokkosViewAllocationBytes();
   if (pmy_pack->pmesh->pmr != nullptr) {
     bytes += pmy_pack->pmesh->pmr->Q017OwnedKokkosViewAllocationBytes();

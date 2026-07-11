@@ -53,6 +53,9 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
   const int nji  = nx2*nx1;
   Real a1 = 1.0, a2 = 1.0, a3 = 1.0;
   auto *ppart = pmy_pack->ppart;
+  const bool full_cr_hall = (ppart != nullptr) && ppart->UsesFullCRHall();
+  DvceArray5D<Real> hall_v;
+  if (full_cr_hall) hall_v = ppart->cr_hall_drift;
   if ((ppart != nullptr) && ppart->UsesExpandingBox()) {
     const auto geom = particles::PICExpandingBoxGeometryAt(
         ppart->pic_expansion_law, ppart->pic_expansion_rate_x1,
@@ -158,6 +161,13 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
           cf = eos.IdealMHDFastSpeed(w_d, w_bz, w_bx, w_by);
         }
         max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
+        if (full_cr_hall) {
+          // The CR-Hall induction velocity is u_g+v_H. Add its directional
+          // speed to the ordinary fast-mode CFL bound.
+          max_dv1 += fabs(hall_v(m, 0, k, j, i));
+          max_dv2 += fabs(hall_v(m, 1, k, j, i));
+          max_dv3 += fabs(hall_v(m, 2, k, j, i));
+        }
       }
 
       min_dt1 = fmin((a1*mbsize.d_view(m).dx1/max_dv1), min_dt1);

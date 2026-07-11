@@ -110,6 +110,8 @@ void ComputeADMDecomposition(Real x, Real y, Real z, bool minkowski, Real a,
                Real * psi4,
                Real * gxx, Real * gxy, Real * gxz, Real * gyy, Real * gyz, Real * gzz,
                Real * Kxx, Real * Kxy, Real * Kxz, Real * Kyy, Real * Kyz, Real * Kzz) {
+  const Real one = static_cast<Real>(1.0);
+  const Real two = static_cast<Real>(2.0);
   // See comments above in ComputeMetricAndInverse
   Real rad = sqrt(SQR(x) + SQR(y) + SQR(z));
   Real r = sqrt((SQR(rad)-SQR(a)+sqrt(SQR(SQR(rad)-SQR(a))+4.0*SQR(a)*SQR(z)))/2.0);
@@ -137,7 +139,7 @@ void ComputeADMDecomposition(Real x, Real y, Real z, bool minkowski, Real a,
   *betax = 2.*H/(1. + 2.*H)*l_u[0];
   *betay = 2.*H/(1. + 2.*H)*l_u[1];
   *betaz = 2.*H/(1. + 2.*H)*l_u[2];
-  Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+  Real const beta_d[3] = {two*H*l_u[0], two*H*l_u[1], two*H*l_u[2]};
 
   *gxx = 2.*H*l_d[0]*l_d[0] + 1.;
   *gxy = 2.*H*l_d[0]*l_d[1];
@@ -169,25 +171,25 @@ void ComputeADMDecomposition(Real x, Real y, Real z, bool minkowski, Real a,
   Real const qb = SQR(r) + SQR(a);
   Real const qc = 3.0*SQR(a * z) - SQR(r)*SQR(r);
   Real const dH_d[3] = {
-    SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
-    SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,
-    SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))
+    SQR(H)*x/(SQR(r)*r) * qc/qa,
+    SQR(H)*y/(SQR(r)*r) * qc/qa,
+    SQR(H)*z/(SQR(SQR(r))*r) * ((qc*qb)/qa - two*SQR(a*r))
   };
 
   // \partial_i l_k
   Real const dl_dd[3][3] = {
     // \partial_x l_k
-    {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
-    x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
+    {x*r * (SQR(a)*x - two*a*r*y - SQR(r)*x)/(SQR(qb)*qa) + r/qb,
+    x*r * (SQR(a)*y + two*a*r*x - SQR(r)*y)/(SQR(qb)*qa) - a/qb,
     - x*z/(r*qa)},
     // \partial_y l_k
-    {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),
-    y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
+    {y*r * (SQR(a)*x - two*a*r*y - SQR(r)*x)/(SQR(qb)*qa) + a/qb,
+    y*r * (SQR(a)*y + two*a*r*x - SQR(r)*y)/(SQR(qb)*qa) + r/qb,
     - y*z/(r*qa)},
     // \partial_z l_k
-    {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),
-    z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
-    - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
+    {z/r * (SQR(a)*x - two*a*r*y - SQR(r)*x)/(qb*qa),
+    z/r * (SQR(a)*y + two*a*r*x - SQR(r)*y)/(qb*qa),
+    -SQR(z)/(SQR(r)*r)*qb/qa + one/r},
   };
 
   Real dg_ddd[3][3][3] = {0.0};
@@ -216,17 +218,17 @@ void ComputeADMDecomposition(Real x, Real y, Real z, bool minkowski, Real a,
   // Derivatives of the shift vector
   Real const dbeta_dd[3][3] = {
     // \partial_x \beta_i
-    {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
-    2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
-    2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
+    {two*dH_d[0]*l_d[0] + two*H*dl_dd[0][0],
+    two*dH_d[0]*l_d[1] + two*H*dl_dd[0][1],
+    two*dH_d[0]*l_d[2] + two*H*dl_dd[0][2]},
     // \partial_y \beta_i
-    {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
-    2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
-    2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
+    {two*dH_d[1]*l_d[0] + two*H*dl_dd[1][0],
+    two*dH_d[1]*l_d[1] + two*H*dl_dd[1][1],
+    two*dH_d[1]*l_d[2] + two*H*dl_dd[1][2]},
     // \partial_z \beta_i
-    {2.*dH_d[2]*l_d[0] + 2.*H*dl_dd[2][0],
-    2.*dH_d[2]*l_d[1] + 2.*H*dl_dd[2][1],
-    2.*dH_d[2]*l_d[2] + 2.*H*dl_dd[2][2]},
+    {two*dH_d[2]*l_d[0] + two*H*dl_dd[2][0],
+    two*dH_d[2]*l_d[1] + two*H*dl_dd[2][1],
+    two*dH_d[2]*l_d[2] + two*H*dl_dd[2][2]},
   };
   /*Real dbeta_dd[3][3];
   for (int a = 0; a < 3; a++) {

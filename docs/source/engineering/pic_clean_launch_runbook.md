@@ -66,10 +66,11 @@ PY
 
 This suite must exercise positive launches for `paper_mhd_pic_vl2_tsc` and
 `extended_mhd_pic`, then reject unsupported modes and invalid cross-mode
-compositions. In particular, `paper_mhd_pic_vl2_tsc` must reject
-direct-current CT, Hall, reduced ion-neutral, and adaptive-delta-f extension
-selections. The historical `pic_parser_contract_guards.py` harness remains
-available only to replay archived `paper_mhd_pic` chronology.
+compositions. `paper_mhd_pic_vl2_tsc` accepts the atomic large-scale CR-Hall
+closure through `pic_cr_hall_mode=full`, but must reject the separate
+`current_to_ct_experimental` source, reduced ion-neutral, and adaptive-delta-f
+extension selections. The historical `pic_parser_contract_guards.py` harness
+remains available only to replay archived `paper_mhd_pic` chronology.
 
 ## Runtime Identity
 
@@ -86,15 +87,18 @@ The identity line must be retained with the run log. For both
 ```text
 state=momentum_p_over_m
 deposition=tsc
-restart_schema=7
+restart_schema=8
 ```
 
-For `paper_mhd_pic_vl2_tsc`, also expect:
+For `paper_mhd_pic_vl2_tsc` with `pic_cr_hall_mode=off`, also expect:
 
 ```text
 physical_mode=paper_mhd_pic_vl2_tsc
 induction=ideal_mhd_only
 ```
+
+A full-closure launch instead reports `induction=cr_hall_full` and then prints the positive
+`PIC CR-Hall: background_ion_q_over_mc=<value>` normalization on the next line.
 
 An `extended_mhd_pic` launch without the Hall source also reports
 `induction=ideal_mhd_only`. A separately selected

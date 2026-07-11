@@ -1,0 +1,204 @@
+# Compact uniform-grid parallel-shock pilot for controlled CR-Hall comparisons.
+# This is engineering evidence, not a qualifying Section 5.4 reproduction.
+#
+# Run each case in its own directory. The full-Hall case is the deck default:
+#   job/basename=shock_full
+# Hall-off uses:
+#   job/basename=shock_off particles/pic_cr_hall_mode=off
+# The no-CR control uses:
+#   job/basename=shock_nocr particles/pic_cr_hall_mode=off \
+#   problem/ps_enable_injection=false problem/ps_enable_gas_subtraction=false
+
+<comment>
+problem = compact delayed-injection parallel shock with full CR-Hall closure
+
+<job>
+basename = shock_full
+
+<mesh>
+nghost = 2
+nx1 = 600
+x1min = 0.0
+x1max = 1800.0
+ix1_bc = reflect
+ox1_bc = inflow
+
+nx2 = 64
+x2min = 0.0
+x2max = 192.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 50
+nx2 = 32
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+tlim = 100.0
+nlim = 200000
+ndiag = 100
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.6666666666666667
+
+<coord>
+special_rel = false
+general_rel = false
+
+<particles>
+particle_type = cosmic_ray
+ppc = 0.0
+pusher = boris_tsc
+pic_enable_2d3v = true
+nspecies = 1
+cr_distribution = random
+deposit_moments = true
+deposit_order = 2
+# This is the Section 5.4 macro-particle mass at dx=3 and gives about 40
+# downstream particles per cell before transport losses.
+deposit_qscale = 9.0e-4
+couple_moments_to_mhd = true
+couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_fluid_feedback_order = mhd_src_terms
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+couple_moments_momentum_coeff = 1.0
+couple_moments_energy_coeff = 1.0
+cr_vx0 = 0.0
+cr_vy0 = 0.0
+cr_vz0 = 0.0
+pic_physical_mode = paper_mhd_pic_vl2_tsc
+pic_background_mode = coupled
+pic_feedback_mode = coupled
+pic_interp_scheme = tsc
+pic_cr_light_speed = 10000.0
+pic_cr_initial_state = momentum
+pic_cr_hall_mode = full
+# Physical background-ion q/(m c); the artificial particle light speed above
+# does not enter this normalization.
+pic_background_ion_q_over_mc = 1.0
+pic_wave_damping_mode = off
+pic_ion_neutral_collision_rate = 0.0
+pic_max_cell_cross = 2
+pic_theta_max = 0.3
+pic_deltaf_mode = off
+pic_deltaf_adapt_mode = off
+pic_deltaf_adapt_interval = 0.0
+pic_load_balance_cost_per_particle = 0.0
+pic_sort_interval = 0
+pic_intermediate_arrays = auto
+pic_random_seed = 23050101
+pic_expanding_box_mode = off
+
+<species0>
+mass = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = pic_parallel_shock
+ps_rho0 = 1.0
+ps_p0 = 1.0
+ps_u0 = 30.0
+ps_b0 = 1.0
+ps_eta = 1.0e-3
+ps_vinj_over_u0 = 3.16227766017
+ps_inject_half_width_cells = 0.5
+ps_shock_speed_model = ideal_surface
+# Form the hydrodynamic shock first, then begin coupled CR injection. There is
+# no startup cohort to remove because no particle is injected before t=45.
+ps_inject_t_start = 45.0
+ps_inject_t_stop = 1.0e9
+ps_remove_birth_time_before = -1.0
+ps_enable_injection = true
+ps_enable_gas_subtraction = true
+ps_enable_surface_averaged_subtraction = false
+ps_enable_curvature_amr = false
+ps_enable_conservation_ledger = false
+ps_escape_raw_events = false
+ps_allow_floor_clipped_subtraction = false
+ps_rho_floor_frac = 1.0e-6
+ps_p_floor_frac = 1.0e-8
+ps_inject_species = 0
+ps_inject_seed = 23050101
+ps_seed_noise_amp = 0.0
+ps_seed_noise_seed = 23050101
+ps_enable_frame_tracking = false
+ps_frame_mode = velocity
+ps_frame_t_start = 0.0
+ps_frame_t_ramp = 0.0
+ps_frame_vfrac = 1.0
+ps_frame_dv_max = 1.0e99
+ps_frame_apply_to_particles = true
+ps_frame_apply_to_inflow = true
+ps_frame_require_uniform = true
+ps_frame_diag_dcycle = 200
+ps_feedback_diag_dcycle = 0
+ps_recenter_x_target = 900.0
+ps_recenter_x_trigger = 1350.0
+ps_recenter_shift_cells = 2
+ps_recenter_vshock_model = -1.0
+
+<output1>
+file_type = hst
+dt = 1.0
+data_format = %.17e
+
+<output2>
+file_type = bin
+variable = mhd_w_bcc
+id = mhd_w_bcc
+dt = 5.0
+ghost_zones = false
+
+<output3>
+file_type = bin
+variable = prtcl_rho
+id = prtcl_rho
+dt = 5.0
+ghost_zones = false
+
+<output4>
+file_type = bin
+variable = prtcl_jx
+id = prtcl_jx
+dt = 5.0
+ghost_zones = false
+
+<output5>
+file_type = bin
+variable = prtcl_jy
+id = prtcl_jy
+dt = 5.0
+ghost_zones = false
+
+<output6>
+file_type = bin
+variable = prtcl_jz
+id = prtcl_jz
+dt = 5.0
+ghost_zones = false
+
+<output7>
+file_type = pvtk
+variable = prtcl_all
+id = prtcl_all
+dt = 10.0
+
+<output8>
+file_type = rst
+dt = 10.0

@@ -44,7 +44,7 @@ _RUNTIME_IDENTITY_TOKENS = [
     "background=coupled",
     "feedback=coupled",
     "induction=ideal_mhd_only",
-    "restart_schema=7",
+    "restart_schema=8",
 ]
 _RESULTS = {}
 

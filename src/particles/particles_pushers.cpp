@@ -86,6 +86,36 @@ void ApplyReflectiveParticleBCs(const int m, const SizeView size,
   }
 }
 
+KOKKOS_INLINE_FUNCTION
+void BorisMomentumStep(const Real q_over_mc, const Real dt,
+                       const Real cex, const Real cey, const Real cez,
+                       const Real bx, const Real by, const Real bz,
+                       const Real light_speed,
+                       Real &state_x, Real &state_y, Real &state_z) {
+  const Real qdt_2m = static_cast<Real>(0.5)*q_over_mc*dt;
+  state_x += qdt_2m*cex;
+  state_y += qdt_2m*cey;
+  state_z += qdt_2m*cez;
+  const Real inv_gamma_minus = static_cast<Real>(1.0)/
+      CRLorentzFactor(state_x, state_y, state_z, light_speed);
+  const Real tx = qdt_2m*bx*inv_gamma_minus;
+  const Real ty = qdt_2m*by*inv_gamma_minus;
+  const Real tz = qdt_2m*bz*inv_gamma_minus;
+  const Real t2 = tx*tx + ty*ty + tz*tz;
+  const Real rot_x = static_cast<Real>(2.0)*tx/(static_cast<Real>(1.0) + t2);
+  const Real rot_y = static_cast<Real>(2.0)*ty/(static_cast<Real>(1.0) + t2);
+  const Real rot_z = static_cast<Real>(2.0)*tz/(static_cast<Real>(1.0) + t2);
+  const Real state_px = state_x + (state_y*tz - state_z*ty);
+  const Real state_py = state_y + (state_z*tx - state_x*tz);
+  const Real state_pz = state_z + (state_x*ty - state_y*tx);
+  state_x += state_py*rot_z - state_pz*rot_y;
+  state_y += state_pz*rot_x - state_px*rot_z;
+  state_z += state_px*rot_y - state_py*rot_x;
+  state_x += qdt_2m*cex;
+  state_y += qdt_2m*cey;
+  state_z += qdt_2m*cez;
+}
+
 }  // namespace
 
 KOKKOS_INLINE_FUNCTION
@@ -396,10 +426,10 @@ TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  // Stage 1 deposits predictor rho/J at x_ini without changing particle
-  // momenta. Stage 2 applies the full-step Boris kick at x_mid before the
-  // impulse deposit. Position updates are a separate post-deposit task.
-  if (stage == 1) return TaskStatus::complete;
+  // Full CR-Hall uses a stage-1 half-kick only as a current predictor. The
+  // actual state is changed only by the stage-2 full kick at x_mid.
+  const bool full_hall = UsesFullCRHall();
+  if (stage == 1 && !full_hall) return TaskStatus::complete;
   if (pmy_pack->pmhd == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -439,6 +469,7 @@ TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
   auto &size = pmy_pack->pmb->mb_size;
   auto bcc = pmy_pack->pmhd->bcc0;
   auto w0 = pmy_pack->pmhd->w0;
+  auto hall_v = cr_hall_drift;
   auto mspecies = species_mass;
   size.template sync<DevExeSpace>();
   auto size_view = size;
@@ -467,37 +498,35 @@ TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
           Bz = 0.0;
           Uz = 0.0;
         }
-        const Real cEx = -(Uy*Bz - Uz*By);
-        const Real cEy = -(Uz*Bx - Ux*Bz);
-        const Real cEz = use_vz_component ? -(Ux*By - Uy*Bx) :
+        Real Hx = 0.0, Hy = 0.0, Hz = 0.0;
+        if (full_hall) {
+          Real unused_x = 0.0, unused_y = 0.0, unused_z = 0.0;
+          InterpolateTSCFields(
+              indcs, size_view, hall_v, w0, true, m, x, y, z,
+              Hx, Hy, Hz, unused_x, unused_y, unused_z, allow_2d3v);
+        }
+        const Real adv_x = Ux + Hx;
+        const Real adv_y = Uy + Hy;
+        const Real adv_z = Uz + Hz;
+        const Real cEx = -(adv_y*Bz - adv_z*By);
+        const Real cEy = -(adv_z*Bx - adv_x*Bz);
+        const Real cEz = use_vz_component ? -(adv_x*By - adv_y*Bx) :
                                            static_cast<Real>(0.0);
         const Real state_x_before = state_x;
         const Real state_y_before = state_y;
         const Real state_z_before = state_z;
-        const Real qdt_2m = pr(IPM, p)*dt_half;
-
-        state_x += qdt_2m*cEx;
-        state_y += qdt_2m*cEy;
-        state_z += qdt_2m*cEz;
-        const Real inv_gamma_minus =
-            static_cast<Real>(1.0)/
-            CRLorentzFactor(state_x, state_y, state_z, light_speed);
-        const Real tx = qdt_2m*Bx*inv_gamma_minus;
-        const Real ty = qdt_2m*By*inv_gamma_minus;
-        const Real tz = qdt_2m*Bz*inv_gamma_minus;
-        const Real t2 = tx*tx + ty*ty + tz*tz;
-        const Real rot_x = static_cast<Real>(2.0)*tx/(static_cast<Real>(1.0) + t2);
-        const Real rot_y = static_cast<Real>(2.0)*ty/(static_cast<Real>(1.0) + t2);
-        const Real rot_z = static_cast<Real>(2.0)*tz/(static_cast<Real>(1.0) + t2);
-        const Real state_px = state_x + (state_y*tz - state_z*ty);
-        const Real state_py = state_y + (state_z*tx - state_x*tz);
-        const Real state_pz = state_z + (state_x*ty - state_y*tx);
-        state_x += state_py*rot_z - state_pz*rot_y;
-        state_y += state_pz*rot_x - state_px*rot_z;
-        state_z += state_px*rot_y - state_py*rot_x;
-        state_x += qdt_2m*cEx;
-        state_y += qdt_2m*cEy;
-        state_z += qdt_2m*cEz;
+        const Real push_dt = (stage == 1) ? dt_half : dt;
+        BorisMomentumStep(pr(IPM, p), push_dt, cEx, cEy, cEz,
+                          Bx, By, Bz, light_speed,
+                          state_x, state_y, state_z);
+        if (stage == 1) {
+          // These diagnostics slots are scratch between the two VL2 stages.
+          // The real kick overwrites them with cE at the end of stage 2.
+          pr(IPEX, p) = state_x;
+          pr(IPEY, p) = state_y;
+          pr(IPEZ, p) = use_vz_component ? state_z : static_cast<Real>(0.0);
+          return;
+        }
 
         const Real energy_before =
             CRKineticEnergy(true, light_speed, state_x_before, state_y_before,
@@ -567,6 +596,7 @@ TaskStatus Particles::DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage) {
   const bool three_d = pmy_pack->pmesh->three_d;
   const bool allow_2d3v = (pic_enable_2d3v && (nx3 == 1));
   const bool use_vz_component = (nx3 > 1) || allow_2d3v;
+  const bool full_hall = UsesFullCRHall();
   const bool track_displacement_local = track_displacement;
   const bool boundary_ledger = pic_boundary_conservation_ledger;
   const Real qscale = deposit_qscale;
@@ -621,6 +651,24 @@ TaskStatus Particles::DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage) {
         const Real state_x_before_reflect = state_x;
         const Real state_y_before_reflect = state_y;
         const Real state_z_before_reflect = state_z;
+        if (stage == 1 && full_hall) {
+          // The stage-2 Hall current uses the scratch half-kick. Reflect that
+          // predicted momentum with the true particle at physical walls.
+          Real predicted_x = pr(IPEX, p);
+          Real predicted_y = pr(IPEY, p);
+          Real predicted_z = pr(IPEZ, p);
+          Real predicted_pos_x = x;
+          Real predicted_pos_y = y;
+          Real predicted_pos_z = z;
+          ApplyReflectiveParticleBCs(
+              m, size_view, mb_bcs_view, multi_d, three_d,
+              predicted_pos_x, predicted_pos_y, predicted_pos_z,
+              predicted_x, predicted_y, predicted_z);
+          pr(IPEX, p) = predicted_x;
+          pr(IPEY, p) = predicted_y;
+          pr(IPEZ, p) = use_vz_component ? predicted_z :
+                                             static_cast<Real>(0.0);
+        }
         ApplyReflectiveParticleBCs(m, size_view, mb_bcs_view, multi_d, three_d,
                                    x, y, z, state_x, state_y, state_z);
         if (boundary_ledger &&

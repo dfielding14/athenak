@@ -33,16 +33,18 @@ Primitive::UnitSystem Primitive::MakeGeometricKilometer() {
     1.0, // c
     1.0, // G
     1.0, // kb
-    CGS.Msun * CGS.G/(CGS.c*CGS.c)*1e-5, // Msun, km
-    CGS.MeV * CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // MeV, km
+    CGS.Msun * CGS.G/(CGS.c*CGS.c)*static_cast<Real>(1e-5), // Msun, km
+    CGS.MeV * CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*
+        static_cast<Real>(1e-5), // MeV, km
 
     1e-5, // length, km
-    CGS.c * 1e-5, // time, km
+    CGS.c * static_cast<Real>(1e-5), // time, km
     1e15, // number density, km^-3
-    CGS.G/(CGS.c*CGS.c)*1e-5, // mass, km
-    CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // energy, km
-    CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e10, // pressure, km^-2
-    CGS.kb*CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // temperature, km
+    CGS.G/(CGS.c*CGS.c)*static_cast<Real>(1e-5), // mass, km
+    CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*static_cast<Real>(1e-5), // energy, km
+    CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*static_cast<Real>(1e10), // pressure, km^-2
+    CGS.kb*CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*
+        static_cast<Real>(1e-5), // temperature, km
   };
 }
 
@@ -57,8 +59,8 @@ Primitive::UnitSystem Primitive::MakeGeometricSolar() {
     (CGS.c*CGS.c)/(CGS.G * CGS.Msun), // length, Msun
     PS_CUBE( CGS.c)/(CGS.G * CGS.Msun), // time, Msun
     PS_CUBE( (CGS.G * CGS.Msun)/(CGS.c*CGS.c) ), // number density, Msun^-3
-    1.0 / CGS.Msun, // mass, Msun
-    1.0 / (CGS.Msun * CGS.c*CGS.c), // energy, Msun
+    static_cast<Real>(1.0) / CGS.Msun, // mass, Msun
+    static_cast<Real>(1.0) / (CGS.Msun * CGS.c*CGS.c), // energy, Msun
     PS_CUBE( CGS.G/(CGS.c*CGS.c) ) * PS_SQR( CGS.Msun/(CGS.c) ), // pressure, Msun^-2
 //     CGS.kb / (CGS.Msun * CGS.c*CGS.c), // temperature, Msun
     CGS.kb/CGS.MeV, // temperature, MeV
@@ -68,28 +70,29 @@ Primitive::UnitSystem Primitive::MakeGeometricSolar() {
 Primitive::UnitSystem Primitive::MakeNuclear() {
   return UnitSystem{
     1.0, // c
-    CGS.G * CGS.MeV/(CGS.c*CGS.c*CGS.c*CGS.c)*1e13, // G, fm
+    CGS.G * CGS.MeV/(CGS.c*CGS.c*CGS.c*CGS.c)*
+        static_cast<Real>(1e13), // G, fm
     1.0, // kb
     CGS.Msun * (CGS.c*CGS.c) / CGS.MeV, // Msun, MeV
     1.0, // MeV
 
     1e13, // length, fm
-    CGS.c * 1e13, // time, fm
+    CGS.c * static_cast<Real>(1e13), // time, fm
     1e-39, // number density, fm^-3
     (CGS.c*CGS.c) / CGS.MeV, // mass, MeV
-    1.0/CGS.MeV, // energy, MeV
-    1e-39/CGS.MeV, // pressure, MeV/fm^3
+    static_cast<Real>(1.0)/CGS.MeV, // energy, MeV
+    static_cast<Real>(1e-39)/CGS.MeV, // pressure, MeV/fm^3
     CGS.kb/CGS.MeV, // temperature, MeV
   };
 }
 
 Primitive::UnitSystem Primitive::MakeMKS() {
   return UnitSystem{
-    CGS.c/1e2,        // c
-    CGS.G/1e3,        // G
-    CGS.kb/1e7,       // kb
-    CGS.Msun/1e3,     // Msun
-    CGS.MeV/1e7,      // MeV
+    CGS.c/static_cast<Real>(1e2),        // c
+    CGS.G/static_cast<Real>(1e3),        // G
+    CGS.kb/static_cast<Real>(1e7),       // kb
+    CGS.Msun/static_cast<Real>(1e3),     // Msun
+    CGS.MeV/static_cast<Real>(1e7),      // MeV
 
     1e-2,             // 1 cm in m
     1.0,              // 1 s in s

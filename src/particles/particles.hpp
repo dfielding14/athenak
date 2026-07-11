@@ -49,7 +49,7 @@ enum class PICFeedbackMode { coupled, test_particle };
 enum class PICPhysicalMode { engineering = 0, paper_test_particle = 1,
                              paper_mhd_pic = 2, extended_mhd_pic = 3,
                              paper_mhd_pic_vl2_tsc = 4 };
-enum class PICCRHallMode { off, current_to_ct_experimental };
+enum class PICCRHallMode { off, current_to_ct_experimental, full };
 enum class PICWaveDampingMode { off, ion_neutral_friction };
 enum class PICCRInitialState { velocity, momentum };
 enum class PICInterpolationScheme { tsc };
@@ -118,6 +118,15 @@ struct ParticlesTaskIDs {
   TaskID csend_jedge;
   TaskID bcs_jedge;
   TaskID convert_j_edge;
+  TaskID zero_hall;
+  TaskID irecv_hall;
+  TaskID dep_hall;
+  TaskID send_hall;
+  TaskID recv_hall;
+  TaskID crecv_hall;
+  TaskID csend_hall;
+  TaskID bcs_hall;
+  TaskID build_hall;
 };
 
 namespace particles {
@@ -177,8 +186,9 @@ PICExpandingBoxGeometry PICExpandingBoxGeometryAt(
   const Real a1 = PICScaleFactor(law, rate_x1, time);
   const Real a2 = PICScaleFactor(law, rate_x2, time);
   const Real a3 = PICScaleFactor(law, rate_x3, time);
-  return {a1, a2, a3, 1.0/a1, 1.0/a2, 1.0/a3,
-          1.0/(a2*a3), 1.0/(a1*a3), 1.0/(a1*a2)};
+  const Real one = static_cast<Real>(1.0);
+  return {a1, a2, a3, one/a1, one/a2, one/a3,
+          one/(a2*a3), one/(a1*a3), one/(a1*a2)};
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -274,6 +284,7 @@ class Particles {
   PICExpandingBoxMode pic_expanding_box_mode = PICExpandingBoxMode::off;
   PICExpansionLaw pic_expansion_law = PICExpansionLaw::linear;
   Real pic_cr_light_speed = 1.0;  // artificial CR light speed in momentum-state modes
+  Real pic_background_ion_q_over_mc = 0.0; // physical background-ion q/(m c)
   Real pic_ion_neutral_collision_rate = 0.0; // reduced high-frequency IN damping rate
   int pic_max_cell_cross = 2;     // particle cell-crossing timestep limit
   Real pic_theta_max = 0.3;       // Boris gyro-angle timestep limit
@@ -331,6 +342,10 @@ class Particles {
   static constexpr int IMOM_EBDOT = 8;
   DvceArray5D<Real> moments;
   DvceArray5D<Real> coarse_moments;
+  static constexpr int NHALL_MOM = 4;
+  DvceArray5D<Real> cr_hall_moments;
+  DvceArray5D<Real> cr_hall_drift;
+  DvceArray5D<Real> cr_hall_diagnostics;
   DvceArray1D<PaperSmoothMomentRecord> paper_smooth_mom_records;
   DvceArray4D<Real> j_edge_x1e, j_edge_x2e, j_edge_x3e;
   DvceArray1D<Real> x1_old, x2_old, x3_old;
@@ -348,6 +363,7 @@ class Particles {
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
   MeshBoundaryValuesCC *pbval_mom = nullptr;
+  MeshBoundaryValuesCC *pbval_hall = nullptr;
   MeshBoundaryValuesFC *pbval_jedge = nullptr;
   PaperSmoothMomentRecordTransport *paper_smooth_mom_transport = nullptr;
   ParticleDestructionObserverFnPtr particle_destruction_observer = nullptr;
@@ -387,6 +403,15 @@ class Particles {
   TaskStatus ClearSendEdgeCurrents(Driver *pdriver, int stage);
   TaskStatus ApplyEdgeCurrentPhysicalBCs(Driver *pdriver, int stage);
   TaskStatus ConvertCoupledCurrentRepresentation(Driver *pdriver, int stage);
+  TaskStatus ZeroCRHallMoments(Driver *pdriver, int stage);
+  TaskStatus InitRecvCRHallMoments(Driver *pdriver, int stage);
+  TaskStatus DepositCRHallMoments(Driver *pdriver, int stage);
+  TaskStatus SendCRHallMoments(Driver *pdriver, int stage);
+  TaskStatus RecvCRHallMoments(Driver *pdriver, int stage);
+  TaskStatus ClearRecvCRHallMoments(Driver *pdriver, int stage);
+  TaskStatus ClearSendCRHallMoments(Driver *pdriver, int stage);
+  TaskStatus ApplyCRHallMomentPhysicalBCs(Driver *pdriver, int stage);
+  TaskStatus BuildCRHallDrift(Driver *pdriver, int stage);
 
   // Cosmic ray specific methods
   void InitializeCosmicRays(ParameterInput *pin);
@@ -436,10 +461,13 @@ class Particles {
   bool UsesPICWaveDamping() const {
     return pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction;
   }
-  static constexpr int PIC_RESTART_SCHEMA_VERSION = 7;
+  bool UsesFullCRHall() const {
+    return pic_cr_hall_mode == PICCRHallMode::full;
+  }
+  static constexpr int PIC_RESTART_SCHEMA_VERSION = 8;
   static constexpr int NPIC_RESTART_MODEL_INTS = 31;
-  static constexpr int NPIC_RESTART_CONFIG_REALS = 34;
-  static constexpr int NPIC_RESTART_MODEL_REALS = 37;
+  static constexpr int NPIC_RESTART_CONFIG_REALS = 35;
+  static constexpr int NPIC_RESTART_MODEL_REALS = 38;
   std::uint64_t RestartSpeciesConfigHash() const {
     std::uint64_t hash = 14695981039346656037ULL;
     auto hash_bytes = [&hash](const auto &value) {
@@ -509,6 +537,7 @@ class Particles {
                    deposit_qscale, couple_j_to_efield_coeff,
                    couple_moments_momentum_coeff, couple_moments_energy_coeff,
                    pic_theta_max, pic_load_balance_cost_per_particle,
+                   pic_background_ion_q_over_mc,
                    r_scale, rho_scale, m_gal, a_gal, z_gal, r_200, rho_mean,
                    par_grav_dx,
                    pic_deltaf_adaptive_xi, pic_deltaf_adaptive_p0,

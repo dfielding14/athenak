@@ -31,14 +31,20 @@ def _remove_outputs(basename):
         pattern = os.path.join(_athena_exe_dir(), directory, basename + '.*')
         for path in glob.glob(pattern):
             os.remove(path)
+    history = os.path.join(_athena_exe_dir(), basename + '.mhd.hst')
+    if os.path.isfile(history):
+        os.remove(history)
 
 
-def _run_case(basename, coeff):
+def _run_case(basename, coeff, hall_mode='off'):
     command = [
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'particles/couple_j_to_efield_coeff=' + str(coeff),
+        'particles/pic_cr_hall_mode=' + hall_mode,
     ]
+    if hall_mode == 'full':
+        command.append('particles/pic_background_ion_q_over_mc=10.0')
     logger.info('Executing %s: %s', basename, ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
                           capture_output=True, text=True)
@@ -47,8 +53,9 @@ def _run_case(basename, coeff):
         raise RuntimeError('Command failed for ' + basename + '\n' + output)
     if 'physical_mode=paper_mhd_pic_vl2_tsc' not in output:
         raise RuntimeError('Missing paper-mode runtime identity for ' + basename)
-    if 'induction=ideal_mhd_only' not in output:
-        raise RuntimeError('Paper mode enabled a non-ideal induction path')
+    induction = 'cr_hall_full' if hall_mode == 'full' else 'ideal_mhd_only'
+    if 'induction=' + induction not in output:
+        raise RuntimeError('Unexpected induction identity for ' + basename)
 
 
 def _output_files(basename, directory, suffix):
@@ -128,22 +135,29 @@ def _read_particle_state(path):
     }
 
 
-def _measure_case(basename):
+def _measure_case(basename, hall_mode):
     vtk_paths = _output_files(basename, 'pvtk', 'prtcl_all.*.part.vtk')
-    return {
+    result = {
         'particles_initial': _read_particle_state(vtk_paths[0]),
         'particles_final': _read_particle_state(vtk_paths[-1]),
         'mhd': _read_mhd_series(basename),
     }
+    if hall_mode == 'full':
+        history_path = os.path.join(
+            _athena_exe_dir(), basename + '.mhd.hst')
+        result['hall_history'] = np.atleast_2d(np.loadtxt(history_path))[:, -2:]
+    return result
 
 
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
-    for label, coeff in [('coeff0', 0.0), ('coeff7', 7.0)]:
+    cases = [('coeff0', 0.0, 'off'), ('coeff7', 7.0, 'off'),
+             ('hall_full', 0.0, 'full')]
+    for label, coeff, hall_mode in cases:
         basename = 'pic_paper_coupling_' + label
         _remove_outputs(basename)
-        _run_case(basename, coeff)
-        _RESULTS[label] = _measure_case(basename)
+        _run_case(basename, coeff, hall_mode)
+        _RESULTS[label] = _measure_case(basename, hall_mode)
 
 
 def _check_close(label, measured, expected, atol):
@@ -187,4 +201,12 @@ def analyze():
     ok = _check_close('coefficient_invariant_particle_momentum',
                       coeff0['particles_final']['momentum'],
                       coeff7['particles_final']['momentum'], 1.0e-12) and ok
+    hall = _RESULTS['hall_full']
+    hall_history = hall['hall_history']
+    ok = np.all(np.isfinite(hall_history)) and ok
+    ok = hall_history[-1, 0] > 0.0 and hall_history[-1, 1] > 0.0 and ok
+    hall_difference = np.max(np.abs(
+        hall['particles_final']['momentum'] - coeff0['particles_final']['momentum']))
+    logger.info('full-Hall particle-momentum difference=% .8e', hall_difference)
+    ok = hall_difference > 1.0e-8 and ok
     return ok

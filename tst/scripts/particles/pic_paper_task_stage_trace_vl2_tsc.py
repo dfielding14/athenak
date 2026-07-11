@@ -117,7 +117,7 @@ _RUNTIME_TOKENS = [
     'induction=ideal_mhd_only',
     'deposition=tsc',
     'wave_damping=off',
-    'restart_schema=7',
+    'restart_schema=8',
 ]
 
 

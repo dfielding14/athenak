@@ -968,7 +968,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
   #if MPI_PARALLEL_ENABLED
     Real m[4], gm[4];
     m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-    MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(m, gm, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
     t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
   #endif
 
@@ -1020,11 +1020,11 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 
   #if MPI_PARALLEL_ENABLED
     m[0] = t0; m[1] = t1; m[2] = totvol;
-    MPI_Allreduce(m, gm, 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(m, gm, 3, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
     t0 = gm[0]; t1 = gm[1]; totvol = gm[2];
   #endif
 
-    t0 = std::max(t0, 1.0e-20);
+    t0 = std::max(t0, static_cast<Real>(1.0e-20));
 
     Real m0 = t0;
     Real m1 = t1;
@@ -1309,7 +1309,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt, bool exact_impulse) {
     #if MPI_PARALLEL_ENABLED
       Real m[4], gm[4];
       m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-      MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(m, gm, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
       t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
     #endif
 

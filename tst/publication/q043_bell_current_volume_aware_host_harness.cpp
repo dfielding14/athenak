@@ -13,7 +13,6 @@
 
 int main(int argc, char **argv) {
   using q043_bell_current_volume_aware::DepositedJOverC;
-  using q043_bell_current_volume_aware::EigenmodeAtPhase;
   using q043_bell_current_volume_aware::HasRequiredDepositedJOverC;
   using q043_bell_current_volume_aware::HasRequiredSpeciesChargeOverMass;
   using q043_bell_current_volume_aware::ModeParameters;
@@ -24,6 +23,7 @@ int main(int argc, char **argv) {
   using q043_bell_current_volume_aware::SourceMode;
   using q043_bell_current_volume_aware::SourceModeAmplitudeIsValid;
   using q043_bell_current_volume_aware::SourceModeSpeciesMassIsValid;
+  using q043_bell_current_volume_aware::UnstableEigenmodeAtPhase;
 
   if (argc == 6) {
     const std::string mode_name(argv[1]);
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
   const ModeParameters parameters = {
     2, 0.4, 1.0e-6, 1.0, 1.0, 1.0, 1.0, k0
   };
-  const auto sample = EigenmodeAtPhase(parameters, 0.37);
+  const auto sample = UnstableEigenmodeAtPhase(parameters, 0.37);
   std::cout << "shared_carrier " << sample.magnetic.x1 << ' '
             << sample.magnetic.x2 << ' ' << sample.magnetic.x3 << ' '
             << sample.velocity.x1 << ' ' << sample.velocity.x2 << ' '
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
   const ModeParameters uniform_parameters = {
     2, 0.4, 0.0, 1.0, 1.0, 1.0, 1.0, k0
   };
-  const auto uniform = EigenmodeAtPhase(uniform_parameters, 0.37);
+  const auto uniform = UnstableEigenmodeAtPhase(uniform_parameters, 0.37);
   std::cout << "uniform_carrier " << uniform.magnetic.x1 << ' '
             << uniform.magnetic.x2 << ' ' << uniform.magnetic.x3 << ' '
             << uniform.velocity.x1 << ' ' << uniform.velocity.x2 << ' '

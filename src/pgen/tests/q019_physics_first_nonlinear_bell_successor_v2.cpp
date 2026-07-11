@@ -1994,7 +1994,11 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
         const Vector3 centered = {
           velocity.x1 - guide_parallel_stream_speed, velocity.x2, velocity.x3};
         centered_sum = Add(centered_sum, centered);
-        const Real values[3] = {centered.x1, centered.x2, centered.x3};
+        const Real values[3] = {
+          static_cast<Real>(centered.x1),
+          static_cast<Real>(centered.x2),
+          static_cast<Real>(centered.x3)
+        };
         for (int a = 0; a < 3; ++a) {
           for (int b = 0; b < 3; ++b) {
             centered_second[a][b] += values[a]*values[b]/6.0;

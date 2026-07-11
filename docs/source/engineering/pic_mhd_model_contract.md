@@ -14,7 +14,7 @@ The runtime identity is selected with `<particles>/pic_physical_mode`.
 | `engineering` | Backward-compatible development and proxy tests | Historical velocity slots | Legacy opt-in current-to-CT source remains available | Legacy opt-in policies |
 | `paper_test_particle` | Particle-only analytical tests of paper mechanics | Mass-normalized momentum `p/m` | No CR-current CT source | Disabled |
 | `paper_mhd_pic` | Historical pre-VL2 paper-mode chronology only | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Preserved for restart and source-history compatibility; do not use for new publication runs |
-| `paper_mhd_pic_vl2_tsc` | Active additive Sun & Bai VL2/TSC paper-reproduction candidate | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Conservative momentum and kinetic-energy deltas for ideal MHD; exact-isothermal delta-f and the Q-006 runtime-local full-f carrier use momentum-only feedback |
+| `paper_mhd_pic_vl2_tsc` | Active VL2/TSC MHD-PIC model | Mass-normalized momentum `p/m` | `pic_cr_hall_mode=off` uses ideal induction; `full` uses the derived large-scale CR-Hall closure | Conservative momentum and kinetic-energy deltas for ideal MHD; exact-isothermal special cases remain Hall-off |
 | `extended_mhd_pic` | Separately named extensions requiring separate qualification | Mass-normalized momentum `p/m` | Extension-specific, never implied by paper mode | Extension-specific and recorded |
 
 `engineering` is not a paper-reproduction mode. It exists to preserve the
@@ -56,17 +56,38 @@ For each CR super-particle, paper mode integrates
 ```text
 d x / dt       = v
 d (p/m) / dt   = (q/mc) (cE + v x B)
-cE             = -u x B
+cE             = -(u + v_H) x B
 ```
+
+Hall-off sets `v_H=0`. Full Hall uses the signed deposited moments
+
+```text
+Q_CR = q_CR/c
+K_CR = J_CR/c
+Q_e  = alpha_i rho + Q_CR
+v_H  = (K_CR - Q_CR u)/Q_e
+alpha_i = <particles>/pic_background_ion_q_over_mc
+```
+
+The pusher and CT use the same closure, signs, and retained stage-centered
+`v_H`, with discretizations appropriate to their locations. The pusher
+TSC-interpolates `u_g`, `v_H`, and `B` to each particle. CT uses limited PLM
+face states selected by the ordinary density-flux sign, with the exact
+staggered face-normal magnetic field. That identical CT face state supplies
+the conservative Hall Poynting flux `(cE_H) x B`. Gas momentum and energy
+receive the opposite particle exchange. Artificial
+`pic_cr_light_speed` does not enter this closure. See the repository-root
+`MHD_PIC_CR_HALL_CODE_MAP.md` for the signed normalization and exact staging.
 
 The configured charge-to-mass slot stores the normalized `q/(mc)` factor used
 by the AthenaK units. The relativistic Boris rotation evaluates its magnetic
 rotation with the Lorentz factor after the first electric half-kick.
 
-For the active `paper_mhd_pic_vl2_tsc` candidate, the MHD induction update
-remains the ideal-MHD constrained transport update. Deposited CR current must
-not be added directly to the CT electric field. After a completed particle
-push, an ideal-MHD gas receives the negative of the deposited CR momentum and
+For the active `paper_mhd_pic_vl2_tsc` model, deposited CR current is never
+added directly to the final edge EMF. Hall-off retains ideal-MHD CT; full Hall
+adds the derived `-v_H x B` correction to face induction fluxes before
+`CornerE` constructs the edge field. After a completed particle push, an
+ideal-MHD gas receives the negative of the deposited CR momentum and
 relativistic kinetic-energy changes. Exact-isothermal paper delta-f uses
 momentum-only feedback. The separately named
 `q006_paper_multispecies_oscillation_runtime_local` generator admits the same
@@ -77,25 +98,30 @@ chronology.
 
 ## Stage Ordering
 
-The target second-order paper sequence is:
+The implemented second-order paper sequence is:
 
 1. Deposit initial-position CR charge and current moments needed by the gas
    predictor.
 2. Advance CR positions from the initial state to the midpoint with initial
    derived velocities.
 3. Advance the MHD predictor and apply CR source terms.
-4. Interpolate midpoint gas velocity and magnetic field to each particle.
-5. Form midpoint `cE = -u x B` and advance `p/m` with the relativistic Boris
-   update.
+4. In full Hall, use a scratch half-kick to predict midpoint CR current and
+   construct midpoint `v_H`; Hall-off has no extra predictor.
+5. Interpolate midpoint gas velocity, Hall drift, and magnetic field to each
+   particle. Form `cE = -(u + v_H) x B` and advance `p/m` with Boris.
 6. Record per-particle momentum and relativistic kinetic-energy deltas.
 7. Advance CR positions from midpoint to the final state with final derived
    velocities.
-8. Deposit the recorded deltas and subtract them from the gas update.
-9. Apply physical boundaries, particle migration, moment synchronization, and
-   constrained transport in the documented task order.
-
-Implementation tests must trace the actual task sequence. This document records
-the required sequence, not an assertion that every step is already complete.
+8. Deposit the recorded deltas and subtract them from the gas update after the
+   ordinary MHD RK flux update.
+9. Reconstruct limited midpoint Hall states to faces, select the lower/upper
+   state by density-flux sign, and use the unique staggered normal `B`. Add the
+   resulting Hall face EMFs and the matched Hall Poynting-flux divergence.
+10. `CornerE` uses total cell `-(u_g+v_H) x B` for GS07, CT updates the
+    staggered field, and physical boundaries plus communication complete.
+11. Validate gas admissibility against the updated face field, then convert
+    conserved to primitive variables. Particle migration follows the staged
+    boundary order.
 
 ## Mesh And Boundary Contract
 
@@ -121,13 +147,18 @@ named extension explicitly documents a different policy. A particle timestep
 must satisfy both the configured maximum cell crossing bound and the configured
 gyro-angle bound.
 
+The first full-Hall implementation is deliberately uniform-grid and full-f.
+AMR/SMR, delta-f, expanding boxes, non-ideal MHD, and relativistic MHD fail
+closed in full mode. This is a known scope boundary, not a claim that the Hall
+equations are optional on supported uniform-grid science runs.
+
 ## Delta-F And Expanding Box
 
 Quiet-start placement remains available as the separately named
 `pic_deltaf_mode=quiet_start` variance-reduction technique. In explicit
 paper/extension modes, `pic_deltaf_mode=physical` stores the initial analytic
 background value, evolves `1 - f0(t,x,p)/f(0,x0,p0)`, deposits perturbation
-moments, fingerprints the model in restart schema version 7, and emits VTK
+moments, fingerprints the model in restart schema version 8, and emits VTK
 weight diagnostics. Quantitative CRSI and CRPAI qualification remains a
 release gate.
 
@@ -136,7 +167,7 @@ half-step particle momentum transforms around the Boris push, drifts in
 comoving coordinates, rescales gas conserved variables, stores raw
 face-centered arrays as divergence-preserving comoving magnetic fluxes,
 derives physical face fields for MHD consumers, maps edge EMFs before CT, and
-fingerprints its law and rates in restart schema version 7. Active-MHD
+fingerprints its law and rates in restart schema version 8. Active-MHD
 expansion is intentionally restricted to parser-qualified compositions until
 each additional source package is mapped and tested. The bounded non-delta-f
 conservative source split deposits physical-volume moments, records the
@@ -155,12 +186,13 @@ gate.
 
 ## Extension Boundary
 
-The paper formulation neglects the CR-induced Hall term. Any Hall-capable
-implementation belongs to `extended_mhd_pic`, with its equation, normalization,
-applicability envelope, tests, and claims registered separately. Entity Toolkit
-may be used as a frozen comparative reference for relativistic particle
-mechanics and compatible deposition micro-oracles; it is not an oracle for
-AthenaK paper-mode induction or gas feedback.
+Sun & Bai (2023) used Hall-off induction, but the complete large-scale MHD-PIC
+system in Bai et al. (2015) includes the CR-induced Hall term. AthenaK keeps the
+VL2/TSC algorithm identity and selects the physical closure explicitly with
+`pic_cr_hall_mode=off|full`. `full` is not an `extended_mhd_pic`
+free-coefficient experiment. It has a fixed signed equation, uniform-grid
+applicability envelope, compact conservation/Bell qualification, and two
+regime diagnostics: `max|R|` and `max Lambda`.
 
 The currently implemented `pic_cr_hall_mode=current_to_ct_experimental`
 extension is a deliberately narrow source experiment:
@@ -220,7 +252,7 @@ A(kappa) = sqrt(pi kappa) (kappa - 1) Gamma(kappa - 1/2)
 ```
 
 and evaluates the fitted background with the corresponding `xi^4`, box-volume,
-and fitted-`p0` normalization. Restart schema version 7 preserves the fitted
+and fitted-`p0` normalization. Restart schema version 8 preserves the fitted
 `xi`, fitted `p0`, and cadence bucket so a restart does not introduce an
 unrequested refit.
 

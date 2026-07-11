@@ -237,13 +237,12 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   auto &eos_data = pmhd->peos->eos_data;
   int &nmhd_ = pmhd->nmhd;
+  auto *ppart = pm->pmb_pack->ppart;
+  const bool full_cr_hall = (ppart != nullptr) && ppart->UsesFullCRHall();
+  const int base_nhist = eos_data.is_ideal ? 11 : 10;
 
   // set number of and names of history variables for mhd
-  if (eos_data.is_ideal) {
-    pdata->nhist = 11;
-  } else {
-    pdata->nhist = 10;
-  }
+  pdata->nhist = base_nhist + (full_cr_hall ? 2 : 0);
   pdata->label[IDN] = "mass";
   pdata->label[IM1] = "1-mom";
   pdata->label[IM2] = "2-mom";
@@ -257,10 +256,13 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   pdata->label[nmhd_+3] = "1-ME";
   pdata->label[nmhd_+4] = "2-ME";
   pdata->label[nmhd_+5] = "3-ME";
+  if (full_cr_hall) {
+    pdata->label[base_nhist] = "hall_Rmax";
+    pdata->label[base_nhist + 1] = "hall_Lmax";
+  }
 
   // capture class variabels for kernel
   auto &u0_ = pmhd->u0;
-  auto *ppart = pm->pmb_pack->ppart;
   const bool expanding_box = ((ppart != nullptr) && ppart->UsesExpandingBox());
   Real physical_volume_scale = 1.0;
   if (expanding_box) {
@@ -274,7 +276,6 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   auto bx2f = expanding_box ? pmhd->bphys.x2f : pmhd->b0.x2f;
   auto bx3f = expanding_box ? pmhd->bphys.x3f : pmhd->b0.x3f;
   auto &size = pm->pmb_pack->pmb->mb_size;
-  int &nhist_ = pdata->nhist;
 
   // loop over all MeshBlocks in this pack
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
@@ -318,8 +319,8 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     hvars.the_array[nmhd_+4] = vol*0.25*(SQR(bx2f(m,k,j+1,i)) + SQR(bx2f(m,k,j,i)));
     hvars.the_array[nmhd_+5] = vol*0.25*(SQR(bx3f(m,k+1,j,i)) + SQR(bx3f(m,k,j,i)));
 
-    // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
-    for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
+    // Hall maxima use a separate max reduction below; initialize their sum slots.
+    for (int n=base_nhist; n<NHISTORY_VARIABLES; ++n) {
       hvars.the_array[n] = 0.0;
     }
 
@@ -331,6 +332,34 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   // store data into hdata array
   for (int n=0; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
+  if (full_cr_hall) {
+    auto hall_diag = ppart->cr_hall_diagnostics;
+    Real hall_rmax = 0.0;
+    Real hall_lmax = 0.0;
+    Kokkos::parallel_reduce(
+        "HistCRHallMax", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int idx, Real &rmax, Real &lmax) {
+      const int m = idx/nkji;
+      const int k0 = (idx - m*nkji)/nji;
+      const int j0 = (idx - m*nkji - k0*nji)/nx1;
+      const int i = idx - m*nkji - k0*nji - j0*nx1 + is;
+      const int j = j0 + js;
+      const int k = k0 + ks;
+      rmax = fmax(rmax, hall_diag(m, 0, k, j, i));
+      lmax = fmax(lmax, hall_diag(m, 1, k, j, i));
+    }, Kokkos::Max<Real>(hall_rmax), Kokkos::Max<Real>(hall_lmax));
+#if MPI_PARALLEL_ENABLED
+    Real hall_maxima[2] = {hall_rmax, hall_lmax};
+    MPI_Allreduce(MPI_IN_PLACE, hall_maxima, 2, MPI_ATHENA_REAL,
+                  MPI_MAX, MPI_COMM_WORLD);
+    // The generic history writer subsequently MPI_SUMs every column. Give each
+    // rank max/nranks so that second reduction writes the global maximum once.
+    hall_rmax = hall_maxima[0]/static_cast<Real>(global_variable::nranks);
+    hall_lmax = hall_maxima[1]/static_cast<Real>(global_variable::nranks);
+#endif
+    pdata->hdata[base_nhist] = hall_rmax;
+    pdata->hdata[base_nhist + 1] = hall_lmax;
   }
 
   return;

@@ -33,6 +33,12 @@ Sun and Bai (2023) reproduction manifest.
     initial findings, paper-source checksum and minimum validation schema.
 - `pvtk_particles.py`
   - Reader for AthenaK particle VTK files.
+- `analyze_pic_cr_hall_bell.py` and `analyze_pic_cr_hall_bell_nonlinear.py`
+  - Compact linear and nonlinear full-CR-Hall Bell qualification reducers.
+- `analyze_pic_parallel_shock_cr_hall_controlled.py`
+  - Controlled delayed-injection no-CR/Hall-off/full-Hall shock reducer.
+- `analyze_pic_turbulent_dynamo_cr_hall.py`
+  - Current-HEAD 128-cubed full-Hall turbulence reducer and Hall-off decision aid.
 
 ## Usage Constraints
 - These scripts are not part of `tst/run_tests.py` regression discovery.

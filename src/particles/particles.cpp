@@ -484,6 +484,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pic_cr_hall_mode = PICCRHallMode::off;
   } else if (pic_cr_hall_mode_str.compare("current_to_ct_experimental") == 0) {
     pic_cr_hall_mode = PICCRHallMode::current_to_ct_experimental;
+  } else if (pic_cr_hall_mode_str.compare("full") == 0) {
+    pic_cr_hall_mode = PICCRHallMode::full;
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
@@ -491,6 +493,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << pic_cr_hall_mode_str << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  pic_background_ion_q_over_mc = pin->GetOrAddReal(
+      "particles", "pic_background_ion_q_over_mc", 0.0);
   std::string pic_wave_damping_mode_str = pin->GetOrAddString(
       "particles", "pic_wave_damping_mode", "off");
   if (pic_wave_damping_mode_str.compare("off") == 0) {
@@ -1163,13 +1167,29 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << " requires <particles>/pusher=boris_tsc" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if ((pic_physical_mode != PICPhysicalMode::extended_mhd_pic) &&
-      (pic_cr_hall_mode != PICCRHallMode::off)) {
+  if ((pic_cr_hall_mode == PICCRHallMode::current_to_ct_experimental) &&
+      (pic_physical_mode != PICPhysicalMode::extended_mhd_pic)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<particles>/pic_cr_hall_mode=" << pic_cr_hall_mode_str
-              << " requires <particles>/pic_physical_mode=extended_mhd_pic"
+              << "<particles>/pic_cr_hall_mode=current_to_ct_experimental requires "
+              << "<particles>/pic_physical_mode=extended_mhd_pic"
               << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (UsesFullCRHall() && !paper_vl2_tsc_mode) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_cr_hall_mode=full requires "
+              << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (UsesFullCRHall() && !pmy_pack->pmesh->three_d && !pic_enable_2d3v) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_cr_hall_mode=full on a 1D or 2D mesh requires "
+              << "<particles>/pic_enable_2d3v=true so the pusher and grid closure "
+              << "retain the same three vector components" << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if ((pic_physical_mode != PICPhysicalMode::extended_mhd_pic) &&
@@ -1374,13 +1394,38 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "requires <particles>/couple_moments_to_mhd=true" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if (UsesFullCRHall()) {
+    if (!std::isfinite(pic_background_ion_q_over_mc) ||
+        pic_background_ion_q_over_mc <= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_cr_hall_mode=full requires finite positive "
+                << "<particles>/pic_background_ion_q_over_mc" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (UsesDeltaF() || pmy_pack->pmesh->multilevel) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_cr_hall_mode=full currently supports uniform-grid "
+                << "full-f MHD-PIC only" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->GetString("mhd", "eos").compare("ideal") != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_cr_hall_mode=full requires ideal MHD so the "
+                << "Hall Poynting flux is part of the evolved total energy"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   if ((global_variable::my_rank == 0) &&
       (particle_type == ParticleType::cosmic_ray)) {
     const char *state_name = UsesRelativisticCRState() ? "momentum_p_over_m" :
                                                         "velocity";
-    const char *induction_name = AddsCRCurrentToCT() ? "cr_current_to_ct" :
-                                                       "ideal_mhd_only";
+    const char *induction_name = UsesFullCRHall() ? "cr_hall_full" :
+        (AddsCRCurrentToCT() ? "cr_current_to_ct" : "ideal_mhd_only");
     const char *deposition_name = !deposit_moments ? "disabled" :
                                   ((deposit_order == 2) ? "tsc" : "cic");
     std::cout << "PIC runtime model: physical_mode=" << pic_physical_mode_str
@@ -1401,6 +1446,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << " max_cell_cross=" << pic_max_cell_cross
               << " theta_max=" << pic_theta_max
               << " restart_schema=" << PIC_RESTART_SCHEMA_VERSION << std::endl;
+    if (UsesFullCRHall()) {
+      std::cout << "PIC CR-Hall: background_ion_q_over_mc="
+                << pic_background_ion_q_over_mc << std::endl;
+    }
   }
 
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
@@ -1446,6 +1495,25 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::deep_copy(pbval_mom->u_in.d_view, static_cast<Real>(0.0));
       pbval_mom->u_in.template modify<DevExeSpace>();
       pbval_mom->u_in.template sync<HostMemSpace>();
+    }
+
+    if (UsesFullCRHall()) {
+      Kokkos::realloc(cr_hall_moments, nmb, NHALL_MOM,
+                      ncells3, ncells2, ncells1);
+      Kokkos::realloc(cr_hall_drift, nmb, 3, ncells3, ncells2, ncells1);
+      Kokkos::realloc(cr_hall_diagnostics, nmb, 2,
+                      ncells3, ncells2, ncells1);
+      Kokkos::deep_copy(cr_hall_moments, static_cast<Real>(0.0));
+      Kokkos::deep_copy(cr_hall_drift, static_cast<Real>(0.0));
+      Kokkos::deep_copy(cr_hall_diagnostics, static_cast<Real>(0.0));
+      pbval_hall = new MeshBoundaryValuesCC(
+          ppack, pin, false, CCCommMode::synchronize);
+      pbval_hall->InitializeBuffers(NHALL_MOM);
+      if (!(pmy_pack->pmesh->strictly_periodic)) {
+        Kokkos::deep_copy(pbval_hall->u_in.d_view, static_cast<Real>(0.0));
+        pbval_hall->u_in.template modify<DevExeSpace>();
+        pbval_hall->u_in.template sync<HostMemSpace>();
+      }
     }
 
     if (couple_moments_to_mhd &&
@@ -1500,6 +1568,9 @@ Particles::~Particles() {
   if (pbval_mom != nullptr) {
     delete pbval_mom;
   }
+  if (pbval_hall != nullptr) {
+    delete pbval_hall;
+  }
   if (pbval_jedge != nullptr) {
     delete pbval_jedge;
   }
@@ -1549,6 +1620,12 @@ void Particles::UpdateAfterAMR(MeshBlockPack *new_pp) {
     }
     if (j_edge_x1e.extent_int(0) > 0) {
       require_meshblock_capacity(j_edge_x1e.extent_int(0), "edge-current");
+    }
+    if (UsesFullCRHall()) {
+      require_meshblock_capacity(cr_hall_moments.extent_int(0), "CR-Hall moment");
+      require_meshblock_capacity(cr_hall_drift.extent_int(0), "CR-Hall drift");
+      require_meshblock_capacity(
+          cr_hall_diagnostics.extent_int(0), "CR-Hall diagnostic");
     }
   }
   if (pic_background_mode == PICBackgroundMode::no_mhd) {

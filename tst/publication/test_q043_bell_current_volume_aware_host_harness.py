@@ -110,7 +110,7 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
         for fields in lines:
             self.assertAlmostEqual(float(fields[2]), 4.0*math.pi, places=13)
 
-    def test_shared_q023_eigenmode_carrier_is_reused(self) -> None:
+    def test_corrected_q023_unstable_eigenmode_carrier_is_reused(self) -> None:
         lines = [
             line.split() for line in self.lines if line.startswith("shared_carrier ")
         ]
@@ -119,6 +119,8 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
         self.assertTrue(all(math.isfinite(value) for value in values))
         self.assertAlmostEqual(sum(value*value for value in values[:3]), 1.0, places=11)
         self.assertAlmostEqual(sum(value*value for value in values[3:]), 1.0e-12, places=24)
+        self.assertGreater(values[2], 0.0)
+        self.assertLess(values[5], 0.0)
 
     def test_uniform_oracle_and_linear_modes_are_disjoint(self) -> None:
         uniform = next(
@@ -154,7 +156,7 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
 
     def test_source_enforces_new_campaign_and_j_over_c_contract(self) -> None:
         source = SOURCE.read_text(encoding="utf-8")
-        self.assertIn('#include "q023_paper_bell_linear.hpp"', source)
+        self.assertIn('#include "q023_paper_bell_linear_joverc.hpp"', source)
         self.assertNotIn('#include "q023_paper_bell_linear.cpp"', source)
         self.assertIn('const std::string block = "q043_bell_current_volume_aware";', source)
         self.assertIn('"Q043-BELL-CURRENT-VOLUME-AWARE"', source)
@@ -213,7 +215,10 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
             '"paper_mhd_pic_vl2_tsc"',
             '"pic_enable_2d3v", true',
             '"pic_cr_initial_state", "velocity"',
-            '"pic_cr_hall_mode", "off"',
+            'pin->GetString("particles", "pic_cr_hall_mode")',
+            'hall_mode.compare("off")',
+            'hall_mode.compare("full")',
+            "physical CR-Hall off and full modes",
             '"pic_wave_damping_mode", "off"',
             '"pic_deltaf_mode", "off"',
             '"pic_expanding_box_mode", "off"',
@@ -221,7 +226,7 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
             '"uniform_current_oracle"',
             '"corrected_linear_eigenmode"',
             '"uniform_zero_perturbation_parallel_stream"',
-            '"section52_right_polarized_eigenmode"',
+            '"section52_positive_current_unstable_eigenmode"',
             "SourceModeAmplitudeIsValid(source_mode, amplitude)",
         )
         for contract in required:

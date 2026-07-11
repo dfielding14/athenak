@@ -3076,7 +3076,8 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       // Section 5.4 requires isotropy relative to the ideal shock surface.
       const Real mu = 2.0 * TaggedUniform01(tag, 1) - 1.0;
       const Real phi = 2.0 * M_PI * TaggedUniform01(tag, 2);
-      const Real st = std::sqrt(std::max(static_cast<Real>(0.0), 1.0 - mu * mu));
+      const Real st = std::sqrt(std::max(
+          static_cast<Real>(0.0), static_cast<Real>(1.0) - mu*mu));
       dirx = mu;
       diry = st * std::cos(phi);
       dirz = st * std::sin(phi);
@@ -3203,7 +3204,8 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   if (ps_enable_subtraction && ps_enable_surface_averaged_subtraction) {
     const Real ownership_terms = std::max(
         static_cast<Real>(1.0),
-        static_cast<Real>(ninj_global) + 4.0 * global_variable::nranks);
+        static_cast<Real>(ninj_global) +
+        static_cast<Real>(4.0)*global_variable::nranks);
     bool ownership_ledger_valid = true;
     for (int n = 0; n < 6; ++n) {
       const Real absolute_contributions =
@@ -3811,13 +3813,15 @@ void MaybePrintFeedbackDiagnostics(Mesh *pm) {
       1.0/static_cast<Real>(ncell_global) : 0.0;
   std::array<Real, nfield> rms{};
   for (int n = 0; n < nfield; ++n) {
-    rms[n] = std::sqrt(std::max(sum_sq_global[n]*inv_ncell, 0.0));
+    rms[n] = std::sqrt(std::max(
+        sum_sq_global[n]*inv_ncell, static_cast<Real>(0.0)));
   }
   const Real inv_npart = (npart_global > 0) ?
       1.0/static_cast<Real>(npart_global) : 0.0;
   std::array<Real, nprt_field> pr_rms{};
   for (int n = 0; n < nprt_field; ++n) {
-    pr_rms[n] = std::sqrt(std::max(pr_sum_sq_global[n]*inv_npart, 0.0));
+    pr_rms[n] = std::sqrt(std::max(
+        pr_sum_sq_global[n]*inv_npart, static_cast<Real>(0.0)));
   }
 
   static bool printed_header = false;

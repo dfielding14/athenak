@@ -24,24 +24,33 @@
 #endif
 
 #if defined(Q043_BELL_CURRENT_VOLUME_AWARE_HOST_CONTRACT) && \
+    !defined(Q023_PAPER_BELL_LINEAR_JOVERC_HOST_CONTRACT)
+#define Q023_PAPER_BELL_LINEAR_JOVERC_HOST_CONTRACT 1
+#define Q043_VOLUME_AWARE_UNDEF_Q023_PAPER_BELL_LINEAR_JOVERC_HOST_CONTRACT 1
+#endif
+#if defined(Q043_BELL_CURRENT_VOLUME_AWARE_HOST_CONTRACT) && \
     !defined(Q023_PAPER_BELL_LINEAR_HOST_CONTRACT)
 #define Q023_PAPER_BELL_LINEAR_HOST_CONTRACT 1
 #define Q043_VOLUME_AWARE_UNDEF_Q023_PAPER_BELL_LINEAR_HOST_CONTRACT 1
 #endif
-#include "q023_paper_bell_linear.hpp"
+#include "q023_paper_bell_linear_joverc.hpp"
 #if defined(Q043_VOLUME_AWARE_UNDEF_Q023_PAPER_BELL_LINEAR_HOST_CONTRACT)
 #undef Q023_PAPER_BELL_LINEAR_HOST_CONTRACT
 #undef Q043_VOLUME_AWARE_UNDEF_Q023_PAPER_BELL_LINEAR_HOST_CONTRACT
+#endif
+#if defined(Q043_VOLUME_AWARE_UNDEF_Q023_PAPER_BELL_LINEAR_JOVERC_HOST_CONTRACT)
+#undef Q023_PAPER_BELL_LINEAR_JOVERC_HOST_CONTRACT
+#undef Q043_VOLUME_AWARE_UNDEF_Q023_PAPER_BELL_LINEAR_JOVERC_HOST_CONTRACT
 #endif
 
 namespace q043_bell_current_volume_aware {
 
 using q023_paper_bell_linear::Basis;
-using q023_paper_bell_linear::EigenmodeAtPhase;
 using q023_paper_bell_linear::ModeBasis;
 using q023_paper_bell_linear::ModeParameters;
 using q023_paper_bell_linear::Vector3;
-using q023_paper_bell_linear::VectorPotentialAt;
+using q023_paper_bell_linear_joverc::UnstableEigenmodeAtPhase;
+using q023_paper_bell_linear_joverc::UnstableVectorPotentialAt;
 
 inline double RootCellVolume(const double x1_extent, const int root_nx1,
                              const double x2_extent, const int root_nx2,
@@ -169,7 +178,6 @@ void Q043VolumeAwareRequireBoolean(ParameterInput *pin, const std::string &block
 void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
                                                   const bool restart) {
   using q043_bell_current_volume_aware::Basis;
-  using q043_bell_current_volume_aware::EigenmodeAtPhase;
   using q043_bell_current_volume_aware::HasRequiredSpeciesChargeOverMass;
   using q043_bell_current_volume_aware::HasRequiredDepositedJOverC;
   using q043_bell_current_volume_aware::ModeBasis;
@@ -178,7 +186,8 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   using q043_bell_current_volume_aware::SourceMode;
   using q043_bell_current_volume_aware::SourceModeAmplitudeIsValid;
   using q043_bell_current_volume_aware::SourceModeSpeciesMassIsValid;
-  using q043_bell_current_volume_aware::VectorPotentialAt;
+  using q043_bell_current_volume_aware::UnstableEigenmodeAtPhase;
+  using q043_bell_current_volume_aware::UnstableVectorPotentialAt;
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   if (pmbp->pmhd == nullptr || pmbp->ppart == nullptr) {
@@ -248,7 +257,7 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   Q043VolumeAwareRequireString(
       pin, block, "initial_eigenmode",
       uniform_current_oracle ? "uniform_zero_perturbation_parallel_stream"
-                             : "section52_right_polarized_eigenmode");
+                             : "section52_positive_current_unstable_eigenmode");
 
   Q043VolumeAwareRequireString(pin, "time", "evolution", "dynamic");
   Q043VolumeAwareRequireString(pin, "time", "integrator", "rk2");
@@ -285,7 +294,11 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   Q043VolumeAwareRequireString(pin, "particles", "pic_interp_scheme", "tsc");
   Q043VolumeAwareRequireBoolean(pin, "particles", "pic_enable_2d3v", true);
   Q043VolumeAwareRequireString(pin, "particles", "pic_cr_initial_state", "velocity");
-  Q043VolumeAwareRequireString(pin, "particles", "pic_cr_hall_mode", "off");
+  const std::string hall_mode = pin->GetString("particles", "pic_cr_hall_mode");
+  if (hall_mode.compare("off") != 0 && hall_mode.compare("full") != 0) {
+    Q043VolumeAwareFatal("q043_bell_current_volume_aware supports only the "
+                         "physical CR-Hall off and full modes");
+  }
   Q043VolumeAwareRequireString(pin, "particles", "pic_wave_damping_mode", "off");
   Q043VolumeAwareRequireString(pin, "particles", "pic_deltaf_mode", "off");
   Q043VolumeAwareRequireString(pin, "particles", "pic_expanding_box_mode", "off");
@@ -299,6 +312,7 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   const Real u_a = pin->GetReal(block, "u_a");
   const Real wavelength = pin->GetReal(block, "wavelength");
   const Real k0 = pin->GetReal(block, "k0");
+  const Real seed_wavenumber = pin->GetOrAddReal(block, "seed_wavenumber", k0);
   const Real omega = pin->GetReal(block, "omega");
   const Real c_over_v_cr = pin->GetReal(block, "c_over_v_cr");
   Q043VolumeAwareRequireFinite("epsilon_default", epsilon_default);
@@ -310,11 +324,13 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   Q043VolumeAwareRequireFinite("u_a", u_a);
   Q043VolumeAwareRequireFinite("wavelength", wavelength);
   Q043VolumeAwareRequireFinite("k0", k0);
+  Q043VolumeAwareRequireFinite("seed_wavenumber", seed_wavenumber);
   Q043VolumeAwareRequireFinite("omega", omega);
   Q043VolumeAwareRequireFinite("c_over_v_cr", c_over_v_cr);
   if (!(epsilon > 0.0 && epsilon < 1.0) || rho <= 0.0 || pressure <= 0.0 ||
       !SourceModeAmplitudeIsValid(source_mode, amplitude) || b_g <= 0.0 ||
-      wavelength <= 0.0 || k0 <= 0.0 || omega <= 0.0 || c_over_v_cr <= 1.0) {
+      wavelength <= 0.0 || k0 <= 0.0 || seed_wavenumber <= 0.0 ||
+      omega <= 0.0 || c_over_v_cr <= 1.0) {
     Q043VolumeAwareFatal("q043_bell_current_volume_aware physical normalization "
                     "contract is invalid");
   }
@@ -397,7 +413,7 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
   if (restart) return;
 
   const ModeParameters parameters = {
-    dimension, epsilon, amplitude, rho, pressure, b_g, u_a, k0
+    dimension, epsilon, amplitude, rho, pressure, b_g, u_a, seed_wavenumber
   };
   auto &indcs = pmy_mesh_->mb_indcs;
   const int is = indcs.is;
@@ -441,9 +457,9 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
                                  size.d_view(m).x3max);
     const Real x3f = LeftEdgeX(k - ks, nx3, size.d_view(m).x3min,
                                size.d_view(m).x3max);
-    a1(m, k, j, i) = VectorPotentialAt(parameters, {x1v, x2f, x3f}).x1;
-    a2(m, k, j, i) = VectorPotentialAt(parameters, {x1f, x2v, x3f}).x2;
-    a3(m, k, j, i) = VectorPotentialAt(parameters, {x1f, x2f, x3v}).x3;
+    a1(m, k, j, i) = UnstableVectorPotentialAt(parameters, {x1v, x2f, x3f}).x1;
+    a2(m, k, j, i) = UnstableVectorPotentialAt(parameters, {x1f, x2v, x3f}).x2;
+    a3(m, k, j, i) = UnstableVectorPotentialAt(parameters, {x1f, x2f, x3v}).x3;
   });
 
   par_for("pgen_q043_volume_aware_bell_ct_field", DevExeSpace(),
@@ -486,7 +502,7 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
                                 size.d_view(m).x3max);
     const Real phase = parameters.k0*
         (basis.parallel.x1*x1 + basis.parallel.x2*x2 + basis.parallel.x3*x3);
-    const auto sample = EigenmodeAtPhase(parameters, phase);
+    const auto sample = UnstableEigenmodeAtPhase(parameters, phase);
     w0(m, IDN, k, j, i) = parameters.rho;
     w0(m, IVX, k, j, i) = sample.velocity.x1;
     w0(m, IVY, k, j, i) = sample.velocity.x2;

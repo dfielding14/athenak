@@ -154,6 +154,14 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
     C2P; a would-be floor repair aborts with global event counts so a coupled
     conservation run cannot silently acquire floor energy.
 
+For the uniform-grid full-f VL2/TSC path, `pic_cr_hall_mode=full` is a separate
+physical closure from the legacy direct-current CT experiment. Particle tasks
+build a midpoint `v_H`; `MHDSrcTerms` reconstructs limited Hall states to faces,
+adds the derived face EMFs, and applies the matching Hall Poynting divergence.
+`CornerE` uses the total cell EMF for GS07, CT updates the staggered field, and
+admissibility is checked afterward against that updated face field. Start with
+`MHD_PIC_CR_HALL_CODE_MAP.md` before changing this route.
+
 ### PR5 Step 2 Passive-MHD Isolation Hook
 - When `<particles>/pic_background_mode=passive_mhd` is active, MHD fluid
   evolution is frozen by short-circuiting:

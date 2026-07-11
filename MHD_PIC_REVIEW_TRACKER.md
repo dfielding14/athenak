@@ -1,231 +1,153 @@
 # MHD-PIC Active Development Tracker
 
-> Temporary working document for `PIC_development`, simplified 2026-07-11.
-> Detailed findings from the original review remain available in Git history at
+> Temporary tracker for `PIC_development`, refreshed 2026-07-11. The committed base is
+> `e37799eb85`; the CR-Hall implementation was developed from that base on
+> `PIC_development`. Detailed findings from the original review remain in Git history at
 > `9364e0ff3:MHD_PIC_REVIEW_TRACKER.md`.
 
-## Purpose and baseline
+This file tracks only work that can affect the next uniform-grid MHD-PIC science runs. It
+follows [ethos.md](ethos.md): physical consistency is mandatory, while extra validation,
+hardening, and optimization require a demonstrated reason. Validation artifacts are under
+`/lustre/orion/ast207/proj-shared/dfielding/PIC/validation`.
 
-This tracker records work that affects the next planned MHD-PIC science runs. It follows
-the project principles in [ethos.md](ethos.md): physical consistency is non-negotiable,
-while validation, hardening, and optimization should be proportional to demonstrated
-risk and intended use.
-
-- Branch: `PIC_development`
-- Current evaluated HEAD: `9364e0ff37`
-- Near-term workflows: uniform-grid Bell, non-relativistic shocks, and turbulent boxes
-- Detailed roadmap: `MHD_PIC_NEXT_STEPS_GUIDE.md` in the shared PIC workspace
-
-Status meanings:
-
-- **ACTIVE**: work on the immediate path.
-- **NEXT**: small, concrete cleanup to do after or alongside active work.
-- **LIMITATION**: known and documented; not on the critical path for current runs.
-- **BACKLOG**: act only when profiling, a failure, or a planned configuration triggers it.
-- **CLOSED**: fixed and covered by focused evidence.
-
-Closed work is summarized here rather than carried as hundreds of lines of completed
-checklists:
-
-- `TURB-1`–`TURB-4`: **CLOSED**. Correct normalization root, RK-consistent work,
-  active-dimension projection, and signed isotropic modes. Implementation `a458bf08e`;
-  focused validation `75da80082`.
-- `MIG-1`: **CLOSED**. Unified migration/destruction compaction with survivor, restart,
-  and ledger tests. Implementation `a458bf08e`; focused validation `75da80082`.
-- `STAB-1`: **CLOSED**. Post-feedback admissibility check before EOS repair in
-  `9364e0ff3`.
-- `DT-1`, `DT-2`: **CLOSED**. Global configured-species gyro bound and pre-injection
-  timestep bound in `9364e0ff3`.
-
-These fixes should remain covered by their focused regressions. They do not need to be
-requalified through a new platform/precision matrix for every subsequent change.
+Status meanings: **CLOSED** has decisive focused evidence; **ACTIVE** is on the immediate
+execution path; **NEXT** is a small concrete cleanup; **LIMITATION** is documented and
+outside the supported current workflow; **BACKLOG** requires a profile, observed failure,
+or planned use case.
 
 ## 1. Active now
 
-### `ROBUST-4` — Use the correct MPI datatype for `Real`
+### Completed foundation
 
-- Status: **ACTIVE — quick fix**
-- Scope: `src/srcterms/turb_driver.cpp`
+- **BASELINE / ROBUST-4 — CLOSED.** The focused normal-precision
+  `particles/pic_turbulent_dynamo_smoke` passed in job `4972237`. The repaired
+  single-precision build and two-rank turbulence smoke passed in job `4972471`.
+  `turb_driver.cpp` now reduces `Real` buffers with `MPI_ATHENA_REAL`; no hard-coded
+  `MPI_DOUBLE` remains in that driver.
+- **HALL-1 — CLOSED for the supported uniform-grid model.**
+  `pic_cr_hall_mode=full|off` is an atomic
+  choice across the midpoint particle field, CT edge EMF, gas-particle momentum and energy
+  exchange, and Hall gas-energy flux. The full path uses deposited
+  `K_cr - Q_cr u_g` and the physical denominator
+  `Q_e = alpha_i rho + Q_cr`; the artificial CR light speed and the legacy experimental
+  coefficient do not set the Hall strength. The only new history quantities are maximum
+  `|R|` and maximum `Lambda`. Signs, normalization, staggering, and time centering are
+  recorded in [MHD_PIC_CR_HALL_CODE_MAP.md](MHD_PIC_CR_HALL_CODE_MAP.md) and the permanent
+  model contract.
+- **CONS-1 — CLOSED.** The original centered-route run `4972459` passed, and the
+  limited-face requalification job `4972934` produced a terminal `PASS`.
+  Hall-off results are invariant when the legacy experimental coefficient changes from
+  zero to seven. The full mode produces a distinct particle response while conserving
+  total momentum to `9.96e-7` and total energy to `9.67e-6` in the focused test.
+- **BELL-LIN-1 — CLOSED.** Immutable-source job `4973137` passed all 12 raw-current,
+  Hall-parameter, growth, frequency, wavelength, polarization, and resolution checks for
+  the final limited-face route. The Hall-off growth and frequency errors are `1.16%` and
+  `0.069%`. At `R=0.01` and `Lambda=1`, the full-Hall growth and real-frequency errors are
+  `0.70%` and `0.41%`; doubling the parallel resolution changes them by only `0.54%` and
+  `0.13%`. The measured deposited values are `J_cr/c = (4*pi,0,0)` and
+  `Q_cr/c = 0.04*pi`, independently reduced from raw particle moment outputs. The first
+  face-route job `4972780` had exposed a late high-wavenumber branch because it selected
+  raw donor cells before interface reconstruction. Applying the Appendix-B order—limited
+  PLM interface reconstruction followed by density-flux upwind selection—removed that
+  resolution failure.
 
-Three turbulence reductions still pass `Real` buffers to `MPI_DOUBLE`. This is correct
-only in double-precision builds and can overrun buffers in single precision.
+Earlier turbulence, migration, admissibility, and timestep blockers (`TURB-1`--`TURB-4`,
+`MIG-1`, `STAB-1`, `DT-1`, and `DT-2`) remain closed by their focused regressions. They do
+not need a new validation matrix for each Hall run.
 
-Do:
+### `BELL-NL-1` — Modest nonlinear Bell pilot
 
-1. Replace those datatypes with `MPI_ATHENA_REAL`.
-2. Run the focused turbulence regression in the normal build.
-3. Run one MPI single-precision turbulence smoke to exercise the repaired path.
+- Status: **ACTIVE — prepared, qualification pending**
 
-Done when the focused tests pass and no hard-coded `MPI_DOUBLE` remains for `Real` buffers
-in the turbulence driver.
+Three superseded centered-route pilots lost gas admissibility at nearly the same physical
+time: the base run, a four-times-higher particle-count run, and a four-times-smaller-CFL
+run. This ruled out particle noise and timestep size and triggered the matched face
+induction/energy route. Run one clean corrected-route pilot from `t=0`; confirm terminal
+nonlinear growth, finite states, and sensible `R` and `Lambda`. Add no further variation
+unless that report exposes a new sensitivity.
 
-### `HALL-1` — Implement the complete large-scale CR-Hall closure
+### `SHOCK-1` — Controlled delayed-injection shocks
 
-- Status: **ACTIVE — highest physics priority**
-- Scope: particle moments/pusher/tasks, MHD CT and energy update, model documentation
+- Status: **ACTIVE after `BELL-NL-1` — deck and analysis prepared, runs pending**
 
-The current production coupling uses ideal-MHD induction. The existing
-`current_to_ct_experimental` mode is a source-isolation experiment with a free
-coefficient; it is not the physical CR-Hall model.
+Use delayed CR injection after the shock forms, one area-averaged shock tracker, and one
+swept-mass/injection ledger. Run the no-CR, full-Hall, and matched Hall-off cases. Check
+shock speed and compression, ledger closure, upstream current and predicted Bell scale,
+magnetic growth, and CR acceleration. Choose one resolution or particle-count repeat from
+the pilot evidence; do not pre-build a parameter matrix.
 
-Do:
+### `BOX-128-1` — Return to the turbulent box
 
-1. Write the compact paper-to-code map for signed CR charge, current, background-ion
-   charge density, electric field, force, time level, and storage location.
-2. Derive the Hall EMF from the deposited `J_cr - q_cr u_g` and the physical electron
-   charge denominator. Do not use a freely tunable Hall-strength coefficient.
-3. Use the same midpoint full electric field in the particle push and constrained
-   transport.
-4. Keep gas momentum exchange, particle energy exchange, and the Hall-related gas energy
-   flux mutually consistent and counted exactly once.
-5. Provide one atomic physical choice, `pic_cr_hall_mode=full|off`. New coupled science
-   decks use `full`; `off` is retained for legacy reproduction and controlled comparison.
-6. Add only `max(|R|)` and `max(Lambda)` as new history diagnostics.
-7. Update the model contract and nearby comments where signs, units, or centering are not
-   obvious from the code.
+- Status: **ACTIVE after the shock comparison — prepared, run pending**
 
-Focused validation:
-
-- one algebra/zero-limit test;
-- one manufactured uniform Hall-EMF test;
-- one existing periodic exchange test with Hall enabled; and
-- the Bell comparison in `BELL-1` below.
-
-Done when these focused tests pass on CPU/MPI and one Frontier GPU smoke exercises the
-full path. Do not build a multidimensional Hall parameter matrix before using it.
-
-### `BELL-1` — Compact physical Bell qualification
-
-- Status: **ACTIVE after the first `HALL-1` implementation**
-- Scope: corrected volume-aware current setup and linear Bell problem
-
-Do:
-
-1. Verify deposited `J_cr/c` directly from raw particle/grid output for one corrected
-   volume-aware case.
-2. Run one Hall-off linear eigenmode and recover growth rate, dominant wavenumber, and
-   polarization/helicity.
-3. Run one Hall-on case near `Lambda ~ 1` and recover the Hall-shifted growth,
-   wavenumber, real frequency, and polarization.
-4. Repeat the Hall-on case at one higher useful resolution.
-5. Vary particles per cell only if the first mode fit is visibly noise-limited.
-
-Done when the two physical branches agree with their dispersion relations and the single
-resolution repeat supports the measured quantities. Proceed directly to a modest nonlinear
-pilot; add another sensitivity only when that pilot identifies one.
-
-### `SHOCK-1` — Choose one reproducible shock and injection workflow
-
-- Status: **ACTIVE after the compact Bell test**
-- Scope: `src/pgen/tests/pic_parallel_shock.cpp` and the active shock deck
-
-The existing immediate-injection/early-removal history and delayed-injection history are
-not physically equivalent because removing particles does not restore what was subtracted
-from the gas. Stop treating both as interchangeable science setups.
-
-Do:
-
-1. Select and document one startup history; delayed injection after initial shock
-   formation is the current preferred simple choice.
-2. Track the area-averaged shock position with one smoothed density- or pressure-gradient
-   criterion.
-3. Maintain one swept-mass and injection ledger. Add local surface reconstruction only if
-   later shock corrugation makes the area-averaged tracker inadequate.
-4. Run a no-CR planar shock, a low-efficiency full-Hall shock, and one matched Hall-off
-   comparison.
-5. Choose one resolution or particle-count repeat from what the pilot shows is limiting.
-
-Done when shock speed/compression are sensible, the injection and gas-particle exchange
-ledgers close to the expected numerical accuracy, and upstream current and magnetic growth
-support a quantitative Bell interpretation.
+Run one canonical `128^3` turbulent box with the full closure and analyze it as a
+self-contained worker job. Add a full-size Hall-off comparison only if the measured
+`Lambda` makes the comparison scientifically useful.
 
 ## 2. Small correctness cleanups
 
 These are narrow fixes, not new validation programs.
 
-### `CLEAN-1` — Stop silently rewriting invalid particle weights
+### `CLEAN-1` — Reject invalid particle weights
 
 - Status: **NEXT**
 
-Several push/deposit paths replace a nonpositive particle weight with one. That silently
-changes mass, charge, current, and feedback.
+Validate weights once at the common construction/load boundary for supported full-f
+workflows and remove fallbacks that silently replace a nonpositive weight with one. Add
+one invalid-weight regression, not a per-cycle particle audit.
 
-Validate weights once at the narrowest common construction/load boundary and fail clearly
-if an invalid weight reaches a supported full-f workflow. Remove the fallback assignments.
-Add one invalid-weight regression; do not add a per-cycle full-particle audit.
-
-### `CLEAN-2` — Prevent physical use of the legacy Bell normalization
+### `CLEAN-2` — Quarantine the legacy Bell normalization
 
 - Status: **NEXT**
 
-The old Q023 relation omits root-cell volume and includes the artificial light speed in
-the current target. Active science decks must use the corrected volume-aware relation.
+Active science decks must use the volume-aware current relation. Keep the old Q023 setup
+only if it is explicitly labeled and guarded as nonphysical legacy mechanics; otherwise
+remove it and its active decks. One startup guard test is sufficient.
 
-Keep the old generator only if it is explicitly labeled and guarded as
-`legacy_nonphysical_mechanics_only`; otherwise remove it and its active decks. One startup
-guard test is enough.
-
-### `CLEAN-3` — Repair default regression discovery
+### `CLEAN-3` — Repair focused test discovery
 
 - Status: **NEXT**
 
-`pic_paper_smooth_tsc_oracle.py` is a helper but is discovered as a regression despite
-lacking `run()` and `analyze()`. Rename/reroute it as a helper or add the normal
-interface, then confirm the focused particle suite reaches its real tests.
+Stop discovering `pic_paper_smooth_tsc_oracle.py` as a standalone regression without
+`run()` and `analyze()`. Treat it as a helper or give it the normal interface, then confirm
+the focused particle suite reaches its actual tests.
 
-## 3. Known limitation
+## 3. Known limitations
 
 ### `AMR-1` — Coupled refinement-interface deposition is not conservative
 
 - Status: **LIMITATION — uniform grids are the supported science path**
 
 Receiver-resolution TSC is evaluated independently on each refinement level without a
-cross-interface partition of unity. Integrated gas feedback can therefore differ from the
-opposite particle change. Current exact-conservation shock paths correctly reject AMR/SMR.
+cross-interface partition of unity, so coupled AMR/SMR runs cannot claim exact integrated
+gas-particle exchange. The current exact-conservation shock path correctly rejects this
+configuration.
 
-Policy now:
+Do not make AMR qualification a gate for uniform-grid Bell, shock, or turbulence work.
+If a planned science run needs AMR, begin with one planar static-refinement crossing and
+measure particle count, momentum/energy exchange, and first-moment closure. Add only the
+rank split, restart, corner, dynamic-refinement, or GPU case that the intended run uses.
 
-- Do not claim exact gas-particle conservation for coupled AMR/SMR runs.
-- Do not make AMR qualification a gate for uniform-grid Bell, shock, or turbulence work.
-- Keep the limitation visible in the model/deck documentation.
-
-If a planned production run needs AMR, resume with the smallest useful sequence:
-
-1. one planar static-refinement crossing;
-2. particle count plus momentum/energy and first-moment closure;
-3. one rank-split repeat; and
-4. only the additional corner, dynamic-refinement, restart, or GPU case used by that run.
+The target full-Hall claim is deliberately limited to uniform Cartesian, full-f,
+non-relativistic ideal MHD with the VL2/TSC coupling path. Other model combinations remain
+unsupported rather than silently approximated.
 
 ## 4. Profile- or failure-triggered backlog
 
-These observations are real, but they are not prerequisites for the current uniform-grid
-science program.
+- **Performance — BACKLOG.** Profile a production-shaped nonlinear Bell or shock run
+  before rewriting deposition, migration, or injection. Address host mirroring, global
+  metadata/communication, allocation churn, or replicated shock injection only when the
+  profile shows material cost. Do not implement particle sorting merely because
+  `pic_sort_interval` exists; reject nonzero settings until a measured need justifies it.
+- **Robustness — BACKLOG.** Fix a rank-local fatal path when it is encountered or touched,
+  rather than auditing the entire code. Revisit generic `TaskStatus::fail` propagation if
+  a reachable task failure demonstrates a hang. Add broader particle validation only in
+  response to observed corruption.
+- **Sensitivity — BACKLOG.** Particle-count, timestep, decomposition, precision, and broad
+  platform sweeps are triggered by a failed fit, noisy pilot, or production requirement;
+  they are not standing gates.
 
-### Performance
-
-- AMR deposition performs host mirroring, global communication, and repeated allocation.
-  Address this only if `AMR-1` becomes active.
-- Ordinary migration uses global metadata and allocation churn. Profile a
-  production-shaped run before redesigning it.
-- Shock injection is globally replicated and repeatedly reallocates particle arrays.
-  Optimize it if the shock pilot shows that injection materially limits runtime.
-- `pic_sort_interval` is parsed but not implemented. Do not implement a sorting
-  framework until profiling justifies it; remove or reject nonzero settings in active
-  decks so inputs do not claim nonexistent behavior.
-
-### Robustness
-
-- Some rank-local error exits could strand MPI peers. Replace a specific path when it is
-  encountered or touched; do not begin a whole-code fatal-path audit.
-- `TaskStatus::fail` is not propagated by the generic task-list driver and could
-  busy-loop. Track this as a general AthenaK issue and fix it if a reachable task
-  failure is observed.
-- Do not add a comprehensive per-cycle particle validator unless an actual corruption
-  demonstrates the need.
-
-## Deletion rule
-
-Delete this tracker when the active items and small cleanups are closed or transferred to
-the ordinary project backlog, and the AMR limitation is documented in the permanent model
-contract. Deletion does not require completing speculative optimization, every platform
-combination, or the entire future AMR program.
+**Deletion rule.** Delete this tracker when the nonlinear Bell, controlled shock, and
+`128^3` full-Hall steps are complete and the three small cleanups are closed or transferred
+to an ordinary backlog. AMR and speculative optimization do not block deletion once their
+limitations are permanent documentation.

@@ -206,11 +206,15 @@ but these are not wired in the constructor.
 - `pic_cr_light_speed`: positive artificial CR light speed used by
   momentum-state modes. `pic_cr_initial_state` selects whether initializer
   components are interpreted as `velocity` or `momentum`.
-- `pic_cr_hall_mode=current_to_ct_experimental` is restricted to
-  `extended_mhd_pic`; paper mode keeps frozen-in ideal-MHD induction. The
-  experimental source is `cE_CT = cE_ideal + alpha_H P_edge[J_CR]`, with
-  `alpha_H=particles/couple_j_to_efield_coeff`. It is a source-isolation path,
-  not a derived or qualified Hall Bell model.
+- `pic_cr_hall_mode=off|full` selects the atomic large-scale CR-Hall closure
+  for `paper_mhd_pic_vl2_tsc`. `full` uses
+  `v_H=(J_CR/c-Q_CR u_g)/(alpha_i rho+Q_CR)` in the particle pusher, CT,
+  gas feedback, Hall energy flux, and CFL estimate. It requires uniform-grid,
+  ideal-MHD, full-f coupling and positive
+  `pic_background_ion_q_over_mc=alpha_i`; non-3D meshes also require 3V.
+- `pic_cr_hall_mode=current_to_ct_experimental` remains restricted to
+  `extended_mhd_pic`. Its free-coefficient current source is a historical
+  source-isolation path, not an alternate strength of the physical closure.
 - `pic_wave_damping_mode=ion_neutral_friction` is restricted to
   `extended_mhd_pic` with active coupled MHD and positive
   `pic_ion_neutral_collision_rate`. It applies the exact static-neutral
@@ -234,7 +238,7 @@ but these are not wired in the constructor.
   extension-only x1-parallel global bi-kappa fit at positive
   `pic_deltaf_adapt_interval`. It requires physical `kappa_aniso` delta-f,
   expanding-box mode, `kappa > 1`, zero drift, and unit configured anisotropy.
-  Restart schema version 7 preserves fitted `xi`, fitted `p0`, cadence
+  Restart schema version 8 preserves fitted `xi`, fitted `p0`, cadence
   bucket.
 - `pic_sort_interval` (default `0`, must be `>= 0`).
 - `pic_random_seed` (default `0`, must be `>= 0`) controls deterministic

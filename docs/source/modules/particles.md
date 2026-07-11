@@ -84,7 +84,8 @@ rho_mean    # Mean density
 | `pic_enable_2d3v` | bool | false | Required for Boris pushers on 2D meshes; keeps `vz` and `Bz` active when `nx3=1` |
 | `pic_cr_light_speed` | Real | 1.0 | Positive artificial CR light speed used by momentum-state paper/extension modes |
 | `pic_cr_initial_state` | string | mode-dependent | `velocity` or `momentum`; paper/extension modes default to `momentum` and convert an explicitly selected velocity initializer to `p/m` |
-| `pic_cr_hall_mode` | string | off | `off` or `current_to_ct_experimental`; the experimental CT-current source is restricted to `extended_mhd_pic` |
+| `pic_cr_hall_mode` | string | off | `off`, `full`, or `current_to_ct_experimental`; `full` selects the atomic large-scale CR-Hall closure for the supported uniform-grid `paper_mhd_pic_vl2_tsc` model, while the experimental CT-current source remains restricted to `extended_mhd_pic` |
+| `pic_background_ion_q_over_mc` | Real | 0.0 | Background-ion charge-to-mass normalization; it must be positive when `pic_cr_hall_mode=full`, fixes the physical electron-charge denominator, and is not a Hall-strength knob |
 | `pic_wave_damping_mode` | string | off | `off` or `ion_neutral_friction`; the reduced static-neutral transverse-friction map is restricted to `extended_mhd_pic` with coupled MHD |
 | `pic_ion_neutral_collision_rate` | Real | 0.0 | Non-negative `nu_in`; must be positive when reduced ion-neutral friction is enabled |
 | `pic_max_cell_cross` | int | 2 | Particle cell-crossing timestep limit before global CFL scaling; must not exceed the smallest active MeshBlock dimension |

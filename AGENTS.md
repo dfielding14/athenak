@@ -242,8 +242,9 @@ paper, and separately named extension paths are not interchangeable.
 2. Particle tasks push CRs, deposit moments and per-step exchange channels, and
    synchronize those fields across block, MPI, and refinement boundaries.
 3. Coupled task insertion places the particle wrappers around the appropriate MHD
-   source/field stages; paper mode keeps constrained transport on ideal-MHD
-   induction while gas receives the documented opposite particle exchange.
+   source/field stages. `pic_cr_hall_mode=off` keeps ideal-MHD induction; `full`
+   adds the derived, stage-centered CR-Hall face induction and matched energy flux
+   while gas receives the documented opposite particle exchange.
 4. Particle ownership migration, AMR reconstruction, and restart loading must
    preserve particle payload, deposited state, source cohort, and runtime-model
    fingerprints.

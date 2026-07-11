@@ -35,10 +35,16 @@
 #undef Q019_ENGINEERING_UNDEF_Q019_HOST_CONTRACT
 #endif
 
+#if defined(Q019_NONLINEAR_BELL_SATURATION_ENGINEERING_HOST_CONTRACT)
+#define Q019_ENGINEERING_INLINE inline
+#else
+#define Q019_ENGINEERING_INLINE KOKKOS_INLINE_FUNCTION
+#endif
+
 namespace q019_nonlinear_bell_saturation_engineering {
 
-using q019_physics_first_nonlinear_bell_successor_v2::AxisAlignedEigenmodeVelocityAt;
 using q019_physics_first_nonlinear_bell_successor_v2::AxisAlignedVectorPotentialAt;
+using q019_physics_first_nonlinear_bell_successor_v2::SeedPhase;
 using q019_physics_first_nonlinear_bell_successor_v2::SeedParameters;
 using q019_physics_first_nonlinear_bell_successor_v2::SeedTopology;
 using q019_physics_first_nonlinear_bell_successor_v2::Vector3;
@@ -63,7 +69,33 @@ inline bool NearlyEqual(const double measured, const double expected) {
       std::abs(measured - expected) <= 1.0e-12*scale;
 }
 
+// The historical axis-aligned carrier winds opposite to the Bell-unstable
+// branch for J_cr parallel to +B0. Keep its broadband seed, but flip the
+// deterministic circular mode used by this newer engineering generator.
+Q019_ENGINEERING_INLINE Vector3 UnstableAxisAlignedVectorPotentialAt(
+    const SeedParameters parameters, const Vector3 position) {
+  Vector3 potential = AxisAlignedVectorPotentialAt(parameters, position);
+  const double phase = parameters.k0*position.x1 +
+      SeedPhase(parameters.field_seed, 0);
+  potential.x2 -= 2.0*parameters.eigenmode_amplitude*std::sin(phase)/parameters.k0;
+  return potential;
+}
+
+Q019_ENGINEERING_INLINE Vector3 UnstableAxisAlignedEigenmodeVelocityAt(
+    const SeedParameters parameters, const Vector3 position) {
+  const double phase = parameters.k0*position.x1 +
+      SeedPhase(parameters.field_seed, 0);
+  const double cs = std::cos(phase);
+  const double sn = std::sin(phase);
+  const double growth = std::sqrt(1.0 - parameters.epsilon*parameters.epsilon);
+  const double scale = parameters.eigenmode_amplitude/std::sqrt(parameters.rho);
+  return {0.0, scale*(-growth*cs - parameters.epsilon*sn),
+          scale*(parameters.epsilon*cs - growth*sn)};
+}
+
 }  // namespace q019_nonlinear_bell_saturation_engineering
+
+#undef Q019_ENGINEERING_INLINE
 
 #if !defined(Q019_NONLINEAR_BELL_SATURATION_ENGINEERING_HOST_CONTRACT)
 namespace {
@@ -108,12 +140,14 @@ void Q019EngineeringRequireClose(const std::string &name, const Real measured,
 
 void ProblemGenerator::Q019NonlinearBellSaturationEngineering(
     ParameterInput *pin, const bool restart) {
-  using q019_nonlinear_bell_saturation_engineering::AxisAlignedEigenmodeVelocityAt;
-  using q019_nonlinear_bell_saturation_engineering::AxisAlignedVectorPotentialAt;
   using q019_nonlinear_bell_saturation_engineering::DepositedJOverC;
   using q019_nonlinear_bell_saturation_engineering::RootCellVolume;
   using q019_nonlinear_bell_saturation_engineering::SeedParameters;
   using q019_nonlinear_bell_saturation_engineering::SeedTopology;
+  using q019_nonlinear_bell_saturation_engineering::
+      UnstableAxisAlignedEigenmodeVelocityAt;
+  using q019_nonlinear_bell_saturation_engineering::
+      UnstableAxisAlignedVectorPotentialAt;
   using q019_nonlinear_bell_saturation_engineering::Vector3;
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
@@ -270,9 +304,12 @@ void ProblemGenerator::Q019NonlinearBellSaturationEngineering(
                                  size.d_view(m).x3max);
     const Real x3f = LeftEdgeX(k - ks, indcs.nx3, size.d_view(m).x3min,
                                size.d_view(m).x3max);
-    const Vector3 av1 = AxisAlignedVectorPotentialAt(parameters, {x1v, x2f, x3f});
-    const Vector3 av2 = AxisAlignedVectorPotentialAt(parameters, {x1f, x2v, x3f});
-    const Vector3 av3 = AxisAlignedVectorPotentialAt(parameters, {x1f, x2f, x3v});
+    const Vector3 av1 =
+        UnstableAxisAlignedVectorPotentialAt(parameters, {x1v, x2f, x3f});
+    const Vector3 av2 =
+        UnstableAxisAlignedVectorPotentialAt(parameters, {x1f, x2v, x3f});
+    const Vector3 av3 =
+        UnstableAxisAlignedVectorPotentialAt(parameters, {x1f, x2f, x3v});
     a1(m, k, j, i) = av1.x1;
     a2(m, k, j, i) = av2.x2;
     a3(m, k, j, i) = av3.x3;
@@ -316,7 +353,8 @@ void ProblemGenerator::Q019NonlinearBellSaturationEngineering(
                                 size.d_view(m).x2max);
     const Real x3 = CellCenterX(k - ks, indcs.nx3, size.d_view(m).x3min,
                                 size.d_view(m).x3max);
-    const Vector3 velocity = AxisAlignedEigenmodeVelocityAt(parameters, {x1, x2, x3});
+    const Vector3 velocity =
+        UnstableAxisAlignedEigenmodeVelocityAt(parameters, {x1, x2, x3});
     w0(m, IDN, k, j, i) = rho;
     w0(m, IVX, k, j, i) = velocity.x1;
     w0(m, IVY, k, j, i) = velocity.x2;
