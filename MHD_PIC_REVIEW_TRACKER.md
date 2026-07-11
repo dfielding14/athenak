@@ -1,752 +1,231 @@
-# Temporary MHD-PIC Implementation Review and Remediation Tracker
-
-> **Temporary working document.** Update this file as fixes, tests, and
-> qualification runs land. Delete it only after every required item in the
-> final deletion checklist is complete.
-
-## Baseline and scope
-
-- Review branch: `PIC_development`
-- Reviewed commit: `f8a56172983a1f009662af4217dcb7b52032d7dc`
-- Review date: 2026-07-08
-- Review type: source/static review, implementation remediation, and focused runtime tests
-- Fresh AthenaK build or simulation performed during review: serial and MPI-enabled
-  builds, bounded serial/two-rank regressions, focused Frontier validation, and an
-  integrated post-fix `128^3` MHD/MHD-PIC turbulent-box matrix
-- Primary implementation reviewed:
-  - `src/particles/`
-  - `src/mhd/mhd_tasks.cpp` and `src/mhd/mhd_update.cpp`
-  - `src/bvals/bvals_part.cpp` and `src/bvals/bvals_mom.cpp`
-  - `src/pgen/tests/pic_parallel_shock.cpp`
-  - Bell problem generators and campaign contracts
-  - `src/srcterms/turb_driver.cpp`
-  - Current turbulent-box, Bell, and parallel-shock inputs and tests
-
-This review concentrates on coding practice, numerical stability, efficiency,
-particle-fluid conservation, physical correctness, and the robustness of the
-current campaign choices.
-
-## Status convention
-
-- **OPEN**: confirmed issue; no accepted fix yet.
-- **IN PROGRESS**: implementation or validation is actively underway.
-- **FIXED, NEEDS VALIDATION**: source fix exists but the required evidence is incomplete.
-- **CLOSED**: fix, regression coverage, and relevant physical validation are complete.
-- **ACCEPTED LIMITATION**: deliberately retained, clearly scoped, and protected from
-  unsupported scientific claims.
-
-Severity convention:
-
-- **P0**: stop physical interpretation or production use of the affected workflow.
-- **P1**: fix or explicitly qualify before science use.
-- **P2**: engineering, performance, maintainability, or secondary robustness issue.
-
-## Executive assessment
-
-The uniform-grid, full-f `paper_mhd_pic_vl2_tsc` core is conceptually sound.
-The explicit-midpoint chronology, relativistic Boris kick, TSC gather/deposit,
-and opposite gas/particle momentum and kinetic-energy exchange are mutually
-consistent on uniform grids.
-
-The implementation is not yet generally science-ready. The original P0 turbulence
-driver, mixed particle migration/destruction blockers, feedback admissibility, and
-particle timestep blockers are closed on `PIC_development`; AMR conservation remains
-open. The shock and Bell campaigns also have important physical-qualification gates
-that must remain separate from code-mechanics tests.
-
-Until the corresponding items below are closed:
-
-- Treat pre-fix turbulent-box outputs as exploratory; retained post-P0 validation
-  remains explicitly development-only because it predates the P1 safeguards and the
-  remaining AMR/Bell/shock science gates.
-- Do not reinterpret pre-fix multi-rank shock survivor populations without provenance;
-  current-branch migration, escape-ledger, restart, and survivor parity are closed.
-- Do not claim exact particle-fluid conservation on AMR/SMR meshes.
-- Treat current nonlinear Bell runs as engineering candidates rather than
-  qualifying physical evidence.
-
-## Recommended remediation order
-
-### 0. Protect interpretation of existing results
-
-- [x] Mark pre-fix turbulent-box results as exploratory and keep post-fix validation
-  explicitly development-only.
-- [x] Protect pre-fix shock interpretation and close current-branch simultaneous
-  migration/escape survivor and ledger parity under `MIG-1`.
-- [ ] Keep AMR exact-conservation and nonlinear Bell claims fail-closed.
-
-### 1. Fix active correctness blockers
-
-- [x] Fix `TURB-1`: constant-energy normalization root.
-- [x] Fix `TURB-2`: midpoint/VL2 forcing energy update.
-- [x] Fix `TURB-3`: inactive-dimension forcing modes and solenoidal projection.
-- [x] Fix `TURB-4`: signed isotropic Fourier-mode enumeration.
-- [x] Fix `MIG-1`: unified migration/destruction compaction.
-- [x] Add focused regressions for all five fixes before rerunning campaigns.
-
-Integrated closure evidence (development validation, nonqualifying): the retained
-`128^3` MHD/MHD-PIC matrix reaches every terminal time, keeps forcing-power error
-between `3.78e-4` and `5.09e-4` against a `1e-3` bound, and preserves
-`max(divB) < 2.76e-13`. MHD restart is bitwise exact. CR restart metadata is exact;
-floating differences affect `2.74e-4` of particle real values and at most `1.01e-4`
-of any mesh field. Their maximum field-scale float32 errors are `1.51` and `4.38`,
-respectively, within the documented eight-epsilon bound. Raw ULP counts are retained
-for audit but are not gated because signed values crossing zero make local ULP distance
-ill-conditioned. Four/eight-rank decomposition errors are at roundoff or exact. Worker
-reanalysis job `4968813` passes the complete matrix in `16.1 s` of analyzer time.
-
-### 2. Add stability and admissibility protection
-
-- [x] Implement `STAB-1`: feedback source positivity/source-timescale control.
-- [x] Implement `DT-1`: globally safe gyrofrequency bound.
-- [x] Implement `DT-2`: pre-transaction injection timestep validation.
-- [x] Add fail-fast accounting for source-induced gas floors.
-
-Focused closure evidence (development validation, nonqualifying): the ideal-MHD
-feedback paths now inspect the post-source trial state before C2P and abort with global
-nonfinite, density, pressure/internal-energy, temperature, and entropy counts. A normal
-two-cycle coupled oscillation and a one-cycle paper-VL2 shock carrier pass; high-current
-and `deposit_qscale=1e6` cases fail at the new guard before an EOS floor can add energy.
-The particle timestep uses the maximum configured species `|q/m|` with active plus ghost
-magnetic fields even when no particles exist. Empty-pack `|q/m|=1000` tests select
-`dt=1.664101e-5` in serial and MPI2. An intentionally restrictive first shock cohort
-selects `dt=1.993355e-3`, injects and pushes six particles without an invalid crossing in
-serial and MPI2. Current-source Frontier job `4968943` completed in 17 seconds with both
-timestep checks and a valid two-rank coupled-feedback cycle; jobs `4968893` and
-`4968928` are retained as preceding equivalent timestep runs.
-
-### 3. Resolve the AMR conservation policy
-
-- [ ] Choose between a conservative cross-level deposition implementation and an
-  explicitly accepted non-conservative `paper_smooth` limitation.
-- [ ] Implement and validate the choice in `AMR-1`.
-- [ ] Run matched uniform/AMR interface tests before using AMR shock outputs for
-  conservation-sensitive conclusions.
-
-### 4. Improve shock physical fidelity
-
-- [ ] Freeze one startup injection history under `SHOCK-1`.
-- [ ] Implement or validate measured shock-surface and mass-flux tracking under
-  `SHOCK-2`.
-- [ ] Add and monitor a CR-Hall applicability diagnostic under `SHOCK-3`.
-- [ ] Re-run controlled planar reproduction tests before nonlinear shock/Bell claims.
-
-### 5. Qualify the Bell workflow
-
-- [ ] Prevent accidental physical use of the legacy normalization under `BELL-1`.
-- [ ] Close the Q043 raw deposited-current matrix under `BELL-2`.
-- [ ] Close corrected linear Bell growth, wavelength, phase, and polarization tests.
-- [ ] Close PPC, resolution, timestep, decomposition, rigidity, and artificial-light-
-  speed convergence gates before nonlinear use.
-
-### 6. Scale and harden the implementation
-
-- [ ] Address the highest-impact performance items in `PERF-1` through `PERF-4`.
-- [ ] Address validation and MPI failure behavior in `ROBUST-1` through `ROBUST-4`.
-- [ ] Make all source-local and default regression entry points green.
-
-## Detailed findings
-
-### TURB-1 — Incorrect constant-energy normalization root
-
-- Status: **CLOSED**
-- Severity: **P0**
-- Affected workflows: all current turbulent boxes with `constant_edot=true`
-- Evidence: `src/srcterms/turb_driver.cpp:908-966`
-
-The scale factor solves
-
-\[
-m_0 s^2 + m_1 s = \dot E,
-\]
-
-whose positive root always begins with `-m1/(2*m0)`. The `m1 < 0` branch instead
-uses `+m1/(2*m0)`, so it does not solve the requested energy-injection equation
-when fluid velocity and force are anti-correlated.
-
-Required work:
-
-- [x] Replace the branch with a numerically stable form of the correct positive root.
-- [x] Add manufactured tests with positive, zero, and negative `m1`.
-- [x] Verify measured `Delta E / Delta t` against configured `dedt` in serial and MPI.
-- [x] Verify restart continuation preserves the same forcing normalization.
-
-Closure evidence: serial and true two-rank MHD/MHD-PIC runtime budgets pass. A
-cycle-one restart continuation reproduces the uninterrupted final force exactly and
-the final history to `1e-14`. A deliberately anti-correlated runtime case has
-`m1=-2.74606726e-2`; its predicted power is `6.000000019e-2` with a normalization
-residual of `1.92e-10`. Measured power errors decrease monotonically from
-`4.78e-4` to `2.88e-4` as CFL is halved twice. An existing 2-D campaign checkpoint
-with legacy nonnegative bounds also loads through the compatibility upgrade.
-
-Closure criterion: the measured injection agrees with the requested value within
-a documented discretization/roundoff tolerance for both signs of `m1`.
-
-### TURB-2 — Midpoint/VL2 forcing double-counts quadratic kinetic energy
-
-- Status: **CLOSED**
-- Severity: **P0**
-- Affected workflows: all turbulent boxes using `paper_mhd_pic_vl2_tsc`
-- Evidence:
-  - midpoint weights: `src/driver/driver.cpp:159-167`
-  - force update: `src/srcterms/turb_driver.cpp:1067-1092`
-  - stage weight application: `src/srcterms/turb_driver.cpp:1348-1365`
-
-Stage 2 evaluates work using the midpoint velocity and then adds another finite-kick
-term, `0.5*a^2*dt^2`. For constant acceleration this gives
-
-\[
-\Delta E = \rho\left(v_0\cdot a\,\Delta t + a^2\Delta t^2\right)
-\]
-
-instead of
-
-\[
-\Delta E = \rho\left(v_0\cdot a\,\Delta t + \tfrac12 a^2\Delta t^2\right).
-\]
-
-When `v dot a` is small, the injected energy can approach twice the requested value.
-
-Required work:
-
-- [x] Make staged forcing obey the selected RK tableau.
-- [x] Use midpoint work without the extra stage-2 quadratic term, or implement a
-  consistent once-per-cycle operator-split exact kick.
-- [x] Add a production-path uniform constant-acceleration one-cycle invariant test.
-- [x] Test MHD-only and MHD-PIC modes to ensure selecting PIC does not change the
-  intended forcing power.
-
-The implementation applies only `rho*v.a` in multi-stage RK source updates; the
-finite-kick quadratic term is retained only for RK1 and explicit standalone impulses.
-The test-only `turb_uniform_accel_test` pgen overwrites the force register after normal
-force setup while retaining the production RK/source/C2P/PIC task path. RK1 MHD,
-Heun MHD, and PIC-VL2 midpoint cases agree with the analytic one-cycle solution:
-history error `8.88e-16`, forcing-power error `8.38e-14`, emitted-force error zero,
-and float32 binary-field error `2.38e-8`. Heun and PIC midpoint final states agree to
-`5.55e-17`; the custom force hook is unavailable in normal production builds.
-
-Closure criterion: momentum and energy match the analytic constant-force solution
-through the expected order, and measured forcing power is independent of the PIC
-integrator selection.
-
-### TURB-3 — Current 2-D forcing is not solenoidal
-
-- Status: **CLOSED**
-- Severity: **P0** for 2-D turbulent boxes
-- Evidence:
-  - nonzero default `kz`: `src/srcterms/turb_driver.cpp:92-97`
-  - mode generation: `src/srcterms/turb_driver.cpp:570-595`
-  - flattened z dependence: `src/srcterms/turb_driver.cpp:429-448`
-  - 3-D projection: `src/srcterms/turb_driver.cpp:647-667`
-
-The 2-D basis removes spatial z dependence but the amplitude projection still uses
-the nonzero three-dimensional wavevector. Therefore a nominally solenoidal force
-generally has nonzero two-dimensional divergence.
-
-Required work:
-
-- [x] Force inactive-dimensional mode numbers to zero.
-- [x] Project using only active spatial wavevector components.
-- [x] Decide and document whether an out-of-plane acceleration component is retained
-  in 2D3V.
-- [x] Add an emitted-force spectral-divergence regression.
-
-The supported isotropic driver retains the out-of-plane acceleration as a valid
-2D3V solenoidal component. The inconsistent legacy `driving_type=1` path is rejected
-rather than exposed as a physical option. Emitted 1-D, 2D3V, and 3-D fields pass
-spectral-divergence checks: the 1-D longitudinal fraction is `2.16e-17` with unit
-transverse fraction, while the sampled 2D3V and 3-D maxima are below `3.25e-8`.
-
-Closure criterion: `sol_fraction=1` produces divergence consistent with roundoff and
-the selected discrete derivative in every supported dimensionality.
-
-### TURB-4 — Fourier mode enumeration is angularly biased
-
-- Status: **CLOSED**
-- Severity: **P0** for isotropic-turbulence claims
-- Evidence: `src/srcterms/turb_driver.cpp:210-231,570-588`
-- Reference implementation: `src/srcterms/initial_perturbations.cpp:272-279,414-444`
-
-The driver enumerates only nonnegative Cartesian mode components. The real-field
-conjugate supplies `-k`, but mixed-sign directions such as `(1,-1,0)` remain absent.
-This is not an isotropic shell.
-
-Required work:
-
-- [x] Adopt signed canonical-half-space enumeration.
-- [x] Preserve deterministic seeding and restart behavior.
-- [x] Test mode counts and absence of duplicate conjugate pairs.
-- [x] Test the unweighted mode angular tensor for isotropy.
-- [x] Test stochastic forcing covariance over enough realizations.
-
-Default isotropic bounds are the complete signed cube and asymmetric explicit bounds
-are rejected. Runtime FFT checks confirm mixed-sign modes in 2-D and 3-D, and a
-cycle-one restart is bitwise identical in the emitted force. Covariance tests over
-256 deterministic seeds in both 3-D and 2D3V satisfy the finite-sample angular-tensor
-contract; repeated-seed force fields and decomposition outputs are exact. Physical-k
-isotropy remains scoped to equal active-axis box/tile lengths.
-
-Closure criterion: shell angular moments are isotropic within a documented finite-mode
-tolerance and reproducible across decompositions and restarts.
-
-### MIG-1 — Mixed migration and destruction corrupt particle identity
-
-- Status: **CLOSED**
-- Severity: **P0** for multi-rank nonperiodic particle runs
-- Evidence: `src/bvals/bvals_part.cpp:976-1035`
-
-Send holes and destruction holes are compacted in separate passes. The send-hole pass
-can copy a particle that is itself in `destroylist`. For example, with ten particles,
-`send={1}`, `destroy={9}`, and no receives, particle 9 is copied into slot 1 and survives,
-while shrinking the arrays drops valid particle 8. The escape ledger records the original
-destruction before this corruption and can therefore appear correct.
-
-Required work:
-
-- [x] Merge send and destruction indices into one unique sorted hole set.
-- [x] Fill receives and compact survivors against that unified set exactly once.
-- [x] Move compaction to a device kernel or otherwise avoid per-particle deep copies.
-- [x] Add a two-rank test with simultaneous inter-rank migration and physical escape.
-- [x] Compare complete tag/source/species/state inventories, not only particle counts.
-
-The exhaustive planner oracle and serial/two-rank end-to-end identity tests pass. The
-dedicated production-path closure fixture retains 128 survivors, every survivor crosses
-rank ownership at least twice and on both sides of a cycle-12 restart, and both ranks
-simultaneously migrate survivors and destroy particles. Four 16-particle destruction
-cohorts occur at cycles 4, 10, 16, and 22. All 26 real and four integer schema-7 fields
-are bitwise identical across serial/MPI2 and full/restart runs. Per-cycle and cumulative
-boundary ledgers agree exactly within their `2e-13` arithmetic tolerance, ending with
-64 escapes, mass `0.0625`, momentum-2 `0.1`, energy `0.0799999999999488`, and zero
-reflection or ledger errors.
-
-Closure criterion: exact survivor identity and boundary ledgers agree across serial,
-MPI, restart, and repeated boundary-crossing cases.
-
-### AMR-1 — `paper_smooth` is not conservative across refinement interfaces
-
-- Status: **OPEN POLICY DECISION**
-- Severity: **P1**
-- Evidence:
-  - implementation: `src/particles/particles_moments.cpp:629-933`
-  - frozen raw totals: `tst/scripts/particles/pic_paper_smooth_tsc_oracle.py:117-126`
-  - explicit no-renormalization policy:
-    `tst/scripts/particles/pic_paper_smooth_tsc_oracle.py:251-263`
-
-Receiver-resolution TSC is evaluated independently on each level without cross-interface
-normalization. Representative 1-D totals include `37/32` and `707/800`, so integrated
-gas momentum and energy feedback do not necessarily equal the opposite particle change.
-
-The exact shock conservation ledger correctly rejects AMR/SMR in
-`src/pgen/tests/pic_parallel_shock.cpp:4178-4243`; this protection must remain until the
-policy is resolved.
-
-Required decision:
-
-- [ ] Implement a conservative cross-level partition/reflux/adjoint scheme; **or**
-- [ ] Retain `paper_smooth` as an accepted non-conservative model with explicit error
-  bounds and prohibit exact-conservation claims.
-
-Required validation:
-
-- [ ] Check partition of unity for every interface position and supported dimension.
-- [ ] Check total gas plus particle momentum and energy closure.
-- [ ] Test dynamic AMR, SMR, MPI decomposition, restart, and interface corners.
-- [ ] Compare Bell growth and shock precursor structure with a matched uniform grid.
-
-### STAB-1 — No feedback source-timescale or positivity constraint
-
-- Status: **CLOSED**
-- Severity: **P1**
-- Evidence:
-  - feedback update: `src/mhd/mhd_tasks.cpp:432-443`
-  - particle timestep: `src/particles/particles.cpp:1909-2034`
-  - energy floor: `src/eos/ideal_c2p_mhd.hpp:43-56`
-
-The final gas update subtracts the full deposited particle impulse without checking that
-the resulting gas state has positive internal energy. FOFC only repairs flux updates and
-cannot preempt source-driven failures. Subsequent EOS floors inject energy and invalidate
-exact conservation.
-
-Required work:
-
-- [x] Form a trial post-feedback gas state.
-- [x] Add a fail-fast admissibility threshold using the configured EOS floors.
-- [x] Record global nonfinite, density, pressure/energy, temperature, and entropy counts.
-- [x] Make all ideal-MHD coupled feedback runs abort on any such event.
-- [x] Stress-test high macro-particle loading and strong currents, and pass a bounded
-  paper-VL2 shock-cell carrier without false positives.
-
-Implementation and evidence:
-
-- `MHD::ValidatePICFeedbackState` runs immediately after all three feedback locations,
-  before C2P can repair the conserved state and invalidate exact exchange.
-- A normal coupled oscillation passes two cycles. Both a `1e8` momentum-feedback stress
-  and a `deposit_qscale=1e6` Boris stress abort with pressure/energy, temperature, and
-  entropy counts and zero density/nonfinite counts.
-- `pic_parallel_shock_section54_stage_timing_acceptance_vl2_tsc` passes one cycle with
-  the guard active. Retained outputs are under `validation/pic-safety-local/`.
-
-### DT-1 — Gyro bound combines only rank-local extrema
-
-- Status: **CLOSED**
-- Severity: **P1**
-- Evidence: `src/particles/particles.cpp:1976-2030` and `src/mesh/mesh.cpp:641-650`
-
-A rank-local maximum particle `|q/mc|` is multiplied by a rank-local maximum magnetic
-field. Only the resulting timestep is globally minimized. A particle and a strong field
-on different ranks therefore never form the required worst-case product.
-
-Required work:
-
-- [x] Use the maximum configured species `|q/mc|` on every rank.
-- [x] Include the full allocated active-plus-ghost field region.
-- [x] Add serial and MPI2 empty-pack high-q/m/strong-B regressions; the empty case is a
-  stricter distributed-extrema test because no rank can supply a particle-local q/m.
-
-The retained MPI2 result from current-source job `4968943` matches the analytic bound:
-`0.1 * 0.3 / (1000 * sqrt(3.25)) = 1.66410059e-5`, measured
-`1.664101e-5`. Species mass and charge now also reject nonfinite input.
-
-### DT-2 — First injected shock cohort can bypass particle timestep limits
-
-- Status: **CLOSED**
-- Severity: **P1**
-- Evidence:
-  - empty-particle early return: `src/particles/particles.cpp:1929-1931`
-  - callback ordering: `src/driver/driver.cpp:507-520,617-618`
-  - injection append: `src/pgen/tests/pic_parallel_shock.cpp:3292-3350,4000-4012`
-
-The timestep is chosen before the next cycle's injection. If no particles existed during
-selection, the first cohort is pushed using an MHD-only timestep.
-
-Required work:
-
-- [x] Include configured species q/m bounds in ordinary timestep selection, including
-  an empty particle pack.
-- [x] Limit the shock timestep from the configured injection-velocity envelope before
-  the injection count and gas-subtraction transaction consume `pm->dt`.
-- [x] Add an intentionally restrictive first-cohort test in serial and MPI2.
-
-With `ps_vinj_over_u0=100`, the old MHD-only step was `4.235803e-2` and caused invalid
-multi-cell destruction. The repaired path uses
-`0.3 * 2 / (300 + 1) = 1.99335548e-3`, measured `1.993355e-3`, and advances six newly
-injected particles without an invalid crossing. The transaction and push use the same
-bounded timestep, so injection mass accounting is not retroactively changed.
-
-### SHOCK-1 — Incompatible startup injection histories
-
-- Status: **OPEN POLICY DECISION**
-- Severity: **P1**
-- Evidence:
-  - particle removal: `src/pgen/tests/pic_parallel_shock.cpp:2142-2213`
-  - production-style t=0 injection and t=45 removal:
-    `inputs/publication/pic_parallel_shock_section54_production_science_successor_v1_vl2_tsc.athinput:134-140`
-  - delayed static injection: `inputs/q011_section54_static_dx3_final_v1_vl2_tsc.athinput:157-164`
-
-Deleting early particles does not restore gas mass, momentum, or energy already removed
-at injection. A run that injects at t=0 and deletes the cohort at t=45 is therefore not
-equivalent to a run that begins injection at t=45.
-
-Required work:
-
-- [ ] Freeze one science policy; delayed injection after shock formation is preferred.
-- [ ] Run a matched startup-history comparison.
-- [ ] Prevent cross-comparison of histories unless the resulting shock-state difference
-  is explicitly quantified.
-
-### SHOCK-2 — Injection follows an analytic rather than measured shock surface
-
-- Status: **OPEN / CONTROLLED-MODE LIMITATION**
-- Severity: **P1**
-- Evidence: `src/pgen/tests/pic_parallel_shock.cpp:736-769,2758-2783,3003-3018`
-
-Particle placement and injected mass use an analytic planar surface, fixed model speed,
-fixed upstream density, and planar area. This is suitable for a short Section 5.4-style
-controlled reproduction but not for a corrugated or CR-modified nonlinear shock.
-
-Required work:
-
-- [ ] Track the local and area-averaged shock surface.
-- [ ] Measure upstream surface-normal mass flux.
-- [ ] Gate injection validity on alignment with the detected front.
-- [ ] Report the effective injected fraction using measured swept mass.
-- [ ] Compare analytic-surface and tracked-surface pilots.
-
-### SHOCK-3 — Paper mode omits CR-Hall induction physics
-
-- Status: **ACCEPTED LIMITATION, NEEDS DIAGNOSTIC**
-- Severity: **P1** when the Hall parameter is not small
-- Evidence: `src/particles/particles.hpp:554-559` and
-  `src/particles/particles.cpp:1302-1312`
-
-Paper mode correctly reproduces the ideal-MHD induction choice and rejects the
-experimental direct-current CT path. The resulting shock model is physically applicable
-only while the CR-Hall correction remains demonstrably small.
-
-Required work:
-
-- [ ] Define and output local/volume/surface Hall applicability measures.
-- [ ] Freeze an acceptance threshold.
-- [ ] Stop or mark runs nonqualifying if the threshold is exceeded.
-- [ ] Keep the experimental Hall extension outside paper-mode claims until independently
-  validated.
-
-### BELL-1 — Legacy nonphysical current normalization remains runnable
-
-- Status: **OPEN**
-- Severity: **P1**
-- Evidence:
-  - legacy relation: `src/pgen/tests/q023_paper_bell_linear.cpp:121-136`
-  - corrected relation: `src/pgen/tests/q043_bell_current_volume_aware.cpp:88-116`
-  - supersession record:
-    `tst/publication/readiness/q043_bell_current_normalization_supersession_2026-06-06.json`
-
-The legacy generator omits root-cell volume and incorrectly includes the artificial CR
-light speed in the deposited-current target. The repository documents the invalidation,
-but the generator and decks remain directly runnable.
-
-Required work:
-
-- [ ] Require an explicit `legacy_nonphysical_mechanics_only` opt-in, or reject legacy
-  generators in science launch tooling.
-- [ ] Ensure every active Bell deck uses the volume-aware `J_CR/c` relation.
-- [ ] Print derived deposited current and root-cell volume at startup.
-
-### BELL-2 — Corrected Bell mechanics lack qualifying runtime evidence
-
-- Status: **OPEN**
-- Severity: **P1**
-- Evidence:
-  - Q043 volume-aware source and oracle
-  - Q019 deck fields `q043_independent_raw_cycle_one_oracle_bound=false`,
-    `q023_independent_linear_predecessor_bound=false`, and `launch_authorized=false`
-  - Q019 checked-in manifest currently drifts from generated content
-
-The corrected Q043 and current Q019 source arithmetic are well designed, but host harnesses
-that include the production source are self-consistency tests rather than independent
-runtime evidence.
-
-Required work:
-
-- [ ] Complete the Q043 deposited-current matrix across dimension, resolution, PPC,
-  decomposition, and artificial light speed.
-- [ ] Independently recompute `J_CR/c` from raw particle and grid outputs.
-- [ ] Complete corrected linear Bell growth, wavelength, phase, and polarization tests.
-- [ ] Close convergence gates before nonlinear saturation work.
-- [ ] Regenerate and review manifests only after the source and deck set are frozen.
-
-### PERF-1 — AMR paper deposition abandons GPU residency
-
-- Status: **OPEN**
-- Severity: **P2**, potentially run-limiting
-- Evidence: `src/particles/particles_moments.cpp:662-868` and
-  `src/bvals/bvals_mom.cpp:142-196`
-
-Each deposition stage mirrors all particle data to the host, builds receiver records in a
-serial host loop, performs global collectives, reallocates a device record array, and copies
-records back. Paper mode does this twice per timestep.
-
-Required work:
-
-- [ ] Replace global exchange with sparse neighbor/device-aware transport.
-- [ ] Build and compact records on device.
-- [ ] Retain capacity rather than reallocating exact sizes every stage.
-- [ ] Benchmark strong/weak scaling on the intended Frontier topology.
-
-### PERF-2 — Ordinary migration uses global metadata and allocation churn
+# MHD-PIC Active Development Tracker
 
-- Status: **OPEN**
-- Severity: **P2**
-- Evidence: `src/bvals/bvals_part.cpp:618-645,680-797,909-913,976-1038`
+> Temporary working document for `PIC_development`, simplified 2026-07-11.
+> Detailed findings from the original review remain available in Git history at
+> `9364e0ff3:MHD_PIC_REVIEW_TRACKER.md`.
 
-Migration globally gathers sender descriptors, repeats the global particle-count gather,
-reallocates full-size send/destroy lists and exact message buffers, and uses many small
-deep copies during compaction.
+## Purpose and baseline
 
-Required work:
+This tracker records work that affects the next planned MHD-PIC science runs. It follows
+the project principles in [ethos.md](ethos.md): physical consistency is non-negotiable,
+while validation, hardening, and optimization should be proportional to demonstrated
+risk and intended use.
 
-- [ ] Use sparse handshakes or neighbor collectives.
-- [ ] Remove the redundant particle-count allgather.
-- [ ] Introduce retained geometric-capacity buffers.
-- [ ] Use a single device compaction kernel shared with `MIG-1`.
+- Branch: `PIC_development`
+- Current evaluated HEAD: `9364e0ff37`
+- Near-term workflows: uniform-grid Bell, non-relativistic shocks, and turbulent boxes
+- Detailed roadmap: `MHD_PIC_NEXT_STEPS_GUIDE.md` in the shared PIC workspace
 
-### PERF-3 — Shock injection is globally replicated and repeatedly reallocates
+Status meanings:
 
-- Status: **OPEN**
-- Severity: **P2**
-- Evidence: `src/pgen/tests/pic_parallel_shock.cpp:2835-2851,3060-3111,3292-3348`
+- **ACTIVE**: work on the immediate path.
+- **NEXT**: small, concrete cleanup to do after or alongside active work.
+- **LIMITATION**: known and documented; not on the critical path for current runs.
+- **BACKLOG**: act only when profiling, a failure, or a planned configuration triggers it.
+- **CLOSED**: fixed and covered by focused evidence.
 
-Every rank receives the full shock-cell list, loops over the global injected population,
-and grows particle arrays to the exact new count each cycle.
+Closed work is summarized here rather than carried as hundreds of lines of completed
+checklists:
 
-Required work:
+- `TURB-1`–`TURB-4`: **CLOSED**. Correct normalization root, RK-consistent work,
+  active-dimension projection, and signed isotropic modes. Implementation `a458bf08e`;
+  focused validation `75da80082`.
+- `MIG-1`: **CLOSED**. Unified migration/destruction compaction with survivor, restart,
+  and ledger tests. Implementation `a458bf08e`; focused validation `75da80082`.
+- `STAB-1`: **CLOSED**. Post-feedback admissibility check before EOS repair in
+  `9364e0ff3`.
+- `DT-1`, `DT-2`: **CLOSED**. Global configured-species gyro bound and pre-injection
+  timestep bound in `9364e0ff3`.
 
-- [ ] Use distributed prefix selection and direct owner construction.
-- [ ] Maintain particle-array capacity separately from live particle count.
-- [ ] Benchmark injection cost versus total particle count and rank count.
-
-### PERF-4 — Advertised sorting and load-balancing controls are ineffective
-
-- Status: **OPEN**
-- Severity: **P2**
-- Evidence:
-  - `pic_sort_interval` parse only: `src/particles/particles.cpp:749-755`
-  - uniform-mesh balancing exclusion: `src/driver/driver.cpp:642-647`
-
-`pic_sort_interval` is parsed and restart-fingerprinted but never used. Bell and shock decks
-set it nonzero. Particle-weighted balancing is also inactive for uniform
-`refinement=none` Bell decks even when their cost is nonzero.
-
-Required work:
-
-- [ ] Implement stable device sorting/binning by MeshBlock/cell/tag on the requested cadence,
-  or reject nonzero values.
-- [ ] Document the mesh classes on which particle-aware balancing is active.
-- [ ] Decide whether periodic redistribution is needed for uniform particle runs.
-
-### ROBUST-1 — Invalid particle state can be silently accepted or rewritten
-
-- Status: **OPEN**
-- Severity: **P2**
-- Evidence: `src/particles/particles.cpp:219-225,412-475,572-645,1589-1613`,
-  `src/particles/particles_pushers.cpp:507-515`, and
-  `src/particles/particles_moments.cpp:702-705,1012-1016,1066-1070`
-
-Several physical inputs lack complete finite/positivity checks, and nonpositive particle
-weights are silently replaced by one in paper push/deposition paths.
-
-Required work:
-
-- [ ] Centralize finite and admissibility validation for configuration, initialization,
-  injection, migration, and restart.
-- [ ] Fail closed on invalid weights, species, GID, state, or macro mass.
-- [ ] Add an optional per-cycle debug state audit.
-
-### ROBUST-2 — Rank-local exits can strand MPI peers
-
-- Status: **OPEN**
-- Severity: **P2**
-- Evidence: error paths in `src/particles/particles_moments.cpp:690-818` and
-  `src/bvals/bvals_part.cpp:680-1089`
-
-Several locally detected errors call `std::exit` before other ranks reach collective
-operations. Use collective validation where appropriate and the repository's MPI-aware
-fatal path for unrecoverable failures.
-
-Required work:
-
-- [ ] Audit PIC and turbulence fatal paths.
-- [ ] Replace unsafe local exits with collective checks or `AbortOnFatalError()`.
-- [ ] Add an injected-error MPI test that terminates cleanly rather than hanging.
-
-### ROBUST-3 — `TaskStatus::fail` can produce an infinite busy loop
-
-- Status: **OPEN**
-- Severity: **P2**
-- Evidence: `src/tasklist/task_list.hpp:144-157` and `src/driver/driver.cpp:369-385`
-
-Only `complete` is handled specially. A task returning `fail` remains runnable forever,
-and the driver has no progress or timeout detection.
-
-Required work:
-
-- [ ] Propagate `fail` to the driver and terminate through the MPI-aware fatal path.
-- [ ] Add no-progress detection for task lists.
-- [ ] Test a manufactured boundary-communication failure.
-
-### ROBUST-4 — Turbulence MPI reductions assume double precision
-
-- Status: **OPEN**
-- Severity: **P2**
-- Evidence: `src/srcterms/turb_driver.cpp:890-895,943-946,1228-1233`
-
-`Real` arrays are reduced using `MPI_DOUBLE`. Single-precision builds can read and write
-beyond the buffers.
-
-Required work:
-
-- [ ] Replace `MPI_DOUBLE` with `MPI_ATHENA_REAL`.
-- [ ] Build and run the turbulence unit tests in single and double precision.
-
-## Validation baseline from the review
-
-These results describe the reviewed baseline and should be updated as fixes land.
-
-| Validation | Baseline result | Interpretation |
-|---|---:|---|
-| Paper-smooth topology/raw-TSC tests | 11 passed | Confirms current routing and intentionally non-unit interface totals; not a conservation qualification |
-| Q043 corrected-current host tests | 12 passed | Strong source-local arithmetic check; not independent runtime evidence |
-| Q019 design tests | 23 passed, 1 failed, 5 skipped | Checked-in manifest drift |
-| Q023 host tests | 3 passed, 1 failed | Stale artifact hash |
-| Q011 shock preparation tests | 1 passed, 4 failed | Stale source-fragment contracts and hashes |
-| Q019 checked-in deck CLI validation | failed | Checked-in manifest drifted |
-| Fresh serial Debug build (`PROBLEM=turb`) | passed | Full executable build and `-c` startup identity |
-| Fresh MPI-enabled Debug build (`PROBLEM=turb`) | passed | Full executable build plus true two-rank MHD and MHD-PIC runs |
-| Blocker host tests | 4 passed | Stable root, RK energy maps, signed modes/projection, and exhaustive compaction identity |
-| Focused AthenaK regression harness | 2 of 2 passed | Fresh serial build ran turbulence and migration/destruction smokes |
-| Turbulence runtime smoke | serial/MPI2 passed | 3-D MHD-PIC/MHD-only budgets, 2D3V, force FFT, restart parity, and legacy-bound upgrade |
-| Migration/destruction runtime smoke | serial/MPI2 passed | Exact 180-of-192 survivor inventory and full state/metadata parity |
-| PIC feedback admissibility guard | valid coupled/shock cases pass; two stress cases abort as designed | Prevents C2P floors from silently adding energy after feedback |
-| Empty-pack gyro timestep | serial/MPI2 passed | Analytic `dt=1.66410059e-5`; configured species and ghost-field bound active without particles |
-| Restrictive first shock cohort | serial/MPI2 passed | Analytic `dt=1.99335548e-3`; six injected particles advance without invalid crossing |
-
-Additional test-infrastructure issue:
-
-- `tst/run_tests.py` discovers every non-helper module and calls `run()` and `analyze()`.
-  `tst/scripts/particles/pic_paper_smooth_tsc_oracle.py` is discovered but implements
-  neither function. The default all-suite GPU CI entry point is therefore structurally
-  broken until the oracle is renamed/routed as a helper or given the regression interface.
-
-## Strengths and invariants to preserve
-
-The following should be protected with focused regression tests while addressing the
-open findings:
-
-- Paper-mode fail-closed composition guards for coupled feedback, TSC order, ghost width,
-  RK2, source placement, ideal induction, and unit conservative coefficients.
-- Explicit-midpoint/VL2 particle chronology on uniform grids.
-- Relativistic Boris rotation using the correct midpoint gamma.
-- Stable relativistic kinetic-energy evaluation.
-- Macro-particle mass, charge, and q/m semantics with root-cell-volume normalization.
-- Matching uniform-grid TSC gather and deposition support.
-- Exact opposite full-f particle/gas momentum and kinetic-energy deltas on uniform grids.
-- Explicit 2D3V handling and rejection of unsupported one-dimensional particle runs.
-- Deterministic shock tags and velocity sampling.
-- Once-per-cycle shock particle creation with RK-weighted gas transaction replay.
-- Restart fingerprints, ownership validation, boundary ledgers, and overflow checks.
-- Corrected Q043/current-Q019 volume-aware Bell current relation.
-- Existing fail-closed labels that distinguish preparation, engineering, and qualifying
-  science artifacts.
-
-## Decisions and update log
-
-Record substantive decisions and validation evidence here. Link commits, tests, run
-directories, or retained evidence as appropriate.
-
-| Date | Item | Status change | Decision or evidence |
-|---|---|---|---|
-| 2026-07-08 | Initial review | Created | Static/source review at `f8a56172983a1f009662af4217dcb7b52032d7dc`; no implementation edits or fresh binary run |
-| 2026-07-08 | `TURB-1`–`TURB-4` | OPEN -> FIXED, NEEDS VALIDATION | Stable normalization, RK-consistent work, dimension-aware signed modes, strict isotropic bounds, legacy-restart migration, host tests, and serial/MPI2 runtime smokes pass; the remaining item-specific closure tests stay open |
-| 2026-07-08 | `MIG-1` | OPEN -> FIXED, NEEDS VALIDATION | Unified validated compaction and one batched survivor kernel; exhaustive oracle plus exact serial/MPI2 survivor-state parity pass; restart/repeated-crossing/ledger evidence remains |
-| 2026-07-10 | `STAB-1`, `DT-1`, `DT-2` | OPEN -> CLOSED | EOS-floor-based post-feedback fail-fast guard, configured-species/full-field gyro bound, and pre-transaction shock injection-velocity bound; ten focused host tests and both Section 5.4 stage-timing carriers pass, serial stress cases abort as designed, and current-source Frontier MPI2 job `4968943` passes both analytic timestep checks plus a coupled-feedback cycle in 17 seconds |
-
-## Final deletion checklist
-
-Delete this document only when all of the following are true:
-
-- [ ] Every P0 item is **CLOSED**.
-- [ ] Every P1 item is **CLOSED** or has a reviewed **ACCEPTED LIMITATION** with runtime
-  guards and claim boundaries.
-- [ ] Required P2 reliability issues are closed; deferred performance work is captured
-  in permanent project tracking rather than silently abandoned.
-- [ ] The complete particle regression suite has a green CPU and GPU run.
-- [ ] MPI, restart, AMR/SMR, and single/double-precision targeted tests are green.
-- [ ] Turbulent-box energy injection, divergence, isotropy, and paired MHD/PIC tests pass.
-- [ ] Mixed migration/escape survivor-identity tests pass.
-- [ ] Uniform and selected multilevel gas-plus-particle conservation tests pass under the
-  adopted AMR policy.
-- [ ] Corrected Bell raw-current and linear-physics matrices pass independently.
-- [ ] Shock injection startup, tracked-surface, and applicability tests pass.
-- [ ] Existing affected campaign outputs have been rerun or clearly retired.
-- [ ] Scientific claims and figure provenance reference only qualified replacement runs.
-- [ ] The update log contains the final qualifying commit and evidence locations.
+These fixes should remain covered by their focused regressions. They do not need to be
+requalified through a new platform/precision matrix for every subsequent change.
+
+## 1. Active now
+
+### `ROBUST-4` — Use the correct MPI datatype for `Real`
+
+- Status: **ACTIVE — quick fix**
+- Scope: `src/srcterms/turb_driver.cpp`
+
+Three turbulence reductions still pass `Real` buffers to `MPI_DOUBLE`. This is correct
+only in double-precision builds and can overrun buffers in single precision.
+
+Do:
+
+1. Replace those datatypes with `MPI_ATHENA_REAL`.
+2. Run the focused turbulence regression in the normal build.
+3. Run one MPI single-precision turbulence smoke to exercise the repaired path.
+
+Done when the focused tests pass and no hard-coded `MPI_DOUBLE` remains for `Real` buffers
+in the turbulence driver.
+
+### `HALL-1` — Implement the complete large-scale CR-Hall closure
+
+- Status: **ACTIVE — highest physics priority**
+- Scope: particle moments/pusher/tasks, MHD CT and energy update, model documentation
+
+The current production coupling uses ideal-MHD induction. The existing
+`current_to_ct_experimental` mode is a source-isolation experiment with a free
+coefficient; it is not the physical CR-Hall model.
+
+Do:
+
+1. Write the compact paper-to-code map for signed CR charge, current, background-ion
+   charge density, electric field, force, time level, and storage location.
+2. Derive the Hall EMF from the deposited `J_cr - q_cr u_g` and the physical electron
+   charge denominator. Do not use a freely tunable Hall-strength coefficient.
+3. Use the same midpoint full electric field in the particle push and constrained
+   transport.
+4. Keep gas momentum exchange, particle energy exchange, and the Hall-related gas energy
+   flux mutually consistent and counted exactly once.
+5. Provide one atomic physical choice, `pic_cr_hall_mode=full|off`. New coupled science
+   decks use `full`; `off` is retained for legacy reproduction and controlled comparison.
+6. Add only `max(|R|)` and `max(Lambda)` as new history diagnostics.
+7. Update the model contract and nearby comments where signs, units, or centering are not
+   obvious from the code.
+
+Focused validation:
+
+- one algebra/zero-limit test;
+- one manufactured uniform Hall-EMF test;
+- one existing periodic exchange test with Hall enabled; and
+- the Bell comparison in `BELL-1` below.
+
+Done when these focused tests pass on CPU/MPI and one Frontier GPU smoke exercises the
+full path. Do not build a multidimensional Hall parameter matrix before using it.
+
+### `BELL-1` — Compact physical Bell qualification
+
+- Status: **ACTIVE after the first `HALL-1` implementation**
+- Scope: corrected volume-aware current setup and linear Bell problem
+
+Do:
+
+1. Verify deposited `J_cr/c` directly from raw particle/grid output for one corrected
+   volume-aware case.
+2. Run one Hall-off linear eigenmode and recover growth rate, dominant wavenumber, and
+   polarization/helicity.
+3. Run one Hall-on case near `Lambda ~ 1` and recover the Hall-shifted growth,
+   wavenumber, real frequency, and polarization.
+4. Repeat the Hall-on case at one higher useful resolution.
+5. Vary particles per cell only if the first mode fit is visibly noise-limited.
+
+Done when the two physical branches agree with their dispersion relations and the single
+resolution repeat supports the measured quantities. Proceed directly to a modest nonlinear
+pilot; add another sensitivity only when that pilot identifies one.
+
+### `SHOCK-1` — Choose one reproducible shock and injection workflow
+
+- Status: **ACTIVE after the compact Bell test**
+- Scope: `src/pgen/tests/pic_parallel_shock.cpp` and the active shock deck
+
+The existing immediate-injection/early-removal history and delayed-injection history are
+not physically equivalent because removing particles does not restore what was subtracted
+from the gas. Stop treating both as interchangeable science setups.
+
+Do:
+
+1. Select and document one startup history; delayed injection after initial shock
+   formation is the current preferred simple choice.
+2. Track the area-averaged shock position with one smoothed density- or pressure-gradient
+   criterion.
+3. Maintain one swept-mass and injection ledger. Add local surface reconstruction only if
+   later shock corrugation makes the area-averaged tracker inadequate.
+4. Run a no-CR planar shock, a low-efficiency full-Hall shock, and one matched Hall-off
+   comparison.
+5. Choose one resolution or particle-count repeat from what the pilot shows is limiting.
+
+Done when shock speed/compression are sensible, the injection and gas-particle exchange
+ledgers close to the expected numerical accuracy, and upstream current and magnetic growth
+support a quantitative Bell interpretation.
+
+## 2. Small correctness cleanups
+
+These are narrow fixes, not new validation programs.
+
+### `CLEAN-1` — Stop silently rewriting invalid particle weights
+
+- Status: **NEXT**
+
+Several push/deposit paths replace a nonpositive particle weight with one. That silently
+changes mass, charge, current, and feedback.
+
+Validate weights once at the narrowest common construction/load boundary and fail clearly
+if an invalid weight reaches a supported full-f workflow. Remove the fallback assignments.
+Add one invalid-weight regression; do not add a per-cycle full-particle audit.
+
+### `CLEAN-2` — Prevent physical use of the legacy Bell normalization
+
+- Status: **NEXT**
+
+The old Q023 relation omits root-cell volume and includes the artificial light speed in
+the current target. Active science decks must use the corrected volume-aware relation.
+
+Keep the old generator only if it is explicitly labeled and guarded as
+`legacy_nonphysical_mechanics_only`; otherwise remove it and its active decks. One startup
+guard test is enough.
+
+### `CLEAN-3` — Repair default regression discovery
+
+- Status: **NEXT**
+
+`pic_paper_smooth_tsc_oracle.py` is a helper but is discovered as a regression despite
+lacking `run()` and `analyze()`. Rename/reroute it as a helper or add the normal
+interface, then confirm the focused particle suite reaches its real tests.
+
+## 3. Known limitation
+
+### `AMR-1` — Coupled refinement-interface deposition is not conservative
+
+- Status: **LIMITATION — uniform grids are the supported science path**
+
+Receiver-resolution TSC is evaluated independently on each refinement level without a
+cross-interface partition of unity. Integrated gas feedback can therefore differ from the
+opposite particle change. Current exact-conservation shock paths correctly reject AMR/SMR.
+
+Policy now:
+
+- Do not claim exact gas-particle conservation for coupled AMR/SMR runs.
+- Do not make AMR qualification a gate for uniform-grid Bell, shock, or turbulence work.
+- Keep the limitation visible in the model/deck documentation.
+
+If a planned production run needs AMR, resume with the smallest useful sequence:
+
+1. one planar static-refinement crossing;
+2. particle count plus momentum/energy and first-moment closure;
+3. one rank-split repeat; and
+4. only the additional corner, dynamic-refinement, restart, or GPU case used by that run.
+
+## 4. Profile- or failure-triggered backlog
+
+These observations are real, but they are not prerequisites for the current uniform-grid
+science program.
+
+### Performance
+
+- AMR deposition performs host mirroring, global communication, and repeated allocation.
+  Address this only if `AMR-1` becomes active.
+- Ordinary migration uses global metadata and allocation churn. Profile a
+  production-shaped run before redesigning it.
+- Shock injection is globally replicated and repeatedly reallocates particle arrays.
+  Optimize it if the shock pilot shows that injection materially limits runtime.
+- `pic_sort_interval` is parsed but not implemented. Do not implement a sorting
+  framework until profiling justifies it; remove or reject nonzero settings in active
+  decks so inputs do not claim nonexistent behavior.
+
+### Robustness
+
+- Some rank-local error exits could strand MPI peers. Replace a specific path when it is
+  encountered or touched; do not begin a whole-code fatal-path audit.
+- `TaskStatus::fail` is not propagated by the generic task-list driver and could
+  busy-loop. Track this as a general AthenaK issue and fix it if a reachable task
+  failure is observed.
+- Do not add a comprehensive per-cycle particle validator unless an actual corruption
+  demonstrates the need.
+
+## Deletion rule
+
+Delete this tracker when the active items and small cleanups are closed or transferred to
+the ordinary project backlog, and the AMR limitation is documented in the permanent model
+contract. Deletion does not require completing speculative optimization, every platform
+combination, or the entire future AMR program.
