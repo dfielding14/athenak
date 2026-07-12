@@ -1,8 +1,8 @@
 # MHD-PIC Active Development Tracker
 
-> Temporary tracker for `PIC_development`, refreshed 2026-07-11. The committed base is
-> `e37799eb85`; the CR-Hall implementation was developed from that base on
-> `PIC_development`. Detailed findings from the original review remain in Git history at
+> Temporary tracker for `PIC_development`, refreshed 2026-07-11. The CR-Hall
+> implementation is frozen on that branch at `44950b654`. Detailed findings from the
+> original review remain in Git history at
 > `9364e0ff3:MHD_PIC_REVIEW_TRACKER.md`.
 
 This file tracks only work that can affect the next uniform-grid MHD-PIC science runs. It
@@ -57,14 +57,19 @@ not need a new validation matrix for each Hall run.
 
 ### `BELL-NL-1` — Modest nonlinear Bell pilot
 
-- Status: **ACTIVE — prepared, qualification pending**
+- Status: **ACTIVE — onset-bounded thermal-buffer rerun pending**
 
 Three superseded centered-route pilots lost gas admissibility at nearly the same physical
 time: the base run, a four-times-higher particle-count run, and a four-times-smaller-CFL
 run. This ruled out particle noise and timestep size and triggered the matched face
 induction/energy route. Run one clean corrected-route pilot from `t=0`; confirm terminal
 nonlinear growth, finite states, and sensible `R` and `Lambda`. Add no further variation
-unless that report exposes a new sensitivity.
+unless that report exposes a new sensitivity. Immutable-source job `4973161` reached
+`B_perp,rms/B0=0.953` before 20 symmetry-equivalent current-filament cells lost thermal
+admissibility at `t=1.523`. The dominant Bell mode remained clean, global CR-to-MHD
+energy exchange closed to `0.066%`, and the source audit found no Hall closure defect.
+The one justified rerun uses `e_int=2` and `tlim=1.6`: enough thermal margin to qualify
+nonlinear onset without turning this coarse pilot into a saturation calculation.
 
 ### `SHOCK-1` — Controlled delayed-injection shocks
 

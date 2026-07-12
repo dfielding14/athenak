@@ -41,7 +41,8 @@ integrator = rk2
 # cfl=0.2 and 0.05. The face-consistent route returns to the efficient value.
 cfl_number = 0.2
 nlim = -1
-tlim = 2
+# This compact pilot qualifies nonlinear onset, not deep filamentation or saturation.
+tlim = 1.6
 ndiag = 20
 
 <mhd>
@@ -103,7 +104,9 @@ pgen_name = q019_nonlinear_bell_saturation_engineering
 <q019_nonlinear_bell_saturation_engineering>
 dimension = 3
 rho = 1
-pressure = 1
+# This Q019 parameter populates internal-energy density directly.  e_int=2 gives
+# p=(gamma-1)e_int=4/3 and beta=8/3 for B0=1.
+pressure = 2
 b_g = 1
 u_a = 1
 wavelength = 1
