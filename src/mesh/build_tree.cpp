@@ -6,10 +6,14 @@
 //! \file build_tree.cpp
 //! \brief Functions to build MeshBlockTreee, both for new runs and restarts
 
+#include <algorithm>
 #include <iostream>
 #include <cinttypes>
 #include <limits> // numeric_limits<>
 #include <memory> // make_unique<>
+#include <numeric>
+#include <unordered_map>
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -322,6 +326,9 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // data has already been read in main(). Thus the file pointer is set to after <par_end>
   bool use_serial_io = UsesSerialIO(shard_mode);
   restart_meta.file_shard_mode = shard_mode;
+  restart_meta.conversion = pin->DoesBlockExist("restart_conversion") &&
+      pin->DoesParameterExist("restart_conversion", "enabled") &&
+      pin->GetBoolean("restart_conversion", "enabled");
   IOWrapperSizeT headeroffset = resfile.GetPosition(use_serial_io);
 
   // following must be identical to calculation of headeroffset (excluding size of
@@ -456,10 +463,12 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   }
   delete [] idlist;
   if (!adaptive) max_level = current_level;
+  restart_meta.source_nmb_total = nmb_total;
+  restart_meta.source_max_level = current_level;
 
   // Ordinary restarts must not construct a tree deeper than the configured AMR limit.
   // Restart conversion handles this case explicitly before target allocation.
-  if (adaptive && current_level > max_level) {
+  if (!restart_meta.conversion && adaptive && current_level > max_level) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Restart contains MeshBlocks at logical level "
               << current_level << " (physical level " << current_level - root_level
@@ -562,10 +571,145 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     }
   }
 
+  if (restart_meta.conversion) {
+    if (shard_mode != FileShardMode::per_node || !adaptive || !three_d) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Restart conversion supports only three-dimensional "
+                << "adaptive per-node restarts." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    int target_physical_level =
+        pin->GetInteger("restart_conversion", "target_physical_level");
+    int target_level = root_level + target_physical_level;
+    int level_reduction = current_level - target_level;
+    if (target_physical_level < 0 || level_reduction < 1 || level_reduction > 3) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Restart conversion requires a lower nonnegative target "
+                << "physical level no more than three levels below the source maximum."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    restart_meta.source_lloc.assign(lloc_eachmb, lloc_eachmb + nmb_total);
+    restart_meta.source_cost.assign(cost_eachmb, cost_eachmb + nmb_total);
+    restart_meta.target_max_level = target_level;
+    max_level = target_level;
+    pin->SetInteger("mesh_refinement", "num_levels", target_physical_level + 1);
+
+    std::unordered_map<LogicalLocation, int, LogicalLocationHash> target_locations;
+    for (const auto &source : restart_meta.source_lloc) {
+      LogicalLocation target = source;
+      if (target.level > target_level) {
+        int shift = target.level - target_level;
+        target.lx1 >>= shift;
+        target.lx2 >>= shift;
+        target.lx3 >>= shift;
+        target.level = target_level;
+      }
+      target_locations.emplace(target, -1);
+    }
+
+    delete [] cost_eachmb;
+    delete [] rank_eachmb;
+    delete [] lloc_eachmb;
+    nmb_total = static_cast<int>(target_locations.size());
+    cost_eachmb = new float[nmb_total];
+    rank_eachmb = new int[nmb_total];
+    lloc_eachmb = new LogicalLocation[nmb_total];
+
+    ptree = std::make_unique<MeshBlockTree>(this);
+    ptree->CreateRootGrid();
+    for (const auto &entry : target_locations) {
+      ptree->AddNodeWithoutRefinement(entry.first);
+    }
+    int target_count;
+    ptree->CreateZOrderedLLList(lloc_eachmb, nullptr, target_count);
+    if (target_count != nmb_total) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Capped restart tree construction failed." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    for (int gid=0; gid<nmb_total; ++gid) {
+      target_locations[lloc_eachmb[gid]] = gid;
+      cost_eachmb[gid] = 1.0;
+    }
+
+    restart_meta.target_gid_each_source.resize(restart_meta.source_nmb_total);
+    for (int source_gid=0; source_gid<restart_meta.source_nmb_total; ++source_gid) {
+      LogicalLocation target = restart_meta.source_lloc[source_gid];
+      if (target.level > target_level) {
+        int shift = target.level - target_level;
+        target.lx1 >>= shift;
+        target.lx2 >>= shift;
+        target.lx3 >>= shift;
+        target.level = target_level;
+      }
+      restart_meta.target_gid_each_source[source_gid] = target_locations.at(target);
+    }
+
+    // Check that the source leaves tile every capped target exactly once at the finest
+    // conversion subvolume.  The three-level limit bounds this mask at 8^3 entries.
+    std::vector<int> source_order(restart_meta.source_nmb_total);
+    std::iota(source_order.begin(), source_order.end(), 0);
+    std::sort(source_order.begin(), source_order.end(), [&](int lhs, int rhs) {
+      return restart_meta.target_gid_each_source[lhs] <
+             restart_meta.target_gid_each_source[rhs];
+    });
+    int mask_nx = 1 << level_reduction;
+    std::vector<unsigned char> coverage(mask_nx*mask_nx*mask_nx);
+    int active_target = -1;
+    for (int source_gid : source_order) {
+      int target_gid = restart_meta.target_gid_each_source[source_gid];
+      if (target_gid != active_target) {
+        if (active_target >= 0 &&
+            std::find(coverage.begin(), coverage.end(), 0) != coverage.end()) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "Source blocks do not completely cover capped target "
+                    << active_target << "." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        std::fill(coverage.begin(), coverage.end(), 0);
+        active_target = target_gid;
+      }
+
+      const auto &source = restart_meta.source_lloc[source_gid];
+      const auto &target = lloc_eachmb[target_gid];
+      int depth = source.level - target.level;
+      int width = 1 << (level_reduction - depth);
+      int x0 = (source.lx1 - (target.lx1 << depth))*width;
+      int y0 = (source.lx2 - (target.lx2 << depth))*width;
+      int z0 = (source.lx3 - (target.lx3 << depth))*width;
+      for (int z=z0; z<z0+width; ++z) {
+        for (int y=y0; y<y0+width; ++y) {
+          for (int x=x0; x<x0+width; ++x) {
+            int index = (z*mask_nx + y)*mask_nx + x;
+            if (coverage[index] != 0) {
+              std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                        << std::endl << "Source blocks overlap within capped target "
+                        << target_gid << "." << std::endl;
+              std::exit(EXIT_FAILURE);
+            }
+            coverage[index] = 1;
+          }
+        }
+      }
+    }
+    if (active_target >= 0 &&
+        std::find(coverage.begin(), coverage.end(), 0) != coverage.end()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Source blocks do not completely cover capped target "
+                << active_target << "." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   // rebuild the MeshBlockTree
-  ptree = std::make_unique<MeshBlockTree>(this);
-  ptree->CreateRootGrid();
-  for (int i=0; i<nmb_total; i++) {ptree->AddNodeWithoutRefinement(lloc_eachmb[i]);}
+  if (!restart_meta.conversion) {
+    ptree = std::make_unique<MeshBlockTree>(this);
+    ptree->CreateRootGrid();
+    for (int i=0; i<nmb_total; i++) {ptree->AddNodeWithoutRefinement(lloc_eachmb[i]);}
+  }
 
   // check the tree structure by making sure total # of MBs counted in tree same as the
   // number read from the restart file.

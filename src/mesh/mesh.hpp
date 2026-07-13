@@ -84,9 +84,18 @@ struct RestartMetaData {
   FileShardMode file_shard_mode = FileShardMode::shared;
   std::string base_dir;
   std::string file_name;
+  std::string source_restart_path;
+  std::string source_particle_path;
   std::uint64_t payload_stride = 0;
+  bool conversion = false;
+  int source_nmb_total = 0;
+  int source_max_level = 0;
+  int target_max_level = 0;
   int original_nranks = 0;
   int original_nnodes = 1;
+  std::vector<LogicalLocation> source_lloc;
+  std::vector<float> source_cost;
+  std::vector<int> target_gid_each_source;
   std::vector<int> gids_eachrank;
   std::vector<int> nmb_eachrank;
   std::vector<int> rank_eachmb;
