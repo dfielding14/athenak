@@ -164,7 +164,7 @@ def _problem_parameters(payload, source):
 
 def _restart_snapshot(path):
     payload = path.read_bytes()
-    probe = restart_layout.probe_schema7_restart_payload(
+    probe = restart_layout.probe_current_restart_payload(
         payload, source=str(path)
     )
     if (

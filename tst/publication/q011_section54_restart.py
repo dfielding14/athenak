@@ -29,12 +29,14 @@ PREREGISTRATION = (
 
 PIC_RESTART_MAGIC = 0x5049435253543031
 EXPECTED_RESTART_SCHEMA = 7
+CURRENT_RESTART_SCHEMA = 8
 EXPECTED_SHOCK_LEDGER_SCHEMA = 3
 EXPECTED_ESCAPE_LEDGER_SCHEMA = 2
 _PIC_RESTART_MARKER = struct.pack("<Q", PIC_RESTART_MAGIC)
 _PIC_METADATA_FORMAT = "<15i"
 _MODEL_INTEGER_COUNT = 31
 _MODEL_REAL_COUNT = 37
+_CURRENT_MODEL_REAL_COUNT = 38
 _REAL_BYTES = 8
 _MAX_LAYOUT_COUNT = 1 << 31
 _MAX_SIGNED_INT = (1 << 31) - 1
@@ -589,10 +591,11 @@ def _unpack_from(
     return struct.unpack_from(format_string, payload, offset)
 
 
-def probe_schema7_restart_payload(
-    payload: bytes, *, source: str = "<restart-bytes>"
+def _probe_restart_payload(
+    payload: bytes, expected_schema: int, model_real_count: int,
+    *, source: str = "<restart-bytes>"
 ) -> RestartPayloadProbe:
-    """Probe and validate the schema-7 particle section of retained restart bytes."""
+    """Probe and validate one versioned particle section of restart bytes."""
     _require(type(payload) is bytes, f"{source}: restart payload must be bytes")
     marker_offset = payload.find(_PIC_RESTART_MARKER)
     _require(marker_offset >= 0, f"{source}: particle restart marker not found")
@@ -620,7 +623,10 @@ def probe_schema7_restart_payload(
         state_kind,
         physical_mode,
     ) = metadata
-    _require(restart_schema == EXPECTED_RESTART_SCHEMA, f"{source}: restart schema is not 7")
+    _require(
+        restart_schema == expected_schema,
+        f"{source}: particle restart schema is not {expected_schema}",
+    )
     _require(
         type(meshblock_count) is int and 1 <= meshblock_count < _MAX_LAYOUT_COUNT,
         f"{source}: invalid particle restart meshblock count",
@@ -641,9 +647,9 @@ def probe_schema7_restart_payload(
     )
     offset += _MODEL_INTEGER_COUNT * struct.calcsize("<i")
     model_reals = _unpack_from(
-        f"<{_MODEL_REAL_COUNT}d", payload, offset, "PIC model reals", source
+        f"<{model_real_count}d", payload, offset, "PIC model reals", source
     )
-    offset += _MODEL_REAL_COUNT * _REAL_BYTES
+    offset += model_real_count * _REAL_BYTES
     _require(state_kind in {0, 1}, f"{source}: invalid particle state kind")
     _require(0 <= physical_mode <= 4, f"{source}: invalid PIC physical mode")
     _require(
@@ -660,11 +666,13 @@ def probe_schema7_restart_payload(
         all(type(value) is float and math.isfinite(value) for value in model_reals),
         f"{source}: invalid PIC model real metadata",
     )
+    particle_count_offset = offset
     particle_count = _unpack_from("<Q", payload, offset, "particle count", source)[0]
     offset += struct.calcsize("<Q")
     _require(
         type(particle_count) is int and 1 <= particle_count < _MAX_LAYOUT_COUNT,
-        f"{source}: invalid particle count",
+        f"{source}: invalid particle count {particle_count} at byte "
+        f"{particle_count_offset}",
     )
     meshblock_counts = _unpack_from(
         f"<{meshblock_count}i", payload, offset, "particle MeshBlock counts", source
@@ -703,6 +711,24 @@ def probe_schema7_restart_payload(
         particle_real_offset=particle_real_offset,
         particle_integer_offset=particle_integer_offset,
         payload_end_offset=payload_end_offset,
+    )
+
+
+def probe_schema7_restart_payload(
+    payload: bytes, *, source: str = "<restart-bytes>"
+) -> RestartPayloadProbe:
+    """Probe a retained Q011 schema-7 particle restart section."""
+    return _probe_restart_payload(
+        payload, EXPECTED_RESTART_SCHEMA, _MODEL_REAL_COUNT, source=source
+    )
+
+
+def probe_current_restart_payload(
+    payload: bytes, *, source: str = "<restart-bytes>"
+) -> RestartPayloadProbe:
+    """Probe the particle restart section written by current AthenaK."""
+    return _probe_restart_payload(
+        payload, CURRENT_RESTART_SCHEMA, _CURRENT_MODEL_REAL_COUNT, source=source
     )
 
 

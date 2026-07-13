@@ -889,32 +889,20 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   int &npart = pmy_part->nprtcl_thispack;
 
 #if MPI_PARALLEL_ENABLED
-  // check that particle communications have all completed
-  bool bflag = false;
-  bool no_errors=true;
-  for (int n=0; n<nrecvs; ++n) {
-    int test;
-    int ierr = MPI_Test(&(rrecv_req[n]), &test, MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors=false;}
-    if (!(static_cast<bool>(test))) {
-      bflag = true;
-    }
-    ierr = MPI_Test(&(irecv_req[n]), &test, MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors=false;}
-    if (!(static_cast<bool>(test))) {
-      bflag = true;
-    }
+  // This task has no independent work left to overlap. Waiting once lets MPI
+  // progress the exchange without repeatedly re-entering this wrapper.
+  int real_error = MPI_SUCCESS;
+  int int_error = MPI_SUCCESS;
+  if (nrecvs > 0) {
+    real_error = MPI_Waitall(nrecvs, rrecv_req.data(), MPI_STATUSES_IGNORE);
+    int_error = MPI_Waitall(nrecvs, irecv_req.data(), MPI_STATUSES_IGNORE);
   }
-
-  // Quit if MPI error detected
-  if (!(no_errors)) {
+  if (real_error != MPI_SUCCESS || int_error != MPI_SUCCESS) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in testing non-blocking receives"
+              << std::endl << "MPI error while waiting for particle receives"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  // exit if particle communications have not completed
-  if (bflag) {return TaskStatus::incomplete;}
 #endif
 
   std::vector<int> send_indices(nprtcl_send);
