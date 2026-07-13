@@ -1,74 +1,88 @@
-# `simple_TRML` pgen and TRML input guide
+# `simple_TRML` problem generator and inputs
 
-This directory contains inputs for the `simple_TRML` AthenaK problem generator.
-The current `simple_TRML` pgen is intentionally clean: it initializes the
-original smooth turbulent radiative mixing layer.
+`simple_TRML` is the minimal production turbulent radiative mixing-layer
+problem generator. It initializes the original smooth hot/cold shear layer,
+applies radiative cooling, optionally ramps the cooling on, initializes a
+cold-material scalar, and can supply a fixed hot reservoir at outer x3.
 
-## Build target
+The earlier experimental implementation is preserved as
+`src/pgen/simple_TRML_extended.cpp`. It retains adaptive-frame-aware boundaries
+and the experimental lower-x3 boundary choices, but those features are not part
+of the minimal `simple_TRML` pgen.
 
-Configure this pgen with:
+## Building
+
+Build the minimal pgen with:
 
 ```bash
-./configure.sh
+cmake -S . -B build-trml -DPROBLEM=simple_TRML
+cmake --build build-trml --parallel 16
 ```
 
-or directly with:
+Build the preserved extended pgen with:
 
 ```bash
-cmake -S . -B build-frontier-hip-cpe25.09-cce20-rocm6.4.2 -DPROBLEM=simple_TRML
-cmake --build build-frontier-hip-cpe25.09-cce20-rocm6.4.2 --parallel 16
+cmake -S . -B build-trml-extended -DPROBLEM=simple_TRML_extended
+cmake --build build-trml-extended --parallel 16
 ```
 
 ## Physical setup
 
-The pgen initializes a pressure-balanced hot/cold shear layer.
+The pgen initializes a pressure-balanced shear layer:
 
-The standard normalization used by the current inputs is:
+```text
+rho(z) = smooth tanh from rho_cold at low x3 to rho_hot at high x3
+P(z)   = pres
+vx(z)  = smooth tanh from -velocity/2 to +velocity/2
+vy(z)  = 0
+vz(z)  = initial_vz + configured pgen-local perturbation
+```
+
+The standard normalization in the supplied inputs is:
 
 ```text
 rho_hot = 1
-P0 = 1
+pres = 1
 gamma = 5/3
 chi = rho_cold/rho_hot
-T_hot = P0/rho_hot
-T_cold = P0/rho_cold
+T_hot = pres/rho_hot
+T_cold = pres/rho_cold
 ```
 
-For the current comparison matrix:
+For the xi comparison inputs:
 
 ```text
 chi = 10^1.75 = 56.23413251903491
 Mach_rel = 0.5
-cs_hot = sqrt(gamma*P0/rho_hot) = 1.2909944487358056
-v_rel = Mach_rel*cs_hot = 0.6454972243679028
-t_shear = (x1max - x1min)/v_rel = 1.5491933384829668
-```
-
-The cooling parameter is:
-
-```text
+velocity = v_rel = 0.6454972243679028
+t_shear = (x1max - x1min)/velocity = 1.5491933384829668
 xi = t_shear/t_cool_min
 ```
 
-so the current xi sweep uses:
+## Initial-condition controls
 
-```text
-xi = 1:   t_cool_min = 1.5491933384829668
-xi = 10:  t_cool_min = 0.15491933384829668
-xi = 100: t_cool_min = 0.015491933384829668
+The primary controls are:
+
+```ini
+<problem>
+rho_hot = 1.0
+rho_cold = 56.23413251903491
+pres = 1.0
+velocity = 0.6454972243679028
+phase_sharpness = 96
+initial_vz = 0.0
 ```
 
-## Initial conditions
+`initial_vz` is literal. The supplied value is stored as the initial vertical
+velocity everywhere, before the optional perturbation is added. There is no
+frame sign conversion:
 
-The active-domain IC is the original smooth TRML setup:
+```text
+initial_vz = -0.035  ->  initial vz = -0.035
+initial_vz = +0.035  ->  initial vz = +0.035
+```
 
-- density is a tanh transition from `rho_cold` at low x3 to `rho_hot` at high x3;
-- pressure is uniform at `pres`;
-- `v_x` is a tanh shear transition from `-0.5*velocity` to `+0.5*velocity`;
-- the original lab-frame `v_z` is zero;
-- `scalar0` stores conserved cold-material density, `rho*cold_fraction`.
-
-The pgen-local sinusoidal vertical perturbation remains controlled by:
+The pgen-local sinusoidal vertical perturbation is controlled by:
 
 ```ini
 max_init_perturb_log2freq = ...
@@ -77,169 +91,65 @@ init_perturb_sharpness = ...
 init_perturb_vel_frac = ...
 ```
 
-Most current inputs set `init_perturb_vel_frac = 0.0` and use the shared
-`<initial_perturbations>` block instead.
+Set `init_perturb_vel_frac = 0.0` when using the shared
+`<initial_perturbations>` module so that the velocity is perturbed only once.
 
-## Velocity-frame convention
-
-All frame-related options use:
-
-```text
-v_grid = v_lab - V_frame
-v_lab  = v_grid + V_frame
-```
-
-The stored AthenaK velocities are grid-frame velocities.
-
-### Constant fixed frame
-
-The pgen-level fixed frame is controlled by:
-
-```ini
-<problem>
-fixed_frame_velocity_x3 = 0.0
-```
-
-This does not require a `<frame_tracking>` block. It only changes how the pgen
-and user boundary fills write velocities.
-
-For example, with `fixed_frame_velocity_x3 = +0.1`, the original lab-frame
-state `v_z_lab = 0` is stored as:
+When passive scalars are enabled, every scalar is initialized as conserved
+cold-material density:
 
 ```text
-v_z_grid = -0.1
+scalar = rho*cold_fraction
 ```
 
-If adaptive frame tracking is also enabled, the effective x3 frame velocity is:
+The cold fraction varies smoothly from one on the cold side to zero on the hot
+side using the same tanh profile as the gas layer.
 
-```text
-V_frame = fixed_frame_velocity_x3 + adaptive_frame_velocity_x3
-```
+## X3 boundaries
 
-## Inner-x3 user boundary options
+### Inner x3
 
-The user lower/inner x3 boundary is selected with:
-
-```ini
-<problem>
-lower_x3_user_bc = reflect
-```
-
-Allowed values are:
-
-```text
-reflect
-outflow
-mass_balance
-```
-
-These only apply when the mesh has:
-
-```ini
-ix3_bc = user
-```
-
-If `ix3_bc = outflow`, AthenaK's normal outflow boundary is used instead.
-
-### `reflect`
-
-`reflect` fills the lower ghost zones with cold gas at pressure `pres` and
-reflects the normal velocity in the grid frame. The wall is therefore stationary
-in the computational frame, not necessarily in the original lab frame.
-
-Tangential behavior:
-
-- `zero_gradient_vx = true` copies `v_x` from the lower active layer;
-- `zero_gradient_vx = false` uses the cold-side reservoir value transformed to
-  the grid frame.
-
-### `outflow`
-
-`outflow` copies the adjacent lower active conserved state into the lower ghost
-zones.
-
-Use this for a user-managed lower outflow while keeping the pgen's user upper
-reservoir active. For true outflow on both z faces, set:
+The minimal pgen does not implement an inner-x3 user boundary. Select an
+AthenaK native boundary in the mesh block, for example:
 
 ```ini
 ix3_bc = outflow
-ox3_bc = outflow
 ```
 
-### `mass_balance`
+or use AthenaK's native reflecting boundary when desired. Setting
+`ix3_bc = user` is rejected at startup because the pgen would otherwise leave
+the inner ghost zones unfilled.
 
-`mass_balance` fills the lower ghost zones with cold gas and imposes a controlled
-normal velocity.
+### Outer x3
 
-Controls:
-
-```ini
-lower_x3_mass_balance_vz = 0.0
-lower_x3_mass_balance_velocity_frame = grid
-lower_x3_mass_balance_pressure_mode = fixed
-lower_x3_mass_balance_tangential_mode = zero_gradient
-lower_x3_mass_balance_max_abs_vz = -1.0
-```
-
-`lower_x3_mass_balance_vz` is the fallback imposed lower velocity. It is used
-unless an enabled frame tracker has a valid live top-Mdot average, in which case
-the lower velocity is set from:
-
-```text
-v_bot = Mdot_top/(rho_cold*A)
-```
-
-where `Mdot_top = integral rho*v3*dA` at the upper x3 face and positive means
-outward/+x3.
-
-`lower_x3_mass_balance_velocity_frame` controls how the imposed velocity is
-interpreted:
-
-- `grid`: the value is already a stored/grid-frame velocity;
-- `lab`: the value is a lab-frame velocity and is stored as
-  `v_grid = v_lab - V_frame`.
-
-Pressure modes:
-
-- `fixed`: use `P_bot = P0`;
-- `total_pressure`: use the ram-pressure-supported value
-  `P_bot = P0 + rho_hot*(v_hot_lab - v_cold_lab)^2`.
-
-Tangential modes:
-
-- `zero_gradient`: copy `v_x` and `v_y` from the lower active layer, then apply
-  them at `rho_cold`;
-- `reservoir`: use the fixed cold-side tangential reservoir velocity transformed
-  to the grid frame.
-
-## Outer-x3 user reservoir
-
-When:
+With:
 
 ```ini
 ox3_bc = user
 ```
 
-the pgen fills the upper ghost zones with hot gas at `rho_hot`, pressure `pres`,
-and cold fraction zero. It enforces the hot-side shear velocity and uses
-zero-gradient primitive velocities for `v_y` and `v_z`:
+the pgen fills the outer ghost zones with the hot reservoir:
 
 ```text
 rho = rho_hot
 P = pres
-v_x,grid = +0.5*v_rel - V_frame,x
-v_y,grid = v_y,active
-v_z,grid = v_z,active
+vx = +velocity/2
+vy = vy in the adjacent active cell
+vz = vz in the adjacent active cell
+cold fraction = 0
 ```
 
-Set `ox3_bc = outflow` to use normal AthenaK outflow instead of this hot
-reservoir.
+Thus rho, pressure, and shear velocity are fixed while `vy` and `vz` are
+zero-gradient primitive velocities. Total energy is rebuilt from the imposed
+pressure and these velocities.
 
-## Cooling options
+Set `ox3_bc = outflow` to use AthenaK's native outer outflow instead.
 
-The base cooling controls are:
+## Cooling
+
+The cooling controls are:
 
 ```ini
+<problem>
 t_cool_min = ...
 T_cutoff_over_T_cold = ...
 T_ci_over_T_cold = ...
@@ -247,10 +157,9 @@ T_ih_over_T_cold = ...
 beta = ...
 ```
 
-Cooling is clamped so that it does not cool below `T_cold`. Cooling is also
-disabled below `T_cold` and above `T_cutoff`.
-
-### Cooling ramp
+The exact cooling update is clamped so that cooling cannot reduce the gas below
+`T_cold`. Cooling is disabled at or below `T_cold` and above the configured
+upper-temperature cutoff.
 
 The optional startup ramp is:
 
@@ -264,114 +173,42 @@ multiplied by:
 
 ```text
 s = clamp(time/cooling_ramp_time, 0, 1)
-smoothstep = 3*s^2 - 2*s^3
-cooling_ramp_factor = cooling_ramp_min_factor
-                      + (1 - cooling_ramp_min_factor)*smoothstep
+ramp = cooling_ramp_min_factor
+       + (1 - cooling_ramp_min_factor)*(3*s^2 - 2*s^3)
 ```
 
-For the xi comparison matrix, use:
-
-```ini
-cooling_ramp_time = 1.5491933384829668
-cooling_ramp_min_factor = 0.0
-```
-
-## Adaptive frame tracking
-
-Leave frame tracking disabled by omitting the `<frame_tracking>` block or setting:
-
-```ini
-<frame_tracking>
-enabled = false
-```
-
-The advanced top-Mdot finite-window mode remains available:
-
-```ini
-mode = top_mdot_window
-mdot_velocity_sign = flipped
-mdot_velocity_factor = 1.0
-mdot_density_mode = geometric_mean
-mdot_start_time = 0.5
-mdot_window_time = 1.5491933384829668
-```
-
-Sign convention:
-
-```text
-Mdot_top = integral rho*v3*dA at upper x3
-positive Mdot_top = outward/+x3
-v_frame_target = sign * factor * <Mdot_top>_window/(rho_frame*A)
-```
-
-`mdot_velocity_sign = flipped` means `sign = -1`.
+The factor starts at `cooling_ramp_min_factor` and reaches exactly one at
+`cooling_ramp_time`.
 
 ## History diagnostics
 
-The pgen writes 29 history variables. Important columns include:
+The minimal pgen writes 25 history variables:
 
-- `cooling_rate`;
-- `M_flux_top`, `M_flux_bot`;
-- `E_flux_top`, `E_flux_bot`;
-- `Mtop_lab`, `Mbot_lab`;
-- `Etop_lab`, `Ebot_lab`;
-- `zavg_i`, `zmin_intermediate`, `zmax_intermediate`;
-- `cool_ramp`, the cooling-ramp factor.
+- cooling removal rate: `cooling_rate`;
+- grid-frame boundary estimates: `M_flux_top`, `M_flux_bot`, `E_flux_top`,
+  and `E_flux_bot`;
+- phase-binned velocity, kinetic-energy, momentum, and volume diagnostics;
+- interface/shear vertical-position diagnostics;
+- the instantaneous cooling multiplier, `cool_ramp`.
 
-The grid-frame fluxes use stored velocities. The `*_lab` fluxes add the current
-frame velocity back before forming the flux.
+The boundary flux histories are estimates made from the boundary-adjacent
+active cells. They are not the Riemann solver's actual face fluxes.
 
-## Current input files
+## Supplied minimal inputs
 
-`TRML_with_Tracers_and_Tracking.athinput`
-
-: Clean small tracer-enabled example using user x3 reservoirs. Frame tracking is
-  present but disabled by default.
-
-`TRML_xi1_M0p5_chi10p1p75_outflowz_coolramp1ts_128x128x256.athinput`
-
-: xi=1 outflow-z production comparison input.
-
-`TRML_xi10_M0p5_chi10p1p75_outflowz_coolramp1ts_128x128x256.athinput`
-
-: xi=10 outflow-z production comparison input.
-
-`TRML_xi100_M0p5_chi10p1p75_outflowz_coolramp1ts_128x128x256.athinput`
-
-: xi=100 outflow-z production comparison input.
-
-The xi inputs use:
+The three xi comparison inputs use 128 x 128 x 256 cells, eight MeshBlocks,
+native lower outflow, the user upper hot reservoir, and a one-shear-time cooling
+ramp:
 
 ```text
-128 x 128 x 256 cells
-64 x 64 x 128 meshblocks
-8 total meshblocks
-ix3_bc = outflow
-ox3_bc = outflow
-cooling_ramp_time = 1 t_shear
-tlim = 31 t_shear
+TRML_xi1_M0p5_chi10p1p75_outflowz_coolramp1ts_128x128x256.athinput
+TRML_xi10_M0p5_chi10p1p75_outflowz_coolramp1ts_128x128x256.athinput
+TRML_xi100_M0p5_chi10p1p75_outflowz_coolramp1ts_128x128x256.athinput
 ```
 
-## Plotting workflow
+`TRML_with_Tracers_and_Tracking.athinput` remains the small tracer-enabled
+example despite its historical filename. It now uses the minimal pgen, native
+lower outflow, the user upper reservoir, and no adaptive frame tracking.
 
-The current Frontier scratch/project workflow uses:
-
-```text
-/lustre/orion/ast207/proj-shared/dfielding/TRML/simple
-```
-
-with plotting helpers:
-
-```text
-plot_history.py
-plot_profiles.py
-plot_slice_panels.py
-```
-
-After a run finishes, generate:
-
-- history plots;
-- top/bottom mass-flux plots;
-- cooling-rate plots;
-- vertical profiles at selected times;
-- x1/x2/x3 slice panels at evenly spaced times.
+The `TRML_frame_tracking*.athinput` files belong to the separate
+`TRML_frame_tracking.cpp` pgen, not to `simple_TRML`.

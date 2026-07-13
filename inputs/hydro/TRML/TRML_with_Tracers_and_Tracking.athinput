@@ -1,10 +1,10 @@
 # Canonical clean simple-TRML run with perturbations and thermodynamic
-# Monte-Carlo tracers. Frame tracking is present as an optional disabled block.
+# Monte-Carlo tracers.
 # t_shear = (x1max - x1min)/velocity = 1.5491933384829668.
 # Validated locally on 8 MPI ranks at 48 x 48 x 96. No timed retuning is used.
 
 <comment>
-problem = Simple cooling TRML with interface tracking and thermodynamic tracers
+problem = Simple cooling TRML with thermodynamic tracers
 
 <job>
 basename = TRML_with_Tracers_and_Tracking
@@ -28,10 +28,9 @@ ox2_bc = periodic
 nx3 = 96
 x3min = -1.0
 x3max = 1.0
-# Both x3 faces use pgen user reservoirs. The lower boundary is a fixed cold
-# reservoir wall with reflected normal velocity, preventing moving-frame drainage
-# of dense cold gas; the upper boundary remains the hot inflow reservoir.
-ix3_bc = user
+# The lower boundary uses AthenaK's native outflow. The pgen supplies only the
+# upper hot reservoir.
+ix3_bc = outflow
 ox3_bc = user
 
 <meshblock>
@@ -39,8 +38,7 @@ nx1 = 24
 nx2 = 24
 nx3 = 48
 
-# Disabled by default. The committed local/Frontier matrix enables this block to exercise
-# simultaneous particle remapping and frame-tracker MeshBlockPack updates.
+# Disabled by default. Retained for optional particle/remesh testing.
 <mesh_refinement>
 refinement = none
 num_levels = 2
@@ -83,34 +81,9 @@ rho_hot = 1.0
 rho_cold = 56.23413251903491
 # Relative shear Mach number is 0.5 for the pressure and gamma below.
 velocity = 0.6454972243679028
-# The cleaned simple_TRML pgen uses the original smooth tanh density/shear
-# interface. There is no physical initial z velocity in the original lab frame.
-initial_profile = tanh
-fixed_frame_velocity_x3 = 0.0
-# Hold the imposed shear vx in the upper reservoir. Set true to copy vx from the
-# upper boundary-adjacent active cell instead.
-zero_gradient_vx = false
-# Lower user-x3 boundary mode. Options:
-#   reflect: fixed cold reservoir wall with reflected normal velocity.
-#   outflow: copy the adjacent active conserved state into the lower ghost zones.
-#   mass_balance: fixed-density cold reservoir with explicit vz, or with live
-#                 top-Mdot balancing when a frame tracker has a valid average.
-lower_x3_user_bc = reflect
-# For lower_x3_user_bc=mass_balance:
-#   fixed:          P=P0.
-#   total_pressure: P=P0 + rho_hot*(v_hot_lab - v_cold_lab)^2, using the
-#                   top-Mdot average and mass-balanced lower velocity.
-lower_x3_mass_balance_pressure_mode = fixed
-# For lower_x3_user_bc=mass_balance:
-#   zero_gradient: copy vx,vy from the lower active layer, but at rho_cold.
-#   reservoir:     use fixed cold-stream lab velocities transformed to the frame.
-lower_x3_mass_balance_tangential_mode = zero_gradient
-# Used by lower_x3_user_bc=mass_balance before any live top-Mdot average is
-# available. Interpreted in lower_x3_mass_balance_velocity_frame.
-lower_x3_mass_balance_vz = 0.0
-lower_x3_mass_balance_velocity_frame = grid
-# Negative disables the cap.
-lower_x3_mass_balance_max_abs_vz = -1.0
+# Literal initial vertical velocity. The pgen stores this exact value everywhere
+# before adding the optional pgen-local perturbation below.
+initial_vz = 0.0
 pres = 1.0
 # Minimum cooling time chosen for xi = 100.
 t_cool_min = 0.015491933384829668
@@ -153,30 +126,8 @@ localization = include
 x3_center = 0.0
 x3_scale = 0.1414213562373095
 
-<frame_tracking>
-# Optional finite-window top-Mdot frame tracking. Leave disabled for the clean
-# baseline. Sign convention:
-#   Mdot_top = integral rho*v3*dA at upper x3, positive outward/+x3.
-#   v_grid = v_lab - V_frame.
-enabled = false
-tracked_fluid = hydro
-start_time = 0.0
-apply_every = 1
-diagnostic_every = 2000
-axes = x3
-mode = top_mdot_window
-mdot_velocity_sign = flipped
-mdot_velocity_factor = 1.0
-mdot_density_mode = geometric_mean
-mdot_area = -1.0
-mdot_start_time = 0.5
-mdot_window_time = 1.5491933384829668
-max_abs_boost = 0.2
-max_boost_change_mode = per_time
-max_boost_change_rate = 0.02
-
 <particles>
-# Thermodynamic fields are sampled at each MC tracer's grid-frame cell center.
+# Thermodynamic fields are sampled at each MC tracer's cell center.
 particle_type = lagrangian_mc
 pusher = lagrangian_mc
 random_seed = 67890
@@ -211,7 +162,7 @@ slab_max = 1.0
 seed = 223344
 
 <output1>
-# Hydro, user-cooling, and frame-tracker histories share this cadence.
+# Hydro and user-cooling histories share this cadence.
 file_type = hst
 data_format = %24.16e
 dt = 0.25
@@ -265,7 +216,7 @@ variable = prtcl_all
 dt = 1.0e9
 
 <output8>
-# Per-rank restart files preserve frame state, tracers, and injection schedules under MPI.
+# Per-rank restart files preserve tracers and injection schedules under MPI.
 file_type = rst
 dt = 25.0
 single_file_per_rank = true

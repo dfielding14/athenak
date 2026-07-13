@@ -1,19 +1,20 @@
-# Simple TRML with tracers and frame tracking
+# Historical extended TRML with tracers and frame tracking
 
-Current option documentation lives in [`README.md`](README.md). This file is a
-historical note for the older tracer/frame-tracking workflow and should not be
-treated as the authoritative reference for the cleaned `simple_TRML` pgen.
+Current minimal-pgen documentation lives in [`README.md`](README.md). This file
+records the older tracer/frame-tracking workflow preserved in
+`simple_TRML_extended.cpp`; it is not the reference for `simple_TRML` or the
+current `TRML_with_Tracers_and_Tracking.athinput`.
 
 Build this problem with:
 
 ```bash
-cmake -S . -B build_trml -DPROBLEM=simple_TRML
+cmake -S . -B build_trml -DPROBLEM=simple_TRML_extended
 cmake --build build_trml -j
 ```
 
-The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four pieces:
+The historical configuration combined four pieces:
 
-- `simple_TRML.cpp` supplies the pressure-balanced shear layer, exact cooling update,
+- `simple_TRML_extended.cpp` supplies the pressure-balanced shear layer, exact cooling update,
   upper x3 hot reservoir, and user history diagnostics.
 - `<initial_perturbations>` supplies the one-time, reproducibly seeded velocity field.
   The pgen-local perturbation amplitude is zero to prevent applying two perturbations.
@@ -22,10 +23,10 @@ The companion input `TRML_with_Tracers_and_Tracking.athinput` combines four piec
   interface-position rate rather than the velocity of gas flowing through the interface.
 - `particle_type=lagrangian_mc` follows the mass flux and samples thermodynamic fields.
 
-## Canonical input
+## Historical input
 
-`TRML_with_Tracers_and_Tracking.athinput` is the single supported integrated-run
-configuration. It records the `xi=100`, `48 x 48 x 96`, 50-shear-time setup,
+The historical integrated run used the `xi=100`, `48 x 48 x 96`,
+50-shear-time setup,
 including eight root MeshBlocks for one-block-per-rank launches on eight MPI ranks,
 the low-bandwidth controller, single-precision full-volume and slice outputs, and
 the 3,072-particle/51-event tracer schedule.
@@ -89,7 +90,7 @@ See [TRML_TRACER_PARTICLE_OUTPUT_GUIDE.md](TRML_TRACER_PARTICLE_OUTPUT_GUIDE.md)
 for the complete column reference, MPI/restart behavior, integrity checks, and
 temperature-evolution plotting examples.
 
-The canonical input gives the history and particle-history outputs the same cadence so
+The historical input gave the history and particle-history outputs the same cadence so
 they can be joined exactly by time or cycle. Velocity-carrying particle species have not
 been validated with this frame tracker; the statement above is specific to
 `lagrangian_mc` tracers.
