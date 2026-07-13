@@ -1,0 +1,15 @@
+# Overrides for a small GOTHAM restart-conversion integration test.
+# Supply the source restart with -r and replace particle_restart on the command line.
+
+<job>
+basename = gotham_conversion_test
+
+<turb_driving>
+turb_flag  = 1
+dedt       = 0.0
+tdriv_start = 100.0
+
+<restart_conversion>
+enabled               = true
+target_physical_level = 1
+particle_restart      = replace_with_exact_particle_restart

@@ -28,6 +28,8 @@
 #include <cstdlib>
 #include <cstdio> // sscanf
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -214,6 +216,115 @@ RestartPathInfo NormalizeRestartPath(const std::string &restart_arg) {
   return info;
 }
 
+void WriteRestartConversion(Driver *driver, Outputs *outputs, Mesh *mesh,
+                            ParameterInput *pin, const fs::path &output_dir) {
+  int floor_count = mesh->ecounter.neos_dfloor + mesh->ecounter.neos_efloor +
+                    mesh->ecounter.neos_tfloor;
+  // Populate target ghosts and primitives through the ordinary restart path, without
+  // entering Driver::Initialize(), which would replace the stored timestep.
+  driver->InitBoundaryValuesAndPrimitives(mesh);
+  int new_floor_count = mesh->ecounter.neos_dfloor + mesh->ecounter.neos_efloor +
+                        mesh->ecounter.neos_tfloor;
+  if (new_floor_count != floor_count) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Primitive recovery applied a floor to the converted "
+              << "state; no restart was written." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  BaseTypeOutput *fluid_output = nullptr;
+  BaseTypeOutput *particle_output = nullptr;
+  for (auto *output : outputs->pout_list) {
+    if (output->out_params.file_type == "rst") {
+      fluid_output = output;
+    } else if (output->out_params.file_type == "rst_prtcl") {
+      particle_output = output;
+    }
+  }
+  if (fluid_output == nullptr || particle_output == nullptr ||
+      fluid_output->out_params.file_shard_mode != FileShardMode::per_node) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Restart conversion requires one per-node fluid restart "
+              << "output and one particle restart output." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::string basename = pin->GetString("job", "basename");
+  if (mesh->restart_meta.file_name.rfind(basename + ".", 0) == 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Converted output basename must differ from the archived "
+              << "source basename." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  fluid_output->out_params.file_number = 0;
+  particle_output->out_params.file_number = 0;
+  pin->SetInteger(fluid_output->out_params.block_name, "file_number", 1);
+  pin->SetInteger(particle_output->out_params.block_name, "file_number", 1);
+  pin->SetBoolean("restart_conversion", "enabled", false);
+
+  fs::path fluid_path = output_dir / "rst" / (basename + ".00000.rst");
+  fs::path particle_path = output_dir / "rst_prtcl" /
+                           (basename + ".00000.rst_prtcl");
+  pin->SetString("particles", "star_particle_file", PathToString(particle_path));
+
+  // The sidecar is complete before its absolute path is embedded in the fluid restart.
+  particle_output->LoadOutputData(mesh);
+  Kokkos::fence();
+  particle_output->WriteOutputFile(mesh, pin, true);
+  Kokkos::fence();
+  fluid_output->LoadOutputData(mesh);
+  Kokkos::fence();
+  fluid_output->WriteOutputFile(mesh, pin, true);
+  Kokkos::fence();
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
+  if (global_variable::my_rank == 0) {
+    std::ofstream manifest("conversion_manifest.tmp", std::ios::trunc);
+    manifest << std::setprecision(17);
+    manifest << "source_fluid=" << mesh->restart_meta.source_restart_path << '\n'
+             << "source_particles=" << mesh->restart_meta.source_particle_path << '\n'
+             << "converted_fluid=" << PathToString(fluid_path) << '\n'
+             << "converted_particles=" << PathToString(particle_path) << '\n'
+             << "output_shards=" << global_variable::nnodes << '\n'
+             << "source_blocks=" << mesh->restart_meta.source_nmb_total << '\n'
+             << "target_blocks=" << mesh->nmb_total << '\n'
+             << "source_max_physical_level="
+             << mesh->restart_meta.source_max_level - mesh->root_level << '\n'
+             << "target_max_physical_level="
+             << mesh->restart_meta.target_max_level - mesh->root_level << '\n'
+             << "time=" << mesh->time << '\n'
+             << "cycle=" << mesh->ncycle << '\n'
+             << "dt=" << mesh->dt << '\n'
+             << "timestep_policy=preserved from source restart\n"
+             << "turbulence_rng=preserved\n"
+             << "turbulence_force=zeroed for inactive legacy driver\n"
+             << "hashes=pending\n";
+    manifest.close();
+    if (!manifest || std::rename("conversion_manifest.tmp", "conversion_manifest.txt") != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Unable to publish conversion manifest." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    // Hashing every shard is a conversion-workflow concern.  Publish only a written
+    // marker here; the focused finalizer promotes it to CONVERSION_COMPLETE.
+    std::ofstream marker("CONVERSION_WRITTEN.tmp", std::ios::trunc);
+    marker << "Restart pair and conversion manifest written successfully.\n";
+    marker.close();
+    if (!marker || std::rename("CONVERSION_WRITTEN.tmp", "CONVERSION_WRITTEN") != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Unable to publish conversion written marker."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+}
+
 }  // namespace
 
 //----------------------------------------------------------------------------------------
@@ -223,6 +334,7 @@ RestartPathInfo NormalizeRestartPath(const std::string &restart_arg) {
 int main(int argc, char *argv[]) {
   std::string input_file, restart_file, run_dir;
   std::string restart_base_dir, restart_file_name;
+  std::string source_restart_path, source_particle_path, conversion_output_dir;
   bool iarg_flag = false;  // set to true if -i <file> argument is on cmdline
   bool marg_flag = false;  // set to true if -m        argument is on cmdline
   bool narg_flag = false;  // set to true if -n        argument is on cmdline
@@ -486,6 +598,32 @@ int main(int argc, char *argv[]) {
     return(0);
   }
 
+  bool restart_conversion = pinput->DoesBlockExist("restart_conversion") &&
+      pinput->DoesParameterExist("restart_conversion", "enabled") &&
+      pinput->GetBoolean("restart_conversion", "enabled");
+  if (restart_conversion) {
+    if (!res_flag || run_dir.empty()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Restart conversion requires both -r and a separate "
+                << "output directory supplied with -d." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    source_restart_path = PathToString(fs::absolute(restart_file).lexically_normal());
+    source_particle_path = PathToString(fs::absolute(pinput->GetString(
+        "restart_conversion", "particle_restart")).lexically_normal());
+    // Particle initialization happens before ChangeRunDir(), but store an absolute path
+    // so the exact source sidecar is also unambiguous in conversion provenance.
+    pinput->SetInteger("particles", "star_prtcl_rst_flag", 1);
+    pinput->SetString("particles", "star_particle_file", source_particle_path);
+    conversion_output_dir = PathToString(fs::absolute(run_dir).lexically_normal());
+    if (fs::exists(conversion_output_dir)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Restart conversion output directory already exists: "
+                << conversion_output_dir << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   //--- Step 4. --------------------------------------------------------------------------
   // Construct Mesh.  Then build MeshBlockTree and add MeshBlockPack containing MeshBlocks
   // on this rank.  Latter cannot be performed in Mesh constructor since it requires
@@ -494,6 +632,8 @@ int main(int argc, char *argv[]) {
   Mesh* pmesh = new Mesh(pinput);
   if (res_flag) {
     pmesh->SetRestartFileInfo(restart_base_dir, restart_file_name, restart_shard_mode);
+    pmesh->restart_meta.source_restart_path = source_restart_path;
+    pmesh->restart_meta.source_particle_path = source_particle_path;
   }
   if (!res_flag) {
     pmesh->BuildTreeFromScratch(pinput);
@@ -550,9 +690,16 @@ int main(int argc, char *argv[]) {
   //    2. TaskList(s) executed in Driver::Execute()
   //    3. Any final analysis or diagnostics run in Driver::Finalize()
 
-  pdriver->Initialize(pmesh, pinput, pout, res_flag);
-  pdriver->Execute(pmesh, pinput, pout);
-  pdriver->Finalize(pmesh, pinput, pout);
+  if (restart_conversion) {
+    WriteRestartConversion(pdriver, pout, pmesh, pinput, conversion_output_dir);
+    if (pmesh->pgen->pgen_final_func != nullptr) {
+      (pmesh->pgen->pgen_final_func)(pinput, pmesh);
+    }
+  } else {
+    pdriver->Initialize(pmesh, pinput, pout, res_flag);
+    pdriver->Execute(pmesh, pinput, pout);
+    pdriver->Finalize(pmesh, pinput, pout);
+  }
 
   //--- Step 8. -------------------------------------------------------------------------
   // clean up, and terminate
