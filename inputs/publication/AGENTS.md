@@ -21,6 +21,8 @@ manifest together with `tst/publication/AGENTS.md`.
 | Change Section 5.4 parallel-shock decks | `pic_parallel_shock_section54_*` | `src/pgen/tests/pic_parallel_shock.cpp` and Q011 parsers, contracts, readiness bindings, and analyzers |
 | Change compact full-Hall nonlinear Bell pilot | `pic_cr_hall_bell_nonlinear_pilot.athinput` | Q019 initializer, `MHD_PIC_CR_HALL_CODE_MAP.md`, and its focused reducer |
 | Change controlled delayed-injection Hall shock | `pic_parallel_shock_cr_hall_controlled_pilot.athinput` | Shock generator, restart ledger, and controlled-shock reducer |
+| Change long full-Hall shock successor | `pic_parallel_shock_cr_hall_long_full.athinput` | Compact pilot, shock generator, restart ledger, and controlled-shock reducer |
+| Change 3D full-Hall shock check | `pic_parallel_shock_cr_hall_3d_full.athinput` | Qualified long 2D shock, 3D source-scaling probe, shock generator, and 3D reducer |
 
 ## Change flow
 

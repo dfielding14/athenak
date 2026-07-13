@@ -101,15 +101,18 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
 
 **stagen**
 - `CopyCons` -> `Fluxes` -> `SendFlux` -> `RecvFlux` -> `RKUpdate`
-- `MHDSrcTerms`
-- `SendU_OA` / `RecvU_OA` (orbital advection)
-- `RestrictU` -> `SendU` -> `RecvU`
-- `SendU_Shr` / `RecvU_Shr` (shearing box BCs)
+- `MHDSrcTerms` -> `ApplyPICWaveDamping`
 - `CornerE` -> `EFieldSrc` -> `SendE` -> `RecvE` -> `CT`
-- `SendB_OA` / `RecvB_OA` (orbital advection for B)
-- `RestrictB` -> `SendB` -> `RecvB`
-- `SendB_Shr` / `RecvB_Shr` (shearing box BCs for B)
+- PIC expanding-box field/state/feedback hooks
+- `SendU_OA` / `RecvU_OA` (orbital advection) -> `RestrictU` -> `SendU` ->
+  `RecvU` -> shearing-box U exchange
+- `SendB_OA` / `RecvB_OA` (orbital advection for B) -> `RestrictB` -> `SendB` ->
+  `RecvB` -> shearing-box B exchange
 - `ApplyPhysicalBCs` -> `Prolongate` -> `ConToPrim` -> `NewTimeStep`
+
+`Fluxes` adds the full CR-Hall face induction and energy flux before its internal
+FOFC call. Full-f paper-VL2 particle tasks are inserted after `CopyCons` and
+before `Fluxes`; see `src/particles/AGENTS.md` for their stage ordering.
 
 **after_stagen**
 - `ClearSend` -> `ClearRecv`
@@ -123,6 +126,9 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
   divergence-free fields.
 - **FOFC**: estimates updated U and Bcc, flags floor/excision cells, and replaces
   fluxes with first-order LLF fluxes in those regions (also used for GR excision).
+  For full-f paper VL2, the trial includes both the Hall-enriched face fluxes and
+  the matching stage particle source. On replaced faces, the full-Hall path then
+  restores donor-cell Hall induction and energy terms before clearing the flags.
 - **Source terms**: `SourceTerms` adds gravity/cooling/shearing-box terms; GR/ADM
   coordinate sources are injected when appropriate.
 - **Timestep**: `NewTimeStep` uses fast magnetosonic speeds in Newtonian/SR, but
@@ -141,25 +147,31 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
   - `couple_fluid_feedback_order=mhd_src_terms`: feedback applied in
     `MHD::MHDSrcTerms`
   - `couple_fluid_feedback_order=efield_src`: feedback applied in `MHD::EFieldSrc`
-  - deposited rates are built once per cycle and then applied across explicit
-    RK stages with the stage beta coefficient; targets are gated by toggles
-    (`couple_moments_momentum_to_mhd`,
-    `couple_moments_energy_to_mhd`).
-  - for Boris + `pic_feedback_mode=coupled`, both feedback locations consume
-    deposited per-step particle deltas (`dp/dt`, `dE/dt`) with opposite sign
-    for conservative exchange; non-Boris paths retain legacy `J x B` / `J dot B`
-    source handling.
+  - legacy modes build deposited rates once per cycle and reuse them across RK
+    stages with the stage beta coefficient; targets are gated by
+    `couple_moments_momentum_to_mhd` and `couple_moments_energy_to_mhd`.
+  - full-f paper VL2 instead applies the analytic deposited charge/current force
+    in stage 1 and the opposite of the deposited, realized particle
+    `dp/dt`/`dE/dt` impulse in stage 2. This same helper updates the live state
+    and the FOFC trial state.
+  - other coupled Boris paths consume deposited per-step particle deltas with
+    opposite sign for conservative exchange; non-Boris paths retain legacy
+    `J x B` / `J dot B` source handling.
   - every ideal-MHD feedback path validates the post-source trial state against
     density, pressure/internal-energy, temperature, and entropy floors before
     C2P; a would-be floor repair aborts with global event counts so a coupled
     conservation run cannot silently acquire floor energy.
 
 For the uniform-grid full-f VL2/TSC path, `pic_cr_hall_mode=full` is a separate
-physical closure from the legacy direct-current CT experiment. Particle tasks
-build a midpoint `v_H`; `MHDSrcTerms` reconstructs limited Hall states to faces,
-adds the derived face EMFs, and applies the matching Hall Poynting divergence.
-`CornerE` uses the total cell EMF for GS07, CT updates the staggered field, and
-admissibility is checked afterward against that updated face field. Start with
+physical closure from the legacy direct-current CT experiment. Its predictor
+uses deposited charge/current to build `v_H`; the stage-2 particle push uses the
+predicted midpoint field, then deposits the realized particle impulse. The grid
+corrector uses that impulse directly,
+`cE_H = -(dp_CR/dt)/(alpha_i rho_g)`, rather than reusing the predictor `v_H`.
+`Fluxes` adds the limited Hall face EMFs and matching `(cE_H x B)` energy flux
+before FOFC, flux communication, and RK update. `CornerE` assembles the total
+face/cell EMF for GS07, CT updates the staggered field, and admissibility is
+checked against the updated face field. Start with
 `MHD_PIC_CR_HALL_CODE_MAP.md` before changing this route.
 
 ### PR5 Step 2 Passive-MHD Isolation Hook

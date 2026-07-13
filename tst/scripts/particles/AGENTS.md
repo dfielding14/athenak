@@ -32,7 +32,7 @@ runtime overrides before changing a fixture. Preparation contracts can instead
 reference `inputs/publication/`.
 
 Runnable harness modules expose `run()` and `analyze()`. Shared helpers use the
-`*_utils.py` suffix so broad discovery skips them. MPI-aware tests commonly use
+`*_utils.py` or `*_oracle.py` suffix so broad discovery skips them. MPI-aware tests commonly use
 `MPIEXEC` (default `mpiexec`) and query `athena -c` before enabling multirank
 cases.
 
@@ -50,9 +50,8 @@ cases.
   qualification. Legacy `*_publication.py` modules are excluded from broad
   discovery by default and do not establish publication evidence.
 - `pic_paper_smooth_tsc_oracle.py` is a standalone oracle without harness
-  `run()`/`analyze()` functions, but its name is not excluded by broad suite
-  discovery. Prefer focused particle module names over assuming the complete
-  `particles` suite contains only runnable harness modules.
+  `run()`/`analyze()` functions; the `*_oracle.py` suffix excludes it from broad
+  suite discovery while the compiled interface regression imports it directly.
 - Paper or shock preparation contracts may validate frozen source/deck
   structure without executing or qualifying a production campaign.
 <!-- END build-memory-table -->

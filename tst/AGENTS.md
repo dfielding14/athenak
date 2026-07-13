@@ -25,7 +25,7 @@ discovery.
 - Run `run_tests.py` from `tst/`; test names are relative to `tst/scripts/`.
 - The runner imports selected modules, builds AthenaK once, then calls each
   module's `run()` and `analyze()`.
-- Suite discovery skips `utils`, `style`, `*_utils.py`, and, by default,
+- Suite discovery skips `utils`, `style`, `*_utils.py`, `*_oracle.py`, and, by default,
   `*_publication.py`. Explicit publication module names still run;
   `ATHENA_INCLUDE_PUBLICATION_TESTS=1` includes them in broad discovery.
 - `tst/scripts/utils/athena.py` configures with `cmake3`, builds with `make -j8`,

@@ -48,7 +48,8 @@ Index constants are defined in `athena.hpp`:
   - `IPX, IPVX, IPY, IPVY, IPZ, IPVZ`: position plus velocity in
     `pic_physical_mode=engineering`, or position plus mass-normalized momentum
     `p/m` in explicit paper/extension modes
-  - Cosmic rays (`CRParticlesIndex`): `IPM` (q/m), `IPBX/IPBY/IPBZ` (sampled B),
+  - Cosmic rays (`CRParticlesIndex`): `IPM` (code-normalized `q/(m c)` in
+    paper/extension modes), `IPBX/IPBY/IPBZ` (sampled B),
     `IPDX/IPDY/IPDZ` (displacement), `IPDB` (parallel displacement),
     `IPEX/IPEY/IPEZ` (sampled midpoint `cE`), `IPDPX/IPDPY/IPDPZ` (per-step
     momentum-rate feedback channels), `IPDE` (per-step energy-rate channel),
@@ -83,7 +84,9 @@ for stars (`PGID`, `PTAG`, and `NSN`).
     `charge`.
   - Optional per-species drift overrides in each `speciesN` block:
     `vx0`, `vy0`, `vz0` (fallback to global `cr_vx0/cr_vy0/cr_vz0`).
-  - `IPM` stores charge-to-mass ratio for each particle.
+  - `IPM` stores `species_charge/species_mass`; paper/extension modes interpret
+    this code-normalized ratio as `q/(m c)`, with no additional division by the
+    artificial CR light speed in the pusher.
 - Initialization:
   - `cr_distribution = center` (default) maps particles over MeshBlock cell
     centers; it does not collapse every particle in a block onto the block
@@ -95,6 +98,9 @@ for stars (`PGID`, `PTAG`, and `NSN`).
   - `IPWT` is initialized as local cell volume divided by root-cell volume, so
     ppc-created particles carry refinement-consistent macro weights while
     preserving root-level `deposit_qscale` semantics.
+  - CR populations validate all active `IPWT` values once after
+    fresh or restart problem setup. Values must be finite and positive; push,
+    deposition, and history consumers never repair invalid weights locally.
 - Optional displacement tracking via `track_displacement` updates `IPD*` and `IPDB`.
 - Boris pushers support both MHD-carried fields (`coupled` / `passive_mhd`) and
   particle-owned no-MHD carriers (`pic_background_mode=no_mhd`).
@@ -133,9 +139,12 @@ but these are not wired in the constructor.
   Step size uses `particles:grav_dx` (default `1e-6`).
 - **Boris** (cosmic rays): midpoint E+B Boris sequence:
   first drift by `dt/2`, interpolate midpoint `u` and `B`, compute
-  `cE = -u x B`, apply full-step Boris momentum update, then second drift by
-  `dt/2`. Per-step `dp/dt`, `dE/dt`, and `cE dot B` diagnostics are stored in
-  the CR payload for deposition and regression checks.
+  `cE`, apply the Boris momentum update, then second drift by `dt/2`. The
+  standard ideal carrier uses `cE = -u x B`; full CR-Hall uses `-(u+v_H) x B`
+  for its particle predictor. In paper VL2 full-Hall mode, stage 1 makes only a
+  scratch half-kick predictor and stage 2 performs the real midpoint full kick.
+  The realized stage-2 `dp/dt`, `dE/dt`, and `cE dot B` diagnostics are stored
+  in the CR payload for deposition and conservative feedback.
 
 ### Field interpolation
 - `InterpolateLinear`: trilinear (or bilinear in 2D) interpolation of midpoint
@@ -148,11 +157,14 @@ but these are not wired in the constructor.
 ## Moment Deposition and PR2 Coupling Controls
 
 ### Deposition controls
-- `deposit_moments` (default `false`): enables particle moment deposition.
+- `deposit_moments`: enables particle moment deposition. It defaults to `false`
+  outside paper-coupled modes and to `true` in `paper_mhd_pic` and
+  `paper_mhd_pic_vl2_tsc`.
   In Boris CR paths this includes `rho/J` and midpoint diagnostics channels
   (`E dot B`, and in coupled mode `dp/dt`, `dE/dt`).
 - `deposit_order`:
-  - default and all non-direct paths: `1` only
+  - all paths other than `direct_staggered` and `paper_mhd_pic_vl2_tsc`: `1`
+  - `paper_mhd_pic_vl2_tsc`: defaults to and requires `2` for TSC deposition
   - coupled `direct_staggered` path: `1` and `2` supported
   - coupled `direct_staggered` deposition is trajectory-based and aborts if the
     old-to-new particle shape support shifts by more than one cell in any active
@@ -196,6 +208,9 @@ but these are not wired in the constructor.
   - default `test_particle` for `pic_background_mode=passive_mhd`
   - accepted values: `coupled`, `test_particle`
 - `pic_interp_scheme`: `tsc` (default and currently only valid value).
+- Every non-engineering `pic_physical_mode`, including
+  `paper_mhd_pic_vl2_tsc`, requires `pusher=boris_tsc`; `boris_lin` remains an
+  engineering-mode option.
 - `pic_enable_2d3v`: required for Boris pushers on 2D meshes; the reduced
   2D/2V Lorentz-force path is not implemented.
 - `pic_physical_mode`: `engineering`, `paper_test_particle`, `paper_mhd_pic`,
@@ -207,10 +222,13 @@ but these are not wired in the constructor.
   momentum-state modes. `pic_cr_initial_state` selects whether initializer
   components are interpreted as `velocity` or `momentum`.
 - `pic_cr_hall_mode=off|full` selects the atomic large-scale CR-Hall closure
-  for `paper_mhd_pic_vl2_tsc`. `full` uses
-  `v_H=(J_CR/c-Q_CR u_g)/(alpha_i rho+Q_CR)` in the particle pusher, CT,
-  gas feedback, Hall energy flux, and CFL estimate. It requires uniform-grid,
-  ideal-MHD, full-f coupling and positive
+  for `paper_mhd_pic_vl2_tsc`. The particle predictor builds
+  `v_H=(J_CR/c-Q_CR u_g)/(alpha_i rho_g+Q_CR)`. After the real stage-2 push,
+  the grid corrector instead uses the deposited particle impulse directly as
+  `cE_H=-(dp_CR/dt)/(alpha_i rho_g)` for CT and the Hall energy flux; gas
+  feedback consumes that realized momentum/energy exchange with the opposite
+  sign. It requires uniform-grid, ideal-MHD, full-f coupling and positive
+  code-normalized
   `pic_background_ion_q_over_mc=alpha_i`; non-3D meshes also require 3V.
 - `pic_cr_hall_mode=current_to_ct_experimental` remains restricted to
   `extended_mhd_pic`. Its free-coefficient current source is a historical
@@ -312,10 +330,12 @@ High-level flow:
 6. **RecvP**: unpack received particles, fill holes, destroy out-of-domain particles.
 7. **ClearRecv/ClearSend**: finalize MPI requests.
 
-Notes from `bvals_part.cpp`:
-- `BoundaryFlag::reflect` is handled immediately after each pusher by mirroring
-  the particle position and flipping the normal velocity before deposition or
-  exchange.
+Boundary notes:
+- In the legacy/non-paper pushers, `BoundaryFlag::reflect` is handled before
+  deposition or exchange by mirroring the particle position and flipping the
+  normal velocity. Paper VL2 first deposits its stage predictor or realized
+  impulse, then applies reflection inside the separate staged half-drift before
+  particle exchange.
 - Any particle that still exits through a non-periodic physical face during
   exchange (`outflow`, `inflow`, `user`, or an unhandled physical crossing) is
   marked for destruction.
@@ -329,17 +349,30 @@ Notes from `bvals_part.cpp`:
 `Particles::AssembleTasks` always wires:
 - `before_timeintegrator` push/deposition chain:
   `AdaptDeltaF -> SaveOldPositions -> Push -> ZeroMoments -> InitRecvMoments ->
-  DepositMoments -> SendMoments -> RecvMoments -> ClearRecvMoments ->
-  ClearSendMoments`
+  DepositMoments -> RestrictMoments -> SendMoments -> RecvMoments ->
+  ClearRecvMoments -> ClearSendMoments -> ApplyMomentPhysicalBCs ->
+  ProlongateMoments`. Paper VL2 wrappers are stage-gated, so this stage-0 chain
+  does not perform its coupled update.
 
 Particle migration communication depends on coupling mode:
 - uncoupled/default: `NewGID -> SendCnt -> InitRecv -> SendP -> RecvP ->
   ClearRecv -> ClearSend` in `before_timeintegrator`
-- coupled: same migration chain moved to `after_timeintegrator`.
+- legacy coupled modes: the same migration chain moves to
+  `after_timeintegrator`
+- paper VL2: the chain runs in `after_stagen`, so ownership is corrected after
+  both the midpoint (stage 1) and endpoint (stage 2) half drifts.
 
-In coupled mode, moment wrappers are also inserted into `stagen` on stage 1:
-- insertion anchor is selected by `couple_fluid_feedback_order`
-  (`MHD::MHDSrcTerms` vs `MHD::EFieldSrc`)
+In coupled mode, moment wrappers are also inserted into `stagen`:
+- legacy modes retain the stage-1 insertion anchor selected by
+  `couple_fluid_feedback_order` (`MHD::MHDSrcTerms` vs `MHD::EFieldSrc`)
+- full-f paper VL2 inserts its staged chain after `MHD::CopyCons` and before
+  `MHD::Fluxes`: optional full-Hall predictor deposition/`v_H` construction ->
+  `Push` -> `SaveOldPositions` -> moment deposition/synchronization ->
+  `DriftPaperCosmicRaysHalfStep`. Hall-off runs the generic moment wrappers in
+  both stages. Full Hall instead uses separately synchronized `cr_hall_moments`
+  for its stage-1 analytic source and runs the generic `moments` wrappers only
+  in stage 2, where they deposit the realized particle `dp/dt` and `dE/dt` used
+  by the exact gas and grid correctors.
 - if `couple_j_to_efield_representation=edge_staggered` and
   `couple_j_deposition_mode=cc_convert`, `ConvertCoupledCurrentRepresentation`
   is inserted immediately before `MHD::EFieldSrc` and depends on both `CornerE`
