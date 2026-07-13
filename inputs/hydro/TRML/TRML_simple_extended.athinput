@@ -1,0 +1,244 @@
+# Extended simple-TRML run with thermodynamic Monte-Carlo tracers and
+# temperature-based adaptive frame tracking.
+# Build with -DPROBLEM=simple_TRML_extended.
+# t_shear = (x1max - x1min)/velocity = 1.5491933384829668.
+
+<comment>
+problem = Extended simple cooling TRML with temperature-based frame tracking
+
+<job>
+basename = TRML_simple_extended
+
+<mesh>
+nghost = 4
+
+# The 2 x 2 x 2 MeshBlock layout gives one block per rank with 8 MPI ranks.
+nx1 = 128
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 256
+x3min = -1.0
+x3max = 1.0
+# Use AthenaK's native zero-gradient outflow at the cold-side boundary. The
+# extended pgen's user boundary supplies only the upper hot reservoir.
+ix3_bc = outflow
+ox3_bc = user
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 128
+
+# Disabled by default. Retained for optional particle/remesh testing.
+<mesh_refinement>
+refinement = none
+num_levels = 2
+refinement_interval = 1
+max_nmb_per_rank = 256
+
+<amr_criterion0>
+method = min_max
+variable = hydro_w_s00
+value_max = 0.1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = -1
+# 50 shear times.
+tlim = 77.45966692414834
+ndiag = 20
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666667
+nscalars = 1
+fofc = true
+dfloor = 1.0e-4
+pfloor = 1.0e-5
+
+<units>
+length_cgs = 1.0
+mass_cgs = 1.0
+time_cgs = 1.0
+mu = 0.6
+
+<problem>
+rho_hot = 1.0
+rho_cold = 56.23413251903491 # chi = rho_cold/rho_hot = 10^1.75.
+velocity = 0.6454972243679028 # Relative shear Mach number is 0.5 for the pressure and gamma below.
+# No additional fixed-frame offset. Adaptive frame motion is controlled by the
+# <frame_tracking> block below.
+fixed_frame_velocity_x3 = 0.0
+pres = 1.0
+# Minimum cooling time chosen for xi = 100.
+t_cool_min = 0.015491933384829668
+T_cutoff_over_T_cold = 20.0
+T_ci_over_T_cold = 10.0
+T_ih_over_T_cold = 30.0
+beta = 0.0
+# Negative disables the optional smooth startup ramp.
+cooling_ramp_time = -1.0
+cooling_ramp_min_factor = 0.0
+
+user_srcs = true
+user_dt = true
+user_hist = true
+user_bcs = true
+
+phase_sharpness = 96
+
+# The shared perturbation module below supplies the actual initial velocity
+# perturbation, so this pgen-local amplitude must remain zero.
+max_init_perturb_log2freq = 5
+min_init_perturb_log2freq = 2
+init_perturb_sharpness = 50.0
+init_perturb_vel_frac = 0.0
+
+<initial_perturbations>
+# Reproducible, solenoidal in-plane perturbations localized around the interface.
+variables = velocity
+velocity_rms = 0.02
+remove_velocity_mean = true
+spectral_slope = 1.666666666666667
+nlow = 2
+nhigh = 4
+min_kz = 0
+max_kz = 0
+f_solenoidal = 1.0
+rseed = 24680
+localization = include
+x3_center = 0.0
+x3_scale = 0.1414213562373095
+
+<frame_tracking>
+# Follow the volume-weighted centroid of the cold-side thermal-interface band.
+# With P0=1 and rho_cold=10^1.75, T_cold=0.01778279410038923;
+# this selects 1.5*T_cold <= T <= 8*T_cold.
+enabled = true
+tracked_fluid = hydro
+start_time = 0.0
+apply_every = 1
+diagnostic_every = 2000
+axes = x3
+x3_target = 0.0
+target = temperature
+target_min = 0.02667419115058384
+target_max = 0.1422623528031138
+weight = volume
+mode = pd
+position_signal = centroid
+velocity_signal = position_rate
+# Low-bandwidth, nominally critically damped controller.
+tau_avg = 1.0
+tau_relax = 5.0
+tau_vel = 2.5
+max_abs_boost = 0.2
+max_boost_change_mode = per_time
+max_boost_change_rate = 0.02
+
+<particles>
+# Thermodynamic fields are sampled at each MC tracer's cell center.
+particle_type = lagrangian_mc
+pusher = lagrangian_mc
+random_seed = 67890
+track_variables = density, pressure, temperature, entropy, v1, v2, v3, mach, scalar0
+
+<tracer_seed1>
+# 777 tracers (25.3% of the population) uniformly sample the initial volume at t=0.
+id = 1
+start_time = 0.0
+end_time = 0.0
+cadence = -1.0
+count_per_event = 777
+weight = volume
+region = all
+seed = 112233
+
+<tracer_seed2>
+# Inject 45 tracers at each of 51 uniformly spaced times from t=0 through
+# t=50*t_shear. This contributes 2,295 tracers, for 3,072 total.
+id = 2
+start_time = 0.0
+end_time = 77.45966692414834
+cadence = 1.5491933384829668
+count_per_event = 45
+weight = volume
+region = slab
+slab_axis = 3
+# Top active-cell layer: one root-grid cell thick for nx3=256.
+slab_min = 0.9921875
+slab_max = 1.0
+seed = 223344
+
+<output1>
+# Hydro, cooling, and frame histories share this cadence.
+file_type = hst
+data_format = %24.16e
+dt = 0.25
+
+<output2>
+file_type = prtcl_thermo_history
+id = thermo
+dt = 0.25
+variables = density, pressure, temperature, entropy, v1, v2, v3, mach, scalar0
+
+<output3>
+# Single-precision full-volume primitive snapshots for restart-independent checks.
+file_type = bin
+id = state
+variable = hydro_w
+ghost_zones = false
+dt = 15.0
+
+<output4>
+# Primitive slice through x1=0, sampled every quarter shear time.
+file_type = bin
+id = slice_x1
+variable = hydro_w
+slice_x1 = 0.0
+ghost_zones = false
+dt = 0.3872983346207417
+
+<output5>
+# Primitive slice through x2=0, sampled every quarter shear time.
+file_type = bin
+id = slice_x2
+variable = hydro_w
+slice_x2 = 0.0
+ghost_zones = false
+dt = 0.3872983346207417
+
+<output6>
+# Primitive slice through x3=0, sampled every quarter shear time.
+file_type = bin
+id = slice_x3
+variable = hydro_w
+slice_x3 = 0.0
+ghost_zones = false
+dt = 0.3872983346207417
+
+<output7>
+# Effectively disable frequent particle VTK dumps; thermo histories remain enabled.
+file_type = pvtk
+id = tracers
+variable = prtcl_all
+dt = 1.0e9
+
+<output8>
+# Per-rank restart files preserve tracers, injection schedules, and frame state.
+file_type = rst
+dt = 25.0
+single_file_per_rank = true
