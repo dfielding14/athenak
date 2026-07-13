@@ -28,6 +28,7 @@
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
+#include "particles/particles.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "pgen.hpp"
 
@@ -41,6 +42,7 @@ struct RestartBlockRequest {
 
 struct PerNodeRestartRequest {
   int local_index;
+  int source_gid;
   IOWrapperSizeT file_offset;
 };
 
@@ -180,13 +182,35 @@ std::vector<std::vector<PerNodeRestartRequest>> BuildPerNodeRestartRequests(
     int src_node = meta.rank_to_node[src_rank];
     IOWrapperSizeT chunk_index = static_cast<IOWrapperSizeT>(rank_chunk_prefix[src_rank])
                                + static_cast<IOWrapperSizeT>(local_chunk_index);
-    requests[src_node].push_back({m, chunk_stride*chunk_index});
+    requests[src_node].push_back({m, gid, chunk_stride*chunk_index});
+  }
+  return requests;
+}
+
+std::vector<std::vector<PerNodeRestartRequest>> BuildConversionRestartRequests(
+    Mesh *pm, const RestartMetaData &meta, const std::vector<int> &rank_chunk_prefix,
+    IOWrapperSizeT chunk_stride) {
+  auto *pack = pm->pmb_pack;
+  std::vector<std::vector<PerNodeRestartRequest>> requests(meta.original_nnodes);
+  for (int source_gid=0; source_gid<meta.source_nmb_total; ++source_gid) {
+    int target_gid = meta.target_gid_each_source[source_gid];
+    if (target_gid < pack->gids || target_gid > pack->gide) {
+      continue;
+    }
+    int src_rank = meta.rank_eachmb[source_gid];
+    int local_chunk_index = source_gid - meta.gids_eachrank[src_rank];
+    int src_node = meta.rank_to_node[src_rank];
+    IOWrapperSizeT chunk_index = static_cast<IOWrapperSizeT>(rank_chunk_prefix[src_rank])
+                               + static_cast<IOWrapperSizeT>(local_chunk_index);
+    requests[src_node].push_back({target_gid - pack->gids, source_gid,
+                                  chunk_stride*chunk_index});
   }
   return requests;
 }
 
 std::vector<PerNodeRestartSpan> BuildPerNodeRestartSpans(
-    std::vector<PerNodeRestartRequest> &requests, IOWrapperSizeT chunk_stride) {
+    std::vector<PerNodeRestartRequest> &requests, IOWrapperSizeT chunk_stride,
+    IOWrapperSizeT max_span_bytes=0) {
   std::sort(requests.begin(), requests.end(),
             [](const PerNodeRestartRequest &lhs, const PerNodeRestartRequest &rhs) {
               return lhs.file_offset < rhs.file_offset;
@@ -202,7 +226,8 @@ std::vector<PerNodeRestartSpan> BuildPerNodeRestartSpans(
   IOWrapperSizeT span_bytes = chunk_stride;
   for (std::size_t i = 1; i < requests.size(); ++i) {
     IOWrapperSizeT expected_offset = requests[i-1].file_offset + chunk_stride;
-    if (requests[i].file_offset == expected_offset) {
+    if (requests[i].file_offset == expected_offset &&
+        (max_span_bytes == 0 || span_bytes + chunk_stride <= max_span_bytes)) {
       span_bytes += chunk_stride;
       continue;
     }
@@ -215,6 +240,90 @@ std::vector<PerNodeRestartSpan> BuildPerNodeRestartSpans(
   spans.push_back({span_offset, first_request,
                    static_cast<int>(requests.size()) - first_request, span_bytes});
   return spans;
+}
+
+void RestrictConversionSpan(Mesh *pm, const RestartChunkLayout &layout,
+                            const std::vector<PerNodeRestartRequest> &requests,
+                            const PerNodeRestartSpan &span, const char *span_data,
+                            int nhydro, int nout1, int nout2, int nout3) {
+  auto &meta = pm->restart_meta;
+  auto *phydro = pm->pmb_pack->phydro;
+  auto &indcs = pm->mb_indcs;
+  auto u0 = phydro->u0;
+
+  // A source block d levels below its capped ancestor fills one nx/2^d target
+  // subvolume.  Average each 2^d-cubed source-cell group into that subvolume.
+  for (int depth=0; depth<=3; ++depth) {
+    std::vector<int> group;
+    for (int n=0; n<span.request_count; ++n) {
+      const auto &request = requests[span.first_request + n];
+      int target_gid = request.local_index + pm->pmb_pack->gids;
+      if (meta.source_lloc[request.source_gid].level -
+          pm->lloc_eachmb[target_gid].level == depth) {
+        group.push_back(n);
+      }
+    }
+    if (group.empty()) {
+      continue;
+    }
+
+    int count = static_cast<int>(group.size());
+    HostArray5D<Real> source_host("conversion-source-host", count, nhydro,
+                                  nout3, nout2, nout1);
+    HostArray1D<int> target_host("conversion-target-host", count);
+    HostArray1D<int> x0_host("conversion-x0-host", count);
+    HostArray1D<int> y0_host("conversion-y0-host", count);
+    HostArray1D<int> z0_host("conversion-z0-host", count);
+    int refine = 1 << depth;
+    int subnx1 = indcs.nx1/refine;
+    int subnx2 = indcs.nx2/refine;
+    int subnx3 = indcs.nx3/refine;
+
+    for (int g=0; g<count; ++g) {
+      int span_index = group[g];
+      const auto &request = requests[span.first_request + span_index];
+      const char *chunk = span_data +
+          static_cast<IOWrapperSizeT>(span_index)*layout.chunk_stride;
+      std::memcpy(&source_host(g, 0, 0, 0, 0), chunk + layout.hydro_offset,
+                  layout.hydro_bytes);
+      target_host(g) = request.local_index;
+
+      int target_gid = request.local_index + pm->pmb_pack->gids;
+      const auto &source = meta.source_lloc[request.source_gid];
+      const auto &target = pm->lloc_eachmb[target_gid];
+      x0_host(g) = indcs.is + (source.lx1 - (target.lx1 << depth))*subnx1;
+      y0_host(g) = indcs.js + (source.lx2 - (target.lx2 << depth))*subnx2;
+      z0_host(g) = indcs.ks + (source.lx3 - (target.lx3 << depth))*subnx3;
+    }
+
+    DvceArray5D<Real> source("conversion-source", count, nhydro, nout3, nout2, nout1);
+    DvceArray1D<int> targets("conversion-targets", count);
+    DvceArray1D<int> x0("conversion-x0", count);
+    DvceArray1D<int> y0("conversion-y0", count);
+    DvceArray1D<int> z0("conversion-z0", count);
+    Kokkos::deep_copy(source, source_host);
+    Kokkos::deep_copy(targets, target_host);
+    Kokkos::deep_copy(x0, x0_host);
+    Kokkos::deep_copy(y0, y0_host);
+    Kokkos::deep_copy(z0, z0_host);
+
+    Real normalization = 1.0/static_cast<Real>(refine*refine*refine);
+    par_for("restrict restart conversion", DevExeSpace(), 0, count-1, 0, nhydro-1,
+            0, subnx3-1, 0, subnx2-1, 0, subnx1-1,
+    KOKKOS_LAMBDA(int g, int n, int k, int j, int i) {
+      Real sum = 0.0;
+      for (int fk=0; fk<refine; ++fk) {
+        for (int fj=0; fj<refine; ++fj) {
+          for (int fi=0; fi<refine; ++fi) {
+            sum += source(g, n, indcs.ks + k*refine + fk,
+                          indcs.js + j*refine + fj, indcs.is + i*refine + fi);
+          }
+        }
+      }
+      u0(targets(g), n, z0(g) + k, y0(g) + j, x0(g) + i) = sum*normalization;
+    });
+    Kokkos::fence();
+  }
 }
 
 void PrintPerNodeRestartStats(int shard_id, int raw_requests, int merged_spans,
@@ -325,6 +434,123 @@ void UnpackPerNodePayloadChunk(const char *chunk_ptr, int local_index,
   }
 }
 
+void LoadPerNodeConversionData(Mesh *pm, IOWrapperSizeT data_stride,
+                               int nout1, int nout2, int nout3,
+                               int nhydro, int nmhd, int nrad,
+                               int nforce, int nz4c, int nadm) {
+  MeshBlockPack *pack = pm->pmb_pack;
+  hydro::Hydro *phydro = pack->phydro;
+  TurbulenceDriver *pturb = pack->pturb;
+  const RestartMetaData &meta = pm->restart_meta;
+  if (phydro == nullptr || phydro->nhydro != 5 || phydro->nscalars != 3 ||
+      nhydro != 8 || pack->pmhd != nullptr || pack->pionn != nullptr ||
+      pack->prad != nullptr || pack->pz4c != nullptr || pack->padm != nullptr ||
+      pturb == nullptr || pack->ppart == nullptr ||
+      pack->ppart->particle_type != ParticleType::star) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Restart conversion is limited to the GOTHAM ideal-hydro "
+              << "layout with three scalars, inactive turbulence, and star particles."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pturb->turb_flag != 1 || pturb->dedt != 0.0 || pturb->tdriv_start != 100.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Restart conversion requires the legacy 4 pc phase "
+              << "settings turb_flag=1, dedt=0, and tdriv_start=100." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  RestartChunkLayout layout = BuildRestartChunkLayout(
+      meta, data_stride, nout1, nout2, nout3, nhydro, nmhd, nrad, nforce, nz4c, nadm,
+      "Restart conversion data");
+  std::vector<int> rank_chunk_prefix = BuildPerNodeRankChunkPrefix(meta);
+  auto requests = BuildConversionRestartRequests(pm, meta, rank_chunk_prefix,
+                                                  layout.chunk_stride);
+
+  std::vector<std::string> shard_paths(meta.original_nnodes);
+  for (int shard=0; shard<meta.original_nnodes; ++shard) {
+    char shard_dir[20];
+    std::snprintf(shard_dir, sizeof(shard_dir), "node_%08d", shard);
+    if (!meta.base_dir.empty()) {
+      shard_paths[shard] = meta.base_dir + "/" + shard_dir + "/" + meta.file_name;
+    } else {
+      shard_paths[shard] = std::string(shard_dir) + "/" + meta.file_name;
+    }
+  }
+
+  constexpr IOWrapperSizeT max_span_bytes = 256ULL*1024ULL*1024ULL;
+  for (int shard=0; shard<meta.original_nnodes; ++shard) {
+    auto &shard_requests = requests[shard];
+    int local_has_requests = shard_requests.empty() ? 0 : 1;
+#if MPI_PARALLEL_ENABLED
+    int node_has_requests = local_has_requests;
+    MPI_Allreduce(MPI_IN_PLACE, &node_has_requests, 1, MPI_INT, MPI_MAX,
+                  global_variable::node_comm);
+    if (node_has_requests == 0) {
+      continue;
+    }
+#else
+    if (!local_has_requests) {
+      continue;
+    }
+#endif
+
+    auto spans = BuildPerNodeRestartSpans(shard_requests, layout.chunk_stride,
+                                          max_span_bytes);
+    int collective_reads = static_cast<int>(spans.size());
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, &collective_reads, 1, MPI_INT, MPI_MAX,
+                  global_variable::node_comm);
+#endif
+
+    IOWrapper srcfile;
+#if MPI_PARALLEL_ENABLED
+    srcfile.SetCommunicator(global_variable::node_comm);
+    srcfile.Open(shard_paths[shard].c_str(), IOWrapper::FileMode::read, false);
+#else
+    srcfile.Open(shard_paths[shard].c_str(), IOWrapper::FileMode::read, true);
+#endif
+
+    char dummy = '\0';
+    for (int span_idx=0; span_idx<collective_reads; ++span_idx) {
+      const PerNodeRestartSpan *span = (span_idx < static_cast<int>(spans.size()))
+          ? &spans[span_idx] : nullptr;
+      IOWrapperSizeT local_bytes = (span == nullptr) ? 0 : span->byte_count;
+      std::vector<char> span_buffer(static_cast<std::size_t>(local_bytes));
+      char *span_data = (local_bytes > 0) ? span_buffer.data() : &dummy;
+#if MPI_PARALLEL_ENABLED
+      std::size_t bytes_read = srcfile.Read_bytes_at_all(
+          span_data, 1, local_bytes, (span == nullptr) ? 0 : span->file_offset, false);
+#else
+      std::size_t bytes_read = srcfile.Read_bytes_at(
+          span_data, 1, local_bytes, (span == nullptr) ? 0 : span->file_offset, true);
+#endif
+      if (bytes_read != local_bytes) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Restart conversion payload not read correctly from "
+                  << shard_paths[shard] << "." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (span != nullptr) {
+        RestrictConversionSpan(pm, layout, shard_requests, *span, span_data,
+                               nhydro, nout1, nout2, nout3);
+      }
+    }
+
+#if MPI_PARALLEL_ENABLED
+    srcfile.Close(false);
+#else
+    srcfile.Close(true);
+#endif
+    PrintPerNodeRestartStats(shard, static_cast<int>(shard_requests.size()),
+                             static_cast<int>(spans.size()), collective_reads);
+  }
+  Kokkos::fence();
+  // The saved forcing field is irrelevant for this explicitly inactive driver.  Keep the
+  // restored RNG state, but write a clean zero forcing field in the converted checkpoint.
+  Kokkos::deep_copy(pturb->force, 0.0);
+}
+
 void LoadPerNodeRestartData(Mesh *pm, IOWrapperSizeT data_stride,
                             int nout1, int nout2, int nout3,
                             int nhydro, int nmhd, int nrad,
@@ -337,6 +563,12 @@ void LoadPerNodeRestartData(Mesh *pm, IOWrapperSizeT data_stride,
   radiation::Radiation *prad = pack->prad;
   TurbulenceDriver *pturb = pack->pturb;
   const RestartMetaData &meta = pm->restart_meta;
+
+  if (meta.conversion) {
+    LoadPerNodeConversionData(pm, data_stride, nout1, nout2, nout3, nhydro, nmhd,
+                              nrad, (pturb != nullptr) ? nforce : 0, nz4c, nadm);
+    return;
+  }
 
   RestartChunkLayout layout = BuildRestartChunkLayout(meta, data_stride, nout1, nout2, nout3,
                                                       nhydro, nmhd, nrad,
@@ -500,7 +732,8 @@ void LoadPartitionedRestartData(Mesh *pm,
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if (meta.rank_eachmb.size() != static_cast<std::size_t>(pm->nmb_total)) {
+  int metadata_nmb = meta.conversion ? meta.source_nmb_total : pm->nmb_total;
+  if (meta.rank_eachmb.size() != static_cast<std::size_t>(metadata_nmb)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Restart metadata inconsistent with MeshBlock count."
               << std::endl;
