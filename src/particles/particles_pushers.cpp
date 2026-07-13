@@ -535,8 +535,7 @@ TaskStatus Particles::PushPaperCosmicRaysVL2(Driver *pdriver, int stage) {
             CRKineticEnergy(true, light_speed, state_x, state_y, state_z);
         const int sp = pi(PSP, p);
         if (sp < 0 || sp >= nspecies_local) return;
-        Real weight = pr(IPWT, p);
-        if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+        const Real weight = pr(IPWT, p);
         const Real macro_mass = qscale*weight*mspecies(sp);
         pr(IPDPX, p) = macro_mass*(state_x - state_x_before)*inv_dt;
         pr(IPDPY, p) = macro_mass*(state_y - state_y_before)*inv_dt;
@@ -833,9 +832,8 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real q_over_m = pr(IPM, p);
         int sp = pi(PSP, p);
         if (sp < 0 || sp >= nspecies_local) return;
-        Real weight = pr(IPWT, p);
-        if (weight <= 0.0) weight = 1.0;
-        Real m_macro = qscale*weight*mspecies(sp);
+        const Real weight = pr(IPWT, p);
+        const Real m_macro = qscale*weight*mspecies(sp);
 
         if (expanding_box_local) {
           state_x *= a1_start/a1_mid;

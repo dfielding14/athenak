@@ -17,6 +17,9 @@
 #include <vector>
 #include <cstdlib>
 #include "athena.hpp"
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
@@ -1585,6 +1588,42 @@ Particles::~Particles() {
   }
   if (paper_smooth_mom_transport != nullptr) {
     delete paper_smooth_mom_transport;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::ValidateMacroWeights(const char *context) const
+//! \brief Reject invalid CR macro weights once a particle population is assembled.
+
+void Particles::ValidateMacroWeights(const char *context) const {
+  if (particle_type != ParticleType::cosmic_ray) return;
+
+  int invalid_weight = 0;
+  if (nprtcl_thispack > 0) {
+    auto pr = prtcl_rdata;
+    Kokkos::parallel_reduce(
+        "validate_cr_macro_weights",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+        KOKKOS_LAMBDA(const int p, int &invalid) {
+          const Real weight = pr(IPWT, p);
+          if (!Kokkos::isfinite(weight) ||
+              !(weight > static_cast<Real>(0.0))) {
+            invalid += 1;
+          }
+        },
+        Kokkos::Sum<int>(invalid_weight));
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &invalid_weight, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+#endif
+  if (invalid_weight != 0) {
+    if (global_variable::my_rank == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Cosmic-ray macro weights must be finite and > 0 after "
+                << context << "." << std::endl;
+    }
+    std::exit(EXIT_FAILURE);
   }
 }
 

@@ -66,6 +66,69 @@ def test_every_pic_feedback_path_checks_post_source_admissibility() -> None:
     assert "restart_utils::AbortOnFatalError();" in guard
 
 
+def test_legacy_bell_normalization_requires_explicit_mechanics_opt_in() -> None:
+    source = (REPO_ROOT / "src/pgen/pgen.cpp").read_text(encoding="ascii")
+    guard = _function_body(source, "void GuardLegacyBellNormalization(")
+
+    assert 'pgen_fun_name == "q023_paper_bell_linear"' in guard
+    assert 'pgen_fun_name == "q029_hall_bell_linear"' in guard
+    assert '"allow_legacy_nonphysical_bell_mechanics", false' in guard
+    assert "omits division by the root-cell volume V_root" in guard
+    assert "extra artificial-C factor" in guard
+    assert "mechanics-only" in guard
+    assert "q043_bell_current_volume_aware" in guard
+    assert "q023_paper_bell_linear_joverc" in guard
+    assert source.count(
+        "GuardLegacyBellNormalization(pin, pgen_fun_name);"
+    ) == 2
+
+
+def test_cr_macro_weights_are_rejected_once_not_silently_repaired() -> None:
+    particles = (REPO_ROOT / "src/particles/particles.cpp").read_text(
+        encoding="ascii"
+    )
+    validator = _function_body(
+        particles, "void Particles::ValidateMacroWeights("
+    )
+
+    assert "particle_type != ParticleType::cosmic_ray" in validator
+    assert "UsesDeltaF()" not in validator
+    assert "!Kokkos::isfinite(weight)" in validator
+    assert "!(weight > static_cast<Real>(0.0))" in validator
+    assert '"validate_cr_macro_weights"' in validator
+    assert "invalid += 1;" in validator
+    assert "Kokkos::Sum<int>(invalid_weight)" in validator
+    assert "MPI_Allreduce" in validator
+
+    pgen = (REPO_ROOT / "src/pgen/pgen.cpp").read_text(encoding="ascii")
+    assert pgen.count("->ValidateMacroWeights(") == 2
+    assert 'ValidateMacroWeights("fresh problem setup")' in pgen
+    assert 'ValidateMacroWeights("restart problem setup")' in pgen
+
+    consumer_paths = (
+        "src/particles/particles_pushers.cpp",
+        "src/particles/particles_moments.cpp",
+        "src/pgen/turb.cpp",
+    )
+    forbidden_repairs = (
+        "if (weight <= 0.0) weight = 1.0;",
+        "if (weight <= static_cast<Real>(0.0)) "
+        "weight = static_cast<Real>(1.0);",
+    )
+    for relative_path in consumer_paths:
+        consumer = (REPO_ROOT / relative_path).read_text(encoding="ascii")
+        for repair in forbidden_repairs:
+            assert repair not in consumer
+
+    def invalid(weight: float) -> bool:
+        return not math.isfinite(weight) or not (weight > 0.0)
+
+    assert invalid(math.nan)
+    assert invalid(0.0)
+    assert invalid(-1.0)
+    assert not invalid(1.0)
+
+
 def test_parallel_shock_limits_first_cohort_before_transaction() -> None:
     source = (
         REPO_ROOT / "src/pgen/tests/pic_parallel_shock.cpp"

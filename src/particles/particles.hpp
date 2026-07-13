@@ -373,6 +373,7 @@ class Particles {
 
   // functions...
   void CreateParticleTags(ParameterInput *pin);
+  void ValidateMacroWeights(const char *context) const;
   void UpdateAfterAMR(MeshBlockPack *new_pp);
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Push(Driver *pdriver, int stage);

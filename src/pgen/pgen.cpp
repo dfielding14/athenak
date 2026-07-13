@@ -1739,6 +1739,32 @@ void LoadParticleRestartData(Mesh *pm,
   pm->CountParticles();
 }
 
+void GuardLegacyBellNormalization(ParameterInput *pin,
+                                  const std::string &pgen_fun_name) {
+  const bool is_legacy_bell =
+      (pgen_fun_name == "q023_paper_bell_linear" ||
+       pgen_fun_name == "q029_hall_bell_linear");
+  if (!is_legacy_bell) return;
+
+  const bool allow_legacy = pin->GetOrAddBoolean(
+      "problem", "allow_legacy_nonphysical_bell_mechanics", false);
+  if (allow_legacy) return;
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl
+            << "Problem generator '" << pgen_fun_name
+            << "' preserves a legacy nonphysical Bell-current normalization: "
+            << "it omits division by the root-cell volume V_root and includes an "
+            << "extra artificial-C factor." << std::endl
+            << "This setup is mechanics-only and cannot support physical or science "
+            << "evidence. Use q043_bell_current_volume_aware or "
+            << "q023_paper_bell_linear_joverc for physical Bell runs." << std::endl
+            << "To reproduce the legacy mechanics explicitly, set "
+            << "<problem>/allow_legacy_nonphysical_bell_mechanics=true."
+            << std::endl;
+  restart_utils::AbortOnFatalError();
+}
+
 }  // namespace
 
 void ProblemGenerator::RequestUserStop(const int reason_code, const bool failure) {
@@ -1791,6 +1817,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
 #else
   // else read name of built-in pgen from <problem> block in input file, and call
   std::string pgen_fun_name = pin->GetOrAddString("problem", "pgen_name", "none");
+  GuardLegacyBellNormalization(pin, pgen_fun_name);
 
   if (pgen_fun_name.compare("advection") == 0) {
     Advection(pin, false);
@@ -1903,6 +1930,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
                 << "block, but not enrolled by UserProblem()." << std::endl;
       restart_utils::AbortOnFatalError();
     }
+  }
+  if (pm->pmb_pack->ppart != nullptr) {
+    pm->pmb_pack->ppart->ValidateMacroWeights("fresh problem setup");
   }
 }
 
@@ -2504,6 +2534,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   UserProblem(pin, true);
 #else
   std::string pgen_fun_name = pin->GetOrAddString("problem", "pgen_name", "none");
+  GuardLegacyBellNormalization(pin, pgen_fun_name);
 
   if (pgen_fun_name.compare("advection") == 0) {
     Advection(pin, true);
@@ -2615,5 +2646,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "block, but not enrolled by UserProblem()." << std::endl;
       restart_utils::AbortOnFatalError();
     }
+  }
+  if (pm->pmb_pack->ppart != nullptr) {
+    pm->pmb_pack->ppart->ValidateMacroWeights("restart problem setup");
   }
 }

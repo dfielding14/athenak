@@ -691,8 +691,7 @@ TaskStatus Particles::DepositCRHallMoments(Driver *pdriver, int stage) {
     const int sp = pi(PSP, p);
     if (m < 0 || m >= nmb || sp < 0 || sp >= nspecies_local) return;
 
-    Real weight = pr(IPWT, p);
-    if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+    const Real weight = pr(IPWT, p);
     const Real state_x = predicted_state ? pr(IPEX, p) : pr(IPVX, p);
     const Real state_y = predicted_state ? pr(IPEY, p) : pr(IPVY, p);
     const Real state_z = predicted_state ? pr(IPEZ, p) : pr(IPVZ, p);
@@ -898,8 +897,7 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
         std::exit(EXIT_FAILURE);
       }
 
-      Real weight = h_pr(IPWT, p);
-      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real weight = h_pr(IPWT, p);
       const Real df_weight = UsesDeltaF() ? h_pr(IPDFWT, p) :
                                            static_cast<Real>(1.0);
       const Real physical_boundary_norm = PaperSmoothPhysicalBoundaryNorm(
@@ -1208,8 +1206,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int sp = pi(PSP,p);
       if (sp < 0 || sp >= nspecies_local) return;
 
-      Real weight = pr(IPWT,p);
-      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real weight = pr(IPWT,p);
       const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
       const Real q_macro =
           physical_density_scale*qscale*weight*df_weight*qspecies(sp);
@@ -1262,8 +1259,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int sp = pi(PSP,p);
       if (sp < 0 || sp >= nspecies_local) return;
 
-      Real weight = pr(IPWT,p);
-      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real weight = pr(IPWT,p);
       const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
       const Real q_macro =
           physical_density_scale*qscale*weight*df_weight*qspecies(sp);
@@ -1380,8 +1376,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     int sp = pi(PSP,p);
     if (sp < 0 || sp >= nspecies_local) return;
 
-    Real weight = pr(IPWT,p);
-    if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+    const Real weight = pr(IPWT,p);
     const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
     Real q_macro = qscale*weight*df_weight*qspecies(sp);
     Real coeff = q_macro*inv_dt;
@@ -1781,8 +1776,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int sp = pi(PSP,p);
       if (sp < 0 || sp >= nspecies_local) return;
 
-      Real weight = pr(IPWT,p);
-      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real weight = pr(IPWT,p);
       const Real df_weight = deltaf_local ? pr(IPDFWT,p) : static_cast<Real>(1.0);
       Real q_macro = qscale*weight*df_weight*qspecies(sp);
       Real coeff = q_macro*inv_dt;

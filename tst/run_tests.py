@@ -41,7 +41,7 @@ def is_publication_test(test_name):
 
 
 def is_helper_module(test_name):
-    return test_name.rsplit('.', 1)[-1].endswith('_utils')
+    return test_name.rsplit('.', 1)[-1].endswith(('_utils', '_oracle'))
 
 
 def script_test_names(directory):

@@ -375,8 +375,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
         KOKKOS_LAMBDA(const int p, Real &energy, Real &px, Real &py, Real &pz) {
           const int species = pi(PSP,p);
           if (species < 0 || species >= nspecies) return;
-          Real weight = pr(IPWT,p);
-          if (weight <= 0.0) weight = 1.0;
+          const Real weight = pr(IPWT,p);
           const Real macro_mass = qscale*weight*masses(species);
           energy += macro_mass*particles::CRKineticEnergy(
               momentum_state, light_speed,
