@@ -20,7 +20,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 HISTORY_LABEL = re.compile(r"\[[0-9]+\]=([^\s]+)")
-EVIDENCE_NOTE = "engineering pilot | not a Sun--Bai reproduction"
+EVIDENCE_NOTE = "engineering_proxy | not_sun_bai_reproduction=true"
 COLORS = ("#3b4cc0", "#2a9d8f", "#d1495b")
 ENERGY_RESIDUAL_LIMIT = 1.0e-2
 TOTAL_MOMENTUM_LIMIT = 1.0e-3
@@ -125,10 +125,16 @@ def _real(
         raise RuntimeError(f"missing <{block}>/{name}") from exc
 
 
-def _validate_model(parameters: dict[str, dict[str, str]]) -> dict[str, Any]:
+def _validate_model(
+    parameters: dict[str, dict[str, str]], expected_hall_mode: str
+) -> dict[str, Any]:
     particles = parameters.get("particles", {})
-    if particles.get("pic_cr_hall_mode") != "full":
-        raise RuntimeError("analysis requires particles/pic_cr_hall_mode=full")
+    if expected_hall_mode not in {"full", "off"}:
+        raise RuntimeError(f"unsupported Hall mode: {expected_hall_mode}")
+    if particles.get("pic_cr_hall_mode") != expected_hall_mode:
+        raise RuntimeError(
+            "analysis expected particles/pic_cr_hall_mode=" + expected_hall_mode
+        )
     if particles.get("pic_physical_mode") != "paper_mhd_pic_vl2_tsc":
         raise RuntimeError("analysis requires the VL2/TSC physical model")
     if parameters.get("mesh_refinement", {}).get("refinement") != "none":
@@ -147,7 +153,7 @@ def _validate_model(parameters: dict[str, dict[str, str]]) -> dict[str, Any]:
         raise RuntimeError("background-ion and CR species q/(mc) do not match")
     return {
         "mesh": list(shape),
-        "hall_mode": "full",
+        "hall_mode": expected_hall_mode,
         "physical_mode": particles["pic_physical_mode"],
         "background_ion_q_over_mc": alpha_i,
         "cr_species_q_over_mc": qom,
@@ -226,10 +232,12 @@ def _snapshot(path: Path, read_binary, retain_slice: bool) -> dict[str, Any]:
 def _history_metrics(
     mhd: dict[str, np.ndarray], user: dict[str, np.ndarray],
     volume: float, driving_rate: float, threshold: float,
-    tail_fraction: float,
+    tail_fraction: float, hall_mode: str,
 ) -> dict[str, Any]:
     required_mhd = ("time", "tot-E", "1-KE", "2-KE", "3-KE",
-                    "1-ME", "2-ME", "3-ME", "hall_Rmax", "hall_Lmax")
+                    "1-ME", "2-ME", "3-ME")
+    if hall_mode == "full":
+        required_mhd += ("hall_Rmax", "hall_Lmax")
     required_user = ("time", "vx_vol", "vy_vol", "vz_vol", "v2_vol",
                      "divB_max", "cr_Ekin", "cr_Px", "cr_Py", "cr_Pz")
     for name in required_mhd:
@@ -239,16 +247,20 @@ def _history_metrics(
         if name not in user:
             raise RuntimeError(f"user history is missing {name}")
     time = mhd["time"]
-    hall_lambda = mhd["hall_Lmax"]
-    hall_r = mhd["hall_Rmax"]
-    if np.any(hall_lambda < 0.0) or np.any(hall_r < 0.0):
+    hall_lambda = mhd["hall_Lmax"] if hall_mode == "full" else None
+    hall_r = mhd["hall_Rmax"] if hall_mode == "full" else None
+    if (hall_mode == "full" and
+            (np.any(hall_lambda < 0.0) or np.any(hall_r < 0.0))):
         raise RuntimeError("Hall maxima must be non-negative")
     tail_start = time[0] + (1.0 - tail_fraction) * (time[-1] - time[0])
     tail = time >= tail_start
-    if np.count_nonzero(tail) < 5:
+    if hall_mode == "full" and np.count_nonzero(tail) < 5:
         raise RuntimeError("Hall recommendation tail has fewer than five samples")
-    sustained_fraction = float(np.mean(hall_lambda[tail] >= threshold))
-    recommend = sustained_fraction >= 0.5
+    sustained_fraction = (
+        float(np.mean(hall_lambda[tail] >= threshold))
+        if hall_mode == "full" else 0.0
+    )
+    recommend = (hall_mode == "full") and sustained_fraction >= 0.5
 
     kinetic = mhd["1-KE"] + mhd["2-KE"] + mhd["3-KE"]
     magnetic = mhd["1-ME"] + mhd["2-ME"] + mhd["3-ME"]
@@ -281,14 +293,25 @@ def _history_metrics(
         "magnetic_rms": magnetic_rms.tolist(),
         "total_momentum_norm": total_momentum.tolist(),
         "divb_max": user["divB_max"].tolist(),
-        "hall_rmax": hall_r.tolist(),
-        "hall_lambda_max": hall_lambda.tolist(),
+        "hall_rmax": hall_r.tolist() if hall_mode == "full" else None,
+        "hall_lambda_max": hall_lambda.tolist() if hall_mode == "full" else None,
         "tail_start": float(tail_start),
-        "tail_lambda_median": float(np.median(hall_lambda[tail])),
-        "tail_lambda_p90": float(np.quantile(hall_lambda[tail], 0.9)),
-        "tail_lambda_peak": float(np.max(hall_lambda[tail])),
-        "tail_rmax_median": float(np.median(hall_r[tail])),
-        "tail_fraction_at_or_above_threshold": sustained_fraction,
+        "tail_lambda_median": (
+            float(np.median(hall_lambda[tail])) if hall_mode == "full" else None
+        ),
+        "tail_lambda_p90": (
+            float(np.quantile(hall_lambda[tail], 0.9))
+            if hall_mode == "full" else None
+        ),
+        "tail_lambda_peak": (
+            float(np.max(hall_lambda[tail])) if hall_mode == "full" else None
+        ),
+        "tail_rmax_median": (
+            float(np.median(hall_r[tail])) if hall_mode == "full" else None
+        ),
+        "tail_fraction_at_or_above_threshold": (
+            sustained_fraction if hall_mode == "full" else None
+        ),
         "recommend_full_size_hall_off": recommend,
     }
 
@@ -311,7 +334,9 @@ def _style() -> None:
     })
 
 
-def _plot_history(metrics: dict[str, Any], threshold: float, path: Path) -> None:
+def _plot_history(
+    metrics: dict[str, Any], threshold: float, hall_mode: str, path: Path
+) -> None:
     time = np.asarray(metrics["time"])
     user_time = np.asarray(metrics["user_time"])
     fig, axes = plt.subplots(2, 2, figsize=(10.0, 7.2), constrained_layout=True)
@@ -333,28 +358,42 @@ def _plot_history(metrics: dict[str, Any], threshold: float, path: Path) -> None
     axes[1, 0].set(xlabel="time", ylabel="conservation diagnostic")
     axes[1, 0].legend()
 
-    axes[1, 1].semilogy(time, np.maximum(metrics["hall_rmax"], 1.0e-16),
-                       label=r"$\max |R|$")
-    axes[1, 1].semilogy(time, np.maximum(metrics["hall_lambda_max"], 1.0e-16),
-                       label=r"$\max \Lambda$")
-    axes[1, 1].axhline(threshold, color="0.25", linestyle="--",
-                       label=rf"comparison threshold $\Lambda={threshold:g}$")
-    axes[1, 1].axvspan(metrics["tail_start"], time[-1], color="0.7", alpha=0.18)
-    axes[1, 1].set(xlabel="time", ylabel="instantaneous domain maximum")
-    axes[1, 1].legend()
+    if hall_mode == "full":
+        axes[1, 1].semilogy(time, np.maximum(metrics["hall_rmax"], 1.0e-16),
+                           label=r"$\max |R|$")
+        axes[1, 1].semilogy(time, np.maximum(metrics["hall_lambda_max"], 1.0e-16),
+                           label=r"$\max \Lambda$")
+        axes[1, 1].axhline(threshold, color="0.25", linestyle="--",
+                           label=rf"comparison threshold $\Lambda={threshold:g}$")
+        axes[1, 1].axvspan(metrics["tail_start"], time[-1],
+                           color="0.7", alpha=0.18)
+        axes[1, 1].set(xlabel="time", ylabel="instantaneous domain maximum")
+        axes[1, 1].legend()
+    else:
+        axes[1, 1].axis("off")
+        axes[1, 1].text(
+            0.5, 0.55, "CR-Hall closure disabled\nmatched control",
+            transform=axes[1, 1].transAxes, ha="center", va="center", fontsize=12,
+        )
 
     for axis in axes.flat:
         axis.grid(alpha=0.18)
-    decision = "RUN Hall-off control" if metrics["recommend_full_size_hall_off"] \
-        else "skip full-size Hall-off control"
-    fig.suptitle(f"128$^3$ full-CR-Hall turbulent dynamo: {decision}")
+    if hall_mode == "full":
+        decision = "RUN Hall-off control" if metrics["recommend_full_size_hall_off"] \
+            else "skip full-size Hall-off control"
+        title = f"128$^3$ full-CR-Hall turbulent dynamo: {decision}"
+    else:
+        title = "128$^3$ Hall-off turbulent-dynamo control"
+    fig.suptitle(title)
     fig.text(0.995, 0.995, EVIDENCE_NOTE, ha="right", va="top",
              fontsize=7, color="0.35")
     fig.savefig(path, dpi=300)
     plt.close(fig)
 
 
-def _plot_slices(snapshots: list[dict[str, Any]], path: Path) -> None:
+def _plot_slices(
+    snapshots: list[dict[str, Any]], hall_mode: str, path: Path
+) -> None:
     density = [item["density_slice"] / item["density_mean"] - 1.0
                for item in snapshots]
     log_b = [np.log10(np.maximum(item["magnetic_slice"] / item["magnetic_rms"],
@@ -386,14 +425,17 @@ def _plot_slices(snapshots: list[dict[str, Any]], path: Path) -> None:
                  label=r"$\rho/\langle\rho\rangle-1$")
     fig.colorbar(magnetic_image, ax=axes[1, :], shrink=0.82,
                  label=r"$\log_{10}(|B|/B_{\rm rms})$")
-    fig.suptitle("Midplane structure in the full-CR-Hall turbulent box")
+    model = "full-CR-Hall" if hall_mode == "full" else "Hall-off"
+    fig.suptitle(f"Midplane structure in the {model} turbulent box")
     fig.text(0.995, 0.995, EVIDENCE_NOTE, ha="right", va="top",
              fontsize=7, color="0.35")
     fig.savefig(path, dpi=300)
     plt.close(fig)
 
 
-def _plot_spectra(snapshots: list[dict[str, Any]], path: Path) -> None:
+def _plot_spectra(
+    snapshots: list[dict[str, Any]], hall_mode: str, path: Path
+) -> None:
     fig, axis = plt.subplots(figsize=(7.2, 5.2), constrained_layout=True)
     for color, item in zip(COLORS, snapshots):
         mode = np.asarray(item["spectrum_mode"])
@@ -409,8 +451,9 @@ def _plot_spectra(snapshots: list[dict[str, Any]], path: Path) -> None:
              ylabel=r"shell magnetic energy $E_B(k)$")
     axis.grid(alpha=0.18, which="both")
     axis.legend()
-    axis.set_title("Magnetic-energy spectrum")
-    fig.text(0.995, 0.995, EVIDENCE_NOTE, ha="right", va="top",
+    model = "full-CR-Hall" if hall_mode == "full" else "Hall-off"
+    axis.set_title(f"{model} magnetic-energy spectrum")
+    fig.text(0.995, 0.005, EVIDENCE_NOTE, ha="right", va="bottom",
              fontsize=7, color="0.35")
     fig.savefig(path, dpi=300)
     plt.close(fig)
@@ -420,6 +463,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--expected-hall-mode", choices=("full", "off"), default="full"
+    )
     parser.add_argument("--lambda-threshold", type=float, default=0.1)
     parser.add_argument("--tail-fraction", type=float, default=0.3)
     args = parser.parse_args()
@@ -437,7 +483,7 @@ def main() -> int:
     headers = [(_binary_header(path), path) for path in paths]
     headers.sort(key=lambda item: item[0]["time"])
     parameters = _parameters(headers[0][0]["input"])
-    model = _validate_model(parameters)
+    model = _validate_model(parameters, args.expected_hall_mode)
     if headers[-1][0]["time"] < 0.99 * model["tlim"]:
         raise RuntimeError("MHD snapshots do not reach the requested terminal time")
     selected_indices = sorted({0, len(headers) // 2, len(headers) - 1})
@@ -459,7 +505,7 @@ def main() -> int:
     user = _history(_one_file(args.run, "user"))
     metrics = _history_metrics(
         mhd, user, volume, model["driving_energy_rate"],
-        args.lambda_threshold, args.tail_fraction,
+        args.lambda_threshold, args.tail_fraction, args.expected_hall_mode,
     )
     energy_residual = np.asarray(metrics["energy_residual_fraction"])
     total_momentum = np.asarray(metrics["total_momentum_norm"])
@@ -495,28 +541,31 @@ def main() -> int:
         },
     }
     acceptance["passed"] = all(acceptance["checks"].values())
-    recommendation = {
-        "run_full_size_hall_off": metrics["recommend_full_size_hall_off"],
-        "criterion": (
-            "Recommend the full-size Hall-off control when instantaneous max Lambda "
-            f"is at least {args.lambda_threshold:g} in at least half of the final "
-            f"{100.0 * args.tail_fraction:g}% of history samples."
-        ),
-        "physical_basis": (
-            "Lambda=|v_H|/v_A measures the Hall drift relative to the Alfv\u00e9n speed; "
-            "a sustained value of 0.1 makes a ten-percent induction-scale correction "
-            "plausible somewhere in the domain."
-        ),
-        "tail_fraction_at_or_above_threshold":
-            metrics["tail_fraction_at_or_above_threshold"],
-        "tail_lambda_median": metrics["tail_lambda_median"],
-        "tail_lambda_p90": metrics["tail_lambda_p90"],
-        "tail_lambda_peak": metrics["tail_lambda_peak"],
-        "limitation": (
-            "The history stores an instantaneous domain maximum, not a volume "
-            "filling fraction; isolated spikes alone do not trigger the comparison."
-        ),
-    }
+    recommendation = None
+    if args.expected_hall_mode == "full":
+        recommendation = {
+            "run_full_size_hall_off": metrics["recommend_full_size_hall_off"],
+            "criterion": (
+                "Recommend the full-size Hall-off control when instantaneous max Lambda "
+                f"is at least {args.lambda_threshold:g} in at least half of the final "
+                f"{100.0 * args.tail_fraction:g}% of history samples."
+            ),
+            "physical_basis": (
+                "Lambda=|v_H|/v_A measures the Hall drift relative to the Alfv\u00e9n "
+                "speed; a sustained value at the selected threshold makes an "
+                "induction-scale correction of that order plausible somewhere in "
+                "the domain."
+            ),
+            "tail_fraction_at_or_above_threshold":
+                metrics["tail_fraction_at_or_above_threshold"],
+            "tail_lambda_median": metrics["tail_lambda_median"],
+            "tail_lambda_p90": metrics["tail_lambda_p90"],
+            "tail_lambda_peak": metrics["tail_lambda_peak"],
+            "limitation": (
+                "The history stores an instantaneous domain maximum, not a volume "
+                "filling fraction; isolated spikes alone do not trigger the comparison."
+            ),
+        }
     clean_snapshots = []
     for item in snapshots:
         clean_snapshots.append({
@@ -536,13 +585,20 @@ def main() -> int:
     }
 
     _style()
-    _plot_history(metrics, args.lambda_threshold,
-                  args.output_dir / "turbulent_dynamo_full_hall_history.png")
-    _plot_slices(snapshots,
-                 args.output_dir / "turbulent_dynamo_full_hall_slices.png")
-    _plot_spectra(snapshots,
-                  args.output_dir / "turbulent_dynamo_full_hall_spectra.png")
-    (args.output_dir / "turbulent_dynamo_full_hall_analysis.json").write_text(
+    mode_slug = "full_hall" if args.expected_hall_mode == "full" else "hall_off"
+    _plot_history(
+        metrics, args.lambda_threshold, args.expected_hall_mode,
+        args.output_dir / f"turbulent_dynamo_{mode_slug}_history.png",
+    )
+    _plot_slices(
+        snapshots, args.expected_hall_mode,
+        args.output_dir / f"turbulent_dynamo_{mode_slug}_slices.png",
+    )
+    _plot_spectra(
+        snapshots, args.expected_hall_mode,
+        args.output_dir / f"turbulent_dynamo_{mode_slug}_spectra.png",
+    )
+    (args.output_dir / f"turbulent_dynamo_{mode_slug}_analysis.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(
         {"acceptance": acceptance, "hall_off_recommendation": recommendation},
