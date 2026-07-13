@@ -275,7 +275,8 @@ std::uint64_t ps_profile_particle_append_records = 0;
 std::uint64_t ps_profile_particle_resize_old_records = 0;
 std::uint64_t ps_profile_particle_resize_old_bytes = 0;
 
-bool ParallelShockExactMeshStateIsFixedUniform(const Mesh *pmesh) {
+bool ParallelShockMeshStateIsFixedUniform(const Mesh *pmesh,
+                                          const bool require_unit_costs) {
   if (pmesh == nullptr || pmesh->adaptive || pmesh->multilevel ||
       pmesh->nmb_total <= 0 || pmesh->lloc_eachmb == nullptr ||
       pmesh->cost_eachmb == nullptr || pmesh->max_level != pmesh->root_level ||
@@ -299,7 +300,8 @@ bool ParallelShockExactMeshStateIsFixedUniform(const Mesh *pmesh) {
         loc.lx2 < 0 || loc.lx2 >= pmesh->nmb_rootx2 ||
         loc.lx3 < 0 || loc.lx3 >= pmesh->nmb_rootx3 ||
         !std::isfinite(pmesh->cost_eachmb[gid]) ||
-        pmesh->cost_eachmb[gid] != 1.0F) {
+        pmesh->cost_eachmb[gid] <= 0.0F ||
+        (require_unit_costs && pmesh->cost_eachmb[gid] != 1.0F)) {
       return false;
     }
     const int root_gid =
@@ -309,6 +311,10 @@ bool ParallelShockExactMeshStateIsFixedUniform(const Mesh *pmesh) {
   }
   return std::all_of(occupied_root_blocks.begin(), occupied_root_blocks.end(),
                      [](const bool occupied) { return occupied; });
+}
+
+bool ParallelShockExactMeshStateIsFixedUniform(const Mesh *pmesh) {
+  return ParallelShockMeshStateIsFixedUniform(pmesh, true);
 }
 
 std::uint64_t ParallelShockUniformSourceTopologyHash(
@@ -2851,7 +2857,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   const Real xshock = ShockSurfaceModelX1(pm->time);
   const bool uniform_surface_fast_path =
       ps_enable_subtraction && ps_enable_surface_averaged_subtraction &&
-      ParallelShockExactMeshStateIsFixedUniform(pm);
+      ParallelShockMeshStateIsFixedUniform(pm, false);
   std::int64_t surface_global_i = -1;
   if (uniform_surface_fast_path && xshock >= pm->mesh_size.x1min &&
       xshock < pm->mesh_size.x1max) {
@@ -4883,9 +4889,15 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
         !pin->GetOrAddBoolean("coord", "general_rel", false) &&
         !pin->GetOrAddBoolean("mesh_refinement", "prolong_primitives", false) &&
         !pin->DoesBlockExist("initial_turb");
+    const bool static_particle_redistribution_enabled =
+        pin->GetOrAddInteger(
+            "particles", "pic_static_load_balance_interval", 0) > 0 &&
+        pin->GetOrAddReal(
+            "particles", "pic_static_load_balance_cost_per_particle", 0.0) > 0.0;
     const bool exact_mesh_model =
         ParallelShockExactMeshStateIsFixedUniform(pmy_mesh_) &&
         !ps_enable_curvature_amr &&
+        !static_particle_redistribution_enabled &&
         ppart->pic_load_balance_cost_per_particle == static_cast<Real>(0.0);
     if (!exact_particle_model || !exact_mhd_model || integrator != "rk2" ||
         !ps_enable_injection || !ps_enable_subtraction ||
@@ -4898,7 +4910,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
                 << "exact particle-boundary instrumentation, injection with gas "
                 << "subtraction, user history, no frame/recenter map, no MHD "
                 << "diffusion or other source terms, a fixed uniform mesh with "
-                << "curvature AMR and particle-weighted AMR load balancing disabled, "
+                << "curvature AMR, particle-weighted AMR load balancing, and "
+                << "same-level particle redistribution disabled, "
                 << "root_level=max_level, every reconstructed MeshBlock at root_level "
                 << "with in-range unique logical coordinates that completely tile the "
                 << "root grid and unit cost, no restored adaptive cooldown metadata, "

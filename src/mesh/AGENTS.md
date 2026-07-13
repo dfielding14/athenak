@@ -45,7 +45,8 @@ See `../../AGENTS.md` for repository-wide conventions and workflow.
 3. Allocates `cost_eachmb`, `rank_eachmb`, `lloc_eachmb`, and rank offsets.
 4. Calls `Mesh::LoadBalance` to assign MeshBlocks to MPI ranks.
 5. Constructs `MeshBlockPack`, `MeshBlock`s, and neighbor lists.
-6. Instantiates `MeshRefinement` if multilevel refinement is enabled.
+6. Instantiates `MeshRefinement` if multilevel refinement or opt-in nonadaptive
+   same-level particle redistribution is enabled.
 
 ### Restarts
 `Mesh::BuildTreeFromRestart` rehydrates mesh metadata from the restart file, rebuilds

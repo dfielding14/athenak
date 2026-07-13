@@ -48,14 +48,13 @@ def _parse_deck(path: Path) -> dict[str, dict[str, str]]:
     return blocks
 
 
-def test_static_cadence_is_disabled_by_default_and_gated_to_smr_pic() -> None:
+def test_static_cadence_is_disabled_by_default_and_gated_to_nonadaptive_pic() -> None:
     driver = (REPO_ROOT / "src/driver/driver.cpp").read_text(encoding="ascii")
     gate = _function_body(driver, "bool Driver::StaticParticleLoadBalanceDue")
     assert "pic_static_load_balance_interval_(0)" in driver
     assert "pic_static_load_balance_cost_per_particle_(0.0)" in driver
     assert "pic_static_load_balance_interval_ > 0" in gate
     assert "pic_static_load_balance_cost_per_particle_ > 0.0" in gate
-    assert "pm->multilevel" in gate
     assert "!pm->adaptive" in gate
     assert "pm->pmb_pack->ppart != nullptr" in gate
     assert "pm->ncycle % pic_static_load_balance_interval_ == 0" in gate
@@ -108,11 +107,33 @@ def test_static_controls_validate_and_reserve_capacity_only_when_enabled() -> No
     request = _function_body(build_tree, "bool StaticParticleLoadBalanceRequested")
     assert STATIC_INTERVAL in request
     assert STATIC_COST in request
-    assert "multilevel && !adaptive && StaticParticleLoadBalanceRequested(pin)" in (
-        build_tree
-    )
+    assert "!adaptive && StaticParticleLoadBalanceRequested(pin)" in build_tree
+    assert "if (multilevel || static_particle_lb)" in build_tree
     assert "static particle load balancing" in build_tree
     assert "max_nmb_per_rank" in build_tree
+
+
+def test_uniform_shock_fast_path_preserves_exact_ledger_cost_guard() -> None:
+    source = (
+        REPO_ROOT / "src/pgen/tests/pic_parallel_shock.cpp"
+    ).read_text(encoding="ascii")
+    topology = _function_body(
+        source, "bool ParallelShockMeshStateIsFixedUniform"
+    )
+    exact = _function_body(
+        source, "bool ParallelShockExactMeshStateIsFixedUniform"
+    )
+    preparation = _function_body(
+        source, "void PrepareParallelShockInjectionTransaction"
+    )
+    assert "pmesh->cost_eachmb[gid] <= 0.0F" in topology
+    assert "require_unit_costs && pmesh->cost_eachmb[gid] != 1.0F" in topology
+    assert "ParallelShockMeshStateIsFixedUniform(pmesh, true)" in exact
+    assert "ParallelShockMeshStateIsFixedUniform(pm, false)" in preparation
+    assert "static_particle_redistribution_enabled" in source
+    assert '"pic_static_load_balance_interval", 0) > 0' in source
+    assert '"pic_static_load_balance_cost_per_particle", 0.0) > 0.0' in source
+    assert "!static_particle_redistribution_enabled" in source
 
 
 def test_restart_override_keeps_physical_cost_zero() -> None:
@@ -193,6 +214,50 @@ def test_runtime_restart_accepts_performance_only_static_cost(tmp_path: Path) ->
     )
     assert continuation_nmb == initial_nmb
     assert continuation_cost > continuation_nmb
+
+
+def test_runtime_uniform_mesh_accepts_opt_in_particle_redistribution(
+    tmp_path: Path,
+) -> None:
+    executable = _executable()
+    initial_dir = tmp_path / "uniform_initial"
+    initial_dir.mkdir()
+    initial = _run(
+        executable,
+        [
+            "-i",
+            str(BASE_DECK),
+            "-d",
+            str(initial_dir),
+            "job/basename=pic_uniform_particle_lb",
+            "mesh_refinement/refinement=none",
+        ],
+    )
+    assert initial.returncode == 0, initial.stdout
+    assert _telemetry(initial.stdout, "q017.telemetry.amr.enabled") == 0.0
+    restarts = sorted((initial_dir / "rst").glob("*.rst"))
+    assert restarts
+
+    continuation_dir = tmp_path / "uniform_continuation"
+    continuation_dir.mkdir()
+    continuation = _run(
+        executable,
+        [
+            "-r",
+            str(restarts[-1]),
+            "-i",
+            str(OVERRIDE_DECK),
+            "-d",
+            str(continuation_dir),
+        ],
+    )
+    assert continuation.returncode == 0, continuation.stdout
+    assert _telemetry(continuation.stdout, "q017.telemetry.amr.enabled") == 0.0
+    assert _telemetry(
+        continuation.stdout, "q017.telemetry.load.cost.total"
+    ) > _telemetry(
+        continuation.stdout, "q017.telemetry.meshblocks.total"
+    )
 
 
 @pytest.mark.parametrize(

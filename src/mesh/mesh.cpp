@@ -349,9 +349,7 @@ Mesh::~Mesh() {
   delete [] nmb_eachrank;
   delete [] nprtcl_eachrank;
   delete pmb_pack;
-  if (multilevel) {
-    delete pmr;
-  }
+  delete pmr;
 }
 
 void Mesh::SetRestartFileInfo(const std::string &base_dir,

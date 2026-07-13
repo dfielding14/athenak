@@ -393,7 +393,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   // Reserve per-rank capacity for topology changes or opt-in static redistribution.
   nmb_maxperrank = nmb_thisrank;
   const bool static_particle_lb =
-      multilevel && !adaptive && StaticParticleLoadBalanceRequested(pin);
+      !adaptive && StaticParticleLoadBalanceRequested(pin);
   if (adaptive || static_particle_lb) {
     if (pin->DoesParameterExist("mesh_refinement", "max_nmb_per_rank")) {
       nmb_maxperrank = pin->GetReal("mesh_refinement", "max_nmb_per_rank");
@@ -423,8 +423,8 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   }
 #endif
 
-  // Create new MeshRefinement object with either SMR or AMR (SMR needs Restrict fns)
-  if (multilevel) {
+  // The unchanged-mesh particle redistributor reuses MeshRefinement's transfer path.
+  if (multilevel || static_particle_lb) {
     pmr = new MeshRefinement(this, pin);
   }
 
@@ -967,7 +967,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // Reserve per-rank capacity for topology changes or opt-in static redistribution.
   nmb_maxperrank = nmb_thisrank;
   const bool static_particle_lb =
-      multilevel && !adaptive && StaticParticleLoadBalanceRequested(pin);
+      !adaptive && StaticParticleLoadBalanceRequested(pin);
   if (adaptive || static_particle_lb) {
     if (pin->DoesParameterExist("mesh_refinement", "max_nmb_per_rank")) {
       nmb_maxperrank = pin->GetReal("mesh_refinement", "max_nmb_per_rank");
@@ -989,8 +989,8 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     }
   }
 
-  // Create new MeshRefinement object with either SMR or AMR (SMR needs Restrict fns)
-  if (multilevel) {
+  // The unchanged-mesh particle redistributor reuses MeshRefinement's transfer path.
+  if (multilevel || static_particle_lb) {
     pmr = new MeshRefinement(this, pin);
   }
 

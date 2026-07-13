@@ -637,12 +637,12 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
 //----------------------------------------------------------------------------------------
 //! \fn Driver::StaticParticleLoadBalanceDue()
-//! \brief Return true when the opt-in static-mesh PIC redistribution cadence is due.
+//! \brief Return true when the opt-in unchanged-mesh PIC redistribution cadence is due.
 
 bool Driver::StaticParticleLoadBalanceDue(const Mesh *pm) const {
   return pic_static_load_balance_interval_ > 0 &&
          pic_static_load_balance_cost_per_particle_ > 0.0 &&
-         pm != nullptr && pm->multilevel && !pm->adaptive && pm->pmr != nullptr &&
+         pm != nullptr && !pm->adaptive && pm->pmr != nullptr &&
          pm->pmb_pack != nullptr && pm->pmb_pack->ppart != nullptr &&
          (pm->ncycle % pic_static_load_balance_interval_ == 0);
 }

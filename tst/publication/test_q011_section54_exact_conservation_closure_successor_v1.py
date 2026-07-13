@@ -932,6 +932,7 @@ class Q011ExactConservationClosureTests(unittest.TestCase):
             "fixed uniform mesh",
             "runtime load balancing are",
             "ParallelShockExactMeshStateIsFixedUniform",
+            "static_particle_redistribution_enabled",
             "pmesh->max_level != pmesh->root_level",
             "loc.level != pmesh->root_level",
             "pmesh->cost_eachmb[gid] != 1.0F",

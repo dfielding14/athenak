@@ -33,6 +33,11 @@ nx1 = 50
 nx2 = 16
 nx3 = 16
 
+<mesh_refinement>
+refinement = none
+# Used only when opt-in same-level particle redistribution is enabled.
+max_nmb_per_rank = 32
+
 <time>
 evolution = dynamic
 integrator = rk2
@@ -93,6 +98,9 @@ pic_deltaf_mode = off
 pic_deltaf_adapt_mode = off
 pic_deltaf_adapt_interval = 0.0
 pic_load_balance_cost_per_particle = 0.0
+# Performance-only same-level redistribution remains opt-in.
+pic_static_load_balance_interval = 0
+pic_static_load_balance_cost_per_particle = 0.0
 pic_sort_interval = 0
 pic_intermediate_arrays = auto
 pic_random_seed = 23050101
