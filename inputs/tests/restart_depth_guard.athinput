@@ -1,0 +1,68 @@
+# AthenaK input file for the ordinary-restart depth guard regression
+
+<job>
+basename = RestartDepthGuard
+
+<mesh>
+nghost = 2
+nx1    = 16
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2    = 16
+x2min  = 0.0
+x2max  = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3    = 16
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<mesh_refinement>
+refinement       = adaptive
+num_levels       = 2
+max_nmb_per_rank = 64
+
+<refinement1>
+level = 1
+x1min = 0.0
+x1max = 0.5
+x2min = 0.0
+x2max = 0.5
+x3min = 0.0
+x3max = 0.5
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 1.0e-3
+vflow     = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type = rst
+dt        = 1.0

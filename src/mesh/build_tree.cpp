@@ -457,6 +457,20 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   delete [] idlist;
   if (!adaptive) max_level = current_level;
 
+  // Ordinary restarts must not construct a tree deeper than the configured AMR limit.
+  // Restart conversion handles this case explicitly before target allocation.
+  if (adaptive && current_level > max_level) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Restart contains MeshBlocks at logical level "
+              << current_level << " (physical level " << current_level - root_level
+              << "), but <mesh_refinement>/num_levels permits only logical level "
+              << max_level << " (physical level " << max_level - root_level << ")."
+              << std::endl << "A restart conversion is required before using this lower "
+              << "limit. Current MPI rank count = " << global_variable::nranks << "."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   restart_meta.rank_eachmb.assign(nmb_total, 0);
   if (restart_meta.original_nranks > 0) {
     restart_meta.gids_eachrank.assign(restart_meta.original_nranks, 0);
