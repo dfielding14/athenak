@@ -100,6 +100,11 @@ struct RestartMetaData {
   std::vector<int> nmb_eachrank;
   std::vector<int> rank_eachmb;
   std::vector<int> rank_to_node;
+  // Phase-4 conversion diagnostics are accumulated while each source payload is in hand.
+  long double source_integral[8] = {};
+  long double source_abs_integral[8] = {};
+  long double source_kinetic = 0.0;
+  long double source_internal = 0.0;
 };
 
 // Equality operator for LogicalLocation (needed for unordered_map)

@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -291,6 +292,38 @@ void RestrictConversionSpan(Mesh *pm, const RestartChunkLayout &layout,
       int target_gid = request.local_index + pm->pmb_pack->gids;
       const auto &source = meta.source_lloc[request.source_gid];
       const auto &target = pm->lloc_eachmb[target_gid];
+      long double cell_volume = static_cast<long double>(pm->mesh_size.dx1) *
+                                static_cast<long double>(pm->mesh_size.dx2) *
+                                static_cast<long double>(pm->mesh_size.dx3);
+      for (int level=pm->root_level; level<source.level; ++level) {
+        cell_volume *= 0.125L;
+      }
+      long double block_integral[8] = {};
+      long double block_abs_integral[8] = {};
+      long double block_kinetic = 0.0;
+      long double block_internal = 0.0;
+      for (int k=indcs.ks; k<=indcs.ke; ++k) {
+        for (int j=indcs.js; j<=indcs.je; ++j) {
+          for (int i=indcs.is; i<=indcs.ie; ++i) {
+            long double value[8];
+            for (int n=0; n<8; ++n) {
+              value[n] = static_cast<long double>(source_host(g, n, k, j, i));
+              block_integral[n] += value[n];
+              block_abs_integral[n] += std::fabs(value[n]);
+            }
+            long double kinetic = 0.5L*(value[1]*value[1] + value[2]*value[2] +
+                                        value[3]*value[3])/value[0];
+            block_kinetic += kinetic;
+            block_internal += value[4] - kinetic;
+          }
+        }
+      }
+      for (int n=0; n<8; ++n) {
+        meta.source_integral[n] += block_integral[n]*cell_volume;
+        meta.source_abs_integral[n] += block_abs_integral[n]*cell_volume;
+      }
+      meta.source_kinetic += block_kinetic*cell_volume;
+      meta.source_internal += block_internal*cell_volume;
       x0_host(g) = indcs.is + (source.lx1 - (target.lx1 << depth))*subnx1;
       y0_host(g) = indcs.js + (source.lx2 - (target.lx2 << depth))*subnx2;
       z0_host(g) = indcs.ks + (source.lx3 - (target.lx3 << depth))*subnx3;

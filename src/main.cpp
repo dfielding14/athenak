@@ -24,7 +24,9 @@
 //========================================================================================
 
 // C/C++ headers
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <cstdio> // sscanf
 #include <filesystem>
@@ -44,6 +46,7 @@
 #include "utils/utils.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "hydro/hydro.hpp"
 #include "outputs/outputs.hpp"
 #include "driver/driver.hpp"
 #include "particles/particles.hpp"
@@ -70,6 +73,25 @@ struct RestartPathInfo {
   std::string normalized_open_path;
   std::string base_dir;
   std::string file_name;
+};
+
+constexpr int kConversionFields = 8;
+constexpr long double kConversionTolerance = 5.0e-13L;
+const char *kConversionFieldNames[kConversionFields] = {
+  "density", "momentum_x1", "momentum_x2", "momentum_x3",
+  "total_energy", "metallicity", "dust_small", "dust_large"
+};
+
+struct ConversionDiagnostics {
+  long double source[kConversionFields] = {};
+  long double source_abs[kConversionFields] = {};
+  long double target[kConversionFields] = {};
+  long double source_kinetic = 0.0;
+  long double source_internal = 0.0;
+  long double target_kinetic = 0.0;
+  long double target_internal = 0.0;
+  long double max_scaled_integral_error = 0.0;
+  long long invalid_target_cells = 0;
 };
 
 bool HasShardPrefix(const std::string &name, const char *prefix) {
@@ -216,6 +238,84 @@ RestartPathInfo NormalizeRestartPath(const std::string &restart_arg) {
   return info;
 }
 
+ConversionDiagnostics MeasureRestartConversion(Mesh *mesh) {
+  ConversionDiagnostics diagnostics;
+  auto *pack = mesh->pmb_pack;
+  auto &indcs = mesh->mb_indcs;
+  auto target = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), Kokkos::subview(pack->phydro->u0,
+                                     std::make_pair(0, pack->nmb_thispack),
+                                     Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL));
+
+  for (int n=0; n<kConversionFields; ++n) {
+    diagnostics.source[n] = mesh->restart_meta.source_integral[n];
+    diagnostics.source_abs[n] = mesh->restart_meta.source_abs_integral[n];
+  }
+  diagnostics.source_kinetic = mesh->restart_meta.source_kinetic;
+  diagnostics.source_internal = mesh->restart_meta.source_internal;
+
+  for (int m=0; m<pack->nmb_thispack; ++m) {
+    int gid = pack->gids + m;
+    long double cell_volume = static_cast<long double>(mesh->mesh_size.dx1) *
+                              static_cast<long double>(mesh->mesh_size.dx2) *
+                              static_cast<long double>(mesh->mesh_size.dx3);
+    for (int level=mesh->root_level; level<mesh->lloc_eachmb[gid].level; ++level) {
+      cell_volume *= 0.125L;
+    }
+    for (int k=indcs.ks; k<=indcs.ke; ++k) {
+      for (int j=indcs.js; j<=indcs.je; ++j) {
+        for (int i=indcs.is; i<=indcs.ie; ++i) {
+          long double value[kConversionFields];
+          bool finite = true;
+          for (int n=0; n<kConversionFields; ++n) {
+            value[n] = static_cast<long double>(target(m, n, k, j, i));
+            diagnostics.target[n] += value[n]*cell_volume;
+            finite = finite && std::isfinite(value[n]);
+          }
+          long double kinetic = 0.5L*(value[1]*value[1] + value[2]*value[2] +
+                                      value[3]*value[3])/value[0];
+          long double internal = value[4] - kinetic;
+          diagnostics.target_kinetic += kinetic*cell_volume;
+          diagnostics.target_internal += internal*cell_volume;
+          if (!finite || value[0] <= 0.0 || internal <= 0.0 ||
+              !std::isfinite(kinetic) || !std::isfinite(internal)) {
+            ++diagnostics.invalid_target_cells;
+          }
+        }
+      }
+    }
+  }
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, diagnostics.source, kConversionFields, MPI_LONG_DOUBLE,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, diagnostics.source_abs, kConversionFields, MPI_LONG_DOUBLE,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, diagnostics.target, kConversionFields, MPI_LONG_DOUBLE,
+                MPI_SUM, MPI_COMM_WORLD);
+  long double energies[4] = {diagnostics.source_kinetic,
+                             diagnostics.source_internal,
+                             diagnostics.target_kinetic,
+                             diagnostics.target_internal};
+  MPI_Allreduce(MPI_IN_PLACE, energies, 4, MPI_LONG_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  diagnostics.source_kinetic = energies[0];
+  diagnostics.source_internal = energies[1];
+  diagnostics.target_kinetic = energies[2];
+  diagnostics.target_internal = energies[3];
+  MPI_Allreduce(MPI_IN_PLACE, &diagnostics.invalid_target_cells, 1, MPI_LONG_LONG_INT,
+                MPI_SUM, MPI_COMM_WORLD);
+#endif
+
+  for (int n=0; n<kConversionFields; ++n) {
+    long double scale = std::max(1.0L, diagnostics.source_abs[n]);
+    diagnostics.max_scaled_integral_error = std::max(
+        diagnostics.max_scaled_integral_error,
+        std::fabs(diagnostics.target[n] - diagnostics.source[n])/scale);
+  }
+  return diagnostics;
+}
+
 void WriteRestartConversion(Driver *driver, Outputs *outputs, Mesh *mesh,
                             ParameterInput *pin, const fs::path &output_dir) {
   int floor_count = mesh->ecounter.neos_dfloor + mesh->ecounter.neos_efloor +
@@ -229,6 +329,14 @@ void WriteRestartConversion(Driver *driver, Outputs *outputs, Mesh *mesh,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Primitive recovery applied a floor to the converted "
               << "state; no restart was written." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  ConversionDiagnostics diagnostics = MeasureRestartConversion(mesh);
+  if (diagnostics.invalid_target_cells != 0 ||
+      diagnostics.max_scaled_integral_error > kConversionTolerance) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Restart conversion failed its finite-state or conserved-"
+              << "integral acceptance gate; no restart was written." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -283,7 +391,7 @@ void WriteRestartConversion(Driver *driver, Outputs *outputs, Mesh *mesh,
 
   if (global_variable::my_rank == 0) {
     std::ofstream manifest("conversion_manifest.tmp", std::ios::trunc);
-    manifest << std::setprecision(17);
+    manifest << std::setprecision(21);
     manifest << "source_fluid=" << mesh->restart_meta.source_restart_path << '\n'
              << "source_particles=" << mesh->restart_meta.source_particle_path << '\n'
              << "converted_fluid=" << PathToString(fluid_path) << '\n'
@@ -299,9 +407,35 @@ void WriteRestartConversion(Driver *driver, Outputs *outputs, Mesh *mesh,
              << "cycle=" << mesh->ncycle << '\n'
              << "dt=" << mesh->dt << '\n'
              << "timestep_policy=preserved from source restart\n"
+             << "physical_source_invocations=0\n"
+             << "particle_updates=0\n"
+             << "primitive_recovery_floors=0\n"
+             << "invalid_target_cells=" << diagnostics.invalid_target_cells << '\n'
+             << "conservation_tolerance=" << kConversionTolerance << '\n'
+             << "max_scaled_integral_error="
+             << diagnostics.max_scaled_integral_error << '\n'
              << "turbulence_rng=preserved\n"
              << "turbulence_force=zeroed for inactive legacy driver\n"
              << "hashes=pending\n";
+    for (int n=0; n<kConversionFields; ++n) {
+      manifest << "source_integral." << kConversionFieldNames[n] << '='
+               << diagnostics.source[n] << '\n'
+               << "source_abs_integral." << kConversionFieldNames[n] << '='
+               << diagnostics.source_abs[n] << '\n'
+               << "target_integral." << kConversionFieldNames[n] << '='
+               << diagnostics.target[n] << '\n';
+    }
+    manifest << "source_resolved_kinetic=" << diagnostics.source_kinetic << '\n'
+             << "target_resolved_kinetic=" << diagnostics.target_kinetic << '\n'
+             << "resolved_kinetic_change="
+             << diagnostics.target_kinetic - diagnostics.source_kinetic << '\n'
+             << "source_internal_energy=" << diagnostics.source_internal << '\n'
+             << "target_internal_energy=" << diagnostics.target_internal << '\n'
+             << "internal_energy_change="
+             << diagnostics.target_internal - diagnostics.source_internal << '\n'
+             << "energy_partition_closure="
+             << (diagnostics.target_kinetic - diagnostics.source_kinetic) +
+                (diagnostics.target_internal - diagnostics.source_internal) << '\n';
     manifest.close();
     if (!manifest || std::rename("conversion_manifest.tmp", "conversion_manifest.txt") != 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
