@@ -1,0 +1,135 @@
+# Small GOTHAM state used by the restart-conversion oracle regression.
+
+<job>
+basename = gotham_conversion_source
+
+<mesh>
+nghost = 4
+nx1    = 8
+x1min  = -200.0
+x1max  = 200.0
+ix1_bc = user
+ox1_bc = user
+nx2    = 8
+x2min  = -200.0
+x2max  = 200.0
+ix2_bc = user
+ox2_bc = user
+nx3    = 8
+x3min  = -200.0
+x3max  = 200.0
+ix3_bc = user
+ox3_bc = user
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<mesh_refinement>
+refinement          = adaptive
+num_levels          = 4
+refinement_interval = 5
+max_nmb_per_rank    = 512
+
+<refinement1>
+level = 3
+x1min = -50.0
+x1max = 50.0
+x2min = -50.0
+x2max = 50.0
+x3min = -50.0
+x3max = 50.0
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+gamma       = 1.6666666666666667
+cgm_cooling = false
+pfloor      = 1.0e-12
+dfloor      = 1.0e-12
+sfloor      = 1.0e-14
+tfloor      = 1.0e-12
+T_max       = 5.0e8
+nscalars    = 3
+
+<problem>
+profile_file      = inputs/gotham/tables/cgm_profiles_rsonic_0.7.txt
+disk_profile_file = inputs/gotham/tables/disk_profiles.txt
+r_circ            = 10.0
+v_circ            = 9.54085191986995
+ddens_max         = 2.0
+metallicity       = 0.3333333333333333
+cgm_turb_nlow     = 1
+cgm_turb_nhigh    = 2
+cgm_turb_rms      = 0.0
+cgm_turb_xscale   = 10.0
+cgm_turb_yscale   = 10.0
+cgm_turb_zscale   = 10.0
+
+<potential>
+r_scale   = 11.605294024177795
+rho_scale = 2.1743800601559324
+mass_gal  = 6547.387043624801
+scale_gal = 1.4691189466064514
+z_gal     = 0.15
+r_200     = 144.76736317842207
+rho_mean  = 2.5759499304527406e-05
+
+<particles>
+particle_type       = star
+star_prtcl_rst_flag = 0
+star_particle_file  = inputs/gotham/tables/clusters_central.txt
+pusher              = rk4_gravity
+
+<SN>
+r_inj = 1.0
+delay = 10.0
+
+<dust>
+d_z_init = 0.3
+d_z_sn   = 0.3
+a_gr_s   = 0.003
+a_gr_l   = 0.1
+rho_gr   = 3.0
+D_floor  = 1.0e-20
+
+<turb_driving>
+type           = hydro
+turb_flag      = 1
+dedt           = 0.0
+tdriv_start    = 100.0
+tdriv_duration = 0.02
+dt_turb_update = 0.001
+tcorr          = 0.02
+nlow           = 1
+nhigh          = 2
+spect_form     = 1
+npeak          = 1.5
+sol_fraction   = 0.5
+tile_driving   = false
+rseed          = 314159
+
+<units>
+length_cgs = 3.0856775809623245e21
+mass_cgs   = 3.036951775493658e39
+time_cgs   = 3.15576e15
+mu         = 0.62
+
+<output1>
+file_type            = rst
+dt                   = 1.0
+single_file_per_node = true
+
+<output2>
+file_type = rst_prtcl
+dt        = 1.0
