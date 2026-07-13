@@ -19,6 +19,10 @@
 #include "units/units.hpp"
 #include "utils/sn_scheduler.hpp"
 
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
 namespace particles {
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
@@ -289,6 +293,15 @@ void Particles::LoadFromRestart(ParameterInput *pin, MeshBlockPack *ppack,
   prtcl_file.read(reinterpret_cast<char*>(&restart_ncycle), sizeof(int));
   prtcl_file.read(reinterpret_cast<char*>(&total_particles), sizeof(int));
 
+  bool conversion = ppack->pmesh->restart_meta.conversion;
+  if (conversion && (restart_time != ppack->pmesh->time ||
+                     restart_ncycle != ppack->pmesh->ncycle || total_particles == 0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle restart does not match the conversion fluid "
+              << "time/cycle or contains no GOTHAM star particles." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   if (total_particles == 0) {
     prtcl_file.close();
     ppart->nprtcl_thispack = 0;
@@ -297,6 +310,12 @@ void Particles::LoadFromRestart(ParameterInput *pin, MeshBlockPack *ppack,
 
   prtcl_file.read(reinterpret_cast<char*>(&nrdata_global), sizeof(int));
   prtcl_file.read(reinterpret_cast<char*>(&nidata_global), sizeof(int));
+  if (conversion && (nrdata_global != 9 || nidata_global != 3)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle restart field dimensions do not match GOTHAM "
+              << "star particles (9 real, 3 integer)." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // Step 2: All ranks read all particle data
   std::vector<Real> all_particle_rdata(total_particles * nrdata_global);
@@ -364,6 +383,19 @@ void Particles::LoadFromRestart(ParameterInput *pin, MeshBlockPack *ppack,
   ppart->nprtcl_thispack = my_particle_rdata.size() / nrdata_global;
   ppart->nrdata = nrdata_global;
   ppart->nidata = nidata_global;
+
+  if (conversion) {
+    int loaded_particles = ppart->nprtcl_thispack;
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, &loaded_particles, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+    if (loaded_particles != total_particles) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle redistribution assigned " << loaded_particles
+                << " of " << total_particles << " source particles." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
   
   if (ppart->nprtcl_thispack > 0) {
     // Allocate and populate particle arrays
