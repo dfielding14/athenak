@@ -43,10 +43,11 @@ _PARTICLE_CYCLE_CHAIN = [
 ]
 
 _PAPER_STAGE_INSERT_CHAIN = [
-    'TaskID insert_dep = (feedback_in_mhd_src ? pmhd->id.rkupdt : '
-    'pmhd->id.efld);',
-    'TaskID insert_loc = (feedback_in_mhd_src ? pmhd->id.srctrms : '
-    'pmhd->id.efldsrc);',
+    'const bool before_pic_flux = paper_vl2 && !UsesDeltaF();',
+    'TaskID insert_dep = before_pic_flux ? pmhd->id.copyu : '
+    '(feedback_in_mhd_src ? pmhd->id.rkupdt : pmhd->id.efld);',
+    'TaskID insert_loc = before_pic_flux ? pmhd->id.flux : '
+    '(feedback_in_mhd_src ? pmhd->id.srctrms : pmhd->id.efldsrc);',
     'TaskID sid = insert_dep;',
     'stagen_tl->InsertTask(&Particles::Push, this, sid, insert_loc);',
     'stagen_tl->InsertTask(&Particles::SaveOldPositions, this, '
@@ -146,6 +147,7 @@ def _check_static_task_graph():
     particles_moments = _normalized(
         _REPO_ROOT / 'src' / 'particles' / 'particles_moments.cpp')
     mhd_tasks = _normalized(_REPO_ROOT / 'src' / 'mhd' / 'mhd_tasks.cpp')
+    mhd_fofc = _normalized(_REPO_ROOT / 'src' / 'mhd' / 'mhd_fofc.cpp')
     driver = _normalized(_REPO_ROOT / 'src' / 'driver' / 'driver.cpp')
     parallel_shock = _normalized(
         _REPO_ROOT / 'src' / 'pgen' / 'tests' / 'pic_parallel_shock.cpp')
@@ -180,7 +182,7 @@ def _check_static_task_graph():
          'return PushPaperCosmicRaysVL2(pdriver, stage);'),
         ('paper stage-1 kick no-op',
          particles_pushers,
-         'if (stage == 1) return TaskStatus::complete;'),
+         'if (stage == 1 && !full_hall) return TaskStatus::complete;'),
         ('paper stage-2 midpoint kick',
          particles_pushers,
          'InterpolateTSCFields(indcs, size_view, bcc, w0, true, m, x, y, z, '
@@ -193,23 +195,30 @@ def _check_static_task_graph():
          'TaskStatus Particles::DriftPaperCosmicRaysHalfStep('),
         ('paper both-stage moments',
          particles_moments,
-         'if (paper_vl2) return (stage == 1) || (stage == 2);'),
-        ('paper stage-1 predictor feedback',
+         'if (paper_vl2) return full_hall ? (stage == 2) : '
+         '((stage == 1) || (stage == 2));'),
+        ('paper full-f feedback helper',
          mhd_tasks,
-         'const bool paper_vl2_predictor = '
-         'ppart->UsesPaperVL2Coupling() && (stage == 1);'),
+         'void MHD::AddPaperVL2FeedbackSource('),
         ('paper full-f stage-1 rho/J feedback',
          mhd_tasks,
-         'if (paper_vl2_predictor && !use_deltaf) { const Real rho = '
+         'if (stage == 1) { const Real qcr = full_cr_hall ? '
+         'hall_mom(m, particles::Particles::IMOM_RHO, k, j, i) : '
          'mom(m, particles::Particles::IMOM_RHO, k, j, i);'),
+        ('paper full-f live source',
+         mhd_tasks,
+         'AddPaperVL2FeedbackSource(u0, stage, beta_dt, is, ie, js, je, ks, ke);'),
+        ('paper full-f source-aware FOFC',
+         mhd_fofc,
+         'AddPaperVL2FeedbackSource(utest_, stage, beta_dt, '
+         'il, iu, jl, ju, kl, ku);'),
         ('paper delta-f analytic background feedback',
          mhd_tasks,
-         '} else if (use_deltaf) { const Real rho = background_rho + '
+         'if (use_deltaf) { const Real rho = background_rho + '
          'mom(m, particles::Particles::IMOM_RHO, k, j, i);'),
         ('paper VL2 source transaction',
          parallel_shock,
-         'ps_injection_transaction_applied_local[n] = '
-         'stage_weight*stage_delta[n];'),
+         'Real actual_stage_delta = stage_weight*stage_delta[n];'),
         ('CT source gate',
          mhd_tasks,
          'if ((ppart != nullptr) && ppart->AddsCRCurrentToCT()) {'),
@@ -240,7 +249,7 @@ def _check_static_task_graph():
             raise RuntimeError(label + ' missing source fragment:\n' + fragment)
 
     _RESULTS['particle_cycle_tasks'] = len(_PARTICLE_CYCLE_CHAIN)
-    _RESULTS['paper_stage_insert_tasks'] = len(_PAPER_STAGE_INSERT_CHAIN) - 3
+    _RESULTS['paper_stage_insert_tasks'] = len(_PAPER_STAGE_INSERT_CHAIN) - 4
     _RESULTS['paper_vl2_coefficients'] = len(_PAPER_VL2_COEFF_CHAIN) - 1
     _RESULTS['mhd_stage_tasks_through_expanding_box_u'] = len(_MHD_STAGE_CHAIN)
     _RESULTS['static_graph'] = 'pass'

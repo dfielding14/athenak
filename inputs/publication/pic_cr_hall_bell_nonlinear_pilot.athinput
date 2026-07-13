@@ -8,7 +8,7 @@ problem = compact 3D full-CR-Hall nonlinear Bell pilot
 basename = pic_cr_hall_bell_nonlinear_pilot
 
 <mesh>
-nghost = 2
+nghost = 3
 nx1 = 80
 x1min = 0
 x1max = 5
@@ -36,19 +36,20 @@ nx3 = 16
 <time>
 evolution = dynamic
 integrator = rk2
-# The nonlinear feedback source needs a smaller step than the linear mode;
-# The old centered CT/energy route failed at the same physical time for
-# cfl=0.2 and 0.05. The face-consistent route returns to the efficient value.
+# CFL=0.2 and 0.1 follow the same nonlinear trajectory and reach the same
+# filament state, so timestep reduction is not the remedy for deep collapse.
 cfl_number = 0.2
 nlim = -1
-# This compact pilot qualifies nonlinear onset, not deep filamentation or saturation.
-tlim = 1.6
+# End after Bperp,rms reaches B0 but before the repeatable coarse-grid
+# deep-filament pressure-depletion limit. This is not a convergence claim.
+tlim = 1.5
 ndiag = 20
 
 <mhd>
 eos = ideal
 reconstruct = plm
 rsolver = hlld
+fofc = true
 gamma = 1.6666666666666667
 
 <particles>

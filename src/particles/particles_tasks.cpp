@@ -230,10 +230,13 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     const bool feedback_in_mhd_src =
         use_fluid_feedback &&
         (couple_fluid_feedback_order == CoupledFluidFeedbackOrder::mhd_src_terms);
-    TaskID insert_dep = (feedback_in_mhd_src ? pmhd->id.rkupdt : pmhd->id.efld);
-    TaskID insert_loc = (feedback_in_mhd_src ? pmhd->id.srctrms : pmhd->id.efldsrc);
-    const char *insert_name = (feedback_in_mhd_src ? "MHD::MHDSrcTerms" :
-                                                       "MHD::EFieldSrc");
+    const bool before_pic_flux = paper_vl2 && !UsesDeltaF();
+    TaskID insert_dep = before_pic_flux ? pmhd->id.copyu :
+        (feedback_in_mhd_src ? pmhd->id.rkupdt : pmhd->id.efld);
+    TaskID insert_loc = before_pic_flux ? pmhd->id.flux :
+        (feedback_in_mhd_src ? pmhd->id.srctrms : pmhd->id.efldsrc);
+    const char *insert_name = before_pic_flux ? "MHD::Fluxes" :
+        (feedback_in_mhd_src ? "MHD::MHDSrcTerms" : "MHD::EFieldSrc");
     if ((insert_dep == TaskID(0)) || (insert_loc == TaskID(0))) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl

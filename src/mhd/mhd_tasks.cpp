@@ -85,6 +85,115 @@ void CRHallFaceState(const HallView hall_v, const BView bcc,
   }
 }
 
+template <typename MomentView, typename WView>
+KOKKOS_INLINE_FUNCTION
+Real CRHallCorrectorCellE(const MomentView moments, const WView w,
+                          const int component, const Real alpha_i,
+                          const int m, const int k, const int j, const int i) {
+  const int source = particles::Particles::IMOM_DPXDT + component;
+  return -moments(m, source, k, j, i)/(alpha_i*w(m, IDN, k, j, i));
+}
+
+template <typename MomentView, typename WView>
+KOKKOS_INLINE_FUNCTION
+Real CRHallCorrectorFaceE(const MomentView moments, const WView w,
+                          const int component, const int normal,
+                          const bool lower_state, const Real alpha_i,
+                          const int m, const int k, const int j, const int i) {
+  int im = i, ip = i;
+  int jm = j, jp = j;
+  int km = k, kp = k;
+  if (normal == 0) {
+    --im;
+    ++ip;
+  } else if (normal == 1) {
+    --jm;
+    ++jp;
+  } else {
+    --km;
+    ++kp;
+  }
+  const Real qm = CRHallCorrectorCellE(
+      moments, w, component, alpha_i, m, km, jm, im);
+  const Real qc = CRHallCorrectorCellE(
+      moments, w, component, alpha_i, m, k, j, i);
+  const Real qp = CRHallCorrectorCellE(
+      moments, w, component, alpha_i, m, kp, jp, ip);
+  Real q_plus, q_minus;
+  PLM(qm, qc, qp, q_plus, q_minus);
+  return lower_state ? q_plus : q_minus;
+}
+
+template <typename HallView, typename MomentView, typename WView, typename BView>
+KOKKOS_INLINE_FUNCTION
+void CRHallGridFaceState(const HallView hall_v, const MomentView moments,
+                         const WView w, const BView bcc,
+                         const bool corrector, const Real alpha_i,
+                         const int normal, const Real bnormal,
+                         const bool lower_state, const int m, const int k,
+                         const int j, const int i, Real &ex, Real &ey,
+                         Real &ez, Real &snormal) {
+  if (!corrector) {
+    CRHallFaceState(hall_v, bcc, normal, bnormal, lower_state,
+                    m, k, j, i, ex, ey, ez, snormal);
+    return;
+  }
+  ex = CRHallCorrectorFaceE(
+      moments, w, 0, normal, lower_state, alpha_i, m, k, j, i);
+  ey = CRHallCorrectorFaceE(
+      moments, w, 1, normal, lower_state, alpha_i, m, k, j, i);
+  ez = CRHallCorrectorFaceE(
+      moments, w, 2, normal, lower_state, alpha_i, m, k, j, i);
+  const Real bx = (normal == 0) ? bnormal : CRHallFaceValue(
+      bcc, IBX, normal, lower_state, m, k, j, i);
+  const Real by = (normal == 1) ? bnormal : CRHallFaceValue(
+      bcc, IBY, normal, lower_state, m, k, j, i);
+  const Real bz = (normal == 2) ? bnormal : CRHallFaceValue(
+      bcc, IBZ, normal, lower_state, m, k, j, i);
+  if (normal == 0) {
+    snormal = ey*bz - ez*by;
+  } else if (normal == 1) {
+    snormal = ez*bx - ex*bz;
+  } else {
+    snormal = ex*by - ey*bx;
+  }
+}
+
+template <typename HallView, typename MomentView, typename WView, typename BView>
+KOKKOS_INLINE_FUNCTION
+void CRHallGridCellState(const HallView hall_v, const MomentView moments,
+                         const WView w, const BView bcc,
+                         const bool corrector, const Real alpha_i,
+                         const int normal, const Real bnormal,
+                         const int m, const int k, const int j, const int i,
+                         Real &ex, Real &ey, Real &ez, Real &snormal) {
+  if (corrector) {
+    ex = CRHallCorrectorCellE(moments, w, 0, alpha_i, m, k, j, i);
+    ey = CRHallCorrectorCellE(moments, w, 1, alpha_i, m, k, j, i);
+    ez = CRHallCorrectorCellE(moments, w, 2, alpha_i, m, k, j, i);
+  } else {
+    const Real hx = hall_v(m, 0, k, j, i);
+    const Real hy = hall_v(m, 1, k, j, i);
+    const Real hz = hall_v(m, 2, k, j, i);
+    const Real bx = (normal == 0) ? bnormal : bcc(m, IBX, k, j, i);
+    const Real by = (normal == 1) ? bnormal : bcc(m, IBY, k, j, i);
+    const Real bz = (normal == 2) ? bnormal : bcc(m, IBZ, k, j, i);
+    ex = -(hy*bz - hz*by);
+    ey = -(hz*bx - hx*bz);
+    ez = -(hx*by - hy*bx);
+  }
+  const Real bx = (normal == 0) ? bnormal : bcc(m, IBX, k, j, i);
+  const Real by = (normal == 1) ? bnormal : bcc(m, IBY, k, j, i);
+  const Real bz = (normal == 2) ? bnormal : bcc(m, IBZ, k, j, i);
+  if (normal == 0) {
+    snormal = ey*bz - ez*by;
+  } else if (normal == 1) {
+    snormal = ez*bx - ex*bz;
+  } else {
+    snormal = ex*by - ey*bx;
+  }
+}
+
 }  // namespace
 
 //----------------------------------------------------------------------------------------
@@ -357,6 +466,188 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \brief Add the CR-Hall induction and energy corrections to the face fluxes.
+
+void MHD::AddCRHallFluxes(int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesFullCRHall()) return;
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const bool corrector = (stage == 2);
+  const Real alpha_i = ppart->pic_background_ion_q_over_mc;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto hall_v = ppart->cr_hall_drift;
+  auto moments = ppart->moments;
+  auto w = w0;
+  auto bcc = bcc0;
+  auto b1f = b0.x1f;
+  auto b2f = b0.x2f;
+  auto b3f = b0.x3f;
+  auto flx1 = uflx.x1f;
+  auto flx2 = uflx.x2f;
+  auto flx3 = uflx.x3f;
+  auto eh2x1 = e2x1;
+  auto eh3x1 = e3x1;
+  auto eh1x2 = e1x2;
+  auto eh3x2 = e3x2;
+  auto eh1x3 = e1x3;
+  auto eh2x3 = e2x3;
+
+  const int x1_il = use_fofc ? is - 1 : is;
+  const int x1_iu = use_fofc ? ie + 2 : ie + 1;
+  const int x1_jl = multi_d ? js - 1 : js;
+  const int x1_ju = multi_d ? je + 1 : je;
+  const int x1_kl = three_d ? ks - 1 : ks;
+  const int x1_ku = three_d ? ke + 1 : ke;
+  par_for("cr_hall_face_flux_x1", DevExeSpace(), 0, nmb1,
+          x1_kl, x1_ku, x1_jl, x1_ju, x1_il, x1_iu,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const bool lower = (flx1(m, IDN, k, j, i) >= 0.0);
+    const int iu = lower ? i - 1 : i;
+    Real ex, ey, ez, sx;
+    CRHallGridFaceState(hall_v, moments, w, bcc, corrector, alpha_i,
+                        0, b1f(m, k, j, i), lower, m, k, j, iu,
+                        ex, ey, ez, sx);
+    eh2x1(m, k, j, i) += ey;
+    eh3x1(m, k, j, i) += ez;
+    flx1(m, IEN, k, j, i) += sx;
+  });
+
+  if (multi_d) {
+    const int x2_jl = use_fofc ? js - 1 : js;
+    const int x2_ju = use_fofc ? je + 2 : je + 1;
+    const int x2_kl = three_d ? ks - 1 : ks;
+    const int x2_ku = three_d ? ke + 1 : ke;
+    par_for("cr_hall_face_flux_x2", DevExeSpace(), 0, nmb1,
+            x2_kl, x2_ku, x2_jl, x2_ju, is - 1, ie + 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      const bool lower = (flx2(m, IDN, k, j, i) >= 0.0);
+      const int ju = lower ? j - 1 : j;
+      Real ex, ey, ez, sy;
+      CRHallGridFaceState(hall_v, moments, w, bcc, corrector, alpha_i,
+                          1, b2f(m, k, j, i), lower, m, k, ju, i,
+                          ex, ey, ez, sy);
+      eh1x2(m, k, j, i) += ex;
+      eh3x2(m, k, j, i) += ez;
+      flx2(m, IEN, k, j, i) += sy;
+    });
+  }
+
+  if (three_d) {
+    const int x3_kl = use_fofc ? ks - 1 : ks;
+    const int x3_ku = use_fofc ? ke + 2 : ke + 1;
+    par_for("cr_hall_face_flux_x3", DevExeSpace(), 0, nmb1,
+            x3_kl, x3_ku, js - 1, je + 1, is - 1, ie + 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      const bool lower = (flx3(m, IDN, k, j, i) >= 0.0);
+      const int ku = lower ? k - 1 : k;
+      Real ex, ey, ez, sz;
+      CRHallGridFaceState(hall_v, moments, w, bcc, corrector, alpha_i,
+                          2, b3f(m, k, j, i), lower, m, ku, j, i,
+                          ex, ey, ez, sz);
+      eh1x3(m, k, j, i) += ex;
+      eh2x3(m, k, j, i) += ey;
+      flx3(m, IEN, k, j, i) += sz;
+    });
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Restore a donor-cell CR-Hall correction on faces replaced by FOFC.
+
+void MHD::AddCRHallFOFCFluxes(int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesFullCRHall() || !use_fofc) return;
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const bool corrector = (stage == 2);
+  const Real alpha_i = ppart->pic_background_ion_q_over_mc;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto hall_v = ppart->cr_hall_drift;
+  auto moments = ppart->moments;
+  auto w = w0;
+  auto bcc = bcc0;
+  auto b1f = b0.x1f;
+  auto b2f = b0.x2f;
+  auto b3f = b0.x3f;
+  auto flx1 = uflx.x1f;
+  auto flx2 = uflx.x2f;
+  auto flx3 = uflx.x3f;
+  auto eh2x1 = e2x1;
+  auto eh3x1 = e3x1;
+  auto eh1x2 = e1x2;
+  auto eh3x2 = e3x2;
+  auto eh1x3 = e1x3;
+  auto eh2x3 = e2x3;
+  auto fofc_flag = fofc;
+
+  const int x1_jl = multi_d ? js - 1 : js;
+  const int x1_ju = multi_d ? je + 1 : je;
+  const int x1_kl = three_d ? ks - 1 : ks;
+  const int x1_ku = three_d ? ke + 1 : ke;
+  par_for("cr_hall_fofc_x1", DevExeSpace(), 0, nmb1,
+          x1_kl, x1_ku, x1_jl, x1_ju, is - 1, ie + 2,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (!fofc_flag(m, k, j, i - 1) && !fofc_flag(m, k, j, i)) return;
+    const bool lower = (flx1(m, IDN, k, j, i) >= 0.0);
+    const int iu = lower ? i - 1 : i;
+    Real ex, ey, ez, sx;
+    CRHallGridCellState(hall_v, moments, w, bcc, corrector, alpha_i,
+                        0, b1f(m, k, j, i), m, k, j, iu,
+                        ex, ey, ez, sx);
+    eh2x1(m, k, j, i) += ey;
+    eh3x1(m, k, j, i) += ez;
+    flx1(m, IEN, k, j, i) += sx;
+  });
+
+  if (multi_d) {
+    const int x2_kl = three_d ? ks - 1 : ks;
+    const int x2_ku = three_d ? ke + 1 : ke;
+    par_for("cr_hall_fofc_x2", DevExeSpace(), 0, nmb1,
+            x2_kl, x2_ku, js - 1, je + 2, is - 1, ie + 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      if (!fofc_flag(m, k, j - 1, i) && !fofc_flag(m, k, j, i)) return;
+      const bool lower = (flx2(m, IDN, k, j, i) >= 0.0);
+      const int ju = lower ? j - 1 : j;
+      Real ex, ey, ez, sy;
+      CRHallGridCellState(hall_v, moments, w, bcc, corrector, alpha_i,
+                          1, b2f(m, k, j, i), m, k, ju, i,
+                          ex, ey, ez, sy);
+      eh1x2(m, k, j, i) += ex;
+      eh3x2(m, k, j, i) += ez;
+      flx2(m, IEN, k, j, i) += sy;
+    });
+  }
+
+  if (three_d) {
+    par_for("cr_hall_fofc_x3", DevExeSpace(), 0, nmb1,
+            ks - 1, ke + 2, js - 1, je + 1, is - 1, ie + 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      if (!fofc_flag(m, k - 1, j, i) && !fofc_flag(m, k, j, i)) return;
+      const bool lower = (flx3(m, IDN, k, j, i) >= 0.0);
+      const int ku = lower ? k - 1 : k;
+      Real ex, ey, ez, sz;
+      CRHallGridCellState(hall_v, moments, w, bcc, corrector, alpha_i,
+                          2, b3f(m, k, j, i), m, ku, j, i,
+                          ex, ey, ez, sz);
+      eh1x3(m, k, j, i) += ex;
+      eh2x3(m, k, j, i) += ey;
+      flx3(m, IEN, k, j, i) += sz;
+    });
+  }
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::Fluxes
 //! \brief Wrapper task list function that calls everything necessary to compute fluxes
 //! of conserved variables
@@ -396,6 +687,10 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
   if (pcond != nullptr) {
     pcond->AddHeatFlux(w0, peos->eos_data, uflx);
   }
+
+  // The CR-Hall induction and Poynting terms are one conservative face flux.
+  // Add both before FOFC and RKUpdate so they use the same fallback and RK weight.
+  AddCRHallFluxes(stage);
 
   // call FOFC if necessary
   if (use_fofc) {
@@ -483,6 +778,87 @@ TaskStatus MHD::RecvFlux(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \brief Apply the full-f paper-VL2 particle feedback source to a trial or live state.
+
+void MHD::AddPaperVL2FeedbackSource(const DvceArray5D<Real> &target, int stage,
+                                    Real beta_dt, int il, int iu, int jl, int ju,
+                                    int kl, int ku) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart == nullptr) || !ppart->UsesPaperVL2Coupling() ||
+      ppart->UsesDeltaF() ||
+      (ppart->couple_fluid_feedback_order !=
+       CoupledFluidFeedbackOrder::mhd_src_terms)) {
+    return;
+  }
+  const bool add_mom = ppart->couple_moments_momentum_to_mhd;
+  const bool add_eng = ppart->couple_moments_energy_to_mhd;
+  if (!add_mom && !add_eng) return;
+
+  const bool full_cr_hall = ppart->UsesFullCRHall();
+  const Real mom_coef = ppart->couple_moments_momentum_coeff;
+  const Real eng_coef = ppart->couple_moments_energy_coeff;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto mom = ppart->moments;
+  auto hall_mom = ppart->cr_hall_moments;
+  auto hall_v = ppart->cr_hall_drift;
+  auto w = w0;
+  auto bcc = bcc0;
+  auto u = target;
+
+  par_for("paper_vl2_feedback_source", DevExeSpace(), 0, nmb1,
+          kl, ku, jl, ju, il, iu,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (stage == 1) {
+      const Real qcr = full_cr_hall ?
+          hall_mom(m, particles::Particles::IMOM_RHO, k, j, i) :
+          mom(m, particles::Particles::IMOM_RHO, k, j, i);
+      const Real kx = full_cr_hall ?
+          hall_mom(m, particles::Particles::IMOM_JX, k, j, i) :
+          mom(m, particles::Particles::IMOM_JX, k, j, i);
+      const Real ky = full_cr_hall ?
+          hall_mom(m, particles::Particles::IMOM_JY, k, j, i) :
+          mom(m, particles::Particles::IMOM_JY, k, j, i);
+      const Real kz = full_cr_hall ?
+          hall_mom(m, particles::Particles::IMOM_JZ, k, j, i) :
+          mom(m, particles::Particles::IMOM_JZ, k, j, i);
+      const Real hx = full_cr_hall ? hall_v(m, 0, k, j, i) : 0.0;
+      const Real hy = full_cr_hall ? hall_v(m, 1, k, j, i) : 0.0;
+      const Real hz = full_cr_hall ? hall_v(m, 2, k, j, i) : 0.0;
+      const Real bx = bcc(m, IBX, k, j, i);
+      const Real by = bcc(m, IBY, k, j, i);
+      const Real bz = bcc(m, IBZ, k, j, i);
+      const Real vx = w(m, IVX, k, j, i) + hx;
+      const Real vy = w(m, IVY, k, j, i) + hy;
+      const Real vz = w(m, IVZ, k, j, i) + hz;
+      const Real cex = -(vy*bz - vz*by);
+      const Real cey = -(vz*bx - vx*bz);
+      const Real cez = -(vx*by - vy*bx);
+      if (add_mom) {
+        u(m, IM1, k, j, i) -= beta_dt*mom_coef*(qcr*cex + ky*bz - kz*by);
+        u(m, IM2, k, j, i) -= beta_dt*mom_coef*(qcr*cey + kz*bx - kx*bz);
+        u(m, IM3, k, j, i) -= beta_dt*mom_coef*(qcr*cez + kx*by - ky*bx);
+      }
+      if (add_eng) {
+        u(m, IEN, k, j, i) -= beta_dt*eng_coef*(kx*cex + ky*cey + kz*cez);
+      }
+    } else if (stage == 2) {
+      if (add_mom) {
+        u(m, IM1, k, j, i) -= beta_dt*mom_coef*
+                              mom(m, particles::Particles::IMOM_DPXDT, k, j, i);
+        u(m, IM2, k, j, i) -= beta_dt*mom_coef*
+                              mom(m, particles::Particles::IMOM_DPYDT, k, j, i);
+        u(m, IM3, k, j, i) -= beta_dt*mom_coef*
+                              mom(m, particles::Particles::IMOM_DPZDT, k, j, i);
+      }
+      if (add_eng) {
+        u(m, IEN, k, j, i) -= beta_dt*eng_coef*
+                              mom(m, particles::Particles::IMOM_DEDT, k, j, i);
+      }
+    }
+  });
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskList MHD::MHDSrcTerms
 //! \brief Wrapper task list function to apply source terms to conservative vars
 //! Note source terms must be computed using only primitives (w0), as the conserved
@@ -546,8 +922,8 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
       const Real mom_coef = ppart->couple_moments_momentum_coeff;
       const Real eng_coef = ppart->couple_moments_energy_coeff;
       const bool use_deltaf = ppart->UsesDeltaF();
-      const bool paper_vl2_predictor =
-          ppart->UsesPaperVL2Coupling() && (stage == 1);
+      const bool paper_vl2_full_f =
+          ppart->UsesPaperVL2Coupling() && !use_deltaf;
       const bool full_cr_hall = ppart->UsesFullCRHall();
       Real background_density_scale = 1.0;
       if (ppart->UsesExpandingBox()) {
@@ -563,48 +939,17 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
       const Real background_jy = ppart->pic_deltaf_background_jy;
       const Real background_jz = ppart->pic_deltaf_background_jz;
       auto mom = ppart->moments;
-      auto hall_mom = ppart->cr_hall_moments;
-      auto hall_v = ppart->cr_hall_drift;
       auto bcc = bcc0;
       auto w = w0;
       auto u = u0;
 
-      par_for("prtcl_fluid_feedback_src", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+      if (paper_vl2_full_f) {
+        AddPaperVL2FeedbackSource(u0, stage, beta_dt, is, ie, js, je, ks, ke);
+      } else {
+        par_for("prtcl_fluid_feedback_src", DevExeSpace(),
+                0, nmb1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        if (paper_vl2_predictor && !use_deltaf) {
-          const Real rho = full_cr_hall ?
-              hall_mom(m, particles::Particles::IMOM_RHO, k, j, i) :
-              mom(m, particles::Particles::IMOM_RHO, k, j, i);
-          const Real jx = full_cr_hall ?
-              hall_mom(m, particles::Particles::IMOM_JX, k, j, i) :
-              mom(m, particles::Particles::IMOM_JX, k, j, i);
-          const Real jy = full_cr_hall ?
-              hall_mom(m, particles::Particles::IMOM_JY, k, j, i) :
-              mom(m, particles::Particles::IMOM_JY, k, j, i);
-          const Real jz = full_cr_hall ?
-              hall_mom(m, particles::Particles::IMOM_JZ, k, j, i) :
-              mom(m, particles::Particles::IMOM_JZ, k, j, i);
-          const Real bx = bcc(m, IBX, k, j, i);
-          const Real by = bcc(m, IBY, k, j, i);
-          const Real bz = bcc(m, IBZ, k, j, i);
-          const Real hx = full_cr_hall ? hall_v(m, 0, k, j, i) : 0.0;
-          const Real hy = full_cr_hall ? hall_v(m, 1, k, j, i) : 0.0;
-          const Real hz = full_cr_hall ? hall_v(m, 2, k, j, i) : 0.0;
-          const Real vx = w(m, IVX, k, j, i) + hx;
-          const Real vy = w(m, IVY, k, j, i) + hy;
-          const Real vz = w(m, IVZ, k, j, i) + hz;
-          const Real cex = -(vy*bz - vz*by);
-          const Real cey = -(vz*bx - vx*bz);
-          const Real cez = -(vx*by - vy*bx);
-          if (add_mom) {
-            u(m, IM1, k, j, i) -= beta_dt*mom_coef*(rho*cex + jy*bz - jz*by);
-            u(m, IM2, k, j, i) -= beta_dt*mom_coef*(rho*cey + jz*bx - jx*bz);
-            u(m, IM3, k, j, i) -= beta_dt*mom_coef*(rho*cez + jx*by - jy*bx);
-          }
-          if (add_eng) {
-            u(m, IEN, k, j, i) -= beta_dt*eng_coef*(jx*cex + jy*cey + jz*cez);
-          }
-        } else if (use_deltaf) {
+        if (use_deltaf) {
           const Real rho = background_rho +
               mom(m, particles::Particles::IMOM_RHO, k, j, i);
           const Real jx = background_jx +
@@ -662,117 +1007,13 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
             u(m, IEN, k, j, i) += beta_dt*eng_coef*(jx*bx + jy*by + jz*bz);
           }
         }
-      });
-      if (full_cr_hall) {
-        const bool multi_d = pmy_pack->pmesh->multi_d;
-        const bool three_d = pmy_pack->pmesh->three_d;
-        auto &mbsize = pmy_pack->pmb->mb_size;
-        auto flx1 = uflx.x1f;
-        auto flx2 = uflx.x2f;
-        auto flx3 = uflx.x3f;
-        auto b1f = b0.x1f;
-        auto b2f = b0.x2f;
-        auto b3f = b0.x3f;
-        auto eh2x1 = e2x1;
-        auto eh3x1 = e3x1;
-        auto eh1x2 = e1x2;
-        auto eh3x2 = e3x2;
-        auto eh1x3 = e1x3;
-        auto eh2x3 = e2x3;
-
-        // Mignone et al. (2018), Appendix B: add the CR contribution to
-        // the face induction flux using the cell selected by the ordinary
-        // mass flux. CornerE then builds the CT edge EMF from these faces.
-        const int x1_jl = multi_d ? js - 1 : js;
-        const int x1_ju = multi_d ? je + 1 : je;
-        const int x1_kl = three_d ? ks - 1 : ks;
-        const int x1_ku = three_d ? ke + 1 : ke;
-        par_for("cr_hall_face_efield_x1", DevExeSpace(), 0, nmb1,
-                x1_kl, x1_ku, x1_jl, x1_ju, is, ie + 1,
-        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-          const bool lower = (flx1(m, IDN, k, j, i) >= 0.0);
-          const int iu = lower ? i - 1 : i;
-          Real ex, ey, ez, sx;
-          CRHallFaceState(hall_v, bcc, 0, b1f(m, k, j, i), lower,
-                          m, k, j, iu, ex, ey, ez, sx);
-          eh2x1(m, k, j, i) += ey;
-          eh3x1(m, k, j, i) += ez;
         });
-        if (multi_d) {
-          const int x2_kl = three_d ? ks - 1 : ks;
-          const int x2_ku = three_d ? ke + 1 : ke;
-          par_for("cr_hall_face_efield_x2", DevExeSpace(), 0, nmb1,
-                  x2_kl, x2_ku, js, je + 1, is - 1, ie + 1,
-          KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-            const bool lower = (flx2(m, IDN, k, j, i) >= 0.0);
-            const int ju = lower ? j - 1 : j;
-            Real ex, ey, ez, sy;
-            CRHallFaceState(hall_v, bcc, 1, b2f(m, k, j, i), lower,
-                            m, k, ju, i, ex, ey, ez, sy);
-            eh1x2(m, k, j, i) += ex;
-            eh3x2(m, k, j, i) += ez;
-          });
-        }
-        if (three_d) {
-          par_for("cr_hall_face_efield_x3", DevExeSpace(), 0, nmb1,
-                  ks, ke + 1, js - 1, je + 1, is - 1, ie + 1,
-          KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-            const bool lower = (flx3(m, IDN, k, j, i) >= 0.0);
-            const int ku = lower ? k - 1 : k;
-            Real ex, ey, ez, sz;
-            CRHallFaceState(hall_v, bcc, 2, b3f(m, k, j, i), lower,
-                            m, ku, j, i, ex, ey, ez, sz);
-            eh1x3(m, k, j, i) += ex;
-            eh2x3(m, k, j, i) += ey;
-          });
-        }
-
-        if (add_eng) {
-          // Use the identical upwind state for the conservative Hall
-          // Poynting flux. This keeps the energy and CT corrections on the
-          // same face stencil rather than applying a centered cell source.
-          par_for("cr_hall_energy_flux", DevExeSpace(), 0, nmb1,
-                  ks, ke, js, je, is, ie,
-          KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-            const bool right_lower = (flx1(m, IDN, k, j, i + 1) >= 0.0);
-            const bool left_lower = (flx1(m, IDN, k, j, i) >= 0.0);
-            const int ir = right_lower ? i : i + 1;
-            const int il = left_lower ? i - 1 : i;
-            Real ex, ey, ez, sr, sl;
-            CRHallFaceState(hall_v, bcc, 0, b1f(m, k, j, i + 1), right_lower,
-                            m, k, j, ir, ex, ey, ez, sr);
-            CRHallFaceState(hall_v, bcc, 0, b1f(m, k, j, i), left_lower,
-                            m, k, j, il, ex, ey, ez, sl);
-            Real div_s = (sr - sl)/mbsize.d_view(m).dx1;
-            if (multi_d) {
-              const bool top_lower = (flx2(m, IDN, k, j + 1, i) >= 0.0);
-              const bool bottom_lower = (flx2(m, IDN, k, j, i) >= 0.0);
-              const int jr = top_lower ? j : j + 1;
-              const int jl = bottom_lower ? j - 1 : j;
-              CRHallFaceState(hall_v, bcc, 1, b2f(m, k, j + 1, i), top_lower,
-                              m, k, jr, i, ex, ey, ez, sr);
-              CRHallFaceState(hall_v, bcc, 1, b2f(m, k, j, i), bottom_lower,
-                              m, k, jl, i, ex, ey, ez, sl);
-              div_s += (sr - sl)/mbsize.d_view(m).dx2;
-            }
-            if (three_d) {
-              const bool upper_lower = (flx3(m, IDN, k + 1, j, i) >= 0.0);
-              const bool lower_lower = (flx3(m, IDN, k, j, i) >= 0.0);
-              const int kr = upper_lower ? k : k + 1;
-              const int kl = lower_lower ? k - 1 : k;
-              CRHallFaceState(hall_v, bcc, 2, b3f(m, k + 1, j, i), upper_lower,
-                              m, kr, j, i, ex, ey, ez, sr);
-              CRHallFaceState(hall_v, bcc, 2, b3f(m, k, j, i), lower_lower,
-                              m, kl, j, i, ex, ey, ez, sl);
-              div_s += (sr - sl)/mbsize.d_view(m).dx3;
-            }
-            u(m, IEN, k, j, i) -= beta_dt*eng_coef*div_s;
-          });
-        }
       }
       // Full Hall changes total energy and B as one conservative flux. Check
       // admissibility after CT has applied the matching field update.
-      if (!full_cr_hall) ValidatePICFeedbackState("mhd_src_terms", stage);
+      if (!full_cr_hall) {
+        ValidatePICFeedbackState("mhd_src_terms", stage);
+      }
     }
   }
 

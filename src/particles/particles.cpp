@@ -1418,6 +1418,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    if (pin->GetOrAddBoolean("mhd", "fofc", false) &&
+        pmy_pack->pmesh->mb_indcs.ng < 3) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_cr_hall_mode=full with <mhd>/fofc=true "
+                << "requires <mesh>/nghost >= 3 for Hall face reconstruction"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   if ((global_variable::my_rank == 0) &&

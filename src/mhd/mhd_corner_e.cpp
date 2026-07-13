@@ -33,8 +33,14 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
   auto *ppart = pmy_pack->ppart;
   const bool full_cr_hall =
       (ppart != nullptr) && ppart->UsesFullCRHall();
+  const bool hall_corrector = full_cr_hall && (stage == 2);
+  const Real alpha_i = full_cr_hall ? ppart->pic_background_ion_q_over_mc : 1.0;
   DvceArray5D<Real> hall_v;
-  if (full_cr_hall) hall_v = ppart->cr_hall_drift;
+  DvceArray5D<Real> moments;
+  if (full_cr_hall) {
+    hall_v = ppart->cr_hall_drift;
+    moments = ppart->moments;
+  }
   auto &size = pmy_pack->pmb->mb_size;
   auto &flat = pmy_pack->pcoord->coord_data.is_minkowski;
   auto &spin = pmy_pack->pcoord->coord_data.bh_spin;
@@ -153,10 +159,17 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
     } else {
       par_for("e_cc_2d", DevExeSpace(), 0, nmb1, js-1, je+1, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int j, int i) {
-        const Real hx = full_cr_hall ? hall_v(m, 0, ks, j, i) : 0.0;
-        const Real hy = full_cr_hall ? hall_v(m, 1, ks, j, i) : 0.0;
-        e3cc_(m,ks,j,i) = (w0_(m,IVY,ks,j,i) + hy)*bcc_(m,IBX,ks,j,i) -
-                          (w0_(m,IVX,ks,j,i) + hx)*bcc_(m,IBY,ks,j,i);
+        const Real ideal = w0_(m,IVY,ks,j,i)*bcc_(m,IBX,ks,j,i) -
+                           w0_(m,IVX,ks,j,i)*bcc_(m,IBY,ks,j,i);
+        Real hall = 0.0;
+        if (hall_corrector) {
+          hall = -moments(m, particles::Particles::IMOM_DPZDT, ks, j, i)/
+                 (alpha_i*w0_(m, IDN, ks, j, i));
+        } else if (full_cr_hall) {
+          hall = hall_v(m, 1, ks, j, i)*bcc_(m, IBX, ks, j, i) -
+                 hall_v(m, 0, ks, j, i)*bcc_(m, IBY, ks, j, i);
+        }
+        e3cc_(m,ks,j,i) = ideal + hall;
       });
     }
 
@@ -316,18 +329,29 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
     } else {
       par_for("e_cc_3d", DevExeSpace(), 0, nmb1, ks-1, ke+1, js-1, je+1, is-1, ie+1,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        const Real h1 = full_cr_hall ? hall_v(m, 0, k, j, i) : 0.0;
-        const Real h2 = full_cr_hall ? hall_v(m, 1, k, j, i) : 0.0;
-        const Real h3 = full_cr_hall ? hall_v(m, 2, k, j, i) : 0.0;
-        const Real v1 = w0_(m,IVX,k,j,i) + h1;
-        const Real v2 = w0_(m,IVY,k,j,i) + h2;
-        const Real v3 = w0_(m,IVZ,k,j,i) + h3;
-        e1cc_(m,k,j,i) = v3*bcc_(m,IBY,k,j,i) -
-                         v2*bcc_(m,IBZ,k,j,i);
-        e2cc_(m,k,j,i) = v1*bcc_(m,IBZ,k,j,i) -
-                         v3*bcc_(m,IBX,k,j,i);
-        e3cc_(m,k,j,i) = v2*bcc_(m,IBX,k,j,i) -
-                         v1*bcc_(m,IBY,k,j,i);
+        const Real v1 = w0_(m,IVX,k,j,i);
+        const Real v2 = w0_(m,IVY,k,j,i);
+        const Real v3 = w0_(m,IVZ,k,j,i);
+        const Real b1 = bcc_(m,IBX,k,j,i);
+        const Real b2 = bcc_(m,IBY,k,j,i);
+        const Real b3 = bcc_(m,IBZ,k,j,i);
+        Real eh1 = 0.0, eh2 = 0.0, eh3 = 0.0;
+        if (hall_corrector) {
+          const Real inv_qi = 1.0/(alpha_i*w0_(m, IDN, k, j, i));
+          eh1 = -moments(m, particles::Particles::IMOM_DPXDT, k, j, i)*inv_qi;
+          eh2 = -moments(m, particles::Particles::IMOM_DPYDT, k, j, i)*inv_qi;
+          eh3 = -moments(m, particles::Particles::IMOM_DPZDT, k, j, i)*inv_qi;
+        } else if (full_cr_hall) {
+          const Real h1 = hall_v(m, 0, k, j, i);
+          const Real h2 = hall_v(m, 1, k, j, i);
+          const Real h3 = hall_v(m, 2, k, j, i);
+          eh1 = h3*b2 - h2*b3;
+          eh2 = h1*b3 - h3*b1;
+          eh3 = h2*b1 - h1*b2;
+        }
+        e1cc_(m,k,j,i) = v3*b2 - v2*b3 + eh1;
+        e2cc_(m,k,j,i) = v1*b3 - v3*b1 + eh2;
+        e3cc_(m,k,j,i) = v2*b1 - v1*b2 + eh3;
       });
     }
 

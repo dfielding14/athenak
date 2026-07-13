@@ -107,6 +107,10 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       }
     });
 
+    // Paper VL2 applies particle feedback after RKUpdate. Include the same
+    // staged source in this trial state so FOFC tests the composite update.
+    AddPaperVL2FeedbackSource(utest_, stage, beta_dt, il, iu, jl, ju, kl, ku);
+
     // Test whether conversion to primitives requires floors
     // Note b0 and w0 passed to function, but not used/changed.
     peos->ConsToPrim(utest_, b0, w0, bcctest_, true, il, iu, jl, ju, kl, ku);
@@ -481,6 +485,10 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       }
     }
   });
+
+  // FOFC replaces complete face fluxes. Re-add the donor-cell CR-Hall
+  // induction and energy terms on those same faces before clearing the flags.
+  AddCRHallFOFCFluxes(stage);
 
   // reset FOFC flag (do not reset excision flag)
   if (use_fofc_) {

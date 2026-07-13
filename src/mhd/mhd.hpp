@@ -163,10 +163,15 @@ class MHD {
   // ...in "stagen_tl" task list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
+  void AddCRHallFluxes(int stage);
+  void AddCRHallFOFCFluxes(int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
   TaskStatus MHDSrcTerms(Driver *d, int stage);
+  void AddPaperVL2FeedbackSource(const DvceArray5D<Real> &target, int stage,
+                                 Real beta_dt, int il, int iu, int jl, int ju,
+                                 int kl, int ku);
   TaskStatus ApplyPICWaveDamping(Driver *d, int stage);
   TaskStatus ApplyPICWaveDampingMap(Driver *d, int stage);
   TaskStatus ApplyPICExpandingBoxWaveDamping(Driver *d, int stage);
