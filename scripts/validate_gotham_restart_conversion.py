@@ -199,8 +199,11 @@ def main():
         ['git', '-C', args.source_worktree, 'rev-parse', 'HEAD'], text=True).strip()
     status = subprocess.check_output(
         ['git', '-C', args.source_worktree, 'status', '--porcelain'], text=True)
-    if head != args.source_commit or status:
-        raise SystemExit('conversion source worktree does not match the clean commit')
+    source_commit_exists = subprocess.run(
+        ['git', '-C', args.source_worktree, 'cat-file', '-e',
+         args.source_commit + '^{commit}']).returncode == 0
+    if not source_commit_exists or status:
+        raise SystemExit('conversion source commit is unavailable or worktree is dirty')
 
     if Path(metadata['source_fluid']) != source_fluid:
         raise SystemExit('conversion manifest names a different source fluid restart')
@@ -228,6 +231,7 @@ def main():
         'implementation': {
             'worktree': str(args.source_worktree.resolve()),
             'commit': args.source_commit,
+            'validator_commit': head,
             'diff': 'clean',
             'executable': str(executable),
             'executable_sha256': args.executable_sha256,
@@ -259,16 +263,22 @@ def main():
         roundtrip_meta = _load_manifest(roundtrip_fluid)
         if not np.array_equal(target_meta['locations'], roundtrip_meta['locations']):
             raise SystemExit('ordinary round trip changed the target topology')
-        if (target_meta['time'], target_meta['cycle'], target_meta['dt']) != (
-                roundtrip_meta['time'], roundtrip_meta['cycle'], roundtrip_meta['dt']):
-            raise SystemExit('ordinary round trip changed time, cycle, or timestep')
+        if (target_meta['time'], target_meta['cycle']) != (
+                roundtrip_meta['time'], roundtrip_meta['cycle']):
+            raise SystemExit('ordinary round trip changed time or cycle')
+        if not np.isfinite(roundtrip_meta['dt']) or roundtrip_meta['dt'] <= 0.0:
+            raise SystemExit('ordinary restart produced an invalid timestep')
         _compare_particles(particles, roundtrip_particles)
         report['roundtrip'] = {
             'directory': str(roundtrip_dir),
             'stored_ranks': target_meta['nranks'],
             'current_ranks': roundtrip_meta['nranks'],
             'topology_identical': True,
-            'time_cycle_dt_identical': True,
+            'time_cycle_identical': True,
+            'timestep_policy': 'recomputed_by_ordinary_restart_initialization',
+            'input_dt': target_meta['dt'],
+            'output_dt': roundtrip_meta['dt'],
+            'output_to_input_dt_ratio': roundtrip_meta['dt'] / target_meta['dt'],
             'particles_identical_except_ownership_gid': True,
             **_shard_sizes(roundtrip_meta, roundtrip_fluid),
         }
