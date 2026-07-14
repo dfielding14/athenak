@@ -38,6 +38,7 @@
 #include <string>
 #include <system_error>
 #include <unordered_map>
+#include <vector>
 
 // Athena headers
 #include "athena.hpp"
@@ -97,6 +98,29 @@ struct ConversionDiagnostics {
 bool HasShardPrefix(const std::string &name, const char *prefix) {
   return name.rfind(prefix, 0) == 0;
 }
+
+#if MPI_PARALLEL_ENABLED
+void SumConversionValues(long double *values, int count) {
+  int rank, nranks;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nranks);
+  std::vector<long double> gathered;
+  if (rank == 0) gathered.resize(nranks*count);
+
+  // Frontier's Cray MPICH exposes MPI_LONG_DOUBLE without a valid MPI_SUM operation.
+  // Transport the native values as bytes and retain deterministic long-double summation.
+  const int bytes = count*static_cast<int>(sizeof(long double));
+  MPI_Gather(values, bytes, MPI_BYTE, gathered.data(), bytes, MPI_BYTE, 0,
+             MPI_COMM_WORLD);
+  if (rank == 0) {
+    std::fill(values, values + count, 0.0L);
+    for (int r=0; r<nranks; ++r) {
+      for (int n=0; n<count; ++n) values[n] += gathered[r*count + n];
+    }
+  }
+  MPI_Bcast(values, bytes, MPI_BYTE, 0, MPI_COMM_WORLD);
+}
+#endif
 
 bool IsExactShardDirectoryName(const std::string &name, const char *prefix) {
   constexpr int kShardIdDigits = 8;
@@ -288,17 +312,14 @@ ConversionDiagnostics MeasureRestartConversion(Mesh *mesh) {
   }
 
 #if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(MPI_IN_PLACE, diagnostics.source, kConversionFields, MPI_LONG_DOUBLE,
-                MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE, diagnostics.source_abs, kConversionFields, MPI_LONG_DOUBLE,
-                MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE, diagnostics.target, kConversionFields, MPI_LONG_DOUBLE,
-                MPI_SUM, MPI_COMM_WORLD);
+  SumConversionValues(diagnostics.source, kConversionFields);
+  SumConversionValues(diagnostics.source_abs, kConversionFields);
+  SumConversionValues(diagnostics.target, kConversionFields);
   long double energies[4] = {diagnostics.source_kinetic,
                              diagnostics.source_internal,
                              diagnostics.target_kinetic,
                              diagnostics.target_internal};
-  MPI_Allreduce(MPI_IN_PLACE, energies, 4, MPI_LONG_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  SumConversionValues(energies, 4);
   diagnostics.source_kinetic = energies[0];
   diagnostics.source_internal = energies[1];
   diagnostics.target_kinetic = energies[2];
