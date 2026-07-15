@@ -242,9 +242,11 @@ but these are not wired in the constructor.
 - `pic_max_cell_cross` (default `2`) and `pic_theta_max` (default `0.3`)
   with positivity guards. `pic_max_cell_cross` must not exceed the smallest
   active MeshBlock dimension because particle exchange is nearest-neighbor.
-  Boris timestep selection uses the maximum configured species `|charge/mass|`
-  even for an empty particle pack and scans active plus ghost magnetic fields;
-  this keeps distributed extrema and the first injected cohort bounded.
+  Boris timestep selection scans active plus ghost magnetic fields. Active
+  momentum-state particles use their current `|charge/mass| B_max/gamma`, while
+  engineering-state particles retain `gamma=1`. Only a globally empty population
+  uses the maximum configured species `|charge/mass|` fallback, which bounds the
+  first injected cohort without constraining empty ranks in a nonempty run.
 - `pic_deltaf_mode`: `off` (default), `quiet_start`, `on`, or `physical`; every
   enabled mode requires an explicit `pic_deltaf_f0` background.
   - `quiet_start` applies deterministic low-discrepancy placement for reduced

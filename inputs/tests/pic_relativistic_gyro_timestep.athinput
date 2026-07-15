@@ -1,0 +1,90 @@
+# AthenaK input file for the relativistic gyro-timestep/orbit regression
+
+<comment>
+problem   = Eight gamma=100 particles orbiting in a uniform magnetic field
+
+<job>
+basename  = pic_relativistic_gyro_timestep
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 64.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = 0.0
+x2max     = 64.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = 0.0
+x3max     = 64.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.5
+nlim       = 1000
+tlim       = 6.283185307179586
+ndiag      = 1
+
+<particles>
+particle_type           = cosmic_ray
+# One particle in each of the eight 4x4x4 MeshBlocks: 8 particles total.
+ppc                     = 0.015625
+pusher                  = boris_tsc
+nspecies                = 1
+cr_distribution         = center
+deposit_moments         = false
+couple_moments_to_mhd   = false
+couple_moments_momentum_to_mhd = false
+couple_moments_energy_to_mhd   = false
+cr_vx0                  = 99.99499987499375
+cr_vy0                  = 0.0
+cr_vz0                  = 0.0
+pic_physical_mode       = paper_test_particle
+pic_background_mode     = no_mhd
+pic_feedback_mode       = test_particle
+pic_interp_scheme       = tsc
+pic_cr_light_speed      = 1.0
+pic_cr_initial_state    = momentum
+pic_max_cell_cross      = 2
+pic_theta_max           = 0.8
+pic_deltaf_mode         = off
+pic_sort_interval       = 0
+pic_intermediate_arrays = auto
+pic_expanding_box_mode  = off
+pic_no_mhd_bx           = 0.0
+pic_no_mhd_by           = 0.0
+pic_no_mhd_bz           = 1.0
+
+<species0>
+mass   = 1.0
+charge = 100.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+vflow     = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 1
+file_number = 0

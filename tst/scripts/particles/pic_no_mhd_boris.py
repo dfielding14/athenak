@@ -354,6 +354,67 @@ def run(**kwargs):
         'expected_dt': 0.3 * 0.1 / 50.0,
     }
 
+    relativistic_gamma = 10.0
+    relativistic_momentum = np.sqrt(relativistic_gamma**2 - 1.0)
+    relativistic_qom = 100.0
+    relativistic_theta = 0.1
+    relativistic_bmag = 1.0
+    relativistic_output = _run_command(
+        'relativistic_gyro_angle_dt_limit',
+        1,
+        [
+            'job/basename=pic_no_mhd_boris_relativistic_thetalimit',
+            'particles/pic_cr_light_speed=1.0',
+            'particles/cr_vx0=' + str(relativistic_momentum),
+            'particles/cr_vy0=0.0',
+            'particles/cr_vz0=0.0',
+            'particles/pic_no_mhd_bz=' + str(relativistic_bmag),
+            'particles/pic_theta_max=' + str(relativistic_theta),
+            'species0/mass=1.0',
+            'species0/charge=' + str(relativistic_qom),
+            'time/nlim=1',
+            'output1/dcycle=0',
+            'output2/dcycle=0',
+        ],
+        input_deck='tests/pic_relativistic_gyro_paper.athinput',
+    )
+    _TIMESTEP_RESULTS['relativistic_gyro_angle_dt_limit'] = {
+        'measured_dt': _extract_cycle_dt(relativistic_output, 0),
+        'expected_dt': (0.3 * relativistic_theta * relativistic_gamma /
+                        (relativistic_qom * relativistic_bmag)),
+    }
+
+    crossing_gamma = 100.0
+    crossing_light_speed = 100.0
+    crossing_momentum = crossing_light_speed * np.sqrt(crossing_gamma**2 - 1.0)
+    crossing_bmag = 1.0
+    crossing_qom = crossing_momentum / (32.0 * crossing_bmag)
+    crossing_velocity = crossing_momentum / crossing_gamma
+    crossing_output = _run_command(
+        'relativistic_rg32_cell_cross_dt_limit',
+        1,
+        [
+            'job/basename=pic_no_mhd_boris_relativistic_rg32',
+            'particles/pic_cr_light_speed=' + str(crossing_light_speed),
+            'particles/cr_vx0=' + str(crossing_momentum),
+            'particles/cr_vy0=0.0',
+            'particles/cr_vz0=0.0',
+            'particles/pic_no_mhd_bz=' + str(crossing_bmag),
+            'particles/pic_max_cell_cross=2',
+            'particles/pic_theta_max=0.3',
+            'species0/mass=1.0',
+            'species0/charge=' + str(crossing_qom),
+            'time/nlim=1',
+            'output1/dcycle=0',
+            'output2/dcycle=0',
+        ],
+        input_deck='tests/pic_relativistic_gyro_paper.athinput',
+    )
+    _TIMESTEP_RESULTS['relativistic_rg32_cell_cross_dt_limit'] = {
+        'measured_dt': _extract_cycle_dt(crossing_output, 0),
+        'expected_dt': 0.3 * 2.0 / crossing_velocity,
+    }
+
     amr_output = _run_command(
         'no_mhd_amr_capacity',
         1,
@@ -531,7 +592,11 @@ def analyze():
                                    mpi2['npart'], serial['npart'],
                                    1.0e-6, 1.0e-8) and ok
 
-    for dt_label in ['cell_cross_dt_limit', 'gyro_angle_dt_limit']:
+    for dt_label in [
+            'cell_cross_dt_limit',
+            'gyro_angle_dt_limit',
+            'relativistic_gyro_angle_dt_limit',
+            'relativistic_rg32_cell_cross_dt_limit']:
         dt_result = _TIMESTEP_RESULTS.get(dt_label)
         if dt_result is None:
             logger.warning('Missing %s result', dt_label)

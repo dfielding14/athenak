@@ -2065,6 +2065,7 @@ void Particles::NewTimeStep() {
   const int gids = pmy_pack->gids;
   const int nmb = pmy_pack->nmb_thispack;
   const Real max_cell_cross = static_cast<Real>(pic_max_cell_cross);
+  const Real theta_max = pic_theta_max;
   const bool momentum_state_local = UsesRelativisticCRState();
   const Real light_speed_local = pic_cr_light_speed;
   auto &size = pmy_pack->pmb->mb_size;
@@ -2074,40 +2075,8 @@ void Particles::NewTimeStep() {
   size.template sync<DevExeSpace>();
   auto size_view = size;
 
-  Real dt_part = max_dt;
-  Kokkos::parallel_reduce(
-      "ParticlesNewTimeStep", Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
-      KOKKOS_LAMBDA(const int &p, Real &min_dt) {
-        int m = pi(PGID, p) - gids;
-        if (m < 0 || m >= nmb) return;
-
-        Real candidate = max_dt;
-        Real vx, vy, vz;
-        CRVelocityFromState(momentum_state_local, light_speed_local,
-                            pr(IPVX, p), pr(IPVY, p), pr(IPVZ, p), vx, vy, vz);
-        vx = fabs(vx);
-        vy = fabs(vy);
-        vz = fabs(vz);
-
-        if (vx > 0.0) {
-          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx1/vx);
-        }
-        if (multi_d && vy > 0.0) {
-          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx2/vy);
-        }
-        if (three_d && vz > 0.0) {
-          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx3/vz);
-        }
-        min_dt = fmin(min_dt, candidate);
-      },
-      Kokkos::Min<Real>(dt_part));
-
+  Real bmag_max = 0.0;
   if (pusher == ParticlesPusher::boris_lin || pusher == ParticlesPusher::boris_tsc) {
-    // Species properties are part of the global run configuration.  Using their
-    // maximum is safe even when this rank (or the entire initial state) has no
-    // particles, and avoids multiplying unrelated rank-local q/m and B extrema.
-    const Real qom_max = pic_species_qom_max;
-
     DvceArray5D<Real> bcc;
     if (pic_background_mode == PICBackgroundMode::no_mhd) {
       bcc = pic_no_mhd_bcc0;
@@ -2115,7 +2084,7 @@ void Particles::NewTimeStep() {
       bcc = pmy_pack->pmhd->bcc0;
     }
 
-    if (bcc.size() > 0 && qom_max > 0.0) {
+    if (bcc.size() > 0 && pic_species_qom_max > 0.0) {
       // A particle may sample a neighboring cell during its next half drift.
       // Bound every allocated cell, including valid ghost fields.
       const int nx1 = bcc.extent_int(4);
@@ -2143,11 +2112,51 @@ void Particles::NewTimeStep() {
           },
           Kokkos::Max<Real>(b2_max));
 
-      if (b2_max > 0.0) {
-        const Real omega_max = qom_max*std::sqrt(b2_max);
-        dt_part = std::min(dt_part, pic_theta_max/omega_max);
-      }
+      bmag_max = std::sqrt(b2_max);
     }
+  }
+
+  Real dt_part = max_dt;
+  Kokkos::parallel_reduce(
+      "ParticlesNewTimeStep", Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+      KOKKOS_LAMBDA(const int &p, Real &min_dt) {
+        int m = pi(PGID, p) - gids;
+        if (m < 0 || m >= nmb) return;
+
+        Real candidate = max_dt;
+        const Real sx = pr(IPVX, p);
+        const Real sy = pr(IPVY, p);
+        const Real sz = pr(IPVZ, p);
+        const Real gamma = momentum_state_local ?
+            CRLorentzFactor(sx, sy, sz, light_speed_local) : static_cast<Real>(1.0);
+        const Real inv_gamma = 1.0/gamma;
+        const Real vx = fabs(sx*inv_gamma);
+        const Real vy = fabs(sy*inv_gamma);
+        const Real vz = fabs(sz*inv_gamma);
+
+        if (vx > 0.0) {
+          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx1/vx);
+        }
+        if (multi_d && vy > 0.0) {
+          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx2/vy);
+        }
+        if (three_d && vz > 0.0) {
+          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx3/vz);
+        }
+        if (bmag_max > 0.0) {
+          const Real omega = fabs(pr(IPM, p))*bmag_max*inv_gamma;
+          if (omega > 0.0) {
+            candidate = fmin(candidate, theta_max/omega);
+          }
+        }
+        min_dt = fmin(min_dt, candidate);
+      },
+      Kokkos::Min<Real>(dt_part));
+
+  // Before the first cohort exists, retain the configured gamma=1 species bound.
+  // Empty ranks in a globally nonempty run defer to active-particle rank limits.
+  if (pmy_pack->pmesh->nprtcl_total_u64 == 0 && bmag_max > 0.0) {
+    dt_part = std::min(dt_part, theta_max/(pic_species_qom_max*bmag_max));
   }
 
   dtnew = dt_part;

@@ -21,14 +21,42 @@ def _function_body(source: str, signature: str) -> str:
     raise AssertionError(f"unterminated function: {signature}")
 
 
-def test_particle_timestep_uses_species_bound_for_empty_packs() -> None:
+def test_particle_timestep_uses_active_relativistic_gyro_bound() -> None:
     source = (REPO_ROOT / "src/particles/particles.cpp").read_text(
         encoding="ascii"
     )
     body = _function_body(source, "void Particles::NewTimeStep()")
+    particle_reduce = body[body.index('"ParticlesNewTimeStep"'):]
+    compact_reduce = "".join(particle_reduce.split())
 
-    assert "if (nprtcl_thispack <= 0)" not in body
-    assert "const Real qom_max = pic_species_qom_max;" in body
+    assert "CRLorentzFactor(" in compact_reduce
+    assert "fabs(pr(IPM,p))" in compact_reduce
+    assert "theta_max/omega" in compact_reduce
+
+
+def test_particle_timestep_retains_global_empty_population_fallback() -> None:
+    source = (REPO_ROOT / "src/particles/particles.cpp").read_text(
+        encoding="ascii"
+    )
+    body = _function_body(source, "void Particles::NewTimeStep()")
+    compact = "".join(body.split())
+
+    assert "if(nprtcl_thispack<=0)" not in compact
+    assert "pmy_pack->pmesh->nprtcl_total_u64==0" in compact
+    assert "theta_max/(pic_species_qom_max*bmag_max)" in compact
+
+
+def test_particle_timestep_adds_no_second_particle_pass() -> None:
+    source = (REPO_ROOT / "src/particles/particles.cpp").read_text(
+        encoding="ascii"
+    )
+    body = _function_body(source, "void Particles::NewTimeStep()")
+    compact = "".join(body.split())
+
+    particle_range = "Kokkos::RangePolicy<>(DevExeSpace(),0,nprtcl_thispack)"
+    assert compact.count(particle_range) == 1
+    assert body.count('"ParticlesNewTimeStep"') == 1
+    assert "ParticlesNewTimeStepGamma" not in body
     assert "ParticlesNewTimeStepQom" not in body
 
 
