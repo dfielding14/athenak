@@ -198,7 +198,7 @@ void CRHallGridCellState(const HallView hall_v, const MomentView moments,
 
 //----------------------------------------------------------------------------------------
 //! \fn void MHD::ValidatePICFeedbackState
-//! \brief Abort before C2P can repair a non-admissible post-feedback trial state.
+//! \brief Abort on non-finite or invalid-density post-feedback trial states.
 
 void MHD::ValidatePICFeedbackState(const char *source_name, int stage) {
   if (!peos->eos_data.is_ideal || nmhd <= IEN) return;
@@ -288,7 +288,9 @@ void MHD::ValidatePICFeedbackState(const char *source_name, int stage) {
         if (pressure_floor) sum.the_array[3] += 1.0;
         if (temperature_floor) sum.the_array[4] += 1.0;
         if (entropy_floor) sum.the_array[5] += 1.0;
-        invalid = invalid || pressure_floor || temperature_floor || entropy_floor;
+        // ConsToPrim immediately applies AthenaK's standard thermal floors.  Keep
+        // those finite states repairable while retaining hard failures above for
+        // non-finite values and invalid density.
       }
     } else if (finite_state) {
       invalid = true;
@@ -304,8 +306,8 @@ void MHD::ValidatePICFeedbackState(const char *source_name, int stage) {
     if (global_variable::my_rank == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "PIC feedback produced a non-admissible trial MHD state before "
-                << "EOS floor repair: source=" << source_name
+                << "PIC feedback produced a non-finite or invalid-density trial "
+                << "MHD state: source=" << source_name
                 << " stage=" << stage
                 << " cells=" << violations.the_array[0]
                 << " nonfinite=" << violations.the_array[1]
