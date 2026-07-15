@@ -17,6 +17,7 @@ _MACRO_MASS = 1.0e-3
 _MASS_FLUX = 0.10 * 1.0 * (3.0 + 1.0) * 8.0
 _RESULTS = {}
 _FLOOR_REJECTION = {}
+_FLOOR_THROTTLE = {}
 _INTEGRATOR_REJECTION = {}
 _PAPER_INTEGRATOR_REJECTIONS = {}
 _PARAMETER_REJECTIONS = {}
@@ -183,6 +184,40 @@ def _run_expected_floor_rejection():
     })
 
 
+def _run_floor_throttle():
+    basename = 'pic_parallel_shock_rk_stage_budget_floor_throttle'
+    _remove_outputs(basename)
+    command = [
+        './athena', '-i', _athena_input_path(),
+        'job/basename=' + basename,
+        'time/integrator=rk1',
+        'particles/pic_physical_mode=extended_mhd_pic',
+        'particles/deposit_order=1',
+        'problem/ps_p0=0.10',
+        'problem/ps_eta=0.30',
+        'problem/ps_enable_gas_subtraction=true',
+        'problem/ps_throttle_injection_at_floor=true',
+    ]
+    logger.info('Executing conservative floor throttle: %s', ' '.join(command))
+    proc = subprocess.run(command, cwd=_athena_exe_dir(),
+                          capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
+    throttle_match = re.search(
+        r'injection_throttle_diag: .*requested_particles=(\d+) '
+        r'realized_particles=(\d+)', output)
+    injected = np.nan
+    if proc.returncode == 0:
+        restart = _latest_file('rst', basename + '.*.rst')
+        injected = _restart_parameter(
+            restart, 'problem', 'ps_injected_cr_count_global', float)
+    _FLOOR_THROTTLE.update({
+        'returncode': proc.returncode,
+        'requested': int(throttle_match.group(1)) if throttle_match else -1,
+        'realized': int(throttle_match.group(2)) if throttle_match else -1,
+        'injected': injected,
+    })
+
+
 def _run_expected_integrator_rejection():
     basename = 'pic_parallel_shock_rk_stage_budget_rk4_reject'
     _remove_outputs(basename)
@@ -273,6 +308,7 @@ def run(**kwargs):
         'gas_energy_removed': paper_off['gas_energy'] - paper_on['gas_energy'],
     }
     _run_expected_floor_rejection()
+    _run_floor_throttle()
     _run_expected_integrator_rejection()
     _run_expected_paper_integrator_rejection('rk1')
     _run_expected_paper_integrator_rejection('rk3')
@@ -367,6 +403,12 @@ def analyze():
             ok = np.array_equal(off['injected_ledger'], reference[2]) and ok
     ok = _FLOOR_REJECTION.get('returncode', 0) != 0 and ok
     ok = _FLOOR_REJECTION.get('saw_floor_rejection', False) and ok
+    ok = _FLOOR_THROTTLE.get('returncode', 1) == 0 and ok
+    ok = _FLOOR_THROTTLE.get('requested', -1) > 0 and ok
+    ok = 0 <= _FLOOR_THROTTLE.get('realized', -1) < (
+        _FLOOR_THROTTLE.get('requested', -1)) and ok
+    ok = _FLOOR_THROTTLE.get('injected', np.nan) == (
+        _FLOOR_THROTTLE.get('realized', -1)) and ok
     ok = _INTEGRATOR_REJECTION.get('returncode', 0) != 0 and ok
     ok = _INTEGRATOR_REJECTION.get('saw_integrator_rejection', False) and ok
     for rejection in _PAPER_INTEGRATOR_REJECTIONS.values():

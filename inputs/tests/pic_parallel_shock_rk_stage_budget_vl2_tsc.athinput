@@ -104,6 +104,7 @@ ps_inject_t_stop              = 1.0
 ps_remove_birth_time_before   = -1.0
 ps_enable_injection           = true
 ps_enable_gas_subtraction     = true
+ps_throttle_injection_at_floor = false
 ps_enable_curvature_amr       = false
 ps_test_source_transaction_terms_override = false
 ps_test_source_transaction_terms          = 1.0

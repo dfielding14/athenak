@@ -171,6 +171,7 @@ bool ps_enable_injection = true;
 bool ps_enable_subtraction = true;
 bool ps_enable_curvature_amr = true;
 bool ps_allow_floor_clipped_subtraction = false;
+bool ps_throttle_injection_at_floor = false;
 bool ps_enable_frame_tracking = false;
 bool ps_enable_conservation_ledger = false;
 bool ps_use_2d3v = false;
@@ -199,6 +200,9 @@ Real ps_particle_macro_mass = 1.0;
 bool ps_particle_momentum_state = false;
 Real ps_particle_light_speed = 1.0;
 Real ps_mass_reservoir_global = 0.0;
+int ps_injection_throttle_cycle = std::numeric_limits<int>::min();
+int ps_injection_throttle_requested = 0;
+int ps_injection_throttle_cap = std::numeric_limits<int>::max();
 int ps_injection_transaction_cycle = std::numeric_limits<int>::min();
 std::vector<GasDelta> ps_injection_transaction_gas_deltas;
 int ps_injection_transaction_device_cycle = std::numeric_limits<int>::min();
@@ -2615,48 +2619,38 @@ void ResetParallelShockGasSubtractionDeviceLedger() {
   ps_injection_transaction_device_cycle = std::numeric_limits<int>::min();
 }
 
-void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
-  if (!ps_enable_subtraction) return;
-  if (!(stage_weight > 0.0) || !std::isfinite(stage_weight)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "pic_parallel_shock gas-subtraction stage weight must be finite "
-              << "and positive." << std::endl;
-    restart_utils::AbortOnFatalError();
-  }
-
-  MeshBlockPack *pmbp = pm->pmb_pack;
-  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
-  auto *pmhd = pmbp->pmhd;
+void SyncParallelShockGasSubtractionDeviceLedger(const int cycle) {
   const int nsub = static_cast<int>(ps_injection_transaction_gas_deltas.size());
-  if (ps_injection_transaction_device_cycle != pm->ncycle) {
-    if (ps_injection_transaction_gas_deltas_host.extent_int(0) != nsub) {
-      ps_injection_transaction_gas_deltas_host =
-          HostArray1D<GasDelta>("ps_gas_deltas_host", nsub);
-      ps_injection_transaction_gas_deltas_device =
-          DvceArray1D<GasDelta>("ps_gas_deltas_device", nsub);
-    }
-    for (int n = 0; n < nsub; ++n) {
-      ps_injection_transaction_gas_deltas_host(n) =
-          ps_injection_transaction_gas_deltas[n];
-    }
-    if (nsub > 0) {
-      Kokkos::deep_copy(ps_injection_transaction_gas_deltas_device,
-                        ps_injection_transaction_gas_deltas_host);
-    }
-    ps_injection_transaction_device_cycle = pm->ncycle;
+  if (ps_injection_transaction_device_cycle == cycle) return;
+  if (ps_injection_transaction_gas_deltas_host.extent_int(0) != nsub) {
+    ps_injection_transaction_gas_deltas_host =
+        HostArray1D<GasDelta>("ps_gas_deltas_host", nsub);
+    ps_injection_transaction_gas_deltas_device =
+        DvceArray1D<GasDelta>("ps_gas_deltas_device", nsub);
   }
-  auto d_gas_deltas = ps_injection_transaction_gas_deltas_device;
+  for (int n = 0; n < nsub; ++n) {
+    ps_injection_transaction_gas_deltas_host(n) =
+        ps_injection_transaction_gas_deltas[n];
+  }
+  if (nsub > 0) {
+    Kokkos::deep_copy(ps_injection_transaction_gas_deltas_device,
+                      ps_injection_transaction_gas_deltas_host);
+  }
+  ps_injection_transaction_device_cycle = cycle;
+}
 
+std::array<int, 3> ParallelShockGasSubtractionFloorStatus(
+    Mesh *pm, const Real stage_weight,
+    const Real min_remaining_thermal_fraction) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const int nsub = static_cast<int>(ps_injection_transaction_gas_deltas.size());
+  auto d_gas_deltas = ps_injection_transaction_gas_deltas_device;
   auto &u0 = pmhd->u0;
   auto &b0 = pmhd->b0;
   const Real rho_floor = ps_rho_floor_frac*ps_rho0;
   const Real p_floor = ps_p_floor_frac*ps_p0;
   const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
-  const bool allow_floor_clipped_subtraction = ps_allow_floor_clipped_subtraction;
-  int local_density_floor_clips = 0;
-  int local_pressure_floor_clips = 0;
-  int local_nonfinite_cells = 0;
+  std::array<int, 3> local = {};
   Kokkos::parallel_reduce(
     "ps_gas_subtract_validate", Kokkos::RangePolicy<>(DevExeSpace(), 0, nsub),
   KOKKOS_LAMBDA(const int n, int &density_clips, int &pressure_clips,
@@ -2677,7 +2671,8 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
       return;
     }
     if (dm <= 0.0) return;
-    const Real rho = u0(m, IDN, k, j, i) - dm;
+    const Real rho_before = u0(m, IDN, k, j, i);
+    const Real rho = rho_before - dm;
     if (!isfinite(rho)) {
       ++nonfinite_cells;
       return;
@@ -2686,47 +2681,78 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
       ++density_clips;
       return;
     }
-    const Real mx = u0(m, IM1, k, j, i) - dmx;
-    const Real my = u0(m, IM2, k, j, i) - dmy;
-    const Real mz = u0(m, IM3, k, j, i) - dmz;
-    const Real energy = u0(m, IEN, k, j, i) - de;
+    const Real mx_before = u0(m, IM1, k, j, i);
+    const Real my_before = u0(m, IM2, k, j, i);
+    const Real mz_before = u0(m, IM3, k, j, i);
+    const Real energy_before = u0(m, IEN, k, j, i);
+    const Real mx = mx_before - dmx;
+    const Real my = my_before - dmy;
+    const Real mz = mz_before - dmz;
+    const Real energy = energy_before - de;
     const Real bx = 0.5*(b0.x1f(m, k, j, i) + b0.x1f(m, k, j, i + 1));
     const Real by = 0.5*(b0.x2f(m, k, j, i) + b0.x2f(m, k, j + 1, i));
     const Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
+    const Real magnetic = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    const Real kin_before =
+        0.5*(SQR(mx_before) + SQR(my_before) + SQR(mz_before))/rho_before;
+    const Real thermal_before = energy_before - kin_before - magnetic;
     const Real kin = 0.5*(SQR(mx) + SQR(my) + SQR(mz))/rho;
-    const Real efloor = p_floor/gm1 + kin + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    const Real retained_thermal =
+        min_remaining_thermal_fraction*thermal_before;
+    const Real thermal_floor =
+        (retained_thermal > p_floor/gm1) ? retained_thermal : p_floor/gm1;
+    const Real efloor = thermal_floor + kin + magnetic;
     if (!isfinite(mx) || !isfinite(my) || !isfinite(mz) || !isfinite(energy) ||
-        !isfinite(bx) || !isfinite(by) || !isfinite(bz) || !isfinite(efloor)) {
+        !isfinite(bx) || !isfinite(by) || !isfinite(bz) ||
+        !isfinite(thermal_before) || !isfinite(efloor)) {
       ++nonfinite_cells;
       return;
     }
     if (energy < efloor) ++pressure_clips;
-  }, Kokkos::Sum<int>(local_density_floor_clips),
-     Kokkos::Sum<int>(local_pressure_floor_clips),
-     Kokkos::Sum<int>(local_nonfinite_cells));
+  }, Kokkos::Sum<int>(local[0]), Kokkos::Sum<int>(local[1]),
+     Kokkos::Sum<int>(local[2]));
 #if MPI_PARALLEL_ENABLED
-  int global_density_floor_clips = 0;
-  int global_pressure_floor_clips = 0;
-  int global_nonfinite_cells = 0;
-  MPI_Allreduce(&local_density_floor_clips, &global_density_floor_clips, 1,
-                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(&local_pressure_floor_clips, &global_pressure_floor_clips, 1,
-                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(&local_nonfinite_cells, &global_nonfinite_cells, 1,
-                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  std::array<int, 3> global = {};
+  MPI_Allreduce(local.data(), global.data(), 3, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  return global;
 #else
-  int global_density_floor_clips = local_density_floor_clips;
-  int global_pressure_floor_clips = local_pressure_floor_clips;
-  int global_nonfinite_cells = local_nonfinite_cells;
+  return local;
 #endif
-  if (global_density_floor_clips > 0 || global_nonfinite_cells > 0 ||
-      (global_pressure_floor_clips > 0 && !ps_allow_floor_clipped_subtraction)) {
+}
+
+void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
+  if (!ps_enable_subtraction) return;
+  if (!(stage_weight > 0.0) || !std::isfinite(stage_weight)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock gas-subtraction stage weight must be finite "
+              << "and positive." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
+  auto *pmhd = pmbp->pmhd;
+  const int nsub = static_cast<int>(ps_injection_transaction_gas_deltas.size());
+  SyncParallelShockGasSubtractionDeviceLedger(pm->ncycle);
+  auto d_gas_deltas = ps_injection_transaction_gas_deltas_device;
+
+  auto &u0 = pmhd->u0;
+  auto &b0 = pmhd->b0;
+  const Real rho_floor = ps_rho_floor_frac*ps_rho0;
+  const Real p_floor = ps_p_floor_frac*ps_p0;
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  const bool allow_floor_clipped_subtraction = ps_allow_floor_clipped_subtraction;
+  const std::array<int, 3> floor_status =
+      ParallelShockGasSubtractionFloorStatus(pm, stage_weight, 0.0);
+  if (floor_status[0] > 0 || floor_status[2] > 0 ||
+      (floor_status[1] > 0 && !ps_allow_floor_clipped_subtraction)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock gas subtraction would violate a fluid floor: "
-              << "density_floor_cells=" << global_density_floor_clips
-              << " pressure_floor_cells=" << global_pressure_floor_clips
-              << " nonfinite_cells=" << global_nonfinite_cells
+              << "density_floor_cells=" << floor_status[0]
+              << " pressure_floor_cells=" << floor_status[1]
+              << " nonfinite_cells=" << floor_status[2]
               << ". The process is stopping before clipping or checkpoint publication."
               << std::endl;
     restart_utils::AbortOnFatalError();
@@ -2813,6 +2839,11 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
 }
 
 void PrepareParallelShockInjectionTransaction(Mesh *pm) {
+  if (ps_injection_throttle_cycle != pm->ncycle) {
+    ps_injection_throttle_cycle = pm->ncycle;
+    ps_injection_throttle_requested = 0;
+    ps_injection_throttle_cap = std::numeric_limits<int>::max();
+  }
   if (ps_injection_transaction_cycle == pm->ncycle)
     return;
   ps_injection_transaction_cycle = pm->ncycle;
@@ -3317,13 +3348,24 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
                   << "pic_parallel_shock injected particle count exceeds int range." << std::endl;
         restart_utils::AbortOnFatalError();
       }
-      ninj_global = static_cast<int>(ninj_real);
-      reservoir_after = mass_budget - static_cast<Real>(ninj_global) * ps_particle_macro_mass;
+      ps_injection_throttle_requested = static_cast<int>(ninj_real);
+      ninj_global = std::min(ps_injection_throttle_requested,
+                             ps_injection_throttle_cap);
+      reservoir_after = mass_budget -
+          static_cast<Real>(ps_injection_throttle_requested)*ps_particle_macro_mass;
     }
   }
   if (ninj_global <= 0) {
     ps_mass_reservoir_global = reservoir_after;
     StoreRuntimeStateForRestart(pm->time);
+    if (global_variable::my_rank == 0 && ps_throttle_injection_at_floor &&
+        ps_injection_throttle_requested > 0 && ps_feedback_diag_dcycle > 0 &&
+        (pm->ncycle % ps_feedback_diag_dcycle) == 0) {
+      std::cout << "pic_parallel_shock injection_throttle_diag: cycle="
+                << pm->ncycle << " requested_particles="
+                << ps_injection_throttle_requested << " realized_particles=0"
+                << std::endl;
+    }
     return;
   }
 
@@ -3759,6 +3801,31 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   if (ps_enable_subtraction) {
     for (const auto &kv : gas_deltas) {
       ps_injection_transaction_gas_deltas.push_back(kv.second);
+    }
+  }
+  if (ps_enable_subtraction && ps_throttle_injection_at_floor) {
+    SyncParallelShockGasSubtractionDeviceLedger(pm->ncycle);
+    const std::array<int, 3> floor_status =
+        ParallelShockGasSubtractionFloorStatus(pm, 1.0, 0.5);
+    if (floor_status[2] == 0 && (floor_status[0] > 0 || floor_status[1] > 0)) {
+      // Keep unit particle weights and retry with half as many particles.  The
+      // unused injection prescription is not queued for an unphysical catch-up
+      // burst; only the usual sub-particle reservoir remainder is retained.
+      ps_injection_throttle_cap = ninj_global/2;
+      ps_injection_transaction_gas_deltas.clear();
+      ResetParallelShockGasSubtractionDeviceLedger();
+      ps_injection_transaction_cycle = std::numeric_limits<int>::min();
+      PrepareParallelShockInjectionTransaction(pm);
+      return;
+    }
+    if (global_variable::my_rank == 0 &&
+        ninj_global < ps_injection_throttle_requested &&
+        ps_feedback_diag_dcycle > 0 &&
+        (pm->ncycle % ps_feedback_diag_dcycle) == 0) {
+      std::cout << "pic_parallel_shock injection_throttle_diag: cycle="
+                << pm->ncycle << " requested_particles="
+                << ps_injection_throttle_requested << " realized_particles="
+                << ninj_global << std::endl;
     }
   }
   if (ps_enable_subtraction) {
@@ -4769,6 +4836,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_enable_curvature_amr", true);
   ps_allow_floor_clipped_subtraction = pin->GetOrAddBoolean(
       "problem", "ps_allow_floor_clipped_subtraction", false);
+  ps_throttle_injection_at_floor = pin->GetOrAddBoolean(
+      "problem", "ps_throttle_injection_at_floor", false);
   ps_enable_conservation_ledger = pin->GetOrAddBoolean(
       "problem", "ps_enable_conservation_ledger", false);
   ps_test_source_transaction_terms_override = pin->GetOrAddBoolean(
@@ -4845,6 +4914,13 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << "pic_parallel_shock floor-clipped subtraction is an exploratory "
               << "non-conservative continuation mode and cannot be combined with "
               << "the exact conservation ledger." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (ps_allow_floor_clipped_subtraction && ps_throttle_injection_at_floor) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock floor clipping and conservative injection "
+              << "throttling are mutually exclusive." << std::endl;
     restart_utils::AbortOnFatalError();
   }
   if (ps_enable_conservation_ledger) {
