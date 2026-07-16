@@ -46,6 +46,10 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--energy-bins", type=int, default=120)
     parser.add_argument("--energy-min", type=float, default=0.3)
     parser.add_argument("--energy-max", type=float, default=1000.0)
+    parser.add_argument(
+        "--birth-cuts", type=float, nargs="*", default=None,
+        help="also plot particles born at or after each supplied time",
+    )
     parser.add_argument("--dpi", type=int, default=350)
     return parser.parse_args()
 
@@ -79,6 +83,7 @@ def _reduce(args: argparse.Namespace) -> dict[str, np.ndarray | float]:
     points = np.asarray(particles.points, dtype=np.float64)
     velocity = np.asarray(particles.vectors["vel"], dtype=np.float64)
     weights = np.asarray(particles.scalars["macro_weight"], dtype=np.float64)
+    birth_time = np.asarray(particles.scalars["birth_time"], dtype=np.float64)
     source = np.asarray(
         particles.scalars.get("cr_source", np.ones(len(points))), dtype=np.float64
     )
@@ -103,15 +108,30 @@ def _reduce(args: argparse.Namespace) -> dict[str, np.ndarray | float]:
         np.log10(args.energy_min), np.log10(args.energy_max),
         args.energy_bins + 1,
     )
-    histogram, _, _ = np.histogram2d(
-        x_relative[selected], np.log10(energy_ratio[selected]),
-        bins=(x_edges, log_energy_edges), weights=weights[selected],
-    )
     dx = np.diff(x_edges)[:, None]
     dlog_energy = np.diff(log_energy_edges)[None, :]
-    distribution = histogram / (dx * dlog_energy)
+    birth_cuts = np.asarray(
+        [np.nan] + ([] if args.birth_cuts is None else args.birth_cuts),
+        dtype=np.float64,
+    )
+    distributions = []
+    selected_weights = []
+    log_energy_ratio = np.log10(energy_ratio)
+    for birth_cut in birth_cuts:
+        cohort = selected if np.isnan(birth_cut) else selected & (birth_time >= birth_cut)
+        histogram, _, _ = np.histogram2d(
+            x_relative[cohort], log_energy_ratio[cohort],
+            bins=(x_edges, log_energy_edges), weights=weights[cohort],
+        )
+        distributions.append(histogram / (dx * dlog_energy))
+        selected_weights.append(float(np.sum(weights[cohort])))
+    distribution = np.stack(distributions)
+    if args.birth_cuts is None:
+        distribution = distribution[0]
     return {
         "distribution": distribution,
+        "birth_cuts": birth_cuts,
+        "selected_weights": np.asarray(selected_weights),
         "x_edges": x_edges,
         "log_energy_edges": log_energy_edges,
         "time": _particle_time(args.particles) * omega0,
@@ -134,32 +154,55 @@ def main() -> int:
     x_edges = np.asarray(reduced["x_edges"], dtype=np.float64)
     energy_edges = np.asarray(reduced["log_energy_edges"], dtype=np.float64)
     time = float(np.asarray(reduced["time"]))
-    positive = distribution[distribution > 0.0]
+    normalization_distribution = (
+        distribution[0] if distribution.ndim == 3 else distribution
+    )
+    positive = normalization_distribution[normalization_distribution > 0.0]
     norm = colors.LogNorm(
         vmin=max(float(np.percentile(positive, 1.0)), np.finfo(float).tiny),
         vmax=float(np.percentile(positive, 99.8)),
     )
 
     _style()
-    figure, axis = plt.subplots(figsize=(10.2, 3.5))
-    image = axis.pcolormesh(
-        x_edges, energy_edges, distribution.T, shading="flat",
-        cmap="turbo", norm=norm, rasterized=True,
-    )
-    axis.axvline(0.0, color="white", lw=1.0, ls="--")
-    axis.set_xlabel(r"$(x_1-x_{\rm sh})\,\omega_{pi}/c$")
-    axis.set_ylabel(r"$\log_{10}(E/E_{\rm sh})$")
-    axis.text(
-        0.02, 0.96, rf"$\Omega_0 t={time:.1f}$", transform=axis.transAxes,
-        ha="left", va="top", fontsize=10,
-        bbox={"facecolor": "white", "alpha": 0.82, "pad": 2.0,
-              "edgecolor": "none"},
-    )
-    axis.text(0.02, 0.05, "downstream", transform=axis.transAxes,
-              ha="left", va="bottom", color="white", fontsize=9)
-    axis.text(0.98, 0.05, "upstream", transform=axis.transAxes,
-              ha="right", va="bottom", color="white", fontsize=9)
-    bar = figure.colorbar(image, ax=axis, pad=0.02)
+    if distribution.ndim == 2:
+        panels = distribution[None, ...]
+        labels = [None]
+        figure, axes = plt.subplots(figsize=(10.2, 3.5), squeeze=False)
+        axes = axes[0]
+    else:
+        panels = distribution
+        birth_cuts = np.asarray(reduced["birth_cuts"], dtype=np.float64)
+        labels = ["all particles"] + [
+            rf"$t_{{\rm birth}}\geq {cut:g}$" for cut in birth_cuts[1:]
+        ]
+        figure, axes = plt.subplots(
+            1, len(panels), figsize=(5.0 * len(panels), 3.5),
+            sharex=True, sharey=True, squeeze=False,
+        )
+        axes = axes[0]
+
+    for index, (axis, panel, label) in enumerate(zip(axes, panels, labels)):
+        image = axis.pcolormesh(
+            x_edges, energy_edges, panel.T, shading="flat",
+            cmap="turbo", norm=norm, rasterized=True,
+        )
+        axis.axvline(0.0, color="white", lw=1.0, ls="--")
+        axis.set_xlabel(r"$(x_1-x_{\rm sh})\,\omega_{pi}/c$")
+        if index == 0:
+            axis.set_ylabel(r"$\log_{10}(E/E_{\rm sh})$")
+            axis.text(
+                0.02, 0.96, rf"$\Omega_0 t={time:.1f}$", transform=axis.transAxes,
+                ha="left", va="top", fontsize=10,
+                bbox={"facecolor": "white", "alpha": 0.82, "pad": 2.0,
+                      "edgecolor": "none"},
+            )
+        if label is not None:
+            axis.set_title(label, fontsize=10)
+        axis.text(0.02, 0.05, "downstream", transform=axis.transAxes,
+                  ha="left", va="bottom", color="white", fontsize=8)
+        axis.text(0.98, 0.05, "upstream", transform=axis.transAxes,
+                  ha="right", va="bottom", color="white", fontsize=8)
+    bar = figure.colorbar(image, ax=list(axes), pad=0.02)
     bar.set_label(r"$E f(E)$")
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
