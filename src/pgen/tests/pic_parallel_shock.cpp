@@ -38,6 +38,7 @@
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
+#include "bvals/bvals.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
@@ -124,6 +125,11 @@ struct GasDelta {
   Real de;
 };
 
+struct MignoneSweptCell {
+  int m, k, j, i;
+  Real mass;
+};
+
 struct RawEscapeEvent {
   int valid;
   int tag;
@@ -157,12 +163,15 @@ bool ps_enable_surface_averaged_subtraction = false;
 Real ps_inject_t_start = 0.0;
 Real ps_inject_t_stop = 1.0e99;
 Real ps_remove_birth_time_before = -1.0;
+Real ps_remove_at_time = -1.0;
 Real ps_seed_noise_amp = 0.0;
 int ps_seed_noise_seed = 1234;
 std::array<Real, 4> ps_seed_noise_phase_by = {0.0, 0.0, 0.0, 0.0};
 std::array<Real, 4> ps_seed_noise_phase_bz = {0.0, 0.0, 0.0, 0.0};
 enum class PSShockSpeedModel { finite_mach, ideal_surface };
 PSShockSpeedModel ps_shock_speed_model = PSShockSpeedModel::finite_mach;
+enum class PSInjectionMode { ideal_surface, mignone_tracer };
+PSInjectionMode ps_injection_mode = PSInjectionMode::ideal_surface;
 Real ps_refine_curv = 1.0;
 Real ps_derefine_curv = 0.1;
 Real ps_rho_floor_frac = 1.0e-6;
@@ -278,6 +287,102 @@ std::uint64_t ps_profile_particle_resize_calls = 0;
 std::uint64_t ps_profile_particle_append_records = 0;
 std::uint64_t ps_profile_particle_resize_old_records = 0;
 std::uint64_t ps_profile_particle_resize_old_bytes = 0;
+DvceArray4D<int> ps_mignone_shock_mask;
+DvceArray5D<Real> ps_mignone_scalar_scratch;
+DvceArray5D<Real> ps_mignone_coarse_scalar_scratch;
+Mesh *ps_mignone_mesh = nullptr;
+int ps_mignone_cycle = std::numeric_limits<int>::min();
+bool ps_mignone_injection_due = false;
+bool ps_mignone_telemetry_printed = false;
+std::vector<MignoneSweptCell> ps_mignone_local_swept_cells;
+Real ps_mignone_tracer_mass_global = 0.0;
+Real ps_mignone_swept_mass_global = 0.0;
+Real ps_mignone_shock_x1_global = 0.0;
+Real ps_mignone_x1_min_global = 0.0;
+Real ps_mignone_x1_max_global = 0.0;
+Real ps_mignone_downstream_fraction = 0.0;
+Real ps_mignone_accumulation_start_time = 0.0;
+Real ps_mignone_last_injection_time = -1.0;
+Real ps_mignone_last_accumulation_dt = 0.0;
+Real ps_mignone_last_swept_mass = 0.0;
+int ps_mignone_injection_events = 0;
+
+// The Mignone reset/reseed happens in user_work_before_loop, after the normal
+// end-of-stage halo fill. Exchange only this scalar before stage-1 fluxes so
+// reconstruction never sees stale tracer ghosts at block or periodic faces.
+TaskStatus MignoneTracerInitRecv(Driver *pdrive, int stage) {
+  (void)pdrive;
+  (void)stage;
+  auto *pmhd = ps_mignone_mesh->pmb_pack->pmhd;
+  auto u0 = pmhd->u0;
+  auto scalar = ps_mignone_scalar_scratch;
+  const int nmb = ps_mignone_mesh->pmb_pack->nmb_thispack;
+  const int n3 = u0.extent_int(2);
+  const int n2 = u0.extent_int(3);
+  const int n1 = u0.extent_int(4);
+  const int iscalar = pmhd->nmhd;
+  par_for("ps_mignone_copy_scalar", DevExeSpace(), 0, nmb - 1,
+          0, n3 - 1, 0, n2 - 1, 0, n1 - 1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    scalar(m, 0, k, j, i) = u0(m, iscalar, k, j, i);
+  });
+  return pmhd->pbval_u->InitRecv(1);
+}
+
+TaskStatus MignoneTracerSend(Driver *pdrive, int stage) {
+  (void)pdrive;
+  (void)stage;
+  auto *pmhd = ps_mignone_mesh->pmb_pack->pmhd;
+  return pmhd->pbval_u->PackAndSendCC(ps_mignone_scalar_scratch,
+                                     ps_mignone_coarse_scalar_scratch);
+}
+
+TaskStatus MignoneTracerClearRecv(Driver *pdrive, int stage) {
+  (void)pdrive;
+  (void)stage;
+  return ps_mignone_mesh->pmb_pack->pmhd->pbval_u->ClearRecv();
+}
+
+TaskStatus MignoneTracerRecv(Driver *pdrive, int stage) {
+  (void)pdrive;
+  (void)stage;
+  auto *pmhd = ps_mignone_mesh->pmb_pack->pmhd;
+  return pmhd->pbval_u->RecvAndUnpackCC(ps_mignone_scalar_scratch,
+                                       ps_mignone_coarse_scalar_scratch);
+}
+
+TaskStatus MignoneTracerClearSend(Driver *pdrive, int stage) {
+  (void)pdrive;
+  (void)stage;
+  return ps_mignone_mesh->pmb_pack->pmhd->pbval_u->ClearSend();
+}
+
+TaskStatus MignoneTracerFinishGhostSync(Driver *pdrive, int stage) {
+  (void)pdrive;
+  (void)stage;
+  Mesh *pm = ps_mignone_mesh;
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto u0 = pmhd->u0;
+  auto w0 = pmhd->w0;
+  auto scalar = ps_mignone_scalar_scratch;
+  const int nmb = pm->pmb_pack->nmb_thispack;
+  const int n3 = u0.extent_int(2);
+  const int n2 = u0.extent_int(3);
+  const int n1 = u0.extent_int(4);
+  const int iscalar = pmhd->nmhd;
+  par_for("ps_mignone_restore_scalar", DevExeSpace(), 0, nmb - 1,
+          0, n3 - 1, 0, n2 - 1, 0, n1 - 1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    u0(m, iscalar, k, j, i) = scalar(m, 0, k, j, i);
+  });
+  pmhd->pbval_u->HydroBCs(pm->pmb_pack, pmhd->pbval_u->u_in, u0);
+  par_for("ps_mignone_refresh_primitive_scalar", DevExeSpace(), 0, nmb - 1,
+          0, n3 - 1, 0, n2 - 1, 0, n1 - 1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    w0(m, iscalar, k, j, i) = u0(m, iscalar, k, j, i)/u0(m, IDN, k, j, i);
+  });
+  return TaskStatus::complete;
+}
 
 bool ParallelShockMeshStateIsFixedUniform(const Mesh *pmesh,
                                           const bool require_unit_costs) {
@@ -370,11 +475,16 @@ void HashParallelShockRestartControl(std::uint64_t &hash, const char *name,
   HashParallelShockRestartBytes(hash, &value, sizeof(value));
 }
 
-std::string ParallelShockRestartControlFingerprint() {
+std::string ParallelShockRestartControlFingerprint(const bool legacy_v2 = false) {
   constexpr std::uint64_t fnv_offset_basis = 14695981039346656037ULL;
   std::uint64_t hash = fnv_offset_basis;
-  constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v2";
-  HashParallelShockRestartBytes(hash, schema, sizeof(schema));
+  if (legacy_v2) {
+    constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v2";
+    HashParallelShockRestartBytes(hash, schema, sizeof(schema));
+  } else {
+    constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v3";
+    HashParallelShockRestartBytes(hash, schema, sizeof(schema));
+  }
 
   // Diagnostics cadence and initial-only seed noise do not alter continuation.
   HashParallelShockRestartControl(hash, "ps_rho0", ps_rho0);
@@ -394,6 +504,11 @@ std::string ParallelShockRestartControlFingerprint() {
   HashParallelShockRestartControl(hash, "ps_inject_t_stop", ps_inject_t_stop);
   HashParallelShockRestartControl(hash, "ps_remove_birth_time_before",
                                   ps_remove_birth_time_before);
+  if (!legacy_v2) {
+    HashParallelShockRestartControl(hash, "ps_remove_at_time", ps_remove_at_time);
+    HashParallelShockRestartControl(hash, "ps_injection_mode",
+                                    static_cast<int>(ps_injection_mode));
+  }
   HashParallelShockRestartControl(hash, "ps_shock_speed_model",
                                   static_cast<int>(ps_shock_speed_model));
   HashParallelShockRestartControl(hash, "ps_refine_curv", ps_refine_curv);
@@ -476,7 +591,14 @@ void ValidateAndStoreParallelShockRestartControls(ParameterInput *pin,
       restart_utils::AbortOnFatalError();
     }
     const std::string checkpointed = pin->GetString(block, parameter);
-    if (checkpointed != current) {
+    // V2 had only ideal-surface injection and used the birth cutoff itself as
+    // the removal trigger. Accept that exact legacy behavior, then store V3.
+    const bool legacy_equivalent =
+        ps_injection_mode == PSInjectionMode::ideal_surface &&
+        ps_remove_at_time == ps_remove_birth_time_before;
+    const bool matches_legacy_v2 = legacy_equivalent &&
+        checkpointed == ParallelShockRestartControlFingerprint(true);
+    if (checkpointed != current && !matches_legacy_v2) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock restart continuation-control fingerprint "
@@ -490,6 +612,10 @@ void ValidateAndStoreParallelShockRestartControls(ParameterInput *pin,
 
 inline bool FrameModeVelocity() {
   return ps_frame_mode == PSFrameMode::velocity;
+}
+
+inline bool InjectionModeMignoneTracer() {
+  return ps_injection_mode == PSInjectionMode::mignone_tracer;
 }
 
 inline bool FrameModeRecenter() {
@@ -1116,7 +1242,7 @@ bool ParallelShockAggregateKineticEnergyIsAdmissible(
 void RejectDuplicateParallelShockRestartLedgers(ParameterInput *pin,
                                                 const bool restart) {
   if (!restart || pin == nullptr) return;
-  constexpr std::array<const char *, 19> cr_ledger_fields = {
+  constexpr std::array<const char *, 24> cr_ledger_fields = {
     "ps_cr_ledger_schema", "ps_cr_ledger_complete", "ps_mass_reservoir_global",
     "ps_injected_cr_count_global", "ps_injected_cr_mass_global",
     "ps_injected_cr_momentum_x1_global", "ps_injected_cr_momentum_x2_global",
@@ -1125,7 +1251,9 @@ void RejectDuplicateParallelShockRestartLedgers(ParameterInput *pin,
     "ps_removed_cr_mass_global", "ps_removed_cr_momentum_x1_global",
     "ps_removed_cr_momentum_x2_global", "ps_removed_cr_momentum_x3_global",
     "ps_removed_cr_energy_global", "ps_tag_seeded", "ps_injection_tag_floor",
-    "ps_next_tag"
+    "ps_next_tag", "ps_mignone_accumulation_start_time",
+    "ps_mignone_last_injection_time", "ps_mignone_last_accumulation_dt",
+    "ps_mignone_last_swept_mass", "ps_mignone_injection_events"
   };
   constexpr std::array<const char *, 17> escape_ledger_fields = {
     "ps_escape_ledger_schema", "ps_escape_ledger_complete",
@@ -1366,7 +1494,7 @@ void ValidateParallelShockRuntimeLedger(const char *context, const Real current_
   const bool invalid_sink_completion =
       ps_removed_excluded_early_cohort &&
       (ps_remove_birth_time_before < 0.0 ||
-       current_time < ps_remove_birth_time_before);
+       ps_remove_at_time < 0.0 || current_time < ps_remove_at_time);
   const Real expected_injected_mass =
       ps_injected_cr_count_global*ps_particle_macro_mass;
   const Real expected_removed_mass =
@@ -1476,6 +1604,22 @@ void ValidateParallelShockRuntimeLedger(const char *context, const Real current_
               ps_escaped_injected_cr_momentum_x3_global,
               ps_escaped_injected_cr_abs_momentum_x3_global,
               ps_escaped_injected_cr_term_count_global);
+  const bool invalid_mignone_state = InjectionModeMignoneTracer() &&
+      (!std::isfinite(ps_mignone_accumulation_start_time) ||
+       !std::isfinite(ps_mignone_last_injection_time) ||
+       !std::isfinite(ps_mignone_last_accumulation_dt) ||
+       !std::isfinite(ps_mignone_last_swept_mass) ||
+       ps_mignone_injection_events < 0 ||
+       ps_mignone_accumulation_start_time < ps_inject_t_start ||
+       ps_mignone_last_accumulation_dt < 0.0 ||
+       ps_mignone_last_swept_mass < 0.0 ||
+       (ps_mignone_injection_events == 0 &&
+        (ps_mignone_last_injection_time != -1.0 ||
+         ps_mignone_last_accumulation_dt != 0.0 ||
+         ps_mignone_last_swept_mass != 0.0)) ||
+       (ps_mignone_injection_events > 0 &&
+        (ps_mignone_last_injection_time < ps_inject_t_start ||
+         ps_mignone_last_injection_time > current_time)));
   if (!std::isfinite(ps_particle_macro_mass) || ps_particle_macro_mass <= 0.0 ||
       !std::isfinite(ps_mass_reservoir_global) ||
       ps_mass_reservoir_global < 0.0 ||
@@ -1504,7 +1648,7 @@ void ValidateParallelShockRuntimeLedger(const char *context, const Real current_
       invalid_escape_before_audit || invalid_escape_audit_time ||
       invalid_empty_injected_ledger || invalid_empty_removed_ledger ||
       invalid_empty_escape_ledger || invalid_escape_comparison_metadata ||
-      invalid_tag_window ||
+      invalid_tag_window || invalid_mignone_state ||
       !std::isfinite(expected_injected_mass) ||
       !std::isfinite(expected_removed_mass) ||
       !std::isfinite(expected_escaped_mass) ||
@@ -1619,6 +1763,16 @@ void StoreRuntimeStateForRestart(const Real current_time) {
                      static_cast<int>(ps_injection_tag_floor));
   ps_pin->SetInteger("problem", "ps_next_tag",
                      static_cast<int>(ps_next_tag));
+  ps_pin->SetReal("problem", "ps_mignone_accumulation_start_time",
+                  ps_mignone_accumulation_start_time);
+  ps_pin->SetReal("problem", "ps_mignone_last_injection_time",
+                  ps_mignone_last_injection_time);
+  ps_pin->SetReal("problem", "ps_mignone_last_accumulation_dt",
+                  ps_mignone_last_accumulation_dt);
+  ps_pin->SetReal("problem", "ps_mignone_last_swept_mass",
+                  ps_mignone_last_swept_mass);
+  ps_pin->SetInteger("problem", "ps_mignone_injection_events",
+                     ps_mignone_injection_events);
   if (ps_enable_conservation_ledger) {
     ValidateParallelShockConservationLedger("runtime");
     ps_pin->SetInteger("problem", "ps_conservation_ledger_schema", 1);
@@ -2163,6 +2317,9 @@ void UpdateOuterInflowState(Mesh *pm, const Real frame_vx) {
   u_in.h_view(IM2, BoundaryFace::outer_x1) = 0.0;
   u_in.h_view(IM3, BoundaryFace::outer_x1) = 0.0;
   u_in.h_view(IEN, BoundaryFace::outer_x1) = ein;
+  if (InjectionModeMignoneTracer()) {
+    u_in.h_view(pmbp->pmhd->nmhd, BoundaryFace::outer_x1) = 0.0;
+  }
   b_in.h_view(IBX, BoundaryFace::outer_x1) = ps_b0;
   b_in.h_view(IBY, BoundaryFace::outer_x1) = 0.0;
   b_in.h_view(IBZ, BoundaryFace::outer_x1) = 0.0;
@@ -2211,7 +2368,7 @@ void ApplyRecenteringShiftToParticles(Mesh *pm, const Real xshift) {
 
 void RemoveExcludedEarlyInjectedParticles(Mesh *pm) {
   if (ps_removed_excluded_early_cohort || ps_remove_birth_time_before < 0.0 ||
-      pm->time < ps_remove_birth_time_before) {
+      ps_remove_at_time < 0.0 || pm->time < ps_remove_at_time) {
     return;
   }
   MeshBlockPack *pmbp = pm->pmb_pack;
@@ -2838,6 +2995,268 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   }
 }
 
+void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
+  if (!InjectionModeMignoneTracer() || ps_mignone_cycle == pm->ncycle) return;
+  ps_mignone_cycle = pm->ncycle;
+  ps_mignone_injection_due = false;
+  ps_mignone_telemetry_printed = false;
+  ps_mignone_local_swept_cells.clear();
+  ps_mignone_tracer_mass_global = 0.0;
+  ps_mignone_swept_mass_global = 0.0;
+  ps_mignone_shock_x1_global = 0.0;
+  ps_mignone_x1_min_global = 0.0;
+  ps_mignone_x1_max_global = 0.0;
+  ps_mignone_downstream_fraction = 0.0;
+
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  auto *pmhd = (pmbp != nullptr) ? pmbp->pmhd : nullptr;
+  if (pmhd == nullptr) return;
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int js = indcs.js;
+  const int ks = indcs.ks;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int nmb = pmbp->nmb_thispack;
+  const int ncells = nmb*nx3*nx2*nx1;
+  const int scalar = pmhd->nmhd;
+  auto &u0 = pmhd->u0;
+  auto &w0 = pmhd->w0;
+  auto &size = pmbp->pmb->mb_size;
+  if (ps_mignone_shock_mask.extent_int(0) != nmb ||
+      ps_mignone_shock_mask.extent_int(1) != nx3 ||
+      ps_mignone_shock_mask.extent_int(2) != nx2 ||
+      ps_mignone_shock_mask.extent_int(3) != nx1) {
+    ps_mignone_shock_mask = DvceArray4D<int>(
+        "ps_mignone_shock_mask", nmb, nx3, nx2, nx1);
+  }
+  auto shock_mask = ps_mignone_shock_mask;
+  constexpr Real curvature_threshold = 0.2;
+  constexpr Real pressure_min_threshold = 15.0;
+  constexpr Real pressure_max_threshold = 250.0;
+  constexpr Real tiny = 1.0e-30;
+  par_for("ps_mignone_shock_detector", DevExeSpace(), 0, ncells - 1,
+  KOKKOS_LAMBDA(const int idx) {
+    const int i0 = idx % nx1;
+    const int j0 = (idx/nx1) % nx2;
+    const int k0 = (idx/(nx1*nx2)) % nx3;
+    const int m = idx/(nx1*nx2*nx3);
+    const int i = is + i0;
+    const int j = js + j0;
+    const int k = ks + k0;
+    const Real compression =
+        w0(m, IVX, k, j, i + 1) - w0(m, IVX, k, j, i - 1) +
+        w0(m, IVY, k, j + 1, i) - w0(m, IVY, k, j - 1, i);
+    const Real p = w0(m, IEN, k, j, i);
+    const Real pxm = w0(m, IEN, k, j, i - 1);
+    const Real pxp = w0(m, IEN, k, j, i + 1);
+    const Real pym = w0(m, IEN, k, j - 1, i);
+    const Real pyp = w0(m, IEN, k, j + 1, i);
+    // Mignone et al. (2018), Eq. 74: sum the separately normalized
+    // x- and y-direction pressure curvatures.
+    const Real normalized_curvature =
+        fabs(pxp - 2.0*p + pxm)/fmax(pxp + 2.0*p + pxm, tiny) +
+        fabs(pyp - 2.0*p + pym)/fmax(pyp + 2.0*p + pym, tiny);
+    Real pmin = pxm;
+    Real pmax = pxm;
+    for (int dj = -1; dj <= 1; ++dj) {
+      for (int di = -1; di <= 1; ++di) {
+        if (di == 0 && dj == 0) continue;
+        const Real pn = w0(m, IEN, k, j + dj, i + di);
+        pmin = fmin(pmin, pn);
+        pmax = fmax(pmax, pn);
+      }
+    }
+    shock_mask(m, k0, j0, i0) =
+        (compression < 0.0 &&
+         normalized_curvature > curvature_threshold &&
+         pmin < pressure_min_threshold && pmax > pressure_max_threshold) ? 1 : 0;
+  });
+
+  array_sum::GlobalSum local;
+  Kokkos::parallel_reduce(
+      "ps_mignone_tracer_totals", Kokkos::RangePolicy<>(DevExeSpace(), 0, ncells),
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &sum) {
+    const int i0 = idx % nx1;
+    const int j0 = (idx/nx1) % nx2;
+    const int k0 = (idx/(nx1*nx2)) % nx3;
+    const int m = idx/(nx1*nx2*nx3);
+    const int i = is + i0;
+    const int j = js + j0;
+    const int k = ks + k0;
+    const Real tracer_density = fmax(u0(m, scalar, k, j, i), 0.0);
+    const Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    const Real tracer_mass = tracer_density*vol;
+    sum.the_array[0] += tracer_mass;
+    if (shock_mask(m, k0, j0, i0) == 0) {
+      sum.the_array[1] += tracer_mass;
+      if (tracer_mass > 0.0) sum.the_array[2] += 1.0;
+    } else {
+      const Real x1 = size.d_view(m).x1min +
+          (static_cast<Real>(i0) + 0.5)*size.d_view(m).dx1;
+      sum.the_array[3] += 1.0;
+      sum.the_array[4] += x1;
+    }
+  }, Kokkos::Sum<array_sum::GlobalSum>(local));
+
+  std::array<Real, 5> global = {
+    local.the_array[0], local.the_array[1], local.the_array[2],
+    local.the_array[3], local.the_array[4]
+  };
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, global.data(), static_cast<int>(global.size()),
+                MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+#endif
+  if (!std::isfinite(global[0]) || !std::isfinite(global[1]) ||
+      global[0] < 0.0 || global[1] < 0.0 || global[1] > global[0] ||
+      global[2] < 0.0 || global[3] < 0.0 || !std::isfinite(global[4])) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock Mignone tracer/shock totals are invalid."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  ps_mignone_tracer_mass_global = global[0];
+  ps_mignone_swept_mass_global = global[1];
+  ps_mignone_shock_x1_global = (global[3] > 0.0) ?
+      global[4]/global[3] : ShockSurfaceModelX1(pm->time);
+  ps_mignone_injection_due =
+      global[3] > 0.0 && global[0] > 0.0 && global[1] > 0.8*global[0];
+
+  if (ps_mignone_injection_due) {
+    const int local_count = static_cast<int>(local.the_array[2]);
+    DvceArray1D<MignoneSweptCell> device_cells(
+        "ps_mignone_swept_cells", local_count);
+    Kokkos::View<int, DevMemSpace> counter("ps_mignone_swept_cell_counter");
+    Kokkos::deep_copy(counter, 0);
+    par_for("ps_mignone_compact_swept_cells", DevExeSpace(), 0, ncells - 1,
+    KOKKOS_LAMBDA(const int idx) {
+      const int i0 = idx % nx1;
+      const int j0 = (idx/nx1) % nx2;
+      const int k0 = (idx/(nx1*nx2)) % nx3;
+      const int m = idx/(nx1*nx2*nx3);
+      if (shock_mask(m, k0, j0, i0) != 0) return;
+      const int i = is + i0;
+      const int j = js + j0;
+      const int k = ks + k0;
+      const Real tracer_density = fmax(u0(m, scalar, k, j, i), 0.0);
+      if (tracer_density <= 0.0) return;
+      const int n = Kokkos::atomic_fetch_add(&counter(), 1);
+      MignoneSweptCell cell{};
+      cell.m = m;
+      cell.k = k;
+      cell.j = j;
+      cell.i = i;
+      cell.mass = tracer_density*size.d_view(m).dx1*
+          size.d_view(m).dx2*size.d_view(m).dx3;
+      device_cells(n) = cell;
+    });
+    int packed_count = 0;
+    Kokkos::deep_copy(packed_count, counter);
+    if (packed_count != local_count) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock Mignone swept-cell compaction changed count."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+    auto host_cells = Kokkos::create_mirror_view_and_copy(
+        HostMemSpace(), device_cells);
+    ps_mignone_local_swept_cells.reserve(static_cast<std::size_t>(local_count));
+    for (int n = 0; n < local_count; ++n) {
+      ps_mignone_local_swept_cells.push_back(host_cells(n));
+    }
+  }
+
+  // Reset after an injection, otherwise retain the accumulated scalar. In both
+  // cases the current shock cells seed T=1 for the upcoming MHD step.
+  const bool reset = ps_mignone_injection_due;
+  if (reset) {
+    const int n1 = u0.extent_int(4);
+    const int n2 = u0.extent_int(3);
+    const int n3 = u0.extent_int(2);
+    par_for("ps_mignone_clear_tracer", DevExeSpace(), 0, nmb - 1,
+            0, n3 - 1, 0, n2 - 1, 0, n1 - 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      u0(m, scalar, k, j, i) = 0.0;
+      w0(m, scalar, k, j, i) = 0.0;
+    });
+  }
+  par_for("ps_mignone_update_tracer", DevExeSpace(), 0, ncells - 1,
+  KOKKOS_LAMBDA(const int idx) {
+    const int i0 = idx % nx1;
+    const int j0 = (idx/nx1) % nx2;
+    const int k0 = (idx/(nx1*nx2)) % nx3;
+    const int m = idx/(nx1*nx2*nx3);
+    const int i = is + i0;
+    const int j = js + j0;
+    const int k = ks + k0;
+    const Real rho = u0(m, IDN, k, j, i);
+    Real tracer_density = reset ? 0.0 : fmax(u0(m, scalar, k, j, i), 0.0);
+    if (shock_mask(m, k0, j0, i0) != 0) tracer_density = rho;
+    u0(m, scalar, k, j, i) = tracer_density;
+    w0(m, scalar, k, j, i) = tracer_density/rho;
+  });
+
+  if (ps_mignone_injection_due) {
+    Real x1_min_local = std::numeric_limits<Real>::max();
+    Real x1_max_local = -std::numeric_limits<Real>::max();
+    Real downstream_mass_local = 0.0;
+    size.template sync<HostMemSpace>();
+    for (const MignoneSweptCell &cell : ps_mignone_local_swept_cells) {
+      const auto &mb = size.h_view(cell.m);
+      const Real x1 = mb.x1min +
+          (static_cast<Real>(cell.i - is) + 0.5)*mb.dx1;
+      x1_min_local = std::min(x1_min_local, x1 - 0.5*mb.dx1);
+      x1_max_local = std::max(x1_max_local, x1 + 0.5*mb.dx1);
+      if (x1 < ps_mignone_shock_x1_global) downstream_mass_local += cell.mass;
+    }
+    Real x1_min_global = x1_min_local;
+    Real x1_max_global = x1_max_local;
+    Real downstream_mass_global = downstream_mass_local;
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(&x1_min_local, &x1_min_global, 1, MPI_ATHENA_REAL, MPI_MIN,
+                  MPI_COMM_WORLD);
+    MPI_Allreduce(&x1_max_local, &x1_max_global, 1, MPI_ATHENA_REAL, MPI_MAX,
+                  MPI_COMM_WORLD);
+    MPI_Allreduce(&downstream_mass_local, &downstream_mass_global, 1,
+                  MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+#endif
+    ps_mignone_x1_min_global = x1_min_global;
+    ps_mignone_x1_max_global = x1_max_global;
+    ps_mignone_downstream_fraction =
+        downstream_mass_global/ps_mignone_swept_mass_global;
+    ps_mignone_last_injection_time = pm->time;
+    ps_mignone_last_accumulation_dt =
+        pm->time - ps_mignone_accumulation_start_time;
+    ps_mignone_accumulation_start_time = pm->time;
+    ps_mignone_last_swept_mass = ps_mignone_swept_mass_global;
+    ++ps_mignone_injection_events;
+  }
+}
+
+void PrintMignoneInjectionTelemetry(Mesh *pm, const int injected_count) {
+  if (!InjectionModeMignoneTracer() || !ps_mignone_injection_due ||
+      ps_mignone_telemetry_printed) {
+    return;
+  }
+  ps_mignone_telemetry_printed = true;
+  if (global_variable::my_rank != 0) return;
+  std::cout << std::setprecision(17)
+            << "pic_parallel_shock mignone_injection_diag: event="
+            << ps_mignone_injection_events << " cycle=" << pm->ncycle
+            << " time=" << pm->time
+            << " accumulation_dt=" << ps_mignone_last_accumulation_dt
+            << " tracer_mass=" << ps_mignone_tracer_mass_global
+            << " swept_mass=" << ps_mignone_swept_mass_global
+            << " shock_x=" << ps_mignone_shock_x1_global
+            << " injected_x_min=" << ps_mignone_x1_min_global
+            << " injected_x_max=" << ps_mignone_x1_max_global
+            << " downstream_fraction=" << ps_mignone_downstream_fraction
+            << " injected_count=" << injected_count << std::endl;
+}
+
 void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   if (ps_injection_throttle_cycle != pm->ncycle) {
     ps_injection_throttle_cycle = pm->ncycle;
@@ -2867,6 +3286,10 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
               << "pic_parallel_shock injection timestep must be finite and positive." << std::endl;
     restart_utils::AbortOnFatalError();
   }
+  if (InjectionModeMignoneTracer()) {
+    PrepareMignoneTracerInjectionCycle(pm);
+    if (!ps_mignone_injection_due) return;
+  }
   // Particle creation and reservoir consumption are irreversible.  Commit them
   // once per physical cycle, then replay only the matching RK-weighted fluid
   // subtraction on later stages.
@@ -2887,6 +3310,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
 
   const Real xshock = ShockSurfaceModelX1(pm->time);
   const bool uniform_surface_fast_path =
+      !InjectionModeMignoneTracer() &&
       ps_enable_subtraction && ps_enable_surface_averaged_subtraction &&
       ParallelShockMeshStateIsFixedUniform(pm, false);
   std::int64_t surface_global_i = -1;
@@ -2902,6 +3326,39 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   cells.reserve(static_cast<std::size_t>(pmbp->nmb_thispack) * indcs.nx2 * indcs.nx3);
 
   Real area_total = 0.0;
+  if (InjectionModeMignoneTracer()) {
+    cells.reserve(ps_mignone_local_swept_cells.size());
+    for (const MignoneSweptCell &swept : ps_mignone_local_swept_cells) {
+      const int m = swept.m;
+      const int gid = mb_gid.h_view(m);
+      const LogicalLocation &location = pm->lloc_eachmb[gid];
+      ShockCell cell{};
+      cell.m = m;
+      cell.k = swept.k;
+      cell.j = swept.j;
+      cell.i = swept.i;
+      cell.gid = gid;
+      cell.level = location.level;
+      cell.global_i = static_cast<std::int64_t>(location.lx1)*indcs.nx1 +
+          (swept.i - is);
+      cell.global_j = static_cast<std::int64_t>(location.lx2)*indcs.nx2 +
+          (swept.j - js);
+      cell.global_k = static_cast<std::int64_t>(location.lx3)*indcs.nx3 +
+          (swept.k - ks);
+      cell.dx1 = mb_size.h_view(m).dx1;
+      cell.dx2 = mb_size.h_view(m).dx2;
+      cell.dx3 = mb_size.h_view(m).dx3;
+      cell.x1c = mb_size.h_view(m).x1min +
+          (static_cast<Real>(swept.i - is) + 0.5)*cell.dx1;
+      cell.x2c = mb_size.h_view(m).x2min +
+          (static_cast<Real>(swept.j - js) + 0.5)*cell.dx2;
+      cell.x3c = 0.0;
+      cell.area = swept.mass;
+      cell.vol = cell.dx1*cell.dx2*cell.dx3;
+      area_total += cell.area;
+      cells.push_back(cell);
+    }
+  } else {
   for (int m = 0; m < pmbp->nmb_thispack; ++m) {
     const int gid = mb_gid.h_view(m);
     const LogicalLocation &location = pm->lloc_eachmb[gid];
@@ -2959,6 +3416,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
         }
       }
     }
+  }
   }
 
   Real reduced_area_global = area_total;
@@ -3338,8 +3796,10 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   Real reservoir_after = ps_mass_reservoir_global;
   if (global_running_area > 0.0) {
     const Real sweep_speed = ps_u0 + ps_shock_speed;
-    const Real swept_mass = ps_eta * ps_rho0 * sweep_speed * pm->dt * global_running_area;
-    const Real mass_budget = ps_mass_reservoir_global + swept_mass;
+    const Real prescribed_mass = InjectionModeMignoneTracer() ?
+        ps_eta*global_running_area :
+        ps_eta*ps_rho0*sweep_speed*pm->dt*global_running_area;
+    const Real mass_budget = ps_mass_reservoir_global + prescribed_mass;
     if (mass_budget > 0.0) {
       const Real ninj_real = std::floor(mass_budget / ps_particle_macro_mass);
       if (!std::isfinite(ninj_real) ||
@@ -3358,6 +3818,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   if (ninj_global <= 0) {
     ps_mass_reservoir_global = reservoir_after;
     StoreRuntimeStateForRestart(pm->time);
+    PrintMignoneInjectionTelemetry(pm, 0);
     if (global_variable::my_rank == 0 && ps_throttle_injection_at_floor &&
         ps_injection_throttle_requested > 0 && ps_feedback_diag_dcycle > 0 &&
         (pm->ncycle % ps_feedback_diag_dcycle) == 0) {
@@ -3580,7 +4041,12 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
     // reproduces the tag-derived state so a remote sink can consume it.
     for (int n = 0; n < ninj_global; ++n) {
     const std::int64_t tag = tag_base + static_cast<std::int64_t>(n);
-    const Real draw = TaggedUniform01(tag, 0) * global_running_area;
+    // A systematic draw keeps the Mignone per-cell count within one particle
+    // of its swept-mass expectation without introducing a second weight type.
+    const Real draw = InjectionModeMignoneTracer() ?
+        (static_cast<Real>(n) + TaggedUniform01(tag_base, 0))*
+            global_running_area/static_cast<Real>(ninj_global) :
+        TaggedUniform01(tag, 0)*global_running_area;
     auto it = std::lower_bound(global_area_prefix.begin(), global_area_prefix.end(), draw);
     std::size_t idx = static_cast<std::size_t>(std::distance(global_area_prefix.begin(), it));
     if (idx >= global_cells.size())
@@ -3645,7 +4111,9 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       part.j = cell.j;
       part.i = cell.i;
       part.vol = cell.vol;
-      part.x1 = ClampInsideDomain(xshock, x1min, x1max);
+      part.x1 = InjectionModeMignoneTracer() ?
+          cell.x1c + (TaggedUniform01(tag, 5) - 0.5)*cell.dx1 : xshock;
+      part.x1 = ClampInsideDomain(part.x1, x1min, x1max);
       part.x2 = cell.x2c + (TaggedUniform01(tag, 3) - 0.5) * cell.dx2;
       part.x3 = three_d ? (cell.x3c + (TaggedUniform01(tag, 4) - 0.5) * cell.dx3) : 0.0;
       part.x2 = ClampInsideDomain(part.x2, x2min, x2max);
@@ -3705,6 +4173,32 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
       dit->second.de += mass_rho * particle_energy;
     }
   }
+  }
+
+  if (InjectionModeMignoneTracer() && ninj_global > 0) {
+    Real x1_min_local = std::numeric_limits<Real>::max();
+    Real x1_max_local = -std::numeric_limits<Real>::max();
+    Real downstream_count_local = 0.0;
+    for (const InjectedParticle &part : injected) {
+      x1_min_local = std::min(x1_min_local, part.x1);
+      x1_max_local = std::max(x1_max_local, part.x1);
+      if (part.x1 < ps_mignone_shock_x1_global) downstream_count_local += 1.0;
+    }
+    Real x1_min_global = x1_min_local;
+    Real x1_max_global = x1_max_local;
+    Real downstream_count_global = downstream_count_local;
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(&x1_min_local, &x1_min_global, 1, MPI_ATHENA_REAL, MPI_MIN,
+                  MPI_COMM_WORLD);
+    MPI_Allreduce(&x1_max_local, &x1_max_global, 1, MPI_ATHENA_REAL, MPI_MAX,
+                  MPI_COMM_WORLD);
+    MPI_Allreduce(&downstream_count_local, &downstream_count_global, 1,
+                  MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+#endif
+    ps_mignone_x1_min_global = x1_min_global;
+    ps_mignone_x1_max_global = x1_max_global;
+    ps_mignone_downstream_fraction =
+        downstream_count_global/static_cast<Real>(ninj_global);
   }
 
   std::array<Real, 6> injected_reduced = {};
@@ -3847,6 +4341,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   ps_injected_cr_momentum_x3_global += injected_global[4];
   ps_injected_cr_energy_global += injected_global[5];
   StoreRuntimeStateForRestart(pm->time);
+  PrintMignoneInjectionTelemetry(pm, ninj_global);
   if (ninject <= 0) {
     pm->CountParticles();
     return;
@@ -4555,6 +5050,10 @@ void ParallelShockFinalize(ParameterInput *pin, Mesh *pm) {
   FinalizeParallelShockEscapeEventStream();
   OutputParallelShockProfileTelemetry(pm);
   ResetParallelShockGasSubtractionDeviceLedger();
+  ps_mignone_shock_mask = DvceArray4D<int>();
+  ps_mignone_scalar_scratch = DvceArray5D<Real>();
+  ps_mignone_coarse_scalar_scratch = DvceArray5D<Real>();
+  ps_mignone_mesh = nullptr;
   if (global_variable::my_rank == 0) {
     std::cout << "pic_parallel_shock escape_accounting_telemetry:"
               << " population_audit_calls=" << ps_particle_population_audit_calls
@@ -4759,6 +5258,14 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_profile_particle_append_records = 0;
   ps_profile_particle_resize_old_records = 0;
   ps_profile_particle_resize_old_bytes = 0;
+  ps_mignone_shock_mask = DvceArray4D<int>();
+  ps_mignone_scalar_scratch = DvceArray5D<Real>();
+  ps_mignone_coarse_scalar_scratch = DvceArray5D<Real>();
+  ps_mignone_mesh = nullptr;
+  ps_mignone_cycle = std::numeric_limits<int>::min();
+  ps_mignone_injection_due = false;
+  ps_mignone_telemetry_printed = false;
+  ps_mignone_local_swept_cells.clear();
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   if (pmbp->pmhd == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -4821,6 +5328,10 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_inject_t_start = pin->GetOrAddReal("problem", "ps_inject_t_start", 0.0);
   ps_inject_t_stop = pin->GetOrAddReal("problem", "ps_inject_t_stop", 1.0e99);
   ps_remove_birth_time_before = pin->GetOrAddReal("problem", "ps_remove_birth_time_before", -1.0);
+  ps_remove_at_time = pin->GetOrAddReal(
+      "problem", "ps_remove_at_time", ps_remove_birth_time_before);
+  const std::string injection_mode = pin->GetOrAddString(
+      "problem", "ps_injection_mode", "ideal_surface");
   std::string shock_speed_model =
       pin->GetOrAddString("problem", "ps_shock_speed_model", "finite_mach");
   ps_seed_noise_amp = pin->GetOrAddReal("problem", "ps_seed_noise_amp", 0.0);
@@ -4874,6 +5385,17 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_inject_seed = pin->GetOrAddInteger("problem", "ps_inject_seed", 1234);
 
   const std::string integrator = pin->GetString("time", "integrator");
+  if (injection_mode == "ideal_surface") {
+    ps_injection_mode = PSInjectionMode::ideal_surface;
+  } else if (injection_mode == "mignone_tracer") {
+    ps_injection_mode = PSInjectionMode::mignone_tracer;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "ps_injection_mode must be 'ideal_surface' or 'mignone_tracer'."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
   if (ps_enable_injection && integrator != "rk1" && integrator != "rk2"
       && integrator != "rk3") {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -5002,12 +5524,25 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       !std::isfinite(ps_inject_half_width_cells) ||
       !std::isfinite(ps_inject_t_start) || !std::isfinite(ps_inject_t_stop) ||
       ps_inject_t_stop < ps_inject_t_start ||
-      !std::isfinite(ps_remove_birth_time_before)) {
+      !std::isfinite(ps_remove_birth_time_before) ||
+      !std::isfinite(ps_remove_at_time)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock injection controls must be finite, "
               << "ps_vinj_over_u0 must be positive, and the injection interval "
               << "must be ordered." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  const bool removal_disabled = ps_remove_birth_time_before < 0.0 &&
+      ps_remove_at_time < 0.0;
+  const bool removal_ordered = ps_remove_birth_time_before >= 0.0 &&
+      ps_remove_at_time >= ps_remove_birth_time_before;
+  if (!(removal_disabled || removal_ordered)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock early-cohort removal requires both controls "
+              << "to be negative (disabled), or ps_remove_at_time >= "
+              << "ps_remove_birth_time_before >= 0." << std::endl;
     restart_utils::AbortOnFatalError();
   }
   if (!std::isfinite(ps_seed_noise_amp) || ps_seed_noise_amp < 0.0) {
@@ -5028,6 +5563,22 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << "pic_parallel_shock requires ps_subtract_stencil_cells to be "
               << "a positive odd integer." << std::endl;
     restart_utils::AbortOnFatalError();
+  }
+  if (InjectionModeMignoneTracer()) {
+    const bool fixed_uniform_2d = pmy_mesh_->two_d && !pmy_mesh_->three_d &&
+        ParallelShockMeshStateIsFixedUniform(pmy_mesh_, false);
+    if (!fixed_uniform_2d || !pmbp->ppart->pic_enable_2d3v ||
+        pmbp->pmhd->nscalars != 1 || !ps_enable_injection ||
+        !ps_enable_subtraction || ps_enable_surface_averaged_subtraction ||
+        ps_subtract_stencil_cells != 1 || ps_enable_frame_tracking) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ps_injection_mode=mignone_tracer requires a fixed uniform "
+                << "2D3V mesh, exactly one MHD passive scalar, local conservative "
+                << "gas subtraction with a one-cell stencil, and frame tracking "
+                << "disabled." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
   }
   if (shock_speed_model == "finite_mach") {
     ps_shock_speed_model = PSShockSpeedModel::finite_mach;
@@ -5207,6 +5758,37 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       pin->GetOrAddReal("problem", "ps_removed_cr_momentum_x3_global", 0.0) : 0.0;
   ps_removed_cr_energy_global = restart ?
       pin->GetOrAddReal("problem", "ps_removed_cr_energy_global", 0.0) : 0.0;
+  if (restart && InjectionModeMignoneTracer()) {
+    constexpr std::array<const char *, 5> mignone_state_fields = {
+      "ps_mignone_accumulation_start_time",
+      "ps_mignone_last_injection_time",
+      "ps_mignone_last_accumulation_dt",
+      "ps_mignone_last_swept_mass",
+      "ps_mignone_injection_events"
+    };
+    bool complete = true;
+    for (const char *field : mignone_state_fields) {
+      complete = complete && pin->DoesParameterExist("problem", field);
+    }
+    if (!complete) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock Mignone tracer restart state is incomplete."
+                << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+  }
+  ps_mignone_accumulation_start_time = restart ? pin->GetOrAddReal(
+      "problem", "ps_mignone_accumulation_start_time", ps_inject_t_start) :
+      ps_inject_t_start;
+  ps_mignone_last_injection_time = restart ? pin->GetOrAddReal(
+      "problem", "ps_mignone_last_injection_time", -1.0) : -1.0;
+  ps_mignone_last_accumulation_dt = restart ? pin->GetOrAddReal(
+      "problem", "ps_mignone_last_accumulation_dt", 0.0) : 0.0;
+  ps_mignone_last_swept_mass = restart ? pin->GetOrAddReal(
+      "problem", "ps_mignone_last_swept_mass", 0.0) : 0.0;
+  ps_mignone_injection_events = restart ? pin->GetOrAddInteger(
+      "problem", "ps_mignone_injection_events", 0) : 0;
   const bool has_escape_ledger_schema =
       restart && pin->DoesParameterExist("problem", "ps_escape_ledger_schema");
   if (restart) {
@@ -5465,6 +6047,21 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   if (ps_enable_conservation_ledger) {
     user_hist_func = ParallelShockConservationHistory;
   }
+  if (InjectionModeMignoneTracer()) {
+    ps_mignone_mesh = pmy_mesh_;
+    auto &u = pmbp->pmhd->u0;
+    ps_mignone_scalar_scratch = DvceArray5D<Real>(
+        "ps_mignone_scalar_scratch", u.extent_int(0), 1, u.extent_int(2),
+        u.extent_int(3), u.extent_int(4));
+    auto tracer_tasks = pmbp->tl_map["before_timeintegrator"];
+    TaskID dep = pmbp->pmhd->id.savest;
+    dep = tracer_tasks->AddTask(MignoneTracerInitRecv, dep);
+    dep = tracer_tasks->AddTask(MignoneTracerSend, dep);
+    dep = tracer_tasks->AddTask(MignoneTracerClearRecv, dep);
+    dep = tracer_tasks->AddTask(MignoneTracerRecv, dep);
+    dep = tracer_tasks->AddTask(MignoneTracerClearSend, dep);
+    tracer_tasks->AddTask(MignoneTracerFinishGhostSync, dep);
+  }
 
   // The inflow reservoir is not stored in restart files, so rebuild it before
   // Driver::Initialize() fills ghost zones on both new and restarted runs.
@@ -5500,6 +6097,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   const Real upstream_p0 = ps_p0;
   const Real upstream_u0 = ps_u0;
   const Real upstream_b0 = ps_b0;
+  const bool initialize_mignone_tracer = InjectionModeMignoneTracer();
+  const int mignone_scalar = pmbp->pmhd->nmhd;
 
   // Set uniform upstream state (flow toward the reflecting wall).
   par_for("pgen_pic_parallel_shock", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
@@ -5509,6 +6108,9 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     u0(m, IM1, k, j, i) = -upstream_rho0*upstream_u0;
     u0(m, IM2, k, j, i) = 0.0;
     u0(m, IM3, k, j, i) = 0.0;
+    if (initialize_mignone_tracer) {
+      u0(m, mignone_scalar, k, j, i) = 0.0;
+    }
 
     Real dby = 0.0;
     Real dbz = 0.0;
