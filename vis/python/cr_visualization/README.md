@@ -55,7 +55,8 @@ python3 vis/python/cr_visualization/read_meshblock_and_tracks.py \
   --meshblock 0 \
   --max-particles 32 \
   --time-stride 20 \
-  --output "$RUN/Pm1_rank0_mb0_tracks32_stride20.h5"
+  --output "$RUN/Pm1_rank0_mb0_tracks32_stride20.h5" \
+  --xdmf-output "$RUN/Pm1_rank0_mb0_tracks32_stride20.xmf"
 ```
 
 The optional output is a self-contained HDF5 bundle:
@@ -73,6 +74,42 @@ The bundled track array is ordered `[particle, time, field]`. Its `fields`
 attribute names the final dimension. `inside_meshblock` is a Boolean array with
 shape `[particle, time]`. Add `--inside-only` to replace samples outside the
 chosen MeshBlock with `NaN`, which breaks plotted lines at the block boundary.
+
+Open the generated `.xmf` file directly in ParaView or VisIt. Its sibling
+`.xdmf.h5` file is the visualization payload and must remain beside it. The XDMF
+view contains an `MHD` rectilinear-grid collection and a `ParticleTracks`
+polyline collection. MHD fields are cell centered. Particle quantities are
+point data, while `output_tag`, `track_tag`, `species`, and the other particle
+identity columns are line-cell data.
+
+The default `--track-geometry inside` writes only consecutive trajectory
+segments whose saved endpoints are inside the selected MeshBlock. Use
+`--track-geometry complete` to include the complete histories of all selected
+particles. This creates real line connectivity; it does not depend on either
+viewer interpreting `NaN` values as line breaks.
+
+For complete trajectories, periodic axes are inferred from the AthenaK binary
+header. The exporter splits a polyline at each wrapped-domain jump, preventing
+false lines across the full box while keeping every ordinary saved segment in
+the original periodic domain. A sample isolated by two such splits is retained
+as a one-point cell, so decimation never discards a saved particle state.
+
+For convenient vector operations, the export groups component fields without
+storing redundant component copies:
+
+```text
+MHD:       velx,vely,velz -> fluid_velocity
+           bcc1,bcc2,bcc3 -> magnetic_field
+particles: vx,vy,vz       -> particle_velocity
+           bx,by,bz       -> magnetic_field
+           k1,k2,k3       -> curvature
+           db1,db2,db3    -> magnetic_field_gradient
+```
+
+All ungrouped rich-track fields remain scalar point arrays. When their source
+components are present, the exporter also adds `magnetic_field_magnitude`,
+`curvature_magnitude`, and `mu_M = v_perp^2/(2 B)`. Position supplies the
+polyline geometry, and saved `time` and `cycle` are point arrays.
 
 The same operation can be used directly from Python:
 
@@ -172,6 +209,34 @@ location, bounds, time, cycle, and requested fields. `tracks` contains the
 local contiguous particle range, times, cycles, field names, and values. Dave
 and Ken can pass these local objects directly into their distributed
 visualization pipeline.
+
+To produce files that ParaView and VisIt can open directly, use the MPI XDMF
+exporter instead:
+
+```bash
+srun -N 16 -n 128 \
+  python3 vis/python/cr_visualization/export_full_dataset_mpi.py \
+  --mhd-rank0 "$MHD_ROOT/rank_00000000/Pm1_S4_eta3e-6.full_mhd_w_bcc.00024.bin" \
+  --merged-tracks "$RUN/$BASE.tracks.h5" \
+  --output "$RUN/Pm1_full_stride20.xmf" \
+  --quantities velx vely velz bcc1 bcc2 bcc3 \
+  --time-stride 20 \
+  --particle-batch 4
+```
+
+Each MPI process writes one independent `Pm1_full_stride20.rankNNNNN.h5`
+piece. Process zero gathers only small grid metadata and writes the `.xmf`
+collection; field and trajectory arrays are never gathered. Keep all pieces
+beside the `.xmf` file. Both viewers can distribute the collection's spatial
+blocks across their rendering processes.
+
+The exporter writes a new copy of every selected MHD field and track sample.
+At full fidelity that is intentionally expensive: Pm1 contains about 2 TiB of
+MHD data and 7.8 billion trajectory points. First export a narrow quantity set,
+time window, or `--time-stride 10` or `20`; use stride one only when every
+saved track sample is necessary. The resulting XDMF/HDF5 files are derived
+visualization products. The AthenaK binary files and merged track HDF5 remain
+the canonical data.
 
 At full fidelity the Pm1 track array has shape `(38912, 200000, 16)`. Use
 `--time-stride 1` when every saved point is required. For interactive rendering,

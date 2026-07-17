@@ -98,6 +98,15 @@ def _meshblock_from_raw(
         [[data[f"x{i}f"][0], data[f"x{i}f"][-1]] for i in range(1, 4)],
         dtype=dtype,
     )
+    data["DomainBounds"] = np.array(
+        [
+            [filedata["x1min"], filedata["x1max"]],
+            [filedata["x2min"], filedata["x2max"]],
+            [filedata["x3min"], filedata["x3max"]],
+        ],
+        dtype=dtype,
+    )
+    data["PeriodicAxes"] = tuple(filedata.get("periodic_axes", ()))
     data["SourceFile"] = source
     return data
 
@@ -466,8 +475,12 @@ def write_meshblock_bundle(
         mhd.attrs["cycle"] = meshblock["NumCycles"]
         mhd.attrs["meshblock_index"] = meshblock["MeshBlockIndex"]
         mhd.attrs["logical_location"] = meshblock["LogicalLocation"]
+        mhd.attrs["periodic_axes"] = meshblock.get("PeriodicAxes", ())
         mhd.attrs["fields"] = ",".join(meshblock["VariableNames"])
         mhd.create_dataset("bounds", data=meshblock["Bounds"])
+        mhd.create_dataset(
+            "domain_bounds", data=meshblock.get("DomainBounds", meshblock["Bounds"])
+        )
         for name in ("x1f", "x1v", "x2f", "x2v", "x3f", "x3v"):
             mhd.create_dataset(name, data=meshblock[name])
         for name in meshblock["VariableNames"]:

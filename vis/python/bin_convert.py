@@ -189,6 +189,15 @@ def read_binary(filename):
     x2max = float(get_from_header(header, "<mesh>", "x2max"))
     x3min = float(get_from_header(header, "<mesh>", "x3min"))
     x3max = float(get_from_header(header, "<mesh>", "x3max"))
+    periodic_axes = []
+    for axis in range(1, 4):
+        try:
+            inner = get_from_header(header, "<mesh>", f"ix{axis}_bc").strip()
+            outer = get_from_header(header, "<mesh>", f"ox{axis}_bc").strip()
+        except KeyError:
+            continue
+        if inner == "periodic" and outer == "periodic":
+            periodic_axes.append(axis - 1)
 
     # load data from each meshblock
     n_vars = len(var_list)
@@ -244,6 +253,7 @@ def read_binary(filename):
     filedata["x2max"] = x2max
     filedata["x3min"] = x3min
     filedata["x3max"] = x3max
+    filedata["periodic_axes"] = tuple(periodic_axes)
 
     filedata["n_mbs"] = mb_count
     filedata["nx1_mb"] = nx1
@@ -1515,6 +1525,15 @@ def read_single_rank_binary_as_athdf(
         ],
         dtype=dtype,
     )
+    data["DomainBounds"] = np.array(
+        [
+            [filedata["x1min"], filedata["x1max"]],
+            [filedata["x2min"], filedata["x2max"]],
+            [filedata["x3min"], filedata["x3max"]],
+        ],
+        dtype=dtype,
+    )
+    data["PeriodicAxes"] = filedata["periodic_axes"]
 
     return data
 

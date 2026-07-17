@@ -18,6 +18,13 @@ from cr_visualization.cr_data import (  # noqa: E402
     read_merged_track_subset,
     write_meshblock_bundle,
 )
+from cr_visualization.xdmf_export import (  # noqa: E402
+    piece_path,
+    visualization_track_fields,
+    write_visualization_piece,
+    write_xdmf_collection,
+    xmf_path,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,11 +51,32 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="optional combined MeshBlock and trajectory HDF5 file",
     )
+    parser.add_argument(
+        "--xdmf-output",
+        type=Path,
+        help="XMF file to open directly in ParaView or VisIt",
+    )
+    parser.add_argument(
+        "--track-geometry",
+        choices=("inside", "complete"),
+        default="inside",
+        help="export only in-block segments or complete selected trajectories",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    track_fields = args.track_fields
+    if args.xdmf_output is not None:
+        track_fields = visualization_track_fields(track_fields)
+    if (
+        args.xdmf_output is not None
+        and args.inside_only
+        and args.track_geometry == "complete"
+    ):
+        raise SystemExit("--inside-only cannot be combined with complete geometry")
+
     meshblock = read_meshblock(
         args.mhd_bin,
         meshblock_index=args.meshblock,
@@ -70,7 +98,7 @@ def main() -> None:
         time_min=args.time_min,
         time_max=args.time_max,
         time_stride=args.time_stride,
-        fields=args.track_fields,
+        fields=track_fields,
         inside_only=args.inside_only,
     )
 
@@ -92,6 +120,17 @@ def main() -> None:
     if args.output is not None:
         write_meshblock_bundle(args.output, meshblock, tracks)
         print(args.output)
+    if args.xdmf_output is not None:
+        output = xmf_path(args.xdmf_output).resolve()
+        payload = piece_path(output)
+        metadata = write_visualization_piece(
+            payload,
+            [meshblock],
+            tracks,
+            track_geometry=args.track_geometry,
+        )
+        write_xdmf_collection(output, [metadata])
+        print(output)
 
 
 if __name__ == "__main__":

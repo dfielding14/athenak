@@ -9,6 +9,7 @@ from .cr_data import (
     read_rank_meshblocks,
     write_meshblock_bundle,
 )
+from .xdmf_export import write_visualization_piece, write_xdmf_collection
 
 __all__ = [
     "discover_rank_files",
@@ -18,4 +19,6 @@ __all__ = [
     "read_merged_track_subset",
     "read_rank_meshblocks",
     "write_meshblock_bundle",
+    "write_visualization_piece",
+    "write_xdmf_collection",
 ]
