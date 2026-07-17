@@ -130,7 +130,9 @@ def read_binary(filename):
     pheader_count = int(fp.readline().split(b"=")[-1])
     pheader = {}
     for _ in range(pheader_count - 1):
-        key, val = [x.strip() for x in fp.readline().decode("utf-8").split("=")]
+        key, val = [
+            x.strip() for x in fp.readline().decode("utf-8").split("=", 1)
+        ]
         pheader[key] = val
     time = float(pheader["time"])
     cycle = int(pheader["cycle"])
@@ -167,7 +169,7 @@ def read_binary(filename):
             if line.startswith("<"):
                 block = line
                 continue
-            key, value = line.split("=")
+            key, value = line.split("=", 1)
             if block == blockname and key.strip() == keyname:
                 return value
         raise KeyError(f"no parameter called {blockname}/{keyname}")
@@ -299,7 +301,9 @@ def read_coarsened_binary(filename):
     pheader_count = int(fp.readline().split(b"=")[-1])
     pheader = {}
     for _ in range(pheader_count - 1):
-        key, val = [x.strip() for x in fp.readline().decode("utf-8").split("=")]
+        key, val = [
+            x.strip() for x in fp.readline().decode("utf-8").split("=", 1)
+        ]
         pheader[key] = val
     time = float(pheader["time"])
     cycle = int(pheader["cycle"])
@@ -337,7 +341,7 @@ def read_coarsened_binary(filename):
             if line.startswith("<"):
                 block = line
                 continue
-            key, value = line.split("=")
+            key, value = line.split("=", 1)
             if block == blockname and key.strip() == keyname:
                 return value
         raise KeyError(f"no parameter called {blockname}/{keyname}")
@@ -1359,6 +1363,7 @@ def read_single_rank_binary_as_athdf(
     quantities=None,
     dtype=None,
     return_levels=False,
+    meshblock_index=0,
     x1_min=None,
     x1_max=None,
     x2_min=None,
@@ -1371,8 +1376,12 @@ def read_single_rank_binary_as_athdf(
     center_func_3=None,
 ):
     """
-    Reads a single rank binary file and organizes data similar to
-    athdf format without writing to file.
+    Reads one MeshBlock from a single-rank binary file and organizes it
+    similarly to athdf format without writing to a file.
+
+    ``meshblock_index`` selects a MeshBlock by its zero-based position in the
+    rank file. Most uniform-grid production outputs contain one MeshBlock per
+    rank, so the default remains zero.
     """
     # Step 1: Read binary data for a single rank
     filedata = read_binary(filename)
@@ -1387,8 +1396,19 @@ def read_single_rank_binary_as_athdf(
     else:
         new_data = False
 
-    # Extract size information
-    block_size = [filedata["nx1_mb"], filedata["nx2_mb"], filedata["nx3_mb"]]
+    if meshblock_index < 0 or meshblock_index >= filedata["n_mbs"]:
+        raise IndexError(
+            f"meshblock_index {meshblock_index} is outside the file's "
+            f"0:{filedata['n_mbs']} MeshBlock range"
+        )
+
+    # Output slices can be smaller than the configured MeshBlock dimensions.
+    mb_index = filedata["mb_index"][meshblock_index]
+    block_size = [
+        int(mb_index[1] - mb_index[0] + 1),
+        int(mb_index[3] - mb_index[2] + 1),
+        int(mb_index[5] - mb_index[4] + 1),
+    ]
     if dtype is None:
         dtype = np.float32
 
@@ -1421,8 +1441,8 @@ def read_single_rank_binary_as_athdf(
         nx = block_size[d - 1]
 
         # Use the meshblock geometry for local min and max
-        xmin = filedata["mb_geometry"][0, (d - 1) * 2]
-        xmax = filedata["mb_geometry"][0, (d - 1) * 2 + 1]
+        xmin = filedata["mb_geometry"][meshblock_index, (d - 1) * 2]
+        xmax = filedata["mb_geometry"][meshblock_index, (d - 1) * 2 + 1]
 
         data[xf] = np.linspace(xmin, xmax, nx + 1, dtype=dtype)
         data[xv] = np.empty(nx, dtype=dtype)
@@ -1450,6 +1470,14 @@ def read_single_rank_binary_as_athdf(
     if x3_max is not None:
         k_max = min(k_max, np.searchsorted(data["x3f"], x3_max))
 
+    # Keep returned coordinates aligned with a spatially sliced field array.
+    data["x1f"] = data["x1f"][i_min:i_max + 1]
+    data["x1v"] = data["x1v"][i_min:i_max]
+    data["x2f"] = data["x2f"][j_min:j_max + 1]
+    data["x2v"] = data["x2v"][j_min:j_max]
+    data["x3f"] = data["x3f"][k_min:k_max + 1]
+    data["x3v"] = data["x3v"][k_min:k_max]
+
     # Prepare arrays for data
     if new_data:
         for q in quantities:
@@ -1464,18 +1492,29 @@ def read_single_rank_binary_as_athdf(
         for q in quantities:
             data[q].fill(0.0)
 
-    # Process the single block
+    # Process the selected block
     for q in quantities:
-        block_data = filedata["mb_data"][q][0]  # Single rank, so only one block
+        block_data = filedata["mb_data"][q][meshblock_index]
         data[q] = block_data[k_min:k_max, j_min:j_max, i_min:i_max]
 
     if return_levels:
-        data["Levels"].fill(filedata["mb_logical"][0, 3])  # Level of the single block
+        data["Levels"].fill(filedata["mb_logical"][meshblock_index, 3])
 
     # Add metadata
     data["Time"] = filedata["time"]
     data["NumCycles"] = filedata["cycle"]
-    data["MaxLevel"] = filedata["mb_logical"][0, 3]
+    data["MaxLevel"] = int(filedata["mb_logical"][meshblock_index, 3])
+    data["MeshBlockIndex"] = int(meshblock_index)
+    data["LogicalLocation"] = filedata["mb_logical"][meshblock_index].copy()
+    data["VariableNames"] = tuple(quantities)
+    data["Bounds"] = np.array(
+        [
+            [data["x1f"][0], data["x1f"][-1]],
+            [data["x2f"][0], data["x2f"][-1]],
+            [data["x3f"][0], data["x3f"][-1]],
+        ],
+        dtype=dtype,
+    )
 
     return data
 
