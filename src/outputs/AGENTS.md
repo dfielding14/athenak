@@ -49,6 +49,10 @@ Restart:
   and accompanied by a checksummed `.complete` marker plus checkpoint
   `.manifest`. Startup rejects missing or mismatched completion metadata before
   consuming restart state.
+- `restart.cpp` writes particle arrays and model metadata. Particle metadata
+  fields are declared with particle state in `src/particles/particles.hpp`;
+  restart reading and compatibility validation are handled in
+  `src/pgen/pgen.cpp`.
 
 The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
 
@@ -77,15 +81,21 @@ The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
 ## Extension Points
 
 ### PIC diagnostic derived outputs (current)
-- Particle moment outputs include:
+- Deposited particle-moment outputs include:
   - `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`
   - `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`
   - `prtcl_ebdot`
   - `prtcl_jx_edge`, `prtcl_jy_edge`, `prtcl_jz_edge`
 - The `prtcl_j*_edge` outputs are cell-centered projections of the edge-current
-  arrays used by `MHD::EFieldSrc`; they are diagnostics, not raw staggered dumps.
-- All of the above require `<particles>/deposit_moments=true`; validation is
-  enforced in `BaseTypeOutput` before output object construction.
+  arrays. They are diagnostics, not raw staggered dumps or the full-Hall CT
+  induction path.
+- These deposited-moment outputs require `<particles>/deposit_moments=true`;
+  validation is enforced in `BaseTypeOutput` before output object construction.
+- Direct CR-record binning also provides `prtcl_ecr`, `prtcl_pcr`, `prtcl_wcr`,
+  `prtcl_ekin_flux_x`, `prtcl_ekin_flux_y`, `prtcl_ekin_flux_z`, and
+  `prtcl_pcr_aniso`. These read active particle records and do not require
+  deposited moments; pressure anisotropy additionally requires active MHD for
+  the local magnetic-field direction.
 
 ### Add a new output variable
 - Update `NOUTPUT_CHOICES` and `var_choice` in `outputs.hpp`.

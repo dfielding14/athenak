@@ -29,6 +29,10 @@ documents live under `docs/source/engineering/`.
   - Source-controlled release claims, findings, external-artifact inventory,
     storage policy and validation-manifest schema. These records are compact
     control metadata, not qualification evidence.
+- `frontier_control_plane/`
+  - Installed, checksummed, fail-closed Frontier campaign control plane. Read
+    its local `AGENTS.md` before changing or operating it; production mutations
+    must not run from a mutable source checkout.
 - `test_pic_readiness_registry.py`
   - Enforces the authorized Frontier root and budget, selected extension claims,
     initial findings, paper-source checksum and minimum validation schema.
@@ -38,6 +42,13 @@ documents live under `docs/source/engineering/`.
   - Compact linear and nonlinear full-CR-Hall Bell qualification reducers.
 - `analyze_pic_parallel_shock_cr_hall_controlled.py`
   - Controlled delayed-injection no-CR/Hall-off/full-Hall shock reducer.
+- `plot_pic_shock_nine_panel.py`, `plot_pic_shock_cr_variants.py`,
+  `plot_pic_shock_energy_position.py`, and `plot_pic_shock_triptych.py`
+  - Shared readers and presentation views for retained parallel-shock outputs;
+    keep variable names and physical normalizations synchronized across them.
+- `q043_bell_current_volume_aware_deposited_current_oracle.py`
+  - Generates and validates the manifest-bound Q043 deck matrix under
+    `inputs/tests/`; individual generated decks are not hand-maintained.
 - `analyze_pic_turbulent_dynamo_cr_hall.py`
   - Current-HEAD 128-cubed full-Hall turbulence reducer and Hall-off decision aid.
 
@@ -50,6 +61,9 @@ documents live under `docs/source/engineering/`.
 - `PIC_LARGE_MACHINE_VALIDATION.md` is retired historical evidence only. Do not
   execute commands or infer authority from it.
 - Heavy shock scans require an explicitly approved execution policy.
+- Frontier submission, reservation, ledger, and reconciliation operations must
+  use the installed read-only control plane described in
+  `frontier_control_plane/AGENTS.md`.
 - Keep output paths deterministic and rooted under `tst/.codex/` unless
   explicitly overridden by CLI options.
 - Treat proxy guardrail plots as regression diagnostics, not publication physics

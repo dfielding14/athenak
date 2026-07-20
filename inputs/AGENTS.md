@@ -24,7 +24,8 @@ durable model and setup documents live under `docs/source/engineering/`.
 - `shearing_box/`: shearing-box input decks.
 - `srhydro/`: special-relativistic hydro input decks.
 - `srmhd/`: special-relativistic MHD input decks.
-- `tests/`: regression-test input decks referenced by the test harness.
+- `tests/`: regression-test input decks referenced by the test harness. See
+  `inputs/tests/AGENTS.md` before changing shared or generated fixtures.
 - `z4c/`: Z4c numerical-relativity input decks.
 - `turb_timed_amr_stage1.athinput`: top-level standalone input deck.
 
@@ -74,7 +75,7 @@ Format rules are enforced by `src/parameter_input.cpp`:
   `inputs/<filename>`, so tests assume files live under this directory. Renaming
   or moving input decks requires updating the test scripts.
 
-### PR2 PIC Coupling Regression Decks
+### PIC Coupling Regression Decks
 - Main coupled deck:
   - `inputs/tests/pic_mhd_current_coupling.athinput`
 - Passive-background isolation deck:
@@ -91,10 +92,12 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `inputs/tests/pic_mhd_coupling_guard_hydro.athinput`
   - `inputs/tests/pic_mhd_coupling_guard_isothermal.athinput`
   - `inputs/tests/pic_mhd_coupling_guard_edge_relativistic.athinput`
-- PR2 coupling-sensitive overrides commonly used by tests:
+- Coupling-sensitive overrides commonly used by tests:
   - `particles/couple_moments_to_mhd`
-  - `particles/couple_j_to_efield_coeff`
-  - `particles/couple_j_to_efield_representation`
+  - retained current-representation controls
+    `particles/couple_j_to_efield_coeff` and
+    `particles/couple_j_to_efield_representation`; current MHD induction uses
+    `particles/pic_cr_hall_mode`, not a direct `EFieldSrc` current term
   - `particles/couple_moments_momentum_to_mhd`
   - `particles/couple_moments_energy_to_mhd`
   - `particles/couple_fluid_feedback_order`
@@ -117,6 +120,8 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `particles/pic_cr_light_speed > 0` selects the artificial CR light speed
   - `particles/pic_cr_hall_mode = off|full`; `full` is the fixed large-scale
     CR-Hall closure for the uniform-grid VL2/TSC model
+  - obsolete `particles/pic_physical_mode` is fatal in a fresh input; legacy
+    restart headers warn and ignore it in favor of explicit controls
   - `particles/pic_wave_damping_mode = off|ion_neutral_friction` with
     non-negative `particles/pic_ion_neutral_collision_rate`
   - `particles/pic_max_cell_cross` (bounded by the smallest active MeshBlock

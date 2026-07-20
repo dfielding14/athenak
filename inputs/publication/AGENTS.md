@@ -20,7 +20,9 @@ manifest together with `tst/publication/AGENTS.md`. Active priorities come from
 | Change compact full-Hall nonlinear Bell pilot | `pic_cr_hall_bell_nonlinear_pilot.athinput` | Q019 initializer, `docs/source/engineering/pic_cr_hall_code_map.md`, and its focused reducer |
 | Change controlled delayed-injection Hall shock | `pic_parallel_shock_cr_hall_controlled_pilot.athinput` | Shock generator, restart ledger, and controlled-shock reducer |
 | Change long full-Hall shock successor | `pic_parallel_shock_cr_hall_long_full.athinput` | Compact pilot, shock generator, restart ledger, and controlled-shock reducer |
+| Change wide full-Hall shock successor | `pic_parallel_shock_cr_hall_wide_full.athinput` | Long full-Hall deck, shock generator, output schema, and shock plotting tools |
 | Change 3D full-Hall shock check | `pic_parallel_shock_cr_hall_3d_full.athinput` | Qualified long 2D shock, 3D source-scaling probe, shock generator, and 3D reducer |
+| Change the frozen Mignone-R2 full-Hall shock | `pic_parallel_shock_mignone_r2_full_hall.athinput` | `docs/source/engineering/pic_mignone_r2_shock_setup.md`, generator, tracer smoke test, and retained provenance |
 
 ## Change flow
 
@@ -35,6 +37,7 @@ From the repository root:
 
 - `python3 -m pytest -q tst/publication/test_bell_saturation_engineering_analysis_v1.py`
 - `python3 -m pytest -q tst/publication/test_q011_section54_production_science_successor_v1.py`
+- `cd tst && python3 run_tests.py particles/pic_parallel_shock_mignone_tracer_smoke`
 
 Use the matching Q011 preparation/exact-conservation tests when that family
 changes.

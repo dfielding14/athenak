@@ -140,14 +140,15 @@ stage ordering.
   clamps characteristic speeds to 1.0 in GR/dynamical GR.
 
 ### Particle Coupling Hooks
-- `MHD::EFieldSrc` keeps shearing-box behavior and adds an optional particle term:
-  - enabled only when `<particles>/couple_moments_to_mhd=true`
-  - additive update to edge-centered `efld` using
-    `<particles>/couple_j_to_efield_coeff`
-  - representation branch:
-    - `cell_centered`: reads deposited moments directly
-    - `edge_staggered`: reads particle-owned edge-current arrays; those arrays
-      come from either CC-to-edge conversion or direct staggered deposition.
+- `MHD::EFieldSrc` applies shearing-box EMFs, can host the optional fluid-feedback
+  source ordering described below, and maps edge EMFs for the expanding box. It
+  does **not** add deposited CR current directly to `efld`.
+- The only deposited-CR-current-dependent MHD induction path is
+  `Fluxes -> AddCRHallFluxes -> CornerE -> CT` when
+  `<particles>/pic_cr_hall_mode=full`. Hall-off coupling retains ideal-MHD
+  induction. Particle edge-current arrays and their conversion/deposition
+  controls remain engineering/diagnostic infrastructure, not an `EFieldSrc`
+  induction term.
 - Optional fluid momentum/energy feedback is split from E-coupling:
   - `couple_fluid_feedback_order=mhd_src_terms`: feedback applied in
     `MHD::MHDSrcTerms`
@@ -162,10 +163,9 @@ stage ordering.
   - other coupled Boris paths consume deposited per-step particle deltas with
     opposite sign for conservative exchange; non-Boris paths retain legacy
     `J x B` / `J dot B` source handling.
-  - every ideal-MHD feedback path validates the post-source trial state against
-    density, pressure/internal-energy, temperature, and entropy floors before
-    C2P; a would-be floor repair aborts with global event counts so a coupled
-    conservation run cannot silently acquire floor energy.
+  - ideal-MHD feedback validation aborts on non-finite state or invalid/density-
+    floor violations. Finite thermal deficits are counted for diagnostics and
+    then handled by the standard C2P pressure, temperature, and entropy floors.
 
 For the uniform-grid full-f VL2/TSC path, `pic_cr_hall_mode=off|full` selects
 ideal-MHD or full CR-Hall induction. The full closure's predictor uses deposited

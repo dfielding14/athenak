@@ -14,13 +14,13 @@ in `MHD_PIC_NEXT_STEPS_GUIDE.md`; durable MHD-PIC contracts live under
 
 | Task | Start in | Also inspect or validate |
 | --- | --- | --- |
-| Change relativistic pushing or field sampling | `pic_relativistic_gyro_paper.py`, `pic_boris_midpoint_eb.py`, `pic_no_mhd_boris.py` | `src/particles/particles_pushers.cpp` and referenced decks |
+| Change relativistic pushing, gyro timestep, or field sampling | `pic_relativistic_gyro_paper.py`, `pic_relativistic_gyro_timestep.py`, `pic_boris_midpoint_eb.py`, `pic_no_mhd_boris.py` | `src/particles/particles_pushers.cpp`, timestep guards, and referenced decks |
 | Change deposition or TSC behavior | `pic_deposit_conservation.py`, `pic_entity_deposit_*.py`, `pic_paper_smooth_tsc_interface.py` | `src/particles/particles_moments.cpp`, boundary exchange, and the standalone TSC oracle |
 | Change MHD backreaction or stage ordering | `pic_paper_coupling_conservation_vl2_tsc.py`, `pic_parallel_shock_rk_stage_budget_vl2_tsc.py`, `pic_mhd_coupling_decomp.py` | `src/mhd/mhd_tasks.cpp`, particle task wiring, and paired VL2 decks |
 | Change MPI, AMR, boundary, or restart behavior | `pic_*decomp*.py`, `pic_mhd_coupling_multilevel.py`, `pic_mhd_restart_fidelity.py`, `pic_restart_safety_guards.py` | `src/bvals/`, `src/mesh/`, and restart/output code |
 | Change particle migration/destruction compaction | `pic_migration_destruction_compaction.py` | `tst/test_particle_migration_compaction.py` and `src/bvals/particle_compaction.hpp` |
 | Change turbulent forcing or its PIC coupling | `pic_turbulent_dynamo_smoke.py` | `tst/test_turb_driver.py`, `src/srcterms/turb_driver.*`, and the MHD/PIC smoke decks |
-| Change shock injection or feedback | `pic_parallel_shock_*.py` | `src/pgen/tests/pic_parallel_shock.cpp` and every referenced shock deck |
+| Change shock injection, split removal, tracer sampling, or feedback | `pic_parallel_shock_*.py` | `src/pgen/tests/pic_parallel_shock.cpp` and every referenced test/publication shock deck |
 | Change physical proxy diagnostics | Bell, CRSI, CRPAI, multispecies, expanding-box, and turbulent-dynamo modules | `pic_analysis_utils.py` and the evidence labels in the paired deck/test |
 
 ## Test and input flow
@@ -48,8 +48,11 @@ the complete coupled order-2 contract.
 ## Local validation
 
 - `cd tst && python3 run_tests.py particles/pic_deposit_conservation`
+- `cd tst && python3 run_tests.py particles/pic_relativistic_gyro_timestep`
 - `cd tst && python3 run_tests.py particles/pic_paper_coupling_conservation_vl2_tsc --cmake=-DCMAKE_BUILD_TYPE=Debug`
 - `cd tst && python3 run_tests.py particles/pic_mhd_coupling_decomp --cmake=-DAthena_ENABLE_MPI=ON`
+- `cd tst && python3 run_tests.py particles/pic_parallel_shock_split_removal_restart`
+- `cd tst && python3 run_tests.py particles/pic_parallel_shock_mignone_tracer_smoke`
 - `python3 tst/scripts/particles/pic_paper_smooth_tsc_oracle.py --indent 0`
 - `python3 -m flake8 tst/scripts/particles`
 

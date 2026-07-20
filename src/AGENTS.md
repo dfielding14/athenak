@@ -12,7 +12,7 @@ workflow.
 ## Root-Level Files
 
 ### Build and entry point
-- `src/CMakeLists.txt`: CMake rules for building the core library/executable.
+- `src/CMakeLists.txt`: CMake rules for building the `athena` executable.
 - `src/main.cpp`: program entry point (MPI/Kokkos init, input parsing, `Mesh`
   construction, driver execution).
 

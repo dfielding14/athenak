@@ -85,6 +85,13 @@ solver. See `../../AGENTS.md` for repository-wide conventions and workflow.
 - CLI for converting a stem of `.bin` files to `.athdf`/`.xdmf` using
   `bin_convert.read_binary` and `bin_convert.write_athdf`.
 
+### `read_pdf.py`
+- Reads AthenaK N-dimensional PDF output: `read_pdf_header` parses the companion
+  ASCII metadata and bin edges, while `read_pdf` reads the float64 time/data
+  payload and optionally reshapes it to the declared overflow-inclusive shape.
+- Data files must match `<stem>.NNNNN.pdf`; the inferred header is
+  `<stem>.header.pdf`.
+
 ---
 
 ## Plotting and Analysis Scripts

@@ -19,7 +19,7 @@ documents live under `docs/source/engineering/`.
 | Add or rename a built-in generator | Its implementation file | Declaration in `src/pgen/pgen.hpp`, both dispatch chains in `src/pgen/pgen.cpp`, `src/CMakeLists.txt`, a matching input, and its regression |
 | Change a classical hydro/MHD test | `advection.cpp`, `cpaw.cpp`, `divb_amr.cpp`, `linear_wave.cpp`, `orszag_tang.cpp`, or `shock_tube.cpp` | Matching suite under `tst/scripts/` and `inputs/tests/` |
 | Change PIC interface or distribution setup | `pic_paper_smooth_tsc_interface.cpp`, `q006_*`, `q007_*`, `q032_*`, or `q033_*` | `src/particles/`, paired input decks, and `tst/scripts/particles/` |
-| Change parallel-shock injection or accounting | `pic_parallel_shock.cpp` | `inputs/tests/pic_parallel_shock_*`, `inputs/publication/pic_parallel_shock_*`, and matching Q011 tests |
+| Change parallel-shock injection, split removal, tracer sampling, or accounting | `pic_parallel_shock.cpp` | `inputs/tests/pic_parallel_shock_*`, publication shock decks including the Mignone-R2 freeze, and matching particle/Q011 tests |
 | Change linear Bell seeds or current normalization | `q023_paper_bell_linear*`, `q043_bell_current_volume_aware.cpp` | Shared headers and corresponding host harnesses under `tst/publication/` |
 | Change nonlinear Bell setup | `q019_nonlinear_bell_saturation_engineering.cpp`, `q019_physics_first_nonlinear_bell_successor_v2.hpp` | `inputs/publication/pic_bell_nonlinear_saturation_engineering_v1.athinput`, the full-Hall nonlinear pilot, and the compact Bell analyzer/tests |
 | Change orderly driver-stop behavior | `driver_user_stop.cpp` | `inputs/tests/driver_user_stop.athinput` and `tst/publication/test_driver_user_stop.py` |
@@ -63,6 +63,8 @@ Runtime shock changes normally require a focused compiled regression, for exampl
 - `cd tst && python3 run_tests.py particles/pic_parallel_shock_rk_stage_budget_vl2_tsc`
 - `cd tst && python3 run_tests.py particles/pic_parallel_shock_restart_controls`
 - `cd tst && python3 run_tests.py particles/pic_parallel_shock_outer_x1_escape_restart`
+- `cd tst && python3 run_tests.py particles/pic_parallel_shock_split_removal_restart`
+- `cd tst && python3 run_tests.py particles/pic_parallel_shock_mignone_tracer_smoke`
 
 ## Local constraints
 

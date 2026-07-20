@@ -13,12 +13,12 @@ discovery.
 
 | Task | Start in | Also inspect or validate |
 | --- | --- | --- |
-| Add or change a compiled regression | `tst/scripts/<suite>/` | Referenced `inputs/tests/*.athinput` and a focused `run_tests.py` invocation |
+| Add or change a compiled regression | `tst/scripts/<suite>/` | `inputs/tests/AGENTS.md`, referenced decks, and a focused `run_tests.py` invocation |
 | Change PIC/MHD-PIC validation | `tst/scripts/particles/` | `tst/scripts/particles/AGENTS.md` and the affected source modules |
 | Change test build or execution behavior | `tst/run_tests.py`, `tst/scripts/utils/athena.py` | `.github/workflows/main.yml` and `.gitlab-ci.yml` |
 | Change load-balancing source checks | `tst/test_mesh_load_balance.py`, `tst/test_pic_static_load_balance.py` | `src/mesh/`, `src/driver/`, and paired restart decks |
 | Change C++ or Python style checks | `tst/scripts/style/`, `setup.cfg` | CI lint jobs |
-| Change artifact, qualification, or campaign tooling | `tst/publication/` | Read `tst/publication/AGENTS.md` first |
+| Change artifact, qualification, or campaign tooling | `tst/publication/` | Read `tst/publication/AGENTS.md`; control-plane changes also require its child guide |
 
 ## Harness flow
 
@@ -28,8 +28,9 @@ discovery.
 - Suite discovery skips `utils`, `style`, `*_utils.py`, `*_oracle.py`, and, by default,
   `*_publication.py`. Explicit publication module names still run;
   `ATHENA_INCLUDE_PUBLICATION_TESTS=1` includes them in broad discovery.
-- `tst/scripts/utils/athena.py` configures with `cmake3`, builds with `make -j8`,
-  and resolves test input names below `inputs/`.
+- `tst/scripts/utils/athena.py` configures with the `CMAKE` environment command
+  (default `cmake`), builds with `make -j8`, and resolves test input names below
+  `inputs/`.
 - Every harness invocation removes `tst/build` before and after execution. Do not
   use that directory for retained evidence.
 - Top-level pytest files and `tst/publication/` tests are separate from

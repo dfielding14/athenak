@@ -18,15 +18,17 @@ implementation documents live under `docs/source/engineering/`.
   tag assignment, species setup, and allocation of particle arrays.
 
 ### Pushers and field interpolation
-- `particles_pushers.cpp`: pusher implementations (drift, RK4 gravity, Boris) plus
-  `InterpolateLinear` and `InterpolateTSC` for B-field sampling.
+- `particles_pushers.cpp`: pusher implementations (drift, RK4 gravity, Boris)
+  plus `InterpolateLinearFields` for carrier-field sampling.
+- `field_interpolation.hpp`: shared `InterpolateTSCFields` implementation used
+  by Boris pushers and shock injection.
 
 ### Task list wiring
 - `particles_tasks.cpp`: inserts particle tasks into the `before_timeintegrator`
   and `after_timeintegrator` task lists, and wires coupled-stage insertion points.
 - `particles_moments.cpp`: moment deposition/communication wrappers and the
-  deterministic cell-centered to edge-current conversion task used by
-  `edge_staggered` coupling mode.
+  deterministic cell-centered to edge-current conversion task retained for
+  staggered-current diagnostics and engineering paths.
 
 ### Data structs
 - `particles_data_structs.hpp`: `ParticleLocationData` and `ParticleMessageData` used
@@ -148,9 +150,9 @@ but these are not wired in the constructor.
   in the CR payload for deposition and conservative feedback.
 
 ### Field interpolation
-- `InterpolateLinear`: trilinear (or bilinear in 2D) interpolation of midpoint
+- `InterpolateLinearFields`: trilinear (or bilinear in 2D) interpolation of midpoint
   carrier fields (`B` and fluid velocity `u`).
-- `InterpolateTSC`: triangular-shaped cloud weighting over a 3x3x3 stencil for
+- `InterpolateTSCFields`: triangular-shaped cloud weighting over a 3x3x3 stencil for
   midpoint carrier fields (`B` and fluid velocity `u`).
 
 ---
@@ -173,14 +175,17 @@ but these are not wired in the constructor.
   When `deposit_moments=true`, restart files also persist deposited moment
   arrays; coupled edge-staggered runs additionally persist `j_edge_x*e`.
 
-### E-field coupling controls
+### Coupling and retained current-representation controls
 - `couple_moments_to_mhd` (default `false`): opt-in particle-to-MHD coupling.
-- `couple_j_to_efield_coeff` (default `1.0`): explicit current-to-E coupling
-  coefficient applied in MHD `EFieldSrc`.
+- `couple_j_to_efield_coeff` (default `1.0`): retained compatibility coefficient;
+  current MHD induction does not consume it in `EFieldSrc`.
 - `couple_j_to_efield_representation`:
-  - `cell_centered` (default): uses deposited CC current directly.
-  - `edge_staggered`: stores current on the edge-centered layout consumed by
-    `MHD::EFieldSrc`.
+  - `cell_centered` (default): keeps deposited current in cell-centered moments.
+  - `edge_staggered`: allocates edge-current arrays populated by CC conversion or
+    direct staggered deposition for retained diagnostics/engineering paths.
+- VL2 rejects `edge_staggered` and `direct_staggered` as direct-current CT
+  options. Use `pic_cr_hall_mode=off|full`; only `full` adds CR-current-dependent
+  induction through MHD face fluxes, `CornerE`, and CT.
 
 ### Fluid feedback controls
 - `couple_moments_momentum_to_mhd` (default `false`)
@@ -204,8 +209,10 @@ but these are not wired in the constructor.
 - `<time>/integrator=vl2` selects the two-stage VL2/TSC coupling algorithm.
   It requires cosmic rays with `pusher=boris_tsc`, a coupled MHD background,
   `pic_feedback_mode=coupled`, `deposit_moments=true`, `deposit_order=2`,
-  `couple_moments_to_mhd=true`, conservative momentum feedback, ideal-MHD
-  energy feedback, and `couple_fluid_feedback_order=mhd_src_terms`. These
+  `couple_moments_to_mhd=true`, conservative momentum feedback, and
+  `couple_fluid_feedback_order=mhd_src_terms`. Ideal MHD also requires energy
+  feedback; the guarded exact-isothermal paper paths use momentum-only feedback.
+  These
   settings are explicit:
   deposition and every particle-to-gas coupling toggle default to `false`, and
   `deposit_order` defaults to `1`.
@@ -213,6 +220,9 @@ but these are not wired in the constructor.
   controls only whether initializer components are converted from velocity or
   accepted as momentum. `pic_cr_light_speed` is the positive artificial light
   speed used by the relativistic Boris kinematics.
+- Fresh inputs containing obsolete `pic_physical_mode` are fatal. A legacy
+  restart header may contain that field, but it is warned about and ignored in
+  favor of the explicit controls documented here.
 - `pic_background_mode=coupled|passive_mhd|no_mhd` selects the field carrier;
   `pic_feedback_mode=coupled|test_particle` independently selects whether
   particle feedback is admitted. `pic_interp_scheme=tsc` is currently the only
@@ -289,7 +299,8 @@ but these are not wired in the constructor.
 - Coupling requires `deposit_moments=true` and an active `<mhd>` block.
 - Coupled mode is rejected for `radiation+MHD`, hydro/ion-neutral, and
   numerical-relativity (`adm`/`z4c`) compositions.
-- Energy feedback requires ideal MHD EOS.
+- Energy feedback requires ideal MHD EOS; the exact-isothermal VL2 paper paths
+  are explicitly guarded momentum-only exceptions with energy feedback off.
 - `edge_staggered` and fluid feedback branches are restricted to
   non-relativistic MHD.
 - `pic_feedback_mode=test_particle` explicitly rejects particle-to-MHD coupling
@@ -356,11 +367,12 @@ In coupled mode, moment wrappers are also inserted into `stagen`:
   exact gas and grid correctors.
 - if `couple_j_to_efield_representation=edge_staggered` and
   `couple_j_deposition_mode=cc_convert`, `ConvertCoupledCurrentRepresentation`
-  is inserted immediately before `MHD::EFieldSrc` and depends on both `CornerE`
-  and wrapper completion.
+  is inserted before `MHD::EFieldSrc` to populate the retained edge-current
+  representation; current `EFieldSrc` does not turn that array into an EMF.
 - if `couple_j_deposition_mode=direct_staggered`, direct edge-current
   synchronization and physical-BC tasks are inserted before `MHD::EFieldSrc`
-  instead of the CC conversion task. Physical edge-current BCs cover
+  instead of the CC conversion task. These arrays are retained engineering and
+  diagnostic state, not the full-Hall CT route. Physical edge-current BCs cover
   `periodic`, `reflect`, and `outflow`; direct mode rejects `inflow`, so use
   `couple_j_deposition_mode=cc_convert` for inflow-boundary coupled runs.
 

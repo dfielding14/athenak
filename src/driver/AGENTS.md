@@ -46,8 +46,13 @@ See `../../AGENTS.md` for repository-wide conventions and workflow.
 
 ## Integrators (as implemented)
 The constructor handles these integrator strings:
-- `rk1`, `rk2`, `rk3`, `rk4`
+- `rk1`, `rk2`, `vl2`, `rk3`, `rk4`
 - `imex2`, `imex3`, `imex+`
+
+`rk2` is the ordinary two-stage Heun/SSPRK method. `vl2` is the distinct
+two-stage MHD-PIC predictor/corrector: its stage source weights are `1/2` and
+`1`, and construction requires an active `<particles>` block. Particle-side
+guards enforce the rest of the VL2/TSC coupling contract.
 
 ImEx integrators allocate `impl_src` for stiff sources (currently used for ion-neutral
 two-fluid runs). The driver enforces ImEx when ion-neutral physics is enabled.

@@ -82,15 +82,20 @@ efficiently on CPUs and GPUs.
   changing behavior or documentation.
 - If editing docs, follow the audit workflow in `docs/AGENT_PRIMER.md`.
 
-### PIC PR2 Coupling Status (Current)
+### PIC Development Notes
+- This section records staged implementation milestones. For current runtime
+  contracts, use the managed navigation block below and
+  `docs/source/engineering/pic_mhd_model_contract.md`.
 - PR2 particle-to-MHD coupling is runtime opt-in under the `<particles>` block.
 - Defaults preserve legacy behavior:
   - `couple_moments_to_mhd = false`
   - `couple_j_to_efield_representation = cell_centered`
   - fluid feedback toggles remain off by default.
-- Coupled ordering now follows a staged split:
-  - particle push/deposition wrappers are inserted in `stagen` (stage 1 only)
-  - particle migration communication runs in `after_timeintegrator` when coupled.
+- Coupled ordering follows the selected integrator:
+  - non-VL2 coupling retains its stage-1 insertion anchor and migrates particles
+    in `after_timeintegrator`
+  - VL2 inserts its particle predictor/corrector wrappers in both stages and
+    migrates particles in `after_stagen` after each staged half drift.
 - PR2 guards remain strict:
   - coupling is limited to single-fluid MHD task paths
   - radiation+MHD, hydro/ion-neutral, and NR (`adm`/`z4c`) compositions are
@@ -110,9 +115,9 @@ efficiently on CPUs and GPUs.
   - Boris CR pushers now use a midpoint E+B sequence (`cE = -u x B`) and
     store per-step particle delta channels used by coupled fluid feedback in
     `MHDSrcTerms`/`EFieldSrc` when `pic_feedback_mode=coupled`.
-  - In staged `pic_deltaf_mode=on` runs with `cr_distribution=random`,
-    initialization uses a deterministic low-discrepancy quiet start to reduce
-    sampling noise in proxy growth checks.
+  - With `pic_deltaf_mode=quiet_start|physical` and compatible random
+    initialization, deterministic quiet-start sampling reduces proxy noise;
+    `off` retains ordinary full-f sampling.
   - In staged `pic_expanding_box_mode=on` runs, CR Boris pushers apply a
     half-step expansion/compression source update around the Boris advance
     using `pic_expansion_rate_x1/x2/x3`.
@@ -192,9 +197,8 @@ python run_tests.py
 
 ### Style checks
 ```bash
-cd tst/scripts/style
-bash check_athena_cpp_style.sh
-flake8 tst/ vis/
+python3 -m flake8
+bash tst/scripts/style/check_athena_cpp_style.sh
 ```
 
 ### Style reminders
@@ -209,63 +213,55 @@ Prefer the source code over documentation. If behavior is unclear, stop and ask
 for clarification rather than guessing.
 
 <!-- BEGIN build-memory-table -->
-## MHD-PIC Navigation
+## Repository Navigation
 
-`MHD_PIC_NEXT_STEPS_GUIDE.md` governs active project work. Durable model,
-implementation, setup, and ethos documents live in `docs/source/engineering/`;
-start with `docs/source/engineering/pic_mhd_model_contract.md` and verify claims
-against the implementation and focused tests.
-
-The runtime API is explicit: Boris cosmic rays store mass-normalized momentum
-`p/m`, while `<particles>/pic_cr_initial_state=velocity|momentum` controls only
-initializer interpretation. `<time>/integrator=vl2` selects staged VL2/TSC
-coupling. Deposition and all gas-coupling toggles default off with
-`deposit_order=1`; VL2 decks must enable their complete coupling contract and
-set `deposit_order=2`. CR-Hall is selected only by
-`<particles>/pic_cr_hall_mode=off|full`.
-
-### Task lookup
+Use this table to enter the smallest relevant subtree, then read its local
+`AGENTS.md`. Verify behavior in source and focused tests; generated docs and
+campaign labels are not authoritative substitutes.
 
 | Task | Start in | Follow or validate |
 | --- | --- | --- |
-| Change CR state, initialization, or guards | `src/particles/particles.hpp`, `src/particles/particles.cpp` | Model contract, `inputs/AGENTS.md`, parser/guard regressions |
-| Change Boris integration or field interpolation | `src/particles/particles_pushers.cpp`, `src/particles/field_interpolation.hpp` | Gyro, midpoint E+B, and no-MHD focused tests |
-| Change deposition or particle moments | `src/particles/particles_moments.cpp` | `src/bvals/`, AMR/interface tests, conservation tests, output mappings |
-| Change gas feedback, induction, or stage ordering | `src/particles/particles_tasks.cpp`, `src/mhd/mhd_tasks.cpp` | VL2 conservation, ideal-induction isolation, and stage-budget regressions |
-| Change particle MPI, physical boundaries, or AMR lifetime | `src/bvals/bvals_part.cpp`, `src/mesh/` | Decomposition, nonperiodic, refinement-interface, restart, and load-balance tests |
-| Change restart schema or PIC diagnostics | `src/outputs/restart.cpp`, `src/pgen/pgen.cpp`, `src/outputs/derived_variables.cpp` | Restart fidelity/safety plus particle VTK and gridded-output consumers |
-| Change turbulent MHD-PIC boxes | `src/pgen/turb.cpp`, `src/srcterms/initial_perturbations.*`, `src/srcterms/turb_driver.*` | `inputs/particles/AGENTS.md` and turbulent-dynamo smoke test |
-| Change Bell or non-relativistic shock setups | `src/pgen/tests/` | `src/pgen/tests/AGENTS.md`, `inputs/publication/AGENTS.md`, focused Q011/Q019/Q023/Q043 tests |
-| Add or change a PIC regression | `tst/scripts/particles/` | `tst/AGENTS.md`, `tst/scripts/particles/AGENTS.md`, paired decks in `inputs/tests/` |
-| Change campaign evidence or launch tooling | `tst/publication/` | Read `tst/publication/AGENTS.md`; keep proxies, preparations, and qualification evidence distinct |
+| Change build configuration, dependencies, or the executable | `CMakeLists.txt`, `src/CMakeLists.txt`, `src/main.cpp` | `README.md`, CI workflows, and a clean configure/build |
+| Change input parsing or startup behavior | `src/parameter_input.*`, `src/main.cpp` | `inputs/AGENTS.md` and parser-focused tests |
+| Change mesh topology, AMR/SMR, load balancing, or boundaries | `src/mesh/`, `src/bvals/` | Both local guides plus AMR, restart, and decomposition tests |
+| Change hydro or MHD numerics | `src/hydro/`, `src/mhd/`, `src/reconstruct/`, `src/eos/` | Diffusion/source guides, matching decks, and compiled regressions |
+| Change radiation or geodesic transport | `src/radiation/`, `src/geodesic-grid/`, `src/coordinates/` | Radiation inputs and regression suite |
+| Change numerical relativity or dynamical GRMHD | `src/z4c/`, `src/dyn_grmhd/`, `src/coordinates/` | Task-list, boundary, pgen, and restart guides |
+| Change source terms, forcing, or shearing-box behavior | `src/srcterms/`, `src/diffusion/`, `src/shearing_box/` | Hydro/MHD task flow and focused tests |
+| Change particles or MHD-PIC coupling | `src/particles/`, `src/mhd/mhd_tasks.cpp` | Model contract, particle/MHD guides, paired decks, and conservation tests |
+| Add or change a problem generator | `src/pgen/` | Built-in registry, matching input deck, and regression |
+| Change output, restart, or analysis readers | `src/outputs/`, `vis/python/` | Output guide, restart consumers, and format-specific tests |
+| Add or change an input deck | `inputs/` | Nearest input guide and every consuming test/campaign manifest |
+| Add or change validation | `tst/` | Test guide, referenced deck, source owner, and focused invocation |
+| Change documentation | `docs/` | `docs/AGENTS.md`, authored Sphinx source, and rendered output |
+| Change publication evidence or cluster control | `tst/publication/` | Campaign guide, readiness policy, and control-plane child guide |
 
-### Cross-subsystem flow
+### Runtime flow
 
-1. `ParameterInput` and `MeshBlockPack::AddPhysics` construct MHD and particle
-   modules from the selected input blocks.
-2. Particle tasks push CRs, deposit moments and per-step exchange channels, and
-   synchronize those fields across block, MPI, and refinement boundaries.
-3. With `time/integrator=vl2`, coupled task insertion places the staged TSC
-   particle wrappers around the MHD source and field updates.
-   `pic_cr_hall_mode=off` keeps ideal-MHD induction; `full` adds the
-   stage-centered CR-Hall induction and matched energy flux while gas receives
-   the opposite particle exchange.
-4. Particle ownership migration, AMR reconstruction, and restart loading must
-   preserve particle payload, deposited state, source cohort, and runtime-model
-   fingerprints.
-5. Outputs expose both particle records and gridded diagnostics; changes to stored
-   state often require coordinated restart, output, test, and analysis updates.
+1. `main.cpp` initializes MPI/Kokkos, parses input, constructs `Mesh`, and asks
+   `MeshBlockPack::AddPhysics` to instantiate selected modules.
+2. `Driver` executes dependency-ordered task lists through each integrator
+   stage; mesh/boundary modules synchronize state between blocks and ranks.
+3. Physics modules update conserved state, primitives, staggered fields, and
+   particles. Outputs and restart code serialize the resulting state.
+4. `tst/run_tests.py` builds and runs compiled regressions; standalone pytest
+   and `tst/publication/` tooling have separate discovery and authority rules.
 
-### Local guides
+### MHD-PIC route
 
-- `src/particles/AGENTS.md`, `src/mhd/AGENTS.md`: particle state/coupling and
-  MHD source, electric-field, and CT flow.
-- `src/mesh/AGENTS.md`, `src/bvals/AGENTS.md`, `src/outputs/AGENTS.md`: AMR,
-  communication, restart, and diagnostics boundaries.
-- `src/pgen/tests/AGENTS.md`: built-in PIC, Bell, and shock generators.
-- `inputs/particles/AGENTS.md`, `inputs/publication/AGENTS.md`,
-  `tst/scripts/particles/AGENTS.md`: decks and focused validation.
+`MHD_PIC_NEXT_STEPS_GUIDE.md` governs active work; the durable contract begins
+at `docs/source/engineering/pic_mhd_model_contract.md`. Boris CRs store `p/m`.
+`time/integrator=vl2` selects the two-stage TSC predictor/corrector, and
+`pic_cr_hall_mode=off|full` selects ideal or full CR-Hall induction. Start in
+`src/particles/AGENTS.md`, `src/mhd/AGENTS.md`, and
+`tst/scripts/particles/AGENTS.md` before changing this cross-subsystem path.
 
-`kokkos/` is a separate Git submodule and is outside this navigation guide's
-write scope.
+### Repository boundaries
+
+- `kokkos/` is a separate Git submodule; do not edit it as part of ordinary
+  AthenaK work.
+- `build/`, `docs/build/`, test build trees, caches, and runtime output
+  directories are generated artifacts, not source.
+- Small support areas such as `.github/`, `scripts/`, and `figures/` are routed
+  from this root guide unless their scope grows enough to need a local guide.
 <!-- END build-memory-table -->
