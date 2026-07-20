@@ -13,13 +13,13 @@ import re
 from typing import Mapping
 
 
-PAPER_PHYSICAL_MODE = "paper_mhd_pic_vl2_tsc"
+INTEGRATOR = "vl2"
 RUNTIME_MOMENTUM_STATE = "momentum_p_over_m"
 DECK_INITIAL_STATE = "momentum"
 LIGHT_SPEED = 10000.0
 UPSTREAM_SPEED_U0 = 30.0
 IDEAL_SURFACE_SPEED = 10.0
-RESTART_SCHEMA = 7
+RESTART_SCHEMA = 8
 BASE_DECK_PATH = (
     "inputs/publication/pic_parallel_shock_section54_paper_vl2_tsc.athinput"
 )
@@ -53,7 +53,7 @@ class VariantBinding:
 class RuntimeIdentity:
     """Typed projection of the required PIC runtime-model identity."""
 
-    physical_mode: str
+    integrator: str
     state: str
     light_speed: float
     restart_schema: int
@@ -65,7 +65,7 @@ class DeckContract:
     """Typed projection of the deck assumptions used by these helpers."""
 
     variant: str
-    physical_mode: str
+    integrator: str
     initial_state: str
     light_speed: float
     gamma: float
@@ -279,11 +279,25 @@ def _apply_model_launch_overrides(
 
 
 def _typed_deck_contract(blocks: Mapping[str, Mapping[str, str]]) -> DeckContract:
-    physical_mode = _parameter(blocks, "particles", "pic_physical_mode")
+    integrator = _parameter(blocks, "time", "integrator")
     _require(
-        physical_mode == PAPER_PHYSICAL_MODE,
-        "deck particles/pic_physical_mode: expected paper mode",
+        integrator == INTEGRATOR,
+        "deck time/integrator: expected vl2",
     )
+    for name, expected in (
+        ("pusher", "boris_tsc"),
+        ("deposit_moments", "true"),
+        ("deposit_order", "2"),
+        ("couple_moments_to_mhd", "true"),
+        ("couple_moments_momentum_to_mhd", "true"),
+        ("couple_moments_energy_to_mhd", "true"),
+        ("pic_background_mode", "coupled"),
+        ("pic_feedback_mode", "coupled"),
+    ):
+        _require(
+            _parameter(blocks, "particles", name) == expected,
+            f"deck particles/{name}: expected {expected}",
+        )
     initial_state = _parameter(blocks, "particles", "pic_cr_initial_state")
     _require(
         initial_state == DECK_INITIAL_STATE,
@@ -367,7 +381,7 @@ def _typed_deck_contract(blocks: Mapping[str, Mapping[str, str]]) -> DeckContrac
     _require_close(finest_dy, expected_finest_spacing, "deck finest dy")
     return DeckContract(
         variant=variant,
-        physical_mode=physical_mode,
+        integrator=integrator,
         initial_state=initial_state,
         light_speed=light_speed,
         gamma=gamma,
@@ -430,16 +444,36 @@ def parse_runtime_identity_line(line: object) -> RuntimeIdentity:
         name, value = match.groups()
         _require(name not in fields, f"runtime identity: duplicate field {name}")
         fields[name] = value
-    missing = sorted({"physical_mode", "state", "C", "restart_schema"} - set(fields))
+    required = {
+        "integrator",
+        "state",
+        "C",
+        "background",
+        "feedback",
+        "induction",
+        "deposition",
+        "restart_schema",
+    }
+    missing = sorted(required - set(fields))
     _require(not missing, f"runtime identity: missing fields {', '.join(missing)}")
     _require(
-        fields["physical_mode"] == PAPER_PHYSICAL_MODE,
-        "runtime identity physical_mode: expected paper mode",
+        fields["integrator"] == INTEGRATOR,
+        "runtime identity integrator: expected vl2",
     )
     _require(
         fields["state"] == RUNTIME_MOMENTUM_STATE,
         "runtime identity state: expected momentum_p_over_m",
     )
+    for name, expected in (
+        ("background", "coupled"),
+        ("feedback", "coupled"),
+        ("induction", "ideal_mhd_only"),
+        ("deposition", "tsc"),
+    ):
+        _require(
+            fields[name] == expected,
+            f"runtime identity {name}: expected {expected}",
+        )
     light_speed = _finite_float_text(fields["C"], "runtime identity C")
     _require_close(light_speed, LIGHT_SPEED, "runtime identity C")
     _require(
@@ -452,7 +486,7 @@ def parse_runtime_identity_line(line: object) -> RuntimeIdentity:
         f"runtime identity restart_schema: expected {RESTART_SCHEMA}",
     )
     return RuntimeIdentity(
-        physical_mode=fields["physical_mode"],
+        integrator=fields["integrator"],
         state=fields["state"],
         light_speed=light_speed,
         restart_schema=restart_schema,
@@ -484,19 +518,13 @@ def x_ideal(time: object) -> float:
 
 def reconstruct_chi_from_physical_speed(
     physical_speed: object,
-    *,
-    physical_mode: object,
 ) -> float:
-    """Reconstruct chi from a physical speed magnitude under the frozen paper mode.
+    """Reconstruct chi from a physical speed magnitude under the frozen model.
 
     Particle-VTK velocities are serialized float32 projections.  The returned
     value is consequently a projection estimate, not exact pre-serialization
     momentum recovery.
     """
-    _require(
-        physical_mode == PAPER_PHYSICAL_MODE,
-        "chi reconstruction: expected paper physical mode",
-    )
     speed = _finite_real(physical_speed, "physical speed")
     _require(speed >= 0.0, "physical speed: expected a nonnegative magnitude")
     _require(speed < LIGHT_SPEED, "physical speed: expected a subluminal magnitude")
@@ -513,8 +541,6 @@ def reconstruct_chi_from_physical_speed(
 
 def reconstruct_chi_from_physical_velocity(
     velocity_xyz: object,
-    *,
-    physical_mode: object,
 ) -> float:
     """Reconstruct chi from one float32-projected physical velocity vector."""
     _require(
@@ -534,4 +560,4 @@ def reconstruct_chi_from_physical_velocity(
     )
     speed = math.hypot(vx, vy, vz)
     _require(math.isfinite(speed), "physical velocity: expected a finite magnitude")
-    return reconstruct_chi_from_physical_speed(speed, physical_mode=physical_mode)
+    return reconstruct_chi_from_physical_speed(speed)

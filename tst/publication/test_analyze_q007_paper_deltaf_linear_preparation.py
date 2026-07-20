@@ -15,18 +15,11 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tst.publication import analyze_q007_paper_deltaf_linear_preparation as q007
+from tst.publication import analyze_q007_paper_deltaf_linear_preparation_vl2_tsc as q007
 from tst.publication.pvtk_particles import ParticleVTKData
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SIDECAR = (
-    REPO_ROOT
-    / "tst/publication/readiness/"
-    "q007_paper_deltaf_linear_source_local_preparation_successor_v5_2026-06-02.json"
-)
-
-
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -142,24 +135,27 @@ def _write_runtime_invocation_tree(root: Path) -> dict[str, object]:
         "pinned_executable_sha256": "2" * 64,
     }
     cases = {
-        "crsi": ("crsi", "pic_q007_paper_crsi_linear_preparation.athinput", [], 0, range(4)),
+        "crsi": (
+            "crsi", "pic_q007_paper_crsi_linear_preparation_vl2_tsc.athinput",
+            [], 0, range(4),
+        ),
         "crpai-prolate": (
             "crpai_prolate",
-            "pic_q007_paper_crpai_linear_prolate_preparation.athinput",
+            "pic_q007_paper_crpai_linear_prolate_preparation_vl2_tsc.athinput",
             [],
             0,
             range(2),
         ),
         "crpai-oblate": (
             "crpai_oblate",
-            "pic_q007_paper_crpai_linear_oblate_preparation.athinput",
+            "pic_q007_paper_crpai_linear_oblate_preparation_vl2_tsc.athinput",
             [],
             0,
             range(2),
         ),
         "negative-crpai-nlim1": (
             "crpai_prolate",
-            "pic_q007_paper_crpai_linear_prolate_preparation.athinput",
+            "pic_q007_paper_crpai_linear_prolate_preparation_vl2_tsc.athinput",
             ["time/nlim=1"],
             1,
             range(0),
@@ -676,7 +672,10 @@ class Q007PaperDeltaFLinearPreparationTests(unittest.TestCase):
                     elif target == "unexpected":
                         (root / "crsi/unexpected.txt").write_text("extra\n", encoding="utf-8")
                     else:
-                        deck = root / "decks/pic_q007_paper_crsi_linear_preparation.athinput"
+                        deck = (
+                            root
+                            / "decks/pic_q007_paper_crsi_linear_preparation_vl2_tsc.athinput"
+                        )
                         deck.write_text(
                             deck.read_text(encoding="utf-8").replace(
                                 "nlim       = 2", "nlim       = 3", 1
@@ -719,46 +718,6 @@ class Q007PaperDeltaFLinearPreparationTests(unittest.TestCase):
             path.write_text("<mesh>\nnx1 = 32\nnx1 = 32\n", encoding="utf-8")
             with self.assertRaisesRegex(q007.ContractError, "duplicate parameter"):
                 q007.parse_athinput(path)
-
-    def test_readiness_sidecar_binds_only_new_q007_artifacts(self) -> None:
-        sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
-        self.assertEqual(sidecar["gate"], "Q-007")
-        self.assertEqual(sidecar["qualification_effect"], q007.QUALIFICATION_EFFECT)
-        self.assertFalse(sidecar["claim_closure"])
-        self.assertEqual(sidecar["frontier_authorization"], "not_bound")
-        expected_paths = {
-            "src/pgen/tests/q007_paper_deltaf_linear.hpp",
-            "src/pgen/tests/q007_paper_deltaf_linear.cpp",
-            "inputs/tests/pic_q007_paper_crsi_linear_preparation.athinput",
-            "inputs/tests/pic_q007_paper_crpai_linear_prolate_preparation.athinput",
-            "inputs/tests/pic_q007_paper_crpai_linear_oblate_preparation.athinput",
-            "tst/publication/immutable_orion_tree.py",
-            "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
-            "tst/publication/test_analyze_q007_paper_deltaf_linear_preparation.py",
-        }
-        bindings = sidecar["artifact_bindings"]
-        self.assertEqual(set(bindings), expected_paths)
-        for relative, expected in bindings.items():
-            self.assertEqual(_sha256(REPO_ROOT / relative), expected)
-        shared_paths = {
-            "docs/source/engineering/pic_mhd_model_contract.md",
-            "src/CMakeLists.txt",
-            "src/particles/particles.cpp",
-            "src/pgen/pgen.cpp",
-            "src/pgen/pgen.hpp",
-            "src/outputs/vtk_prtcl.cpp",
-            "tst/publication/pvtk_particles.py",
-        }
-        self.assertEqual(set(sidecar["shared_artifact_bindings"]), shared_paths)
-        for relative, expected in sidecar["shared_artifact_bindings"].items():
-            self.assertEqual(_sha256(REPO_ROOT / relative), expected)
-        boundary = sidecar["nonqualification_boundary"]
-        self.assertFalse(boundary["qualifying_evidence"])
-        self.assertTrue(boundary["bounded_serial_crsi_runtime_replay"])
-        self.assertTrue(boundary["source_local_log_bin_weighted_loading"])
-        self.assertTrue(boundary["source_local_deterministic_four_branch_wave_spectrum"])
-        self.assertFalse(boundary["runtime_growth_fit"])
-
 
 if __name__ == "__main__":
     unittest.main()

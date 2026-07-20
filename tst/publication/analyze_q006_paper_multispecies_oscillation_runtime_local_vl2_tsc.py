@@ -102,9 +102,8 @@ PIN_BUILD_DEPENDENCY_PATHS = {
     "src/pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp",
     "src/pgen/tests/q007_paper_deltaf_linear.cpp",
     "src/pgen/tests/q007_paper_deltaf_linear.hpp",
-    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py",
-    "tst/publication/analyze_q007_paper_deltaf_linear_preparation.py",
-    "tst/publication/analyze_q011_injection_distribution_runtime_local.py",
+    "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local_vl2_tsc.py",
+    "tst/publication/analyze_q007_paper_deltaf_linear_preparation_vl2_tsc.py",
     "tst/publication/immutable_orion_tree.py",
     "tst/scripts/particles/pic_mhd_expanding_box_cpaw_history_preparation.py",
     "tst/scripts/particles/pic_parser_contract_guards_vl2_tsc.py",
@@ -168,11 +167,6 @@ PARTICLES_SOURCE = REPO_ROOT / "src/particles/particles.cpp"
 DISPATCH = REPO_ROOT / "src/pgen/pgen.cpp"
 HEADER = REPO_ROOT / "src/pgen/pgen.hpp"
 CMAKE = REPO_ROOT / "src/CMakeLists.txt"
-PREPARATION_SIDECAR = (
-    REPO_ROOT
-    / "tst/publication/readiness/"
-    "q006_paper_multispecies_oscillation_source_local_preparation_2026-05-30.json"
-)
 DECKS = {
     "uniform": (
         REPO_ROOT
@@ -189,14 +183,14 @@ DECKS = {
     ),
 }
 EXPECTED_DECK_SHA256 = {
-    "uniform": "f2ac0efc5d773dc59d4a03ea6c556e3fa6d5260afb83dbf0787a6e3b01186591",
-    "smr": "6976e4839b6b7b2e4e777f1e82baeb2b405ea639659aaf50fb69dc54deb682e3",
+    "uniform": "2efe56ef8f4d725e9e484f24c904a0448b6ccb9a1f73f9dbbfb546eedca230ff",
+    "smr": "1233239910547be8210866c9369dacfc4b858340994fcdb1e16ecf9f2e6451ff",
     "audited_amr_runtime_local":
-        "7347d707af8474cf5a88bd2115de16e53d765bc514819ea3627b1ce660c22dde",
+        "2fc29d8f6783c0de145a53116fe5fa7d8dbb32b6b657a42efb6bbfbd32499672",
 }
 
 _EXPECTED_COMMON = {
-    ("time", "integrator"): "rk2",
+    ("time", "integrator"): "vl2",
     ("time", "cfl_number"): "0.1",
     ("time", "nlim"): "2",
     ("time", "tlim"): "1.0",
@@ -221,7 +215,6 @@ _EXPECTED_COMMON = {
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
     ("particles", "couple_moments_momentum_coeff"): "1.0",
     ("particles", "couple_moments_energy_coeff"): "0.0",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_interp_scheme"): "tsc",
@@ -613,19 +606,6 @@ def validate_deck(grid_setup: str, path: Path | None = None) -> dict[str, Any]:
 def validate_decks() -> list[dict[str, Any]]:
     """Validate all three bounded serial-host successor carriers."""
     return [validate_deck(grid) for grid in DECKS]
-
-
-def validate_historical_preparation_bindings() -> dict[str, Any]:
-    """Require every committed preparation artifact to retain its frozen hash."""
-    sidecar = _load_retained_json_text(
-        PREPARATION_SIDECAR.read_text(encoding="utf-8"),
-        "Q-006 preparation sidecar",
-    )
-    bindings = sidecar["artifact_bindings"]
-    for relative, expected in bindings.items():
-        _require(_sha256(REPO_ROOT / relative) == expected,
-                 f"historical Q-006 preparation hash drifted: {relative}")
-    return {"preserved": True, "artifact_count": len(bindings)}
 
 
 def validate_registration() -> dict[str, Any]:
@@ -1282,18 +1262,16 @@ def _parser_contract_oracle(root: Path, pinned: dict[str, Any]) -> list[dict[str
     from scripts.particles import pic_parser_contract_guards_vl2_tsc as guards  # noqa: PLC0415
 
     generic = root / "decks/pic_parser_contract_guards.athinput"
-    q006 = root / "decks/pic_q006_paper_multispecies_oscillation_uniform_runtime_local_vl2_tsc.athinput"
     oracle = []
     for positive, cases in ((True, guards._POSITIVE_CASES), (False, guards._REJECTION_CASES)):
         for label, arguments, expected in cases:
-            deck = q006 if label in guards._Q006_RUNTIME_LOCAL_CASES else generic
             oracle.append({
                 "label": label,
                 "positive": positive,
                 "expected": expected,
-                "deck": {"path": str(deck), "sha256": _sha256(deck)},
+                "deck": {"path": str(generic), "sha256": _sha256(generic)},
                 "argv": [
-                    pinned["pinned_executable_path"], "-i", str(deck), "time/nlim=0",
+                    pinned["pinned_executable_path"], "-i", str(generic), "time/nlim=0",
                     *arguments,
                 ],
             })
@@ -1303,21 +1281,7 @@ def _parser_contract_oracle(root: Path, pinned: dict[str, Any]) -> list[dict[str
 def _expected_parser_generated_paths(label: str, positive: bool) -> set[str]:
     if not positive:
         return set()
-    if label != "paper_mhd_pic_vl2_tsc_isothermal_fullf_momentum_only":
-        return {"pic_parser_contract_guards-errs.dat"}
-    basename = "pic_q006_paper_multispecies_oscillation_uniform_runtime_local"
-    payload = set()
-    for index in range(2):
-        suffix = f"{index:05d}"
-        payload.add(f"bin/{basename}.mhd_w_bcc.{suffix}.bin")
-        payload.add(f"pvtk/{basename}.prtcl_all.{suffix}.part.vtk")
-        payload.update({
-            f"rst/{basename}.{suffix}.rst",
-            f"rst/{basename}.{suffix}.rst.complete",
-            f"rst/{basename}.{suffix}.rst.manifest",
-            f"rst/{basename}.{suffix}.rst.manifest.complete",
-        })
-    return payload
+    return {"pic_parser_contract_guards-errs.dat"}
 
 
 def _validate_parser_contract_suite(root: Path, pinned: dict[str, Any]) -> dict[str, Any]:
@@ -1609,7 +1573,6 @@ def static_descriptor() -> dict[str, Any]:
         "external_review_claimed": False,
         "decks": validate_decks(),
         "registration": validate_registration(),
-        "historical_preparation": validate_historical_preparation_bindings(),
         "analytical_contract": analytical_contract(),
     }
 

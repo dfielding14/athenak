@@ -75,15 +75,20 @@ class Q032ReducedStaticNeutralRuntimeLocalTests(unittest.TestCase):
         for axis in ("ix1_bc", "ox1_bc", "ix2_bc", "ox2_bc"):
             self.assertEqual(blocks["mesh"][axis], "periodic")
         self.assertEqual(blocks["mesh_refinement"]["refinement"], "none")
+        self.assertEqual(blocks["time"]["integrator"], "rk1")
         particles = blocks["particles"]
-        self.assertEqual(particles["pic_physical_mode"], "extended_mhd_pic")
         self.assertEqual(particles["pic_wave_damping_mode"], "ion_neutral_friction")
         self.assertEqual(particles["pic_ion_neutral_collision_rate"], "0.7")
         self.assertEqual(particles["pic_feedback_mode"], "test_particle")
         self.assertEqual(particles["pic_enable_2d3v"], "true")
         self.assertEqual(particles["ppc"], "0.0")
         self.assertEqual(particles["deposit_moments"], "false")
+        self.assertEqual(particles["deposit_order"], "1")
         self.assertEqual(particles["couple_moments_to_mhd"], "false")
+        self.assertEqual(particles["pic_background_mode"], "coupled")
+        self.assertEqual(particles["pic_interp_scheme"], "tsc")
+        self.assertEqual(particles["pic_cr_initial_state"], "momentum")
+        self.assertEqual(particles["pic_cr_hall_mode"], "off")
         self.assertEqual(blocks["problem"]["pgen_name"],
                          "q032_reduced_static_neutral_local")
 

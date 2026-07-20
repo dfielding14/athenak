@@ -43,7 +43,7 @@ EXPECTED_XMIN = (0.0, 0.0, 0.0)
 
 _EXPECTED_DECK_VALUES = {
     ("time", "evolution"): "dynamic",
-    ("time", "integrator"): "rk2",
+    ("time", "integrator"): "vl2",
     ("time", "cfl_number"): "0.1",
     ("time", "nlim"): "0",
     ("time", "tlim"): "4.0",
@@ -61,7 +61,6 @@ _EXPECTED_DECK_VALUES = {
     ("particles", "couple_j_to_efield_coeff"): "1.0",
     ("particles", "couple_moments_momentum_to_mhd"): "true",
     ("particles", "couple_moments_energy_to_mhd"): "true",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_interp_scheme"): "tsc",

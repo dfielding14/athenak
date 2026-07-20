@@ -13,7 +13,7 @@ import unittest
 
 import numpy as np
 
-from tst.publication import analyze_q023_paper_bell_linear as bell
+from tst.publication import analyze_q023_paper_bell_linear_vl2_tsc as bell
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

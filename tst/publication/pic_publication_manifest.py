@@ -125,14 +125,6 @@ ARTIFACT_CASES: Tuple[ArtifactCase, ...] = (
         note="Mode-growth envelope from transverse current.",
     ),
     ArtifactCase(
-        case_id="bell_growth_proxy",
-        group="benchmark_engineering",
-        runner="module",
-        module="scripts.particles.pic_bell_growth_proxy",
-        output_globs=("tst/build/src/bin/pic_bell_proxy_*.*.bin",),
-        note="Coupled-vs-uncoupled Bell-like magnetic growth proxy.",
-    ),
-    ArtifactCase(
         case_id="multispecies_backreaction_oscillation",
         group="benchmark_engineering",
         runner="module",

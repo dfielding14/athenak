@@ -88,6 +88,7 @@ _EXPECTED_GEOMETRY = {
 }
 
 _EXPECTED_DECK_VALUES = {
+    ("time", "integrator"): "vl2",
     ("time", "nlim"): "0",
     ("time", "tlim"): "0.0",
     ("particles", "particle_type"): "cosmic_ray",
@@ -104,7 +105,6 @@ _EXPECTED_DECK_VALUES = {
     ("particles", "couple_moments_momentum_to_mhd"): "true",
     ("particles", "couple_moments_energy_to_mhd"): "true",
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_interp_scheme"): "tsc",
@@ -413,6 +413,10 @@ def validate_candidate_deck(path: Path, expected_dimension: int) -> dict[str, An
             raise ContractError(
                 f"{path}: {block}/{name}: expected {expected!r}, measured {measured!r}"
             )
+    if "pic_physical_mode" in blocks.get("particles", {}):
+        raise ContractError(
+            f"{path}: particles/pic_physical_mode is obsolete; use explicit controls"
+        )
 
     metadata = blocks[PGEN_BLOCK]
     if metadata.get("dimension") != str(expected_dimension):

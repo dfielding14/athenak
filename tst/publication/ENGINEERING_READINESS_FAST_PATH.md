@@ -91,39 +91,19 @@ The terminal evidence is
 record has `engineering_ready: true`; it does not authorize a scientific or
 publication claim and does not replace the 132-case Q043 campaign.
 
-## Bell And Shock Commands
+## Shock Commands
 
 ```bash
-sbatch tst/publication/frontier_q023_linear_bell_engineering_v1.sh
-sbatch tst/publication/frontier_q019_nonlinear_bell_engineering_v1.sh
 sbatch tst/publication/frontier_pic_shock_engineering_readiness_v1.sh
 sbatch tst/publication/frontier_q011_coupled_shock_transport_engineering_v1.sh
 ```
 
-The Bell jobs write `quicklook.json` under their job-specific
-`engineering_readiness/` roots. The shock mechanics gate writes an artifact
-manifest, CSV/JSON summaries, and comparison plot. The coupled transport job
-runs a one-node uniform reduction of the Section 5.4 production deck and writes
-time-resolved particle and exact-cohort statistics to `quicklook.json`.
+The shock mechanics gate writes an artifact manifest, CSV/JSON summaries, and
+comparison plot. The coupled transport job runs a one-node uniform reduction
+of the Section 5.4 production deck and writes time-resolved particle and
+exact-cohort statistics to `quicklook.json`.
 
 ## Publication-Style Figures
-
-The checked-in figure generator produces two-column-width vector PDFs,
-400-DPI PNGs, manuscript-ready captions, and a SHA-256 provenance manifest:
-
-```bash
-python3 -B -m tst.publication.make_bell_shock_publication_figures_v1 \
-  --linear-root /lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/linear-bell-4905859 \
-  --nonlinear-root /lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/nonlinear-bell-4905865 \
-  --shock-root /lustre/orion/ast207/proj-shared/dfielding/PIC/engineering_readiness/shock-acceleration-4905888 \
-  --output-root /lustre/orion/ast207/proj-shared/dfielding/PIC/publication_figures/bell_shock_20260626
-```
-
-The earlier two-figure set is a publication-quality presentation of compact
-engineering runs. It supports corrected linear Bell growth, coherent
-finite-amplitude Bell response, shock formation, coupled injection, and
-particle transport. That earlier set does not support turbulent Bell saturation
-or diffusive shock acceleration claims.
 
 The finite-rigidity nonlinear-to-saturation figure is generated separately:
 

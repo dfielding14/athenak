@@ -21,7 +21,7 @@ ARTIFACT_ROLE = "source_local_synthetic_static_neutral_contract_only"
 QUALIFICATION_EFFECT = "none_source_local_launch_blocked_contract_only"
 LAUNCH_STATUS = "blocked_missing_plotnikov_inputs_review_authorization_and_generator"
 DECK = REPO_ROOT / "inputs/tests/pic_q032_plotnikov_damped_crsi_candidate.athinput"
-DECK_SHA256 = "ae471a610d8c2c50367c58df372361c1dfeec08644224789f9cba8a55df722a9"
+DECK_SHA256 = "6621e256b5b4c58b6fb65f9fa924361a0d7e1f4095c154a3ffffa97b81ee879d"
 _PGEN_DISPATCH = REPO_ROOT / "src/pgen/pgen.cpp"
 _PGEN_NAME = "q032_plotnikov_damped_crsi_open"
 COLLISION_RATE_GRID = (0.0, 0.7, 1.4)
@@ -73,15 +73,21 @@ _PREREQUISITE_BINDINGS = {
         "8338ee08f311ce353186a514549cec1227d17de300557645655158ee73da3dc4",
 }
 _EXPECTED_DECK_VALUES = {
+    ("time", "integrator"): "rk2",
     ("time", "nlim"): "0",
     ("time", "tlim"): "0.0",
     ("particles", "particle_type"): "cosmic_ray",
     ("particles", "pusher"): "boris_tsc",
     ("particles", "deposit_moments"): "true",
+    ("particles", "deposit_order"): "1",
     ("particles", "couple_moments_to_mhd"): "true",
-    ("particles", "pic_physical_mode"): "extended_mhd_pic",
+    ("particles", "couple_moments_momentum_to_mhd"): "true",
+    ("particles", "couple_moments_energy_to_mhd"): "true",
+    ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
+    ("particles", "pic_interp_scheme"): "tsc",
+    ("particles", "pic_cr_initial_state"): "momentum",
     ("particles", "pic_cr_hall_mode"): "off",
     ("particles", "pic_wave_damping_mode"): "ion_neutral_friction",
     ("particles", "pic_ion_neutral_collision_rate"): "0.7",

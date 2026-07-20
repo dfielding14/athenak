@@ -181,6 +181,21 @@ _RUNTIME_DEFAULTS = {
 DEPOSITION_TOLERANCE_ULPS = 128.0
 QUALIFICATION_EFFECT = "none_source_local_output_oracle_only"
 
+_EXPLICIT_VL2_CONTROLS = {
+    ("time", "integrator"): "vl2",
+    ("particles", "particle_type"): "cosmic_ray",
+    ("particles", "pusher"): "boris_tsc",
+    ("particles", "deposit_moments"): "true",
+    ("particles", "deposit_order"): "2",
+    ("particles", "couple_moments_to_mhd"): "true",
+    ("particles", "couple_moments_momentum_to_mhd"): "true",
+    ("particles", "couple_moments_energy_to_mhd"): "true",
+    ("particles", "pic_background_mode"): "coupled",
+    ("particles", "pic_feedback_mode"): "coupled",
+    ("particles", "pic_interp_scheme"): "tsc",
+    ("particles", "pic_cr_hall_mode"): "off",
+}
+
 _GEOMETRY = {
     1: {
         "bounds": ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0)),
@@ -451,7 +466,7 @@ def render_oracle_deck(case: Mapping[str, object]) -> str:
             "",
             "<time>",
             "evolution = dynamic",
-            "integrator = rk2",
+            "integrator = vl2",
             "cfl_number = 0.1",
             "nlim = 1",
             "tlim = 1.0e30",
@@ -484,7 +499,6 @@ def render_oracle_deck(case: Mapping[str, object]) -> str:
             f"cr_vx0 = {_float_token(stream[0])}",
             f"cr_vy0 = {_float_token(stream[1])}",
             f"cr_vz0 = {_float_token(stream[2])}",
-            "pic_physical_mode = paper_mhd_pic_vl2_tsc",
             "pic_background_mode = coupled",
             "pic_feedback_mode = coupled",
             "pic_interp_scheme = tsc",
@@ -626,6 +640,16 @@ def parse_athinput_text(text: str) -> dict[str, dict[str, str]]:
 def validate_rendered_deck(case: Mapping[str, object], text: str) -> dict[str, object]:
     """Validate a rendered deck and its volume-aware configured closure."""
     blocks = parse_athinput_text(text)
+    for (block, name), expected in _EXPLICIT_VL2_CONTROLS.items():
+        measured = blocks.get(block, {}).get(name)
+        _require(
+            measured == expected,
+            f"{case['case_id']}: {block}/{name} must be {expected}",
+        )
+    _require(
+        "pic_physical_mode" not in blocks.get("particles", {}),
+        f"{case['case_id']}: obsolete particles/pic_physical_mode is forbidden",
+    )
     nx = tuple(int(blocks["mesh"][f"nx{axis}"]) for axis in (1, 2, 3))
     mb = tuple(int(blocks["meshblock"][f"nx{axis}"]) for axis in (1, 2, 3))
     bounds = tuple(

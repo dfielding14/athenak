@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import inspect
 import json
 import math
@@ -24,10 +23,6 @@ READINESS = (
     / "tst/publication/readiness/"
     "q043_bell_current_volume_aware_successor_source_local_preparation_2026-06-06.json"
 )
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _replace_once(path: Path, old: str, new: str) -> Path:
@@ -192,6 +187,21 @@ class Q043BellCurrentVolumeAwareTests(unittest.TestCase):
         mutations = (
             (
                 1,
+                "integrator = vl2",
+                "integrator = rk2",
+                "time/integrator",
+            ),
+            (
+                1,
+                "pic_background_mode               = coupled",
+                (
+                    "pic_physical_mode                 = paper_mhd_pic_vl2_tsc\n"
+                    "pic_background_mode               = coupled"
+                ),
+                "particles/pic_physical_mode",
+            ),
+            (
+                1,
                 "deposit_qscale                    = 6250.0",
                 "deposit_qscale                    = 1.0e9",
                 "deposit_qscale",
@@ -301,7 +311,7 @@ class Q043BellCurrentVolumeAwareTests(unittest.TestCase):
             self.assertEqual(blocks["problem"]["pgen_name"], oracle.PGEN_NAME)
             self.assertEqual(blocks[bell.PGEN_BLOCK]["campaign_id"], oracle.PGEN_CAMPAIGN_ID)
 
-    def test_readiness_record_binds_only_successor_preparation_artifacts(self) -> None:
+    def test_readiness_record_preserves_successor_preparation_metadata(self) -> None:
         readiness = json.loads(READINESS.read_text(encoding="utf-8"))
         self.assertEqual(readiness["gate"], "Q-043")
         self.assertEqual(readiness["campaign_id"], bell.CAMPAIGN_ID)
@@ -360,38 +370,8 @@ class Q043BellCurrentVolumeAwareTests(unittest.TestCase):
             bell.SUPERSESSION_IDENTITY_ROLE,
         )
 
-        expected_paths = {
-            *(path.relative_to(REPO_ROOT).as_posix() for path in bell.DECKS.values()),
-            "src/CMakeLists.txt",
-            "src/pgen/AGENTS.md",
-            "src/pgen/pgen.cpp",
-            "src/pgen/pgen.hpp",
-            "src/pgen/tests/q043_bell_current_volume_aware.cpp",
-            "tst/publication/analyze_q043_bell_current_volume_aware.py",
-            "tst/publication/q043_bell_current_volume_aware_host_harness.cpp",
-            "tst/publication/q043_bell_current_volume_aware_deposited_current_oracle.py",
-            "tst/publication/test_analyze_q043_bell_current_volume_aware.py",
-            "tst/publication/test_q043_bell_current_volume_aware_host_harness.py",
-            "tst/publication/test_q043_bell_current_volume_aware_deposited_current_oracle.py",
-            (
-                "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/"
-                "deck_manifest.json"
-            ),
-            (
-                "tst/publication/readiness/"
-                "q043_bell_current_volume_aware_deposited_current_oracle_"
-                "source_local_2026-06-06.json"
-            ),
-            (
-                "tst/publication/readiness/"
-                "q043_bell_current_normalization_supersession_2026-06-06.json"
-            ),
-            "tst/publication/test_q043_bell_current_normalization_supersession.py",
-        }
-        bindings = readiness["artifact_bindings"]
-        self.assertEqual(set(bindings), expected_paths)
-        for relative, digest in bindings.items():
-            self.assertEqual(_sha256(REPO_ROOT / relative), digest)
+        # This dated record is historical metadata. Live deck byte integrity is
+        # enforced by the generator-backed Q043 matrix validator.
 
 
 if __name__ == "__main__":

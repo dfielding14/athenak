@@ -476,8 +476,14 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                 _make_writable_tree(tree)
 
     def test_q006_and_q007_reject_unrelated_sealed_memfd(self) -> None:
-        from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local
-        from tst.publication import analyze_q007_paper_deltaf_linear_preparation
+        from tst.publication import (
+            analyze_q006_paper_multispecies_oscillation_runtime_local_vl2_tsc
+            as analyze_q006_paper_multispecies_oscillation_runtime_local,
+        )
+        from tst.publication import (
+            analyze_q007_paper_deltaf_linear_preparation_vl2_tsc
+            as analyze_q007_paper_deltaf_linear_preparation,
+        )
 
         fd = os.memfd_create("unrelated", flags=os.MFD_ALLOW_SEALING)
         try:
@@ -500,8 +506,14 @@ class ImmutableOrionTreeTests(unittest.TestCase):
             os.close(fd)
 
     def test_q006_and_q007_reject_unknown_file_injected_after_snapshot_handoff(self) -> None:
-        from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local
-        from tst.publication import analyze_q007_paper_deltaf_linear_preparation
+        from tst.publication import (
+            analyze_q006_paper_multispecies_oscillation_runtime_local_vl2_tsc
+            as analyze_q006_paper_multispecies_oscillation_runtime_local,
+        )
+        from tst.publication import (
+            analyze_q007_paper_deltaf_linear_preparation_vl2_tsc
+            as analyze_q007_paper_deltaf_linear_preparation,
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -532,8 +544,14 @@ class ImmutableOrionTreeTests(unittest.TestCase):
                 _make_writable_tree(tree)
 
     def test_q006_and_q007_reject_verified_directory_replaced_by_regular_file(self) -> None:
-        from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local
-        from tst.publication import analyze_q007_paper_deltaf_linear_preparation
+        from tst.publication import (
+            analyze_q006_paper_multispecies_oscillation_runtime_local_vl2_tsc
+            as analyze_q006_paper_multispecies_oscillation_runtime_local,
+        )
+        from tst.publication import (
+            analyze_q007_paper_deltaf_linear_preparation_vl2_tsc
+            as analyze_q007_paper_deltaf_linear_preparation,
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

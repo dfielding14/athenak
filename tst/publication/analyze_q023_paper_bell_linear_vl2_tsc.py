@@ -80,23 +80,24 @@ _APPROVED_SOURCE_LOCAL_RAW_VARIANTS = {
         "dimension": 1,
         "epsilon": 0.4,
         "deck": DECKS[1],
-        "deck_sha256": "b77689de8e683d918cbfda2d13adac77ca7aa85b7f5cb7f998fb1dfc02ce1cba",
+        "deck_sha256": "64f7050ecafefd6e61b4722f666e94cea65af68606726aad8f6b3e4baec75fa3",
     },
     "Q023-SOURCE-LOCAL-BASELINE-2D-EPSILON-0P4": {
         "dimension": 2,
         "epsilon": 0.4,
         "deck": DECKS[2],
-        "deck_sha256": "1877445adcecd24dbc91aeda80e5f11a4529fd4ab68049ef000e7cdda79b3524",
+        "deck_sha256": "4cfbc19003e06bd9fc9a394d0a93c009fece573aaea51eb9dcf92c82c10ebbf3",
     },
     "Q023-SOURCE-LOCAL-BASELINE-3D-EPSILON-0P4": {
         "dimension": 3,
         "epsilon": 0.4,
         "deck": DECKS[3],
-        "deck_sha256": "e30e44d1566e4acaf1201c46db8cf37537101c79c2d325a48dbe4ae9288556ad",
+        "deck_sha256": "0f9bd5a773b4c3f68a4dd415ea90ed7e0487b856524bd89edf0d7edfa4e722ea",
     },
 }
 
 _EXPECTED_DECK_VALUES = {
+    ("time", "integrator"): "vl2",
     ("time", "nlim"): "0",
     ("time", "tlim"): "0.0",
     ("particles", "particle_type"): "cosmic_ray",
@@ -114,7 +115,6 @@ _EXPECTED_DECK_VALUES = {
     ("particles", "couple_moments_momentum_to_mhd"): "true",
     ("particles", "couple_moments_energy_to_mhd"): "true",
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
-    ("particles", "pic_physical_mode"): "paper_mhd_pic_vl2_tsc",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_enable_2d3v"): "true",

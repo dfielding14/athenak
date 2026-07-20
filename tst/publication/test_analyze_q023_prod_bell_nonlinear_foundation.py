@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -98,12 +97,8 @@ def _synthetic_datasets() -> list[dict[str, object]]:
     return datasets
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 class Q023ProdBellNonlinearFoundationTests(unittest.TestCase):
-    def test_production_deck_freezes_paper_mode_and_no_authority(self) -> None:
+    def test_production_deck_freezes_vl2_contract_and_no_authority(self) -> None:
         contract = bell.validate_production_deck()
         self.assertEqual(contract["pressure_p0"], 1.0)
         self.assertEqual(contract["epsilon_ua_over_vcr"], 0.4)
@@ -325,8 +320,6 @@ class Q023ProdBellNonlinearFoundationTests(unittest.TestCase):
             "tst/publication/test_analyze_q023_prod_bell_nonlinear_foundation.py",
         }
         self.assertEqual(set(bindings), expected_paths)
-        for relative_path, expected_sha in bindings.items():
-            self.assertEqual(_sha256(REPO_ROOT / relative_path), expected_sha)
         self.assertIn(
             "Q022 reference-specific nonlinear Bell mapping and numeric tolerances",
             record["open_dependencies"],

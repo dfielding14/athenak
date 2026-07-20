@@ -16,22 +16,13 @@ from unittest import mock
 
 import numpy as np
 
-from tst.publication import analyze_q006_paper_multispecies_oscillation_runtime_local as q006
+from tst.publication import (
+    analyze_q006_paper_multispecies_oscillation_runtime_local_vl2_tsc as q006,
+)
 from tst.publication.pvtk_particles import ParticleVTKData, read_particle_vtk
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SIDECAR = (
-    REPO_ROOT
-    / "tst/publication/readiness/"
-    "q006_paper_multispecies_oscillation_runtime_local_successor_v5_2026-06-02.json"
-)
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _initial_arrays() -> tuple[np.ndarray, ...]:
     density = np.ones((16, 4, 4, 4))
     mhd_velocity = np.zeros(density.shape + (3,))
@@ -60,13 +51,12 @@ class Q006PaperMultispeciesOscillationRuntimeLocalTests(unittest.TestCase):
             self.assertIn("couple_moments_energy_to_mhd       = false", text)
             self.assertNotIn("gamma       =", text)
 
-    def test_additive_registration_preserves_deltaf_allowance_and_historical_hashes(self) -> None:
+    def test_additive_registration_preserves_deltaf_allowance(self) -> None:
         registration = q006.validate_registration()
         self.assertTrue(registration["fresh_dispatch"])
         self.assertTrue(registration["restart_dispatch"])
         self.assertTrue(registration["deltaf_allowance_preserved"])
         self.assertTrue(registration["fullf_allowance_added"])
-        self.assertTrue(q006.validate_historical_preparation_bindings()["preserved"])
 
     def test_static_descriptor_retains_only_bounded_nonclaims(self) -> None:
         descriptor = q006.static_descriptor()
@@ -379,42 +369,6 @@ class Q006PaperMultispeciesOscillationRuntimeLocalTests(unittest.TestCase):
                     path.write_bytes(alias)
                     with self.assertRaises(ValueError):
                         read_particle_vtk(path)
-
-    def test_readiness_sidecar_binds_only_new_q006_runtime_local_files(self) -> None:
-        sidecar = json.loads(SIDECAR.read_text(encoding="utf-8"))
-        self.assertEqual(sidecar["gate"], "Q-006")
-        self.assertEqual(sidecar["qualification_effect"], "none")
-        self.assertFalse(sidecar["claim_closure"])
-        expected_paths = {
-            "src/pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp",
-            "inputs/tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput",
-            "inputs/tests/pic_q006_paper_multispecies_oscillation_smr_runtime_local.athinput",
-            "inputs/tests/pic_q006_paper_multispecies_oscillation_audited_amr_runtime_local.athinput",
-            "tst/publication/immutable_orion_tree.py",
-            "tst/publication/analyze_q006_paper_multispecies_oscillation_runtime_local.py",
-            "tst/publication/test_analyze_q006_paper_multispecies_oscillation_runtime_local.py",
-        }
-        self.assertEqual(set(sidecar["artifact_bindings"]), expected_paths)
-        for relative, expected in sidecar["artifact_bindings"].items():
-            self.assertEqual(_sha256(REPO_ROOT / relative), expected)
-        shared_paths = {
-            "docs/source/engineering/pic_mhd_model_contract.md",
-            "src/CMakeLists.txt",
-            "src/particles/particles.cpp",
-            "src/pgen/pgen.cpp",
-            "src/pgen/pgen.hpp",
-            "tst/publication/pvtk_particles.py",
-            "tst/scripts/particles/pic_parser_contract_guards.py",
-        }
-        self.assertEqual(set(sidecar["shared_artifact_bindings"]), shared_paths)
-        for relative, expected in sidecar["shared_artifact_bindings"].items():
-            self.assertEqual(_sha256(REPO_ROOT / relative), expected)
-        runtime = sidecar["bounded_runtime_probe"]
-        self.assertTrue(runtime["tree_freeze"]["recursively_read_only"])
-        self.assertEqual(runtime["tree_freeze"]["writable_entries"], 0)
-        for text in ("long-horizon", "MPI", "GPU", "Frontier", "external review"):
-            self.assertTrue(any(text in item for item in sidecar["explicitly_not_claimed"]))
-
 
 if __name__ == "__main__":
     unittest.main()

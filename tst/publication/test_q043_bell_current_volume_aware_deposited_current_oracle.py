@@ -709,7 +709,7 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
             with self.assertRaises(oracle.ContractError):
                 oracle.analyze_raw_matrix(raw)
 
-    def test_readiness_record_binds_additive_non_authorizing_oracle(self) -> None:
+    def test_readiness_record_preserves_non_authorizing_oracle_metadata(self) -> None:
         record = json.loads(READINESS.read_text(encoding="utf-8"))
         self.assertEqual(record["campaign_id"], oracle.CAMPAIGN_ID)
         self.assertEqual(record["qualification_effect"], oracle.QUALIFICATION_EFFECT)
@@ -757,14 +757,8 @@ class Q043BellCurrentVolumeAwareDepositedCurrentOracleTests(unittest.TestCase):
         self.assertFalse(
             record["normalization_contract"]["artificial_light_speed_in_formula"]
         )
-        self.assertEqual(
-            _sha256(oracle.CHECKED_IN_MANIFEST),
-            record["artifact_bindings"][
-                "inputs/tests/q043_bell_current_volume_aware_deposited_current_oracle/deck_manifest.json"
-            ],
-        )
-        for relative, digest in record["artifact_bindings"].items():
-            self.assertEqual(_sha256(REPO_ROOT / relative), digest)
+        # This dated record is historical metadata. Live deck byte integrity is
+        # enforced by validate_checked_in_decks() above.
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ import stat
 import tempfile
 from typing import Any, Iterable
 
-from tst.publication import analyze_q023_paper_bell_linear as bell
+from tst.publication import analyze_q023_paper_bell_linear_vl2_tsc as bell
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -44,9 +44,9 @@ EXPECTED_VARIANT_COUNT = (
 
 SOURCE_DECKS = dict(bell.DECKS)
 SOURCE_DECK_SHA256 = {
-    1: "b84fb1b046d3174c3ce6bdd5f9067173dccd0636557d57c047331bf0a42eb4d5",
-    2: "b8a11ce7f7227210392de133bf52f71c265d86ab5ade73bf89a45a6449a3a23c",
-    3: "a0fda35a71542e3c411c574a4c5069cbbae3776f02aa10dd44176a3102664103",
+    1: "64f7050ecafefd6e61b4722f666e94cea65af68606726aad8f6b3e4baec75fa3",
+    2: "4cfbc19003e06bd9fc9a394d0a93c009fece573aaea51eb9dcf92c82c10ebbf3",
+    3: "0f9bd5a773b4c3f68a4dd415ea90ed7e0487b856524bd89edf0d7edfa4e722ea",
 }
 
 LOADING_POLICY = {

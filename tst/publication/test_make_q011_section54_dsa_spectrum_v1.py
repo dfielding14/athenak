@@ -41,7 +41,7 @@ def _input_parameters(
             "x3max": "1.0",
         },
         "meshblock": {"nx1": "20", "nx2": "20", "nx3": "1"},
-        "time": {"integrator": "rk2", "tlim": tlim},
+        "time": {"integrator": "vl2", "tlim": tlim},
         "mhd": {"eos": "ideal", "gamma": "1.66666666667"},
         "particles": {
             "particle_type": "cosmic_ray",
@@ -55,7 +55,6 @@ def _input_parameters(
             "couple_moments_energy_to_mhd": "true",
             "couple_moments_momentum_coeff": "1.0",
             "couple_moments_energy_coeff": "1.0",
-            "pic_physical_mode": "paper_mhd_pic_vl2_tsc",
             "pic_background_mode": "coupled",
             "pic_feedback_mode": "coupled",
             "pic_interp_scheme": "tsc",

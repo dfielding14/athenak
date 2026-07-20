@@ -37,11 +37,21 @@ nx3 = 1
 refinement = adaptive
 num_levels = 3
 
+<time>
+integrator = vl2
+
 <mhd>
 gamma = 1.66666666667
 
 <particles>
-pic_physical_mode = paper_mhd_pic_vl2_tsc
+pusher = boris_tsc
+deposit_moments = true
+deposit_order = 2
+couple_moments_to_mhd = true
+couple_moments_momentum_to_mhd = true
+couple_moments_energy_to_mhd = true
+pic_background_mode = coupled
+pic_feedback_mode = coupled
 pic_cr_light_speed = 10000.0
 pic_cr_initial_state = momentum
 
@@ -55,12 +65,14 @@ ps_enable_curvature_amr = true
 
 def _runtime_line(**replacements: str) -> str:
     values = {
-        "physical_mode": model.PAPER_PHYSICAL_MODE,
+        "integrator": model.INTEGRATOR,
         "state": model.RUNTIME_MOMENTUM_STATE,
         "C": "10000",
         "background": "coupled",
         "feedback": "coupled",
-        "restart_schema": "7",
+        "induction": "ideal_mhd_only",
+        "deposition": "tsc",
+        "restart_schema": "8",
     }
     values.update(replacements)
     return "PIC runtime model: " + " ".join(
@@ -167,18 +179,18 @@ class Q011Section54VariantBindingTests(unittest.TestCase):
 class Q011Section54RuntimeIdentityTests(unittest.TestCase):
     def test_runtime_identity_requires_frozen_paper_projection(self) -> None:
         identity = model.parse_runtime_identity("startup\n" + _runtime_line() + "\n")
-        self.assertEqual(identity.physical_mode, model.PAPER_PHYSICAL_MODE)
+        self.assertEqual(identity.integrator, model.INTEGRATOR)
         self.assertEqual(identity.state, "momentum_p_over_m")
         self.assertEqual(identity.light_speed, 10000.0)
-        self.assertEqual(identity.restart_schema, 7)
+        self.assertEqual(identity.restart_schema, 8)
 
     def test_runtime_identity_rejects_missing_duplicate_and_malformed_fields(self) -> None:
         cases = {
-            "missing": _runtime_line().replace(" restart_schema=7", ""),
+            "missing": _runtime_line().replace(" restart_schema=8", ""),
             "duplicate": _runtime_line() + " C=10000",
             "malformed": _runtime_line() + " malformed",
             "nonfinite_C": _runtime_line(C="nan"),
-            "decimal_schema": _runtime_line(restart_schema="7.0"),
+            "decimal_schema": _runtime_line(restart_schema="8.0"),
         }
         for label, line in cases.items():
             with self.subTest(label=label):
@@ -187,10 +199,14 @@ class Q011Section54RuntimeIdentityTests(unittest.TestCase):
 
     def test_runtime_identity_rejects_required_value_drift(self) -> None:
         cases = {
-            "historical_mode": {"physical_mode": "paper_mhd_pic"},
+            "integrator": {"integrator": "rk2"},
             "velocity_state": {"state": "velocity"},
             "light_speed": {"C": "9999"},
-            "restart_schema": {"restart_schema": "6"},
+            "background": {"background": "external"},
+            "feedback": {"feedback": "external"},
+            "induction": {"induction": "cr_hall_full"},
+            "deposition": {"deposition": "cic"},
+            "restart_schema": {"restart_schema": "7"},
         }
         for label, replacements in cases.items():
             with self.subTest(label=label):
@@ -219,17 +235,11 @@ class Q011Section54ChiReconstructionTests(unittest.TestCase):
     def test_chi_reconstructs_from_float_physical_velocity(self) -> None:
         expected = (25.0 / (1.0 - 25.0 / 10000.0**2)) / 30.0**2
         self.assertAlmostEqual(
-            model.reconstruct_chi_from_physical_speed(
-                5.0,
-                physical_mode=model.PAPER_PHYSICAL_MODE,
-            ),
+            model.reconstruct_chi_from_physical_speed(5.0),
             expected,
         )
         self.assertAlmostEqual(
-            model.reconstruct_chi_from_physical_velocity(
-                (3.0, 4.0, 0.0),
-                physical_mode=model.PAPER_PHYSICAL_MODE,
-            ),
+            model.reconstruct_chi_from_physical_velocity((3.0, 4.0, 0.0)),
             expected,
         )
 
@@ -245,22 +255,11 @@ class Q011Section54ChiReconstructionTests(unittest.TestCase):
         for velocity in vectors:
             with self.subTest(velocity=velocity):
                 with self.assertRaises(model.ModelContractError):
-                    model.reconstruct_chi_from_physical_velocity(
-                        velocity,
-                        physical_mode=model.PAPER_PHYSICAL_MODE,
-                    )
+                    model.reconstruct_chi_from_physical_velocity(velocity)
 
-    def test_chi_rejects_nonpaper_mode_and_negative_speed(self) -> None:
-        with self.assertRaisesRegex(model.ModelContractError, "paper physical mode"):
-            model.reconstruct_chi_from_physical_velocity(
-                (3.0, 4.0, 0.0),
-                physical_mode="paper_mhd_pic",
-            )
+    def test_chi_rejects_negative_speed(self) -> None:
         with self.assertRaisesRegex(model.ModelContractError, "nonnegative magnitude"):
-            model.reconstruct_chi_from_physical_speed(
-                -1.0,
-                physical_mode=model.PAPER_PHYSICAL_MODE,
-            )
+            model.reconstruct_chi_from_physical_speed(-1.0)
 
     def test_float32_projection_uncertainty_is_documented(self) -> None:
         note = model.FLOAT32_PROJECTION_UNCERTAINTY
@@ -273,7 +272,7 @@ class Q011Section54DeckContractTests(unittest.TestCase):
     def test_typed_deck_contract_freezes_model_assumptions(self) -> None:
         contract = model.parse_deck_contract(_amr_deck())
         self.assertEqual(contract.variant, "three_level_amr_root_dx12_finest_dx3")
-        self.assertEqual(contract.physical_mode, model.PAPER_PHYSICAL_MODE)
+        self.assertEqual(contract.integrator, model.INTEGRATOR)
         self.assertEqual(contract.initial_state, "momentum")
         self.assertEqual(contract.light_speed, 10000.0)
         self.assertAlmostEqual(contract.gamma, 5.0 / 3.0)
@@ -299,9 +298,15 @@ class Q011Section54DeckContractTests(unittest.TestCase):
 
     def test_typed_deck_contract_rejects_assumption_drift(self) -> None:
         replacements = {
-            "physical_mode": (
-                "pic_physical_mode = paper_mhd_pic_vl2_tsc",
-                "pic_physical_mode = paper_mhd_pic",
+            "integrator": (
+                "integrator = vl2",
+                "integrator = rk2",
+            ),
+            "pusher": ("pusher = boris_tsc", "pusher = boris"),
+            "deposition": ("deposit_order = 2", "deposit_order = 1"),
+            "background": (
+                "pic_background_mode = coupled",
+                "pic_background_mode = external",
             ),
             "light_speed": (
                 "pic_cr_light_speed = 10000.0",

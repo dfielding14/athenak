@@ -21,7 +21,7 @@ LAUNCH_STATUS = (
     "and_external_review"
 )
 DECK = REPO_ROOT / "inputs/tests/pic_q033_crpai_transport_calibration_candidate.athinput"
-DECK_SHA256 = "77ffeb7bdfd1f1f2299db7e4ee257d105b580a6bd554cd244e6d9e0c8214ce58"
+DECK_SHA256 = "3a627cab02bdd8834f6f30ea39d2016d1e37f23848a44c3d1a7a6a1432aaf938"
 _PGEN_DISPATCH = REPO_ROOT / "src/pgen/pgen.cpp"
 _PGEN_NAME = "q033_crpai_transport_calibration_open"
 ABSOLUTE_TOLERANCE = 1.0e-12
@@ -114,20 +114,23 @@ _Q022_COMPARISON_ID = "XCMP-EXT-CRPAI-TRANSPORT"
 _Q022_DATASET_ID = "Q022-DATASET-XCMP-EXT-CRPAI-TRANSPORT"
 _Q022_REFERENCE_ID = "sun_bai_zhao_2024_arxiv_2409.08592"
 _EXPECTED_DECK_VALUES = {
+    ("time", "integrator"): "rk2",
     ("time", "nlim"): "0",
     ("time", "tlim"): "0.0",
     ("particles", "particle_type"): "cosmic_ray",
     ("particles", "pusher"): "boris_tsc",
     ("particles", "deposit_moments"): "true",
+    ("particles", "deposit_order"): "1",
     ("particles", "couple_moments_to_mhd"): "true",
     ("particles", "couple_j_to_efield_representation"): "cell_centered",
     ("particles", "couple_j_deposition_mode"): "cc_convert",
     ("particles", "couple_moments_momentum_to_mhd"): "true",
     ("particles", "couple_moments_energy_to_mhd"): "true",
     ("particles", "couple_fluid_feedback_order"): "mhd_src_terms",
-    ("particles", "pic_physical_mode"): "extended_mhd_pic",
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
+    ("particles", "pic_interp_scheme"): "tsc",
+    ("particles", "pic_cr_initial_state"): "momentum",
     ("particles", "pic_cr_hall_mode"): "off",
     ("particles", "pic_wave_damping_mode"): "ion_neutral_friction",
     ("particles", "pic_ion_neutral_collision_rate"): "1.0e-4",

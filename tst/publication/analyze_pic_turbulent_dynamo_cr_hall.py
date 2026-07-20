@@ -135,8 +135,25 @@ def _validate_model(
         raise RuntimeError(
             "analysis expected particles/pic_cr_hall_mode=" + expected_hall_mode
         )
-    if particles.get("pic_physical_mode") != "paper_mhd_pic_vl2_tsc":
-        raise RuntimeError("analysis requires the VL2/TSC physical model")
+    required_controls = {
+        ("time", "integrator"): "vl2",
+        ("particles", "particle_type"): "cosmic_ray",
+        ("particles", "pusher"): "boris_tsc",
+        ("particles", "deposit_moments"): "true",
+        ("particles", "deposit_order"): "2",
+        ("particles", "couple_moments_to_mhd"): "true",
+        ("particles", "couple_moments_momentum_to_mhd"): "true",
+        ("particles", "couple_moments_energy_to_mhd"): "true",
+        ("particles", "pic_background_mode"): "coupled",
+        ("particles", "pic_feedback_mode"): "coupled",
+        ("particles", "pic_interp_scheme"): "tsc",
+    }
+    for (block, name), expected in required_controls.items():
+        measured = parameters.get(block, {}).get(name)
+        if measured != expected:
+            raise RuntimeError(
+                f"analysis requires {block}/{name}={expected}; measured {measured!r}"
+            )
     if parameters.get("mesh_refinement", {}).get("refinement") != "none":
         raise RuntimeError("analysis requires the uniform 128^3 box")
     shape = tuple(int(parameters["mesh"][f"nx{axis}"]) for axis in (1, 2, 3))
@@ -154,7 +171,8 @@ def _validate_model(
     return {
         "mesh": list(shape),
         "hall_mode": expected_hall_mode,
-        "physical_mode": particles["pic_physical_mode"],
+        "integrator": parameters["time"]["integrator"],
+        "coupling": "vl2_tsc",
         "background_ion_q_over_mc": alpha_i,
         "cr_species_q_over_mc": qom,
         "ppc": float(particles["ppc"]),

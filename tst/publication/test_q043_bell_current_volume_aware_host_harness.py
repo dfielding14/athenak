@@ -210,9 +210,13 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
             "requires ideal-MHD EOS",
             "rejects AMR/SMR",
             "requires periodic boundaries",
-            '"pic_physical_mode"',
-            '"paper_mhd_pic"',
-            '"paper_mhd_pic_vl2_tsc"',
+            '"time", "integrator", "vl2"',
+            '"particles", "pusher", "boris_tsc"',
+            '"particles", "deposit_moments", true',
+            '"particles", "couple_moments_to_mhd", true',
+            '"particles", "pic_background_mode", "coupled"',
+            '"particles", "pic_feedback_mode", "coupled"',
+            '"particles", "pic_interp_scheme", "tsc"',
             '"pic_enable_2d3v", true',
             '"pic_cr_initial_state", "velocity"',
             'pin->GetString("particles", "pic_cr_hall_mode")',
@@ -232,6 +236,7 @@ class Q043BellCurrentVolumeAwareHostHarnessTests(unittest.TestCase):
         for contract in required:
             with self.subTest(contract=contract):
                 self.assertIn(contract, source)
+        self.assertNotIn('"pic_physical_mode"', source)
 
     def test_builtin_registration_covers_fresh_restart_and_cmake(self) -> None:
         pgen = (REPO_ROOT / "src/pgen/pgen.cpp").read_text(encoding="utf-8")

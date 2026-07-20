@@ -70,11 +70,10 @@ _PVTK_HEADER = re.compile(
 )
 
 _EXPECTED_TEXT_PARAMETERS = {
-    ("time", "integrator"): "rk2",
+    ("time", "integrator"): model.INTEGRATOR,
     ("mhd", "eos"): "ideal",
     ("particles", "particle_type"): "cosmic_ray",
     ("particles", "pusher"): "boris_tsc",
-    ("particles", "pic_physical_mode"): model.PAPER_PHYSICAL_MODE,
     ("particles", "pic_background_mode"): "coupled",
     ("particles", "pic_feedback_mode"): "coupled",
     ("particles", "pic_interp_scheme"): "tsc",
@@ -245,7 +244,7 @@ def _validate_runtime_model(
         f"value {expected_deposit_qscale!r}; observed {observed_deposit_qscale!r}",
     )
     return {
-        "physical_mode": _parameter_text(dataset, "particles", "pic_physical_mode"),
+        "integrator": _parameter_text(dataset, "time", "integrator"),
         "particle_light_speed": measured_floats["particles/pic_cr_light_speed"],
         "upstream_speed_u0": measured_floats["problem/ps_u0"],
         "particle_macro_mass": observed_deposit_qscale,
