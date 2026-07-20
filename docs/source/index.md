@@ -184,6 +184,7 @@ Internal design dossiers and ongoing investigations live here:
 - [MHD-PIC Runtime Model Contract](engineering/pic_mhd_model_contract.md)
 - [MHD-PIC CR-Hall Paper-to-Code Map](engineering/pic_cr_hall_code_map.md)
 - [MHD-PIC Project Ethos](engineering/pic_project_ethos.md)
+- [MHD-PIC Breaking Merge Plan](engineering/pic_branch_merge_plan.md)
 - [Mignone-R2 Full-Hall Shock Setup](engineering/pic_mignone_r2_shock_setup.md)
 - [MHD-PIC AMR Lifetime And Interface Policy](engineering/pic_amr_lifetime_and_interface_policy.md)
 - [Q-016 Bounded Particle Provenance And Spectra](engineering/pic_q016_particle_provenance_spectra.md)
@@ -205,6 +206,7 @@ engineering/particle_merge_cr_pushers
 engineering/particle_merge_implementation
 engineering/particle_merge_unified_data
 engineering/pic_amr_lifetime_and_interface_policy
+engineering/pic_branch_merge_plan
 engineering/pic_cr_hall_code_map
 engineering/pic_mhd_model_contract
 engineering/pic_mignone_r2_shock_setup
