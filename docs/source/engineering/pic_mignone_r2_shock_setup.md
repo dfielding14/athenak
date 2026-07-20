@@ -9,9 +9,16 @@ particle bundle can be subtracted conservatively while retaining a thermal
 reserve.
 
 The authoritative runtime deck is
-[`inputs/publication/pic_parallel_shock_mignone_r2_full_hall.athinput`](inputs/publication/pic_parallel_shock_mignone_r2_full_hall.athinput).
+[`inputs/publication/pic_parallel_shock_mignone_r2_full_hall.athinput`](../../../inputs/publication/pic_parallel_shock_mignone_r2_full_hall.athinput).
 The shock and injection implementation is
-[`src/pgen/tests/pic_parallel_shock.cpp`](src/pgen/tests/pic_parallel_shock.cpp).
+[`src/pgen/tests/pic_parallel_shock.cpp`](../../../src/pgen/tests/pic_parallel_shock.cpp).
+
+The completed source is frozen at tag
+`pic-nonrelshock-t3000-20260720` (`3e03007e6`). The consolidated campaign under
+[`NonRelShock`](/lustre/orion/ast207/proj-shared/dfielding/PIC/NonRelShock)
+passed its archive validation with a strictly monotonic history from \(t=0\)
+through 3000 and retains the exact executable, input, source patch, final
+restart, selected raw outputs, analysis, and figures.
 
 ## Simulation setup
 
@@ -31,7 +38,7 @@ uses \(\rho_0=p_0=B_0=1\), so \(v_{A,0}=1\), with background-ion
 | Upstream gas | \(\rho_0=1\), \(p_0=1\), \(\boldsymbol{u}=(-30,0,0)\) |
 | Magnetic field | \(\boldsymbol{B}_0=(1,0,0)\), parallel to the shock normal |
 | Equation of state | Ideal gas, \(\gamma=5/3\) |
-| MHD numerics | PLM reconstruction, LLF Riemann solver, RK2, CFL 0.3 |
+| MHD numerics | PLM reconstruction, LLF Riemann solver, VL2, CFL 0.3 |
 | Modeled shock speed | \(v_{sh}=10\) in the reflecting-wall frame |
 | Duration | \(t=0\) to \(3000\,\Omega_0^{-1}\) |
 | Initial perturbations | None |
@@ -186,6 +193,12 @@ The \(Q=0.8\) trigger, \(p>30p_0\) prefilter, and carrier-affordability rule are
 restart-fingerprinted. The affordability implementation changes the restart
 schema, so checkpoints made before it are invalid and this calculation must
 begin at \(t=0\).
+
+The frozen \(t=3000\) checkpoint predates the explicit integrator name and its
+header therefore says `integrator=rk2`. The cleaned runtime preserves its
+schema-8 compatibility tag; replay it with the command-line override
+`time/integrator=vl2`. This exact read was validated during the interface
+cleanup without advancing the solution.
 
 ## Relation to the published method
 

@@ -4,6 +4,8 @@
 This directory holds AthenaK runtime input decks (plain-text `.athinput` files)
 used for examples, problem setups, and regression tests. Files here are consumed
 by `ParameterInput` and passed to the executable via `-i` in `src/main.cpp`.
+For MHD-PIC deck work, `MHD_PIC_NEXT_STEPS_GUIDE.md` governs active priorities;
+durable model and setup documents live under `docs/source/engineering/`.
 
 ---
 
@@ -101,26 +103,25 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - optional per-species drift overrides:
     `speciesN/vx0`, `speciesN/vy0`, `speciesN/vz0` (fallback to global
     `particles/cr_v*0` when omitted).
-- Staged PIC runtime-control overrides (parse/guard stage):
-  - `particles/pic_physical_mode = engineering|paper_test_particle|paper_mhd_pic|
-    paper_mhd_pic_vl2_tsc|extended_mhd_pic`; explicit paper/extension modes
-    store CR `p/m`; `paper_mhd_pic_vl2_tsc` selects the additive Sun-Bai VL2
-    TSC candidate while `paper_mhd_pic` retains its historical behavior
+  - Moment deposition and particle-to-gas coupling toggles default to `false`;
+    `deposit_order` defaults to `1`. Decks using VL2/TSC must enable the complete
+    coupling contract explicitly and set `deposit_order=2`.
+- Explicit PIC runtime controls:
+  - `time/integrator = vl2` selects the staged Sun-Bai VL2/TSC coupling path;
+    other integrators retain their ordinary AthenaK meanings
+  - cosmic-ray Boris pushers store `p/m`; `particles/pic_cr_initial_state =
+    velocity|momentum` controls only how initializer values are interpreted
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = coupled|test_particle`
   - `particles/pic_interp_scheme = tsc`
-  - `particles/pic_cr_light_speed > 0` selects the artificial CR light speed in
-    momentum-state modes; `particles/pic_cr_initial_state = velocity|momentum`
-    controls initializer interpretation
-  - `particles/pic_cr_hall_mode = off|full|current_to_ct_experimental`;
-    `full` is the fixed large-scale CR-Hall closure for the uniform-grid
-    VL2/TSC model, while `current_to_ct_experimental` is the legacy
-    free-coefficient extension
+  - `particles/pic_cr_light_speed > 0` selects the artificial CR light speed
+  - `particles/pic_cr_hall_mode = off|full`; `full` is the fixed large-scale
+    CR-Hall closure for the uniform-grid VL2/TSC model
   - `particles/pic_wave_damping_mode = off|ion_neutral_friction` with
     non-negative `particles/pic_ion_neutral_collision_rate`
   - `particles/pic_max_cell_cross` (bounded by the smallest active MeshBlock
     dimension), `particles/pic_theta_max`
-  - `particles/pic_deltaf_mode = off|quiet_start|on|physical` (with
+  - `particles/pic_deltaf_mode = off|quiet_start|physical` (with
     `particles/pic_deltaf_f0 = uniform|uniform_quiet|kappa_iso|kappa_drift|
     kappa_aniso`)
   - `particles/pic_deltaf_adapt_mode =
@@ -143,18 +144,14 @@ Format rules are enforced by `src/parameter_input.cpp`:
     reduced static-neutral damping, and built-in MHD history output. It checks
     endpoint source normalization and ordering, not opposite-impulse
     conservation or CRPAI transport calibration.
-- `inputs/tests/pic_extended_hall_ct_smoke.athinput`
-  - Explicit `extended_mhd_pic` one-cycle manufactured-source carrier used to
-    verify that the experimental Hall CT increment is nonzero and odd in
-    `particles/couple_j_to_efield_coeff`. It is not Hall Bell qualification.
 - `inputs/tests/pic_ion_neutral_friction_smoke.athinput`
-  - Explicit `extended_mhd_pic` manufactured-source carrier used to verify the
-    exact reduced static-neutral transverse momentum factor and energy sink.
-    It is not ion-neutral-damped CRSI qualification.
+  - Manufactured-source carrier used to verify the exact reduced
+    static-neutral transverse momentum factor and energy sink. It is not
+    ion-neutral-damped CRSI qualification.
 - `inputs/tests/pic_adaptive_deltaf_smoke.athinput`
-  - Explicit `extended_mhd_pic` two-species expanding-box carrier used to
-    verify the adaptive global bi-kappa `xi`/`p0` fit, restart state, and
-    parser guards. It is not CRPAI transport calibration.
+  - Two-species expanding-box carrier used to verify the adaptive global
+    bi-kappa `xi`/`p0` fit, restart state, and parser guards. It is not CRPAI
+    transport calibration.
 - `inputs/tests/pic_q016_particle_provenance.athinput`
   - Bounded serial-host parallel-shock carrier used to verify persistent
     initial and shock-injected CR provenance, restart preservation, MeshBlock
@@ -165,7 +162,7 @@ Format rules are enforced by `src/parameter_input.cpp`:
     alternates six AMR transitions through restart continuations and verifies
     stable particle identity plus refreshed ownership. It is not MPI, HIP or
     scientific-AMR qualification.
-- `inputs/tests/pic_q009_coupled_inflow_lifetime.athinput`
+- `inputs/tests/pic_q009_coupled_inflow_lifetime_vl2_tsc.athinput`
   - Bounded serial-host coupled PIC/MHD x2-inflow sibling for repeated
     refine/derefine lifetime replay through restart. It exercises the
     linear-wave MHD background inflow reservoir and cell-centered
@@ -203,17 +200,13 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Transverse-anisotropy no-MHD proxy with two species and opposite `vy0`
     drifts; regression fits the dominant transverse-current mode growth rate
     and gates out positive exponential growth.
-- `inputs/tests/pic_bell_growth_proxy.athinput`
-  - Coupled-MHD Bell-like proxy that compares uncoupled vs coupled runs for
-    transverse magnetic growth and enforces positive growth only in coupled
-    mode with serial/MPI parity.
-- `inputs/tests/pic_q023_paper_bell_linear_{1d,2d,3d}_candidate.athinput`
+- `inputs/tests/pic_q023_paper_bell_linear_{1d,2d,3d}_candidate_vl2_tsc.athinput`
   - Source-local Sun and Bai Section 5.2 Bell preparations using the dedicated
     right-polarized eigenmode generator. The physical 1D case is represented
     by an exact transverse-invariant `nx2=4` thin 2D3V carrier because the
     particle module intentionally supports 2D/3D meshes. These decks are not
     authorized qualifying campaign inputs until clean freeze and registration.
-- `inputs/tests/pic_q006_paper_multispecies_oscillation_{uniform,smr,audited_amr}_candidate.athinput`
+- `inputs/tests/pic_q006_paper_multispecies_oscillation_{uniform,smr,audited_amr}_runtime_local_vl2_tsc.athinput`
   - Source-local Sun and Bai Section 5.3 deck freezes using the dedicated
     guarded generator. They preserve the manuscript loading and initial sound
     speed while explicitly retaining the current ideal-MHD compatibility
@@ -231,7 +224,7 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Same oscillation setup with nested static refinement (AMR-style proxy for
     uniform/SMR/AMR parity gating in current AthenaK harness limits).
 - `inputs/tests/pic_crsi_deltaf_proxy.athinput`
-  - Coupled-MHD CRSI-style proxy deck used with `pic_deltaf_mode=off|on` to
+  - Coupled-MHD CRSI-style proxy deck used with `pic_deltaf_mode=off|physical` to
     gate polarization-resolved growth metrics and MPI decomposition parity.
 - `inputs/tests/pic_crpai_prolate_proxy.athinput`
   - CRPAI-style prolate branch-selection proxy (`cr_vx0 > 0`) used with
@@ -276,7 +269,7 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Restart/safety coverage deck used by
     `particles/pic_restart_safety_guards` for restart A/B equivalence across
     `no_mhd`, `passive_mhd`, and `coupled_edge_direct` runtime modes, plus
-    deterministic unsupported-combination guard checks, schema-7 adaptive-state
+    deterministic unsupported-combination guard checks, schema-8 adaptive-state
     reconciliation, and star-potential override rejection.
 
 ### Orszag-Tang Problem Controls Used by Shock Campaigns

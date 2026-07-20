@@ -3,37 +3,36 @@
 ## Scope
 
 AthenaK exposes several particle and MHD-PIC execution paths. They are not
-interchangeable. A run that claims to reproduce Sun & Bai (2023),
-arXiv:2304.10568v1, must select an explicit paper mode and must not assemble a
-model from independent legacy booleans.
+interchangeable. Runtime identity is described by the controls that actually
+change the algorithm; there is no umbrella `pic_physical_mode` selector.
 
-The runtime identity is selected with `<particles>/pic_physical_mode`.
+| Concern | Explicit control |
+| --- | --- |
+| VL2 predictor/corrector chronology | `<time>/integrator=vl2` |
+| Particle representation | Cosmic rays with a Boris pusher store mass-normalized momentum `p/m`; drift and star particles store velocity |
+| CR input interpretation | `<particles>/pic_cr_initial_state=velocity|momentum`; velocity input is converted once during initialization |
+| Background evolution | `<particles>/pic_background_mode=coupled|passive_mhd|no_mhd` |
+| Gas feedback | `<particles>/pic_feedback_mode=coupled|test_particle` plus the explicit deposition and feedback switches |
+| CR-Hall closure | `<particles>/pic_cr_hall_mode=off|full` |
 
-| Mode | Purpose | CR state | Induction policy | Gas feedback |
-| --- | --- | --- | --- | --- |
-| `engineering` | Backward-compatible development and proxy tests | Historical velocity slots | Legacy opt-in current-to-CT source remains available | Legacy opt-in policies |
-| `paper_test_particle` | Particle-only analytical tests of paper mechanics | Mass-normalized momentum `p/m` | No CR-current CT source | Disabled |
-| `paper_mhd_pic` | Historical pre-VL2 paper-mode chronology only | Mass-normalized momentum `p/m` | Frozen-in `cE = -u x B`; no CR Hall term | Preserved for restart and source-history compatibility; do not use for new publication runs |
-| `paper_mhd_pic_vl2_tsc` | Active VL2/TSC MHD-PIC model | Mass-normalized momentum `p/m` | `pic_cr_hall_mode=off` uses ideal induction; `full` uses the derived large-scale CR-Hall closure | Analytic predictor and exact deposited momentum/kinetic-energy corrector for ideal MHD; exact-isothermal special cases remain Hall-off |
-| `extended_mhd_pic` | Separately named extensions requiring separate qualification | Mass-normalized momentum `p/m` | Extension-specific, never implied by paper mode | Extension-specific and recorded |
+Fresh inputs containing the obsolete umbrella selector fail with a migration
+error so that old implicit defaults cannot silently change the physics.
+Schema-8 restart headers may still contain the old field; restart reads ignore
+that field and validate the stored state against the explicit model metadata.
+Legacy VL2 checkpoints must be restarted with `<time>/integrator=vl2`.
 
-`engineering` is not a paper-reproduction mode. It exists to preserve the
-historical interface while migration tests are written. `paper_mhd_pic` is
-also retained as historical chronology only. New coupled publication decks
-must select `paper_mhd_pic_vl2_tsc` or a separately named extension mode.
+New coupled science decks use cosmic-ray Boris-TSC particles, second-order TSC
+deposition, explicit momentum and energy feedback, and
+`<time>/integrator=vl2`. Full Hall is one atomic physical choice; there is no
+free-strength or experimental Hall mode.
 
 ## Particle State
 
 The shared particle payload slots `IPVX`, `IPVY`, and `IPVZ` retain their
-historical names for restart-layout compatibility. Their meaning depends on the
-runtime mode:
-
-| Mode family | Slot meaning |
-| --- | --- |
-| `engineering` | Coordinate velocity components |
-| `paper_test_particle`, `paper_mhd_pic`, `paper_mhd_pic_vl2_tsc`, `extended_mhd_pic` | Mass-normalized momentum components `p/m` |
-
-In a momentum-state mode, the derived quantities are
+historical names for restart-layout compatibility. Cosmic rays advanced by a
+Boris pusher store mass-normalized momentum `p/m`; drift and star particles
+retain coordinate velocity. In a momentum-state path, the derived quantities
+are
 
 ```text
 gamma = sqrt(1 + |p/m|^2 / C^2)
@@ -46,12 +45,13 @@ Particle motion, current deposition, VTK output, tracked-particle output, and
 cell-crossing timestep checks use derived velocity. Restart files preserve the
 stored state and must record enough metadata to reject incompatible reads.
 
-The `drift` and `rk4_gravity` pushers continue to use velocity slots.
-Momentum-state paper modes require a CR Boris pusher.
+The `drift` and `rk4_gravity` pushers continue to use velocity slots. The
+`pic_cr_initial_state` selector changes only how a CR's supplied initial values
+are interpreted before conversion; it does not change the stored runtime state.
 
 ## Paper Equations
 
-For each CR super-particle, paper mode integrates
+For each CR super-particle, the VL2/TSC path integrates
 
 ```text
 d x / dt       = v
@@ -91,14 +91,15 @@ stage-2 drift from charge density. The stage-2 gas source likewise uses the
 deposited `DPDT` and relativistic kinetic-energy rate `DEDT` directly. Gas
 momentum and energy receive the opposite particle exchange. Artificial
 `pic_cr_light_speed` affects particle kinematics but does not enter the Hall
-closure. See the repository-root `MHD_PIC_CR_HALL_CODE_MAP.md` for the signed
+closure. See the
+[CR-Hall paper-to-code map](pic_cr_hall_code_map.md) for the signed
 normalization and exact staging.
 
 The configured charge-to-mass slot stores the normalized `q/(mc)` factor used
 by the AthenaK units. The relativistic Boris rotation evaluates its magnetic
 rotation with the Lorentz factor after the first electric half-kick.
 
-For the active `paper_mhd_pic_vl2_tsc` model, deposited CR current is never
+For the active `<time>/integrator=vl2` model, deposited CR current is never
 added directly to the final edge EMF. Hall-off retains ideal-MHD CT; full Hall
 adds the derived Hall correction to the face induction fluxes and adds the
 matched `(cE_H x B)` term to the face total-energy flux before FOFC and the RK
@@ -108,9 +109,7 @@ the edge field from the resulting face terms. Exact-isothermal paper delta-f
 uses momentum-only feedback. The separately named
 `q006_paper_multispecies_oscillation_runtime_local` generator admits the same
 momentum-only contract for its bounded full-f Section 5.3 mechanics carrier;
-other exact-isothermal full-f paper-mode compositions fail closed. The
-historical `paper_mhd_pic` identity remains available only to preserve prior
-chronology.
+other exact-isothermal full-f compositions fail closed.
 
 ## Stage Ordering
 
@@ -230,31 +229,11 @@ gate.
 Sun & Bai (2023) used Hall-off induction, but the complete large-scale MHD-PIC
 system in Bai et al. (2015) includes the CR-induced Hall term. AthenaK keeps the
 VL2/TSC algorithm identity and selects the physical closure explicitly with
-`pic_cr_hall_mode=off|full`. `full` is not an `extended_mhd_pic`
-free-coefficient experiment. It has a fixed signed equation, uniform-grid
-applicability envelope, and two regime diagnostics, `max|R|` and `max Lambda`;
-the current candidate still requires fresh compact conservation and Bell
-qualification.
-
-The currently implemented `pic_cr_hall_mode=current_to_ct_experimental`
-extension is a deliberately narrow source experiment:
-
-```text
-cE_CT = cE_ideal + alpha_H P_edge[J_CR]
-alpha_H = <particles>/couple_j_to_efield_coeff
-```
-
-where `P_edge` is either the selected cell-centered-to-edge conversion or the
-explicit staggered-current representation. This mode requires
-`pic_physical_mode=extended_mhd_pic` and coupled particle moments. The host
-manufactured-source smoke compares Hall-off, `+alpha_H`, and `-alpha_H` runs
-and requires the magnetic-field increments to be nonzero and odd in
-`alpha_H`.
-
-This source-isolation oracle does not establish a derived CR-induced Hall
-normalization, a Hall Bell dispersion relation, a nonlinear applicability
-envelope, or shock-front validity. Those remain separate extension release
-gates.
+`pic_cr_hall_mode=off|full`. `full` is not a free-coefficient experiment. It
+has a fixed signed equation, uniform-grid
+applicability envelope, and two regime diagnostics, `max|R|` and `max Lambda`.
+The frozen uniform candidates passed the focused conservation, Bell, restart,
+and MPI qualification summarized in `MHD_PIC_NEXT_STEPS_GUIDE.md`.
 
 ### Reduced Ion-Neutral Friction
 
@@ -270,9 +249,8 @@ where `nu_in = <particles>/pic_ion_neutral_collision_rate`. For non-expanding
 runs, the exact map is applied once after the explicit RK source update. For
 expanding runs, it is applied once after the endpoint physical-frame feedback
 map. Ideal-MHD total energy loses the removed transverse ion kinetic energy.
-This mode requires
-`pic_physical_mode=extended_mhd_pic`, a positive collision rate, and an active
-coupled MHD background.
+This mode requires a positive collision rate and an active coupled MHD
+background.
 
 This is not the repository's general two-fluid `ion-neutral` module. It assumes
 static neutrals and does not establish a CRSI dispersion comparison, a damping
@@ -298,8 +276,8 @@ and fitted-`p0` normalization. Restart schema version 8 preserves the fitted
 `xi`, fitted `p0`, and cadence bucket so a restart does not introduce an
 unrequested refit.
 
-The bounded implementation requires `extended_mhd_pic`, physical
-`kappa_aniso` delta-f, expanding-box mode, `kappa > 1`, zero configured drift,
+The bounded implementation requires physical `kappa_aniso` delta-f,
+expanding-box mode, `kappa > 1`, zero configured drift,
 unit configured anisotropy scales, and a positive fit interval. Its host oracle
 checks the closed-form two-species fit, parser guards, restart fingerprint
 rejection, and exact uninterrupted-versus-restarted state. It does not establish

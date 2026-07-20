@@ -1,7 +1,8 @@
 # CR-Hall closure: paper-to-code map
 
-This is the implementation contract for the uniform-grid, full-f
-`paper_mhd_pic_vl2_tsc` CR-Hall path. It is deliberately narrow: its purpose is to
+This is the implementation contract for the uniform-grid, full-f CR-Hall path
+using `<time>/integrator=vl2`, Boris-TSC particles, and second-order TSC
+deposition. It is deliberately narrow: its purpose is to
 make the normalization, signs, staggering, and time centering reviewable before the
 physics is trusted. It is not a general plasma-closure document.
 
@@ -183,7 +184,7 @@ The relevant code path starts in:
 
 ## Exact VL2 time-centering contract
 
-`paper_mhd_pic_vl2_tsc` selects a two-stage VL2 predictor-corrector in
+`<time>/integrator=vl2` selects a two-stage VL2 predictor-corrector in
 `src/driver/driver.cpp`: stage 1 has `beta=1/2`, and stage 2 rebuilds the final state
 from the saved base state with `beta=1`. `w0` and `bcc0` remain at the input time level
 until `ConToPrim` closes each stage.
@@ -321,8 +322,6 @@ Ji--Hopkins physical reduced-speed-of-light formulation.
   energy flux as one closure.
 - `pic_cr_hall_mode=off` removes the whole Hall correction while retaining the coupled
   Sun--Bai momentum/energy path.
-- `current_to_ct_experimental` and `couple_j_to_efield_coeff` are historical engineering
-  controls, not alternate strengths of the physical closure.
 - Historical decks remain explicitly `off`; new coupled science decks explicitly select
   `full` and provide `pic_background_ion_q_over_mc`.
 

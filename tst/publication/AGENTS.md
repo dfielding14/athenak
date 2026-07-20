@@ -4,7 +4,9 @@
 This directory contains non-regression tooling for exploratory PIC and MHD-PIC
 artifact campaigns. Scripts here orchestrate selected runs, collect artifacts,
 and generate internal quick-look figures. The checked-in manifest is not a
-Sun and Bai (2023) reproduction manifest.
+Sun and Bai (2023) reproduction manifest. Active priorities are governed by
+`MHD_PIC_NEXT_STEPS_GUIDE.md`; durable MHD-PIC model, Hall, shock, and ethos
+documents live under `docs/source/engineering/`.
 
 ## Contents
 - `pic_publication_manifest.py`
@@ -13,9 +15,8 @@ Sun and Bai (2023) reproduction manifest.
 - `run_pic_publication_suite.py`
   - Executes selected manifest cases and archives logs/artifacts.
 - `plot_pic_publication_figures.py`
-  - Produces figure candidates from archived artifacts in separate
-    `engineering_proxy` and `extended_engineering` bundles. Historical bundle
-    names remain deprecated CLI aliases only.
+  - Produces figure candidates from archived exploratory artifacts; artifact
+    labels are evidence taxonomy, not physical qualification.
 - `run_pic_shock_scan.py`
   - Emits Orszag-Tang-style shock-rich engineering stress grids. Direct
     execution is acknowledged local-only use and is rejected on Frontier.
@@ -42,8 +43,10 @@ Sun and Bai (2023) reproduction manifest.
 
 ## Usage Constraints
 - These scripts are not part of `tst/run_tests.py` regression discovery.
-- `PIC_PRODUCTION_READINESS_PLAN.md` is the only controlling release,
-  qualification and Frontier-authorization document.
+- `MHD_PIC_NEXT_STEPS_GUIDE.md` controls active project work.
+- `PIC_PRODUCTION_READINESS_PLAN.md` retains the fail-closed release,
+  qualification, and Frontier-authorization rules until those records are
+  explicitly superseded.
 - `PIC_LARGE_MACHINE_VALIDATION.md` is retired historical evidence only. Do not
   execute commands or infer authority from it.
 - Heavy shock scans require an explicitly approved execution policy.

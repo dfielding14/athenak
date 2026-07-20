@@ -1,6 +1,6 @@
 # AthenaK MHD-PIC Program Guide
 
-> Tracked working guide for the PIC_development branch, revised 2026-07-13.
+> Tracked working guide for the PIC_development branch, revised 2026-07-20.
 > Part I is the active uniform-grid implementation and science program.
 > Part II is the deferred static/adaptive mesh-refinement roadmap.
 > Update this guide when evidence changes a decision; do not turn it into a
@@ -67,14 +67,14 @@ uniform-grid calculation. It is distinct from persistent spatial AMR.
 - Fix observed failures and direct physical inconsistencies. Do not pre-build
   defenses against every imaginable state.
 
-The fuller rationale is in
-[ethos.md](/ccs/home/dfielding/athenak-pic/ethos.md).
+The fuller rationale is in the
+[MHD-PIC project ethos](docs/source/engineering/pic_project_ethos.md).
 
 ## 2. Current validated baseline
 
 The source repository is
 [/ccs/home/dfielding/athenak-pic](/ccs/home/dfielding/athenak-pic) on branch
-PIC_development. The validated uniform-grid reference is tagged
+PIC_development. The validated reusable uniform-grid reference is tagged
 **pic-science-candidate-20260713-v2**. Its principal component commits are:
 
 - **978344bcd**: conservative CR-Hall coupling;
@@ -89,27 +89,61 @@ PIC_development. The validated uniform-grid reference is tagged
 That tag is immutable. The previous **pic-science-candidate-20260713** tag at
 **7b784e3b8** remains the pre-performance reference.
 
+The completed Mignone-R2-style 2D3V shock is frozen separately at
+**pic-nonrelshock-t3000-20260720** (**3e03007e6**). That tag contains the exact
+safe-carrier injection source, production and smoke decks, focused tests, and
+setup specification used by the archived \(t=3000\) campaign. The exact
+Frontier executable, input, source patch, output, final restart, figures, and
+hash manifests are retained under
+[`NonRelShock`](/lustre/orion/ast207/proj-shared/dfielding/PIC/NonRelShock).
+This problem-specific tag is immutable evidence for the shock result; it does
+not replace the reusable v2 baseline for unrelated workflows.
+
 | Work item | Status | Decisive evidence or next action |
 | --- | --- | --- |
-| Paper-to-code full-Hall map | Complete | [MHD_PIC_CR_HALL_CODE_MAP.md](/ccs/home/dfielding/athenak-pic/MHD_PIC_CR_HALL_CODE_MAP.md) |
+| Paper-to-code full-Hall map | Complete | [CR-Hall paper-to-code map](docs/source/engineering/pic_cr_hall_code_map.md) |
 | Full-Hall linear physics | Complete | Job 4975948 passed all 12 Hall-off, full-Hall, moment, wavelength, frequency, polarization, and resolution checks |
 | Exact source/core qualification | Complete | Job 4978017 passed conservation, source closure, normal precision, task ordering, and safety checks |
 | MPI single-precision smoke | Complete | Two-rank GPU job 4975966 passed |
 | Nonlinear Bell onset | Bounded pass | Job 4975940 reached \(B_{\perp,\mathrm{rms}}/B_0=1.043\); no saturation claim |
-| Controlled 2D shock | Complete | Jobs 4976035 and 4977996 plus analysis 4978079 established a stable shock and coherent Bell precursor |
+| Compact controlled 2D shock | Complete | Jobs 4976035 and 4977996 plus analysis 4978079 established a stable shock and coherent Bell precursor |
+| Mignone-R2-style 2D3V shock | Complete and frozen | The full-Hall uniform run completed continuously from \(t=0\) to 3000; see the [setup specification](docs/source/engineering/pic_mignone_r2_shock_setup.md) and frozen campaign archive |
 | Matched 128-cubed boxes | Engineering comparison complete | Full-Hall 4976062 and Hall-off 4976612 completed through \(t=10\) and exposed a measurable Hall response |
 | 3D shock scaling probe | Complete | Job 4980740 passed and exposed shock-source duplication and early particle imbalance |
 | Uniform-grid performance | PERF-U1 through PERF-U4 complete | Source preparation and migration improved; unsafe Frontier atomics cut representative-box cost by 13%; conditional shock redistribution delivered a further 1.40x speedup; stop general optimization |
+| Focused correctness cleanups | Complete | Invalid macro weights are rejected, legacy nonphysical Bell mechanics require explicit opt-in, and focused test discovery is repaired |
 | Production 3D shock | Next; candidate frozen | Finalize the best-science-per-node-hour uniform case; the old narrow deck remains a benchmark, not the automatic science target |
 | Production turbulent boxes | Primary science after 3D proof | Saturate MHD first, save one common checkpoint, then introduce CRs |
 | SMR/AMR | Deferred Part II | Full Hall remains fail-closed on multilevel meshes |
 
-The concise active status is in
-[MHD_PIC_REVIEW_TRACKER.md](/ccs/home/dfielding/athenak-pic/MHD_PIC_REVIEW_TRACKER.md).
-This guide owns the physical contract and full execution plan; the tracker is
-only the current dashboard.
+This guide is now the single durable program record. Temporary execution
+trackers should not be recreated unless a new active campaign genuinely needs
+one.
 
-### 2.1 Decisive 2D physical result
+### 2.1 Frozen Mignone-R2-style shock through \(t=3000\)
+
+The current method-section shock reference is the uniform 2D3V, full-Hall
+Mignone-R2-style campaign documented in the
+[shock setup specification](docs/source/engineering/pic_mignone_r2_shock_setup.md).
+It used a \(120000\times3000\,c/\omega_{pi}\) domain on a
+\(11520\times288\) mesh, a parallel upstream field, Alfvénic Mach number 30,
+and shock-created CRs. The injection ledger uses the swept-mass trigger, a
+cheap \(p>30p_0\) carrier prefilter, and an exact carrier-local affordability
+transaction. An unaffordable carrier remains pending; the run does not clip
+the subtraction, redistribute it to another cell, or invoke the legacy global
+floor throttle.
+
+The archived history is strictly monotonic from \(t=0\) through 3000 with 3001
+rows. It contains 101 fluid/moment snapshots, 51 full particle snapshots, 31
+publication triptychs, and one verified final restart. The Release,
+double-precision MPI+HIP executable used `-munsafe-fp-atomics`; its SHA-256 and
+the exact deck, environment, and source-patch hashes are recorded in the
+archive validation manifest. This establishes a long, restartable,
+production-scale uniform-grid shock workflow and preserves the magnetic
+morphology and CR-distribution evidence needed for the method comparison. It
+does not by itself establish a 3D result or a converged maximum-energy spectrum.
+
+### 2.2 Earlier compact Bell qualification
 
 The qualified long shock reached \(t=400\) on a \(5000\) by \(128\) mesh. It
 measured:
@@ -129,7 +163,12 @@ The terminal mean and local-maximum parallel Hall parameters were only 0.059
 and 0.203, and the mean predicted Hall wavelength shift was below 0.1 percent.
 A matched Hall-off 3D shock is therefore not part of the validation plan.
 
-### 2.2 Completed 3D throughput probe
+These compact measurements remain the quantitative Bell scale, handedness,
+and Hall-strength benchmark used to design the 3D proof run. The frozen
+\(t=3000\) Mignone-R2-style campaign supersedes it as the long-duration 2D
+method reference.
+
+### 2.3 Completed 3D throughput probe
 
 Production-shaped job 4980740 ran the current
 [3D benchmark deck](/ccs/home/dfielding/athenak-pic/inputs/publication/pic_parallel_shock_cr_hall_3d_full.athinput)
@@ -529,6 +568,13 @@ double-precision, MPI/HIP, gfx90a configuration with
 and passed the normal-precision full-Hall conservation test plus the two-GPU MPI
 single-precision turbulence smoke. Its source snapshot SHA-256 is
 `472096c3b26ec574212bbb97dc8bf1c158045332fec78ae34bc26173127c223d`.
+
+The later tag `pic-nonrelshock-t3000-20260720` freezes the exact demonstrated
+safe-carrier shock source at commit `3e03007e6`. Its archived executable and
+campaign products completed the uniform Mignone-R2-style run through
+\(t=3000\). Preserve that tag for shock reproduction; keep the reusable v2 tag
+as the pre-shock baseline and create a new candidate only after a coherent
+cross-cutting implementation batch passes the focused requalification above.
 
 ### 4.8 SHOCK-U1 — Smart 3D method validation
 

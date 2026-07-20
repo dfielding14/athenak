@@ -2,13 +2,10 @@
 
 ## Purpose
 
-Use this runbook to establish a clean local launch for the active
-`paper_mhd_pic_vl2_tsc` and `extended_mhd_pic` runtime identities. The
-historical `paper_mhd_pic` identity remains available for restart and
-source-history compatibility only; do not use it for new publication work.
-These checks are host-side development evidence only. They do not qualify MPI
-runtime, HIP/GPU runtime, Frontier portability, scientific reproduction, or
-publication claims.
+Use this runbook to establish a clean local launch for the explicit PIC runtime
+interface. These checks are host-side development evidence only. They do not
+qualify MPI runtime, HIP/GPU runtime, Frontier portability, scientific
+reproduction, or publication claims.
 
 The governing model boundary is documented in
 [MHD-PIC Runtime Model Contract](pic_mhd_model_contract.md). Supported build
@@ -64,13 +61,11 @@ if not pic_parser_contract_guards_vl2_tsc.analyze():
 PY
 ```
 
-This suite must exercise positive launches for `paper_mhd_pic_vl2_tsc` and
-`extended_mhd_pic`, then reject unsupported modes and invalid cross-mode
-compositions. `paper_mhd_pic_vl2_tsc` accepts the atomic large-scale CR-Hall
-closure through `pic_cr_hall_mode=full`, but must reject the separate
-`current_to_ct_experimental` source, reduced ion-neutral, and adaptive-delta-f
-extension selections. The historical `pic_parser_contract_guards.py` harness
-remains available only to replay archived `paper_mhd_pic` chronology.
+This suite exercises coupled `rk1`, coupled Sun--Bai `vl2`, test-particle, and
+bounded adaptive/damped expanding-box launches, then rejects unsupported
+values and inconsistent compositions. In particular, `vl2` requires the
+explicit coupled MHD, TSC deposition, and conservative-feedback controls;
+`pic_cr_hall_mode=full` requires `vl2`. Hall accepts only `off` or `full`.
 
 ## Runtime Identity
 
@@ -78,11 +73,11 @@ For rank zero cosmic-ray launches, AthenaK prints one identity line beginning
 with:
 
 ```text
-PIC runtime model: physical_mode=<mode> state=<state> C=<value> ...
+PIC runtime model: integrator=<integrator> state=<state> C=<value> ...
 ```
 
-The identity line must be retained with the run log. For both
-`paper_mhd_pic_vl2_tsc` and `extended_mhd_pic`, expect:
+The identity line must be retained with the run log. A coupled VL2 cosmic-ray
+Boris launch reports:
 
 ```text
 state=momentum_p_over_m
@@ -90,20 +85,18 @@ deposition=tsc
 restart_schema=8
 ```
 
-For `paper_mhd_pic_vl2_tsc` with `pic_cr_hall_mode=off`, also expect:
+For a coupled VL2 launch with `pic_cr_hall_mode=off`, also expect:
 
 ```text
-physical_mode=paper_mhd_pic_vl2_tsc
+integrator=vl2
 induction=ideal_mhd_only
 ```
 
-A full-closure launch instead reports `induction=cr_hall_full` and then prints the positive
-`PIC CR-Hall: background_ion_q_over_mc=<value>` normalization on the next line.
-
-An `extended_mhd_pic` launch without the Hall source also reports
-`induction=ideal_mhd_only`. A separately selected
-`pic_cr_hall_mode=current_to_ct_experimental` extension reports
-`induction=cr_current_to_ct`. An extension identity is not paper-mode evidence.
+A full-closure launch instead reports `induction=cr_hall_full` and then prints
+the positive `PIC CR-Hall: background_ion_q_over_mc=<value>` normalization on
+the next line. The same identity line reports the explicit background,
+feedback, delta-f, damping, and expanding-box selections. `rk2` denotes Heun;
+it does not select the Sun--Bai staged chronology.
 
 ## Optional Host Build Checks
 

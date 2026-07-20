@@ -7,6 +7,8 @@ terms, refinement criteria, history outputs, and finalization hooks).
 It includes both built-in regression tests (`tests/`) and a large set of
 compile-time user problems.
 See `../../AGENTS.md` for repository-wide conventions and workflow.
+For active MHD-PIC work use `MHD_PIC_NEXT_STEPS_GUIDE.md`; durable model and
+shock-setup documents live under `docs/source/engineering/`.
 
 ---
 
@@ -49,8 +51,8 @@ Representative mappings include:
 - `orszag_tang` -> `tests/orszag_tang.cpp` (`ProblemGenerator::OrszagTang`)
 - `pic_parallel_shock` -> `tests/pic_parallel_shock.cpp`
   (`ProblemGenerator::PICParallelShock`)
-- `q006_paper_multispecies_oscillation` ->
-  `tests/q006_paper_multispecies_oscillation.cpp`
+- `q006_paper_multispecies_oscillation_runtime_local` ->
+  `tests/q006_paper_multispecies_oscillation_runtime_local.cpp`
   (`ProblemGenerator::Q006PaperMultispeciesOscillation`)
 - `q023_paper_bell_linear` -> `tests/q023_paper_bell_linear.cpp`
   (`ProblemGenerator::Q023PaperBellLinear`)
@@ -60,8 +62,6 @@ Representative mappings include:
 - `q043_bell_current_volume_aware` ->
   `tests/q043_bell_current_volume_aware.cpp`
   (`ProblemGenerator::Q043BellCurrentVolumeAware`)
-- `q029_hall_bell_linear` -> `tests/q029_hall_bell_linear.cpp`
-  (`ProblemGenerator::Q029HallBellLinear`)
 - `q032_reduced_static_neutral_local` ->
   `tests/q032_reduced_static_neutral_local.cpp`
   (`ProblemGenerator::Q032ReducedStaticNeutralLocal`)
@@ -198,11 +198,12 @@ Representative mappings include:
   `single_file_per_rank` restarts. The per-rank path uses restart metadata
   (`rank_eachmb`, `gids_eachrank`, `nmb_eachrank`) to remap each local
   MeshBlock's source file/offset before loading.
-- `tests/pic_parallel_shock.cpp` is the eventual-paper-target pgen for Section
-  5.4-style parallel-shock studies (reflecting wall, `B0 || x`, eta injection,
-  conservative gas subtraction, and curvature AMR via `g_rho`/`g_P`).
-  Current decks are unqualified engineering scaffolds. Keep this path separate
-  from Orszag-Tang smoke/pipeline workflows.
+- `tests/pic_parallel_shock.cpp` owns the MHD-PIC parallel-shock setup
+  (reflecting wall, `B0 || x`, swept-mass injection, conservative gas
+  subtraction, provenance/escape ledgers, and optional curvature AMR). Keep it
+  separate from Orszag-Tang stress workflows and synchronize changes with
+  `docs/source/engineering/pic_mignone_r2_shock_setup.md`, focused decks, and
+  shock regressions.
 
 ---
 

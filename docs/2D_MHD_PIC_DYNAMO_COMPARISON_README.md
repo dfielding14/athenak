@@ -36,7 +36,8 @@ Common mesh and MHD settings:
 - Domain: periodic box, `x1,x2 in [-0.5, 0.5]`, `nx1 = nx2 = 512`, `nx3 = 1`.
 - Meshblocks: `256 x 128 x 1`, giving 8 meshblocks for one Frontier node with
   8 GPUs.
-- Integrator/reconstruction/Riemann solver: `rk2`, `plm`, `hlld`.
+- Integrator/reconstruction/Riemann solver: `rk2`, `plm`, `hlld` for the
+  MHD-only deck and `vl2`, `plm`, `hlld` for the coupled CR deck.
 - Gas: nearly isothermal ideal gas with `gamma = 1.00001` and
   `iso_sound_speed = 1.0`.
 - Driving: solenoidal turbulence, `constant_edot = true`, `dedt = 0.15`,
@@ -54,7 +55,10 @@ CR settings in the PIC deck:
 - `pic_cr_initial_state = velocity`
 - Six species with velocities `(+/-5,0,0)`, `(0,+/-5,0)`, `(0,0,+/-5)`.
 - `mass = 1.0`, `charge = 100.0` for each species.
-- Coupled MHD-PIC mode: `pic_physical_mode = paper_mhd_pic_vl2_tsc`.
+- Coupled MHD-PIC controls: `time/integrator = vl2`, TSC push and deposition,
+  `pic_background_mode = coupled`, `pic_feedback_mode = coupled`, and
+  `pic_cr_hall_mode = off`. Set only the last control to `full` for a matched
+  full-CR-Hall run.
 
 The six-beam loading is intended as an initially nearly isotropic CR population.
 It is not a sampled thermal distribution. The code converts the input velocities

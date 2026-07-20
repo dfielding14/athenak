@@ -8,7 +8,9 @@ problem executable, plus a small number of compile-time test fixtures. Built-ins
 are selected by `<problem>/pgen_name`; declarations, fresh/restart dispatch, and
 build registration live in `src/pgen/pgen.hpp`, `src/pgen/pgen.cpp`, and
 `src/CMakeLists.txt`. `driver_user_stop.cpp` is a compile-time `UserProblem`
-fixture selected with `-DPROBLEM=tests/driver_user_stop` instead.
+fixture selected with `-DPROBLEM=tests/driver_user_stop` instead. Active MHD-PIC
+priorities are in `MHD_PIC_NEXT_STEPS_GUIDE.md`; durable model and shock setup
+documents live under `docs/source/engineering/`.
 
 ## Task lookup
 
@@ -19,8 +21,7 @@ fixture selected with `-DPROBLEM=tests/driver_user_stop` instead.
 | Change PIC interface or distribution setup | `pic_paper_smooth_tsc_interface.cpp`, `q006_*`, `q007_*`, `q032_*`, or `q033_*` | `src/particles/`, paired input decks, and `tst/scripts/particles/` |
 | Change parallel-shock injection or accounting | `pic_parallel_shock.cpp` | `inputs/tests/pic_parallel_shock_*`, `inputs/publication/pic_parallel_shock_*`, and matching Q011 tests |
 | Change linear Bell seeds or current normalization | `q023_paper_bell_linear*`, `q043_bell_current_volume_aware.cpp` | Shared headers and corresponding host harnesses under `tst/publication/` |
-| Change Hall-Bell preparation | `q029_hall_bell_linear.cpp` | Shared Q023 carrier math and Q029 host harnesses |
-| Change nonlinear Bell setup | `q019_nonlinear_bell_saturation_engineering.cpp`, `q019_physics_first_nonlinear_bell_successor_v2.*` | `inputs/publication/q019_*`, their manifests/materializers, and Q019 tests |
+| Change nonlinear Bell setup | `q019_nonlinear_bell_saturation_engineering.cpp`, `q019_physics_first_nonlinear_bell_successor_v2.hpp` | `inputs/publication/pic_bell_nonlinear_saturation_engineering_v1.athinput`, the full-Hall nonlinear pilot, and the compact Bell analyzer/tests |
 | Change orderly driver-stop behavior | `driver_user_stop.cpp` | `inputs/tests/driver_user_stop.athinput` and `tst/publication/test_driver_user_stop.py` |
 
 ## Important flow
@@ -44,14 +45,18 @@ fixture selected with `-DPROBLEM=tests/driver_user_stop` instead.
   work-in-loop, history, and final callbacks before returning on restart.
 - Shared Bell headers feed several generators. Trace all consumers before
   changing carrier math or normalization.
+- MHD-PIC generators select staged coupling explicitly with
+  `<time>/integrator=vl2` and the complete TSC/coupling controls. Boris CR state
+  is always `p/m`; `pic_cr_initial_state` controls only initializer input
+  interpretation. Hall choices are only `pic_cr_hall_mode=off|full`.
 
 ## Focused validation
 
 From the repository root, lightweight Bell/source contracts include:
 
-- `python3 -m pytest -q tst/publication/test_q029_hall_bell_linear_host_harness.py`
+- `python3 -m pytest -q tst/publication/test_q023_paper_bell_linear_host_harness.py`
 - `python3 -m pytest -q tst/publication/test_q043_bell_current_volume_aware_host_harness.py`
-- `python3 -m pytest -q tst/publication/test_q019_physics_first_nonlinear_bell_successor_v2.py`
+- `python3 -m pytest -q tst/publication/test_bell_saturation_engineering_analysis_v1.py`
 
 Runtime shock changes normally require a focused compiled regression, for example:
 
@@ -64,8 +69,9 @@ Runtime shock changes normally require a focused compiled regression, for exampl
 - Treat a PIC/Bell generator, its deck, host math, analyzer, and registration as
   one contract. Many paths intentionally fail closed on geometry, normalization,
   runtime mode, and campaign metadata.
-- Keep historical, corrected paper, and experimental Hall Bell paths distinct.
-  Sharing seed-carrier math does not make their physical claims interchangeable.
+- Keep corrected current-normalization, Hall-off, and full-Hall Bell contracts
+  distinct. Sharing seed-carrier math does not make their physical claims
+  interchangeable.
 - Preparation, proxy, candidate, or engineering labels do not establish
   qualification or authorize a production campaign.
 <!-- END build-memory-table -->

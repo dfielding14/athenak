@@ -3,12 +3,9 @@
 ## Scope
 
 This declaration defines the bounded toolchain scope for clean-launch work on
-the active `paper_mhd_pic_vl2_tsc` and `extended_mhd_pic` identities. The
-historical `paper_mhd_pic` identity remains available for restart and
-source-history compatibility only; do not use it for new publication work. A
-successful configure, build, or startup check is not a scientific qualification
-record and does not qualify Frontier portability, decomposition parity, GPU
-parity, or paper reproduction.
+the explicit PIC runtime interface. A successful configure, build, or startup
+check is not a scientific qualification record and does not qualify Frontier
+portability, decomposition parity, GPU parity, or paper reproduction.
 
 | Profile | Supported scope now | Qualification limit |
 | --- | --- | --- |
@@ -17,9 +14,12 @@ parity, or paper reproduction.
 | Host MPI | Separate configure, build, and `-c` startup check | Rank launch requires a suitable launcher; qualifying MPI runtime is deferred to controlled Frontier work |
 | Frontier HIP/MPI | Declared AMD `gfx90a` candidate profile | Build/runtime/profile-selection evidence requires Frontier allocation and the submission unlock |
 
-Keep the runtime identity separate from the build profile. Both
-`paper_mhd_pic_vl2_tsc` and `extended_mhd_pic` use mass-normalized momentum
-state, but extension controls must never be presented as paper-mode evidence.
+Keep runtime choices separate from the build profile. Cosmic-ray Boris pushers
+store mass-normalized momentum `p/m`; `pic_cr_initial_state` only states whether
+an initializer supplies velocity or momentum. `<time>/integrator=vl2` selects
+the Sun--Bai staged coupling chronology, while `rk2` remains Heun. Background,
+feedback, Hall, delta-f, damping, and expanding-box behavior are selected by
+their explicit controls and must be reported with qualification evidence.
 
 ## Host Configure Commands
 

@@ -135,10 +135,6 @@ efficiently on CPUs and GPUs.
     `particles/pic_weibel_growth_proxy` (AthenaK-adapted Weibel control using
     no-MHD counter-`vy` beams, with non-positive growth and serial/MPI parity
     gates on the dominant transverse-current mode).
-  - A current-driven Bell-like growth anchor is present as
-    `particles/pic_bell_growth_proxy` (coupled vs uncoupled comparison that
-    requires positive transverse magnetic growth only in coupled mode with
-    serial/MPI growth-rate parity).
   - A multi-species coupled oscillation parity anchor is present as
     `particles/pic_multispecies_backreaction_oscillation` using uniform, SMR,
     and nested-refinement AMR-style proxy decks with frequency-window, energy-
@@ -215,23 +211,31 @@ for clarification rather than guessing.
 <!-- BEGIN build-memory-table -->
 ## MHD-PIC Navigation
 
-Use `docs/source/engineering/pic_mhd_model_contract.md` to identify the intended
-runtime model, then verify every claim in the implementation and focused tests.
-The coherent selector is `<particles>/pic_physical_mode`; legacy engineering,
-paper, and separately named extension paths are not interchangeable.
+`MHD_PIC_NEXT_STEPS_GUIDE.md` governs active project work. Durable model,
+implementation, setup, and ethos documents live in `docs/source/engineering/`;
+start with `docs/source/engineering/pic_mhd_model_contract.md` and verify claims
+against the implementation and focused tests.
+
+The runtime API is explicit: Boris cosmic rays store mass-normalized momentum
+`p/m`, while `<particles>/pic_cr_initial_state=velocity|momentum` controls only
+initializer interpretation. `<time>/integrator=vl2` selects staged VL2/TSC
+coupling. Deposition and all gas-coupling toggles default off with
+`deposit_order=1`; VL2 decks must enable their complete coupling contract and
+set `deposit_order=2`. CR-Hall is selected only by
+`<particles>/pic_cr_hall_mode=off|full`.
 
 ### Task lookup
 
 | Task | Start in | Follow or validate |
 | --- | --- | --- |
-| Change CR state, modes, initialization, or guards | `src/particles/particles.hpp`, `src/particles/particles.cpp` | Model contract, `inputs/AGENTS.md`, parser/guard regressions |
+| Change CR state, initialization, or guards | `src/particles/particles.hpp`, `src/particles/particles.cpp` | Model contract, `inputs/AGENTS.md`, parser/guard regressions |
 | Change Boris integration or field interpolation | `src/particles/particles_pushers.cpp`, `src/particles/field_interpolation.hpp` | Gyro, midpoint E+B, and no-MHD focused tests |
 | Change deposition or particle moments | `src/particles/particles_moments.cpp` | `src/bvals/`, AMR/interface tests, conservation tests, output mappings |
-| Change gas feedback, induction, or stage ordering | `src/particles/particles_tasks.cpp`, `src/mhd/mhd_tasks.cpp` | VL2 stage trace, ideal-induction isolation, fluid-particle conservation |
+| Change gas feedback, induction, or stage ordering | `src/particles/particles_tasks.cpp`, `src/mhd/mhd_tasks.cpp` | VL2 conservation, ideal-induction isolation, and stage-budget regressions |
 | Change particle MPI, physical boundaries, or AMR lifetime | `src/bvals/bvals_part.cpp`, `src/mesh/` | Decomposition, nonperiodic, refinement-interface, restart, and load-balance tests |
 | Change restart schema or PIC diagnostics | `src/outputs/restart.cpp`, `src/pgen/pgen.cpp`, `src/outputs/derived_variables.cpp` | Restart fidelity/safety plus particle VTK and gridded-output consumers |
 | Change turbulent MHD-PIC boxes | `src/pgen/turb.cpp`, `src/srcterms/initial_perturbations.*`, `src/srcterms/turb_driver.*` | `inputs/particles/AGENTS.md` and turbulent-dynamo smoke test |
-| Change Bell or non-relativistic shock setups | `src/pgen/tests/` | `src/pgen/tests/AGENTS.md`, `inputs/publication/AGENTS.md`, focused Q011/Q019/Q023/Q029/Q043 tests |
+| Change Bell or non-relativistic shock setups | `src/pgen/tests/` | `src/pgen/tests/AGENTS.md`, `inputs/publication/AGENTS.md`, focused Q011/Q019/Q023/Q043 tests |
 | Add or change a PIC regression | `tst/scripts/particles/` | `tst/AGENTS.md`, `tst/scripts/particles/AGENTS.md`, paired decks in `inputs/tests/` |
 | Change campaign evidence or launch tooling | `tst/publication/` | Read `tst/publication/AGENTS.md`; keep proxies, preparations, and qualification evidence distinct |
 
@@ -241,37 +245,26 @@ paper, and separately named extension paths are not interchangeable.
    modules from the selected input blocks.
 2. Particle tasks push CRs, deposit moments and per-step exchange channels, and
    synchronize those fields across block, MPI, and refinement boundaries.
-3. Coupled task insertion places the particle wrappers around the appropriate MHD
-   source/field stages. `pic_cr_hall_mode=off` keeps ideal-MHD induction; `full`
-   adds the derived, stage-centered CR-Hall face induction and matched energy flux
-   while gas receives the documented opposite particle exchange.
+3. With `time/integrator=vl2`, coupled task insertion places the staged TSC
+   particle wrappers around the MHD source and field updates.
+   `pic_cr_hall_mode=off` keeps ideal-MHD induction; `full` adds the
+   stage-centered CR-Hall induction and matched energy flux while gas receives
+   the opposite particle exchange.
 4. Particle ownership migration, AMR reconstruction, and restart loading must
    preserve particle payload, deposited state, source cohort, and runtime-model
    fingerprints.
 5. Outputs expose both particle records and gridded diagnostics; changes to stored
    state often require coordinated restart, output, test, and analysis updates.
 
-### Focused validation
-
-- Run compiled regressions from `tst/` with a specific module name, for example
-  `python3 run_tests.py particles/pic_paper_coupling_conservation_vl2_tsc`.
-- Run the standalone deposition oracle from the repository root with
-  `python3 tst/scripts/particles/pic_paper_smooth_tsc_oracle.py --indent 0`.
-- Use `tst/scripts/particles/AGENTS.md` to select the nearest invariant; do not
-  assume proxy or preparation tests establish scientific qualification.
-
 ### Local guides
 
-- `src/particles/AGENTS.md`: particle state, pushers, deposition, task wiring,
-  MPI exchange, and runtime controls.
-- `src/mhd/AGENTS.md`: MHD task flow, source hooks, electric fields, and CT.
+- `src/particles/AGENTS.md`, `src/mhd/AGENTS.md`: particle state/coupling and
+  MHD source, electric-field, and CT flow.
 - `src/mesh/AGENTS.md`, `src/bvals/AGENTS.md`, `src/outputs/AGENTS.md`: AMR,
   communication, restart, and diagnostics boundaries.
 - `src/pgen/tests/AGENTS.md`: built-in PIC, Bell, and shock generators.
-- `inputs/particles/AGENTS.md`, `inputs/publication/AGENTS.md`: science and
-  campaign deck families.
-- `tst/AGENTS.md`, `tst/scripts/particles/AGENTS.md`: harness and focused PIC
-  validation routing.
+- `inputs/particles/AGENTS.md`, `inputs/publication/AGENTS.md`,
+  `tst/scripts/particles/AGENTS.md`: decks and focused validation.
 
 `kokkos/` is a separate Git submodule and is outside this navigation guide's
 write scope.

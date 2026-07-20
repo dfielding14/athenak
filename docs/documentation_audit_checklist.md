@@ -79,6 +79,9 @@ Use the checkboxes below to track progress. Whenever you update a document, reco
 
 ### Engineering Notes
 
+- [x] MHD-PIC CR-Hall Paper-to-Code Map — `docs/source/engineering/pic_cr_hall_code_map.md`
+- [x] MHD-PIC Project Ethos — `docs/source/engineering/pic_project_ethos.md`
+- [x] Mignone-R2 Full-Hall Shock Setup — `docs/source/engineering/pic_mignone_r2_shock_setup.md`
 - [x] MHD-PIC Clean-Launch Runbook — `docs/build/html/engineering/pic_clean_launch_runbook.html`
 - [x] MHD-PIC Supported Toolchains — `docs/build/html/engineering/pic_supported_toolchains.html`
 - [x] MHD-PIC Runtime Model Contract — `docs/build/html/engineering/pic_mhd_model_contract.html`

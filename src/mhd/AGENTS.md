@@ -5,6 +5,10 @@ This directory implements the MHD module: conserved/primitive state, magnetic fi
 Riemann solvers, constrained transport, source terms, and boundary communication for
 magnetohydrodynamics (including SR/GR variants when enabled).
 See `../../AGENTS.md` for repository-wide conventions and workflow.
+For MHD-PIC equations and signs, use
+`docs/source/engineering/pic_mhd_model_contract.md` and
+`docs/source/engineering/pic_cr_hall_code_map.md`; active priorities are in
+`MHD_PIC_NEXT_STEPS_GUIDE.md`.
 
 ---
 
@@ -111,8 +115,9 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
 - `ApplyPhysicalBCs` -> `Prolongate` -> `ConToPrim` -> `NewTimeStep`
 
 `Fluxes` adds the full CR-Hall face induction and energy flux before its internal
-FOFC call. Full-f paper-VL2 particle tasks are inserted after `CopyCons` and
-before `Fluxes`; see `src/particles/AGENTS.md` for their stage ordering.
+FOFC call. With `time/integrator=vl2`, full-f TSC particle tasks are inserted
+after `CopyCons` and before `Fluxes`; see `src/particles/AGENTS.md` for their
+stage ordering.
 
 **after_stagen**
 - `ClearSend` -> `ClearRecv`
@@ -126,7 +131,7 @@ before `Fluxes`; see `src/particles/AGENTS.md` for their stage ordering.
   divergence-free fields.
 - **FOFC**: estimates updated U and Bcc, flags floor/excision cells, and replaces
   fluxes with first-order LLF fluxes in those regions (also used for GR excision).
-  For full-f paper VL2, the trial includes both the Hall-enriched face fluxes and
+  For full-f VL2/TSC, the trial includes both the Hall-enriched face fluxes and
   the matching stage particle source. On replaced faces, the full-Hall path then
   restores donor-cell Hall induction and energy terms before clearing the flags.
 - **Source terms**: `SourceTerms` adds gravity/cooling/shearing-box terms; GR/ADM
@@ -134,7 +139,7 @@ before `Fluxes`; see `src/particles/AGENTS.md` for their stage ordering.
 - **Timestep**: `NewTimeStep` uses fast magnetosonic speeds in Newtonian/SR, but
   clamps characteristic speeds to 1.0 in GR/dynamical GR.
 
-### PR2 Particle Coupling Hooks
+### Particle Coupling Hooks
 - `MHD::EFieldSrc` keeps shearing-box behavior and adds an optional particle term:
   - enabled only when `<particles>/couple_moments_to_mhd=true`
   - additive update to edge-centered `efld` using
@@ -147,10 +152,10 @@ before `Fluxes`; see `src/particles/AGENTS.md` for their stage ordering.
   - `couple_fluid_feedback_order=mhd_src_terms`: feedback applied in
     `MHD::MHDSrcTerms`
   - `couple_fluid_feedback_order=efield_src`: feedback applied in `MHD::EFieldSrc`
-  - legacy modes build deposited rates once per cycle and reuse them across RK
+  - non-VL2 runs build deposited rates once per cycle and reuse them across RK
     stages with the stage beta coefficient; targets are gated by
     `couple_moments_momentum_to_mhd` and `couple_moments_energy_to_mhd`.
-  - full-f paper VL2 instead applies the analytic deposited charge/current force
+  - full-f VL2/TSC instead applies the analytic deposited charge/current force
     in stage 1 and the opposite of the deposited, realized particle
     `dp/dt`/`dE/dt` impulse in stage 2. This same helper updates the live state
     and the FOFC trial state.
@@ -162,9 +167,9 @@ before `Fluxes`; see `src/particles/AGENTS.md` for their stage ordering.
     C2P; a would-be floor repair aborts with global event counts so a coupled
     conservation run cannot silently acquire floor energy.
 
-For the uniform-grid full-f VL2/TSC path, `pic_cr_hall_mode=full` is a separate
-physical closure from the legacy direct-current CT experiment. Its predictor
-uses deposited charge/current to build `v_H`; the stage-2 particle push uses the
+For the uniform-grid full-f VL2/TSC path, `pic_cr_hall_mode=off|full` selects
+ideal-MHD or full CR-Hall induction. The full closure's predictor uses deposited
+charge/current to build `v_H`; the stage-2 particle push uses the
 predicted midpoint field, then deposits the realized particle impulse. The grid
 corrector uses that impulse directly,
 `cE_H = -(dp_CR/dt)/(alpha_i rho_g)`, rather than reusing the predictor `v_H`.
@@ -172,9 +177,9 @@ corrector uses that impulse directly,
 before FOFC, flux communication, and RK update. `CornerE` assembles the total
 face/cell EMF for GS07, CT updates the staggered field, and admissibility is
 checked against the updated face field. Start with
-`MHD_PIC_CR_HALL_CODE_MAP.md` before changing this route.
+`docs/source/engineering/pic_cr_hall_code_map.md` before changing this route.
 
-### PR5 Step 2 Passive-MHD Isolation Hook
+### Passive-MHD Isolation Hook
 - When `<particles>/pic_background_mode=passive_mhd` is active, MHD fluid
   evolution is frozen by short-circuiting:
   - `MHD::RKUpdate`
