@@ -619,13 +619,16 @@ def model_float(model: dict[str, object], name: str, default: float | None
 
 def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
                               lengths: tuple[float, float, float],
-                              model: dict[str, object] | None
+                              model: dict[str, object] | None,
+                              include_local_fields: bool = False,
                               ) -> dict[str, object]:
     """Reconstruct a cell-centered LF temperature-smoothing power proxy.
 
     This follows the implemented closure and algebraic heat-flux cap, but it
     evaluates cell-centered periodic gradients from retained snapshots. It is
-    not the discrete face flux applied during time integration.
+    not the discrete face flux applied during time integration. When requested,
+    the returned local fields expose arrays already used by this reconstruction;
+    the default scalar-only product remains JSON serializable.
     """
 
     if model is None:
@@ -796,7 +799,7 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
     choices_used["effective_backup_limiter"] = backup
     if coefficient_mode == "background":
         choices_used["lf_c_parallel0"] = model.get("lf_c_parallel0", "unspecified")
-    return {
+    result: dict[str, object] = {
         "available": True,
         "definition": (
             "integral[-q_parallel b.grad(T_parallel) "
@@ -825,6 +828,29 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
             np.where(perpendicular_capped, pperp_work, 0.0)
         ),
     }
+    if include_local_fields:
+        parallel_activity = np.divide(
+            np.abs(qpar),
+            qpar_max,
+            out=np.zeros_like(qpar),
+            where=valid & (qpar_max > 0.0),
+        )
+        perpendicular_activity = np.divide(
+            np.abs(qperp),
+            qperp_max,
+            out=np.zeros_like(qperp),
+            where=valid & (qperp_max > 0.0),
+        )
+        result["local_fields"] = {
+            "normalized_parallel_flux": parallel_activity,
+            "normalized_perpendicular_flux": perpendicular_activity,
+            "normalized_flux_activity": (
+                0.5 * (parallel_activity + perpendicular_activity)
+            ),
+            "regularized_power_density": ppar_work + pperp_work,
+            "limiter_collision_rate": nu_limiter,
+        }
+    return result
 
 
 def velocity_gradient_products(velocity: list[np.ndarray], bhat: list[np.ndarray],
@@ -3832,6 +3858,39 @@ def synthetic_test() -> dict[str, object]:
     strain = np.asarray(record["pdf"]["bb_grad_velocity"]["density"])
     pressure_density = record["pressure_density_joint"]
     heat_flux = record["heat_flux_transport_proxy"]
+    heat_flux_with_fields = heat_flux_transport_proxy(
+        fields, lengths, model, include_local_fields=True
+    )
+    local_heat_flux = heat_flux_with_fields["local_fields"]
+    parallel_activity = np.asarray(
+        local_heat_flux["normalized_parallel_flux"], dtype=float
+    )
+    perpendicular_activity = np.asarray(
+        local_heat_flux["normalized_perpendicular_flux"], dtype=float
+    )
+    combined_activity = np.asarray(
+        local_heat_flux["normalized_flux_activity"], dtype=float
+    )
+    valid_local_heat_flux = bool(
+        "local_fields" not in heat_flux
+        and all(
+            np.asarray(local_heat_flux[name]).shape == shape
+            and np.isfinite(np.asarray(local_heat_flux[name], dtype=float)).all()
+            for name in (
+                "normalized_parallel_flux",
+                "normalized_perpendicular_flux",
+                "normalized_flux_activity",
+                "regularized_power_density",
+                "limiter_collision_rate",
+            )
+        )
+        and np.min(combined_activity) >= 0.0
+        and np.max(combined_activity) <= 1.0
+        and np.max(np.abs(
+            combined_activity
+            - 0.5 * (parallel_activity + perpendicular_activity)
+        )) < 1.0e-15
+    )
     finite_alignment = bool(
         alignment and np.isfinite(np.asarray(alignment["density"])).all()
     )
@@ -3940,6 +3999,7 @@ def synthetic_test() -> dict[str, object]:
         and heat_flux["available"]
         and heat_flux["regularized_perpendicular_power"] > 0.0
         and abs(float(heat_flux["regularized_parallel_power"])) < 1.0e-14
+        and valid_local_heat_flux
         and abs(float(pressure_work["anisotropic_stress_power"])) < 1.0e-14
         and correlated["anisotropic_stress_power"] < 0.0
         and correlated_transfer["normalization_available"]
@@ -3992,6 +4052,7 @@ def synthetic_test() -> dict[str, object]:
             heat_flux["regularized_perpendicular_power"]
         ),
         "zero_parallel_heat_flux_proxy": heat_flux["regularized_parallel_power"],
+        "valid_optional_local_heat_flux_fields": valid_local_heat_flux,
         "zero_anisotropic_pressure_work": pressure_work["anisotropic_stress_power"],
         "negative_correlated_anisotropic_pressure_work": (
             correlated["anisotropic_stress_power"]
