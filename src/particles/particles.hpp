@@ -46,10 +46,8 @@ enum class CoupledFluidFeedbackOrder { mhd_src_terms, efield_src };
 // constants for staged PIC runtime controls used by PR5+ test-suite expansion
 enum class PICBackgroundMode { coupled, passive_mhd, no_mhd };
 enum class PICFeedbackMode { coupled, test_particle };
-enum class PICPhysicalMode { engineering = 0, paper_test_particle = 1,
-                             paper_mhd_pic = 2, extended_mhd_pic = 3,
-                             paper_mhd_pic_vl2_tsc = 4 };
-enum class PICCRHallMode { off, current_to_ct_experimental, full };
+// Keep the full-mode value at 2 so schema-8 restart fingerprints remain stable.
+enum class PICCRHallMode { off = 0, full = 2 };
 enum class PICWaveDampingMode { off, ion_neutral_friction };
 enum class PICCRInitialState { velocity, momentum };
 enum class PICInterpolationScheme { tsc };
@@ -270,11 +268,11 @@ class Particles {
   Real couple_moments_energy_coeff = 1.0;       // energy feedback coefficient
   PICBackgroundMode pic_background_mode = PICBackgroundMode::coupled;
   PICFeedbackMode pic_feedback_mode = PICFeedbackMode::coupled;
-  PICPhysicalMode pic_physical_mode = PICPhysicalMode::engineering;
   PICCRHallMode pic_cr_hall_mode = PICCRHallMode::off;
   PICWaveDampingMode pic_wave_damping_mode = PICWaveDampingMode::off;
   PICCRInitialState pic_cr_initial_state = PICCRInitialState::velocity;
   PICInterpolationScheme pic_interp_scheme = PICInterpolationScheme::tsc;
+  bool pic_vl2_integrator = false; // explicit <time>/integrator=vl2 selector
   bool pic_enable_2d3v = false;    // keep vz/Bz channels active when nx3==1
   PICDeltaFMode pic_deltaf_mode = PICDeltaFMode::off;
   PICDeltaFBackground pic_deltaf_background = PICDeltaFBackground::uniform;
@@ -443,8 +441,10 @@ class Particles {
   std::uint64_t Q017PaperSmoothHostAllocationBytes() const;
   void ObserveQ017PaperSmoothHostAllocationBytes(std::uint64_t transient_bytes=0);
   void OutputQ017Telemetry() const;
-  bool UsesRelativisticCRState() const {
-    return pic_physical_mode != PICPhysicalMode::engineering;
+  bool UsesMomentumState() const {
+    return particle_type == ParticleType::cosmic_ray &&
+           (pusher == ParticlesPusher::boris_lin ||
+            pusher == ParticlesPusher::boris_tsc);
   }
   bool UsesDeltaF() const {
     return pic_deltaf_mode == PICDeltaFMode::physical;
@@ -456,8 +456,8 @@ class Particles {
   bool UsesExpandingBox() const {
     return pic_expanding_box_mode == PICExpandingBoxMode::on;
   }
-  bool UsesPaperVL2Coupling() const {
-    return pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc;
+  bool UsesVL2TSCCoupling() const {
+    return pic_vl2_integrator;
   }
   bool UsesPICWaveDamping() const {
     return pic_wave_damping_mode == PICWaveDampingMode::ion_neutral_friction;
@@ -466,6 +466,19 @@ class Particles {
     return pic_cr_hall_mode == PICCRHallMode::full;
   }
   static constexpr int PIC_RESTART_SCHEMA_VERSION = 8;
+  // Preserve the schema-8 integer slot without using it to select runtime behavior.
+  // New files use 0, 1, and 4 for velocity, momentum, and validated VL2 state.
+  int RestartLegacyModeTag() const {
+    if (UsesVL2TSCCoupling()) return 4;
+    return UsesMomentumState() ? 1 : 0;
+  }
+  bool MatchesRestartLegacyModeTag(int legacy_tag) const {
+    if (UsesVL2TSCCoupling()) return legacy_tag == 4;
+    // Schema-8 tags 1--3 selected different non-VL2 umbrella modes. Their
+    // actual mechanics are checked by state_kind and the explicit metadata.
+    if (UsesMomentumState()) return legacy_tag >= 1 && legacy_tag <= 3;
+    return legacy_tag == 0;
+  }
   static constexpr int NPIC_RESTART_MODEL_INTS = 31;
   static constexpr int NPIC_RESTART_CONFIG_REALS = 35;
   static constexpr int NPIC_RESTART_MODEL_REALS = 38;
@@ -582,13 +595,6 @@ class Particles {
     pic_deltaf_adapt_last_bucket = bucket;
     return true;
   }
-  bool AddsCRCurrentToCT() const {
-    return couple_moments_to_mhd &&
-           ((pic_physical_mode == PICPhysicalMode::engineering) ||
-            ((pic_physical_mode == PICPhysicalMode::extended_mhd_pic) &&
-             (pic_cr_hall_mode == PICCRHallMode::current_to_ct_experimental)));
-  }
-
  private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles
   static constexpr int nq017_particle_timers =

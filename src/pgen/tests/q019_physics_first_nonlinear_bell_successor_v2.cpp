@@ -1576,7 +1576,7 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
   }
 
   Q019RequireString(pin, "time", "evolution", "dynamic");
-  Q019RequireString(pin, "time", "integrator", "rk2");
+  Q019RequireString(pin, "time", "integrator", "vl2");
   if (pin->GetInteger("time", "nlim") == 0 ||
       !(pin->GetReal("time", "tlim") > 0.0)) {
     Q019NonlinearFatal("Q019 candidate decks must genuinely advance");
@@ -1592,7 +1592,6 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
                     "cell_centered");
   Q019RequireString(pin, "particles", "couple_j_deposition_mode", "cc_convert");
   Q019RequireString(pin, "particles", "couple_fluid_feedback_order", "mhd_src_terms");
-  Q019RequireString(pin, "particles", "pic_physical_mode", "paper_mhd_pic_vl2_tsc");
   Q019RequireString(pin, "particles", "pic_background_mode", "coupled");
   Q019RequireString(pin, "particles", "pic_feedback_mode", "coupled");
   Q019RequireString(pin, "particles", "pic_interp_scheme", "tsc");
@@ -2577,7 +2576,7 @@ void ProblemGenerator::Q019PhysicsFirstNonlinearBellSuccessorV2(
         Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_global_cell_base);
     auto &pi = ppart->prtcl_idata;
     auto &pr = ppart->prtcl_rdata;
-    const bool momentum_state = ppart->UsesRelativisticCRState();
+    const bool momentum_state = ppart->UsesMomentumState();
     const Real cr_light_speed = ppart->pic_cr_light_speed;
     const int gids = pmbp->gids;
     int initializer_order_mismatches = 0;

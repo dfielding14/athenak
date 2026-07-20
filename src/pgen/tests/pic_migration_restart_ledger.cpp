@@ -216,7 +216,7 @@ void ValidateContract(ParameterInput *pin, Mesh *pm) {
     MigrationFatal("migration regression boundary contract drifted");
   }
   if (!pmbp->pmhd->peos->eos_data.is_ideal ||
-      !ppart->UsesPaperVL2Coupling() || !ppart->pic_boundary_conservation_ledger ||
+      !ppart->UsesVL2TSCCoupling() || !ppart->pic_boundary_conservation_ledger ||
       !ppart->track_displacement || ppart->nspecies != 3 ||
       pin->GetInteger("time", "nlim") > kExpectedCycles ||
       !pin->GetBoolean("problem", "user_work_in_loop")) {

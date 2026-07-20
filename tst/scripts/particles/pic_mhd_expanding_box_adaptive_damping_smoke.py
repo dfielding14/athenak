@@ -57,7 +57,6 @@ def _run_case(label, background_rho, damping_mode, collision_rate):
     if proc.returncode != 0:
         raise RuntimeError('Command failed for ' + label + '\n' + output)
     for token in [
-            'physical_mode=extended_mhd_pic',
             'background=coupled',
             'feedback=coupled',
             'deltaf_adapt=global_bikappa_moments_experimental',

@@ -86,7 +86,6 @@ class ProblemGenerator {
   void PICMigrationRestartLedger(ParameterInput *pin, const bool restart);
   void PICPaperSmoothTSCInterface(ParameterInput *pin, const bool restart);
   void PICParallelShock(ParameterInput *pin, const bool restart);
-  void Q006PaperMultispeciesOscillation(ParameterInput *pin, const bool restart);
   void Q006PaperMultispeciesOscillationRuntimeLocal(ParameterInput *pin,
                                                     const bool restart);
   void Q007PaperCRSILinearPreparation(ParameterInput *pin, const bool restart);
@@ -98,7 +97,6 @@ class ProblemGenerator {
   void Q023PaperBellLinear(ParameterInput *pin, const bool restart);
   void Q023PaperBellLinearJOverC(ParameterInput *pin, const bool restart);
   void Q043BellCurrentVolumeAware(ParameterInput *pin, const bool restart);
-  void Q029HallBellLinear(ParameterInput *pin, const bool restart);
   void Q032ReducedStaticNeutralLocal(ParameterInput *pin, const bool restart);
   void Q033CRPAITransportRuntimeLocal(ParameterInput *pin, const bool restart);
   void ShockTube(ParameterInput *pin, const bool restart);

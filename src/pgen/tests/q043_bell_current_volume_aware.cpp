@@ -260,7 +260,7 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
                              : "section52_positive_current_unstable_eigenmode");
 
   Q043VolumeAwareRequireString(pin, "time", "evolution", "dynamic");
-  Q043VolumeAwareRequireString(pin, "time", "integrator", "rk2");
+  Q043VolumeAwareRequireString(pin, "time", "integrator", "vl2");
   Q043VolumeAwareRequireString(pin, "mhd", "eos", "ideal");
   Q043VolumeAwareRequireString(pin, "particles", "particle_type", "cosmic_ray");
   Q043VolumeAwareRequireString(pin, "particles", "pusher", "boris_tsc");
@@ -269,17 +269,8 @@ void ProblemGenerator::Q043BellCurrentVolumeAware(ParameterInput *pin,
     Q043VolumeAwareFatal("q043_bell_current_volume_aware requires exactly one species");
   }
   Q043VolumeAwareRequireBoolean(pin, "particles", "deposit_moments", true);
-  const std::string physical_mode =
-      pin->GetString("particles", "pic_physical_mode");
-  const bool paper_vl2_tsc =
-      physical_mode.compare("paper_mhd_pic_vl2_tsc") == 0;
-  if (!paper_vl2_tsc && physical_mode.compare("paper_mhd_pic") != 0) {
-    Q043VolumeAwareFatal("<particles>/pic_physical_mode does not match the corrected "
-                    "Q-043 Section 5.2 contract");
-  }
-  if (pin->GetInteger("particles", "deposit_order") != (paper_vl2_tsc ? 2 : 1)) {
-    Q043VolumeAwareFatal("<particles>/deposit_order does not match the corrected "
-                    "Q-043 Section 5.2 physical mode");
+  if (pin->GetInteger("particles", "deposit_order") != 2) {
+    Q043VolumeAwareFatal("Q-043 requires TSC moment deposition");
   }
   Q043VolumeAwareRequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q043VolumeAwareRequireBoolean(pin, "particles", "couple_moments_momentum_to_mhd", true);

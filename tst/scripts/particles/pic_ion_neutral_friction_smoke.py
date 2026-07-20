@@ -53,11 +53,7 @@ def _run_case(case_name, damping_mode, collision_rate):
     output = (proc.stdout or '') + (proc.stderr or '')
     if proc.returncode != 0:
         raise RuntimeError('Command failed for ' + case_name + '\n' + output)
-    expected = [
-        'physical_mode=extended_mhd_pic',
-        'wave_damping=' + damping_mode,
-        'nu_in=',
-    ]
+    expected = ['wave_damping=' + damping_mode, 'nu_in=']
     for token in expected:
         if token not in output:
             raise RuntimeError(case_name + ' missing runtime token: ' + token)
@@ -89,12 +85,6 @@ def run(**kwargs):
         _remove_outputs('pic_ion_neutral_friction_' + case_name)
     _RESULTS['off'] = _run_case('off', 'off', 0.0)
     _RESULTS['damped'] = _run_case('damped', 'ion_neutral_friction', _NU_IN)
-    _run_guard(
-        'paper_mode_rejects_damping',
-        ['particles/pic_physical_mode=paper_mhd_pic',
-         'particles/pic_wave_damping_mode=ion_neutral_friction',
-         'particles/pic_ion_neutral_collision_rate=0.7'],
-        'requires <particles>/pic_physical_mode=extended_mhd_pic')
     _run_guard(
         'friction_requires_positive_rate',
         ['particles/pic_wave_damping_mode=ion_neutral_friction',

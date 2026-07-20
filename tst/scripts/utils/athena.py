@@ -20,7 +20,8 @@ def make(arguments):
         subprocess.check_call(['mkdir', 'build'], stdout=out_log)
         build_dir = current_dir + '/build/'
         os.chdir(build_dir)
-        cmake_command = ['cmake3', '../' + athena_rel_path] + arguments
+        cmake_command = [os.environ.get('CMAKE', 'cmake'),
+                         '../' + athena_rel_path] + arguments
         make_command = ['make', '-j8']
         try:
             t0 = timer()

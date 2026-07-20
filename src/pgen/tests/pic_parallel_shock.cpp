@@ -1052,7 +1052,7 @@ void EncodeCRStateFromVelocity(const particles::Particles *ppart,
   state_x = vx;
   state_y = vy;
   state_z = vz;
-  if (!ppart->UsesRelativisticCRState()) return;
+  if (!ppart->UsesMomentumState()) return;
 
   const Real light_speed = ppart->pic_cr_light_speed;
   const Real v2 = vx*vx + vy*vy + vz*vz;
@@ -1072,7 +1072,7 @@ void EncodeCRStateFromVelocity(const particles::Particles *ppart,
 
 Real VelocityMagnitudeFromMomentumMagnitude(const particles::Particles *ppart,
                                             const Real momentum) {
-  if (!ppart->UsesRelativisticCRState()) return momentum;
+  if (!ppart->UsesMomentumState()) return momentum;
   const Real light_speed = ppart->pic_cr_light_speed;
   return momentum/std::sqrt(1.0 + SQR(momentum/light_speed));
 }
@@ -1086,7 +1086,7 @@ void BoostRelativeVelocityFromSurface(const particles::Particles *ppart,
   vx = surface_vx + relative_vx;
   vy = relative_vy;
   vz = relative_vz;
-  if (!ppart->UsesRelativisticCRState()) return;
+  if (!ppart->UsesMomentumState()) return;
 
   const Real light_speed = ppart->pic_cr_light_speed;
   if (std::abs(surface_vx) >= light_speed) {
@@ -1146,7 +1146,7 @@ void ApplyFrameShiftToParticles(Mesh *pm, const Real dvx) {
 
   auto *ppart = pmbp->ppart;
   if (ppart->nprtcl_thispack <= 0) return;
-  if (ppart->UsesRelativisticCRState()) {
+  if (ppart->UsesMomentumState()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock particle frame shifting is not yet defined "
@@ -1337,7 +1337,7 @@ void RejectDuplicateParallelShockRestartLedgers(ParameterInput *pin,
 bool PaperVL2EscapeStageChronologyIsValid(const particles::Particles *ppart,
                                           const Mesh *pm, const int stage,
                                           const Real audit_time) {
-  if (!ppart->UsesPaperVL2Coupling()) return true;
+  if (!ppart->UsesVL2TSCCoupling()) return true;
   if (stage != 1 && stage != 2) return false;
   if (pm->ncycle < 0 ||
       pm->ncycle > (std::numeric_limits<int>::max() - stage + 1)/2) {
@@ -1357,7 +1357,7 @@ void ValidatePaperVL2CommittedEscapeChronology(const particles::Particles *ppart
                                                const Real committed_time,
                                                const char *context,
                                                const bool collective = true) {
-  if (ppart == nullptr || !ppart->UsesPaperVL2Coupling()) return;
+  if (ppart == nullptr || !ppart->UsesVL2TSCCoupling()) return;
   int invalid_local = 0;
   if (committed_cycle < 0 ||
       committed_cycle > std::numeric_limits<int>::max()/2 ||
@@ -1854,7 +1854,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
   if (!std::isfinite(pm->time) || !std::isfinite(pm->dt) || pm->dt <= 0.0) {
     local[7] += 1.0;
     local_diag[0] += 1.0;
-  } else if (ppart->UsesPaperVL2Coupling()) {
+  } else if (ppart->UsesVL2TSCCoupling()) {
     if (stage == 1) {
       audit_time = pm->time + 0.5*pm->dt;
     } else if (stage == 2) {
@@ -1966,7 +1966,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
       Real vy = 0.0;
       Real vz = 0.0;
       particles::CRVelocityFromState(
-          ppart->UsesRelativisticCRState(), ppart->pic_cr_light_speed,
+          ppart->UsesMomentumState(), ppart->pic_cr_light_speed,
           h_pr(IPVX, rejected_particle), h_pr(IPVY, rejected_particle),
           h_pr(IPVZ, rejected_particle), vx, vy, vz);
       const Real lx = block.x1max - block.x1min;
@@ -2008,7 +2008,7 @@ void ObserveParallelShockParticleDestruction(particles::Particles *ppart, Mesh *
     const int nrdata = ppart->nrdata;
     const int inject_species = ps_inject_species;
     const Real q_over_m = ps_particle_q_over_m;
-    const bool momentum_state = ppart->UsesRelativisticCRState();
+    const bool momentum_state = ppart->UsesMomentumState();
     const Real light_speed = ppart->pic_cr_light_speed;
     const bool allow_2d3v = ps_use_2d3v;
     size.template sync<DevExeSpace>();
@@ -2438,7 +2438,7 @@ void RemoveExcludedEarlyInjectedParticles(Mesh *pm) {
       removed_local[3] += mass*h_pr_old(IPVY, p);
       removed_local[4] += mass*h_pr_old(IPVZ, p);
       removed_local[5] += mass*particles::CRKineticEnergy(
-          ppart->UsesRelativisticCRState(), ppart->pic_cr_light_speed,
+          ppart->UsesMomentumState(), ppart->pic_cr_light_speed,
           h_pr_old(IPVX, p), h_pr_old(IPVY, p), h_pr_old(IPVZ, p));
       continue;
     }
@@ -2627,7 +2627,7 @@ ParallelShockInjectedState MakeParallelShockInjectedState(
       ppart, state.vx, state.vy, state.vz,
       state.state_x, state.state_y, state.state_z);
   state.energy = particles::CRKineticEnergy(
-      ppart->UsesRelativisticCRState(), ppart->pic_cr_light_speed,
+      ppart->UsesMomentumState(), ppart->pic_cr_light_speed,
       state.state_x, state.state_y, state.state_z);
   return state;
 }
@@ -3087,11 +3087,14 @@ void PrintParallelShockGasSubtractionFloorDiagnostic(
         static_cast<std::int64_t>(loc.lx3)*indcs.nx3 + report.k - indcs.ks;
     logical = {gid, loc.level, global_i, global_j, global_k};
     geometry = {
-      size.x1min + (static_cast<Real>(report.i - indcs.is) + 0.5)*size.dx1,
-      size.x2min + (static_cast<Real>(report.j - indcs.js) + 0.5)*size.dx2,
+      size.x1min + (static_cast<Real>(report.i - indcs.is) +
+                    static_cast<Real>(0.5))*size.dx1,
+      size.x2min + (static_cast<Real>(report.j - indcs.js) +
+                    static_cast<Real>(0.5))*size.dx2,
       pm->three_d ?
-          size.x3min + (static_cast<Real>(report.k - indcs.ks) + 0.5)*size.dx3 :
-          0.0,
+          size.x3min + (static_cast<Real>(report.k - indcs.ks) +
+                        static_cast<Real>(0.5))*size.dx3 :
+          static_cast<Real>(0.0),
       size.dx1, size.dx2, size.dx3,
       ps_injection_transaction_gas_deltas[local_index].vol
     };
@@ -3299,7 +3302,7 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   }
   const bool paper_vl2 =
       (pm->pmb_pack != nullptr) && (pm->pmb_pack->ppart != nullptr) &&
-      pm->pmb_pack->ppart->UsesPaperVL2Coupling();
+      pm->pmb_pack->ppart->UsesVL2TSCCoupling();
   if (paper_vl2) {
     ps_injection_transaction_clipped_energy_local = local_clipped_energy;
     ps_injection_transaction_clipped_cells_local = local_clipped_cells;
@@ -4762,7 +4765,7 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
     EncodeCRStateFromVelocity(ppart, particle_vx, particle_vy, particle_vz, state_x, state_y,
                               state_z);
     const Real particle_energy = particles::CRKineticEnergy(
-        ppart->UsesRelativisticCRState(), ppart->pic_cr_light_speed, state_x, state_y, state_z);
+        ppart->UsesMomentumState(), ppart->pic_cr_light_speed, state_x, state_y, state_z);
 
     if (ps_enable_subtraction && ps_enable_surface_averaged_subtraction) {
       injected_deterministic[2] += ps_particle_macro_mass * state_x;
@@ -5158,7 +5161,7 @@ void AccumulateParallelShockMHDBoundaryTransport(Mesh *pm, const Real stage_weig
   Kokkos::fence();
 
   const bool paper_vl2 =
-      pmbp->ppart != nullptr && pmbp->ppart->UsesPaperVL2Coupling();
+      pmbp->ppart != nullptr && pmbp->ppart->UsesVL2TSCCoupling();
   for (int n=0; n<5; ++n) {
     if (!std::isfinite(boundary_delta.the_array[n])) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -5842,7 +5845,7 @@ void LimitParallelShockInjectionTimeStep(Mesh *pm) {
     Real vmax_x1 = std::abs(surface_vx) + vinj;
     Real vmax_x2 = vinj;
     Real vmax_x3 = vinj;
-    if (ppart->UsesRelativisticCRState()) {
+    if (ppart->UsesMomentumState()) {
       Real vx_plus, vy_dummy, vz_dummy;
       Real vx_minus;
       BoostRelativeVelocityFromSurface(
@@ -6089,11 +6092,11 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     restart_utils::AbortOnFatalError();
   }
   if (ps_enable_injection && integrator != "rk1" && integrator != "rk2"
-      && integrator != "rk3") {
+      && integrator != "rk3" && integrator != "vl2") {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock injection is qualified only with time/integrator="
-              << "rk1, rk2, or rk3; received '" << integrator << "'." << std::endl;
+              << "rk1, rk2, rk3, or vl2; received '" << integrator << "'." << std::endl;
     restart_utils::AbortOnFatalError();
   }
 
@@ -6170,7 +6173,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     const bool exact_particle_model =
         pmy_mesh_->two_d && ppart->pic_enable_2d3v &&
         ppart->pic_boundary_conservation_ledger &&
-        ppart->UsesPaperVL2Coupling() &&
+        ppart->UsesVL2TSCCoupling() &&
         ppart->pic_background_mode == PICBackgroundMode::coupled &&
         ppart->pic_feedback_mode == PICFeedbackMode::coupled &&
         ppart->deposit_moments && ppart->deposit_order == 2 &&
@@ -6206,14 +6209,14 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
         !ps_enable_curvature_amr &&
         !static_particle_redistribution_enabled &&
         ppart->pic_load_balance_cost_per_particle == static_cast<Real>(0.0);
-    if (!exact_particle_model || !exact_mhd_model || integrator != "rk2" ||
+    if (!exact_particle_model || !exact_mhd_model || integrator != "vl2" ||
         !ps_enable_injection || !ps_enable_subtraction ||
         ps_enable_frame_tracking || frame_mode != "velocity" ||
         !user_history_enabled || !exact_mesh_model) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock exact conservation ledger requires the "
-                << "2D3V paper_mhd_pic_vl2_tsc conservative coupled model, rk2, "
+                << "2D3V conservative VL2/TSC coupled model, integrator=vl2, "
                 << "exact particle-boundary instrumentation, injection with gas "
                 << "subtraction, user history, no frame/recenter map, no MHD "
                 << "diffusion or other source terms, a fixed uniform mesh with "
@@ -6360,7 +6363,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl << "Computed injected macro-mass must be > 0." << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  ps_particle_momentum_state = pmbp->ppart->UsesRelativisticCRState();
+  ps_particle_momentum_state = pmbp->ppart->UsesMomentumState();
   ps_particle_light_speed = pmbp->ppart->pic_cr_light_speed;
   if (!std::isfinite(ps_particle_light_speed) || ps_particle_light_speed <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -6680,7 +6683,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     restart_utils::AbortOnFatalError();
   }
   if (ps_enable_frame_tracking && FrameModeRecenter()) {
-    if (ps_frame_apply_to_particles && pmbp->ppart->UsesPaperVL2Coupling()) {
+    if (ps_frame_apply_to_particles && pmbp->ppart->UsesVL2TSCCoupling()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "pic_parallel_shock paper-mode recentering with particle shifts "

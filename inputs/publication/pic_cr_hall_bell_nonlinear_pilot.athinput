@@ -35,7 +35,7 @@ nx3 = 16
 
 <time>
 evolution = dynamic
-integrator = rk2
+integrator = vl2
 # CFL=0.2 and 0.1 follow the same nonlinear trajectory and reach the same
 # filament state, so timestep reduction is not the remedy for deep collapse.
 cfl_number = 0.2
@@ -73,7 +73,6 @@ couple_moments_energy_coeff = 1
 cr_vx0 = 100
 cr_vy0 = 0
 cr_vz0 = 0
-pic_physical_mode = paper_mhd_pic_vl2_tsc
 pic_background_mode = coupled
 pic_feedback_mode = coupled
 pic_interp_scheme = tsc

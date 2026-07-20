@@ -60,7 +60,7 @@ struct ParticleRestartSectionMeta {
   int edge2_cnt = 0;
   int edge3_cnt = 0;
   int state_kind = -1;
-  int physical_mode = -1;
+  int legacy_mode_tag = -1;
   Real cr_light_speed = 0.0;
   std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> model_ints;
   std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> model_reals;
@@ -344,7 +344,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
   int ref_edge2_cnt = 0;
   int ref_edge3_cnt = 0;
   int ref_state_kind = -1;
-  int ref_physical_mode = -1;
+  int ref_legacy_mode_tag = -1;
   Real ref_cr_light_speed = 0.0;
   std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> ref_model_ints;
   std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> ref_model_reals;
@@ -426,7 +426,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
     read_int_meta(sm.edge2_cnt, "edge2_cnt");
     read_int_meta(sm.edge3_cnt, "edge3_cnt");
     read_int_meta(sm.state_kind, "state_kind");
-    read_int_meta(sm.physical_mode, "physical_mode");
+    read_int_meta(sm.legacy_mode_tag, "legacy_mode_tag");
     if (srcfile.Read_Reals_at(&sm.cr_light_speed, 1, rd_offset, true) != 1) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
@@ -480,10 +480,9 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                 << "file '" << rank_paths[r] << "'." << std::endl;
       restart_utils::AbortOnFatalError();
     }
-    const int expected_state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
-    const int expected_physical_mode = static_cast<int>(ppart->pic_physical_mode);
+    const int expected_state_kind = ppart->UsesMomentumState() ? 1 : 0;
     if (sm.state_kind != expected_state_kind ||
-        sm.physical_mode != expected_physical_mode ||
+        !ppart->MatchesRestartLegacyModeTag(sm.legacy_mode_tag) ||
         sm.cr_light_speed != ppart->pic_cr_light_speed ||
         !ppart->MatchesRestartModelMetadata(sm.model_ints, sm.model_reals) ||
         !ppart->RestoreRestartModelState(sm.model_reals)) {
@@ -533,7 +532,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
       ref_edge2_cnt = sm.edge2_cnt;
       ref_edge3_cnt = sm.edge3_cnt;
       ref_state_kind = sm.state_kind;
-      ref_physical_mode = sm.physical_mode;
+      ref_legacy_mode_tag = sm.legacy_mode_tag;
       ref_cr_light_speed = sm.cr_light_speed;
       ref_model_ints = sm.model_ints;
       ref_model_reals = sm.model_reals;
@@ -544,7 +543,7 @@ void LoadParticleRestartDataSingleFile(Mesh *pm,
                sm.edge2_cnt != ref_edge2_cnt ||
                sm.edge3_cnt != ref_edge3_cnt ||
                sm.state_kind != ref_state_kind ||
-               sm.physical_mode != ref_physical_mode ||
+               sm.legacy_mode_tag != ref_legacy_mode_tag ||
                sm.cr_light_speed != ref_cr_light_speed ||
                sm.model_ints != ref_model_ints ||
                sm.model_reals != ref_model_reals) {
@@ -1309,7 +1308,7 @@ void LoadParticleRestartData(Mesh *pm,
   int edge2_cnt = 0;
   int edge3_cnt = 0;
   int state_kind = -1;
-  int physical_mode = -1;
+  int legacy_mode_tag = -1;
   Real cr_light_speed = 0.0;
   std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> model_ints;
   std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> model_reals;
@@ -1365,7 +1364,7 @@ void LoadParticleRestartData(Mesh *pm,
   AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   read_int_meta(state_kind, rd_offset, "state_kind");
   AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
-  read_int_meta(physical_mode, rd_offset, "physical_mode");
+  read_int_meta(legacy_mode_tag, rd_offset, "legacy_mode_tag");
   AdvanceParticleRestartOffset(rd_offset, 1, sizeof(int));
   if (global_variable::my_rank == 0) {
     if (resfile.Read_Reals_at(&cr_light_speed, 1, rd_offset, false) != 1) {
@@ -1438,10 +1437,9 @@ void LoadParticleRestartData(Mesh *pm,
               << "Particle restart data layout mismatch." << std::endl;
     restart_utils::AbortOnFatalError();
   }
-  const int expected_state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
-  const int expected_physical_mode = static_cast<int>(ppart->pic_physical_mode);
+  const int expected_state_kind = ppart->UsesMomentumState() ? 1 : 0;
   if (state_kind != expected_state_kind ||
-      physical_mode != expected_physical_mode ||
+      !ppart->MatchesRestartLegacyModeTag(legacy_mode_tag) ||
       cr_light_speed != ppart->pic_cr_light_speed ||
       !ppart->MatchesRestartModelMetadata(model_ints, model_reals) ||
       !ppart->RestoreRestartModelState(model_reals)) {
@@ -1741,9 +1739,7 @@ void LoadParticleRestartData(Mesh *pm,
 
 void GuardLegacyBellNormalization(ParameterInput *pin,
                                   const std::string &pgen_fun_name) {
-  const bool is_legacy_bell =
-      (pgen_fun_name == "q023_paper_bell_linear" ||
-       pgen_fun_name == "q029_hall_bell_linear");
+  const bool is_legacy_bell = (pgen_fun_name == "q023_paper_bell_linear");
   if (!is_legacy_bell) return;
 
   const bool allow_legacy = pin->GetOrAddBoolean(
@@ -1845,8 +1841,6 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     PICPaperSmoothTSCInterface(pin, false);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, false);
-  } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {
-    Q006PaperMultispeciesOscillation(pin, false);
   } else if (
       pgen_fun_name.compare("q006_paper_multispecies_oscillation_runtime_local")
       == 0) {
@@ -1867,8 +1861,6 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     Q023PaperBellLinearJOverC(pin, false);
   } else if (pgen_fun_name.compare("q043_bell_current_volume_aware") == 0) {
     Q043BellCurrentVolumeAware(pin, false);
-  } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {
-    Q029HallBellLinear(pin, false);
   } else if (pgen_fun_name.compare("q032_reduced_static_neutral_local") == 0) {
     Q032ReducedStaticNeutralLocal(pin, false);
   } else if (pgen_fun_name.compare("q033_crpai_transport_runtime_local") == 0) {
@@ -2562,8 +2554,6 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     PICPaperSmoothTSCInterface(pin, true);
   } else if (pgen_fun_name.compare("pic_parallel_shock") == 0) {
     PICParallelShock(pin, true);
-  } else if (pgen_fun_name.compare("q006_paper_multispecies_oscillation") == 0) {
-    Q006PaperMultispeciesOscillation(pin, true);
   } else if (
       pgen_fun_name.compare("q006_paper_multispecies_oscillation_runtime_local")
       == 0) {
@@ -2584,8 +2574,6 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     Q023PaperBellLinearJOverC(pin, true);
   } else if (pgen_fun_name.compare("q043_bell_current_volume_aware") == 0) {
     Q043BellCurrentVolumeAware(pin, true);
-  } else if (pgen_fun_name.compare("q029_hall_bell_linear") == 0) {
-    Q029HallBellLinear(pin, true);
   } else if (pgen_fun_name.compare("q032_reduced_static_neutral_local") == 0) {
     Q032ReducedStaticNeutralLocal(pin, true);
   } else if (pgen_fun_name.compare("q033_crpai_transport_runtime_local") == 0) {

@@ -120,7 +120,6 @@ add_executable(
         pgen/tests/pic_migration_restart_ledger.cpp
         pgen/tests/pic_paper_smooth_tsc_interface.cpp
         pgen/tests/pic_parallel_shock.cpp
-        pgen/tests/q006_paper_multispecies_oscillation.cpp
         pgen/tests/q006_paper_multispecies_oscillation_runtime_local.cpp
         pgen/tests/q007_paper_deltaf_linear.cpp
         pgen/tests/q019_physics_first_nonlinear_bell_successor_v2.cpp
@@ -128,7 +127,6 @@ add_executable(
         pgen/tests/q023_paper_bell_linear.cpp
         pgen/tests/q023_paper_bell_linear_joverc.cpp
         pgen/tests/q043_bell_current_volume_aware.cpp
-        pgen/tests/q029_hall_bell_linear.cpp
         pgen/tests/q032_reduced_static_neutral_local.cpp
         pgen/tests/q033_crpai_transport_runtime_local.cpp
         pgen/tests/shock_tube.cpp

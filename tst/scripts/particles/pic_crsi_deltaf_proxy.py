@@ -115,7 +115,7 @@ def _load_growth_metrics(basename):
 def _run_case(label, basename, nproc, deltaf_on):
     args = [
         'job/basename=' + basename,
-        'particles/pic_deltaf_mode=' + ('on' if deltaf_on else 'off'),
+        'particles/pic_deltaf_mode=' + ('physical' if deltaf_on else 'off'),
     ]
     if deltaf_on:
         args.append('particles/pic_deltaf_f0=kappa_iso')

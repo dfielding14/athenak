@@ -40,7 +40,7 @@ max_nmb_per_rank = 32
 
 <time>
 evolution = dynamic
-integrator = rk2
+integrator = vl2
 cfl_number = 0.3
 tlim = 350.0
 nlim = 200000
@@ -80,7 +80,6 @@ couple_moments_energy_coeff = 1.0
 cr_vx0 = 0.0
 cr_vy0 = 0.0
 cr_vz0 = 0.0
-pic_physical_mode = paper_mhd_pic_vl2_tsc
 pic_background_mode = coupled
 pic_feedback_mode = coupled
 pic_interp_scheme = tsc

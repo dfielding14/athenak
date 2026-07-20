@@ -151,7 +151,7 @@ TaskStatus Particles::AdaptDeltaF(Driver *pdriver, int stage) {
 
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
-  const bool paper_vl2 = UsesPaperVL2Coupling();
+  const bool paper_vl2 = UsesVL2TSCCoupling();
   id.rest_mom = none;
   id.bcs_mom = none;
   id.prol_mom = none;

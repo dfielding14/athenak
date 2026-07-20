@@ -55,6 +55,8 @@ ndiag      = 1
 particle_type           = cosmic_ray
 ppc                     = 16.0
 pusher                  = boris_tsc
+pic_cr_light_speed       = 10000.0
+pic_cr_initial_state     = velocity
 nspecies                = 1
 cr_distribution         = random
 deposit_moments         = true
@@ -69,7 +71,7 @@ pic_feedback_mode       = test_particle
 pic_no_mhd_bx           = 0.0
 pic_no_mhd_by           = 0.0
 pic_no_mhd_bz           = 0.0
-pic_deltaf_mode         = on
+pic_deltaf_mode         = quiet_start
 pic_deltaf_f0           = uniform_quiet
 
 <species0>

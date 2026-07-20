@@ -928,8 +928,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     const int edge1_cnt = CheckedRestartIntProduct({nout3p1, nout2p1, nout1});
     const int edge2_cnt = CheckedRestartIntProduct({nout3p1, nout2, nout1p1});
     const int edge3_cnt = CheckedRestartIntProduct({nout3, nout2p1, nout1p1});
-    const int state_kind = ppart->UsesRelativisticCRState() ? 1 : 0;
-    const int physical_mode = static_cast<int>(ppart->pic_physical_mode);
+    const int state_kind = ppart->UsesMomentumState() ? 1 : 0;
+    // Retain the schema-8 slot without retaining its former runtime selector.
+    const int legacy_mode_tag = ppart->RestartLegacyModeTag();
     const Real cr_light_speed = ppart->pic_cr_light_speed;
     std::array<int, particles::Particles::NPIC_RESTART_MODEL_INTS> model_ints;
     std::array<Real, particles::Particles::NPIC_RESTART_MODEL_REALS> model_reals;
@@ -1069,7 +1070,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     AdvanceRestartOffset(section_offset, 1, sizeof(int));
     const IOWrapperSizeT state_kind_offset = section_offset;
     AdvanceRestartOffset(section_offset, 1, sizeof(int));
-    const IOWrapperSizeT physical_mode_offset = section_offset;
+    const IOWrapperSizeT legacy_mode_tag_offset = section_offset;
     AdvanceRestartOffset(section_offset, 1, sizeof(int));
     const IOWrapperSizeT cr_light_speed_offset = section_offset;
     AdvanceRestartOffset(section_offset, 1, sizeof(Real));
@@ -1142,7 +1143,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                     single_file_per_rank) != 1 ||
           resfile.Write_any_type_at(&state_kind, 1, state_kind_offset, "int",
                                     single_file_per_rank) != 1 ||
-          resfile.Write_any_type_at(&physical_mode, 1, physical_mode_offset, "int",
+          resfile.Write_any_type_at(&legacy_mode_tag, 1, legacy_mode_tag_offset, "int",
                                     single_file_per_rank) != 1 ||
           resfile.Write_any_type_at(&cr_light_speed, 1, cr_light_speed_offset, "Real",
                                     single_file_per_rank) != 1 ||

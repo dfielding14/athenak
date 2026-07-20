@@ -335,7 +335,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     header_offset += msg.str().size();
 
     const bool momentum_state =
-        pm->pmb_pack->ppart->UsesRelativisticCRState();
+        pm->pmb_pack->ppart->UsesMomentumState();
     const Real light_speed = pm->pmb_pack->ppart->pic_cr_light_speed;
     for (int p=0; p<npout_thisrank; ++p) {
       Real vx, vy, vz;

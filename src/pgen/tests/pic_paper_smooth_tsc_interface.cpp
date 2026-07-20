@@ -135,9 +135,9 @@ void ProblemGenerator::PICPaperSmoothTSCInterface(ParameterInput *pin,
   if (pmbp->ppart->particle_type != ParticleType::cosmic_ray) {
     AbortInterfaceRegression("requires <particles>/particle_type=cosmic_ray.");
   }
-  if (!pmbp->ppart->UsesPaperVL2Coupling()) {
+  if (!pmbp->ppart->UsesVL2TSCCoupling()) {
     AbortInterfaceRegression(
-        "requires <particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc.");
+        "requires <time>/integrator=vl2.");
   }
 
   if (pin->GetOrAddBoolean("problem", "require_interface_mpi_split", false)) {

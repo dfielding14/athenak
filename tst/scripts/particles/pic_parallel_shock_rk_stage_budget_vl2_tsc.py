@@ -13,13 +13,13 @@ logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_parallel_shock_rk_stage_budget_vl2_tsc.athinput'
 _INTEGRATORS = ('rk1', 'rk2', 'rk3')
+_VL2_CASE = 'vl2'
 _MACRO_MASS = 1.0e-3
 _MASS_FLUX = 0.10 * 1.0 * (3.0 + 1.0) * 8.0
 _RESULTS = {}
 _FLOOR_REJECTION = {}
 _FLOOR_THROTTLE = {}
 _INTEGRATOR_REJECTION = {}
-_PAPER_INTEGRATOR_REJECTIONS = {}
 _PARAMETER_REJECTIONS = {}
 _FEEDBACK_DIAG_RE = re.compile(
     r'pic_parallel_shock feedback_diag: .*?'
@@ -85,8 +85,7 @@ def _restart_parameter(path, block, name, converter):
     raise RuntimeError(f'Missing restart parameter <{block}>/{name} in ' + path)
 
 
-def _run_case(integrator, subtraction, physical_mode='extended_mhd_pic',
-              label=None):
+def _run_case(integrator, subtraction, label=None):
     suffix = 'on' if subtraction else 'off'
     case = label or integrator
     basename = f'pic_parallel_shock_rk_stage_budget_{case}_{suffix}'
@@ -95,11 +94,9 @@ def _run_case(integrator, subtraction, physical_mode='extended_mhd_pic',
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=' + integrator,
-        'particles/pic_physical_mode=' + physical_mode,
+        'particles/deposit_order=' + ('2' if integrator == 'vl2' else '1'),
         'problem/ps_enable_gas_subtraction=' + str(subtraction).lower(),
     ]
-    if physical_mode != 'paper_mhd_pic_vl2_tsc':
-        command.append('particles/deposit_order=1')
     logger.info('Executing %s: %s', basename, ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
                           capture_output=True, text=True)
@@ -165,7 +162,6 @@ def _run_expected_floor_rejection():
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=rk1',
-        'particles/pic_physical_mode=extended_mhd_pic',
         'particles/deposit_order=1',
         'problem/ps_p0=0.10',
         'problem/ps_eta=0.30',
@@ -231,7 +227,6 @@ def _run_floor_throttle():
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=rk1',
-        'particles/pic_physical_mode=extended_mhd_pic',
         'particles/deposit_order=1',
         'problem/ps_p0=0.10',
         'problem/ps_eta=0.30',
@@ -265,7 +260,6 @@ def _run_expected_integrator_rejection():
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=rk4',
-        'particles/pic_physical_mode=extended_mhd_pic',
         'particles/deposit_order=1',
     ]
     logger.info('Executing expected rejection: %s', ' '.join(command))
@@ -275,32 +269,9 @@ def _run_expected_integrator_rejection():
     _INTEGRATOR_REJECTION.update({
         'returncode': proc.returncode,
         'saw_integrator_rejection': (
-            'injection is qualified only with time/integrator=rk1, rk2, or rk3'
-            in output
+            'injection is qualified only with time/integrator=' in output
         ),
     })
-
-
-def _run_expected_paper_integrator_rejection(integrator):
-    basename = 'pic_parallel_shock_rk_stage_budget_paper_' + integrator + '_reject'
-    _remove_outputs(basename)
-    command = [
-        './athena', '-i', _athena_input_path(),
-        'job/basename=' + basename,
-        'time/integrator=' + integrator,
-        'particles/pic_physical_mode=paper_mhd_pic_vl2_tsc',
-    ]
-    logger.info('Executing expected rejection: %s', ' '.join(command))
-    proc = subprocess.run(command, cwd=_athena_exe_dir(),
-                          capture_output=True, text=True)
-    output = (proc.stdout or '') + (proc.stderr or '')
-    _PAPER_INTEGRATOR_REJECTIONS[integrator] = {
-        'returncode': proc.returncode,
-        'saw_rejection': (
-            '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires '
-            '<time>/integrator=rk2 for the staged VL2 coupling path.' in output
-        ),
-    }
 
 
 def _run_expected_parameter_rejection(label, overrides, reason):
@@ -310,7 +281,6 @@ def _run_expected_parameter_rejection(label, overrides, reason):
         './athena', '-i', _athena_input_path(),
         'job/basename=' + basename,
         'time/integrator=rk1',
-        'particles/pic_physical_mode=extended_mhd_pic',
         'particles/deposit_order=1',
     ] + overrides
     logger.info('Executing expected rejection: %s', ' '.join(command))
@@ -335,23 +305,19 @@ def run(**kwargs):
             'gas_momentum_removed': off['gas_momentum'] - on['gas_momentum'],
             'gas_energy_removed': off['gas_energy'] - on['gas_energy'],
         }
-    paper_off = _run_case('rk2', False, physical_mode='paper_mhd_pic_vl2_tsc',
-                          label='paper_vl2_rk2')
-    paper_on = _run_case('rk2', True, physical_mode='paper_mhd_pic_vl2_tsc',
-                         label='paper_vl2_rk2')
-    _RESULTS['paper_vl2_rk2'] = {
-        'off': paper_off,
-        'on': paper_on,
-        'gas_mass_removed': paper_off['gas_mass'] - paper_on['gas_mass'],
+    vl2_off = _run_case(_VL2_CASE, False)
+    vl2_on = _run_case(_VL2_CASE, True)
+    _RESULTS[_VL2_CASE] = {
+        'off': vl2_off,
+        'on': vl2_on,
+        'gas_mass_removed': vl2_off['gas_mass'] - vl2_on['gas_mass'],
         'gas_momentum_removed': (
-            paper_off['gas_momentum'] - paper_on['gas_momentum']),
-        'gas_energy_removed': paper_off['gas_energy'] - paper_on['gas_energy'],
+            vl2_off['gas_momentum'] - vl2_on['gas_momentum']),
+        'gas_energy_removed': vl2_off['gas_energy'] - vl2_on['gas_energy'],
     }
     _run_expected_floor_rejection()
     _run_floor_throttle()
     _run_expected_integrator_rejection()
-    _run_expected_paper_integrator_rejection('rk1')
-    _run_expected_paper_integrator_rejection('rk3')
     _run_expected_parameter_rejection(
         'negative_floor_reject',
         ['problem/ps_rho_floor_frac=-1.0'],
@@ -395,7 +361,7 @@ def analyze():
     logger.debug('Analyzing test ' + __name__)
     ok = True
     reference = None
-    for case in _INTEGRATORS + ('paper_vl2_rk2',):
+    for case in _INTEGRATORS + (_VL2_CASE,):
         result = _RESULTS[case]
         off = result['off']
         on = result['on']
@@ -453,9 +419,6 @@ def analyze():
         _FLOOR_THROTTLE.get('realized', -1)) and ok
     ok = _INTEGRATOR_REJECTION.get('returncode', 0) != 0 and ok
     ok = _INTEGRATOR_REJECTION.get('saw_integrator_rejection', False) and ok
-    for rejection in _PAPER_INTEGRATOR_REJECTIONS.values():
-        ok = rejection.get('returncode', 0) != 0 and ok
-        ok = rejection.get('saw_rejection', False) and ok
     for rejection in _PARAMETER_REJECTIONS.values():
         ok = rejection.get('returncode', 0) != 0 and ok
         ok = rejection.get('saw_rejection', False) and ok

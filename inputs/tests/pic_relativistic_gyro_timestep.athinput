@@ -53,7 +53,6 @@ couple_moments_energy_to_mhd   = false
 cr_vx0                  = 99.99499987499375
 cr_vy0                  = 0.0
 cr_vz0                  = 0.0
-pic_physical_mode       = paper_test_particle
 pic_background_mode     = no_mhd
 pic_feedback_mode       = test_particle
 pic_interp_scheme       = tsc

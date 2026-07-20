@@ -65,7 +65,7 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   int ntrack_ = ntrack;
   int ntrack_thisrank_ = ntrack_thisrank;
   const bool momentum_state =
-      pm->pmb_pack->ppart->UsesRelativisticCRState();
+      pm->pmb_pack->ppart->UsesMomentumState();
   const Real light_speed = pm->pmb_pack->ppart->pic_cr_light_speed;
 
   // Create device-side counters

@@ -127,7 +127,7 @@ Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
-  if (UsesPaperVL2Coupling() && stage == 0) {
+  if (UsesVL2TSCCoupling() && stage == 0) {
     return TaskStatus::complete;
   }
   Q017Fence();
@@ -727,7 +727,7 @@ TaskStatus Particles::DriftPaperCosmicRaysHalfStep(Driver *pdriver, int stage) {
 //  \brief Boris pusher for cosmic ray particles in electromagnetic fields
 
 TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
-  if (UsesPaperVL2Coupling()) {
+  if (UsesVL2TSCCoupling()) {
     return PushPaperCosmicRaysVL2(pdriver, stage);
   }
   const RegionIndcs indcs = pmy_pack->pmesh->mb_indcs;
@@ -776,7 +776,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   const Real exp_rate_x1_local = pic_expansion_rate_x1;
   const Real exp_rate_x2_local = pic_expansion_rate_x2;
   const Real exp_rate_x3_local = pic_expansion_rate_x3;
-  const bool momentum_state_local = UsesRelativisticCRState();
+  const bool momentum_state_local = UsesMomentumState();
   const Real light_speed_local = pic_cr_light_speed;
   const bool deltaf_local = UsesDeltaF();
   const bool adaptive_deltaf_local = UsesAdaptiveDeltaF();

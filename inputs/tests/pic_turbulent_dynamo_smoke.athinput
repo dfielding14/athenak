@@ -31,7 +31,7 @@ nx3 = 8
 
 <time>
 evolution = dynamic
-integrator = rk2
+integrator = vl2
 cfl_number = 0.2
 nlim = 2
 tlim = 0.01
@@ -69,7 +69,6 @@ couple_moments_energy_to_mhd = true
 couple_fluid_feedback_order = mhd_src_terms
 couple_moments_momentum_coeff = 1.0
 couple_moments_energy_coeff = 1.0
-pic_physical_mode = paper_mhd_pic_vl2_tsc
 pic_background_mode = coupled
 pic_feedback_mode = coupled
 pic_interp_scheme = tsc

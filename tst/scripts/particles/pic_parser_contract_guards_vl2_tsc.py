@@ -7,47 +7,23 @@ import scripts.utils.athena as athena
 logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_parser_contract_guards.athinput'
-_Q006_RUNTIME_LOCAL_INPUT_DECK = (
-    'tests/pic_q006_paper_multispecies_oscillation_uniform_runtime_local.athinput'
-)
-_Q006_RUNTIME_LOCAL_CASES = {
-    'paper_mhd_pic_vl2_tsc_isothermal_fullf_momentum_only',
-    'paper_mhd_pic_vl2_tsc_isothermal_rejects_energy_feedback',
-    'paper_mhd_pic_vl2_tsc_isothermal_fullf_rejects_non_q006_generator',
-}
 _RESULTS = {}
 
-_PAPER_TEST_PARTICLE = [
-    'particles/pic_physical_mode=paper_test_particle',
-    'particles/pic_background_mode=no_mhd',
-    'particles/pic_feedback_mode=test_particle',
-    'particles/couple_moments_to_mhd=false',
-    'particles/couple_moments_momentum_to_mhd=false',
-    'particles/couple_moments_energy_to_mhd=false',
-]
-
-_PAPER_MHD_PIC = [
-    'particles/pic_physical_mode=paper_mhd_pic_vl2_tsc',
+_VL2 = [
+    'time/integrator=vl2',
     'particles/deposit_order=2',
-    'time/integrator=rk2',
 ]
 
-_ADAPTIVE_DELTAF = [
+_TEST_PARTICLE = [
     'particles/pic_background_mode=passive_mhd',
     'particles/pic_feedback_mode=test_particle',
     'particles/deposit_moments=false',
     'particles/couple_moments_to_mhd=false',
     'particles/couple_moments_momentum_to_mhd=false',
     'particles/couple_moments_energy_to_mhd=false',
-    'particles/pic_deltaf_mode=physical',
-    'particles/pic_deltaf_f0=kappa_aniso',
-    'particles/pic_deltaf_kappa=2.0',
-    'particles/pic_deltaf_adapt_mode=global_bikappa_moments_experimental',
-    'particles/pic_deltaf_adapt_interval=1.0',
-    'particles/pic_expanding_box_mode=on',
 ]
 
-_EXPANDING_COUPLED_PHYSICAL_DAMPING = [
+_ADAPTIVE_DAMPED_BOX = [
     'particles/pic_deltaf_mode=physical',
     'particles/pic_deltaf_f0=kappa_aniso',
     'particles/pic_deltaf_kappa=2.0',
@@ -62,215 +38,81 @@ _EXPANDING_COUPLED_PHYSICAL_DAMPING = [
 ]
 
 _POSITIVE_CASES = [
-    ('extended_mhd_pic', [], ['physical_mode=extended_mhd_pic']),
-    ('paper_mhd_pic_vl2_tsc',
-     _PAPER_MHD_PIC,
-     ['physical_mode=paper_mhd_pic_vl2_tsc']),
-    ('paper_mhd_pic_vl2_tsc_isothermal_fullf_momentum_only',
-     _PAPER_MHD_PIC + [
-      'mhd/eos=isothermal',
-      'particles/couple_moments_energy_to_mhd=false'],
-     ['physical_mode=paper_mhd_pic_vl2_tsc']),
-    ('paper_test_particle',
-     _PAPER_TEST_PARTICLE,
-     ['physical_mode=paper_test_particle']),
-    ('extended_adaptive_deltaf',
-     _ADAPTIVE_DELTAF,
-     ['physical_mode=extended_mhd_pic',
-      'deltaf_adapt=global_bikappa_moments_experimental']),
-    ('extended_expanding_coupled_physical_damping',
-     _EXPANDING_COUPLED_PHYSICAL_DAMPING,
-     ['physical_mode=extended_mhd_pic',
-      'background=coupled',
-      'feedback=coupled',
-      'deltaf_adapt=global_bikappa_moments_experimental',
-      'expanding_box=on',
-      'wave_damping=ion_neutral_friction']),
+    ('coupled_rk1', [], [
+        'integrator=rk1',
+        'state=momentum_p_over_m',
+        'background=coupled',
+        'feedback=coupled',
+    ]),
+    ('coupled_vl2', _VL2, [
+        'integrator=vl2',
+        'state=momentum_p_over_m',
+        'deposition=tsc',
+        'background=coupled',
+        'feedback=coupled',
+    ]),
+    ('test_particle', _TEST_PARTICLE, [
+        'background=passive_mhd',
+        'feedback=test_particle',
+    ]),
+    ('adaptive_damped_box', _ADAPTIVE_DAMPED_BOX, [
+        'deltaf_adapt=global_bikappa_moments_experimental',
+        'expanding_box=on',
+        'wave_damping=ion_neutral_friction',
+    ]),
 ]
 
 _REJECTION_CASES = [
-    ('unsupported_physical_mode',
-     ['particles/pic_physical_mode=bad_mode'],
-     'Unsupported value for <particles>/pic_physical_mode: bad_mode'),
     ('unsupported_initial_state',
      ['particles/pic_cr_initial_state=bad_state'],
      'Unsupported value for <particles>/pic_cr_initial_state: bad_state'),
     ('unsupported_hall_mode',
      ['particles/pic_cr_hall_mode=bad_mode'],
      'Unsupported value for <particles>/pic_cr_hall_mode: bad_mode'),
-    ('unsupported_wave_damping_mode',
-     ['particles/pic_wave_damping_mode=bad_mode'],
-     'Unsupported value for <particles>/pic_wave_damping_mode: bad_mode'),
-    ('unsupported_deltaf_adapt_mode',
-     ['particles/pic_deltaf_adapt_mode=bad_mode'],
-     'Unsupported value for <particles>/pic_deltaf_adapt_mode: bad_mode'),
-    ('unsupported_expansion_law',
-     ['particles/pic_expansion_law=bad_law'],
-     'Unsupported value for <particles>/pic_expansion_law: bad_law'),
-    ('unsupported_current_representation',
-     ['particles/couple_j_to_efield_representation=bad_representation'],
-     'Unsupported value for <particles>/couple_j_to_efield_representation: '
-     'bad_representation'),
-    ('unsupported_current_deposition',
-     ['particles/couple_j_deposition_mode=bad_deposition'],
-     'Unsupported value for <particles>/couple_j_deposition_mode: '
-     'bad_deposition'),
-    ('unsupported_feedback_order',
-     ['particles/couple_fluid_feedback_order=bad_order'],
-     'Unsupported value for <particles>/couple_fluid_feedback_order: '
-     'bad_order'),
-    ('engineering_requires_velocity',
-     ['particles/pic_physical_mode=engineering',
-      'particles/pic_cr_light_speed=1.0',
-      'particles/pic_cr_initial_state=momentum'],
-     '<particles>/pic_physical_mode=engineering requires '
-     '<particles>/pic_cr_initial_state=velocity'),
-    ('physical_mode_requires_boris_tsc',
-     _PAPER_TEST_PARTICLE + ['particles/pusher=drift'],
-     '<particles>/pic_physical_mode=paper_test_particle requires '
-     '<particles>/pusher=boris_tsc'),
-    ('paper_test_particle_rejects_feedback',
-     ['particles/pic_physical_mode=paper_test_particle'],
-     '<particles>/pic_physical_mode=paper_test_particle requires '
-     'test-particle feedback with all particle-to-MHD coupling toggles disabled'),
-    ('paper_mhd_pic_vl2_tsc_requires_conservative_feedback',
-     _PAPER_MHD_PIC + [
-      'particles/couple_moments_momentum_to_mhd=false'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires coupled MHD '
-     'background, coupled feedback, moment deposition, and conservative '
-     'momentum feedback'),
-    ('paper_mhd_pic_vl2_tsc_isothermal_rejects_energy_feedback',
-     _PAPER_MHD_PIC + [
-      'mhd/eos=isothermal',
-      'particles/couple_moments_energy_to_mhd=true',
-      'particles/couple_moments_energy_coeff=1.0'],
-     '<particles>/couple_moments_energy_to_mhd=true requires <mhd>/eos=ideal'),
-    ('paper_mhd_pic_vl2_tsc_isothermal_fullf_rejects_non_q006_generator',
-     _PAPER_MHD_PIC + [
-      'mhd/eos=isothermal',
-      'particles/couple_moments_energy_to_mhd=false',
-      'problem/pgen_name=linear_wave'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires coupled MHD '
-     'background, coupled feedback, moment deposition, and conservative '
-     'momentum feedback'),
-    ('paper_mhd_pic_vl2_tsc_ideal_fullf_rejects_momentum_only',
-     _PAPER_MHD_PIC + [
-      'particles/couple_moments_energy_to_mhd=false',
-      'particles/couple_moments_energy_coeff=0.0'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires coupled MHD '
-     'background, coupled feedback, moment deposition, and conservative '
-     'momentum feedback'),
-    ('paper_mhd_pic_vl2_tsc_rejects_direct_ct',
-     _PAPER_MHD_PIC + [
-      'particles/couple_j_to_efield_representation=edge_staggered',
-      'particles/couple_j_deposition_mode=direct_staggered'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc rejects direct-current CT '
-     'induction options'),
-    ('paper_mhd_pic_vl2_tsc_rejects_relativistic_mhd_background',
-     _PAPER_MHD_PIC + [
-      'coord/special_rel=true'],
-     'Fluid momentum/energy feedback is limited to non-relativistic MHD in PR2'),
-    ('paper_mode_rejects_hall_extension',
-     _PAPER_MHD_PIC + [
-      'particles/pic_cr_hall_mode=current_to_ct_experimental'],
-     '<particles>/pic_cr_hall_mode=current_to_ct_experimental requires '
-     '<particles>/pic_physical_mode=extended_mhd_pic'),
-    ('paper_mode_rejects_wave_damping_extension',
-     _PAPER_MHD_PIC + [
-      'particles/pic_wave_damping_mode=ion_neutral_friction',
-      'particles/pic_ion_neutral_collision_rate=0.5'],
-     '<particles>/pic_wave_damping_mode=ion_neutral_friction requires '
-     '<particles>/pic_physical_mode=extended_mhd_pic'),
-    ('paper_mode_rejects_adaptive_deltaf_extension',
-     _PAPER_MHD_PIC + _ADAPTIVE_DELTAF,
-     '<particles>/pic_deltaf_adapt_mode='
-     'global_bikappa_moments_experimental requires '
-     '<particles>/pic_physical_mode=extended_mhd_pic'),
-    ('paper_mhd_pic_vl2_tsc_requires_tsc_deposition',
-     ['particles/pic_physical_mode=paper_mhd_pic_vl2_tsc'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires '
-     '<particles>/deposit_order=2 for TSC moment deposition'),
-    ('paper_mhd_pic_vl2_tsc_requires_rk2_vl2_path',
-     _PAPER_MHD_PIC + ['time/integrator=rk1'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires '
-     '<time>/integrator=rk2 for the staged VL2 coupling path'),
-    ('paper_mhd_pic_vl2_tsc_requires_mhd_source_feedback_order',
-     _PAPER_MHD_PIC + ['particles/couple_fluid_feedback_order=efield_src'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires '
+    ('vl2_requires_boris_tsc',
+     _VL2 + [
+         'particles/pusher=drift',
+         'particles/pic_cr_initial_state=velocity',
+         'particles/pic_cr_light_speed=1.0',
+     ],
+     '<time>/integrator=vl2 with particles requires '
+     '<particles>/particle_type=cosmic_ray and <particles>/pusher=boris_tsc'),
+    ('vl2_requires_conservative_feedback',
+     _VL2 + ['particles/couple_moments_momentum_to_mhd=false'],
+     '<time>/integrator=vl2 requires coupled MHD background, coupled feedback, '
+     'moment deposition, and conservative momentum feedback'),
+    ('vl2_requires_tsc_deposition',
+     ['time/integrator=vl2'],
+     '<time>/integrator=vl2 requires <particles>/deposit_order=2'),
+    ('vl2_rejects_direct_current_ct',
+     _VL2 + [
+         'particles/couple_j_to_efield_representation=edge_staggered',
+         'particles/couple_j_deposition_mode=direct_staggered',
+     ],
+     '<time>/integrator=vl2 rejects direct-current CT induction options'),
+    ('vl2_requires_mhd_source_feedback',
+     _VL2 + ['particles/couple_fluid_feedback_order=efield_src'],
+     '<time>/integrator=vl2 requires '
      '<particles>/couple_fluid_feedback_order=mhd_src_terms'),
-    ('paper_mhd_pic_vl2_tsc_requires_unit_feedback_coefficients',
-     _PAPER_MHD_PIC + ['particles/couple_moments_momentum_coeff=0.5'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires unit conservative '
-     'momentum and enabled energy feedback coefficients'),
-    ('paper_mhd_pic_vl2_tsc_rejects_unstaged_expanding_box',
-     _PAPER_MHD_PIC + ['particles/pic_expanding_box_mode=on'],
-     '<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc with '
-     '<particles>/pic_expanding_box_mode=on is not yet supported by the staged '
-     'VL2 coupling path'),
-    ('hall_extension_requires_coupled_moments',
-     ['particles/pic_cr_hall_mode=current_to_ct_experimental',
-      'particles/couple_moments_to_mhd=false',
-      'particles/couple_moments_momentum_to_mhd=false',
-      'particles/couple_moments_energy_to_mhd=false'],
-     '<particles>/pic_cr_hall_mode=current_to_ct_experimental requires '
-     '<particles>/couple_moments_to_mhd=true'),
+    ('vl2_requires_unit_feedback',
+     _VL2 + ['particles/couple_moments_momentum_coeff=0.5'],
+     '<time>/integrator=vl2 requires unit conservative momentum and enabled '
+     'energy feedback coefficients'),
+    ('vl2_rejects_expanding_box',
+     _VL2 + ['particles/pic_expanding_box_mode=on'],
+     '<time>/integrator=vl2 with <particles>/pic_expanding_box_mode=on is not '
+     'yet supported'),
+    ('full_hall_requires_vl2',
+     ['particles/pic_cr_hall_mode=full'],
+     '<particles>/pic_cr_hall_mode=full requires <time>/integrator=vl2'),
     ('wave_damping_requires_positive_rate',
      ['particles/pic_wave_damping_mode=ion_neutral_friction'],
      '<particles>/pic_wave_damping_mode=ion_neutral_friction requires '
      '<particles>/pic_ion_neutral_collision_rate > 0'),
-    ('wave_damping_requires_coupled_mhd',
-     ['particles/pic_wave_damping_mode=ion_neutral_friction',
-      'particles/pic_ion_neutral_collision_rate=0.5',
-      'particles/pic_background_mode=no_mhd',
-      'particles/pic_feedback_mode=test_particle',
-      'particles/couple_moments_to_mhd=false',
-      'particles/couple_moments_momentum_to_mhd=false',
-      'particles/couple_moments_energy_to_mhd=false'],
-     '<particles>/pic_wave_damping_mode=ion_neutral_friction requires '
-     'an active coupled <mhd> background'),
     ('adaptive_deltaf_requires_bounded_configuration',
      ['particles/pic_deltaf_adapt_mode=global_bikappa_moments_experimental'],
      '<particles>/pic_deltaf_adapt_mode=global_bikappa_moments_experimental '
      'requires physical kappa_aniso delta-f'),
-    ('expanding_box_rejects_direct_current_deposition',
-     ['particles/pic_expanding_box_mode=on',
-      'particles/couple_j_to_efield_representation=edge_staggered',
-      'particles/couple_j_deposition_mode=direct_staggered'],
-     '<particles>/pic_expanding_box_mode=on with active MHD does not support '
-     'staggered or direct CR-current deposition'),
-    ('expanding_box_rejects_hall_current_induction',
-     ['particles/pic_expanding_box_mode=on',
-      'particles/pic_cr_hall_mode=current_to_ct_experimental'],
-     '<particles>/pic_expanding_box_mode=on with active MHD does not support '
-     'particle feedback outside the admitted cell-centered source splits'),
-    ('expanding_box_rejects_efield_feedback_order',
-     ['particles/pic_expanding_box_mode=on',
-      'particles/couple_fluid_feedback_order=efield_src'],
-     '<particles>/pic_expanding_box_mode=on with active MHD does not support '
-     'particle feedback outside the admitted cell-centered source splits'),
-    ('expanding_box_rejects_nonadaptive_deltaf_feedback',
-     ['particles/pic_expanding_box_mode=on',
-      'particles/pic_deltaf_mode=physical',
-      'particles/pic_deltaf_f0=kappa_aniso'],
-     '<particles>/pic_expanding_box_mode=on with active MHD does not support '
-     'particle feedback outside the admitted cell-centered source splits'),
-    ('expanding_box_rejects_no_mhd_guard_bypass',
-     ['particles/pic_expanding_box_mode=on',
-      'particles/pic_background_mode=no_mhd',
-      'particles/pic_feedback_mode=test_particle',
-      'particles/deposit_moments=false',
-      'particles/couple_moments_to_mhd=false',
-      'particles/couple_moments_momentum_to_mhd=false',
-      'particles/couple_moments_energy_to_mhd=false'],
-     '<particles>/pic_expanding_box_mode=on with active MHD does not support '
-     '<particles>/pic_background_mode=no_mhd with an active <mhd> block'),
-    ('expanding_box_rejects_unmapped_deltaf_background_current',
-     ['particles/pic_expanding_box_mode=on',
-      'particles/pic_deltaf_mode=physical',
-      'particles/pic_deltaf_f0=kappa_aniso',
-      'particles/pic_deltaf_background_jx=0.1'],
-     '<particles>/pic_expanding_box_mode=on with active MHD does not support '
-     'nonzero delta-f background current'),
 ]
 
 
@@ -278,14 +120,12 @@ def _athena_exe_dir():
     return os.path.join(os.getcwd(), 'build', 'src')
 
 
-def _athena_input_path(label):
-    input_deck = (_Q006_RUNTIME_LOCAL_INPUT_DECK
-                  if label in _Q006_RUNTIME_LOCAL_CASES else _INPUT_DECK)
-    return '../../' + athena.athena_rel_path + 'inputs/' + input_deck
+def _athena_input_path():
+    return '../../' + athena.athena_rel_path + 'inputs/' + _INPUT_DECK
 
 
 def _execute(label, arguments):
-    command = ['./athena', '-i', _athena_input_path(label), 'time/nlim=0'] + arguments
+    command = ['./athena', '-i', _athena_input_path(), 'time/nlim=0'] + arguments
     logger.info('Executing %s: %s', label, ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
                           capture_output=True, text=True)

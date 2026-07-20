@@ -6,7 +6,7 @@
 # nonlinear regime in an eight-fastest-wavelength, periodic 2D box.
 #
 # Physical assumptions and limits:
-# - paper_mhd_pic_vl2_tsc, TSC interpolation/deposition, full MHD feedback;
+# - explicit VL2/TSC integration and full MHD feedback;
 # - rho0=B0=U_A=1, epsilon=U_A/v_CR=0.4, and P0=1.0;
 # - j_CR=2 B0 c k0, so k0 is the seeded linear Bell scale;
 # - P0=1.0 retains the Bai et al. baseline convention but does not establish
@@ -63,7 +63,7 @@ nx3       = 1
 
 <time>
 evolution  = dynamic
-integrator = rk2
+integrator = vl2
 cfl_number = 0.1
 nlim       = 0
 tlim       = 4.0
@@ -96,7 +96,6 @@ couple_moments_energy_coeff       = 1.0
 cr_vx0                            = 1.118033988749895
 cr_vy0                            = 2.23606797749979
 cr_vz0                            = 0.0
-pic_physical_mode                 = paper_mhd_pic_vl2_tsc
 pic_background_mode               = coupled
 pic_feedback_mode                 = coupled
 pic_interp_scheme                 = tsc

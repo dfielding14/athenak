@@ -32,11 +32,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
               << std::endl;
     exit(EXIT_FAILURE);
   }
-  if (pmbp->ppart->UsesRelativisticCRState()) {
+  if (pmbp->ppart->UsesMomentumState()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "Random particles test initializes velocity slots directly and "
-              << "supports only <particles>/pic_physical_mode=engineering"
+              << "does not support momentum-state cosmic-ray pushers"
               << std::endl;
     exit(EXIT_FAILURE);
   }

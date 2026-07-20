@@ -39,7 +39,7 @@ class Driver {
   int nlim;       // cycle-limit
   int ndiag;      // cycles between output of diagnostic information
   // variables for various SSP and ImEx RK integrators
-  std::string integrator;          // integrator name (rk1, rk2, rk3)
+  std::string integrator;          // integrator name (rk1, rk2, vl2, rk3)
   int nimp_stages;                 // number of implicit stages (ImEx only)
   int nexp_stages;                 // number of explicit stages (both SSP-RK and ImEx)
   Real gam0[4], gam1[4], beta[4];  // weights and fractional timestep per explicit stage

@@ -362,7 +362,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     auto masses = ppart->species_mass;
     const int nspecies = ppart->nspecies;
     const Real qscale = ppart->deposit_qscale;
-    const bool momentum_state = ppart->UsesRelativisticCRState();
+    const bool momentum_state = ppart->UsesMomentumState();
     const Real light_speed = ppart->pic_cr_light_speed;
 
     Real cr_energy = 0.0;

@@ -174,7 +174,6 @@ void ProblemGenerator::Q033CRPAITransportRuntimeLocal(ParameterInput *pin,
   Q033RequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q033RequireBoolean(pin, "particles", "couple_moments_momentum_to_mhd", true);
   Q033RequireBoolean(pin, "particles", "couple_moments_energy_to_mhd", true);
-  Q033RequireString(pin, "particles", "pic_physical_mode", "extended_mhd_pic");
   Q033RequireString(pin, "particles", "pic_background_mode", "coupled");
   Q033RequireString(pin, "particles", "pic_feedback_mode", "coupled");
   Q033RequireString(pin, "particles", "pic_interp_scheme", "tsc");

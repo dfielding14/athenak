@@ -286,7 +286,7 @@ void ProblemGenerator::Q023PaperBellLinearJOverC(ParameterInput *pin,
   Q023JOverCRequireBoolean(pin, block, "qualification_eligible", false);
 
   Q023JOverCRequireString(pin, "time", "evolution", "dynamic");
-  Q023JOverCRequireString(pin, "time", "integrator", "rk2");
+  Q023JOverCRequireString(pin, "time", "integrator", "vl2");
   Q023JOverCRequireString(pin, "mhd", "eos", "ideal");
   Q023JOverCRequireString(pin, "particles", "particle_type", "cosmic_ray");
   Q023JOverCRequireString(pin, "particles", "pusher", "boris_tsc");
@@ -295,17 +295,8 @@ void ProblemGenerator::Q023PaperBellLinearJOverC(ParameterInput *pin,
     Q023JOverCFatal("q023_paper_bell_linear_joverc requires exactly one species");
   }
   Q023JOverCRequireBoolean(pin, "particles", "deposit_moments", true);
-  const std::string physical_mode =
-      pin->GetString("particles", "pic_physical_mode");
-  const bool paper_vl2_tsc =
-      physical_mode.compare("paper_mhd_pic_vl2_tsc") == 0;
-  if (!paper_vl2_tsc && physical_mode.compare("paper_mhd_pic") != 0) {
-    Q023JOverCFatal("<particles>/pic_physical_mode does not match the corrected "
-                    "Q-023-JOVERC Section 5.2 contract");
-  }
-  if (pin->GetInteger("particles", "deposit_order") != (paper_vl2_tsc ? 2 : 1)) {
-    Q023JOverCFatal("<particles>/deposit_order does not match the corrected "
-                    "Q-023-JOVERC Section 5.2 physical mode");
+  if (pin->GetInteger("particles", "deposit_order") != 2) {
+    Q023JOverCFatal("Q-023-JOVERC requires TSC moment deposition");
   }
   Q023JOverCRequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q023JOverCRequireBoolean(pin, "particles", "couple_moments_momentum_to_mhd", true);

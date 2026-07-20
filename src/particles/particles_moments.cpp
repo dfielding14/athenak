@@ -591,7 +591,7 @@ TaskStatus Particles::SaveOldPositions(Driver *pdriver, int stage) {
 TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
@@ -617,11 +617,11 @@ TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->InitRecv(NMOM);
@@ -832,7 +832,7 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
   if (paper_smooth_mom_transport == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "paper_mhd_pic_vl2_tsc multilevel deposition requires the paper_smooth "
+              << "VL2/TSC multilevel deposition requires the paper_smooth "
               << "receiver-record transport" << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -913,7 +913,7 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
       const Real physical_boundary_scale =
           static_cast<Real>(1.0)/physical_boundary_norm;
       Real vx, vy, vz;
-      CRVelocityFromState(UsesRelativisticCRState(), pic_cr_light_speed,
+      CRVelocityFromState(UsesMomentumState(), pic_cr_light_speed,
                           h_pr(IPVX, p), h_pr(IPVY, p), h_pr(IPVZ, p),
                           vx, vy, vz);
       PaperSmoothMomentRecord record{
@@ -1136,11 +1136,11 @@ TaskStatus Particles::DepositPaperSmoothMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return DepositPaperSmoothMoments(pdriver, stage);
   }
 
@@ -1179,7 +1179,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
        (pic_feedback_mode == PICFeedbackMode::coupled) &&
        couple_moments_to_mhd &&
        (couple_moments_momentum_to_mhd || couple_moments_energy_to_mhd));
-  const bool momentum_state_local = UsesRelativisticCRState();
+  const bool momentum_state_local = UsesMomentumState();
   const Real light_speed_local = pic_cr_light_speed;
   const bool deltaf_local = UsesDeltaF();
   Real physical_density_scale = static_cast<Real>(1.0);
@@ -2088,11 +2088,11 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
@@ -2109,11 +2109,11 @@ TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->PackAndSendCC(moments, coarse_moments);
@@ -2126,11 +2126,11 @@ TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->RecvAndUnpackCC(moments, coarse_moments, CCRecvOp::accumulate);
@@ -2143,11 +2143,11 @@ TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->ClearRecv();
@@ -2160,11 +2160,11 @@ TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   return pbval_mom->ClearSend();
@@ -2177,11 +2177,11 @@ TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
 TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
 
@@ -2196,11 +2196,11 @@ TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
 TaskStatus Particles::ProlongateMoments(Driver *pdriver, int stage) {
   (void)pdriver;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }
-  if (UsesPaperVL2Coupling() && pmy_pack->pmesh->multilevel) {
+  if (UsesVL2TSCCoupling() && pmy_pack->pmesh->multilevel) {
     return TaskStatus::complete;
   }
   if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
@@ -2219,7 +2219,7 @@ TaskStatus Particles::InitRecvEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
-                                     UsesPaperVL2Coupling(),
+                                     UsesVL2TSCCoupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -2235,7 +2235,7 @@ TaskStatus Particles::SendEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
-                                     UsesPaperVL2Coupling(),
+                                     UsesVL2TSCCoupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -2252,7 +2252,7 @@ TaskStatus Particles::RecvEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
-                                     UsesPaperVL2Coupling(),
+                                     UsesVL2TSCCoupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -2282,7 +2282,7 @@ TaskStatus Particles::ClearRecvEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
-                                     UsesPaperVL2Coupling(),
+                                     UsesVL2TSCCoupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -2298,7 +2298,7 @@ TaskStatus Particles::ClearSendEdgeCurrents(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
-                                     UsesPaperVL2Coupling(),
+                                     UsesVL2TSCCoupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -2314,7 +2314,7 @@ TaskStatus Particles::ApplyEdgeCurrentPhysicalBCs(Driver *pdriver, int stage) {
   (void)pdriver;
   if (pbval_jedge == nullptr) return TaskStatus::complete;
   if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
-                                     UsesPaperVL2Coupling(),
+                                     UsesVL2TSCCoupling(),
                                      couple_j_to_efield_representation,
                                      couple_j_deposition_mode, stage)) {
     return TaskStatus::complete;
@@ -2680,7 +2680,7 @@ TaskStatus Particles::ConvertCoupledCurrentRepresentation(Driver *pdriver, int s
   (void)pdriver;
   if (!deposit_moments) return TaskStatus::complete;
   if (!couple_moments_to_mhd) return TaskStatus::complete;
-  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesPaperVL2Coupling(),
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, UsesVL2TSCCoupling(),
                                 UsesFullCRHall(), stage)) {
     return TaskStatus::complete;
   }

@@ -124,7 +124,6 @@ void ProblemGenerator::Q032ReducedStaticNeutralLocal(ParameterInput *pin,
   Q032RequireReal(pin, "particles", "cr_vx0", 0.0);
   Q032RequireReal(pin, "particles", "cr_vy0", 0.0);
   Q032RequireReal(pin, "particles", "cr_vz0", 0.0);
-  Q032RequireString(pin, "particles", "pic_physical_mode", "extended_mhd_pic");
   Q032RequireString(pin, "particles", "pic_background_mode", "coupled");
   Q032RequireString(pin, "particles", "pic_feedback_mode", "test_particle");
   Q032RequireString(pin, "particles", "pic_interp_scheme", "tsc");

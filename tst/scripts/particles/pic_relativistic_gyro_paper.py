@@ -248,15 +248,6 @@ def run(**kwargs):
     _RESULTS['restart'] = _measure_case(base_rst)
 
     _run_athena(
-        'guard_restart_physical_model',
-        ['particles/pic_physical_mode=engineering',
-         'particles/pic_cr_light_speed=1.0',
-         'particles/pic_cr_initial_state=velocity',
-         'time/nlim=2', 'output1/dcycle=0', 'output2/dcycle=0'],
-        restart_file=restart_file,
-        expect_fail='Particle restart physical-model metadata mismatch',
-    )
-    _run_athena(
         'guard_velocity_initial_state_below_c',
         ['particles/pic_cr_initial_state=velocity',
          'particles/cr_vx0=3.1', 'time/nlim=0'],
@@ -290,12 +281,6 @@ def run(**kwargs):
         ['particles/pic_expanding_box_mode=on',
          'particles/pic_expansion_rate_x1=-2.0', 'time/nlim=0'],
         expect_fail='must produce finite, positive scale factors',
-    )
-    _run_athena(
-        'guard_paper_hall_requires_extension_mode',
-        ['particles/pic_cr_hall_mode=current_to_ct_experimental',
-         'time/nlim=0'],
-        expect_fail='requires <particles>/pic_physical_mode=extended_mhd_pic',
     )
     _run_athena(
         'guard_negative_particle_load_cost',

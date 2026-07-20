@@ -99,7 +99,6 @@ def test_legacy_bell_normalization_requires_explicit_mechanics_opt_in() -> None:
     guard = _function_body(source, "void GuardLegacyBellNormalization(")
 
     assert 'pgen_fun_name == "q023_paper_bell_linear"' in guard
-    assert 'pgen_fun_name == "q029_hall_bell_linear"' in guard
     assert '"allow_legacy_nonphysical_bell_mechanics", false' in guard
     assert "omits division by the root-cell volume V_root" in guard
     assert "extra artificial-C factor" in guard

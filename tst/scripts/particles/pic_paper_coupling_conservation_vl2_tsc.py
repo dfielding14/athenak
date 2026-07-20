@@ -51,8 +51,6 @@ def _run_case(basename, coeff, hall_mode='off'):
     output = (proc.stdout or '') + (proc.stderr or '')
     if proc.returncode != 0:
         raise RuntimeError('Command failed for ' + basename + '\n' + output)
-    if 'physical_mode=paper_mhd_pic_vl2_tsc' not in output:
-        raise RuntimeError('Missing paper-mode runtime identity for ' + basename)
     induction = 'cr_hall_full' if hall_mode == 'full' else 'ideal_mhd_only'
     if 'induction=' + induction not in output:
         raise RuntimeError('Unexpected induction identity for ' + basename)

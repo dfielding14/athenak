@@ -65,10 +65,7 @@ def _run_case(label, damping_mode, collision_rate):
     output = (proc.stdout or '') + (proc.stderr or '')
     if proc.returncode != 0:
         raise RuntimeError('Command failed for ' + label + '\n' + output)
-    for token in [
-            'physical_mode=extended_mhd_pic',
-            'wave_damping=' + damping_mode,
-            'nu_in=']:
+    for token in ['wave_damping=' + damping_mode, 'nu_in=']:
         if token not in output:
             raise RuntimeError(label + ' missing runtime token: ' + token)
     return _snapshot_series(basename)

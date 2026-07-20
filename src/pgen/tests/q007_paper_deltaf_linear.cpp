@@ -121,7 +121,7 @@ void Q007RejectEffectfulOptionalMHDControls(ParameterInput *pin) {
 
 void Q007ValidateCommon(ParameterInput *pin, const Q007ModeContract &mode) {
   Q007RequireString(pin, "time", "evolution", "dynamic");
-  Q007RequireString(pin, "time", "integrator", "rk2");
+  Q007RequireString(pin, "time", "integrator", "vl2");
   Q007RequireReal(pin, "time", "cfl_number", 0.1);
   Q007RequireInteger(pin, "time", "nlim", mode.runtime_cycle_limit);
   Q007RequireReal(pin, "time", "tlim",
@@ -139,15 +139,7 @@ void Q007ValidateCommon(ParameterInput *pin, const Q007ModeContract &mode) {
   Q007RequireInteger(pin, "particles", "nspecies", 8);
   Q007RequireString(pin, "particles", "cr_distribution", "center");
   Q007RequireBoolean(pin, "particles", "deposit_moments", true);
-  const std::string pic_physical_mode =
-      pin->GetString("particles", "pic_physical_mode");
-  const bool paper_vl2_tsc =
-      (pic_physical_mode.compare("paper_mhd_pic_vl2_tsc") == 0);
-  if (!paper_vl2_tsc && pic_physical_mode.compare("paper_mhd_pic") != 0) {
-    Q007Fatal("<particles>/pic_physical_mode does not match the "
-              "Q-007 preparation contract");
-  }
-  Q007RequireInteger(pin, "particles", "deposit_order", paper_vl2_tsc ? 2 : 1);
+  Q007RequireInteger(pin, "particles", "deposit_order", 2);
   Q007RequireReal(pin, "particles", "deposit_qscale", 1.0e-4);
   Q007RequireBoolean(pin, "particles", "couple_moments_to_mhd", true);
   Q007RequireReal(pin, "particles", "couple_j_to_efield_coeff", 1.0);

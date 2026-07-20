@@ -786,7 +786,7 @@ void MHD::AddPaperVL2FeedbackSource(const DvceArray5D<Real> &target, int stage,
                                     Real beta_dt, int il, int iu, int jl, int ju,
                                     int kl, int ku) {
   auto *ppart = pmy_pack->ppart;
-  if ((ppart == nullptr) || !ppart->UsesPaperVL2Coupling() ||
+  if ((ppart == nullptr) || !ppart->UsesVL2TSCCoupling() ||
       ppart->UsesDeltaF() ||
       (ppart->couple_fluid_feedback_order !=
        CoupledFluidFeedbackOrder::mhd_src_terms)) {
@@ -925,7 +925,7 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
       const Real eng_coef = ppart->couple_moments_energy_coeff;
       const bool use_deltaf = ppart->UsesDeltaF();
       const bool paper_vl2_full_f =
-          ppart->UsesPaperVL2Coupling() && !use_deltaf;
+          ppart->UsesVL2TSCCoupling() && !use_deltaf;
       const bool full_cr_hall = ppart->UsesFullCRHall();
       Real background_density_scale = 1.0;
       if (ppart->UsesExpandingBox()) {
@@ -1345,126 +1345,8 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
     psrc->SBoxEField(b0, efld);
   }
 
-  // PR2: add deposited particle current to edge-centered electric fields.
+  // Particle feedback may optionally be applied at this task-list location.
   auto *ppart = pmy_pack->ppart;
-  if ((ppart != nullptr) && ppart->AddsCRCurrentToCT()) {
-    auto &indcs = pmy_pack->pmesh->mb_indcs;
-    int is = indcs.is, ie = indcs.ie;
-    int js = indcs.js, je = indcs.je;
-    int ks = indcs.ks, ke = indcs.ke;
-    int nmb1 = pmy_pack->nmb_thispack - 1;
-    const Real jcoef = ppart->couple_j_to_efield_coeff;
-
-    if (ppart->couple_j_to_efield_representation ==
-        CoupledCurrentRepresentation::edge_staggered) {
-      auto jx_e = ppart->j_edge_x1e;
-      auto jy_e = ppart->j_edge_x2e;
-      auto jz_e = ppart->j_edge_x3e;
-
-      if (pmy_pack->pmesh->one_d) {
-        auto e2 = efld.x2e;
-        auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_edge_1d", DevExeSpace(), 0, nmb1, is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int i) {
-          e2(m,ks  ,js  ,i) += jcoef*jy_e(m,ks  ,js,i);
-          e2(m,ke+1,js  ,i) += jcoef*jy_e(m,ke+1,js,i);
-          e3(m,ks  ,js  ,i) += jcoef*jz_e(m,ks,js  ,i);
-          e3(m,ks  ,je+1,i) += jcoef*jz_e(m,ks,je+1,i);
-        });
-      } else if (pmy_pack->pmesh->two_d) {
-        auto e1 = efld.x1e;
-        auto e2 = efld.x2e;
-        auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_edge_2d_e1", DevExeSpace(), 0, nmb1, js, je+1,
-                is, ie,
-        KOKKOS_LAMBDA(const int m, const int j, const int i) {
-          e1(m,ks  ,j,i) += jcoef*jx_e(m,ks  ,j,i);
-          e1(m,ke+1,j,i) += jcoef*jx_e(m,ke+1,j,i);
-        });
-        par_for("prtcl_efldsrc_edge_2d_e2", DevExeSpace(), 0, nmb1, js, je,
-                is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int j, const int i) {
-          e2(m,ks  ,j,i) += jcoef*jy_e(m,ks  ,j,i);
-          e2(m,ke+1,j,i) += jcoef*jy_e(m,ke+1,j,i);
-        });
-        par_for("prtcl_efldsrc_edge_2d_e3", DevExeSpace(), 0, nmb1, js, je+1,
-                is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int j, const int i) {
-          e3(m,ks  ,j,i) += jcoef*jz_e(m,ks,j,i);
-        });
-      } else {
-        auto e1 = efld.x1e;
-        auto e2 = efld.x2e;
-        auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_edge_3d_e1", DevExeSpace(), 0, nmb1, ks, ke+1,
-                js, je+1, is, ie,
-        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-          e1(m,k,j,i) += jcoef*jx_e(m,k,j,i);
-        });
-        par_for("prtcl_efldsrc_edge_3d_e2", DevExeSpace(), 0, nmb1, ks, ke+1,
-                js, je, is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-          e2(m,k,j,i) += jcoef*jy_e(m,k,j,i);
-        });
-        par_for("prtcl_efldsrc_edge_3d_e3", DevExeSpace(), 0, nmb1, ks, ke,
-                js, je+1, is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-          e3(m,k,j,i) += jcoef*jz_e(m,k,j,i);
-        });
-      }
-    } else {
-      auto mom = ppart->moments;
-      if (pmy_pack->pmesh->one_d) {
-        auto e2 = efld.x2e;
-        auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_1d", DevExeSpace(), 0, nmb1, is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int i) {
-          e2(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
-          e2(m,ke+1,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
-          e3(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
-          e3(m,ks  ,je+1,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
-        });
-      } else if (pmy_pack->pmesh->two_d) {
-        auto e1 = efld.x1e;
-        auto e2 = efld.x2e;
-        auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_2d_e1", DevExeSpace(), 0, nmb1, js, je+1, is, ie,
-        KOKKOS_LAMBDA(const int m, const int j, const int i) {
-          e1(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
-          e1(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
-        });
-        par_for("prtcl_efldsrc_2d_e2", DevExeSpace(), 0, nmb1, js, je, is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int j, const int i) {
-          e2(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
-          e2(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
-        });
-        par_for("prtcl_efldsrc_2d_e3", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int j, const int i) {
-          e3(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, j, i);
-        });
-      } else {
-        auto e1 = efld.x1e;
-        auto e2 = efld.x2e;
-        auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_3d_e1", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1,
-                is, ie,
-        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-          e1(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, k, j, i);
-        });
-        par_for("prtcl_efldsrc_3d_e2", DevExeSpace(), 0, nmb1, ks, ke+1, js, je,
-                is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-          e2(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, k, j, i);
-        });
-        par_for("prtcl_efldsrc_3d_e3", DevExeSpace(), 0, nmb1, ks, ke, js, je+1,
-                is, ie+1,
-        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-          e3(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, k, j, i);
-        });
-      }
-    }
-  }
-
   // PR2 step II: optional fluid-feedback ordering mode for parity experiments.
   if ((ppart != nullptr) && ppart->couple_moments_to_mhd &&
       (ppart->couple_fluid_feedback_order == CoupledFluidFeedbackOrder::efield_src)) {

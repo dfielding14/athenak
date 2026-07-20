@@ -375,52 +375,41 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       break;
   }
 
-  // A publication run selects one coherent physical model. The engineering
-  // default preserves the historical independent-toggle interface.
-  std::string pic_physical_mode_str = pin->GetOrAddString(
-      "particles", "pic_physical_mode", "engineering");
-  if (pic_physical_mode_str.compare("engineering") == 0) {
-    pic_physical_mode = PICPhysicalMode::engineering;
-  } else if (pic_physical_mode_str.compare("paper_test_particle") == 0) {
-    pic_physical_mode = PICPhysicalMode::paper_test_particle;
-  } else if (pic_physical_mode_str.compare("paper_mhd_pic") == 0) {
-    pic_physical_mode = PICPhysicalMode::paper_mhd_pic;
-  } else if (pic_physical_mode_str.compare("paper_mhd_pic_vl2_tsc") == 0) {
-    pic_physical_mode = PICPhysicalMode::paper_mhd_pic_vl2_tsc;
-  } else if (pic_physical_mode_str.compare("extended_mhd_pic") == 0) {
-    pic_physical_mode = PICPhysicalMode::extended_mhd_pic;
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "Unsupported value for <particles>/pic_physical_mode: "
-              << pic_physical_mode_str << std::endl;
-    std::exit(EXIT_FAILURE);
+  pic_vl2_integrator =
+      pin->GetOrAddString("time", "integrator", "rk2").compare("vl2") == 0;
+  if (pin->DoesParameterExist("particles", "pic_physical_mode")) {
+    if (pmy_pack->pmesh->restart_meta.original_nranks <= 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_physical_mode is obsolete; migrate this input "
+                << "to explicit particle controls and <time>/integrator=vl2"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (global_variable::my_rank == 0) {
+      std::cout << "### WARNING: restart header contains obsolete "
+                << "<particles>/pic_physical_mode; it is ignored in favor of "
+                << "explicit controls" << std::endl;
+    }
   }
-  const bool paper_coupled_mode =
-      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic) ||
-      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc);
-  const bool paper_vl2_tsc_mode =
-      (pic_physical_mode == PICPhysicalMode::paper_mhd_pic_vl2_tsc);
   pic_boundary_conservation_ledger = pin->GetOrAddBoolean(
       "particles", "pic_boundary_conservation_ledger", false);
   if (pic_boundary_conservation_ledger &&
-      (particle_type != ParticleType::cosmic_ray || !paper_vl2_tsc_mode)) {
+      (particle_type != ParticleType::cosmic_ray || !UsesVL2TSCCoupling())) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "<particles>/pic_boundary_conservation_ledger=true is qualified "
-              << "only for cosmic-ray paper_mhd_pic_vl2_tsc runs." << std::endl;
+              << "only for cosmic-ray <time>/integrator=vl2 runs." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
-  // PR1 deposition controls
-  deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments",
-                                         paper_coupled_mode);
-  deposit_order = pin->GetOrAddInteger("particles", "deposit_order",
-                                        paper_vl2_tsc_mode ? 2 : 1);
+  // Coupling is literal and opt-in; the integrator never changes these defaults.
+  deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments", false);
+  deposit_order = pin->GetOrAddInteger("particles", "deposit_order", 1);
   deposit_qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
   couple_moments_to_mhd = pin->GetOrAddBoolean("particles",
                                                "couple_moments_to_mhd",
-                                               paper_coupled_mode);
+                                               false);
   couple_j_to_efield_coeff = pin->GetOrAddReal("particles",
                                                 "couple_j_to_efield_coeff", 1.0);
   std::string j_repr = pin->GetOrAddString("particles",
@@ -469,9 +458,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   couple_moments_momentum_to_mhd = pin->GetOrAddBoolean(
-      "particles", "couple_moments_momentum_to_mhd", paper_coupled_mode);
+      "particles", "couple_moments_momentum_to_mhd", false);
   couple_moments_energy_to_mhd = pin->GetOrAddBoolean(
-      "particles", "couple_moments_energy_to_mhd", paper_coupled_mode);
+      "particles", "couple_moments_energy_to_mhd", false);
   couple_moments_momentum_coeff = pin->GetOrAddReal(
       "particles", "couple_moments_momentum_coeff", 1.0);
   couple_moments_energy_coeff = pin->GetOrAddReal(
@@ -485,8 +474,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       "particles", "pic_cr_hall_mode", "off");
   if (pic_cr_hall_mode_str.compare("off") == 0) {
     pic_cr_hall_mode = PICCRHallMode::off;
-  } else if (pic_cr_hall_mode_str.compare("current_to_ct_experimental") == 0) {
-    pic_cr_hall_mode = PICCRHallMode::current_to_ct_experimental;
   } else if (pic_cr_hall_mode_str.compare("full") == 0) {
     pic_cr_hall_mode = PICCRHallMode::full;
   } else {
@@ -583,10 +570,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "<particles>/pic_cr_light_speed must be > 0" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  const char *pic_cr_initial_state_default =
-      (pic_physical_mode == PICPhysicalMode::engineering) ? "velocity" : "momentum";
   std::string pic_cr_initial_state_str = pin->GetOrAddString(
-      "particles", "pic_cr_initial_state", pic_cr_initial_state_default);
+      "particles", "pic_cr_initial_state", "velocity");
   if (pic_cr_initial_state_str.compare("velocity") == 0) {
     pic_cr_initial_state = PICCRInitialState::velocity;
   } else if (pic_cr_initial_state_str.compare("momentum") == 0) {
@@ -598,22 +583,21 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << pic_cr_initial_state_str << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if ((pic_physical_mode == PICPhysicalMode::engineering) &&
+  if ((particle_type == ParticleType::cosmic_ray) && !UsesMomentumState() &&
       (pic_cr_initial_state != PICCRInitialState::velocity)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<particles>/pic_physical_mode=engineering requires "
+              << "Velocity-state cosmic-ray pushers require "
               << "<particles>/pic_cr_initial_state=velocity" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if ((pic_physical_mode == PICPhysicalMode::engineering) &&
+  if ((particle_type == ParticleType::cosmic_ray) && !UsesMomentumState() &&
       (std::abs(pic_cr_light_speed - 1.0) >
        16.0*std::numeric_limits<Real>::epsilon())) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<particles>/pic_cr_light_speed is reserved in "
-              << "<particles>/pic_physical_mode=engineering; select a momentum-state "
-              << "physical mode to change particle mechanics" << std::endl;
+              << "<particles>/pic_cr_light_speed applies only to momentum-state "
+              << "cosmic-ray Boris pushers" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -658,9 +642,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pic_deltaf_mode = PICDeltaFMode::off;
   } else if (pic_deltaf_mode_str.compare("quiet_start") == 0) {
     pic_deltaf_mode = PICDeltaFMode::quiet_start;
-  } else if (pic_deltaf_mode_str.compare("on") == 0) {
-    pic_deltaf_mode = (pic_physical_mode == PICPhysicalMode::engineering) ?
-        PICDeltaFMode::quiet_start : PICDeltaFMode::physical;
   } else if (pic_deltaf_mode_str.compare("physical") == 0) {
     pic_deltaf_mode = PICDeltaFMode::physical;
   } else {
@@ -961,8 +942,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     const bool qualified_conservative_feedback =
         (common_coupled_feedback && !UsesDeltaF());
     const bool experimental_adaptive_deltaf_feedback =
-        (common_coupled_feedback && UsesAdaptiveDeltaF() &&
-         (pic_physical_mode == PICPhysicalMode::extended_mhd_pic));
+        (common_coupled_feedback && UsesAdaptiveDeltaF());
     const bool admitted_coupled_feedback =
         (qualified_conservative_feedback || experimental_adaptive_deltaf_feedback);
     if (uses_coupled_feedback && !admitted_coupled_feedback) {
@@ -1038,7 +1018,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         (couple_moments_to_mhd &&
          couple_j_deposition_mode ==
          CoupledCurrentDepositionMode::direct_staggered);
-    const bool valid_order2_mode = direct_edge_mode || paper_vl2_tsc_mode;
+    const bool valid_order2_mode = direct_edge_mode || UsesVL2TSCCoupling();
     const bool valid_order = (deposit_order == 1 || deposit_order == 2);
     if ((!valid_order2_mode && deposit_order != 1) ||
         (valid_order2_mode && !valid_order)) {
@@ -1047,7 +1027,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << " is not supported (only deposit_order=1, or "
                 << "deposit_order={1,2} with coupled "
                 << "couple_j_deposition_mode=direct_staggered or "
-                << "pic_physical_mode=paper_mhd_pic_vl2_tsc)"
+                << "time/integrator=vl2)"
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -1154,36 +1134,11 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "MHD in PR2" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if ((pic_physical_mode != PICPhysicalMode::engineering) &&
-      (particle_type != ParticleType::cosmic_ray)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<particles>/pic_physical_mode=" << pic_physical_mode_str
-              << " requires <particles>/particle_type=cosmic_ray" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if ((pic_physical_mode != PICPhysicalMode::engineering) &&
-      (pusher != ParticlesPusher::boris_tsc)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<particles>/pic_physical_mode=" << pic_physical_mode_str
-              << " requires <particles>/pusher=boris_tsc" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if ((pic_cr_hall_mode == PICCRHallMode::current_to_ct_experimental) &&
-      (pic_physical_mode != PICPhysicalMode::extended_mhd_pic)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<particles>/pic_cr_hall_mode=current_to_ct_experimental requires "
-              << "<particles>/pic_physical_mode=extended_mhd_pic"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (UsesFullCRHall() && !paper_vl2_tsc_mode) {
+  if (UsesFullCRHall() && !UsesVL2TSCCoupling()) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "<particles>/pic_cr_hall_mode=full requires "
-              << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc"
+              << "<time>/integrator=vl2"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -1195,21 +1150,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "retain the same three vector components" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if ((pic_physical_mode != PICPhysicalMode::extended_mhd_pic) &&
-      (pic_wave_damping_mode != PICWaveDampingMode::off)) {
+  if (UsesAdaptiveDeltaF() &&
+      ((particle_type != ParticleType::cosmic_ray) ||
+       (pusher != ParticlesPusher::boris_tsc))) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<particles>/pic_wave_damping_mode=" << pic_wave_damping_mode_str
-              << " requires <particles>/pic_physical_mode=extended_mhd_pic"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if ((pic_physical_mode != PICPhysicalMode::extended_mhd_pic) &&
-      UsesAdaptiveDeltaF()) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<particles>/pic_deltaf_adapt_mode=" << pic_deltaf_adapt_mode_str
-              << " requires <particles>/pic_physical_mode=extended_mhd_pic"
+              << "<particles>/pic_deltaf_adapt_mode="
+              << "global_bikappa_moments_experimental requires cosmic-ray "
+              << "particles using <particles>/pusher=boris_tsc"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -1280,30 +1228,26 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       reject_wave_damping_composition("dynamical-relativistic coordinates");
     }
   }
-  if (pic_physical_mode == PICPhysicalMode::paper_test_particle) {
-    if ((pic_feedback_mode != PICFeedbackMode::test_particle) ||
-        couple_moments_to_mhd || couple_moments_momentum_to_mhd ||
-        couple_moments_energy_to_mhd) {
+  if (UsesVL2TSCCoupling()) {
+    if ((particle_type != ParticleType::cosmic_ray) ||
+        (pusher != ParticlesPusher::boris_tsc)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_test_particle requires "
-                << "test-particle feedback with all particle-to-MHD coupling "
-                << "toggles disabled" << std::endl;
+                << "<time>/integrator=vl2 with particles requires "
+                << "<particles>/particle_type=cosmic_ray and "
+                << "<particles>/pusher=boris_tsc" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-  }
-  if (paper_coupled_mode) {
-    const char *paper_mode_name =
-        paper_vl2_tsc_mode ? "paper_mhd_pic_vl2_tsc" : "paper_mhd_pic";
+    const bool has_mhd = pin->DoesBlockExist("mhd");
+    const bool isothermal_mhd =
+        has_mhd && (pin->GetString("mhd", "eos").compare("isothermal") == 0);
     const bool exact_isothermal_deltaf_paper_feedback =
-        (pin->GetString("mhd", "eos").compare("isothermal") == 0) &&
-        UsesDeltaF() && !couple_moments_energy_to_mhd;
+        isothermal_mhd && UsesDeltaF() && !couple_moments_energy_to_mhd;
     const bool exact_isothermal_fullf_paper_feedback =
-        (pin->GetString("mhd", "eos").compare("isothermal") == 0) &&
-        !UsesDeltaF() && !couple_moments_energy_to_mhd &&
+        isothermal_mhd && !UsesDeltaF() && !couple_moments_energy_to_mhd &&
         (pin->GetString("problem", "pgen_name").compare(
              "q006_paper_multispecies_oscillation_runtime_local") == 0);
-    if ((pic_background_mode != PICBackgroundMode::coupled) ||
+    if (!has_mhd || (pic_background_mode != PICBackgroundMode::coupled) ||
         (pic_feedback_mode != PICFeedbackMode::coupled) ||
         !deposit_moments || !couple_moments_to_mhd ||
         !couple_moments_momentum_to_mhd ||
@@ -1312,8 +1256,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
          !exact_isothermal_fullf_paper_feedback)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=" << paper_mode_name
-                << " requires coupled "
+                << "<time>/integrator=vl2 requires coupled "
                 << "MHD background, coupled feedback, moment deposition, and "
                 << "conservative momentum feedback. Energy feedback is required "
                 << "for ideal MHD; exact isothermal paper delta-f uses momentum-only "
@@ -1328,74 +1271,54 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
          CoupledCurrentDepositionMode::direct_staggered)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=" << paper_mode_name
-                << " rejects "
+                << "<time>/integrator=vl2 rejects "
                 << "direct-current CT induction options; use the ideal-MHD "
-                << "paper induction path" << std::endl;
+                << "or full CR-Hall induction path" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (paper_vl2_tsc_mode && deposit_order != 2) {
+    if (deposit_order != 2) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
+                << "<time>/integrator=vl2 requires "
                 << "<particles>/deposit_order=2 for TSC moment deposition."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (paper_vl2_tsc_mode && pmy_pack->pmesh->mb_indcs.ng < 2) {
+    if (pmy_pack->pmesh->mb_indcs.ng < 2) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
+                << "<time>/integrator=vl2 requires "
                 << "mesh/nghost>=2 for receiver-resolution TSC support."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (paper_vl2_tsc_mode &&
-        pin->GetOrAddString("time", "integrator", "rk2").compare("rk2") != 0) {
+    if (couple_fluid_feedback_order != CoupledFluidFeedbackOrder::mhd_src_terms) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
-                << "<time>/integrator=rk2 for the staged VL2 coupling path."
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (paper_vl2_tsc_mode &&
-        couple_fluid_feedback_order != CoupledFluidFeedbackOrder::mhd_src_terms) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires "
+                << "<time>/integrator=vl2 requires "
                 << "<particles>/couple_fluid_feedback_order=mhd_src_terms."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (paper_vl2_tsc_mode &&
-        ((couple_moments_momentum_coeff != static_cast<Real>(1.0)) ||
+    if ((couple_moments_momentum_coeff != static_cast<Real>(1.0)) ||
         (couple_moments_energy_to_mhd &&
-         couple_moments_energy_coeff != static_cast<Real>(1.0)))) {
+         couple_moments_energy_coeff != static_cast<Real>(1.0))) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc requires unit "
+                << "<time>/integrator=vl2 requires unit "
                 << "conservative momentum and enabled energy feedback coefficients."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (paper_vl2_tsc_mode && UsesExpandingBox()) {
+    if (UsesExpandingBox()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/pic_physical_mode=paper_mhd_pic_vl2_tsc with "
+                << "<time>/integrator=vl2 with "
                 << "<particles>/pic_expanding_box_mode=on is not yet supported by "
                 << "the staged VL2 coupling path."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-  }
-  if ((pic_cr_hall_mode == PICCRHallMode::current_to_ct_experimental) &&
-      !couple_moments_to_mhd) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<particles>/pic_cr_hall_mode=current_to_ct_experimental "
-              << "requires <particles>/couple_moments_to_mhd=true" << std::endl;
-    std::exit(EXIT_FAILURE);
   }
   if (UsesFullCRHall()) {
     if (!std::isfinite(pic_background_ion_q_over_mc) ||
@@ -1434,13 +1357,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   if ((global_variable::my_rank == 0) &&
       (particle_type == ParticleType::cosmic_ray)) {
-    const char *state_name = UsesRelativisticCRState() ? "momentum_p_over_m" :
-                                                        "velocity";
-    const char *induction_name = UsesFullCRHall() ? "cr_hall_full" :
-        (AddsCRCurrentToCT() ? "cr_current_to_ct" : "ideal_mhd_only");
+    const char *state_name = UsesMomentumState() ? "momentum_p_over_m" : "velocity";
+    const char *induction_name = UsesFullCRHall() ? "cr_hall_full" : "ideal_mhd_only";
     const char *deposition_name = !deposit_moments ? "disabled" :
                                   ((deposit_order == 2) ? "tsc" : "cic");
-    std::cout << "PIC runtime model: physical_mode=" << pic_physical_mode_str
+    std::cout << "PIC runtime model: integrator="
+              << pin->GetString("time", "integrator")
               << " state=" << state_name
               << " C=" << pic_cr_light_speed
               << " background=" << pic_background_mode_str
@@ -1497,7 +1419,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
     pbval_mom = new MeshBoundaryValuesCC(ppack, pin, false, CCCommMode::synchronize);
     pbval_mom->InitializeBuffers(NMOM);
-    if (UsesPaperVL2Coupling() && ppack->pmesh->multilevel) {
+    if (UsesVL2TSCCoupling() && ppack->pmesh->multilevel) {
       paper_smooth_mom_transport = new PaperSmoothMomentRecordTransport();
     }
     if (!(pmy_pack->pmesh->strictly_periodic) &&
@@ -1733,7 +1655,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     }
     pic_species_qom_max = std::max(
         pic_species_qom_max, std::abs(h_charge(s)/h_mass(s)));
-    if (UsesRelativisticCRState() &&
+    if (UsesMomentumState() &&
         (pic_cr_initial_state == PICCRInitialState::velocity)) {
       const Real v2 = h_vx0(s)*h_vx0(s) + h_vy0(s)*h_vy0(s) + h_vz0(s)*h_vz0(s);
       if (v2 >= pic_cr_light_speed*pic_cr_light_speed) {
@@ -1808,7 +1730,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   auto species_vz0_local = species_vz0;
   const bool deltaf_quiet_start_local = deltaf_quiet_start;
   const int pic_random_seed_local = pic_random_seed;
-  const bool momentum_state_local = UsesRelativisticCRState();
+  const bool momentum_state_local = UsesMomentumState();
   const bool initialize_from_velocity =
       (pic_cr_initial_state == PICCRInitialState::velocity);
   const Real light_speed_local = pic_cr_light_speed;
@@ -2066,7 +1988,7 @@ void Particles::NewTimeStep() {
   const int nmb = pmy_pack->nmb_thispack;
   const Real max_cell_cross = static_cast<Real>(pic_max_cell_cross);
   const Real theta_max = pic_theta_max;
-  const bool momentum_state_local = UsesRelativisticCRState();
+  const bool momentum_state_local = UsesMomentumState();
   const Real light_speed_local = pic_cr_light_speed;
   auto &size = pmy_pack->pmb->mb_size;
   auto &pi = prtcl_idata;

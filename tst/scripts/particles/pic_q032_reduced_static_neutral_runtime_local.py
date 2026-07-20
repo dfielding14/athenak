@@ -86,7 +86,6 @@ def _run_case(case_name, arguments, expected_damping_mode):
     if proc.returncode != 0:
         raise RuntimeError('Command failed for ' + case_name + '\n' + output)
     for token in [
-            'physical_mode=extended_mhd_pic',
             'wave_damping=' + expected_damping_mode,
             'nu_in=']:
         if token not in output:

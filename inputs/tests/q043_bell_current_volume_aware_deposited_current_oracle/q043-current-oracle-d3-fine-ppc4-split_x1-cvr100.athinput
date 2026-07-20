@@ -34,7 +34,7 @@ nx3 = 16
 
 <time>
 evolution = dynamic
-integrator = rk2
+integrator = vl2
 cfl_number = 0.1
 nlim = 1
 tlim = 1.0e30
@@ -67,7 +67,6 @@ couple_moments_energy_coeff = 1.0
 cr_vx0 = 0.54554472558998102
 cr_vy0 = 1.091089451179962
 cr_vz0 = 2.1821789023599241
-pic_physical_mode = paper_mhd_pic_vl2_tsc
 pic_background_mode = coupled
 pic_feedback_mode = coupled
 pic_interp_scheme = tsc

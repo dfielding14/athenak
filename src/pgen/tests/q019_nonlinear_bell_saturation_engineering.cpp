@@ -198,12 +198,11 @@ void ProblemGenerator::Q019NonlinearBellSaturationEngineering(
   Q019EngineeringRequireClose("u_a", u_a, b_g/std::sqrt(rho));
   Q019EngineeringRequireClose("k0", k0, 2.0*M_PI/wavelength);
 
+  Q019EngineeringRequireString(pin, "time", "integrator", "vl2");
   Q019EngineeringRequireString(pin, "mhd", "eos", "ideal");
   Q019EngineeringRequireString(pin, "particles", "particle_type", "cosmic_ray");
   Q019EngineeringRequireString(pin, "particles", "pusher", "boris_tsc");
   Q019EngineeringRequireString(pin, "particles", "cr_distribution", "center");
-  Q019EngineeringRequireString(pin, "particles", "pic_physical_mode",
-                               "paper_mhd_pic_vl2_tsc");
   Q019EngineeringRequireString(pin, "particles", "pic_interp_scheme", "tsc");
   Q019EngineeringRequireBoolean(pin, "particles", "deposit_moments", true);
   Q019EngineeringRequireBoolean(pin, "particles", "couple_moments_to_mhd", true);

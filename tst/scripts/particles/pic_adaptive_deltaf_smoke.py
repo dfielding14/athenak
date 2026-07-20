@@ -186,11 +186,6 @@ def run(**kwargs):
         restart_file=restart_file,
         expect_fail='Particle restart physical-model metadata mismatch')
     _run_athena(
-        'guard_adapt_requires_extension_mode',
-        ['particles/pic_physical_mode=paper_test_particle', 'time/nlim=0',
-         'output1/dcycle=0', 'output2/dcycle=0'],
-        expect_fail='requires <particles>/pic_physical_mode=extended_mhd_pic')
-    _run_athena(
         'guard_adapt_requires_bounded_config',
         ['particles/pic_deltaf_mode=off', 'time/nlim=0',
          'output1/dcycle=0', 'output2/dcycle=0'],

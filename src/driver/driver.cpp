@@ -139,10 +139,6 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     tlim = pin->GetReal("time", "tlim");
     nlim = pin->GetOrAddInteger("time", "nlim", -1);
     ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
-    const bool paper_mhd_pic_vl2_tsc =
-        pin->DoesBlockExist("particles") &&
-        (pin->GetOrAddString("particles", "pic_physical_mode", "engineering") ==
-         "paper_mhd_pic_vl2_tsc");
 
     if (integrator == "rk1") {
       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
@@ -156,26 +152,34 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       nimp_stages = 0;
       nexp_stages = 2;
       cfl_limit = 1.0;  // c_eff = c/nstages = 1/2 (Gottlieb (2009), pg 271)
-      if (paper_mhd_pic_vl2_tsc) {
-        // Sun & Bai VL2 predictor-corrector for staged MHD-PIC coupling.
-        gam0[0] = 0.0;
-        gam1[0] = 1.0;
-        beta[0] = 0.5;
+      // Heun's method / SSPRK (2,2): Gottlieb (2009) equation 3.1
+      // Optimal (in error bounds) explicit two-stage, second-order SSPRK
+      gam0[0] = 0.0;
+      gam1[0] = 1.0;
+      beta[0] = 1.0;
 
-        gam0[1] = 0.0;
-        gam1[1] = 1.0;
-        beta[1] = 1.0;
-      } else {
-        // Heun's method / SSPRK (2,2): Gottlieb (2009) equation 3.1
-        // Optimal (in error bounds) explicit two-stage, second-order SSPRK
-        gam0[0] = 0.0;
-        gam1[0] = 1.0;
-        beta[0] = 1.0;
-
-        gam0[1] = 0.5;
-        gam1[1] = 0.5;
-        beta[1] = 0.5;
+      gam0[1] = 0.5;
+      gam1[1] = 0.5;
+      beta[1] = 0.5;
+    } else if (integrator == "vl2") {
+      // Sun & Bai VL2 predictor-corrector for staged MHD-PIC coupling.
+      if (!pin->DoesBlockExist("particles")) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "<time>/integrator=vl2 requires an active <particles> block"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
       }
+      nimp_stages = 0;
+      nexp_stages = 2;
+      cfl_limit = 1.0;
+      gam0[0] = 0.0;
+      gam1[0] = 1.0;
+      beta[0] = 0.5;
+
+      gam0[1] = 0.0;
+      gam1[1] = 1.0;
+      beta[1] = 1.0;
     } else if (integrator == "rk3") {
       // SSPRK (3,3): Gottlieb (2009) equation 3.2
       // Optimal (in error bounds) explicit three-stage, third-order SSPRK

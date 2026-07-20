@@ -2772,7 +2772,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto mspecies = ppart->species_mass;
     const Real qscale = ppart->deposit_qscale;
     const Real light_speed = ppart->pic_cr_light_speed;
-    const bool momentum_state = ppart->UsesRelativisticCRState();
+    const bool momentum_state = ppart->UsesMomentumState();
     int &npart = pm->nprtcl_thisrank;
     int gids = pm->pmb_pack->gids;
 

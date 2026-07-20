@@ -345,19 +345,19 @@ def run(**kwargs):
         1,
         ['particles/pic_cr_light_speed=2.0', 'time/nlim=0'],
         expect_fail=True,
-        expected_message='<particles>/pic_cr_light_speed is reserved',
+        expected_message='<particles>/pic_cr_light_speed applies only',
     )
     _run_command(
         'guard_pic_deltaf_requires_f0',
         1,
-        ['particles/pic_deltaf_mode=on', 'time/nlim=0'],
+        ['particles/pic_deltaf_mode=quiet_start', 'time/nlim=0'],
         expect_fail=True,
         expected_message='requires <particles>/pic_deltaf_f0',
     )
     _run_command(
         'guard_invalid_pic_deltaf_f0',
         1,
-        ['particles/pic_deltaf_mode=on',
+        ['particles/pic_deltaf_mode=quiet_start',
          'particles/pic_deltaf_f0=not_a_supported_f0',
          'time/nlim=0'],
         expect_fail=True,

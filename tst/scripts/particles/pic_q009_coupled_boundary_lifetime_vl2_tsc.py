@@ -40,7 +40,6 @@ _STAGES = [
     ("derefine_3", "derefine", 1.0e6, 12),
 ]
 _RUNTIME_IDENTITY_TOKENS = [
-    "physical_mode=paper_mhd_pic_vl2_tsc",
     "background=coupled",
     "feedback=coupled",
     "induction=ideal_mhd_only",
