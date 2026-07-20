@@ -175,12 +175,52 @@ def _run_expected_floor_rejection():
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
                           capture_output=True, text=True)
     output = (proc.stdout or '') + (proc.stderr or '')
+    primitive_match = re.search(
+        r'primitive_internal_energy_snapshot=([^ ]+) '
+        r'primitive_pressure_snapshot=([^ ]+)', output)
+    floor_match = re.search(
+        r'after_p=([^ ]+) required_p=([^ ]+) pressure_margin=([^ ]+).*?'
+        r'kinetic_change=([^ ]+) total_energy_draw=([^ ]+) '
+        r'thermal_energy_loss=([^\s]+)', output)
+    diagnostic_values_are_consistent = False
+    if primitive_match is not None and floor_match is not None:
+        primitive_e, primitive_p = map(float, primitive_match.groups())
+        floor_values = tuple(map(float, floor_match.groups()))
+        (after_p, required_p, pressure_margin, kinetic_change,
+         energy_draw, thermal_loss) = floor_values
+        diagnostic_values_are_consistent = (
+            pressure_margin < 0.0
+            and np.isclose(after_p - required_p, pressure_margin)
+            and np.isclose(primitive_p, (1.66666666667 - 1.0) * primitive_e)
+            and np.isclose(thermal_loss, energy_draw + kinetic_change)
+        )
     _FLOOR_REJECTION.update({
         'returncode': proc.returncode,
         'saw_floor_rejection': (
             'gas subtraction would violate a fluid floor' in output
             and 'process is stopping before clipping or checkpoint publication' in output
         ),
+        'saw_floor_diagnostic': all(
+            field in output for field in (
+                'gas_subtraction_floor_diag: reason=pressure',
+                'requested_particles=',
+                'global_cell=',
+                'before_rho=',
+                'before_p=',
+                'primitive_internal_energy_snapshot=',
+                'primitive_pressure_snapshot=',
+                'transaction_dm=',
+                'transaction_denergy=',
+                'carrier_particles=',
+                'stage_particle_equivalent=',
+                'after_p=',
+                'required_p=',
+                'pressure_margin=',
+                'total_energy_draw=',
+                'thermal_energy_loss=',
+            )
+        ),
+        'diagnostic_values_are_consistent': diagnostic_values_are_consistent,
     })
 
 
@@ -403,6 +443,8 @@ def analyze():
             ok = np.array_equal(off['injected_ledger'], reference[2]) and ok
     ok = _FLOOR_REJECTION.get('returncode', 0) != 0 and ok
     ok = _FLOOR_REJECTION.get('saw_floor_rejection', False) and ok
+    ok = _FLOOR_REJECTION.get('saw_floor_diagnostic', False) and ok
+    ok = _FLOOR_REJECTION.get('diagnostic_values_are_consistent', False) and ok
     ok = _FLOOR_THROTTLE.get('returncode', 1) == 0 and ok
     ok = _FLOOR_THROTTLE.get('requested', -1) > 0 and ok
     ok = 0 <= _FLOOR_THROTTLE.get('realized', -1) < (

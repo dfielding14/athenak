@@ -120,6 +120,10 @@ ps_b0 = 1.0
 ps_eta = 2.0e-3
 ps_vinj_over_u0 = 3.1622776601683795
 ps_injection_mode = mignone_tracer
+# Inject once at least 80% of the tagged mass is both swept and in gas with
+# p > 30 p0. Cold tracer tails do not contribute to the injection budget.
+ps_mignone_swept_fraction_trigger = 0.8
+ps_mignone_hot_pressure_min_factor = 30.0
 ps_inject_half_width_cells = 0.5
 ps_shock_speed_model = ideal_surface
 ps_inject_t_start = 0.0
@@ -130,8 +134,8 @@ ps_remove_birth_time_before = 480.0
 ps_remove_at_time = 960.0
 ps_enable_injection = true
 ps_enable_gas_subtraction = true
-# The tracer mode injects from local swept mass, so subtract the matching mass,
-# momentum, and kinetic energy from that same cell with no clipping or throttle.
+# The tracer mode injects from local pressure-qualified swept mass, then
+# subtracts the matching mass, momentum, and kinetic energy from that cell.
 ps_subtract_stencil_cells = 1
 ps_enable_surface_averaged_subtraction = false
 ps_enable_curvature_amr = false

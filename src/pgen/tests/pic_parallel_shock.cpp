@@ -51,6 +51,9 @@
 
 namespace {
 
+constexpr Real ps_mignone_shock_pressure_min_factor = 15.0;
+constexpr Real ps_mignone_shock_pressure_max_factor = 250.0;
+
 struct ShockCell {
   int m, k, j, i;
   int gid;
@@ -123,6 +126,28 @@ struct GasDelta {
   Real dmy;
   Real dmz;
   Real de;
+};
+
+struct GasFloorDiagnostic {
+  int reason;
+  int m, k, j, i;
+  Real primitive_rho_snapshot;
+  Real primitive_internal_energy_snapshot;
+  Real rho_before;
+  Real mx_before, my_before, mz_before;
+  Real energy_before;
+  Real magnetic;
+  Real kinetic_before;
+  Real thermal_before;
+  Real dm, dmx, dmy, dmz, de;
+  Real rho_after;
+  Real mx_after, my_after, mz_after;
+  Real energy_after;
+  Real kinetic_after;
+  Real thermal_after;
+  Real required_thermal;
+  Real density_margin;
+  Real pressure_margin;
 };
 
 struct MignoneSweptCell {
@@ -295,8 +320,14 @@ int ps_mignone_cycle = std::numeric_limits<int>::min();
 bool ps_mignone_injection_due = false;
 bool ps_mignone_telemetry_printed = false;
 std::vector<MignoneSweptCell> ps_mignone_local_swept_cells;
+std::vector<MignoneSweptCell> ps_mignone_local_deferred_cells;
 Real ps_mignone_tracer_mass_global = 0.0;
 Real ps_mignone_swept_mass_global = 0.0;
+Real ps_mignone_hot_swept_mass_global = 0.0;
+Real ps_mignone_deferred_swept_mass_global = 0.0;
+int ps_mignone_deferred_cells_global = 0;
+int ps_mignone_requested_before_deferral = 0;
+bool ps_mignone_event_committed = false;
 Real ps_mignone_shock_x1_global = 0.0;
 Real ps_mignone_x1_min_global = 0.0;
 Real ps_mignone_x1_max_global = 0.0;
@@ -306,6 +337,8 @@ Real ps_mignone_last_injection_time = -1.0;
 Real ps_mignone_last_accumulation_dt = 0.0;
 Real ps_mignone_last_swept_mass = 0.0;
 int ps_mignone_injection_events = 0;
+Real ps_mignone_swept_fraction_trigger = 0.8;
+Real ps_mignone_hot_pressure_min_factor = 30.0;
 
 // The Mignone reset/reseed happens in user_work_before_loop, after the normal
 // end-of-stage halo fill. Exchange only this scalar before stage-1 fluxes so
@@ -482,7 +515,7 @@ std::string ParallelShockRestartControlFingerprint(const bool legacy_v2 = false)
     constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v2";
     HashParallelShockRestartBytes(hash, schema, sizeof(schema));
   } else {
-    constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v3";
+    constexpr char schema[] = "athenak_pic_parallel_shock_restart_controls_v4";
     HashParallelShockRestartBytes(hash, schema, sizeof(schema));
   }
 
@@ -508,6 +541,12 @@ std::string ParallelShockRestartControlFingerprint(const bool legacy_v2 = false)
     HashParallelShockRestartControl(hash, "ps_remove_at_time", ps_remove_at_time);
     HashParallelShockRestartControl(hash, "ps_injection_mode",
                                     static_cast<int>(ps_injection_mode));
+    HashParallelShockRestartControl(hash,
+                                    "ps_mignone_swept_fraction_trigger",
+                                    ps_mignone_swept_fraction_trigger);
+    HashParallelShockRestartControl(hash,
+                                    "ps_mignone_hot_pressure_min_factor",
+                                    ps_mignone_hot_pressure_min_factor);
   }
   HashParallelShockRestartControl(hash, "ps_shock_speed_model",
                                   static_cast<int>(ps_shock_speed_model));
@@ -592,7 +631,7 @@ void ValidateAndStoreParallelShockRestartControls(ParameterInput *pin,
     }
     const std::string checkpointed = pin->GetString(block, parameter);
     // V2 had only ideal-surface injection and used the birth cutoff itself as
-    // the removal trigger. Accept that exact legacy behavior, then store V3.
+    // the removal trigger. Accept that exact legacy behavior, then store V4.
     const bool legacy_equivalent =
         ps_injection_mode == PSInjectionMode::ideal_surface &&
         ps_remove_at_time == ps_remove_birth_time_before;
@@ -2877,6 +2916,299 @@ std::array<int, 3> ParallelShockGasSubtractionFloorStatus(
 #endif
 }
 
+void PrintParallelShockGasSubtractionFloorDiagnostic(
+    Mesh *pm, const Real stage_weight,
+    const Real min_remaining_thermal_fraction,
+    const std::array<int, 3> &floor_status) {
+  auto *pmbp = pm->pmb_pack;
+  auto *pmhd = pmbp->pmhd;
+  const int nsub = static_cast<int>(ps_injection_transaction_gas_deltas.size());
+
+  auto d_gas_deltas = ps_injection_transaction_gas_deltas_device;
+  auto &u0 = pmhd->u0;
+  auto &w0 = pmhd->w0;
+  auto &b0 = pmhd->b0;
+  const Real rho_floor = ps_rho_floor_frac*ps_rho0;
+  const Real p_floor = ps_p_floor_frac*ps_p0;
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  DvceArray1D<GasFloorDiagnostic> device_diagnostics(
+      "ps_gas_floor_diagnostics", std::max(nsub, 1));
+  if (nsub > 0) {
+    par_for("ps_gas_floor_diagnostics", DevExeSpace(), 0, nsub - 1,
+    KOKKOS_LAMBDA(const int n) {
+    const GasDelta d = d_gas_deltas(n);
+    GasFloorDiagnostic report{};
+    report.m = d.m;
+    report.k = d.k;
+    report.j = d.j;
+    report.i = d.i;
+    report.primitive_rho_snapshot = w0(d.m, IDN, d.k, d.j, d.i);
+    report.primitive_internal_energy_snapshot =
+        w0(d.m, IEN, d.k, d.j, d.i);
+    report.dm = stage_weight*d.dm;
+    report.dmx = stage_weight*d.dmx;
+    report.dmy = stage_weight*d.dmy;
+    report.dmz = stage_weight*d.dmz;
+    report.de = stage_weight*d.de;
+    if (!isfinite(report.dm) || !isfinite(report.dmx) ||
+        !isfinite(report.dmy) || !isfinite(report.dmz) ||
+        !isfinite(report.de)) {
+      report.reason = 3;
+      device_diagnostics(n) = report;
+      return;
+    }
+    if (report.dm <= 0.0) {
+      device_diagnostics(n) = report;
+      return;
+    }
+
+    report.rho_before = u0(d.m, IDN, d.k, d.j, d.i);
+    report.mx_before = u0(d.m, IM1, d.k, d.j, d.i);
+    report.my_before = u0(d.m, IM2, d.k, d.j, d.i);
+    report.mz_before = u0(d.m, IM3, d.k, d.j, d.i);
+    report.energy_before = u0(d.m, IEN, d.k, d.j, d.i);
+    report.rho_after = report.rho_before - report.dm;
+    report.mx_after = report.mx_before - report.dmx;
+    report.my_after = report.my_before - report.dmy;
+    report.mz_after = report.mz_before - report.dmz;
+    report.energy_after = report.energy_before - report.de;
+    report.density_margin = report.rho_after - rho_floor;
+    if (!isfinite(report.rho_after)) {
+      report.reason = 3;
+      device_diagnostics(n) = report;
+      return;
+    }
+    if (report.rho_after < rho_floor) {
+      report.reason = 1;
+      device_diagnostics(n) = report;
+      return;
+    }
+
+    const Real bx = 0.5*(b0.x1f(d.m, d.k, d.j, d.i) +
+                         b0.x1f(d.m, d.k, d.j, d.i + 1));
+    const Real by = 0.5*(b0.x2f(d.m, d.k, d.j, d.i) +
+                         b0.x2f(d.m, d.k, d.j + 1, d.i));
+    const Real bz = 0.5*(b0.x3f(d.m, d.k, d.j, d.i) +
+                         b0.x3f(d.m, d.k + 1, d.j, d.i));
+    report.magnetic = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    report.kinetic_before =
+        0.5*(SQR(report.mx_before) + SQR(report.my_before) +
+             SQR(report.mz_before))/report.rho_before;
+    report.thermal_before =
+        report.energy_before - report.kinetic_before - report.magnetic;
+    report.kinetic_after =
+        0.5*(SQR(report.mx_after) + SQR(report.my_after) +
+             SQR(report.mz_after))/report.rho_after;
+    report.thermal_after =
+        report.energy_after - report.kinetic_after - report.magnetic;
+    report.required_thermal = fmax(
+        min_remaining_thermal_fraction*report.thermal_before, p_floor/gm1);
+    report.pressure_margin =
+        gm1*(report.thermal_after - report.required_thermal);
+    if (!isfinite(bx) || !isfinite(by) || !isfinite(bz) ||
+        !isfinite(report.magnetic) || !isfinite(report.kinetic_before) ||
+        !isfinite(report.thermal_before) || !isfinite(report.kinetic_after) ||
+        !isfinite(report.thermal_after) ||
+        !isfinite(report.required_thermal) ||
+        !isfinite(report.pressure_margin)) {
+      report.reason = 3;
+    } else if (report.pressure_margin < 0.0) {
+      report.reason = 2;
+    }
+    device_diagnostics(n) = report;
+    });
+  }
+
+  auto host_diagnostics = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), device_diagnostics);
+  const int target_reason =
+      (floor_status[2] > 0) ? 3 : ((floor_status[0] > 0) ? 1 : 2);
+  double local_score = std::numeric_limits<double>::infinity();
+  int local_index = -1;
+  for (int n = 0; n < nsub; ++n) {
+    const GasFloorDiagnostic &report = host_diagnostics(n);
+    if (report.reason != target_reason) continue;
+    const double score = (target_reason == 1) ? report.density_margin :
+        ((target_reason == 2) ? report.pressure_margin : 0.0);
+    if (score < local_score) {
+      local_score = score;
+      local_index = n;
+    }
+  }
+
+  int owner_rank = global_variable::my_rank;
+#if MPI_PARALLEL_ENABLED
+  struct {
+    double value;
+    int rank;
+  } local_min = {local_score, global_variable::my_rank}, global_min{};
+  MPI_Allreduce(&local_min, &global_min, 1, MPI_DOUBLE_INT, MPI_MINLOC,
+                MPI_COMM_WORLD);
+  owner_rank = global_min.rank;
+  if (!std::isfinite(global_min.value)) {
+    if (global_variable::my_rank == 0) {
+      std::cout << "pic_parallel_shock gas_subtraction_floor_diag: "
+                << "offending-cell detail unavailable" << std::endl;
+    }
+    return;
+  }
+#else
+  if (local_index < 0) {
+    std::cout << "pic_parallel_shock gas_subtraction_floor_diag: "
+              << "offending-cell detail unavailable" << std::endl;
+    return;
+  }
+#endif
+  GasFloorDiagnostic report{};
+  if (global_variable::my_rank == owner_rank && local_index >= 0) {
+    report = host_diagnostics(local_index);
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(&report, static_cast<int>(sizeof(report)), MPI_BYTE, owner_rank,
+            MPI_COMM_WORLD);
+#endif
+
+  std::array<std::int64_t, 5> logical = {};
+  std::array<Real, 7> geometry = {};
+  if (global_variable::my_rank == owner_rank) {
+    auto &mb_size = pmbp->pmb->mb_size;
+    auto &mb_gid = pmbp->pmb->mb_gid;
+    mb_size.template sync<HostMemSpace>();
+    mb_gid.template sync<HostMemSpace>();
+    const auto &indcs = pm->mb_indcs;
+    const int gid = mb_gid.h_view(report.m);
+    const LogicalLocation &loc = pm->lloc_eachmb[gid];
+    const auto &size = mb_size.h_view(report.m);
+    const std::int64_t global_i =
+        static_cast<std::int64_t>(loc.lx1)*indcs.nx1 + report.i - indcs.is;
+    const std::int64_t global_j =
+        static_cast<std::int64_t>(loc.lx2)*indcs.nx2 + report.j - indcs.js;
+    const std::int64_t global_k =
+        static_cast<std::int64_t>(loc.lx3)*indcs.nx3 + report.k - indcs.ks;
+    logical = {gid, loc.level, global_i, global_j, global_k};
+    geometry = {
+      size.x1min + (static_cast<Real>(report.i - indcs.is) + 0.5)*size.dx1,
+      size.x2min + (static_cast<Real>(report.j - indcs.js) + 0.5)*size.dx2,
+      pm->three_d ?
+          size.x3min + (static_cast<Real>(report.k - indcs.ks) + 0.5)*size.dx3 :
+          0.0,
+      size.dx1, size.dx2, size.dx3,
+      ps_injection_transaction_gas_deltas[local_index].vol
+    };
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(logical.data(), static_cast<int>(logical.size()), MPI_INT64_T,
+            owner_rank, MPI_COMM_WORLD);
+  MPI_Bcast(geometry.data(), static_cast<int>(geometry.size()), MPI_ATHENA_REAL,
+            owner_rank, MPI_COMM_WORLD);
+#endif
+  if (global_variable::my_rank != 0) return;
+
+  const char *reason = (report.reason == 1) ? "density" :
+      ((report.reason == 2) ? "pressure" : "nonfinite");
+  const Real p_before = gm1*report.thermal_before;
+  const Real p_after = gm1*report.thermal_after;
+  const Real p_required = gm1*report.required_thermal;
+  const Real primitive_pressure_snapshot =
+      gm1*report.primitive_internal_energy_snapshot;
+  const Real nan = std::numeric_limits<Real>::quiet_NaN();
+  const Real gas_vx = (report.rho_before != 0.0) ?
+      report.mx_before/report.rho_before : nan;
+  const Real gas_vy = (report.rho_before != 0.0) ?
+      report.my_before/report.rho_before : nan;
+  const Real gas_vz = (report.rho_before != 0.0) ?
+      report.mz_before/report.rho_before : nan;
+  const Real removed_state_x = (report.dm != 0.0) ? report.dmx/report.dm : nan;
+  const Real removed_state_y = (report.dm != 0.0) ? report.dmy/report.dm : nan;
+  const Real removed_state_z = (report.dm != 0.0) ? report.dmz/report.dm : nan;
+  const Real removed_specific_energy =
+      (report.dm != 0.0) ? report.de/report.dm : nan;
+  const Real transaction_dm = report.dm/stage_weight;
+  const Real transaction_dmx = report.dmx/stage_weight;
+  const Real transaction_dmy = report.dmy/stage_weight;
+  const Real transaction_dmz = report.dmz/stage_weight;
+  const Real transaction_de = report.de/stage_weight;
+  const Real stage_removed_mass = report.dm*geometry[6];
+  const Real transaction_removed_mass = transaction_dm*geometry[6];
+  const Real stage_particle_equivalent =
+      stage_removed_mass/ps_particle_macro_mass;
+  const Real carrier_particles =
+      transaction_removed_mass/ps_particle_macro_mass;
+  const Real realized_particles =
+      ps_injection_transaction_expected_global[0]/ps_particle_macro_mass;
+  std::cout << std::setprecision(17)
+            << "pic_parallel_shock gas_subtraction_floor_diag: reason=" << reason
+            << " owner_rank=" << owner_rank
+            << " floor_counts=(" << floor_status[0] << ","
+            << floor_status[1] << "," << floor_status[2] << ")"
+            << " cycle=" << pm->ncycle << " time=" << pm->time
+            << " stage_weight=" << stage_weight << std::endl
+            << "pic_parallel_shock gas_subtraction_floor_diag: event="
+            << ps_mignone_injection_events
+            << " requested_particles=" << ps_injection_throttle_requested
+            << " realized_particles=" << realized_particles
+            << " swept_mass=" << ps_mignone_swept_mass_global
+            << " hot_swept_mass=" << ps_mignone_hot_swept_mass_global
+            << " swept_fraction_trigger="
+            << ps_mignone_swept_fraction_trigger
+            << " hot_pressure_min="
+            << ps_mignone_hot_pressure_min_factor*ps_p0 << std::endl
+            << "pic_parallel_shock gas_subtraction_floor_diag: gid=" << logical[0]
+            << " level=" << logical[1]
+            << " global_cell=(" << logical[2] << "," << logical[3]
+            << "," << logical[4] << ")"
+            << " local_cell=(" << report.m << "," << report.k << ","
+            << report.j << "," << report.i << ")"
+            << " x=(" << geometry[0] << "," << geometry[1] << ","
+            << geometry[2] << ")"
+            << " dx=(" << geometry[3] << "," << geometry[4] << ","
+            << geometry[5] << ") volume=" << geometry[6] << std::endl
+            << "pic_parallel_shock gas_subtraction_floor_diag: before_rho="
+            << report.rho_before << " before_p=" << p_before
+            << " before_total_energy=" << report.energy_before
+            << " before_kinetic=" << report.kinetic_before
+            << " before_magnetic=" << report.magnetic
+            << " before_thermal=" << report.thermal_before
+            << " primitive_rho_snapshot=" << report.primitive_rho_snapshot
+            << " primitive_internal_energy_snapshot="
+            << report.primitive_internal_energy_snapshot
+            << " primitive_pressure_snapshot="
+            << primitive_pressure_snapshot
+            << " before_velocity=(" << gas_vx << "," << gas_vy << ","
+            << gas_vz << ")" << std::endl
+            << "pic_parallel_shock gas_subtraction_floor_diag: transaction_dm="
+            << transaction_dm << " transaction_dmomentum=("
+            << transaction_dmx << "," << transaction_dmy << ","
+            << transaction_dmz << ")"
+            << " transaction_denergy=" << transaction_de
+            << " transaction_removed_mass=" << transaction_removed_mass
+            << " carrier_particles=" << carrier_particles
+            << " stage_dm=" << report.dm
+            << " stage_dmomentum=(" << report.dmx << "," << report.dmy << ","
+            << report.dmz << ")"
+            << " stage_denergy=" << report.de
+            << " stage_removed_mass=" << stage_removed_mass
+            << " stage_particle_equivalent=" << stage_particle_equivalent
+            << " particle_state="
+            << (ps_particle_momentum_state ? "momentum_p_over_m" : "velocity")
+            << " removed_specific_momentum=(" << removed_state_x << ","
+            << removed_state_y << "," << removed_state_z << ")"
+            << " removed_specific_energy=" << removed_specific_energy << std::endl
+            << "pic_parallel_shock gas_subtraction_floor_diag: after_rho="
+            << report.rho_after << " after_p=" << p_after
+            << " required_p=" << p_required
+            << " pressure_margin=" << report.pressure_margin
+            << " density_margin=" << report.density_margin
+            << " after_total_energy=" << report.energy_after
+            << " after_kinetic=" << report.kinetic_after
+            << " after_thermal=" << report.thermal_after
+            << " kinetic_change="
+            << report.kinetic_after - report.kinetic_before
+            << " total_energy_draw=" << report.de
+            << " thermal_energy_loss="
+            << report.thermal_before - report.thermal_after << std::endl;
+}
+
 void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
   if (!ps_enable_subtraction) return;
   if (!(stage_weight > 0.0) || !std::isfinite(stage_weight)) {
@@ -2904,6 +3236,8 @@ void ApplyParallelShockGasSubtraction(Mesh *pm, const Real stage_weight) {
       ParallelShockGasSubtractionFloorStatus(pm, stage_weight, 0.0);
   if (floor_status[0] > 0 || floor_status[2] > 0 ||
       (floor_status[1] > 0 && !ps_allow_floor_clipped_subtraction)) {
+    PrintParallelShockGasSubtractionFloorDiagnostic(
+        pm, stage_weight, 0.0, floor_status);
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock gas subtraction would violate a fluid floor: "
@@ -3001,8 +3335,14 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
   ps_mignone_injection_due = false;
   ps_mignone_telemetry_printed = false;
   ps_mignone_local_swept_cells.clear();
+  ps_mignone_local_deferred_cells.clear();
   ps_mignone_tracer_mass_global = 0.0;
   ps_mignone_swept_mass_global = 0.0;
+  ps_mignone_hot_swept_mass_global = 0.0;
+  ps_mignone_deferred_swept_mass_global = 0.0;
+  ps_mignone_deferred_cells_global = 0;
+  ps_mignone_requested_before_deferral = 0;
+  ps_mignone_event_committed = false;
   ps_mignone_shock_x1_global = 0.0;
   ps_mignone_x1_min_global = 0.0;
   ps_mignone_x1_max_global = 0.0;
@@ -3024,6 +3364,7 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
   auto &u0 = pmhd->u0;
   auto &w0 = pmhd->w0;
   auto &size = pmbp->pmb->mb_size;
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
   if (ps_mignone_shock_mask.extent_int(0) != nmb ||
       ps_mignone_shock_mask.extent_int(1) != nx3 ||
       ps_mignone_shock_mask.extent_int(2) != nx2 ||
@@ -3033,9 +3374,12 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
   }
   auto shock_mask = ps_mignone_shock_mask;
   constexpr Real curvature_threshold = 0.2;
-  constexpr Real pressure_min_threshold = 15.0;
-  constexpr Real pressure_max_threshold = 250.0;
   constexpr Real tiny = 1.0e-30;
+  const Real shock_pressure_min =
+      ps_mignone_shock_pressure_min_factor*ps_p0;
+  const Real shock_pressure_max =
+      ps_mignone_shock_pressure_max_factor*ps_p0;
+  const Real hot_pressure_min = ps_mignone_hot_pressure_min_factor*ps_p0;
   par_for("ps_mignone_shock_detector", DevExeSpace(), 0, ncells - 1,
   KOKKOS_LAMBDA(const int idx) {
     const int i0 = idx % nx1;
@@ -3048,11 +3392,11 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
     const Real compression =
         w0(m, IVX, k, j, i + 1) - w0(m, IVX, k, j, i - 1) +
         w0(m, IVY, k, j + 1, i) - w0(m, IVY, k, j - 1, i);
-    const Real p = w0(m, IEN, k, j, i);
-    const Real pxm = w0(m, IEN, k, j, i - 1);
-    const Real pxp = w0(m, IEN, k, j, i + 1);
-    const Real pym = w0(m, IEN, k, j - 1, i);
-    const Real pyp = w0(m, IEN, k, j + 1, i);
+    const Real p = gm1*w0(m, IEN, k, j, i);
+    const Real pxm = gm1*w0(m, IEN, k, j, i - 1);
+    const Real pxp = gm1*w0(m, IEN, k, j, i + 1);
+    const Real pym = gm1*w0(m, IEN, k, j - 1, i);
+    const Real pyp = gm1*w0(m, IEN, k, j + 1, i);
     // Mignone et al. (2018), Eq. 74: sum the separately normalized
     // x- and y-direction pressure curvatures.
     const Real normalized_curvature =
@@ -3063,7 +3407,7 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
     for (int dj = -1; dj <= 1; ++dj) {
       for (int di = -1; di <= 1; ++di) {
         if (di == 0 && dj == 0) continue;
-        const Real pn = w0(m, IEN, k, j + dj, i + di);
+        const Real pn = gm1*w0(m, IEN, k, j + dj, i + di);
         pmin = fmin(pmin, pn);
         pmax = fmax(pmax, pn);
       }
@@ -3071,7 +3415,7 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
     shock_mask(m, k0, j0, i0) =
         (compression < 0.0 &&
          normalized_curvature > curvature_threshold &&
-         pmin < pressure_min_threshold && pmax > pressure_max_threshold) ? 1 : 0;
+         pmin < shock_pressure_min && pmax > shock_pressure_max) ? 1 : 0;
   });
 
   array_sum::GlobalSum local;
@@ -3091,7 +3435,13 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
     sum.the_array[0] += tracer_mass;
     if (shock_mask(m, k0, j0, i0) == 0) {
       sum.the_array[1] += tracer_mass;
-      if (tracer_mass > 0.0) sum.the_array[2] += 1.0;
+      // Require tagged material to be both swept and hot. This excludes cold
+      // tracer tails without redistributing their injection budget elsewhere.
+      if (tracer_mass > 0.0 &&
+          gm1*w0(m, IEN, k, j, i) > hot_pressure_min) {
+        sum.the_array[2] += 1.0;
+        sum.the_array[5] += tracer_mass;
+      }
     } else {
       const Real x1 = size.d_view(m).x1min +
           (static_cast<Real>(i0) + 0.5)*size.d_view(m).dx1;
@@ -3100,9 +3450,9 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
     }
   }, Kokkos::Sum<array_sum::GlobalSum>(local));
 
-  std::array<Real, 5> global = {
+  std::array<Real, 6> global = {
     local.the_array[0], local.the_array[1], local.the_array[2],
-    local.the_array[3], local.the_array[4]
+    local.the_array[3], local.the_array[4], local.the_array[5]
   };
 #if MPI_PARALLEL_ENABLED
   MPI_Allreduce(MPI_IN_PLACE, global.data(), static_cast<int>(global.size()),
@@ -3110,7 +3460,8 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
 #endif
   if (!std::isfinite(global[0]) || !std::isfinite(global[1]) ||
       global[0] < 0.0 || global[1] < 0.0 || global[1] > global[0] ||
-      global[2] < 0.0 || global[3] < 0.0 || !std::isfinite(global[4])) {
+      global[2] < 0.0 || global[3] < 0.0 || !std::isfinite(global[4]) ||
+      !std::isfinite(global[5]) || global[5] < 0.0 || global[5] > global[1]) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock Mignone tracer/shock totals are invalid."
@@ -3119,10 +3470,13 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
   }
   ps_mignone_tracer_mass_global = global[0];
   ps_mignone_swept_mass_global = global[1];
+  ps_mignone_hot_swept_mass_global = global[5];
   ps_mignone_shock_x1_global = (global[3] > 0.0) ?
       global[4]/global[3] : ShockSurfaceModelX1(pm->time);
   ps_mignone_injection_due =
-      global[3] > 0.0 && global[0] > 0.0 && global[1] > 0.8*global[0];
+      global[3] > 0.0 && global[0] > 0.0 &&
+      ps_mignone_hot_swept_mass_global >
+          ps_mignone_swept_fraction_trigger*global[0];
 
   if (ps_mignone_injection_due) {
     const int local_count = static_cast<int>(local.the_array[2]);
@@ -3141,7 +3495,8 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
       const int j = js + j0;
       const int k = ks + k0;
       const Real tracer_density = fmax(u0(m, scalar, k, j, i), 0.0);
-      if (tracer_density <= 0.0) return;
+      if (tracer_density <= 0.0 ||
+          gm1*w0(m, IEN, k, j, i) <= hot_pressure_min) return;
       const int n = Kokkos::atomic_fetch_add(&counter(), 1);
       MignoneSweptCell cell{};
       cell.m = m;
@@ -3169,20 +3524,9 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
     }
   }
 
-  // Reset after an injection, otherwise retain the accumulated scalar. In both
-  // cases the current shock cells seed T=1 for the upcoming MHD step.
-  const bool reset = ps_mignone_injection_due;
-  if (reset) {
-    const int n1 = u0.extent_int(4);
-    const int n2 = u0.extent_int(3);
-    const int n3 = u0.extent_int(2);
-    par_for("ps_mignone_clear_tracer", DevExeSpace(), 0, nmb - 1,
-            0, n3 - 1, 0, n2 - 1, 0, n1 - 1,
-    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      u0(m, scalar, k, j, i) = 0.0;
-      w0(m, scalar, k, j, i) = 0.0;
-    });
-  }
+  // Do not consume the accumulated cohort until particle creation and its
+  // matching gas subtraction have passed the carrier-local affordability gate.
+  // Current shock cells still seed T=1 for the upcoming MHD step.
   par_for("ps_mignone_update_tracer", DevExeSpace(), 0, ncells - 1,
   KOKKOS_LAMBDA(const int idx) {
     const int i0 = idx % nx1;
@@ -3193,47 +3537,339 @@ void PrepareMignoneTracerInjectionCycle(Mesh *pm) {
     const int j = js + j0;
     const int k = ks + k0;
     const Real rho = u0(m, IDN, k, j, i);
-    Real tracer_density = reset ? 0.0 : fmax(u0(m, scalar, k, j, i), 0.0);
+    Real tracer_density = fmax(u0(m, scalar, k, j, i), 0.0);
     if (shock_mask(m, k0, j0, i0) != 0) tracer_density = rho;
     u0(m, scalar, k, j, i) = tracer_density;
     w0(m, scalar, k, j, i) = tracer_density/rho;
   });
+}
 
-  if (ps_mignone_injection_due) {
-    Real x1_min_local = std::numeric_limits<Real>::max();
-    Real x1_max_local = -std::numeric_limits<Real>::max();
-    Real downstream_mass_local = 0.0;
-    size.template sync<HostMemSpace>();
-    for (const MignoneSweptCell &cell : ps_mignone_local_swept_cells) {
-      const auto &mb = size.h_view(cell.m);
-      const Real x1 = mb.x1min +
-          (static_cast<Real>(cell.i - is) + 0.5)*mb.dx1;
-      x1_min_local = std::min(x1_min_local, x1 - 0.5*mb.dx1);
-      x1_max_local = std::max(x1_max_local, x1 + 0.5*mb.dx1);
-      if (x1 < ps_mignone_shock_x1_global) downstream_mass_local += cell.mass;
+std::vector<int> MignoneCarrierFloorReasons(
+    Mesh *pm, const std::vector<GasDelta> &gas_deltas) {
+  const int ndelta = static_cast<int>(gas_deltas.size());
+  std::vector<int> reasons(static_cast<std::size_t>(ndelta), 0);
+  if (ndelta == 0) return reasons;
+
+  HostArray1D<GasDelta> host_deltas("ps_mignone_preflight_host", ndelta);
+  DvceArray1D<GasDelta> device_deltas("ps_mignone_preflight_device", ndelta);
+  for (int n = 0; n < ndelta; ++n) host_deltas(n) = gas_deltas[n];
+  Kokkos::deep_copy(device_deltas, host_deltas);
+  DvceArray1D<int> device_reasons("ps_mignone_preflight_reasons", ndelta);
+
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto &u0 = pmhd->u0;
+  auto &b0 = pmhd->b0;
+  const Real rho_floor = ps_rho_floor_frac*ps_rho0;
+  const Real p_floor = ps_p_floor_frac*ps_p0;
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  // Preparation precedes the RK source stage. Requiring half of the current
+  // thermal energy to remain gives the accepted transaction one-step margin;
+  // the source-stage floor check remains the final invariant.
+  constexpr Real retained_thermal_fraction = 0.5;
+  par_for("ps_mignone_preflight", DevExeSpace(), 0, ndelta - 1,
+  KOKKOS_LAMBDA(const int n) {
+    const GasDelta d = device_deltas(n);
+    int reason = 0;
+    if (!isfinite(d.dm) || !isfinite(d.dmx) || !isfinite(d.dmy) ||
+        !isfinite(d.dmz) || !isfinite(d.de) || d.dm <= 0.0) {
+      device_reasons(n) = 3;
+      return;
     }
-    Real x1_min_global = x1_min_local;
-    Real x1_max_global = x1_max_local;
-    Real downstream_mass_global = downstream_mass_local;
+    const Real rho_before = u0(d.m, IDN, d.k, d.j, d.i);
+    const Real rho_after = rho_before - d.dm;
+    if (!isfinite(rho_before) || !isfinite(rho_after)) {
+      reason = 3;
+    } else if (rho_after < rho_floor) {
+      reason = 1;
+    } else {
+      const Real mx_before = u0(d.m, IM1, d.k, d.j, d.i);
+      const Real my_before = u0(d.m, IM2, d.k, d.j, d.i);
+      const Real mz_before = u0(d.m, IM3, d.k, d.j, d.i);
+      const Real energy_before = u0(d.m, IEN, d.k, d.j, d.i);
+      const Real mx_after = mx_before - d.dmx;
+      const Real my_after = my_before - d.dmy;
+      const Real mz_after = mz_before - d.dmz;
+      const Real energy_after = energy_before - d.de;
+      const Real bx = 0.5*(b0.x1f(d.m, d.k, d.j, d.i) +
+                           b0.x1f(d.m, d.k, d.j, d.i + 1));
+      const Real by = 0.5*(b0.x2f(d.m, d.k, d.j, d.i) +
+                           b0.x2f(d.m, d.k, d.j + 1, d.i));
+      const Real bz = 0.5*(b0.x3f(d.m, d.k, d.j, d.i) +
+                           b0.x3f(d.m, d.k + 1, d.j, d.i));
+      const Real magnetic = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+      const Real kinetic_before =
+          0.5*(SQR(mx_before) + SQR(my_before) + SQR(mz_before))/rho_before;
+      const Real thermal_before = energy_before - kinetic_before - magnetic;
+      const Real kinetic_after =
+          0.5*(SQR(mx_after) + SQR(my_after) + SQR(mz_after))/rho_after;
+      const Real required_thermal = fmax(
+          retained_thermal_fraction*thermal_before, p_floor/gm1);
+      const Real required_energy = required_thermal + kinetic_after + magnetic;
+      if (!isfinite(mx_before) || !isfinite(my_before) ||
+          !isfinite(mz_before) || !isfinite(energy_before) ||
+          !isfinite(mx_after) || !isfinite(my_after) ||
+          !isfinite(mz_after) || !isfinite(energy_after) || !isfinite(bx) ||
+          !isfinite(by) || !isfinite(bz) || !isfinite(thermal_before) ||
+          !isfinite(required_energy)) {
+        reason = 3;
+      } else if (energy_after < required_energy) {
+        reason = 2;
+      }
+    }
+    device_reasons(n) = reason;
+  });
+  auto host_reasons = Kokkos::create_mirror_view_and_copy(
+      HostMemSpace(), device_reasons);
+  for (int n = 0; n < ndelta; ++n) reasons[n] = host_reasons(n);
+  return reasons;
+}
+
+void SelectAffordableMignoneCarriers(
+    Mesh *pm, particles::Particles *ppart, const std::vector<ShockCell> &cells,
+    std::vector<GlobalShockCell> &global_cells,
+    std::vector<Real> &global_area_prefix, Real &local_area,
+    Real &global_area) {
+  if (!InjectionModeMignoneTracer()) return;
+  const std::vector<GlobalShockCell> all_cells = global_cells;
+  std::vector<unsigned char> active(all_cells.size(), 1);
+  const Real surface_vx = ps_shock_speed + FrameVelocityOffset(pm->time);
+  const Real pinj = ps_vinj_over_u0*ps_u0;
+  const Real vinj = VelocityMagnitudeFromMomentumMagnitude(ppart, pinj);
+  bool first_pass = true;
+
+  while (true) {
+    std::vector<std::size_t> active_indices;
+    std::vector<Real> active_prefix;
+    active_indices.reserve(all_cells.size());
+    active_prefix.reserve(all_cells.size());
+    Real active_mass = 0.0;
+    for (std::size_t idx = 0; idx < all_cells.size(); ++idx) {
+      if (active[idx] == 0) continue;
+      active_mass += all_cells[idx].area;
+      active_indices.push_back(idx);
+      active_prefix.push_back(active_mass);
+    }
+
+    int proposed_count = 0;
+    const Real mass_budget = ps_mass_reservoir_global + ps_eta*active_mass;
+    if (active_mass > 0.0 && mass_budget > 0.0) {
+      const Real proposed_real = std::floor(
+          mass_budget/ps_particle_macro_mass);
+      if (!std::isfinite(proposed_real) ||
+          proposed_real > static_cast<Real>(std::numeric_limits<int>::max())) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                  << __LINE__ << std::endl
+                  << "pic_parallel_shock Mignone preflight particle count "
+                  << "exceeds int range." << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
+      proposed_count = static_cast<int>(proposed_real);
+    }
+    if (first_pass) {
+      ps_mignone_requested_before_deferral = proposed_count;
+      first_pass = false;
+    }
+    if (proposed_count <= 0) break;
+
+    std::map<std::size_t, GasDelta> local_deltas;
+    const Real phase = TaggedUniform01(ps_next_tag, 0);
+    for (int n = 0; n < proposed_count; ++n) {
+      const Real draw = (static_cast<Real>(n) + phase)*active_mass/
+          static_cast<Real>(proposed_count);
+      auto prefix_it = std::lower_bound(
+          active_prefix.begin(), active_prefix.end(), draw);
+      std::size_t active_index = static_cast<std::size_t>(
+          std::distance(active_prefix.begin(), prefix_it));
+      if (active_index >= active_indices.size()) {
+        active_index = active_indices.size() - 1;
+      }
+      const std::size_t idx = active_indices[active_index];
+      const GlobalShockCell &global_cell = all_cells[idx];
+      if (global_cell.owner_rank != global_variable::my_rank) continue;
+      if (global_cell.local_cell_index < 0 ||
+          global_cell.local_cell_index >= static_cast<int>(cells.size())) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                  << __LINE__ << std::endl
+                  << "pic_parallel_shock Mignone preflight carrier metadata "
+                  << "is invalid." << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
+      const ShockCell &cell = cells[global_cell.local_cell_index];
+      auto delta_it = local_deltas.find(idx);
+      if (delta_it == local_deltas.end()) {
+        GasDelta delta{};
+        delta.m = cell.m;
+        delta.k = cell.k;
+        delta.j = cell.j;
+        delta.i = cell.i;
+        delta.vol = cell.vol;
+        delta_it = local_deltas.emplace(idx, delta).first;
+      }
+      const std::int64_t proposal_tag =
+          ps_next_tag + static_cast<std::int64_t>(n);
+      const ParallelShockInjectedState state = MakeParallelShockInjectedState(
+          ppart, proposal_tag, surface_vx, vinj, true);
+      const Real mass_density = ps_particle_macro_mass/cell.vol;
+      delta_it->second.dm += mass_density;
+      delta_it->second.dmx += mass_density*state.state_x;
+      delta_it->second.dmy += mass_density*state.state_y;
+      delta_it->second.dmz += mass_density*state.state_z;
+      delta_it->second.de += mass_density*state.energy;
+    }
+
+    std::vector<std::size_t> local_indices;
+    std::vector<GasDelta> deltas;
+    local_indices.reserve(local_deltas.size());
+    deltas.reserve(local_deltas.size());
+    for (const auto &entry : local_deltas) {
+      local_indices.push_back(entry.first);
+      deltas.push_back(entry.second);
+    }
+    const std::vector<int> reasons =
+        MignoneCarrierFloorReasons(pm, deltas);
+    std::vector<int> rejected(all_cells.size(), 0);
+    int nonfinite_local = 0;
+    for (std::size_t n = 0; n < reasons.size(); ++n) {
+      if (reasons[n] == 3) {
+        ++nonfinite_local;
+      } else if (reasons[n] != 0) {
+        rejected[local_indices[n]] = 1;
+      }
+    }
+    int nonfinite_global = nonfinite_local;
 #if MPI_PARALLEL_ENABLED
-    MPI_Allreduce(&x1_min_local, &x1_min_global, 1, MPI_ATHENA_REAL, MPI_MIN,
+    MPI_Allreduce(MPI_IN_PLACE, rejected.data(),
+                  static_cast<int>(rejected.size()), MPI_INT, MPI_MAX,
                   MPI_COMM_WORLD);
-    MPI_Allreduce(&x1_max_local, &x1_max_global, 1, MPI_ATHENA_REAL, MPI_MAX,
+    MPI_Allreduce(&nonfinite_local, &nonfinite_global, 1, MPI_INT, MPI_SUM,
                   MPI_COMM_WORLD);
-    MPI_Allreduce(&downstream_mass_local, &downstream_mass_global, 1,
-                  MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
 #endif
-    ps_mignone_x1_min_global = x1_min_global;
-    ps_mignone_x1_max_global = x1_max_global;
-    ps_mignone_downstream_fraction =
-        downstream_mass_global/ps_mignone_swept_mass_global;
-    ps_mignone_last_injection_time = pm->time;
-    ps_mignone_last_accumulation_dt =
-        pm->time - ps_mignone_accumulation_start_time;
-    ps_mignone_accumulation_start_time = pm->time;
-    ps_mignone_last_swept_mass = ps_mignone_swept_mass_global;
-    ++ps_mignone_injection_events;
+    if (nonfinite_global != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                << __LINE__ << std::endl
+                << "pic_parallel_shock Mignone carrier preflight found a "
+                << "non-finite gas or particle transaction." << std::endl;
+      restart_utils::AbortOnFatalError();
+    }
+
+    int rejected_count = 0;
+    for (std::size_t idx = 0; idx < rejected.size(); ++idx) {
+      if (active[idx] != 0 && rejected[idx] != 0) {
+        active[idx] = 0;
+        ++rejected_count;
+      }
+    }
+    if (rejected_count == 0) break;
   }
+
+  global_cells.clear();
+  global_area_prefix.clear();
+  local_area = 0.0;
+  global_area = 0.0;
+  ps_mignone_local_deferred_cells.clear();
+  ps_mignone_deferred_cells_global = 0;
+  ps_mignone_deferred_swept_mass_global = 0.0;
+  for (std::size_t idx = 0; idx < all_cells.size(); ++idx) {
+    const GlobalShockCell &cell = all_cells[idx];
+    if (active[idx] != 0) {
+      global_area += cell.area;
+      global_cells.push_back(cell);
+      global_area_prefix.push_back(global_area);
+      if (cell.owner_rank == global_variable::my_rank) local_area += cell.area;
+      continue;
+    }
+    ++ps_mignone_deferred_cells_global;
+    ps_mignone_deferred_swept_mass_global += cell.area;
+    if (cell.owner_rank == global_variable::my_rank) {
+      if (cell.local_cell_index < 0 ||
+          cell.local_cell_index >=
+              static_cast<int>(ps_mignone_local_swept_cells.size())) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                  << __LINE__ << std::endl
+                  << "pic_parallel_shock deferred Mignone carrier metadata "
+                  << "is invalid." << std::endl;
+        restart_utils::AbortOnFatalError();
+      }
+      ps_mignone_local_deferred_cells.push_back(
+          ps_mignone_local_swept_cells[cell.local_cell_index]);
+    }
+  }
+}
+
+void CommitMignoneTracerInjectionCycle(Mesh *pm) {
+  if (!InjectionModeMignoneTracer() || !ps_mignone_injection_due) return;
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  auto *pmhd = pmbp->pmhd;
+  auto &u0 = pmhd->u0;
+  auto &w0 = pmhd->w0;
+  auto &size = pmbp->pmb->mb_size;
+  const int scalar = pmhd->nmhd;
+  const int nmb = pmbp->nmb_thispack;
+  const int n1 = u0.extent_int(4);
+  const int n2 = u0.extent_int(3);
+  const int n3 = u0.extent_int(2);
+  par_for("ps_mignone_clear_committed_tracer", DevExeSpace(), 0, nmb - 1,
+          0, n3 - 1, 0, n2 - 1, 0, n1 - 1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    u0(m, scalar, k, j, i) = 0.0;
+    w0(m, scalar, k, j, i) = 0.0;
+  });
+
+  const int ndeferred =
+      static_cast<int>(ps_mignone_local_deferred_cells.size());
+  if (ndeferred > 0) {
+    HostArray1D<MignoneSweptCell> host_cells(
+        "ps_mignone_deferred_host", ndeferred);
+    DvceArray1D<MignoneSweptCell> device_cells(
+        "ps_mignone_deferred_device", ndeferred);
+    for (int n = 0; n < ndeferred; ++n) {
+      host_cells(n) = ps_mignone_local_deferred_cells[n];
+    }
+    Kokkos::deep_copy(device_cells, host_cells);
+    par_for("ps_mignone_restore_deferred_tracer", DevExeSpace(),
+            0, ndeferred - 1,
+    KOKKOS_LAMBDA(const int n) {
+      const MignoneSweptCell cell = device_cells(n);
+      const Real vol = size.d_view(cell.m).dx1*size.d_view(cell.m).dx2*
+          size.d_view(cell.m).dx3;
+      const Real tracer_density = cell.mass/vol;
+      const Real rho = u0(cell.m, IDN, cell.k, cell.j, cell.i);
+      u0(cell.m, scalar, cell.k, cell.j, cell.i) = tracer_density;
+      w0(cell.m, scalar, cell.k, cell.j, cell.i) = tracer_density/rho;
+    });
+  }
+
+  const auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int js = indcs.js;
+  const int ks = indcs.ks;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int ncells = nmb*nx3*nx2*nx1;
+  auto shock_mask = ps_mignone_shock_mask;
+  par_for("ps_mignone_reseed_committed_tracer", DevExeSpace(), 0, ncells - 1,
+  KOKKOS_LAMBDA(const int idx) {
+    const int i0 = idx % nx1;
+    const int j0 = (idx/nx1) % nx2;
+    const int k0 = (idx/(nx1*nx2)) % nx3;
+    const int m = idx/(nx1*nx2*nx3);
+    if (shock_mask(m, k0, j0, i0) == 0) return;
+    const int i = is + i0;
+    const int j = js + j0;
+    const int k = ks + k0;
+    const Real rho = u0(m, IDN, k, j, i);
+    u0(m, scalar, k, j, i) = rho;
+    w0(m, scalar, k, j, i) = 1.0;
+  });
+
+  ps_mignone_last_injection_time = pm->time;
+  ps_mignone_last_accumulation_dt =
+      pm->time - ps_mignone_accumulation_start_time;
+  ps_mignone_accumulation_start_time = pm->time;
+  ps_mignone_last_swept_mass = ps_mignone_swept_mass_global;
+  ++ps_mignone_injection_events;
+  ps_mignone_event_committed = true;
 }
 
 void PrintMignoneInjectionTelemetry(Mesh *pm, const int injected_count) {
@@ -3243,18 +3879,35 @@ void PrintMignoneInjectionTelemetry(Mesh *pm, const int injected_count) {
   }
   ps_mignone_telemetry_printed = true;
   if (global_variable::my_rank != 0) return;
+  const Real rejected_swept_fraction = (ps_mignone_swept_mass_global > 0.0) ?
+      1.0 - ps_mignone_hot_swept_mass_global/ps_mignone_swept_mass_global : 0.0;
+  const int event = ps_mignone_injection_events +
+      (ps_mignone_event_committed ? 0 : 1);
+  const Real accumulation_dt = ps_mignone_event_committed ?
+      ps_mignone_last_accumulation_dt :
+      pm->time - ps_mignone_accumulation_start_time;
   std::cout << std::setprecision(17)
             << "pic_parallel_shock mignone_injection_diag: event="
-            << ps_mignone_injection_events << " cycle=" << pm->ncycle
+            << event << " cycle=" << pm->ncycle
             << " time=" << pm->time
-            << " accumulation_dt=" << ps_mignone_last_accumulation_dt
+            << " accumulation_dt=" << accumulation_dt
             << " tracer_mass=" << ps_mignone_tracer_mass_global
             << " swept_mass=" << ps_mignone_swept_mass_global
+            << " swept_fraction_trigger="
+            << ps_mignone_swept_fraction_trigger
+            << " hot_swept_mass=" << ps_mignone_hot_swept_mass_global
+            << " rejected_swept_fraction=" << rejected_swept_fraction
+            << " hot_pressure_min="
+            << ps_mignone_hot_pressure_min_factor*ps_p0
             << " shock_x=" << ps_mignone_shock_x1_global
             << " injected_x_min=" << ps_mignone_x1_min_global
             << " injected_x_max=" << ps_mignone_x1_max_global
             << " downstream_fraction=" << ps_mignone_downstream_fraction
-            << " injected_count=" << injected_count << std::endl;
+            << " requested_count=" << ps_injection_throttle_requested
+            << " injected_count=" << injected_count
+            << " deferred_cells=" << ps_mignone_deferred_cells_global
+            << " deferred_swept_mass="
+            << ps_mignone_deferred_swept_mass_global << std::endl;
 }
 
 void PrepareParallelShockInjectionTransaction(Mesh *pm) {
@@ -3592,6 +4245,22 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
               << "the global reduction." << std::endl;
     restart_utils::AbortOnFatalError();
   }
+  if (InjectionModeMignoneTracer() &&
+      std::abs(global_running_area - ps_mignone_hot_swept_mass_global) >
+          area_tolerance) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock gathered Mignone carrier mass does not match "
+              << "the hot swept-mass reduction." << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (InjectionModeMignoneTracer()) {
+    SeedNextTag(ppart, pm->time);
+    SelectAffordableMignoneCarriers(
+        pm, ppart, cells, fallback_global_cells,
+        fallback_global_area_prefix, area_total, global_running_area);
+    reduced_area_global = global_running_area;
+  }
 
   // Resolve only this rank's downstream strip in logical cell space. Every rank
   // has the same requested-key order, so a single count reduction proves that
@@ -3794,6 +4463,9 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
 
   int ninj_global = 0;
   Real reservoir_after = ps_mass_reservoir_global;
+  if (InjectionModeMignoneTracer()) {
+    ps_injection_throttle_requested = ps_mignone_requested_before_deferral;
+  }
   if (global_running_area > 0.0) {
     const Real sweep_speed = ps_u0 + ps_shock_speed;
     const Real prescribed_mass = InjectionModeMignoneTracer() ?
@@ -3808,15 +4480,23 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
                   << "pic_parallel_shock injected particle count exceeds int range." << std::endl;
         restart_utils::AbortOnFatalError();
       }
-      ps_injection_throttle_requested = static_cast<int>(ninj_real);
-      ninj_global = std::min(ps_injection_throttle_requested,
-                             ps_injection_throttle_cap);
+      const int budget_count = static_cast<int>(ninj_real);
+      if (InjectionModeMignoneTracer()) {
+        ninj_global = budget_count;
+      } else {
+        ps_injection_throttle_requested = budget_count;
+        ninj_global = std::min(ps_injection_throttle_requested,
+                               ps_injection_throttle_cap);
+      }
       reservoir_after = mass_budget -
-          static_cast<Real>(ps_injection_throttle_requested)*ps_particle_macro_mass;
+          static_cast<Real>(budget_count)*ps_particle_macro_mass;
     }
   }
   if (ninj_global <= 0) {
     ps_mass_reservoir_global = reservoir_after;
+    if (InjectionModeMignoneTracer() && global_running_area > 0.0) {
+      CommitMignoneTracerInjectionCycle(pm);
+    }
     StoreRuntimeStateForRestart(pm->time);
     PrintMignoneInjectionTelemetry(pm, 0);
     if (global_variable::my_rank == 0 && ps_throttle_injection_at_floor &&
@@ -4332,6 +5012,9 @@ void PrepareParallelShockInjectionTransaction(Mesh *pm) {
   const int old_npart = ppart->nprtcl_thispack;
   const int ninject = static_cast<int>(injected.size());
   const int new_npart = old_npart + ninject;
+  if (InjectionModeMignoneTracer()) {
+    CommitMignoneTracerInjectionCycle(pm);
+  }
   ps_mass_reservoir_global = reservoir_after;
   ps_next_tag = tag_base + static_cast<std::int64_t>(ninj_global);
   ps_injected_cr_count_global += injected_global[0];
@@ -5266,6 +5949,11 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_mignone_injection_due = false;
   ps_mignone_telemetry_printed = false;
   ps_mignone_local_swept_cells.clear();
+  ps_mignone_local_deferred_cells.clear();
+  ps_mignone_deferred_swept_mass_global = 0.0;
+  ps_mignone_deferred_cells_global = 0;
+  ps_mignone_requested_before_deferral = 0;
+  ps_mignone_event_committed = false;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   if (pmbp->pmhd == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -5321,6 +6009,10 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_b0 = pin->GetOrAddReal("problem", "ps_b0", 1.0);
   ps_eta = pin->GetOrAddReal("problem", "ps_eta", 1.0e-3);
   ps_vinj_over_u0 = pin->GetOrAddReal("problem", "ps_vinj_over_u0", std::sqrt(10.0));
+  ps_mignone_swept_fraction_trigger = pin->GetOrAddReal(
+      "problem", "ps_mignone_swept_fraction_trigger", 0.8);
+  ps_mignone_hot_pressure_min_factor = pin->GetOrAddReal(
+      "problem", "ps_mignone_hot_pressure_min_factor", 30.0);
   ps_inject_half_width_cells = pin->GetOrAddReal("problem", "ps_inject_half_width_cells", 0.5);
   ps_subtract_stencil_cells = pin->GetOrAddInteger("problem", "ps_subtract_stencil_cells", 1);
   ps_enable_surface_averaged_subtraction = pin->GetOrAddBoolean(
@@ -5419,6 +6111,23 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock floor fractions must be finite and non-negative."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (!std::isfinite(ps_mignone_swept_fraction_trigger) ||
+      ps_mignone_swept_fraction_trigger <= 0.0 ||
+      ps_mignone_swept_fraction_trigger >= 1.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "ps_mignone_swept_fraction_trigger must be finite and in (0,1)."
+              << std::endl;
+    restart_utils::AbortOnFatalError();
+  }
+  if (!std::isfinite(ps_mignone_hot_pressure_min_factor) ||
+      ps_mignone_hot_pressure_min_factor <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "ps_mignone_hot_pressure_min_factor must be finite and > 0."
               << std::endl;
     restart_utils::AbortOnFatalError();
   }
@@ -5570,13 +6279,14 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     if (!fixed_uniform_2d || !pmbp->ppart->pic_enable_2d3v ||
         pmbp->pmhd->nscalars != 1 || !ps_enable_injection ||
         !ps_enable_subtraction || ps_enable_surface_averaged_subtraction ||
-        ps_subtract_stencil_cells != 1 || ps_enable_frame_tracking) {
+        ps_subtract_stencil_cells != 1 || ps_enable_frame_tracking ||
+        ps_throttle_injection_at_floor) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "ps_injection_mode=mignone_tracer requires a fixed uniform "
                 << "2D3V mesh, exactly one MHD passive scalar, local conservative "
                 << "gas subtraction with a one-cell stencil, and frame tracking "
-                << "disabled." << std::endl;
+                << "and the legacy global throttle disabled." << std::endl;
       restart_utils::AbortOnFatalError();
     }
   }

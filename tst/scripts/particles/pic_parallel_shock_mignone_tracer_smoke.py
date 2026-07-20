@@ -28,6 +28,7 @@ _BASENAME = "pic_parallel_shock_mignone_tracer_smoke"
 _PRE_BASENAME = _BASENAME + "_pre"
 _CONTINUED_BASENAME = _BASENAME + "_continued"
 _SINGLE_BLOCK_BASENAME = _BASENAME + "_single_block"
+_ALL_DEFER_BASENAME = _BASENAME + "_all_defer"
 _DIAG_PREFIX = "pic_parallel_shock mignone_injection_diag:"
 _MACRO_MASS = 0.05
 _DX1 = 10.0
@@ -52,6 +53,7 @@ def _remove_outputs():
             _PRE_BASENAME,
             _CONTINUED_BASENAME,
             _SINGLE_BLOCK_BASENAME,
+            _ALL_DEFER_BASENAME,
         ]
         for basename in basenames:
             for path in glob.glob(
@@ -94,8 +96,14 @@ def _restart_state(basename):
     parameters = _restart_problem_parameters(path)
     required = [
         "ps_injection_mode",
+        "ps_mass_reservoir_global",
         "ps_injected_cr_count_global",
         "ps_injected_cr_mass_global",
+        "ps_injected_cr_momentum_x1_global",
+        "ps_injected_cr_momentum_x2_global",
+        "ps_injected_cr_momentum_x3_global",
+        "ps_injected_cr_energy_global",
+        "ps_next_tag",
         "ps_mignone_accumulation_start_time",
         "ps_mignone_last_injection_time",
         "ps_mignone_last_accumulation_dt",
@@ -107,8 +115,19 @@ def _restart_state(basename):
         raise RuntimeError("Restart metadata is missing " + repr(missing))
     return {
         "injection_mode": parameters["ps_injection_mode"],
+        "mass_reservoir": float(parameters["ps_mass_reservoir_global"]),
         "injected_count": float(parameters["ps_injected_cr_count_global"]),
         "injected_mass": float(parameters["ps_injected_cr_mass_global"]),
+        "injected_momentum": tuple(
+            float(parameters[name])
+            for name in (
+                "ps_injected_cr_momentum_x1_global",
+                "ps_injected_cr_momentum_x2_global",
+                "ps_injected_cr_momentum_x3_global",
+            )
+        ),
+        "injected_energy": float(parameters["ps_injected_cr_energy_global"]),
+        "next_tag": int(parameters["ps_next_tag"]),
         "accumulation_start_time": float(
             parameters["ps_mignone_accumulation_start_time"]
         ),
@@ -142,7 +161,13 @@ def _particle_snapshot(basename):
 
 
 def _parse_diagnostics(output):
-    integer_fields = {"event", "cycle", "injected_count"}
+    integer_fields = {
+        "event",
+        "cycle",
+        "requested_count",
+        "injected_count",
+        "deferred_cells",
+    }
     required = {
         "event",
         "cycle",
@@ -150,11 +175,18 @@ def _parse_diagnostics(output):
         "accumulation_dt",
         "tracer_mass",
         "swept_mass",
+        "swept_fraction_trigger",
+        "hot_swept_mass",
+        "rejected_swept_fraction",
+        "hot_pressure_min",
         "shock_x",
         "injected_x_min",
         "injected_x_max",
         "downstream_fraction",
+        "requested_count",
         "injected_count",
+        "deferred_cells",
+        "deferred_swept_mass",
     }
     diagnostics = []
     for line in output.splitlines():
@@ -238,6 +270,24 @@ def run(**kwargs):
     continued_output = (continued.stdout or "") + (continued.stderr or "")
     if continued.returncode != 0:
         raise RuntimeError("Mignone accumulation restart failed\n" + continued_output)
+
+    all_defer_command = command + [
+        "job/basename=" + _ALL_DEFER_BASENAME,
+        "problem/ps_p_floor_frac=1.0e12",
+        "time/nlim=60",
+    ]
+    logger.info(
+        "Executing Mignone all-defer stress: %s", " ".join(all_defer_command)
+    )
+    all_defer = subprocess.run(
+        all_defer_command,
+        cwd=_athena_exe_dir(),
+        capture_output=True,
+        text=True,
+    )
+    all_defer_output = (all_defer.stdout or "") + (all_defer.stderr or "")
+    if all_defer.returncode != 0:
+        raise RuntimeError("Mignone all-defer stress failed\n" + all_defer_output)
     _RESULTS.update(
         {
             "continuous": continuous,
@@ -251,6 +301,11 @@ def run(**kwargs):
                 "diagnostics": _parse_diagnostics(continued_output),
                 "restart": _restart_state(_CONTINUED_BASENAME),
                 "particles": _particle_snapshot(_CONTINUED_BASENAME),
+            },
+            "all_defer": {
+                "diagnostics": _parse_diagnostics(all_defer_output),
+                "restart": _restart_state(_ALL_DEFER_BASENAME),
+                "output": all_defer_output,
             },
         }
     )
@@ -293,10 +348,15 @@ def analyze():
         "accumulation_dt",
         "tracer_mass",
         "swept_mass",
+        "swept_fraction_trigger",
+        "hot_swept_mass",
+        "rejected_swept_fraction",
+        "hot_pressure_min",
         "shock_x",
         "injected_x_min",
         "injected_x_max",
         "downstream_fraction",
+        "deferred_swept_mass",
     ]
     finite = all(
         math.isfinite(event[name])
@@ -306,9 +366,22 @@ def analyze():
     positive_budget = all(
         event["tracer_mass"] > 0.0
         and event["swept_mass"] > 0.0
-        and event["swept_mass"] > 0.8 * event["tracer_mass"]
+        and event["swept_fraction_trigger"] == 0.8
+        and event["hot_pressure_min"] == 30.0
+        and event["hot_swept_mass"] > 0.0
+        and event["hot_swept_mass"] <= event["swept_mass"]
+        and event["hot_swept_mass"]
+        > event["swept_fraction_trigger"] * event["tracer_mass"]
         and event["swept_mass"] <= (1.0 + 1.0e-12) * event["tracer_mass"]
+        and 0.0 <= event["rejected_swept_fraction"] <= 1.0
+        and abs(
+            event["rejected_swept_fraction"]
+            - (1.0 - event["hot_swept_mass"] / event["swept_mass"])
+        ) <= 1.0e-12
+        and event["requested_count"] == event["injected_count"]
         and event["injected_count"] > 0
+        and event["deferred_cells"] == 0
+        and event["deferred_swept_mass"] == 0.0
         for event in diagnostics
     )
     event_ids = [event["event"] for event in diagnostics]
@@ -330,16 +403,65 @@ def analyze():
         and np.all(np.diff(event_times) > 0.0)
     )
     injected_from_events = sum(event["injected_count"] for event in diagnostics)
+    reservoir = 0.0
+    requested_counts = []
+    for event in diagnostics:
+        budget = reservoir + 2.0e-3 * event["hot_swept_mass"]
+        requested = math.floor(budget / _MACRO_MASS)
+        requested_counts.append(requested)
+        reservoir = budget - requested * _MACRO_MASS
+    hot_swept_mass_budget = requested_counts == [
+        event["injected_count"] for event in diagnostics
+    ]
     particle_count = int(particles["ptag"].size)
     birth_times_match_events = all(
         np.any(np.abs(particles["birth_time"] - event["time"]) <= 1.0e-5)
         for event in diagnostics
+    )
+    all_defer = _RESULTS["all_defer"]
+    all_defer_diagnostics = all_defer["diagnostics"]
+    all_defer_restart = all_defer["restart"]
+    repeated_defer_retries = any(
+        right["cycle"] == left["cycle"] + 1
+        for left, right in zip(
+            all_defer_diagnostics, all_defer_diagnostics[1:]
+        )
+    )
+    all_defer_events_are_clean = all(
+        event["event"] == 1
+        and event["requested_count"] > 0
+        and event["injected_count"] == 0
+        and event["deferred_cells"] > 0
+        and event["deferred_swept_mass"] > 0.0
+        and event["deferred_swept_mass"]
+        <= (1.0 + 1.0e-12) * event["hot_swept_mass"]
+        for event in all_defer_diagnostics
+    )
+    all_defer_state_unchanged = (
+        all_defer_restart["injection_mode"] == "mignone_tracer"
+        and all_defer_restart["mass_reservoir"] == 0.0
+        and all_defer_restart["injected_count"] == 0.0
+        and all_defer_restart["injected_mass"] == 0.0
+        and all(value == 0.0 for value in all_defer_restart["injected_momentum"])
+        and all_defer_restart["injected_energy"] == 0.0
+        and all_defer_restart["next_tag"] == 0
+        and all_defer_restart["injection_events"] == 0
+        and all_defer_restart["accumulation_start_time"] == 0.0
+        and all_defer_restart["last_injection_time"] == -1.0
+        and all_defer_restart["last_accumulation_dt"] == 0.0
+        and all_defer_restart["last_swept_mass"] == 0.0
+    )
+    no_fatal_floor_diagnostic = (
+        "gas_subtraction_floor_diag:" not in all_defer["output"]
+        and "gas subtraction would violate a fluid floor"
+        not in all_defer["output"]
     )
     summary = {
         "event_count": len(diagnostics),
         "event_times": event_times.tolist(),
         "accumulation_dt": accumulation_dt.tolist(),
         "injected_from_events": injected_from_events,
+        "hot_swept_mass_budget": hot_swept_mass_budget,
         "active_particle_count": particle_count,
         "local_downstream": local_downstream,
         "cadence_is_sane": cadence_is_sane,
@@ -348,6 +470,11 @@ def analyze():
         "restart_equivalent": restart_equivalent,
         "checkpoint_during_accumulation": checkpoint_during_accumulation,
         "decomposition_equivalent": decomposition_equivalent,
+        "all_defer_attempts": len(all_defer_diagnostics),
+        "repeated_defer_retries": repeated_defer_retries,
+        "all_defer_events_are_clean": all_defer_events_are_clean,
+        "all_defer_state_unchanged": all_defer_state_unchanged,
+        "no_fatal_floor_diagnostic": no_fatal_floor_diagnostic,
     }
     logger.info("Mignone tracer smoke metrics: %s", summary)
     return (
@@ -365,9 +492,11 @@ def analyze():
         and restart["last_accumulation_dt"] == diagnostics[-1]["accumulation_dt"]
         and restart["last_swept_mass"] == diagnostics[-1]["swept_mass"]
         and injected_from_events == particle_count
+        and hot_swept_mass_budget
         and restart["injected_count"] == particle_count
         and abs(restart["injected_mass"] - particle_count * _MACRO_MASS)
         <= 1.0e-12
+        and restart["next_tag"] == particle_count
         and np.unique(particles["ptag"]).size == particle_count
         and np.all(particles["cr_source"] == 1)
         and np.all(particles["macro_weight"] == 1.0)
@@ -375,4 +504,9 @@ def analyze():
         and checkpoint_during_accumulation
         and restart_equivalent
         and decomposition_equivalent
+        and len(all_defer_diagnostics) >= 2
+        and repeated_defer_retries
+        and all_defer_events_are_clean
+        and all_defer_state_unchanged
+        and no_fatal_floor_diagnostic
     )
