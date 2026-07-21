@@ -1,0 +1,144 @@
+# Strong, grid-aligned guide-field ringing reproducer.
+#
+# Build with -DPROBLEM=turb.  Keep HLLD and RK2 fixed, and run this input three
+# times with mhd/reconstruct=plm, ppmx, and wenoz.  See
+# docs/mhd_ringing_reproducer.md for commands and the expected cell-scale wake.
+
+<comment>
+problem = strong-guide-field driven turbulence ringing reproducer
+
+<job>
+basename = turb_ringing_wenoz
+
+<mesh>
+nghost = 3
+
+nx1 = 256
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 256
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 256
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+# Four blocks per direction: 64 blocks total.
+nx1 = 64
+nx2 = 64
+nx3 = 64
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.33
+nlim = -1
+tlim = 1.5
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = wenoz
+rsolver = hlld
+gamma = 1.00001
+
+<problem>
+beta = 0.04
+# turb.cpp: ifield=2 initializes a spatially uniform B3 guide field.
+ifield = 2
+user_hist = true
+
+<turb_driving>
+# Continuously driven, solenoidal, low-wavenumber Ornstein-Uhlenbeck forcing.
+turb_flag = 2
+tcorr = 1.0
+dt_update = 0.01
+normalization = edot
+dedt = 0.25
+spectrum = parabolic
+npeak = 2
+nlow = 1
+nhigh = 3
+min_kz = 1
+max_kz = 3
+driving_type = 0
+sol_fraction = 1.0
+rseed = 1
+
+<output1>
+file_type = hst
+dt = 0.015625
+data_format = %24.16e
+
+<output2>
+file_type = rst
+dt = 0.25
+single_file_per_rank = true
+
+<output3>
+file_type = bin
+variable = mhd_w_bcc
+id = full_mhd_w_bcc
+dt = 0.25
+single_file_per_rank = true
+
+# Exact diagnostic plane through the first marked ringing site.  On this even
+# grid, slice_x1=0 selects the cell centered at x1=0.001953125.
+<output4>
+file_type = bin
+variable = mhd_bmag
+slice_x1 = 0.0
+id = slice_x1_0_bmag
+dt = 0.25
+single_file_per_rank = true
+
+<output5>
+file_type = bin
+variable = mhd_curv_alt
+slice_x1 = 0.0
+id = slice_x1_0_curvature
+dt = 0.25
+single_file_per_rank = true
+
+<output6>
+file_type = bin
+variable = mhd_j2
+slice_x1 = 0.0
+id = slice_x1_0_current2
+dt = 0.25
+single_file_per_rank = true
+
+# Plane through the second marked site.  The nearest selected cell center is
+# x2=0.017578125.
+<output7>
+file_type = bin
+variable = mhd_bmag
+slice_x2 = 0.01953125
+id = slice_x2_001953125_bmag
+dt = 0.25
+single_file_per_rank = true
+
+<output8>
+file_type = bin
+variable = mhd_curv_alt
+slice_x2 = 0.01953125
+id = slice_x2_001953125_curvature
+dt = 0.25
+single_file_per_rank = true
+
+<output9>
+file_type = bin
+variable = mhd_j2
+slice_x2 = 0.01953125
+id = slice_x2_001953125_current2
+dt = 0.25
+single_file_per_rank = true
