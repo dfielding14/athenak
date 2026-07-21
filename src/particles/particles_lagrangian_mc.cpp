@@ -354,6 +354,29 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
   if (!IsFluxTracer()) return;
 
   Mesh *pm = pmy_pack->pmesh;
+  constexpr Real eps = 64.0*std::numeric_limits<Real>::epsilon();
+
+  // The eligibility scan below requires a full device-to-host copy of the fluid
+  // state. Most timesteps have no scheduled injection event, so reject them before
+  // allocating host mirrors or copying the entire mesh. This is especially important
+  // for large GPU MeshBlocks, where an unnecessary copy can dominate every timestep.
+  bool event_due = false;
+  for (const auto &sched : seed_schedules_) {
+    if (sched.complete || sched.count_per_event == 0) continue;
+    if (initial_only) {
+      event_due = event_due || (std::abs(sched.next_time - pm->time) <= eps);
+    } else {
+      event_due = event_due || (sched.next_time <= event_time + eps);
+    }
+  }
+  if (!event_due) {
+    // Particle boundary exchange may have moved particles between ranks since the
+    // previous call. Preserve the original per-step count refresh without paying
+    // for the fluid-state host mirrors needed only by an actual seeding event.
+    pm->UpdateParticleCounts();
+    return;
+  }
+
   auto &indcs = pm->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -392,7 +415,6 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
     Kokkos::deep_copy(h_bcc, pmy_pack->pmhd->bcc0);
   }
 
-  constexpr Real eps = 64.0*std::numeric_limits<Real>::epsilon();
   for (auto &sched : seed_schedules_) {
     if (sched.complete || sched.count_per_event == 0) continue;
     if (initial_only && std::abs(sched.next_time - pm->time) > eps) continue;
