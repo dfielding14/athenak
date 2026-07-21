@@ -1725,8 +1725,34 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                 << "<output>/single_file_per_rank=true in MPI runs" << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    if (shard_mode == FileShardMode::per_rank &&
+        global_variable::nranks != pm->restart_meta.original_nranks) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "lagrangian_mc per-rank particle restarts require "
+                << "the same number of MPI ranks used to write the restart file."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
 #endif
-    pm->pmb_pack->ppart->ReadRestartData(resfile, use_serial_io);
+    if (shard_mode == FileShardMode::per_rank) {
+      char shard_dir[20];
+      std::snprintf(shard_dir, sizeof(shard_dir), "rank_%08d",
+                    global_variable::my_rank);
+      std::string shard_path = pm->restart_meta.base_dir.empty()
+          ? std::string(shard_dir) + "/" + pm->restart_meta.file_name
+          : pm->restart_meta.base_dir + "/" + shard_dir + "/" + pm->restart_meta.file_name;
+      const IOWrapperSizeT particle_offset =
+          headeroffset + data_size_ * pm->restart_meta.nmb_eachrank[global_variable::my_rank];
+      IOWrapper particle_file;
+      particle_file.Open(shard_path.c_str(), IOWrapper::FileMode::read, true);
+      particle_file.Seek(particle_offset, true);
+      pm->pmb_pack->ppart->ReadRestartData(particle_file, true);
+      particle_file.Close(true);
+    } else {
+      const IOWrapperSizeT particle_offset = headeroffset + data_size_ * pm->nmb_total;
+      resfile.Seek(particle_offset, use_serial_io);
+      pm->pmb_pack->ppart->ReadRestartData(resfile, use_serial_io);
+    }
   }
 
   // call problem generator again to re-initialize data, fn ptrs, as needed
