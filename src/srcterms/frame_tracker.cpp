@@ -1367,18 +1367,22 @@ TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
   if (!enabled_ || pmy_pack == nullptr || pmy_pack->pmesh == nullptr) {
     return TaskStatus::complete;
   }
+  pdrive->StartPerformanceRegion(PerformanceRegion::frame_total);
   Mesh *pm = pmy_pack->pmesh;
   const bool displacement_changed = AdvanceFrameDisplacement(pm->dt);
   bool boost_changed = false;
   if (((mode_ == kFTTopMdot) || (mode_ == kFTTopMdotAuto) ||
        pm->time > start_time_) &&
       pm->ncycle % apply_every_ == 0) {
+    pdrive->StartPerformanceRegion(PerformanceRegion::frame_control);
     boost_changed = ApplyTracking();
+    pdrive->StopPerformanceRegion(PerformanceRegion::frame_control);
   }
 
   if ((displacement_changed || boost_changed) && !pm->strictly_periodic) {
     // User and physical ghost states may depend on the lab-frame origin and velocity.
     // Refresh them before output and before the next cycle consumes ghost-zone fluxes.
+    pdrive->StartPerformanceRegion(PerformanceRegion::frame_boundary);
     if (track_mhd_) {
       (void) pmy_pack->pmhd->ApplyPhysicalBCs(pdrive, stage);
       (void) pmy_pack->pmhd->ConToPrimGhostZones(pdrive, stage);
@@ -1386,17 +1390,21 @@ TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
       (void) pmy_pack->phydro->ApplyPhysicalBCs(pdrive, stage);
       (void) pmy_pack->phydro->ConToPrimGhostZones(pdrive, stage);
     }
+    pdrive->StopPerformanceRegion(PerformanceRegion::frame_boundary);
   }
 
   if (boost_changed) {
     // The controller changes characteristic velocities after the usual fluid dt task.
     // Refresh dtnew from the boosted state so restarts follow the same next timestep.
+    pdrive->StartPerformanceRegion(PerformanceRegion::frame_timestep);
     if (track_mhd_) {
       (void) pmy_pack->pmhd->NewTimeStep(pdrive, pdrive->nexp_stages);
     } else {
       (void) pmy_pack->phydro->NewTimeStep(pdrive, pdrive->nexp_stages);
     }
+    pdrive->StopPerformanceRegion(PerformanceRegion::frame_timestep);
   }
+  pdrive->StopPerformanceRegion(PerformanceRegion::frame_total);
   return TaskStatus::complete;
 }
 

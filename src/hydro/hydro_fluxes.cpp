@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "athena.hpp"
+#include "driver/driver.hpp"
 #include "mesh/mesh.hpp"
 #include "coordinates/coordinates.hpp"
 #include "hydro.hpp"
@@ -350,6 +351,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 TaskStatus Hydro::SaveFlux(Driver *pdrive, int stage) {
   if (!uflxidn_saved) return TaskStatus::complete;
 
+  pdrive->StartPerformanceRegion(PerformanceRegion::tracer_save_flux);
+
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -391,6 +394,8 @@ TaskStatus Hydro::SaveFlux(Driver *pdrive, int stage) {
       flxidn3(m,k,j,i) = (stage == 1) ? val : flxidn3(m,k,j,i) + val;
     });
   }
+
+  pdrive->StopPerformanceRegion(PerformanceRegion::tracer_save_flux);
 
   return TaskStatus::complete;
 }

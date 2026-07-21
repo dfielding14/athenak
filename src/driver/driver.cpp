@@ -88,6 +88,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     tlim = pin->GetReal("time", "tlim");
     nlim = pin->GetOrAddInteger("time", "nlim", -1);
     ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
+    performance_timing =
+        pin->GetOrAddBoolean("time", "performance_timing", false);
 
     if (integrator == "rk1") {
       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
@@ -281,6 +283,91 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 }
 
 //----------------------------------------------------------------------------------------
+//! \brief Start an opt-in synchronized performance region.
+//!
+//! The fences make accelerator work attributable to a region, but they also perturb
+//! execution. These diagnostics are therefore disabled by default and intended only for
+//! short controlled benchmarks.
+
+void Driver::StartPerformanceRegion(PerformanceRegion region) {
+  if (!performance_timing) return;
+  const int index = static_cast<int>(region);
+  Kokkos::fence();
+  performance_timers_[index].reset();
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Stop and accumulate an opt-in synchronized performance region.
+
+void Driver::StopPerformanceRegion(PerformanceRegion region) {
+  if (!performance_timing) return;
+  const int index = static_cast<int>(region);
+  Kokkos::fence();
+  performance_seconds_[index] += performance_timers_[index].seconds();
+  performance_calls_[index] += 1;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Clear performance counters immediately before the evolution loop.
+
+void Driver::ResetPerformanceTiming() {
+  performance_seconds_.fill(0.0);
+  performance_calls_.fill(0);
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Print max-rank and mean-rank performance-region totals.
+
+void Driver::ReportPerformanceTiming(double run_seconds) {
+  if (!performance_timing) return;
+
+  static const std::array<const char *, nperformance_regions_> names = {
+      "before_integrator", "before_stage", "stage_tasks", "after_stage",
+      "after_integrator", "outputs", "amr", "timestep", "trml_cooling",
+      "tracer_save_flux", "frame_total", "frame_control", "frame_boundary",
+      "frame_timestep", "particle_push", "particle_comm", "particle_adjust",
+      "particle_seed"};
+
+  std::array<double, nperformance_regions_> max_seconds = performance_seconds_;
+  std::array<double, nperformance_regions_> sum_seconds = performance_seconds_;
+  std::array<unsigned long long, nperformance_regions_> local_calls{};
+  std::array<unsigned long long, nperformance_regions_> max_calls{};
+  for (int n = 0; n < nperformance_regions_; ++n) {
+    local_calls[n] = static_cast<unsigned long long>(performance_calls_[n]);
+    max_calls[n] = local_calls[n];
+  }
+  double max_run_seconds = run_seconds;
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(performance_seconds_.data(), max_seconds.data(), nperformance_regions_,
+                MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(performance_seconds_.data(), sum_seconds.data(), nperformance_regions_,
+                MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(local_calls.data(), max_calls.data(), nperformance_regions_,
+                MPI_UNSIGNED_LONG_LONG, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(&run_seconds, &max_run_seconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#endif
+
+  if (global_variable::my_rank == 0) {
+    std::cout << std::endl
+              << "PERFORMANCE_TIMING synchronized=true nested_regions=true "
+              << "run_seconds_max=" << std::scientific << std::setprecision(6)
+              << max_run_seconds << std::endl;
+    std::cout << "PERFORMANCE_REGION name max_rank_seconds mean_rank_seconds "
+              << "fraction_of_run calls_max" << std::endl;
+    for (int n = 0; n < nperformance_regions_; ++n) {
+      const double mean_seconds =
+          sum_seconds[n]/static_cast<double>(global_variable::nranks);
+      const double fraction =
+          (max_run_seconds > 0.0) ? max_seconds[n]/max_run_seconds : 0.0;
+      std::cout << "PERFORMANCE_REGION " << names[n] << " "
+                << max_seconds[n] << " " << mean_seconds << " " << fraction << " "
+                << max_calls[n] << std::endl;
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn Driver::ExecuteTaskList()
 //! \brief Perform tasks over all MeshBlocks for the TaskList specified by string "tl".
 //! Integer argument "stage" can be used to indicate at which step in overall algorithm
@@ -352,6 +439,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   //---- Step 4.  Initialize various counters, timers, etc.
   run_time_.reset();
   nmb_updated_ = 0;
+  ResetPerformanceTiming();
 
   // allocate memory for stiff source terms with ImEx integrators
   // only implemented for ion-neutral two fluid for now
@@ -399,17 +487,27 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
       // Execute TaskLists
       // Work before time integrator indicated by "0" in stage
+      StartPerformanceRegion(PerformanceRegion::before_integrator);
       ExecuteTaskList(pmesh, "before_timeintegrator", 0);
+      StopPerformanceRegion(PerformanceRegion::before_integrator);
 
       // time-integrator tasks for each stage of integrator
       for (int stage=1; stage<=(nexp_stages); ++stage) {
+        StartPerformanceRegion(PerformanceRegion::before_stage);
         ExecuteTaskList(pmesh, "before_stagen", stage);
+        StopPerformanceRegion(PerformanceRegion::before_stage);
+        StartPerformanceRegion(PerformanceRegion::stage_tasks);
         ExecuteTaskList(pmesh, "stagen", stage);
+        StopPerformanceRegion(PerformanceRegion::stage_tasks);
+        StartPerformanceRegion(PerformanceRegion::after_stage);
         ExecuteTaskList(pmesh, "after_stagen", stage);
+        StopPerformanceRegion(PerformanceRegion::after_stage);
       }
 
       // Work after time integrator indicated by "1" in stage
+      StartPerformanceRegion(PerformanceRegion::after_integrator);
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
+      StopPerformanceRegion(PerformanceRegion::after_integrator);
 
       // Work outside of TaskLists:
       // increment time, ncycle, etc.
@@ -438,15 +536,23 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+          StartPerformanceRegion(PerformanceRegion::outputs);
           out->LoadOutputData(pmesh);
           out->WriteOutputFile(pmesh, pin);
+          StopPerformanceRegion(PerformanceRegion::outputs);
         }
       }
 
       // AMR
-      if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
+      if (pmesh->adaptive) {
+        StartPerformanceRegion(PerformanceRegion::amr);
+        pmesh->pmr->AdaptiveMeshRefinement(this, pin);
+        StopPerformanceRegion(PerformanceRegion::amr);
+      }
       // compute new timestep AFTER all Meshblocks refined/derefined
+      StartPerformanceRegion(PerformanceRegion::timestep);
       pmesh->NewTimeStep(tlim);
+      StopPerformanceRegion(PerformanceRegion::timestep);
 
       // Update wall clock time if needed.
       if (wall_time > 0.) {
@@ -466,8 +572,10 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
+    StartPerformanceRegion(PerformanceRegion::outputs);
     out->LoadOutputData(pmesh);
     out->WriteOutputFile(pmesh, pin);
+    StopPerformanceRegion(PerformanceRegion::outputs);
   }
 
   // call any problem specific functions to do work after main loop
@@ -485,6 +593,7 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
                     MPI_COMM_WORLD);
     }
 #endif
+    ReportPerformanceTiming(exe_time);
     if (global_variable::my_rank == 0) {
       // Print diagnostic messages related to the end of the simulation
       OutputCycleDiagnostics(pmesh);

@@ -12,6 +12,7 @@
 #include <iostream>
 
 #include "athena.hpp"
+#include "driver/driver.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
@@ -61,7 +62,9 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
 //! MeshBlocks.
 
 TaskStatus Particles::NewGID(Driver *pdrive, int stage) {
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_comm);
   TaskStatus tstat = pbval_part->SetNewPrtclGID();
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_comm);
   return tstat;
 }
 
@@ -71,7 +74,9 @@ TaskStatus Particles::NewGID(Driver *pdrive, int stage) {
 //! MPI between all ranks
 
 TaskStatus Particles::SendCnt(Driver *pdrive, int stage) {
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_comm);
   TaskStatus tstat = pbval_part->CountSendsAndRecvs();
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_comm);
   return tstat;
 }
 
@@ -81,7 +86,9 @@ TaskStatus Particles::SendCnt(Driver *pdrive, int stage) {
 
 TaskStatus Particles::InitRecv(Driver *pdrive, int stage) {
   // post receives for particles
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_comm);
   TaskStatus tstat = pbval_part->InitPrtclRecv();
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_comm);
   return tstat;
 }
 
@@ -90,7 +97,9 @@ TaskStatus Particles::InitRecv(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to pack/send particles
 
 TaskStatus Particles::SendP(Driver *pdrive, int stage) {
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_comm);
   TaskStatus tstat = pbval_part->PackAndSendPrtcls();
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_comm);
   return tstat;
 }
 
@@ -99,7 +108,9 @@ TaskStatus Particles::SendP(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to receive/unpack particles
 
 TaskStatus Particles::RecvP(Driver *pdrive, int stage) {
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_comm);
   TaskStatus tstat = pbval_part->RecvAndUnpackPrtcls();
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_comm);
   return tstat;
 }
 
@@ -110,7 +121,9 @@ TaskStatus Particles::RecvP(Driver *pdrive, int stage) {
 
 TaskStatus Particles::ClearSend(Driver *pdrive, int stage) {
   // check sends of particles complete
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_comm);
   TaskStatus tstat = pbval_part->ClearPrtclSend();
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_comm);
   return tstat;
 }
 
@@ -120,16 +133,20 @@ TaskStatus Particles::ClearSend(Driver *pdrive, int stage) {
 
 TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
   // check receives of particles complete
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_comm);
   TaskStatus tstat = pbval_part->ClearPrtclRecv();
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_comm);
   return tstat;
 }
 
 //----------------------------------------------------------------------------------------
 
 TaskStatus Particles::SeedDueTracers(Driver *pdrive, int stage) {
+  pdrive->StartPerformanceRegion(PerformanceRegion::particle_seed);
   if (particle_type == ParticleType::lagrangian_mc) {
     SeedTracersAtTime(pmy_pack->pmesh->time + pmy_pack->pmesh->dt, false);
   }
+  pdrive->StopPerformanceRegion(PerformanceRegion::particle_seed);
   return TaskStatus::complete;
 }
 

@@ -368,6 +368,7 @@ void CoolingSrc(Mesh *pm, Real bdt, Driver *pdrive, int stage) {
   // deltaE already contains the stage's beta*dt, so it must not be multiplied
   // by beta again.
   Real cooling_energy_this_stage;
+  pdrive->StartPerformanceRegion(PerformanceRegion::trml_cooling);
   Kokkos::parallel_reduce(
       "TRML_cooling_src", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
       KOKKOS_LAMBDA(const int &idx, Real &stage_cooling) {
@@ -412,6 +413,7 @@ void CoolingSrc(Mesh *pm, Real bdt, Driver *pdrive, int stage) {
         u0(m, IEN, k, j, i) += deltaE;
       },
       Kokkos::Sum<Real>(cooling_energy_this_stage));
+  pdrive->StopPerformanceRegion(PerformanceRegion::trml_cooling);
 
   // Mirror Hydro::CopyCons for the scalar cooling diagnostic. u1 stores the
   // initial state for RK1/RK2/RK3, while AthenaK's low-storage RK4 also updates

@@ -12,6 +12,8 @@
 // pgen class contains analysis routines that are run at end of execution, they can be
 // called in Finalize().
 
+#include <array>
+#include <cstdint>
 #include <ctime>
 #include <memory>
 #include <string>
@@ -19,6 +21,31 @@
 #include "parameter_input.hpp"
 #include "outputs/outputs.hpp"
 #include "pgen/pgen.hpp"
+
+// Coarse performance regions used by opt-in, synchronization-based diagnostics.
+// Regions may be nested (for example cooling inside stage_tasks), so their times
+// are not intended to sum to the total runtime.
+enum class PerformanceRegion : int {
+  before_integrator = 0,
+  before_stage,
+  stage_tasks,
+  after_stage,
+  after_integrator,
+  outputs,
+  amr,
+  timestep,
+  trml_cooling,
+  tracer_save_flux,
+  frame_total,
+  frame_control,
+  frame_boundary,
+  frame_timestep,
+  particle_push,
+  particle_comm,
+  particle_adjust,
+  particle_seed,
+  count
+};
 
 //----------------------------------------------------------------------------------------
 //! \class Driver
@@ -47,6 +74,7 @@ class Driver {
   Real gamma;                      // gamma value for the IMEX_new integrator
   Kokkos::Timer* pwall_clock_;     // timer for tracking the wall clock
   Real wall_time;
+  bool performance_timing = false;
 
   // functions
   void ExecuteTaskList(Mesh *pm, std::string tl, int stage);
@@ -54,12 +82,21 @@ class Driver {
   void Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout);
   void Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout);
   void InitBoundaryValuesAndPrimitives(Mesh *pm);
+  void StartPerformanceRegion(PerformanceRegion region);
+  void StopPerformanceRegion(PerformanceRegion region);
 
  private:
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
   float lb_efficiency_;         // measure of how efficient was load balancing
+  static constexpr int nperformance_regions_ =
+      static_cast<int>(PerformanceRegion::count);
+  std::array<Kokkos::Timer, nperformance_regions_> performance_timers_;
+  std::array<double, nperformance_regions_> performance_seconds_{};
+  std::array<std::uint64_t, nperformance_regions_> performance_calls_{};
+  void ResetPerformanceTiming();
+  void ReportPerformanceTiming(double run_seconds);
   void OutputCycleDiagnostics(Mesh *pm);
   Real UpdateWallClock();
 };

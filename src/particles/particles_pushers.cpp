@@ -17,6 +17,7 @@ namespace particles {
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
+  pdriver->StartPerformanceRegion(PerformanceRegion::particle_push);
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is;
   int js = indcs.js;
@@ -29,6 +30,7 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
   auto dt_ = (pmy_pack->pmesh->dt);
   auto gids = pmy_pack->gids;
 
+  TaskStatus status = TaskStatus::complete;
   switch (pusher) {
     case ParticlesPusher::drift:
 
@@ -51,11 +53,13 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
 
     break;
   case ParticlesPusher::lagrangian_mc:
-    return PushLagrangianMC(pdriver, stage);
+    status = PushLagrangianMC(pdriver, stage);
+    break;
   default:
     break;
   }
 
-  return TaskStatus::complete;
+  pdriver->StopPerformanceRegion(PerformanceRegion::particle_push);
+  return status;
 }
 } // namespace particles
