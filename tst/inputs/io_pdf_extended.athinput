@@ -1,0 +1,110 @@
+# Focused modern-PDF smoke input for a simple_TRML_extended build.
+
+<job>
+basename = io_pdf_extended
+
+<mesh>
+nghost = 4
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 16
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 32
+x3min = -1.0
+x3max = 1.0
+ix3_bc = outflow
+ox3_bc = user
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = 1
+tlim = 0.01
+ndiag = 1
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666667
+nscalars = 1
+fofc = true
+dfloor = 1.0e-4
+pfloor = 1.0e-5
+
+<units>
+length_cgs = 1.0
+mass_cgs = 1.0
+time_cgs = 1.0
+mu = 0.6
+
+<problem>
+rho_hot = 1.0
+rho_cold = 10.0
+velocity = 0.5
+pres = 1.0
+t_cool_min = 1.0
+T_cutoff_over_T_cold = 31.622776601683793
+T_ci_over_T_cold = 10.0
+T_ih_over_T_cold = 30.0
+beta = 0.0
+phase_sharpness = 24
+max_init_perturb_log2freq = 2
+min_init_perturb_log2freq = 1
+init_perturb_sharpness = 12.0
+init_perturb_vel_frac = 0.0
+user_srcs = true
+user_dt = true
+user_hist = true
+user_bcs = true
+
+<output1>
+file_type = pdf
+id = nd4
+variable_1 = coord_x
+nbin1 = 2
+bin1_min = -0.5
+bin1_max = 0.5
+scale1 = linear
+variable_2 = coord_z
+nbin2 = 2
+bin2_min = -1.0
+bin2_max = 1.0
+scale2 = linear
+variable_3 = hydro_w_d
+nbin3 = 2
+bin3_min = 0.1
+bin3_max = 20.0
+scale3 = log
+variable_4 = hydro_w_vx
+nbin4 = 2
+bin4_min = -1.0
+bin4_max = 1.0
+scale4 = symlog
+linthresh4 = 0.1
+weight = variable
+weight_variable = hydro_w_d
+dt = 1.0
+
+<output2>
+file_type = pdf
+id = volume
+variable_1 = temperature
+nbin1 = 4
+bin1_min = 0.01
+bin1_max = 10.0
+scale1 = log
+weight = volume
+dt = 1.0

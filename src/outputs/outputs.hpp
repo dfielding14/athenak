@@ -8,10 +8,11 @@
 //! \file outputs.hpp
 //  \brief provides classes to handle ALL types of data output
 
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
-
-#include "Kokkos_ScatterView.hpp"
 
 #include "athena.hpp"
 #include "io_wrapper.hpp"
@@ -22,7 +23,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 154
+#define NOUTPUT_CHOICES 158
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -99,13 +100,65 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "tmunu",
 
   // Particles (151-153)
-  "prtcl_all", "prtcl_d", "prtcl_thermo_history"
+  "prtcl_all", "prtcl_d", "prtcl_thermo_history",
+
+  // Generic scalar diagnostics (154-157)
+  "temperature", "coord_x", "coord_y", "coord_z"
 };
 
 
 // forward declarations
 class Mesh;
 class ParameterInput;
+
+enum PDFScaleMode {
+  PDF_SCALE_LINEAR = 0,
+  PDF_SCALE_LOG = 1,
+  PDF_SCALE_SYMLOG = 2
+};
+
+KOKKOS_INLINE_FUNCTION
+Real PDFAbs(Real value) {
+  return (value < 0.0) ? -value : value;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PDFTransformValue(Real value, int scale, Real linthresh) {
+  if (scale == PDF_SCALE_LOG) {
+    return Kokkos::log10(value);
+  }
+  if (scale == PDF_SCALE_SYMLOG) {
+    Real sign = (value < 0.0) ? -1.0 : 1.0;
+    Real abs_value = PDFAbs(value);
+    if (abs_value <= linthresh) {
+      return sign * (abs_value / linthresh);
+    }
+    return sign * (1.0 + Kokkos::log10(abs_value / linthresh));
+  }
+  return value;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PDFInverseTransformValue(Real value, int scale, Real linthresh) {
+  if (scale == PDF_SCALE_LOG) {
+    return Kokkos::pow(10.0, value);
+  }
+  if (scale == PDF_SCALE_SYMLOG) {
+    Real sign = (value < 0.0) ? -1.0 : 1.0;
+    Real abs_value = PDFAbs(value);
+    if (abs_value <= 1.0) {
+      return sign * abs_value * linthresh;
+    }
+    return sign * linthresh * Kokkos::pow(10.0, abs_value - 1.0);
+  }
+  return value;
+}
+
+inline const char *PDFScaleName(int scale) {
+  if (scale == PDF_SCALE_LOG) return "log";
+  if (scale == PDF_SCALE_SYMLOG) return "symlog";
+  return "linear";
+}
 
 //----------------------------------------------------------------------------------------
 //! \struct OutputParameters
@@ -146,6 +199,20 @@ struct OutputParameters {
   bool mass_weighted=false;
   bool single_file_per_rank=false; // DBF: parameter for single file per rank
   std::string data_precision="float32"; // binary field storage: float32 or native Real
+
+  // Modern N-D PDF parameters; legacy PDF inputs are translated into these fields.
+  static constexpr int PDF_MAX_DIM = 4;
+  int pdf_ndim=0;
+  std::string pdf_variables[PDF_MAX_DIM];
+  int pdf_nbin[PDF_MAX_DIM] = {0, 0, 0, 0};
+  Real pdf_bin_min[PDF_MAX_DIM] = {0.0, 0.0, 0.0, 0.0};
+  Real pdf_bin_max[PDF_MAX_DIM] = {1.0, 1.0, 1.0, 1.0};
+  int pdf_scale[PDF_MAX_DIM] = {PDF_SCALE_LINEAR, PDF_SCALE_LINEAR,
+                                PDF_SCALE_LINEAR, PDF_SCALE_LINEAR};
+  Real pdf_linthresh[PDF_MAX_DIM] = {1.0, 1.0, 1.0, 1.0};
+  std::string pdf_weight = "volume";
+  std::string pdf_weight_variable;
+  bool pdf_legacy_layout=false;
 };
 
 //----------------------------------------------------------------------------------------
@@ -310,23 +377,77 @@ class CoarsenedBinaryOutput : public BaseTypeOutput {
 //  \brief  container for PDF data
 
 struct PDFData {
-  int pdf_dimension;
-  int nbin, nbin2;
-  Kokkos::View<Real*> bins;
-  Kokkos::View<Real*> bins2;
+  static constexpr int MAX_DIM = 4;
+
+  int ndim;
+  int nbin[MAX_DIM];
+  int nbin_with_overflow[MAX_DIM];
+  int stride[MAX_DIM];
+  int total_bins;
+  Kokkos::View<Real*> bin_edges[MAX_DIM];
+  Real step_size[MAX_DIM];
+  Real transformed_min[MAX_DIM];
+  Real transformed_max[MAX_DIM];
+  int scale[MAX_DIM];
+  Real linthresh[MAX_DIM];
+  Real bin_min[MAX_DIM];
+  Real bin_max[MAX_DIM];
   bool bins_written;
-  // if logscale is true then this step is the log10 of the step size
-  Real step_size, step_size2;
-  bool mass_weighted;
-  bool logscale, logscale2;
 
-  DvceArray2D<Real> result_; // resulting histogram
-  Kokkos::Experimental::ScatterView<Real **, LayoutWrapper> scatter_result;
+  DvceArray1D<Real> result_;
 
-  PDFData(int dim, int nbinVal, int nbin2Val)
-    : pdf_dimension(dim), nbin(nbinVal), nbin2(nbin2Val),
-      bins("bins", nbin + 1), bins2("bins2", nbin2 + 1),
-      bins_written(false), mass_weighted(false), logscale(false), logscale2(false) {
+  PDFData() : ndim(0), total_bins(0), bins_written(false) {
+    for (int d = 0; d < MAX_DIM; ++d) {
+      nbin[d] = 0;
+      nbin_with_overflow[d] = 0;
+      stride[d] = 0;
+      step_size[d] = 0.0;
+      transformed_min[d] = 0.0;
+      transformed_max[d] = 0.0;
+      scale[d] = PDF_SCALE_LINEAR;
+      linthresh[d] = 1.0;
+      bin_min[d] = 0.0;
+      bin_max[d] = 1.0;
+    }
+  }
+
+  void Initialize(int ndim_in, const int *nbin_in, const Real *bin_min_in,
+                  const Real *bin_max_in, const int *scale_in,
+                  const Real *linthresh_in) {
+    ndim = ndim_in;
+    total_bins = 1;
+    for (int d = 0; d < ndim; ++d) {
+      nbin[d] = nbin_in[d];
+      nbin_with_overflow[d] = nbin[d] + 2;
+      bin_min[d] = bin_min_in[d];
+      bin_max[d] = bin_max_in[d];
+      scale[d] = scale_in[d];
+      linthresh[d] = linthresh_in[d];
+      transformed_min[d] = PDFTransformValue(bin_min[d], scale[d], linthresh[d]);
+      transformed_max[d] = PDFTransformValue(bin_max[d], scale[d], linthresh[d]);
+      step_size[d] = (transformed_max[d] - transformed_min[d])/nbin[d];
+      bin_edges[d] = Kokkos::View<Real*>("pdf_bin_edges_" + std::to_string(d),
+                                         nbin[d] + 1);
+      total_bins *= nbin_with_overflow[d];
+    }
+    stride[ndim - 1] = 1;
+    for (int d = ndim - 2; d >= 0; --d) {
+      stride[d] = stride[d + 1]*nbin_with_overflow[d + 1];
+    }
+    result_ = DvceArray1D<Real>("pdf_result", total_bins);
+  }
+
+  void PopulateBinEdges() {
+    for (int d = 0; d < ndim; ++d) {
+      auto h_edges = Kokkos::create_mirror_view(bin_edges[d]);
+      for (int n = 0; n <= nbin[d]; ++n) {
+        Real transformed = transformed_min[d]
+            + n*(transformed_max[d] - transformed_min[d])/nbin[d];
+        h_edges(n) = PDFInverseTransformValue(transformed, scale[d], linthresh[d]);
+      }
+      Kokkos::deep_copy(bin_edges[d], h_edges);
+    }
+    Kokkos::fence();
   }
 };
 
@@ -342,6 +463,10 @@ class PDFOutput : public BaseTypeOutput {
 
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+
+ private:
+  std::size_t max_writer_allocation_bytes;
+  std::size_t persistent_writer_allocation_bytes;
 };
 
 //----------------------------------------------------------------------------------------

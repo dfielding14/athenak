@@ -112,6 +112,35 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1; // increment derived variable index
   }
 
+  int coordinate = -1;
+  if (name == "coord_x") coordinate = 0;
+  if (name == "coord_y") coordinate = 1;
+  if (name == "coord_z") coordinate = 2;
+  if (coordinate >= 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    int axis = coordinate;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
+    par_for("cartesian_coordinate", DevExeSpace(), 0, (nmb-1), ks, ke, js, je,
+            is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real value = CellCenterX(i-is, nx1, size.d_view(m).x1min,
+                               size.d_view(m).x1max);
+      if (axis == 1) {
+        value = CellCenterX(j-js, nx2, size.d_view(m).x2min,
+                            size.d_view(m).x2max);
+      } else if (axis == 2) {
+        value = CellCenterX(k-ks, nx3, size.d_view(m).x3min,
+                            size.d_view(m).x3max);
+      }
+      dv(m, i_dv, k, j, i) = value;
+    });
+    i_dv += 1;
+  }
+
   // z-component of vorticity.
   // Not computed in ghost zones since requires derivative
   if (name.compare("hydro_wz") == 0 ||

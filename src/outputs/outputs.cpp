@@ -40,10 +40,13 @@
 //========================================================================================
 
 #include <cstdio>
+#include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>    // strcmp
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>   // std::string, to_string()
 
@@ -51,6 +54,244 @@
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
+
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
+namespace {
+
+[[noreturn]] void FatalPDFConfiguration(const OutputParameters &op,
+                                        const std::string &message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "PDF output block '" << op.block_name << "' "
+            << message << std::endl;
+#if MPI_PARALLEL_ENABLED
+  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+std::string OutputVariable(ParameterInput *pin, const OutputParameters &op) {
+  if (op.file_type == "pdf" &&
+      pin->DoesParameterExist(op.block_name, "variable_1")) {
+    return pin->GetString(op.block_name, "variable_1");
+  }
+  return pin->GetString(op.block_name, "variable");
+}
+
+void ParsePDFParameters(ParameterInput *pin, const InputBlock &block,
+                        OutputParameters *op) {
+  const auto fail = [&](const std::string &message) {
+    FatalPDFConfiguration(*op, message);
+  };
+  const auto parse_scale = [&](const std::string &key) {
+    std::string value = pin->GetString(op->block_name, key);
+    if (value == "linear") return PDF_SCALE_LINEAR;
+    if (value == "log") return PDF_SCALE_LOG;
+    if (value == "symlog") return PDF_SCALE_SYMLOG;
+    fail("has invalid " + key + "='" + value +
+         "'; expected linear, log, or symlog");
+    return PDF_SCALE_LINEAR;
+  };
+  const auto set_scale = [&](int dimension, const std::string &scale_key,
+                             const std::string &log_key,
+                             const std::string &linthresh_key,
+                             bool legacy_log_default) {
+    bool has_scale = pin->DoesParameterExist(op->block_name, scale_key);
+    bool has_log = pin->DoesParameterExist(op->block_name, log_key);
+    bool has_linthresh = pin->DoesParameterExist(op->block_name, linthresh_key);
+    int scale = has_scale ? parse_scale(scale_key) :
+        ((has_log ? pin->GetBoolean(op->block_name, log_key) :
+                    legacy_log_default) ? PDF_SCALE_LOG : PDF_SCALE_LINEAR);
+    if (has_scale && has_log) {
+      int legacy_scale = pin->GetBoolean(op->block_name, log_key) ?
+          PDF_SCALE_LOG : PDF_SCALE_LINEAR;
+      if (scale != legacy_scale) {
+        fail("has conflicting " + scale_key + " and " + log_key);
+      }
+    }
+    if (scale == PDF_SCALE_SYMLOG) {
+      if (!has_linthresh) {
+        fail("requires " + linthresh_key + " when " + scale_key + "=symlog");
+      }
+      op->pdf_linthresh[dimension] =
+          pin->GetReal(op->block_name, linthresh_key);
+    } else {
+      if (has_linthresh) {
+        fail("cannot set " + linthresh_key + " unless " + scale_key + "=symlog");
+      }
+      op->pdf_linthresh[dimension] = 1.0;
+    }
+    op->pdf_scale[dimension] = scale;
+  };
+
+  bool has_mass_weighted =
+      pin->DoesParameterExist(op->block_name, "mass_weighted");
+  bool legacy_mass = has_mass_weighted ?
+      pin->GetBoolean(op->block_name, "mass_weighted") : false;
+  std::string translated_weight = legacy_mass ? "mass" : "volume";
+  if (pin->DoesParameterExist(op->block_name, "weight")) {
+    op->pdf_weight = pin->GetString(op->block_name, "weight");
+    if (has_mass_weighted && op->pdf_weight != translated_weight) {
+      fail("has inconsistent mass_weighted and weight settings");
+    }
+  } else {
+    op->pdf_weight = translated_weight;
+  }
+  if (op->pdf_weight != "volume" && op->pdf_weight != "mass" &&
+      op->pdf_weight != "variable") {
+    fail("has invalid weight='" + op->pdf_weight +
+         "'; expected volume, mass, or variable");
+  }
+  if (op->pdf_weight == "variable") {
+    if (!pin->DoesParameterExist(op->block_name, "weight_variable")) {
+      fail("requires weight_variable when weight=variable");
+    }
+    op->pdf_weight_variable =
+        pin->GetString(op->block_name, "weight_variable");
+  }
+  op->mass_weighted = (op->pdf_weight == "mass");
+
+  bool modern = pin->DoesParameterExist(op->block_name, "variable_1");
+  bool requests_modern_storage = modern ||
+      pin->DoesParameterExist(op->block_name, "weight") ||
+      pin->DoesParameterExist(op->block_name, "scale") ||
+      pin->DoesParameterExist(op->block_name, "scale1") ||
+      pin->DoesParameterExist(op->block_name, "scale2") ||
+      pin->DoesParameterExist(op->block_name, "linthresh") ||
+      pin->DoesParameterExist(op->block_name, "linthresh1") ||
+      pin->DoesParameterExist(op->block_name, "linthresh2");
+  op->pdf_legacy_layout = !requests_modern_storage;
+
+  if (modern) {
+    bool gap = false;
+    for (int dimension = 0; dimension < OutputParameters::PDF_MAX_DIM; ++dimension) {
+      std::string suffix = std::to_string(dimension + 1);
+      bool present =
+          pin->DoesParameterExist(op->block_name, "variable_" + suffix);
+      if (!present) {
+        gap = true;
+        continue;
+      }
+      if (gap) fail("has a gap in active variable_N dimensions");
+      op->pdf_ndim = dimension + 1;
+      op->pdf_variables[dimension] =
+          pin->GetString(op->block_name, "variable_" + suffix);
+      op->pdf_nbin[dimension] =
+          pin->GetInteger(op->block_name, "nbin" + suffix);
+      op->pdf_bin_min[dimension] =
+          pin->GetReal(op->block_name, "bin" + suffix + "_min");
+      op->pdf_bin_max[dimension] =
+          pin->GetReal(op->block_name, "bin" + suffix + "_max");
+      set_scale(dimension, "scale" + suffix, "logscale" + suffix,
+                "linthresh" + suffix, false);
+    }
+    for (const auto &line : block.line) {
+      const std::string prefix = "variable_";
+      if (line.param_name.compare(0, prefix.size(), prefix) != 0) continue;
+      const std::string suffix = line.param_name.substr(prefix.size());
+      bool numeric_suffix = !suffix.empty();
+      int dimension = 0;
+      for (char ch : suffix) {
+        if (ch < '0' || ch > '9') {
+          numeric_suffix = false;
+          break;
+        }
+        dimension = 10*dimension + static_cast<int>(ch - '0');
+      }
+      if (numeric_suffix && dimension > OutputParameters::PDF_MAX_DIM) {
+        fail("requests more than four dimensions");
+      }
+    }
+  } else {
+    op->pdf_ndim = 1;
+    op->pdf_variables[0] = op->variable;
+    op->pdf_nbin[0] = pin->GetInteger(op->block_name, "nbin");
+    op->pdf_bin_min[0] = pin->GetReal(op->block_name, "bin_min");
+    op->pdf_bin_max[0] = pin->GetReal(op->block_name, "bin_max");
+    std::string scale_key =
+        pin->DoesParameterExist(op->block_name, "scale1") ? "scale1" : "scale";
+    std::string log_key = pin->DoesParameterExist(op->block_name, "logscale1") ?
+        "logscale1" : "logscale";
+    std::string lin_key = pin->DoesParameterExist(op->block_name, "linthresh1") ?
+        "linthresh1" : "linthresh";
+    set_scale(0, scale_key, log_key, lin_key, true);
+    if (pin->DoesParameterExist(op->block_name, "variable_2")) {
+      op->pdf_ndim = 2;
+      op->pdf_variables[1] = pin->GetString(op->block_name, "variable_2");
+      op->pdf_nbin[1] = pin->GetInteger(op->block_name, "nbin2");
+      op->pdf_bin_min[1] = pin->GetReal(op->block_name, "bin2_min");
+      op->pdf_bin_max[1] = pin->GetReal(op->block_name, "bin2_max");
+      set_scale(1, "scale2", "logscale2", "linthresh2", true);
+    }
+  }
+
+  std::int64_t total_bins = 1;
+  for (int dimension = 0; dimension < op->pdf_ndim; ++dimension) {
+    const std::string &variable = op->pdf_variables[dimension];
+    if (variable == "mhd_w" || variable == "mhd_u" ||
+        variable == "hydro_w" || variable == "hydro_u") {
+      fail("cannot output variable group '" + variable + "'");
+    }
+    if (op->pdf_nbin[dimension] <= 0) {
+      fail("requires positive nbin for dimension " +
+           std::to_string(dimension + 1));
+    }
+    if (!std::isfinite(op->pdf_bin_min[dimension]) ||
+        !std::isfinite(op->pdf_bin_max[dimension])) {
+      fail("requires finite bounds for dimension " +
+           std::to_string(dimension + 1));
+    }
+    if (!(op->pdf_bin_min[dimension] < op->pdf_bin_max[dimension])) {
+      fail("requires bin_min < bin_max for dimension " +
+           std::to_string(dimension + 1));
+    }
+    if (op->pdf_scale[dimension] == PDF_SCALE_LOG &&
+        (op->pdf_bin_min[dimension] <= 0.0 ||
+         op->pdf_bin_max[dimension] <= 0.0)) {
+      fail("requires positive bounds for logarithmic dimension " +
+           std::to_string(dimension + 1));
+    }
+    if (op->pdf_scale[dimension] == PDF_SCALE_SYMLOG &&
+        (!std::isfinite(op->pdf_linthresh[dimension]) ||
+         op->pdf_linthresh[dimension] <= 0.0)) {
+      fail("requires positive linthresh for symlog dimension " +
+           std::to_string(dimension + 1));
+    }
+    Real transformed_min = PDFTransformValue(
+        op->pdf_bin_min[dimension], op->pdf_scale[dimension],
+        op->pdf_linthresh[dimension]);
+    Real transformed_max = PDFTransformValue(
+        op->pdf_bin_max[dimension], op->pdf_scale[dimension],
+        op->pdf_linthresh[dimension]);
+    Real step_size =
+        (transformed_max - transformed_min)/op->pdf_nbin[dimension];
+    if (!std::isfinite(transformed_min) || !std::isfinite(transformed_max) ||
+        !std::isfinite(step_size) || !(step_size > 0.0)) {
+      fail("requires finite transformed bounds and a positive finite bin step for "
+           "dimension " + std::to_string(dimension + 1));
+    }
+    total_bins *= static_cast<std::int64_t>(op->pdf_nbin[dimension]) + 2;
+    if (total_bins > std::numeric_limits<int>::max()) {
+      fail("has too many total bins for a dense shared histogram");
+    }
+  }
+
+  op->nbin = op->pdf_nbin[0];
+  op->bin_min = op->pdf_bin_min[0];
+  op->bin_max = op->pdf_bin_max[0];
+  op->logscale = (op->pdf_scale[0] == PDF_SCALE_LOG);
+  if (op->pdf_ndim > 1) {
+    op->variable_2 = op->pdf_variables[1];
+    op->nbin2 = op->pdf_nbin[1];
+    op->bin2_min = op->pdf_bin_min[1];
+    op->bin2_max = op->pdf_bin_max[1];
+    op->logscale2 = (op->pdf_scale[1] == PDF_SCALE_LOG);
+  }
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // Outputs constructor
@@ -94,7 +335,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           opar.file_type.compare("log") != 0 &&
           opar.file_type.compare("trk") != 0 &&
           opar.file_type.compare("prtcl_thermo_history") != 0) {
-        opar.variable = pin->GetString(opar.block_name, "variable");
+        opar.variable = OutputVariable(pin, opar);
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
 
@@ -185,7 +426,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           opar.file_type.compare("rst") != 0 &&
           opar.file_type.compare("log") != 0 &&
           opar.file_type.compare("prtcl_thermo_history") != 0) {
-        opar.variable = pin->GetString(opar.block_name, "variable");
+        opar.variable = OutputVariable(pin, opar);
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       } else if (opar.file_type.compare("prtcl_thermo_history") == 0) {
         opar.variable = "prtcl_thermo_history";
@@ -258,25 +499,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new CoarsenedBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("pdf") == 0) {
-        opar.bin_min = pin->GetReal(opar.block_name,"bin_min");
-        opar.bin_max = pin->GetReal(opar.block_name,"bin_max");
-        opar.nbin = pin->GetInteger(opar.block_name,"nbin");
-        opar.logscale = pin->GetOrAddBoolean(opar.block_name,"logscale",true);
-        opar.mass_weighted = pin->GetOrAddBoolean(opar.block_name,"mass_weighted",false);
-        // check and set second variable option.
-        if (pin->DoesParameterExist(opar.block_name,"variable_2")) {
-          opar.variable_2 = pin->GetString(opar.block_name, "variable_2");
-          opar.bin2_min = pin->GetOrAddReal(opar.block_name,"bin2_min",0);
-          opar.bin2_max = pin->GetOrAddReal(opar.block_name,"bin2_max",1);
-          opar.nbin2 = pin->GetOrAddInteger(opar.block_name,"nbin2",0);
-          opar.logscale2 = pin->GetOrAddBoolean(opar.block_name,"logscale2",true);
-        } else {
-          opar.variable_2 = "";
-          opar.bin2_min = 0;
-          opar.bin2_max = 1;
-          opar.nbin2 = 0;
-          opar.logscale2 = true;
-        }
+        ParsePDFParameters(pin, *it, &opar);
         pnode = new PDFOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("bin") == 0) {
