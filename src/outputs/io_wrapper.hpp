@@ -19,7 +19,14 @@ using  IOWrapperFile = MPI_File;
 using  IOWrapperFile = FILE*;
 #endif
 
+// File offsets and byte counts use an explicit 64-bit unsigned domain.
 using IOWrapperSizeT = std::uint64_t;
+
+namespace io_wrapper {
+#if MPI_PARALLEL_ENABLED
+void BroadcastBytes(void *buf, IOWrapperSizeT count, int root, MPI_Comm comm);
+#endif
+}  // namespace io_wrapper
 
 class IOWrapper {
  public:
@@ -33,33 +40,35 @@ class IOWrapper {
   // nested type definition of strongly typed/scoped enum in class definition
   enum class FileMode {read, write, append};
 
-  // wrapper functions for basic I/O tasks
-  int Open(const char* fname, FileMode rw, bool single_file_per_rank = false);
+  // Offsets are byte offsets. MPI-backed open, close, and *_at_all operations are
+  // collective over comm_; every rank in that communicator must participate.
+  int Open(const char* fname, FileMode rw, bool use_serial_io = false);
   std::size_t Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT count,
-                         bool single_file_per_rank = false);
+                         bool use_serial_io = false);
   std::size_t Read_bytes_at(void *buf, IOWrapperSizeT size, IOWrapperSizeT count,
-                            IOWrapperSizeT offset, bool single_file_per_rank = false);
+                            IOWrapperSizeT offset, bool use_serial_io = false);
   std::size_t Read_bytes_at_all(void *buf, IOWrapperSizeT size, IOWrapperSizeT count,
-                                IOWrapperSizeT offset, bool single_file_per_rank = false);
+                                IOWrapperSizeT offset, bool use_serial_io = false);
   std::size_t Write_any_type(const void *buf, IOWrapperSizeT count, std::string type,
-                             bool single_file_per_rank = false);
+                             bool use_serial_io = false);
   std::size_t Write_any_type_at(const void *buf, IOWrapperSizeT cnt,IOWrapperSizeT offset,
-                                std::string datatype, bool single_file_per_rank = false);
+                                std::string datatype, bool use_serial_io = false);
   std::size_t Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt,
                                     IOWrapperSizeT offset, std::string datatype,
-                                    bool single_file_per_rank = false);
+                                    bool use_serial_io = false);
   std::size_t Read_Reals(void *buf, IOWrapperSizeT count,
-                         bool single_file_per_rank = false);
+                         bool use_serial_io = false);
   std::size_t Read_Reals_at(void *buf, IOWrapperSizeT count, IOWrapperSizeT offset,
-                            bool single_file_per_rank = false);
+                            bool use_serial_io = false);
   std::size_t Read_Reals_at_all(void *buf, IOWrapperSizeT count, IOWrapperSizeT offset,
-                                bool single_file_per_rank = false);
-  int Close(bool single_file_per_rank = false);
-  int Seek(IOWrapperSizeT offset, bool single_file_per_rank = false);
-  IOWrapperSizeT GetPosition(bool single_file_per_rank = false);
+                                bool use_serial_io = false);
+  int Close(bool use_serial_io = false);
+  int Seek(IOWrapperSizeT offset, bool use_serial_io = false);
+  IOWrapperSizeT GetPosition(bool use_serial_io = false);
 
  private:
   IOWrapperFile fh_;
+  std::string path_;
 #if MPI_PARALLEL_ENABLED
   MPI_Comm comm_;
 #endif

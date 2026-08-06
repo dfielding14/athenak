@@ -40,6 +40,7 @@ cmake --fresh -S "$script_dir" -B "$build_dir" \
   -DKokkos_ENABLE_HIP=ON \
   -DKokkos_ARCH_ZEN3=ON \
   -DKokkos_ARCH_VEGA90A=ON \
+  -DCMAKE_CXX_FLAGS="-I${ROCM_PATH}/include -munsafe-fp-atomics" \
   -DCMAKE_CXX_COMPILER=CC
 
 printf '\nConfigured successfully. Building with 16 parallel jobs...\n'

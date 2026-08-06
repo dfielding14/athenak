@@ -14,6 +14,7 @@
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
@@ -65,6 +66,7 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   lb_efficiency_(0),
   pwall_clock_(ptimer),
   wall_time(wtlim),
+  final_output_policy_(FinalOutputPolicy::all),
   impl_src("ru",1,1,1,1,1,1) {
   // set time-evolution option (no default)
   {
@@ -81,6 +83,23 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       std::exit(EXIT_FAILURE);
     }
   } // extra brace to limit scope of string
+
+  {
+    std::string policy = pin->GetOrAddString("time", "final_output_policy", "all");
+    if (policy == "all") {
+      final_output_policy_ = FinalOutputPolicy::all;
+    } else if (policy == "restart_only") {
+      final_output_policy_ = FinalOutputPolicy::restart_only;
+    } else if (policy == "none") {
+      final_output_policy_ = FinalOutputPolicy::none;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<time> final_output_policy = '" << policy
+                << "' not implemented. Choose all, restart_only, or none."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   // read <time> parameters controlling driver if run requires time-evolution
   if (time_evolution != TimeEvolution::tstatic) {
@@ -330,12 +349,7 @@ void Driver::ReportPerformanceTiming(double run_seconds) {
 
   std::array<double, nperformance_regions_> max_seconds = performance_seconds_;
   std::array<double, nperformance_regions_> sum_seconds = performance_seconds_;
-  std::array<unsigned long long, nperformance_regions_> local_calls{};
-  std::array<unsigned long long, nperformance_regions_> max_calls{};
-  for (int n = 0; n < nperformance_regions_; ++n) {
-    local_calls[n] = static_cast<unsigned long long>(performance_calls_[n]);
-    max_calls[n] = local_calls[n];
-  }
+  std::array<std::uint64_t, nperformance_regions_> max_calls = performance_calls_;
   double max_run_seconds = run_seconds;
 
 #if MPI_PARALLEL_ENABLED
@@ -343,8 +357,8 @@ void Driver::ReportPerformanceTiming(double run_seconds) {
                 MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
   MPI_Allreduce(performance_seconds_.data(), sum_seconds.data(), nperformance_regions_,
                 MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(local_calls.data(), max_calls.data(), nperformance_regions_,
-                MPI_UNSIGNED_LONG_LONG, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(performance_calls_.data(), max_calls.data(), nperformance_regions_,
+                MPI_UINT64_T, MPI_MAX, MPI_COMM_WORLD);
   MPI_Allreduce(&run_seconds, &max_run_seconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 #endif
 
@@ -572,6 +586,13 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
+    bool is_restart = (out->out_params.file_type == "rst" ||
+                       out->out_params.file_type == "rst_prtcl");
+    if (final_output_policy_ == FinalOutputPolicy::none ||
+        (final_output_policy_ == FinalOutputPolicy::restart_only && !is_restart)) {
+      continue;
+    }
+    // Final outputs are emitted normally so their counters advance normally.
     StartPerformanceRegion(PerformanceRegion::outputs);
     out->LoadOutputData(pmesh);
     out->WriteOutputFile(pmesh, pin);
@@ -589,8 +610,10 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 #if MPI_PARALLEL_ENABLED
     // Collect number of MeshBlocks communicated during load balancing across all ranks
     if (pmesh->adaptive) {
-      MPI_Allreduce(MPI_IN_PLACE, &(pmesh->pmr->nmb_sent_thisrank), 1, MPI_INT, MPI_SUM,
-                    MPI_COMM_WORLD);
+      mpi_utils::CheckMpi(
+          MPI_Allreduce(MPI_IN_PLACE, &(pmesh->pmr->nmb_sent_thisrank), 1, MPI_INT,
+                        MPI_SUM, MPI_COMM_WORLD),
+          "MPI_Allreduce for final AMR MeshBlock communication count");
     }
 #endif
     ReportPerformanceTiming(exe_time);
@@ -664,7 +687,8 @@ Real Driver::UpdateWallClock() {
     tnow = pwall_clock_->seconds();
   }
 #if MPI_PARALLEL_ENABLED
-  MPI_Bcast(&tnow, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  mpi_utils::CheckMpi(MPI_Bcast(&tnow, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD),
+                      "MPI_Bcast for wall-clock termination time");
 #endif
   return tnow;
 }

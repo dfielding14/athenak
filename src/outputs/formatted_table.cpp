@@ -9,8 +9,6 @@
 //  1D slices.  Code will issue error if this format is selected for 2D or 3D outputs.
 //  Output is written to a single file even with multiple MeshBlocks and MPI ranks.
 
-#include <sys/stat.h>  // mkdir
-
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
 #include <iomanip>
@@ -20,9 +18,52 @@
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
+#include "output_file_utils.hpp"
 #include "outputs.hpp"
+
+namespace {
+
+[[noreturn]] void FatalFormattedTableError(const std::string &message) {
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" +
+                        message);
+}
+
+void CheckedFormattedTablePrint(std::FILE *output, const std::string &filename,
+                                const char *text) {
+  if (std::fputs(text, output) == EOF) {
+    FatalFormattedTableError("Could not write formatted table output '" +
+                             filename + "'.");
+  }
+}
+
+template <typename Arg, typename... Args>
+void CheckedFormattedTablePrint(std::FILE *output, const std::string &filename,
+                                const char *format, Arg arg, Args... args) {
+  if (std::fprintf(output, format, arg, args...) < 0) {
+    FatalFormattedTableError("Could not write formatted table output '" +
+                             filename + "'.");
+  }
+}
+
+void CheckedFormattedTableFlush(std::FILE *output, const std::string &filename) {
+  if (std::fflush(output) != 0) {
+    FatalFormattedTableError("Could not flush formatted table output '" +
+                             filename + "'.");
+  }
+}
+
+void CheckedFormattedTableClose(std::FILE *output, const std::string &filename) {
+  if (std::fclose(output) != 0) {
+    FatalFormattedTableError("Could not close formatted table output '" +
+                             filename + "'.");
+  }
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
@@ -33,23 +74,20 @@ FormattedTableOutput::FormattedTableOutput(ParameterInput *pin, Mesh *pm,
   // check that 1D slice specified, otherwise issue warning and quit
   if (pm->multi_d) {
     if (!(out_params.slice1) && !(out_params.slice2)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Formatted table outputs can only contain 1D slices"
-                << std::endl << "Please add additional slice planes" << std::endl;
-      exit(EXIT_FAILURE);
+      FatalFormattedTableError("Formatted table outputs can only contain 1D slices. "
+                               "Please add additional slice planes.");
     }
   }
   if (pm->three_d) {
     if ((!(out_params.slice2) && !(out_params.slice3)) ||
         (!(out_params.slice1) && !(out_params.slice3))) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Formatted table outputs can only contain 1D slices"
-                << std::endl << "Please add additional slice planes" << std::endl;
-      exit(EXIT_FAILURE);
+      FatalFormattedTableError("Formatted table outputs can only contain 1D slices. "
+                               "Please add additional slice planes.");
     }
   }
   // create directories for outputs. Comments in binary.cpp constructor explain why
-  mkdir("tab",0775);
+  output_file_utils::EnsureDirectory("tab", 0775, "formatted table output",
+                                     FatalFormattedTableError);
 }
 
 //----------------------------------------------------------------------------------------
@@ -58,10 +96,10 @@ FormattedTableOutput::FormattedTableOutput(ParameterInput *pin, Mesh *pm,
 
 void FormattedTableOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // create filename: "tab/file_basename" + "." + "file_id" + "." + XXXXX + ".tab"
-  // where XXXXX = 5-digit file_number
+  // where XXXXX = file_number with a minimum width of 5 digits
   std::string fname;
-  char number[6];
-  std::snprintf(number, sizeof(number), "%05d", out_params.file_number);
+  std::string number = output_file_utils::FormatSequence(
+      out_params.file_number, "formatted table output", FatalFormattedTableError);
 
   fname.assign("tab/");
   fname.append(out_params.file_basename);
@@ -76,38 +114,41 @@ void FormattedTableOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (global_variable::my_rank == 0) {
     FILE *pfile;
     if ((pfile = std::fopen(fname.c_str(),"w")) == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-         << std::endl << "Output file '" << fname << "' could not be opened" << std::endl;
-      exit(EXIT_FAILURE);
+      FatalFormattedTableError("Output file '" + fname + "' could not be opened.");
     }
 
     // print file header
-    std::fprintf(pfile, "# Athena++ data at time=%e", pm->time);
-    std::fprintf(pfile, "  cycle=%d \n", pm->ncycle);
+    CheckedFormattedTablePrint(pfile, fname, "# Athena++ data at time=%e", pm->time);
+    CheckedFormattedTablePrint(pfile, fname, "  cycle=%d \n", pm->ncycle);
 
     // write one of x1, x2, x3 column headers
-    std::fprintf(pfile, "# gid  ");
-    if (!(out_params.slice1)) std::fprintf(pfile, " i       x1v     ");
-    if (!(out_params.slice2)) std::fprintf(pfile, " j       x2v     ");
-    if (!(out_params.slice3)) std::fprintf(pfile, " k       x3v     ");
+    CheckedFormattedTablePrint(pfile, fname, "# gid  ");
+    if (!(out_params.slice1)) {
+      CheckedFormattedTablePrint(pfile, fname, " i       x1v     ");
+    }
+    if (!(out_params.slice2)) {
+      CheckedFormattedTablePrint(pfile, fname, " j       x2v     ");
+    }
+    if (!(out_params.slice3)) {
+      CheckedFormattedTablePrint(pfile, fname, " k       x3v     ");
+    }
 
     // write data col headers from outvars vector
     for (auto it : outvars) {
-      std::fprintf(pfile, "    %s     ", it.label.c_str());
+      CheckedFormattedTablePrint(pfile, fname, "    %s     ", it.label.c_str());
     }
-    std::fprintf(pfile, "\n"); // terminate line
-    std::fclose(pfile);   // don't forget to close the output file
+    CheckedFormattedTablePrint(pfile, fname, "\n"); // terminate line
+    CheckedFormattedTableClose(pfile, fname);   // don't forget to close the output file
   }
 #if MPI_PARALLEL_ENABLED
-  int ierr = MPI_Barrier(MPI_COMM_WORLD);
+  mpi_utils::CheckMpi(MPI_Barrier(MPI_COMM_WORLD),
+                      "MPI_Barrier after formatted table header publication");
 #endif
 
   // now all ranks open file and append data
   FILE *pfile;
   if ((pfile = std::fopen(fname.c_str(),"a")) == nullptr) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-        << "Output file '" << fname << "' could not be opened" << std::endl;
-    exit(EXIT_FAILURE);
+    FatalFormattedTableError("Output file '" + fname + "' could not be opened.");
   }
   for (int r=0; r<global_variable::nranks; ++r) {
     // MPI ranks append data one-at-a-time in order, due to MPI_Barrier at end of loop
@@ -143,45 +184,53 @@ void FormattedTableOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         for (int k=oks; k<=oke; ++k) {
           for (int j=ojs; j<=oje; ++j) {
             for (int i=ois; i<=oie; ++i) {
-              std::fprintf(pfile, "%05d", pmb->mb_gid.h_view(idx));
+              CheckedFormattedTablePrint(pfile, fname, "%05d", pmb->mb_gid.h_view(idx));
               // write x1, x2, x3 indices and coordinates
               if (oie != ois) {
-                std::fprintf(pfile, " %04d", i);  // note extra space for formatting
+                // note extra space for formatting
+                CheckedFormattedTablePrint(pfile, fname, " %04d", i);
                 Real x1cc = CellCenterX(i-is,nx1,x1min,x1max);
-                std::fprintf(pfile, out_params.data_format.c_str(), x1cc);
+                CheckedFormattedTablePrint(pfile, fname, out_params.data_format.c_str(),
+                                           x1cc);
               }
               if (oje != ojs) {
-                std::fprintf(pfile, " %04d", j);  // note extra space for formatting
+                // note extra space for formatting
+                CheckedFormattedTablePrint(pfile, fname, " %04d", j);
                 Real x2cc = CellCenterX(j-js,nx2,x2min,x2max);
-                std::fprintf(pfile, out_params.data_format.c_str(), x2cc);
+                CheckedFormattedTablePrint(pfile, fname, out_params.data_format.c_str(),
+                                           x2cc);
               }
               if (oke != oks) {
-                std::fprintf(pfile, " %04d", k);  // note extra space for formatting
+                // note extra space for formatting
+                CheckedFormattedTablePrint(pfile, fname, " %04d", k);
                 Real x3cc = CellCenterX(k-ks,nx3,x3min,x3max);
-                std::fprintf(pfile, out_params.data_format.c_str(), x3cc);
+                CheckedFormattedTablePrint(pfile, fname, out_params.data_format.c_str(),
+                                           x3cc);
               }
 
               // write each output variable on same line
               for (int n=0; n<nout_vars; ++n) {
-                std::fprintf(pfile, out_params.data_format.c_str(),
-                             outarray(n,m,k-oks,j-ojs,i-ois));
+                CheckedFormattedTablePrint(pfile, fname, out_params.data_format.c_str(),
+                                           outarray(n,m,k-oks,j-ojs,i-ois));
               }
-              std::fprintf(pfile,"\n"); // terminate line
+              CheckedFormattedTablePrint(pfile, fname, "\n"); // terminate line
             }
           }
         }
       }  // end loop over MeshBlocks
     }
-    std::fflush(pfile);
+    CheckedFormattedTableFlush(pfile, fname);
 #if MPI_PARALLEL_ENABLED
-    int ierr = MPI_Barrier(MPI_COMM_WORLD);
+    mpi_utils::CheckMpi(MPI_Barrier(MPI_COMM_WORLD),
+                        "MPI_Barrier for ordered formatted table append");
 #endif
   }
 
-  std::fclose(pfile);   // don't forget to close the output file
+  CheckedFormattedTableClose(pfile, fname);   // don't forget to close the output file
 
   // increment counters
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "formatted table output", FatalFormattedTableError);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {

@@ -64,6 +64,55 @@ def run_case(
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_node_sharded_tracer_restart_is_rejected_before_write(
+    simple_trml_binary: Path, tmp_path: Path
+) -> None:
+    run_dir = tmp_path / "node_restart_rejected"
+    run_dir.mkdir()
+    input_path = tmp_path / "node_restart_rejected.athinput"
+    source = (
+        REPO_ROOT
+        / "inputs"
+        / "hydro"
+        / "TRML"
+        / "TRML_with_Tracers_and_Tracking.athinput"
+    ).read_text()
+    input_path.write_text(
+        source.replace(
+            "single_file_per_rank = true",
+            "single_file_per_rank = false\nsingle_file_per_node = true",
+        )
+    )
+    result = run(
+        [
+            str(simple_trml_binary),
+            "-i",
+            str(input_path),
+            "-d",
+            str(run_dir),
+            "time/nlim=0",
+            "time/tlim=0",
+            "mesh/nx1=8",
+            "mesh/nx2=8",
+            "mesh/nx3=8",
+            "meshblock/nx1=8",
+            "meshblock/nx2=8",
+            "meshblock/nx3=8",
+            "tracer_seed1/count_per_event=1",
+            "tracer_seed2/count_per_event=1",
+            *[f"output{number}/dt=-1" for number in range(1, 8)],
+        ],
+        check=False,
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "do not yet support node-sharded files" in result.stdout + result.stderr
+    assert not list(run_dir.rglob("*.tmp"))
+
+
 @pytest.mark.parametrize("integrator", ["rk2", "rk3", "rk4"])
 def test_stage_aware_cooling_matches_energy_loss(
     simple_trml_binary: Path, tmp_path: Path, integrator: str

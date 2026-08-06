@@ -1,0 +1,113 @@
+# Runnable MPI example: one diagnostic/restart shard per compute node.
+# Run with at least one MPI rank:
+#   mpirun -np 2 ./athena -i inputs/io/node_sharded_outputs.athinput -d io_node_run
+# Analyze diagnostic output through the public reader example:
+#   python vis/python/examples/read_io_outputs.py bin \
+#     io_node_run/bin/node_00000000/io_node_example.density.00000.bin --assemble-shards
+# Restart from the root manifest, not an individual node payload:
+#   mpirun -np 2 ./athena -r io_node_run/rst/io_node_example.00000.rst -d io_node_resume
+
+<job>
+basename = io_node_example
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 8
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.8
+nlim = 2
+tlim = 0.02
+ndiag = 1
+performance_timing = true
+final_output_policy = restart_only
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.4
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.0
+pl = 1.0
+ul = 0.0
+vl = 0.0
+wl = 0.0
+dr = 0.125
+pr = 0.1
+ur = 0.0
+vr = 0.0
+wr = 0.0
+
+<output1>
+file_type = bin
+id = density
+variable = hydro_w_d
+single_file_per_node = true
+dt = 0.01
+
+<output2>
+file_type = cbin
+id = coarse_density
+variable = hydro_w_d
+coarsen_factor = 2
+compute_moments = false
+single_file_per_node = true
+dt = 0.01
+
+<output3>
+file_type = pdf
+id = radius_density
+variable_1 = coord_r
+nbin1 = 12
+bin1_min = 0.01
+bin1_max = 1.0
+scale1 = log
+variable_2 = hydro_w_d
+nbin2 = 8
+bin2_min = 0.0
+bin2_max = 2.0
+scale2 = linear
+weight = mass
+single_file_per_node = true
+dt = 0.01
+
+<output4>
+file_type = sphslice
+id = density
+variable = hydro_w_d
+slice_r = 0.25
+ntheta = 16
+nphi = 32
+single_file_per_node = true
+dt = 0.01
+
+<output5>
+file_type = rst
+single_file_per_node = true
+dt = 0.01

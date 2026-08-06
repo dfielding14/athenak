@@ -1,0 +1,105 @@
+# Runnable example: four-dimensional PDF with a passive-scalar weight.
+# Read the generated output with:
+#   python vis/python/examples/read_io_outputs.py pdf \
+#     pdf_nd4_coord_r_hydro_w_s_0_vel_sph_r/io_pdf_scalar.00000.pdf
+
+<job>
+basename = io_pdf_scalar
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 8
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.8
+nlim = 1
+tlim = 0.01
+ndiag = 1
+performance_timing = false
+final_output_policy = none
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.4
+nscalars = 1
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.0
+pl = 1.0
+ul = 0.0
+vl = 0.0
+wl = 0.0
+yl = 1.0
+dr = 0.125
+pr = 0.1
+ur = 0.0
+vr = 0.0
+wr = 0.0
+yr = 0.0
+
+<output1>
+file_type = pdf
+id = nd4
+variable_1 = coord_x
+nbin1 = 8
+bin1_min = -0.5
+bin1_max = 0.5
+scale1 = linear
+variable_2 = coord_r
+nbin2 = 8
+bin2_min = 0.01
+bin2_max = 1.0
+scale2 = log
+variable_3 = hydro_w_s_0
+nbin3 = 4
+bin3_min = 0.0
+bin3_max = 1.0
+scale3 = linear
+variable_4 = vel_sph_r
+nbin4 = 8
+bin4_min = -1.0
+bin4_max = 1.0
+scale4 = symlog
+linthresh4 = 0.1
+weight = variable
+weight_variable = hydro_u_s_0
+single_file_per_rank = false
+dt = 1.0
+
+<output2>
+file_type = pdf
+id = volume
+variable_1 = hydro_w_s_0
+nbin1 = 8
+bin1_min = 0.0
+bin1_max = 1.0
+scale1 = linear
+weight = volume
+single_file_per_rank = false
+dt = 1.0

@@ -17,3 +17,8 @@ build*/
 *~
 *.swp
 Lorene
+
+# Python test and bytecode caches
+__pycache__/
+*.py[cod]
+.pytest_cache/

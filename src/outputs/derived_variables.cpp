@@ -12,6 +12,7 @@
 //!   - z-component of current density Jz  [non-relativistic]
 //!   - magnitude of current density J^2  [non-relativistic]
 
+#include <cstddef>
 #include <iostream>
 #include <sstream>
 #include <string>   // std::string, to_string()
@@ -25,11 +26,41 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "mpi_utils.hpp"
 #include "radiation/radiation.hpp"
 #include "radiation/radiation_tetrad.hpp"
 #include "particles/particles.hpp"
+#include "diagnostic_semantics.hpp"
 #include "outputs.hpp"
 #include "utils/current.hpp"
+
+namespace {
+
+void AbortOnInvalidDiagnostic(const DvceArray1D<int> &invalid,
+                              const std::string &name) {
+  auto host_invalid = Kokkos::create_mirror_view(invalid);
+  Kokkos::deep_copy(host_invalid, invalid);
+  if (host_invalid(0) != 0) {
+    mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                          " at line " + std::to_string(__LINE__) +
+                          "\nDerived diagnostic '" + name +
+                          "' encountered a nonfinite value or a non-positive fluid "
+                          "density.");
+  }
+}
+
+void EnsureDerivedVariableShape(DvceArray5D<Real> &derived_var, int nmb, int n_dv,
+                                int n3, int n2, int n1) {
+  if (derived_var.extent(0) != static_cast<std::size_t>(nmb) ||
+      derived_var.extent(1) != static_cast<std::size_t>(n_dv) ||
+      derived_var.extent(2) != static_cast<std::size_t>(n3) ||
+      derived_var.extent(3) != static_cast<std::size_t>(n2) ||
+      derived_var.extent(4) != static_cast<std::size_t>(n1)) {
+    Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+  }
+}
+
+}  // namespace
 
 KOKKOS_INLINE_FUNCTION
 void ComputeUcBcFromPrimitive(const Real uu1, const Real uu2, const Real uu3,
@@ -94,8 +125,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 
   // specific internal energy proxy = eint / density
   if (name.compare("temperature") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -116,16 +146,17 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Not computed in ghost zones since requires derivative
   if (name.compare("hydro_wz") == 0 ||
       name.compare("mhd_wz") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &w0_ = (name.compare("hydro_wz") == 0)?
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
     par_for("vorz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/size.d_view(m).dx1;
+      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))
+                          /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/size.d_view(m).dx2;
+        dv(m,i_dv,k,j,i) -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))
+                            /(2.0*size.d_view(m).dx2);
       }
     });
     i_dv += 1; // increment derived variable index
@@ -135,23 +166,28 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Not computed in ghost zones since requires derivative
   if (name.compare("hydro_w2") == 0 ||
       name.compare("mhd_w2") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &w0_ = (name.compare("hydro_w2") == 0)?
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
     par_for("vor2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real w1 = 0.0;
-      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))/size.d_view(m).dx1;
-      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/size.d_view(m).dx1;
+      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
+      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))/size.d_view(m).dx2;
-        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/size.d_view(m).dx2;
+        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
+        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
       }
       if (three_d) {
-        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))/size.d_view(m).dx3;
-        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))/size.d_view(m).dx3;
+        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
+        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
       }
       dv(m,i_dv,k,j,i) = w1*w1 + w2*w2 + w3*w3;
     });
@@ -162,15 +198,16 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // This makes for a large stencil, but approximates volume-averaged value within cell.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_jz") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("jz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
+      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))
+                          /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
+        dv(m,i_dv,k,j,i) -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))
+                            /(2.0*size.d_view(m).dx2);
       }
     });
     i_dv += 1; // increment derived variable index
@@ -179,22 +216,27 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // magnitude of current density.  Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_j2") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/size.d_view(m).dx1;
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/size.d_view(m).dx2;
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/size.d_view(m).dx3;
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/size.d_view(m).dx3;
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
       }
       dv(m,i_dv,k,j,i) = j1*j1 + j2*j2 + j3*j3;
     });
@@ -206,8 +248,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_curv") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("curv", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -274,8 +315,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_curv_alt") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("curv_alt", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -775,8 +815,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_k_jxb") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("mhd_k_jxb", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -812,8 +851,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_curv_perp") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("curv_perp", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -922,8 +960,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_bmag") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("bmag", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -1039,8 +1076,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 
   // divergence of B, including ghost zones
   if (name.compare("mhd_divb") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
 
     // set the loop limits for 1D/2D/3D problems
     int jl = js, ju = je, kl = ks, ku = ke;
@@ -1246,6 +1282,183 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
         }
       }
     });
+  }
+
+  int coord_kind = -1;
+  if (name == "coord_x") coord_kind = 0;
+  if (name == "coord_y") coord_kind = 1;
+  if (name == "coord_z") coord_kind = 2;
+  if (name == "coord_r") coord_kind = 3;
+  if (name == "coord_theta") coord_kind = 4;
+  if (name == "coord_phi") coord_kind = 5;
+  if (name == "coord_cyl_R") coord_kind = 6;
+  if (name == "coord_cyl_phi") coord_kind = 7;
+  if (name == "coord_cyl_z") coord_kind = 8;
+  if (name == "coord_costheta") coord_kind = 9;
+  if (name == "coord_abscostheta") coord_kind = 10;
+  if (coord_kind >= 0) {
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
+    int kind = coord_kind;
+    DvceArray1D<int> invalid("coordinate_diagnostic_invalid", 1);
+    Kokkos::deep_copy(invalid, 0);
+    par_for("coordinate_diagnostic", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+      Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+      Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
+      auto geometry = output_diagnostics::BuildGeometry(x, y, z);
+      Real value = 0.0;
+      if (kind == 0) value = geometry.x;
+      if (kind == 1) value = geometry.y;
+      if (kind == 2 || kind == 8) value = geometry.z;
+      if (kind == 3) value = geometry.radius;
+      if (kind == 4) value = geometry.theta;
+      if (kind == 5 || kind == 7) value = geometry.phi;
+      if (kind == 6) value = geometry.cylindrical_radius;
+      if (kind == 9) value = geometry.costheta;
+      if (kind == 10) value = geometry.abscostheta;
+      if (!geometry.valid || !output_diagnostics::IsFinite(value)) {
+        Kokkos::atomic_exchange(&invalid(0), 1);
+      }
+      dv(m, i_dv, k, j, i) = value;
+    });
+    AbortOnInvalidDiagnostic(invalid, name);
+    i_dv += 1;
+  }
+
+  int flow_kind = -1;
+  if (name == "vel_sph_r") flow_kind = 0;
+  if (name == "vel_sph_theta") flow_kind = 1;
+  if (name == "vel_sph_phi") flow_kind = 2;
+  if (name == "vel_cyl_R") flow_kind = 3;
+  if (name == "vel_cyl_phi") flow_kind = 4;
+  if (name == "mdot_sph") flow_kind = 5;
+  if (name == "mdot_sph_out") flow_kind = 6;
+  if (name == "mdot_sph_in") flow_kind = 7;
+  if (name == "mdot_vert") flow_kind = 8;
+  if (name == "mdot_vert_out") flow_kind = 9;
+  if (name == "mdot_vert_in") flow_kind = 10;
+  if (flow_kind >= 0) {
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
+    DvceArray5D<Real> u0_;
+    if (pm->pmb_pack->phydro != nullptr) {
+      u0_ = pm->pmb_pack->phydro->u0;
+    } else {
+      u0_ = pm->pmb_pack->pmhd->u0;
+    }
+    auto dv = derived_var;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
+    int kind = flow_kind;
+    DvceArray1D<int> invalid("flow_diagnostic_invalid", 1);
+    Kokkos::deep_copy(invalid, 0);
+    par_for("flow_diagnostic", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+      Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+      Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
+      Real rho = u0_(m, IDN, k, j, i);
+      auto flow = output_diagnostics::BuildFlow(
+          x, y, z, rho, u0_(m, IM1, k, j, i), u0_(m, IM2, k, j, i),
+          u0_(m, IM3, k, j, i));
+      Real value = 0.0;
+      if (kind == 0) value = flow.radial_velocity;
+      if (kind == 1) value = flow.theta_velocity;
+      if (kind == 2 || kind == 4) value = flow.phi_velocity;
+      if (kind == 3) value = flow.cylindrical_radial_velocity;
+      if (kind == 5) value = flow.radial_mass_flux;
+      if (kind == 6) value = fmax(flow.radial_mass_flux, 0.0);
+      if (kind == 7) value = fmin(flow.radial_mass_flux, 0.0);
+      if (kind == 8) value = flow.vertical_mass_flux;
+      if (kind == 9) value = fmax(flow.vertical_mass_flux, 0.0);
+      if (kind == 10) value = fmin(flow.vertical_mass_flux, 0.0);
+      if (!flow.valid || !output_diagnostics::IsFinite(value)) {
+        Kokkos::atomic_exchange(&invalid(0), 1);
+      }
+      dv(m, i_dv, k, j, i) = value;
+    });
+    AbortOnInvalidDiagnostic(invalid, name);
+    i_dv += 1;
+  }
+
+  int energy_kind = -1;
+  if (name == "edot_sph") energy_kind = 0;
+  if (name == "edot_sph_out") energy_kind = 1;
+  if (name == "edot_sph_in") energy_kind = 2;
+  if (name == "edot_sph_kin") energy_kind = 3;
+  if (name == "edot_sph_th") energy_kind = 4;
+  if (name == "edot_sph_mag") energy_kind = 5;
+  if (name == "edot_vert") energy_kind = 6;
+  if (name == "edot_vert_out") energy_kind = 7;
+  if (name == "edot_vert_in") energy_kind = 8;
+  if (energy_kind >= 0) {
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
+    bool is_mhd = (pm->pmb_pack->pmhd != nullptr);
+    DvceArray5D<Real> u0_;
+    DvceArray5D<Real> bcc_;
+    Real gamma = 0.0;
+    if (is_mhd) {
+      u0_ = pm->pmb_pack->pmhd->u0;
+      bcc_ = pm->pmb_pack->pmhd->bcc0;
+      gamma = pm->pmb_pack->pmhd->peos->eos_data.gamma;
+    } else {
+      u0_ = pm->pmb_pack->phydro->u0;
+      gamma = pm->pmb_pack->phydro->peos->eos_data.gamma;
+    }
+    auto dv = derived_var;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
+    int kind = energy_kind;
+    bool require_total_energy = kind != 3 && kind != 5;
+    DvceArray1D<int> invalid("energy_flux_diagnostic_invalid", 1);
+    Kokkos::deep_copy(invalid, 0);
+    par_for("energy_flux_diagnostic", DevExeSpace(), 0, (nmb-1),
+            ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+      Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+      Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
+      Real rho = u0_(m, IDN, k, j, i);
+      Real bx = 0.0;
+      Real by = 0.0;
+      Real bz = 0.0;
+      if (is_mhd) {
+        bx = bcc_(m, IBX, k, j, i);
+        by = bcc_(m, IBY, k, j, i);
+        bz = bcc_(m, IBZ, k, j, i);
+      }
+      auto energy = output_diagnostics::BuildEnergyFlux(
+          x, y, z, rho, u0_(m, IM1, k, j, i), u0_(m, IM2, k, j, i),
+          u0_(m, IM3, k, j, i),
+          require_total_energy ? u0_(m, IEN, k, j, i) : 0.0, gamma, is_mhd,
+          bx, by, bz, require_total_energy);
+      Real sign_z = output_diagnostics::VerticalSign(z);
+      Real vertical_flux = energy.total_vertical*sign_z;
+      Real value = 0.0;
+      if (kind == 0) value = energy.total_radial;
+      if (kind == 1) value = (energy.total_radial > 0.0)
+          ? energy.total_radial : 0.0;
+      if (kind == 2) value = (energy.total_radial < 0.0)
+          ? energy.total_radial : 0.0;
+      if (kind == 3) value = energy.kinetic_radial;
+      if (kind == 4) value = energy.thermal_radial;
+      if (kind == 5) value = energy.magnetic_radial;
+      if (kind == 6) value = vertical_flux;
+      if (kind == 7) value = (vertical_flux > 0.0) ? vertical_flux : 0.0;
+      if (kind == 8) value = (vertical_flux < 0.0) ? vertical_flux : 0.0;
+      if (!energy.valid || !output_diagnostics::IsFinite(value)) {
+        Kokkos::atomic_exchange(&invalid(0), 1);
+      }
+      dv(m, i_dv, k, j, i) = value;
+    });
+    AbortOnInvalidDiagnostic(invalid, name);
+    i_dv += 1;
   }
 
   // Particle density binned to mesh.

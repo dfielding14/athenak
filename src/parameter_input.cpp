@@ -226,11 +226,11 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
 #if MPI_PARALLEL_ENABLED
     // then broadcasts it
   if (!single_file_per_rank) {
-    MPI_Bcast(&ret, sizeof(IOWrapperSizeT), MPI_BYTE, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(&ret, sizeof(IOWrapperSizeT), 0, MPI_COMM_WORLD);
     if (ret == 0) {
       break;
     }
-    MPI_Bcast(buf, ret, MPI_BYTE, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(buf, ret, 0, MPI_COMM_WORLD);
   }
 #endif
     par.write(buf, ret); // add the buffer into the stream
@@ -254,7 +254,12 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
   // Read the stream and load the parameters
   LoadFromStream(par);
   // Seek the file to the end of the header
-  input.Seek(header, single_file_per_rank);
+  if (input.Seek(header, single_file_per_rank) != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Unable to reposition restart file after reading "
+              << "parameter input." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   return;
 }

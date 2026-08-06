@@ -24,17 +24,23 @@
 //========================================================================================
 
 // C/C++ headers
+#include <algorithm>
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <memory>
 #include <cstdio> // sscanf
 #include <fstream>  // Include this for std::ifstream
+#include <limits>
+#include <sstream>
+#include <vector>
 
 // Athena headers
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
+#include "restart_manifest.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
 #include "driver/driver.hpp"
@@ -53,6 +59,27 @@
 #if defined(KOKKOS_ENABLE_HIP)
 #include <hip/hip_runtime.h>
 #endif
+
+namespace {
+
+std::size_t RankDirectoryPosition(const std::string &path) {
+  std::size_t position = 0;
+  while ((position = path.find("/rank_", position)) != std::string::npos) {
+    constexpr std::size_t kPrefixSize = 6;
+    constexpr std::size_t kDigits = 8;
+    std::size_t digits_begin = position + kPrefixSize;
+    std::size_t digits_end = digits_begin + kDigits;
+    if (digits_end < path.size() && path[digits_end] == '/' &&
+        std::all_of(path.begin() + digits_begin, path.begin() + digits_end,
+                    [](char ch) { return ch >= '0' && ch <= '9'; })) {
+      return position;
+    }
+    ++position;
+  }
+  return std::string::npos;
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn int main(int argc, char *argv[])
@@ -232,11 +259,21 @@ int main(int argc, char *argv[]) {
 
   ParameterInput* pinput = new ParameterInput;
   IOWrapper infile, restartfile;
+  std::unique_ptr<NodeRestartManifest> node_restart_manifest;
   // read parameters from restart file
-  bool single_file_per_rank = false; // DBF: flag for single_file_per_rank for rst files
+  bool single_file_per_rank = false;  // Track legacy per-rank restart layout.
   if (res_flag) {
+    if (NodeRestartManifest::IsPayloadPath(restart_file)) {
+      FailNodeRestart("node payload paths are not supported restart entry points; "
+                      "use the public manifest path.");
+    }
+    if (NodeRestartManifest::LooksLikeManifest(restart_file)) {
+      node_restart_manifest =
+          std::make_unique<NodeRestartManifest>(NodeRestartManifest::Load(restart_file));
+      restart_file = node_restart_manifest->CanonicalPayloadPath();
+    }
     // Check if the path contains "rank_" directory
-    size_t rank_pos = restart_file.find("/rank_");
+    size_t rank_pos = RankDirectoryPosition(restart_file);
     single_file_per_rank = (rank_pos != std::string::npos);
 
     // If single_file_per_rank is true, modify the path for the current rank
@@ -255,14 +292,14 @@ int main(int argc, char *argv[]) {
     // Now use restart_file for opening the file
     std::ifstream file_check(restart_file);
     if (!file_check.good()) {
-        std::cerr << "Error: Unable to open restart file: " << restart_file << std::endl;
-        // Handle the error (e.g., exit the program or use a default configuration)
+      FailNodeRestart("Unable to open restart file: " + restart_file);
     }
 
     // read parameters from restart file
     restartfile.Open(restart_file.c_str(),IOWrapper::FileMode::read,single_file_per_rank);
     pinput->LoadFromFile(restartfile, single_file_per_rank);
-    IOWrapperSizeT headeroffset = restartfile.GetPosition(single_file_per_rank);
+    CheckNodeRestartPayloadMarker(restartfile, single_file_per_rank,
+                                  node_restart_manifest != nullptr);
   }
 
   // read parameters from input file.  If both -r and -i are specified, this will
@@ -282,6 +319,7 @@ int main(int argc, char *argv[]) {
     delete pinput;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
+    global_variable::FinalizeNodeCommunicator();
     MPI_Finalize();
 #endif
     return(0);
@@ -307,6 +345,7 @@ int main(int argc, char *argv[]) {
     delete pinput;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
+    global_variable::FinalizeNodeCommunicator();
     MPI_Finalize();
 #endif
     return(0);
@@ -327,7 +366,8 @@ int main(int argc, char *argv[]) {
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput,
                                                      pmesh,
                                                      restartfile,
-                                                     single_file_per_rank);
+                                                     single_file_per_rank,
+                                                     node_restart_manifest.get());
     restartfile.Close(single_file_per_rank);
   }
   //--- Step 6. --------------------------------------------------------------------------
@@ -360,6 +400,7 @@ int main(int argc, char *argv[]) {
   delete pinput;
   Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
+  global_variable::FinalizeNodeCommunicator();
   MPI_Finalize();
 #endif
   return(0);

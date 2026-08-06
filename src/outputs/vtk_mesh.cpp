@@ -12,8 +12,6 @@
 // that have MeshBlocks in slice.  Current design segfaults with slicing if there are
 // ranks that do not write.
 
-#include <sys/stat.h>  // mkdir
-
 #include <algorithm>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
@@ -26,9 +24,42 @@
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "globals.hpp"
+#include "mpi_utils.hpp"
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
 #include "outputs.hpp"
+#include "output_file_utils.hpp"
+
+namespace {
+
+[[noreturn]] void FatalMeshVTKError(const std::string &message) {
+  mpi_utils::AbortWorld(std::string("### FATAL ERROR in ") + __FILE__ +
+                        " at line " + std::to_string(__LINE__) + "\n" +
+                        message);
+}
+
+template <typename... Args>
+void CheckedMeshVTKPrint(std::FILE *output, const std::string &filename,
+                         const char *format, Args... args) {
+  if (std::fprintf(output, format, args...) < 0) {
+    FatalMeshVTKError("Could not write mesh VTK output '" + filename + "'.");
+  }
+}
+
+void CheckedMeshVTKWrite(std::FILE *output, const float *data, std::size_t count,
+                         const std::string &filename) {
+  if (count != 0 && std::fwrite(data, sizeof(float), count, output) != count) {
+    FatalMeshVTKError("Could not write mesh VTK output '" + filename + "'.");
+  }
+}
+
+void CheckedMeshVTKClose(std::FILE *output, const std::string &filename) {
+  if (std::fclose(output) != 0) {
+    FatalMeshVTKError("Could not close mesh VTK output '" + filename + "'.");
+  }
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
@@ -37,7 +68,7 @@
 MeshVTKOutput::MeshVTKOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   // create new directory for this output. Comments in binary.cpp constructor explain why
-  mkdir("vtk",0775);
+  output_file_utils::EnsureDirectory("vtk", 0775, "mesh VTK output", FatalMeshVTKError);
 }
 
 //----------------------------------------------------------------------------------------
@@ -56,10 +87,11 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   int big_end = IsBigEndian(); // =1 on big endian machine
   const int time_precision = std::numeric_limits<Real>::max_digits10 - 1;
   // create filename: "vtk/file_basename"."file_id"."gid"."XXXXX".vtk
-  // where XXXXX = 5-digit file_number, and gid only added if specified
+  // where XXXXX = file_number with a minimum width of 5 digits, and gid only added if
+  // specified
   std::string fname;
-  char number[6];
-  std::snprintf(number, sizeof(number), "%05d", out_params.file_number);
+  std::string number = output_file_utils::FormatSequence(
+      out_params.file_number, "mesh VTK output", FatalMeshVTKError);
 
   fname.assign("vtk/");
   fname.append(out_params.file_basename);
@@ -147,14 +179,15 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // open file and write file header
   if ((pm->nmb_total > 1) && (out_params.gid < 0)) {
     MPI_File fh;
-    if (MPI_File_open(MPI_COMM_WORLD, fname.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY,
-                      MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "Output file '" << fname << "' could not be opened" <<std::endl;
-        exit(EXIT_FAILURE);
-    }
+    mpi_utils::CheckMpi(
+        MPI_File_open(MPI_COMM_WORLD, fname.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY,
+                      MPI_INFO_NULL, &fh),
+        "MPI_File_open for shared mesh VTK output");
     if (global_variable::my_rank == 0) {
-      MPI_File_write(fh, msg.str().c_str(), msg.str().size(), MPI_BYTE,MPI_STATUS_IGNORE);
+      mpi_utils::CheckMpi(
+          MPI_File_write(fh, msg.str().c_str(), msg.str().size(), MPI_BYTE,
+                         MPI_STATUS_IGNORE),
+          "MPI_File_write for shared mesh VTK header");
     }
     size_t header_size = msg.str().size();
 
@@ -168,16 +201,24 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     MPI_Datatype block;
     int bsize[3] = {nx3, nx2, nx1};      // total number of cells in MB
     int bstrt[3] = {0, 0, 0};            // i/j/k starting index of this block
-    MPI_Type_create_subarray(3,bsize,bsize,bstrt,MPI_ORDER_C,MPI_FLOAT,&block);
-    MPI_Type_commit(&block);
+    mpi_utils::CheckMpi(
+        MPI_Type_create_subarray(3, bsize, bsize, bstrt, MPI_ORDER_C, MPI_FLOAT,
+                                 &block),
+        "MPI_Type_create_subarray for shared mesh VTK block");
+    mpi_utils::CheckMpi(MPI_Type_commit(&block),
+                        "MPI_Type_commit for shared mesh VTK block");
 
     // create new datatype representing grid of MeshBlocks
     MPI_Datatype grid;
     int gridsize[3] = {nout3, nout2, nout1};   // total number of cells over all MBs
     int mbstrt[3] = {0, 0, 0};                 // i/j/k starting index of blocks
     int mbsize[3] = {nx3, nx2, nx1};           // number of cells in blocks
-    MPI_Type_create_subarray(3,gridsize,mbsize,mbstrt,MPI_ORDER_C,MPI_FLOAT,&grid);
-    MPI_Type_commit(&grid);
+    mpi_utils::CheckMpi(
+        MPI_Type_create_subarray(3, gridsize, mbsize, mbstrt, MPI_ORDER_C, MPI_FLOAT,
+                                 &grid),
+        "MPI_Type_create_subarray for shared mesh VTK grid");
+    mpi_utils::CheckMpi(MPI_Type_commit(&grid),
+                        "MPI_Type_commit for shared mesh VTK grid");
 
     // Loop over variables
     int nout_vars = outvars.size();
@@ -188,15 +229,17 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                << " float" << std::endl
                << "LOOKUP_TABLE default" << std::endl;
       if (global_variable::my_rank == 0) {
-        MPI_File_write(fh, data_msg.str().c_str(), data_msg.str().size(),
-                          MPI_BYTE, MPI_STATUS_IGNORE);
+        mpi_utils::CheckMpi(
+            MPI_File_write(fh, data_msg.str().c_str(), data_msg.str().size(),
+                           MPI_BYTE, MPI_STATUS_IGNORE),
+            "MPI_File_write for shared mesh VTK variable header");
       }
       header_size += data_msg.str().size();
 
       // Loop over max number of MeshBlocks to be written on any rank
       // This guarantees collective MPI functions are called by all ranks
-      MPI_Datatype mygrid;
       for (int m=0; m<noutmbs_max; ++m) {
+        MPI_Datatype mygrid = MPI_DATATYPE_NULL;
         // if there is a MB to be written, set location in 3D grid of MBs in output file.
         if (m < nout_mbs) {
           LogicalLocation lloc = pm->lloc_eachmb[outmbs[m].mb_gid];
@@ -221,34 +264,56 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           }
           // create new datatype representing this block in grid of MBs, and set file view
           int strt[3] = {kmb*nx3, jmb*nx2, imb*nx1};   // starting indices of this block
-          MPI_Type_create_subarray(3,gridsize,mbsize,strt,MPI_ORDER_C,MPI_FLOAT,&mygrid);
-          MPI_Type_commit(&mygrid);
-          MPI_File_set_view(fh, header_size, MPI_FLOAT, mygrid, "native", MPI_INFO_NULL);
+          mpi_utils::CheckMpi(
+              MPI_Type_create_subarray(3, gridsize, mbsize, strt, MPI_ORDER_C,
+                                       MPI_FLOAT, &mygrid),
+              "MPI_Type_create_subarray for shared mesh VTK MeshBlock view");
+          mpi_utils::CheckMpi(MPI_Type_commit(&mygrid),
+                              "MPI_Type_commit for shared mesh VTK MeshBlock view");
+          mpi_utils::CheckMpi(
+              MPI_File_set_view(fh, header_size, MPI_FLOAT, mygrid, "native",
+                                MPI_INFO_NULL),
+              "MPI_File_set_view for shared mesh VTK MeshBlock");
         } else {
           // if no data to be written, set file view to default
           // file view function is a collective operation, so must be called by all ranks
-          MPI_File_set_view(fh, header_size, MPI_FLOAT, grid, "native", MPI_INFO_NULL);
+          mpi_utils::CheckMpi(
+              MPI_File_set_view(fh, header_size, MPI_FLOAT, grid, "native",
+                                MPI_INFO_NULL),
+              "MPI_File_set_view for empty shared mesh VTK rank");
         }
 
         // every rank has a MB to write, so write collectively
         if (m < noutmbs_min) {
-          MPI_File_write_all(fh, &(data[0]), 1, block, MPI_STATUS_IGNORE);
+          mpi_utils::CheckMpi(
+              MPI_File_write_all(fh, &(data[0]), 1, block, MPI_STATUS_IGNORE),
+              "MPI_File_write_all for shared mesh VTK MeshBlock");
         // some ranks are finished writing, so use non-collective write
         } else if (m < nout_mbs) {
-          MPI_File_write(fh, &(data[0]), 1, block, MPI_STATUS_IGNORE);
+          mpi_utils::CheckMpi(
+              MPI_File_write(fh, &(data[0]), 1, block, MPI_STATUS_IGNORE),
+              "MPI_File_write for shared mesh VTK MeshBlock");
+        }
+        if (mygrid != MPI_DATATYPE_NULL) {
+          mpi_utils::CheckMpi(MPI_Type_free(&mygrid),
+                              "MPI_Type_free for shared mesh VTK MeshBlock view");
         }
       }  // end loop over MeshBlocks
-      MPI_Type_free(&mygrid);
 
       // reset view to stream of bytes in preparation for adding next data header
       header_size += nout1*nout2*nout3*sizeof(float);
-      MPI_File_set_view(fh, header_size, MPI_BYTE, MPI_BYTE, "native", MPI_INFO_NULL);
+      mpi_utils::CheckMpi(
+          MPI_File_set_view(fh, header_size, MPI_BYTE, MPI_BYTE, "native",
+                            MPI_INFO_NULL),
+          "MPI_File_set_view for shared mesh VTK next header");
     }  // end loop over variables
 
     // close the output file and clean up
-    MPI_Type_free(&block);
-    MPI_Type_free(&grid);
-    MPI_File_close(&fh);
+    mpi_utils::CheckMpi(MPI_Type_free(&block),
+                        "MPI_Type_free for shared mesh VTK block");
+    mpi_utils::CheckMpi(MPI_Type_free(&grid),
+                        "MPI_Type_free for shared mesh VTK grid");
+    mpi_utils::CheckMpi(MPI_File_close(&fh), "MPI_File_close for shared mesh VTK");
     delete[] data;
     parallel_write=true;
   }
@@ -260,11 +325,9 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     // open file and write header
     FILE *pfile;
     if ((pfile = std::fopen(fname.c_str(),"w")) == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "Output file '" << fname << "' could not be opened" <<std::endl;
-        exit(EXIT_FAILURE);
+      FatalMeshVTKError("Output file '" + fname + "' could not be opened.");
     }
-    std::fprintf(pfile,"%s",msg.str().c_str());
+    CheckedMeshVTKPrint(pfile, fname, "%s", msg.str().c_str());
 
     // allocate 1D vector of floats used to convert and output entire 3D data
     float *data = new float[nout1*nout2*nout3];
@@ -276,7 +339,7 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       data_msg << std::endl << "SCALARS " << outvars[n].label.c_str()
                << " float" << std::endl
                << "LOOKUP_TABLE default" << std::endl;
-      std::fprintf(pfile,"%s",data_msg.str().c_str());
+      CheckedMeshVTKPrint(pfile, fname, "%s", data_msg.str().c_str());
 
       // Loop over MeshBlocks, insert variable into 3D array
       for (int m=0; m<nout_mbs; ++m) {
@@ -309,15 +372,17 @@ void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         for (int i=0; i<(nout1*nout2*nout3); ++i) { Swap4Bytes(&data[i]); }
       }
       // now write the data as unformatted binary
-      std::fwrite(&(data[0]), sizeof(float), nout1*nout2*nout3, pfile);
+      CheckedMeshVTKWrite(pfile, data, static_cast<std::size_t>(nout1)*nout2*nout3,
+                          fname);
     }
     // close the output file and clean up
-    std::fclose(pfile);
+    CheckedMeshVTKClose(pfile, fname);
     delete[] data;
   }
 
   // increment counters
-  out_params.file_number++;
+  out_params.file_number = output_file_utils::AdvanceFileNumber(
+      out_params.file_number, "mesh VTK output", FatalMeshVTKError);
   if (out_params.last_time < 0.0) {
     out_params.last_time = pm->time;
   } else {

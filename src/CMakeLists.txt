@@ -10,6 +10,7 @@ add_executable(
         main.cpp
         globals.cpp
         parameter_input.cpp
+        restart_manifest.cpp
 
         bvals/bvals.cpp
         bvals/buffs_cc.cpp
@@ -99,6 +100,7 @@ add_executable(
         outputs/history.cpp
         outputs/restart.cpp
         outputs/spherical_surface.cpp
+        outputs/spherical_slice.cpp
         outputs/coarsened_binary.cpp
         outputs/track_prtcl.cpp
         outputs/prtcl_thermo_history.cpp
