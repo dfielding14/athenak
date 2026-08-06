@@ -368,6 +368,21 @@ void Driver::ReportPerformanceTiming(double run_seconds) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \brief Load, write, and report wall time for one output block.
+
+void Driver::WriteOutput(BaseTypeOutput *out, Mesh *pm, ParameterInput *pin) {
+  StartPerformanceRegion(PerformanceRegion::outputs);
+  Kokkos::Timer output_timer;
+  out->LoadOutputData(pm);
+  out->WriteOutputFile(pm, pin);
+  StopPerformanceRegion(PerformanceRegion::outputs);
+  if (global_variable::my_rank == 0) {
+    std::cout << "<" << out->out_params.block_name << "> took " << std::scientific
+              << std::setprecision(6) << output_timer.seconds() << " seconds" << std::endl;
+  }
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn Driver::ExecuteTaskList()
 //! \brief Perform tasks over all MeshBlocks for the TaskList specified by string "tl".
 //! Integer argument "stage" can be used to indicate at which step in overall algorithm
@@ -431,14 +446,15 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   //---- Step 3.  Cycle through output Types and load data / write files.
   if (!res_flag) { // only write outputs at the beginning of the run
     for (auto &out : pout->pout_list) {
-      out->LoadOutputData(pmesh);
-      out->WriteOutputFile(pmesh, pin);
+      WriteOutput(out, pmesh, pin);
     }
   }
 
   //---- Step 4.  Initialize various counters, timers, etc.
   run_time_.reset();
   nmb_updated_ = 0;
+  last_diag_cycle_ = pmesh->ncycle;
+  last_diag_time_ = 0.0;
   ResetPerformanceTiming();
 
   // allocate memory for stiff source terms with ImEx integrators
@@ -536,10 +552,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
-          StartPerformanceRegion(PerformanceRegion::outputs);
-          out->LoadOutputData(pmesh);
-          out->WriteOutputFile(pmesh, pin);
-          StopPerformanceRegion(PerformanceRegion::outputs);
+          WriteOutput(out, pmesh, pin);
         }
       }
 
@@ -572,10 +585,7 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
-    StartPerformanceRegion(PerformanceRegion::outputs);
-    out->LoadOutputData(pmesh);
-    out->WriteOutputFile(pmesh, pin);
-    StopPerformanceRegion(PerformanceRegion::outputs);
+    WriteOutput(out, pmesh, pin);
   }
 
   // call any problem specific functions to do work after main loop
@@ -642,10 +652,16 @@ void Driver::OutputCycleDiagnostics(Mesh *pm) {
 //  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
   const int dtprcsn = 6;
   if (pm->ncycle % ndiag == 0) {
-    Real elapsed = pwall_clock_->seconds();
-    std::cout << "elapsed=" << std::scientific << std::setprecision(dtprcsn) << elapsed
-              << " cycle=" << pm->ncycle
-              << " time=" << pm->time << " dt=" << pm->dt << std::endl;
+    double now = run_time_.seconds();
+    std::uint64_t zonecycles =
+        static_cast<std::uint64_t>(pm->ncycle - last_diag_cycle_) * pm->nmb_total *
+        static_cast<std::uint64_t>(pm->NumberOfMeshBlockCells());
+    double zcs = (now > last_diag_time_) ? zonecycles/(now - last_diag_time_) : 0.0;
+    std::cout << "cycle=" << std::scientific << std::setprecision(dtprcsn) << pm->ncycle
+              << " time=" << pm->time << " dt=" << pm->dt << " zcs=" << zcs
+              << std::endl;
+    last_diag_cycle_ = pm->ncycle;
+    last_diag_time_ = now;
   }
   return;
 }

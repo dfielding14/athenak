@@ -90,6 +90,8 @@ class Driver {
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
   float lb_efficiency_;         // measure of how efficient was load balancing
+  int last_diag_cycle_ = 0;
+  double last_diag_time_ = 0.0;
   static constexpr int nperformance_regions_ =
       static_cast<int>(PerformanceRegion::count);
   std::array<Kokkos::Timer, nperformance_regions_> performance_timers_;
@@ -97,6 +99,7 @@ class Driver {
   std::array<std::uint64_t, nperformance_regions_> performance_calls_{};
   void ResetPerformanceTiming();
   void ReportPerformanceTiming(double run_seconds);
+  void WriteOutput(BaseTypeOutput *out, Mesh *pm, ParameterInput *pin);
   void OutputCycleDiagnostics(Mesh *pm);
   Real UpdateWallClock();
 };
