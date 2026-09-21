@@ -19,9 +19,11 @@
 #include <vector>
 #include <utility>
 #include <algorithm>
+#include <Kokkos_Profiling_ScopedRegion.hpp>
 
 #include "athena.hpp"
 #include "globals.hpp"
+#include "hydro/hydro.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
@@ -49,6 +51,12 @@ CoarsenedBinaryOutput::CoarsenedBinaryOutput(ParameterInput *pin, Mesh *pm,
   int factor = out_params.coarsen_factor;
   if (factor < 1) {
     FatalCoarsenedBinaryError("coarsen_factor must be positive.");
+  }
+  if (out_params.include_gzs || out_params.slice1 || out_params.slice2 ||
+      out_params.slice3 || out_params.gid >= 0) {
+    FatalCoarsenedBinaryError(
+        "Coarsened binary output requires the full domain without ghost zones, "
+        "slices, or gid selection.");
   }
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
   if ((indcs.nx1 > 1 && indcs.nx1 % factor != 0) ||
@@ -199,6 +207,105 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
     Kokkos::realloc(outarray, nout_vars_with_moments, nout_mbs, nout3, nout2, nout1);
   }
 
+  if (out_params.variable.compare("hydro_sgs_2d") == 0) {
+    Kokkos::Profiling::ScopedRegion region("SGS2D/load");
+    int nx = outarray.extent_int(4), ny = outarray.extent_int(3);
+    int fx = ActiveCoarsenFactor(indcs.nx1, out_params.coarsen_factor);
+    int fy = ActiveCoarsenFactor(indcs.nx2, out_params.coarsen_factor);
+    int samples = fx * fy;
+    // Bound each team's work so even a whole-block filter uses many GPU teams.
+    constexpr int chunk_cells = 1024;
+    int chunks = (samples + chunk_cells - 1) / chunk_cells;
+    int cells = nout_mbs * ny * nx;
+    int is = indcs.is, js = indcs.js, ks = indcs.ks;
+    auto u = pm->pmb_pack->phydro->u0;
+    DvceArray5D<Real> coarse(Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                            "sgs_coarse"), 6, nout_mbs, 1, ny, nx);
+    auto partial = coarse;
+    if (chunks > 1) {
+      partial = DvceArray5D<Real>(Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                                 "sgs_partial"), 6, nout_mbs, chunks, ny, nx);
+    }
+
+    Kokkos::parallel_for("sgs_2d_moments",
+      Kokkos::TeamPolicy<DevExeSpace>(cells * chunks, Kokkos::AUTO),
+    KOKKOS_LAMBDA(const TeamMember_t &team) {
+      int chunk = team.league_rank() % chunks;
+      int cell = team.league_rank() / chunks;
+      int i = cell % nx, j = (cell / nx) % ny, m = cell / (nx * ny);
+      int begin = chunk * chunk_cells;
+      int end = (begin + chunk_cells < samples) ? begin + chunk_cells : samples;
+      Real r, x, y, xx, xy, yy;
+      Kokkos::parallel_reduce(Kokkos::TeamThreadRange(team, begin, end),
+      [=](const int offset, Real &sr, Real &sx, Real &sy,
+          Real &sxx, Real &sxy, Real &syy) {
+        int ii = is + i * fx + offset % fx;
+        int jj = js + j * fy + offset / fx;
+        Real rho = u(m,IDN,ks,jj,ii);
+        Real mx = u(m,IM1,ks,jj,ii), my = u(m,IM2,ks,jj,ii);
+        sr += rho; sx += mx; sy += my;
+        sxx += mx*mx/rho; sxy += mx*my/rho; syy += my*my/rho;
+      }, r, x, y, xx, xy, yy);
+      Kokkos::single(Kokkos::PerTeam(team), [=]() {
+        Real norm = (chunks == 1) ? 1.0/samples : 1.0;
+        partial(0,m,chunk,j,i) = norm*r;
+        partial(1,m,chunk,j,i) = norm*x;
+        partial(2,m,chunk,j,i) = norm*y;
+        partial(3,m,chunk,j,i) = norm*xx;
+        partial(4,m,chunk,j,i) = norm*xy;
+        partial(5,m,chunk,j,i) = norm*yy;
+      });
+    });
+
+    if (chunks > 1) {
+      Kokkos::parallel_for("sgs_2d_combine",
+        Kokkos::TeamPolicy<DevExeSpace>(cells, Kokkos::AUTO),
+      KOKKOS_LAMBDA(const TeamMember_t &team) {
+        int cell = team.league_rank();
+        int i = cell % nx, j = (cell / nx) % ny, m = cell / (nx * ny);
+        Real r, x, y, xx, xy, yy;
+        Kokkos::parallel_reduce(Kokkos::TeamThreadRange(team, chunks),
+        [=](const int chunk, Real &sr, Real &sx, Real &sy,
+            Real &sxx, Real &sxy, Real &syy) {
+          sr += partial(0,m,chunk,j,i);
+          sx += partial(1,m,chunk,j,i);
+          sy += partial(2,m,chunk,j,i);
+          sxx += partial(3,m,chunk,j,i);
+          sxy += partial(4,m,chunk,j,i);
+          syy += partial(5,m,chunk,j,i);
+        }, r, x, y, xx, xy, yy);
+        Kokkos::single(Kokkos::PerTeam(team), [=]() {
+          coarse(0,m,0,j,i) = r/samples;
+          coarse(1,m,0,j,i) = x/samples;
+          coarse(2,m,0,j,i) = y/samples;
+          coarse(3,m,0,j,i) = xx/samples;
+          coarse(4,m,0,j,i) = xy/samples;
+          coarse(5,m,0,j,i) = yy/samples;
+        });
+      });
+    }
+    // One transfer per filter width, independent of variable and MeshBlock counts.
+    Kokkos::deep_copy(outarray, coarse);
+    for (int m=0; m<nout_mbs; ++m) {
+      for (int j=0; j<ny; ++j) {
+        for (int i=0; i<nx; ++i) {
+          Real rho = outarray(0,m,0,j,i);
+          if (!(rho > 0.0)) {
+            FatalCoarsenedBinaryError(
+                "hydro_sgs_2d encountered non-positive filtered density.");
+          }
+          Real mx = outarray(1,m,0,j,i), my = outarray(2,m,0,j,i);
+          outarray(1,m,0,j,i) = mx/rho;
+          outarray(2,m,0,j,i) = my/rho;
+          outarray(3,m,0,j,i) -= mx*mx/rho;
+          outarray(4,m,0,j,i) -= mx*my/rho;
+          outarray(5,m,0,j,i) -= my*my/rho;
+        }
+      }
+    }
+    return;
+  }
+
   // Calculate derived variables, if required
   if (out_params.contains_derived) {
     ComputeDerivedVariable(out_params.variable, pm);
@@ -227,14 +334,8 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
       int coarsened_nout2 = nout2/coarsen2;
       int coarsened_nout3 = nout3/coarsen3;
 
-      // copy output variable to new device View
-      DvceArray3D<Real> d_output_var("d_out_var",nout3,nout2,nout1);
       auto d_slice = Kokkos::subview(*(outvars[n].data_ptr), mbi, outvars[n].data_index,
                                      krange,jrange,irange);
-      Kokkos::deep_copy(d_output_var,d_slice);
-      Kokkos::fence(); // Ensure complete copy
-
-
       int number_of_moments = 1;
       if (out_params.compute_moments) {
         number_of_moments = 4;
@@ -242,8 +343,6 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
       DvceArray4D<Real> d_output_var_coarsened("d_output_var_coarsened",
         number_of_moments, coarsened_nout3, coarsened_nout2, coarsened_nout1);
 
-      // Coarsen the d_slice and store the result in d_output_var
-      // CoarsenVariable(d_output_var, d_output_var_coarsened, out_params.coarsen_factor);
       int coarsen_cells = coarsen1 * coarsen2 * coarsen3;
 
       if (nout1 % coarsen1 != 0 || nout2 % coarsen2 != 0 || nout3 % coarsen3 != 0) {
@@ -251,57 +350,30 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
             "Active output dimensions must be divisible by coarsen_factor.");
       }
 
-      int total_iterations = coarsened_nout3
-        * coarsened_nout2 * coarsened_nout1 * coarsen_cells;
-
-      bool compute_moments = out_params.compute_moments;
+      // One team sums each coarse cell, avoiding factor^D contended atomic adds.
+      int coarse_cells = coarsened_nout3 * coarsened_nout2 * coarsened_nout1;
       Kokkos::parallel_for("coarsen_variable",
-       Kokkos::RangePolicy<DevExeSpace>(0, total_iterations),
-      KOKKOS_LAMBDA(const int idx) {
-        // Calculate the 3D indices for the coarsened data
-        int total_coarsened_elements = coarsened_nout1*coarsened_nout2*coarsened_nout3;
+        Kokkos::TeamPolicy<DevExeSpace>(number_of_moments * coarse_cells, Kokkos::AUTO),
+      KOKKOS_LAMBDA(const TeamMember_t &team) {
+        int idx = team.league_rank();
+        int moment_idx = idx / coarse_cells;
         int k_c = (idx / (coarsened_nout2 * coarsened_nout1)) % coarsened_nout3;
         int j_c = (idx / coarsened_nout1) % coarsened_nout2;
         int i_c = idx % coarsened_nout1;
-
-        // Calculate the offset within the active-dimension box filter.
-        int offset = idx / total_coarsened_elements;
-        int kk = offset / (coarsen2 * coarsen1);
-        int jj = (offset / coarsen1) % coarsen2;
-        int ii = offset % coarsen1;
-
-        // Calculate the corresponding indices in the full data
-        int k = k_c * coarsen3 + kk;
-        int j = j_c * coarsen2 + jj;
-        int i = i_c * coarsen1 + ii;
-
-        // Perform the coarsening operation
-        if(k < nout3 && j < nout2 && i < nout1) {
-          Kokkos::atomic_add(&d_output_var_coarsened(0, k_c, j_c, i_c),
-            d_output_var(k, j, i));
-          if (compute_moments) {
-            Kokkos::atomic_add(&d_output_var_coarsened(1, k_c, j_c, i_c),
-              d_output_var(k, j, i)*d_output_var(k, j, i));
-            Kokkos::atomic_add(&d_output_var_coarsened(2, k_c, j_c, i_c),
-              d_output_var(k, j, i)*d_output_var(k, j, i)*d_output_var(k, j, i));
-            Kokkos::atomic_add(&d_output_var_coarsened(3, k_c, j_c, i_c),
-               d_output_var(k, j, i)*d_output_var(k, j, i)
-              *d_output_var(k, j, i)*d_output_var(k, j, i));
-          }
-        }
-      });
-      // Normalize the coarsened data
-      int normalize_iterations = number_of_moments * coarsened_nout3
-                                * coarsened_nout2 * coarsened_nout1;
-      Kokkos::parallel_for("normalize_coarsened_variable",
-        Kokkos::RangePolicy<DevExeSpace>(0, normalize_iterations),
-      KOKKOS_LAMBDA(const int idx) {
-        int moment_idx = idx / (coarsened_nout3 * coarsened_nout2 * coarsened_nout1);
-        int k = (idx / (coarsened_nout2 * coarsened_nout1)) % coarsened_nout3;
-        int j = (idx / coarsened_nout1) % coarsened_nout2;
-        int i = idx % coarsened_nout1;
-
-        d_output_var_coarsened(moment_idx, k, j, i) /= coarsen_cells;
+        Real sum;
+        Kokkos::parallel_reduce(Kokkos::TeamThreadRange(team, coarsen_cells),
+        [=](const int offset, Real &subtotal) {
+          int k = k_c * coarsen3 + offset / (coarsen2 * coarsen1);
+          int j = j_c * coarsen2 + (offset / coarsen1) % coarsen2;
+          int i = i_c * coarsen1 + offset % coarsen1;
+          Real value = d_slice(k,j,i);
+          Real moment = value;
+          for (int p=0; p<moment_idx; ++p) { moment *= value; }
+          subtotal += moment;
+        }, sum);
+        Kokkos::single(Kokkos::PerTeam(team), [&]() {
+          d_output_var_coarsened(moment_idx,k_c,j_c,i_c) = sum/coarsen_cells;
+        });
       });
 
 
@@ -323,27 +395,9 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
     }
   }
 
-  if (out_params.variable.compare("hydro_sgs_2d") == 0) {
-    for (int m=0; m<nout_mbs; ++m) {
-      for (int k=0; k<outarray.extent_int(2); ++k) {
-        for (int j=0; j<outarray.extent_int(3); ++j) {
-          for (int i=0; i<outarray.extent_int(4); ++i) {
-            Real rho = outarray(0,m,k,j,i);
-            if (rho <= 0.0) {
-              FatalCoarsenedBinaryError(
-                  "hydro_sgs_2d encountered non-positive filtered density.");
-            }
-            Real mx = outarray(1,m,k,j,i);
-            Real my = outarray(2,m,k,j,i);
-            outarray(1,m,k,j,i) = mx/rho;
-            outarray(2,m,k,j,i) = my/rho;
-            outarray(3,m,k,j,i) -= mx*mx/rho;
-            outarray(4,m,k,j,i) -= mx*my/rho;
-            outarray(5,m,k,j,i) -= my*my/rho;
-          }
-        }
-      }
-    }
+  // Each filter width owns an output object; do not retain fine-grid scratch per width.
+  if (out_params.contains_derived) {
+    derived_var = DvceArray5D<Real>();
   }
 
   if (out_params.variable.compare("hydro_sgs_3d") == 0) {
@@ -381,6 +435,7 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
 //   All MeshBlocks are written to the same file.
 
 void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+  Kokkos::Profiling::ScopedRegion region("cbin/write");
   // check if slicing
   bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3);
 
@@ -596,8 +651,10 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     if (!single_file_per_rank) {
       myoffset += data_size*ns_mbs;
     }
-    cbinfile.Write_any_type_at_all(data,(data_size*nb_mbs),myoffset,"byte",
-                                    single_file_per_rank);
+    if (cbinfile.Write_any_type_at_all(data,(data_size*nb_mbs),myoffset,"byte",
+                                     single_file_per_rank) != data_size*nb_mbs) {
+      FatalCoarsenedBinaryError("Coarsened binary data were not written completely.");
+    }
   } else {
     // check if elements larger than 2^31
     if (data_size*nb_mbs<=2147483648) {

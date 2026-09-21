@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import numpy as np
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -17,15 +18,19 @@ PRODUCTION_INPUTS = (
 ATHENA = Path.cwd() / "athena"
 sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 
-from bin_convert import read_binary, read_coarsened_binary  # noqa: E402
+from bin_convert import (  # noqa: E402
+    read_binary,
+    read_coarsened_binary,
+    read_coarsened_binary_as_athdf,
+)
 
 
-def run_athena(output_dir, *overrides, restart=None):
+def run_athena(output_dir, *overrides, restart=None, input_file=INPUT):
     """Run the focused input in an isolated output directory."""
     output_dir.mkdir(parents=True, exist_ok=True)
     command = [str(ATHENA), "-d", str(output_dir)]
     if restart is None:
-        command.extend(["-i", str(INPUT)])
+        command.extend(["-i", str(input_file)])
     else:
         command.extend(["-r", str(restart)])
     command.extend(overrides)
@@ -89,47 +94,128 @@ def assemble_2d_blocks(data, names):
     return result
 
 
-def test_2d_sgs_output_matches_direct_favre_filter(tmp_path):
+@pytest.mark.parametrize("factor, block_nx, block_ny", [
+    (1, 8, 8), (2, 8, 8), (8, 8, 8), (48, 96, 96),
+    (64, 128, 64), (64, 512, 512), (512, 512, 512),
+])
+def test_2d_sgs_output_matches_direct_favre_filter(tmp_path, factor, block_nx, block_ny):
     """The producer writes final Favre velocities and SGS stresses on a 2D mesh."""
     run_dir = tmp_path / "run"
-    require_success(run_athena(run_dir))
+    overrides = [f"output4/coarsen_factor={factor}"]
+    if block_nx > 8:
+        blocks_per_axis = 1 if block_nx == 512 else 2
+        overrides.extend([
+            f"mesh/nx1={blocks_per_axis * block_nx}",
+            f"mesh/nx2={blocks_per_axis * block_ny}",
+            f"meshblock/nx1={block_nx}", f"meshblock/nx2={block_ny}",
+            "hydro/viscosity=1.0e-6",
+            "turb_driving/mode_sampling=sparse_annulus",
+            "turb_driving/sparse_mode_count=8",
+            "turb_driving/nlow=5", "turb_driving/nhigh=7", "turb_driving/npeak=6",
+        ])
+    require_success(run_athena(run_dir, *overrides))
 
     state = read_binary(str(latest(run_dir / "bin", "*.state.*.bin")))
     force = read_binary(str(latest(run_dir / "bin", "*.force.*.bin")))
-    sgs = read_coarsened_binary(
-        str(latest(run_dir / "cbin_sgs_2", "*.sgs.*.cbin"))
-    )
+    sgs_path = str(latest(run_dir / f"cbin_sgs_{factor}", "*.sgs.*.cbin"))
+    sgs = read_coarsened_binary(sgs_path)
 
     assert sgs["var_names"] == ["dens", "velx", "vely", "tau_xx", "tau_xy", "tau_yy"]
     assert sgs["Nx3"] == 1
     assert sgs["nx3_mb"] == 1
+    assert sgs["nx1_mb"] == block_nx // factor
+    assert sgs["nx2_mb"] == block_ny // factor
+    assert sgs["cycle"] == state["cycle"] == 3
     np.testing.assert_array_equal(state["mb_logical"], sgs["mb_logical"])
+    assembled = read_coarsened_binary_as_athdf(sgs_path)
+    for name, values in assemble_2d_blocks(sgs, sgs["var_names"]).items():
+        np.testing.assert_array_equal(assembled[name][0], values)
+    np.testing.assert_allclose(
+        assembled["x1f"], np.linspace(-0.5, 0.5, sgs["Nx1"] + 1)
+    )
 
     for block in range(state["n_mbs"]):
-        rho = np.asarray(state["mb_data"]["dens"][block])
-        mx = np.asarray(state["mb_data"]["mom1"][block])
-        my = np.asarray(state["mb_data"]["mom2"][block])
-        rho_bar = square_mean(rho, 2)
-        mx_bar = square_mean(mx, 2)
-        my_bar = square_mean(my, 2)
+        rho = np.asarray(state["mb_data"]["dens"][block], dtype=np.float64)
+        mx = np.asarray(state["mb_data"]["mom1"][block], dtype=np.float64)
+        my = np.asarray(state["mb_data"]["mom2"][block], dtype=np.float64)
+        rho_bar = square_mean(rho, factor)
+        mx_bar = square_mean(mx, factor)
+        my_bar = square_mean(my, factor)
         expected = {
             "dens": rho_bar,
             "velx": mx_bar / rho_bar,
             "vely": my_bar / rho_bar,
-            "tau_xx": square_mean(mx * mx / rho, 2) - mx_bar * mx_bar / rho_bar,
-            "tau_xy": square_mean(mx * my / rho, 2) - mx_bar * my_bar / rho_bar,
-            "tau_yy": square_mean(my * my / rho, 2) - my_bar * my_bar / rho_bar,
+            "tau_xx": square_mean(mx * mx / rho, factor) - mx_bar * mx_bar / rho_bar,
+            "tau_xy": square_mean(mx * my / rho, factor) - mx_bar * my_bar / rho_bar,
+            "tau_yy": square_mean(my * my / rho, factor) - my_bar * my_bar / rho_bar,
         }
+        # Fine-grid binary data have already been rounded to float32.
+        stress_tolerance = 5.0e-7 * np.max((mx * mx + my * my) / rho)
         for name, values in expected.items():
             np.testing.assert_allclose(
-                sgs["mb_data"][name][block], values, rtol=5.0e-6, atol=5.0e-8
+                sgs["mb_data"][name][block], values, rtol=5.0e-6,
+                atol=stress_tolerance if name.startswith("tau_") else 5.0e-12,
             )
+        xx, xy, yy = [
+            np.asarray(sgs["mb_data"][name][block], dtype=np.float64)
+            for name in ("tau_xx", "tau_xy", "tau_yy")
+        ]
+        min_eigenvalue = 0.5 * (xx + yy - np.hypot(xx - yy, 2.0 * xy))
+        assert np.min(min_eigenvalue) >= -stress_tolerance
 
     assert np.all(np.asarray(force["mb_data"]["force3"]) == 0.0)
     assert np.all(np.asarray(state["mb_data"]["mom3"]) == 0.0)
     history = np.loadtxt(run_dir / "turb_sgs_2d_test.hydro.hst")
     assert np.all(history[:, 5] == 0.0)
     assert np.all(history[:, 8] == 0.0)
+
+
+@pytest.mark.parametrize("factor", [0, -2, 3, 16])
+def test_sgs_rejects_invalid_coarsening(tmp_path, factor):
+    result = run_athena(tmp_path, f"output4/coarsen_factor={factor}")
+    assert result.returncode != 0
+    assert "coarsen_factor" in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("option", [
+    "ghost_zones=true", "slice_x1=0.0", "gid=0", "compute_moments=true",
+])
+def test_sgs_rejects_unsupported_output_options(tmp_path, option):
+    input_file = tmp_path / "case.athinput"
+    input_file.write_text(INPUT.read_text() + f"\n<output4>\n{option}\n")
+    result = run_athena(tmp_path, input_file=input_file)
+    assert result.returncode != 0
+    assert "FATAL ERROR" in result.stdout + result.stderr
+    assert "coarsened_binary.cpp" in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("three_d", [False, True])
+def test_coarsened_raw_moments_match_direct_filter(tmp_path, three_d):
+    input_file = tmp_path / "case.athinput"
+    input_file.write_text(INPUT.read_text() + "\n<output4>\ncompute_moments = true\n")
+    overrides = ["output4/variable=hydro_u"]
+    if three_d:
+        overrides.extend(["mesh/nx3=8", "meshblock/nx3=4"])
+    require_success(run_athena(tmp_path, *overrides, input_file=input_file))
+    state = read_binary(str(latest(tmp_path / "bin", "*.state.*.bin")))
+    moments = read_coarsened_binary(
+        str(latest(tmp_path / "cbin_sgs_2", "*.sgs.*.cbin"))
+    )
+    assert moments["number_of_moments"] == 4
+    np.testing.assert_array_equal(state["mb_logical"], moments["mb_logical"])
+    for block in range(state["n_mbs"]):
+        for name in state["var_names"]:
+            values = np.asarray(state["mb_data"][name][block], dtype=np.float64)
+            nz, ny, nx = values.shape
+            zfactor = 2 if three_d else 1
+            for power, suffix in enumerate(("1st", "2nd", "3rd", "4th"), start=1):
+                expected = (values ** power).reshape(
+                    nz // zfactor, zfactor, ny // 2, 2, nx // 2, 2
+                ).mean(axis=(1, 3, 5))
+                np.testing.assert_allclose(
+                    moments["mb_data"][f"{name}_{suffix}"][block], expected,
+                    rtol=5.0e-6, atol=5.0e-7 * np.max(np.abs(values) ** power),
+                )
 
 
 def test_isothermal_viscosity_changes_the_evolution(tmp_path):

@@ -33,10 +33,6 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
   const int nji  = nx2*nx1;
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 
-  if (linear_drag && drag_rate > 0.0) {
-    dtnew = std::min(dtnew, static_cast<Real>(1.0)/drag_rate);
-  }
-
   if (ism_cooling) {
     Real use_e = eos_data.use_e;
     Real gamma = eos_data.gamma;
@@ -128,6 +124,11 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
       min_dt = fmin((eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
+  }
+
+  // Cooling reductions overwrite dtnew, so apply the drag limit afterward.
+  if (linear_drag && drag_rate > 0.0) {
+    dtnew = std::min(dtnew, static_cast<Real>(1.0)/drag_rate);
   }
 
   return;

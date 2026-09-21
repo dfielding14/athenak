@@ -10,6 +10,7 @@
 
 #include "srcterms.hpp"
 
+#include <cmath>
 #include <iostream>
 #include <string> // string
 
@@ -56,9 +57,9 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
   // (2) linear Rayleigh drag
   if (linear_drag) {
     drag_rate = pin->GetReal(block, "drag_rate");
-    if (drag_rate < 0.0) {
+    if (!std::isfinite(drag_rate) || drag_rate < 0.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "drag_rate must not be negative" << std::endl;
+                << std::endl << "drag_rate must be finite and nonnegative" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (pmy_pack->pcoord->is_special_relativistic ||

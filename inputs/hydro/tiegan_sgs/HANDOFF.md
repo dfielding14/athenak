@@ -452,18 +452,27 @@ mpirun -np RANKS build-tiegan-sgs/src/athena \
 
 On a scheduler-managed machine, replace `mpirun` with the site-supported launcher.
 
-The focused tests used for this handoff were:
+Run the focused turbulence tests with the turbulence build:
 
 ```bash
 cd build-tiegan-sgs/src
 PYTHONPATH=../../tst python -m pytest -q \
   ../../tst/test_suite/turb/test_turb_sgs_2d_cpu.py \
-  ../../tst/test_suite/turb/test_linear_drag_cpu.py \
   ../../tst/test_suite/turb/test_turb_driving_cpu.py
 
 PYTHONPATH=../../tst python -m pytest -q \
   ../../tst/test_suite/turb/test_turb_sgs_2d_mpicpu.py \
   ../../tst/test_suite/turb/test_turb_driving_mpicpu.py
+```
+
+The uniform-flow drag tests use built-in problem generators, which `PROBLEM=turb`
+overrides. From the repository root, build and run them separately:
+
+```bash
+cmake -S . -B build-drag -DPROBLEM=built_in_pgens -DCMAKE_BUILD_TYPE=Release
+cmake --build build-drag -j
+cd build-drag/src
+python -m pytest -q ../../tst/test_suite/turb/test_linear_drag_cpu.py
 ```
 
 The target environment needs `pytest`, NumPy, and h5py for these focused tests.

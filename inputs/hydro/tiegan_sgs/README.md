@@ -95,6 +95,36 @@ Each file contains:
 The coarsening factor must divide every active MeshBlock dimension. Keeping every
 factor aligned with MeshBlock boundaries makes the local box filters equivalent to
 a global non-overlapping square filter. The supplied inputs use powers of two.
+Factor 512 therefore requires at least 512 cells in both active MeshBlock
+dimensions; it cannot span several smaller MeshBlocks. Coarsened output requires
+the full domain without ghost zones, slices, or `gid` selection. SGS output does
+not support `compute_moments=true` because its six fields are already the final
+Favre quantities.
+
+Use the default double-precision build for SGS production. The moments and Favre
+subtraction use simulation precision; only the final fields are stored as float32.
+The SGS kernel reads density and the two momenta once per fine cell per filter
+width, accumulating all six moments together without fine-grid moment arrays or
+global atomic adds. Large filters are split into 1024-cell partial reductions to
+keep many GPU teams busy, then combined. Each width transfers one complete coarse
+array to the host, where Favre subtraction precedes float32 serialization.
+The six-field product covers the isothermal momentum closure; it does not include
+the additional energy-flux moments needed for a non-isothermal closure.
+
+Measure overhead with the production GPU count, MeshBlocks, output cadence, and
+filesystem. This helper alternates SGS-on/off runs and reports median timings:
+
+```bash
+python3 scripts/benchmark_sgs.py build/src/athena case.athinput \
+  --launcher 'srun -n 4' --output-dir /scratch/sgs-benchmark time/nlim=1000
+```
+
+Choose enough cycles to include several scheduled snapshots beyond the initial
+and final dumps. All other outputs and physical parameters stay identical. The
+saved logs and `results.json` include timings, output counts, and bytes. Kokkos
+profiling regions `SGS2D/load` and `cbin/write` separate calculation/transfer from
+file packing/writing when a profiling tool is attached. GPU throughput must be
+measured on the target hardware; CPU timings do not establish GPU overhead.
 
 ## Historical Commissioning Runs
 
