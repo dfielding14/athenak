@@ -97,9 +97,9 @@ factor aligned with MeshBlock boundaries makes the local box filters equivalent 
 a global non-overlapping square filter. The supplied inputs use powers of two.
 Factor 512 therefore requires at least 512 cells in both active MeshBlock
 dimensions; it cannot span several smaller MeshBlocks. Coarsened output requires
-the full domain without ghost zones, slices, or `gid` selection. SGS output does
-not support `compute_moments=true` because its six fields are already the final
-Favre quantities.
+the full domain without ghost zones, slices, or `gid` selection. Compact hydro SGS
+outputs do not support `compute_moments=true` because their fields are already
+the final Favre quantities.
 
 Use the default double-precision build for SGS production. The moments and Favre
 subtraction use simulation precision; only the final fields are stored as float32.
@@ -111,8 +111,36 @@ array to the host, where Favre subtraction precedes float32 serialization.
 The six-field product covers the isothermal momentum closure; it does not include
 the additional energy-flux moments needed for a non-isothermal closure.
 
+For three-dimensional hydro, use `variable = hydro_sgs_3d` with `file_type = cbin`.
+It writes ten final Favre fields: `dens`, `velx`, `vely`, `velz`, `tau_xx`,
+`tau_xy`, `tau_xz`, `tau_yy`, `tau_yz`, and `tau_zz`. The definitions above extend
+to all three velocity components. This momentum product supports Newtonian ideal
+and isothermal hydro; it contains no energy-flux closure. The box filter spans all
+three active dimensions and still must fit within each MeshBlock.
+
+For Newtonian ideal-gas MHD, `variable = mhd_sgs` retains the existing 59 raw
+moment fields, `mhd_sgs_1` through `mhd_sgs_59`. These are filtered moments from
+which SGS stresses, EMFs, and energy-flux terms can be constructed; they are not
+final Favre-subtracted labels. Field `mhd_sgs_5` is conserved total energy,
+including kinetic and magnetic energy. The field order and duplicate moments are
+preserved. Isothermal and relativistic MHD are rejected for this product.
+For MHD, `compute_moments=true` retains the existing four raw powers per field
+and uses the same optimized coarsening path.
+
+The optimized 3D hydro and MHD coarsening paths accumulate at most eight moments
+per GPU team, with 1024 fine cells per partial reduction, then combine the partial
+sums and copy the whole coarse output to the host once. This bounds accumulator
+register use and avoids allocating ten or 59 full-resolution moment arrays.
+The standard moment groups use fixed formulas, avoiding field-selection branches
+inside the fine-cell loop.
+The 2D six-moment path is unchanged. These SGS reductions use no global
+floating-point atomics: HIP's `-munsafe-fp-atomics` is compatible but does not
+speed up the reduction itself. It is distinct from `Kokkos_ENABLE_ATOMICS_BYPASS`,
+which must remain off for GPU builds.
+
 Measure overhead with the production GPU count, MeshBlocks, output cadence, and
-filesystem. This helper alternates SGS-on/off runs and reports median timings:
+filesystem. This helper recognizes all three SGS products, alternates SGS-on/off
+runs, and reports median timings:
 
 ```bash
 python3 scripts/benchmark_sgs.py build/src/athena case.athinput \
@@ -122,9 +150,10 @@ python3 scripts/benchmark_sgs.py build/src/athena case.athinput \
 Choose enough cycles to include several scheduled snapshots beyond the initial
 and final dumps. All other outputs and physical parameters stay identical. The
 saved logs and `results.json` include timings, output counts, and bytes. Kokkos
-profiling regions `SGS2D/load` and `cbin/write` separate calculation/transfer from
-file packing/writing when a profiling tool is attached. GPU throughput must be
-measured on the target hardware; CPU timings do not establish GPU overhead.
+profiling regions `SGS2D/load`, `SGS3D/load`, `MHD_SGS/load`, and `cbin/write`
+separate calculation/transfer from file packing/writing when a profiling tool is
+attached. GPU throughput must be measured on the target hardware; CPU timings do
+not establish GPU overhead.
 
 ## Historical Commissioning Runs
 

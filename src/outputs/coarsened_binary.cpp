@@ -16,6 +16,7 @@
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <utility>
 #include <algorithm>
@@ -24,9 +25,11 @@
 #include "athena.hpp"
 #include "globals.hpp"
 #include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
+#include "sgs_moments.hpp"
 
 namespace {
 
@@ -38,6 +41,137 @@ int ActiveCoarsenFactor(int extent, int coarsen_factor) {
   std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
             << message << std::endl;
   std::exit(EXIT_FAILURE);
+}
+
+// Form moments while filtering: no full-resolution SGS arrays or global atomic adds.
+template <bool is_mhd, int powers = 1>
+void CoarsenSGS(Mesh *pm, int factor, HostArray5D<Real> &output) {
+  auto &indcs = pm->mb_indcs;
+  int nx = output.extent_int(4), ny = output.extent_int(3);
+  int nz = output.extent_int(2), nvars = output.extent_int(0);
+  int nmb = pm->pmb_pack->nmb_thispack;
+  int fx = ActiveCoarsenFactor(indcs.nx1, factor);
+  int fy = ActiveCoarsenFactor(indcs.nx2, factor);
+  int fz = ActiveCoarsenFactor(indcs.nx3, factor);
+  int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  int samples = fx * fy * fz;
+  // Keep live sums small and expose enough teams even for whole-block filters.
+  constexpr int group_size = 8, chunk_cells = 1024;
+  int groups = (nvars + group_size - 1) / group_size;
+  int chunks = (samples + chunk_cells - 1) / chunk_cells;
+  int cells = nmb * nz * ny * nx;
+  DvceArray5D<Real> u, bcc;
+  if constexpr (is_mhd) {
+    u = pm->pmb_pack->pmhd->u0;
+    bcc = pm->pmb_pack->pmhd->bcc0;
+  } else {
+    u = pm->pmb_pack->phydro->u0;
+  }
+  DvceArray5D<Real> coarse(Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                          "sgs_coarse"), nvars, nmb, nz, ny, nx);
+  DvceArray3D<Real> partial;
+  if (chunks > 1) {
+    partial = DvceArray3D<Real>(Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                               "sgs_partial"), nvars, cells, chunks);
+  }
+  Kokkos::parallel_for("sgs_3d_moments",
+    Kokkos::TeamPolicy<DevExeSpace>(cells * groups * chunks, Kokkos::AUTO),
+  KOKKOS_LAMBDA(const TeamMember_t &team) {
+    // Neighboring teams reuse the same fine-state chunk across moment groups.
+    int group = team.league_rank() % groups;
+    int chunk = (team.league_rank() / groups) % chunks;
+    int cell = team.league_rank() / (groups * chunks);
+    int i = cell % nx, j = (cell / nx) % ny;
+    int k = (cell / (nx * ny)) % nz, m = cell / (nx * ny * nz);
+    int begin = chunk * chunk_cells;
+    int end = (begin + chunk_cells < samples) ? begin + chunk_cells : samples;
+    auto reduce_group = [=](auto group_start) {
+      int first;
+      if constexpr (powers == 1) { first = decltype(group_start)::value; }
+      else { first = group_start; }
+      Real r0, r1, r2, r3, r4, r5, r6, r7;
+      Kokkos::parallel_reduce(Kokkos::TeamThreadRange(team, begin, end),
+      [=](const int offset, Real &s0, Real &s1, Real &s2, Real &s3,
+          Real &s4, Real &s5, Real &s6, Real &s7) {
+        int ii = is + i * fx + offset % fx;
+        int jj = js + j * fy + (offset / fx) % fy;
+        int kk = ks + k * fz + offset / (fx * fy);
+        MHDCons1D state{};
+        state.d = u(m,IDN,kk,jj,ii);
+        state.mx = u(m,IM1,kk,jj,ii);
+        state.my = u(m,IM2,kk,jj,ii);
+        state.mz = u(m,IM3,kk,jj,ii);
+        if constexpr (is_mhd) {
+          state.e = u(m,IEN,kk,jj,ii);
+          state.bx = bcc(m,IBX,kk,jj,ii);
+          state.by = bcc(m,IBY,kk,jj,ii);
+          state.bz = bcc(m,IBZ,kk,jj,ii);
+        }
+        auto moment = [=](int n) {
+          if constexpr (is_mhd) {
+            Real value = MHDSGSMoment(n / powers, state);
+            Real result = value;
+            for (int p=0; p<n % powers; ++p) { result *= value; }
+            return result;
+          } else {
+            return HydroSGS3DMoment(n, state);
+          }
+        };
+        s0 += moment(first);     s1 += moment(first + 1);
+        s2 += moment(first + 2); s3 += moment(first + 3);
+        s4 += moment(first + 4); s5 += moment(first + 5);
+        s6 += moment(first + 6); s7 += moment(first + 7);
+      }, r0, r1, r2, r3, r4, r5, r6, r7);
+      Kokkos::single(Kokkos::PerTeam(team), [=]() {
+        auto save = [=](int n, Real value) {
+          if (n < nvars) {
+            if (chunks == 1) { coarse(n,m,k,j,i) = value/samples; }
+            else { partial(n,cell,chunk) = value; }
+          }
+        };
+        save(first, r0);     save(first + 1, r1);
+        save(first + 2, r2); save(first + 3, r3);
+        save(first + 4, r4); save(first + 5, r5);
+        save(first + 6, r6); save(first + 7, r7);
+      });
+    };
+    // Resolve moment selectors once per team, so the fine-cell loop has fixed algebra.
+    if constexpr (powers == 1) {
+      switch (group) {
+        case 0: reduce_group(std::integral_constant<int,0>{}); break;
+        case 1: reduce_group(std::integral_constant<int,8>{}); break;
+        default:
+          if constexpr (is_mhd) {
+            switch (group) {
+              case 2: reduce_group(std::integral_constant<int,16>{}); break;
+              case 3: reduce_group(std::integral_constant<int,24>{}); break;
+              case 4: reduce_group(std::integral_constant<int,32>{}); break;
+              case 5: reduce_group(std::integral_constant<int,40>{}); break;
+              case 6: reduce_group(std::integral_constant<int,48>{}); break;
+              case 7: reduce_group(std::integral_constant<int,56>{}); break;
+            }
+          }
+      }
+    } else {
+      reduce_group(group * group_size);
+    }
+  });
+  if (chunks > 1) {
+    Kokkos::parallel_for("sgs_3d_combine",
+      Kokkos::TeamPolicy<DevExeSpace>(nvars * cells, Kokkos::AUTO),
+    KOKKOS_LAMBDA(const TeamMember_t &team) {
+      int cell = team.league_rank() % cells, n = team.league_rank() / cells;
+      int i = cell % nx, j = (cell / nx) % ny;
+      int k = (cell / (nx * ny)) % nz, m = cell / (nx * ny * nz);
+      Real sum;
+      Kokkos::parallel_reduce(Kokkos::TeamThreadRange(team, chunks),
+      [=](const int chunk, Real &subtotal) { subtotal += partial(n,cell,chunk); }, sum);
+      Kokkos::single(Kokkos::PerTeam(team), [=]() {
+        coarse(n,m,k,j,i) = sum/samples;
+      });
+    });
+  }
+  Kokkos::deep_copy(output, coarse);
 }
 
 }  // namespace
@@ -306,6 +440,46 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
     return;
   }
 
+  if (out_params.variable.compare("mhd_sgs") == 0) {
+    Kokkos::Profiling::ScopedRegion region("MHD_SGS/load");
+    if (out_params.compute_moments) {
+      CoarsenSGS<true,4>(pm, out_params.coarsen_factor, outarray);
+    } else {
+      CoarsenSGS<true>(pm, out_params.coarsen_factor, outarray);
+    }
+    return;
+  }
+  if (out_params.variable.compare("hydro_sgs_3d") == 0) {
+    Kokkos::Profiling::ScopedRegion region("SGS3D/load");
+    CoarsenSGS<false>(pm, out_params.coarsen_factor, outarray);
+    for (int m=0; m<nout_mbs; ++m) {
+      for (int k=0; k<outarray.extent_int(2); ++k) {
+        for (int j=0; j<outarray.extent_int(3); ++j) {
+          for (int i=0; i<outarray.extent_int(4); ++i) {
+            Real rho = outarray(0,m,k,j,i);
+            if (!(rho > 0.0)) {
+              FatalCoarsenedBinaryError(
+                  "hydro_sgs_3d encountered non-positive filtered density.");
+            }
+            Real mx = outarray(1,m,k,j,i);
+            Real my = outarray(2,m,k,j,i);
+            Real mz = outarray(3,m,k,j,i);
+            outarray(1,m,k,j,i) = mx/rho;
+            outarray(2,m,k,j,i) = my/rho;
+            outarray(3,m,k,j,i) = mz/rho;
+            outarray(4,m,k,j,i) -= mx*mx/rho;
+            outarray(5,m,k,j,i) -= mx*my/rho;
+            outarray(6,m,k,j,i) -= mx*mz/rho;
+            outarray(7,m,k,j,i) -= my*my/rho;
+            outarray(8,m,k,j,i) -= my*mz/rho;
+            outarray(9,m,k,j,i) -= mz*mz/rho;
+          }
+        }
+      }
+    }
+    return;
+  }
+
   // Calculate derived variables, if required
   if (out_params.contains_derived) {
     ComputeDerivedVariable(out_params.variable, pm);
@@ -398,34 +572,6 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
   // Each filter width owns an output object; do not retain fine-grid scratch per width.
   if (out_params.contains_derived) {
     derived_var = DvceArray5D<Real>();
-  }
-
-  if (out_params.variable.compare("hydro_sgs_3d") == 0) {
-    for (int m=0; m<nout_mbs; ++m) {
-      for (int k=0; k<outarray.extent_int(2); ++k) {
-        for (int j=0; j<outarray.extent_int(3); ++j) {
-          for (int i=0; i<outarray.extent_int(4); ++i) {
-            Real rho = outarray(0,m,k,j,i);
-            if (rho <= 0.0) {
-              FatalCoarsenedBinaryError(
-                  "hydro_sgs_3d encountered non-positive filtered density.");
-            }
-            Real mx = outarray(1,m,k,j,i);
-            Real my = outarray(2,m,k,j,i);
-            Real mz = outarray(3,m,k,j,i);
-            outarray(1,m,k,j,i) = mx/rho;
-            outarray(2,m,k,j,i) = my/rho;
-            outarray(3,m,k,j,i) = mz/rho;
-            outarray(4,m,k,j,i) -= mx*mx/rho;
-            outarray(5,m,k,j,i) -= mx*my/rho;
-            outarray(6,m,k,j,i) -= mx*mz/rho;
-            outarray(7,m,k,j,i) -= my*my/rho;
-            outarray(8,m,k,j,i) -= my*mz/rho;
-            outarray(9,m,k,j,i) -= mz*mz/rho;
-          }
-        }
-      }
-    }
   }
 }
 

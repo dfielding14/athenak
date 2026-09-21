@@ -18,6 +18,7 @@
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
+#include "coordinates/coordinates.hpp"
 #include "eos/eos.hpp"
 #include "globals.hpp"
 #include "hydro/hydro.hpp"
@@ -191,6 +192,23 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Variable 'hydro_sgs_3d' requires a three-dimensional mesh with nx3>1."
        << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (out_params.variable == "mhd_sgs" || out_params.variable == "hydro_sgs_3d") {
+    auto &coord = *(pm->pmb_pack->pcoord);
+    if (coord.is_special_relativistic || coord.is_general_relativistic ||
+        coord.is_dynamical_relativistic) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
+                << out_params.variable << " requires Newtonian fluid variables."
+                << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (out_params.variable == "mhd_sgs" &&
+      !pm->pmb_pack->pmhd->peos->eos_data.is_ideal) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << std::endl
+              << "mhd_sgs requires an ideal EOS with conserved total energy."
+              << std::endl;
     exit(EXIT_FAILURE);
   }
 

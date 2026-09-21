@@ -1,0 +1,73 @@
+# Small driven, compressible ideal-MHD state for all 59 raw SGS products.
+<job>
+basename = turb_mhd_sgs_3d_test
+
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 8
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = 8
+tlim = 1
+ndiag = 8
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = plm
+rsolver = hlld
+
+<problem>
+d_i = 1.0
+ifield = 1
+beta = 10
+
+<turb_driving>
+turb_flag = 2
+tcorr = 0.1
+dt_update = 0.01
+normalization = accel_rms
+accel_rms = 2
+nlow = 1
+nhigh = 3
+npeak = 2
+spectrum = parabolic
+mode_sampling = cartesian
+sparse_mode_count = 0
+sol_fraction = 0.3
+rseed = 2718
+
+<output1>
+file_type = bin
+variable = mhd_u_bcc
+id = state
+dcycle = 8
+
+<output2>
+file_type = cbin
+variable = mhd_sgs
+id = sgs
+coarsen_factor = 2
+dcycle = 8

@@ -29,6 +29,7 @@
 #include "radiation/radiation_tetrad.hpp"
 #include "particles/particles.hpp"
 #include "outputs.hpp"
+#include "sgs_moments.hpp"
 #include "utils/current.hpp"
 
 KOKKOS_INLINE_FUNCTION
@@ -530,81 +531,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("mhd_sgs", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real rho = u0_(m,IDN,k,j,i);
-      Real mx = u0_(m,IVX,k,j,i);
-      Real my = u0_(m,IVY,k,j,i);
-      Real mz = u0_(m,IVZ,k,j,i);
-      Real eint = u0_(m,IEN,k,j,i); // eint = P/(gamma-1)
-      Real Bx = bcc(m,IBX,k,j,i);
-      Real By = bcc(m,IBY,k,j,i);
-      Real Bz = bcc(m,IBZ,k,j,i);
-      // state variables
-      dv(m,0,k,j,i) = rho;
-      dv(m,1,k,j,i) = mx;
-      dv(m,2,k,j,i) = my;
-      dv(m,3,k,j,i) = mz;
-      dv(m,4,k,j,i) = eint;
-      dv(m,5,k,j,i) = Bx;
-      dv(m,6,k,j,i) = By;
-      dv(m,7,k,j,i) = Bz;
-      // rho * v_i * v_j = m_i * m_j / rho
-      dv(m,8,k,j,i) = mx*mx/rho;
-      dv(m,9,k,j,i) = mx*my/rho;
-      dv(m,10,k,j,i) = mx*mz/rho;
-      dv(m,11,k,j,i) = my*my/rho;
-      dv(m,12,k,j,i) = my*mz/rho;
-      dv(m,13,k,j,i) = mz*mz/rho;
-      // B_i * B_j
-      dv(m,14,k,j,i) = Bx*Bx;
-      dv(m,15,k,j,i) = Bx*By;
-      dv(m,16,k,j,i) = Bx*Bz;
-      dv(m,17,k,j,i) = By*By;
-      dv(m,18,k,j,i) = By*Bz;
-      dv(m,19,k,j,i) = Bz*Bz;
-      // v_i * B_j
-      dv(m,20,k,j,i) = mx*Bx/rho;
-      dv(m,21,k,j,i) = mx*By/rho;
-      dv(m,22,k,j,i) = mx*Bz/rho;
-      dv(m,23,k,j,i) = my*Bx/rho;
-      dv(m,24,k,j,i) = my*By/rho;
-      dv(m,25,k,j,i) = my*Bz/rho;
-      dv(m,26,k,j,i) = mz*Bx/rho;
-      dv(m,27,k,j,i) = mz*By/rho;
-      dv(m,28,k,j,i) = mz*Bz/rho;
-      // rho * v_i * T = m_i * P / rho = m_i * P/rho / (gamma-1)
-      dv(m,29,k,j,i) = mx*eint/rho;
-      dv(m,30,k,j,i) = my*eint/rho;
-      dv(m,31,k,j,i) = mz*eint/rho;
-      // rho * v_i * v_j**2 = m_i * m_j**2 / rho**2
-      dv(m,32,k,j,i) = mx*mx*mx/rho/rho;
-      dv(m,33,k,j,i) = mx*my*my/rho/rho;
-      dv(m,34,k,j,i) = mx*mz*mz/rho/rho;
-      dv(m,35,k,j,i) = my*mx*mx/rho/rho;
-      dv(m,36,k,j,i) = my*my*my/rho/rho;
-      dv(m,37,k,j,i) = my*mz*mz/rho/rho;
-      dv(m,38,k,j,i) = mz*mx*mx/rho/rho;
-      dv(m,39,k,j,i) = mz*my*my/rho/rho;
-      dv(m,40,k,j,i) = mz*mz*mz/rho/rho;
-      // v_i * B_j**2 = m_i * B_j**2 / rho
-      dv(m,41,k,j,i) = mx*Bx*Bx/rho;
-      dv(m,42,k,j,i) = mx*By*By/rho;
-      dv(m,43,k,j,i) = mx*Bz*Bz/rho;
-      dv(m,44,k,j,i) = my*Bx*Bx/rho;
-      dv(m,45,k,j,i) = my*By*By/rho;
-      dv(m,46,k,j,i) = my*Bz*Bz/rho;
-      dv(m,47,k,j,i) = mz*Bx*Bx/rho;
-      dv(m,48,k,j,i) = mz*By*By/rho;
-      dv(m,49,k,j,i) = mz*Bz*Bz/rho;
-      // v_i * B_i * B_j = m_i * B_i * B_j / rho
-      dv(m,50,k,j,i) = mx*Bx*Bx/rho;
-      dv(m,51,k,j,i) = mx*Bx*By/rho;
-      dv(m,52,k,j,i) = mx*Bx*Bz/rho;
-      dv(m,53,k,j,i) = my*By*Bx/rho;
-      dv(m,54,k,j,i) = my*By*By/rho;
-      dv(m,55,k,j,i) = my*By*Bz/rho;
-      dv(m,56,k,j,i) = mz*Bz*Bx/rho;
-      dv(m,57,k,j,i) = mz*Bz*By/rho;
-      dv(m,58,k,j,i) = mz*Bz*Bz/rho;
+      MHDCons1D state{u0_(m,IDN,k,j,i), u0_(m,IM1,k,j,i),
+                      u0_(m,IM2,k,j,i), u0_(m,IM3,k,j,i),
+                      u0_(m,IEN,k,j,i), bcc(m,IBX,k,j,i),
+                      bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i)};
+      for (int n=0; n<n_sgs; ++n) { dv(m,n,k,j,i) = MHDSGSMoment(n, state); }
     });
   }
 
@@ -648,31 +579,6 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       dv(m,20,k,j,i) = mz*mx*mx/rho/rho;
       dv(m,21,k,j,i) = mz*my*my/rho/rho;
       dv(m,22,k,j,i) = mz*mz*mz/rho/rho;
-    });
-  }
-
-  // Raw fields needed to construct Favre-filtered 3D Hydro SGS output.
-  if (name.compare("hydro_sgs_3d") == 0) {
-    int n_sgs = 10;
-    Kokkos::realloc(derived_var, nmb, n_sgs, n3, n2, n1);
-    auto dv = derived_var;
-    auto u0_ = pm->pmb_pack->phydro->u0;
-    par_for("hydro_sgs_3d", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real rho = u0_(m,IDN,k,j,i);
-      Real mx = u0_(m,IM1,k,j,i);
-      Real my = u0_(m,IM2,k,j,i);
-      Real mz = u0_(m,IM3,k,j,i);
-      dv(m,0,k,j,i) = rho;
-      dv(m,1,k,j,i) = mx;
-      dv(m,2,k,j,i) = my;
-      dv(m,3,k,j,i) = mz;
-      dv(m,4,k,j,i) = mx*mx/rho;
-      dv(m,5,k,j,i) = mx*my/rho;
-      dv(m,6,k,j,i) = mx*mz/rho;
-      dv(m,7,k,j,i) = my*my/rho;
-      dv(m,8,k,j,i) = my*mz/rho;
-      dv(m,9,k,j,i) = mz*mz/rho;
     });
   }
 

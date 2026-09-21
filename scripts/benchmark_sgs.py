@@ -36,9 +36,11 @@ def prepare_inputs(source, overrides):
         fields = re.findall(r"(?m)^\s*(\w+)\s*=\s*([^#\n]*)", body)
         blocks.setdefault(name, {}).update((key, value.strip()) for key, value in fields)
     sgs = {name for name, fields in blocks.items()
-           if name.startswith("output") and fields.get("variable") == "hydro_sgs_2d"}
+           if name.startswith("output") and fields.get("variable") in
+           ("hydro_sgs_2d", "hydro_sgs_3d", "mhd_sgs")}
     if not sgs:
-        raise ValueError("Input must contain hydro_sgs_2d output blocks")
+        raise ValueError(
+            "Input must contain hydro_sgs_2d, hydro_sgs_3d, or mhd_sgs output blocks")
     baseline = parts[0] + "".join(f"<{name}>\n{body}"
         for name, body in zip(parts[1::2], parts[2::2]) if name not in sgs)
     return {"off": baseline, "on": source}
