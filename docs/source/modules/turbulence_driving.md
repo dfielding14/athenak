@@ -75,6 +75,47 @@ places most kinetic energy at large scales. For an ideal-gas fluid, the associat
 kinetic energy is removed rather than converted into internal energy. The source
 term timestep is limited by `1/drag_rate` before applying the run CFL number.
 
+## Instantaneous Turbulence History
+
+Add `turbulence = true` to an `hst` output block to append nine diagnostics to
+the usual hydro or MHD history file. They are computed only at history writes,
+with one additional device reduction and no mesh-sized work arrays. The option
+requires a periodic, uniform-grid Newtonian fluid with at least two ghost cells;
+it is disabled by default and cannot be combined with `user_hist_only = true`.
+
+All columns are volume integrals. Let $K=\int\rho|\boldsymbol{u}|^2/2\,dV$,
+$Z=\int|\boldsymbol{\omega}|^2/2\,dV$, and
+$\boldsymbol{\omega}=\nabla\times\boldsymbol{u}$ (the full curl, also on a 2D mesh).
+
+| Column | Meaning |
+|---|---|
+| `enstrophy` | $Z$, without density weighting |
+| `drag-KE` | Positive kinetic-energy loss rate $2\alpha K$ |
+| `drag-enst` | Positive enstrophy loss rate $2\alpha Z$ |
+| `visc-KE` | Kinetic-energy loss rate from the explicit viscous momentum operator |
+| `visc-enst` | Signed viscous contribution to $dZ/dt$; negative means removal |
+| `force-KE` | Instantaneous forcing work $\int\rho\boldsymbol{u}\cdot\boldsymbol{a}\,dV$ |
+| `force-enst` | Signed forcing contribution to $dZ/dt$ |
+| `p-dilat` | Pressure work $\int p\nabla\cdot\boldsymbol{u}\,dV$ |
+| `enst-comp` | Compression contribution $-\int|\boldsymbol{\omega}|^2\nabla\cdot\boldsymbol{u}/2\,dV$ |
+
+Viscous rates use the same face-averaged $\rho\nu$ and stress differences as
+the solver. Enstrophy uses centered derivatives and periodic summation by parts,
+so neither viscous nor forcing acceleration needs ghost cells. Disabled drag,
+viscosity, or turbulence forcing contributes zero. At startup, before the first
+forcing update, the forcing rates are zero; subsequent writes use the acceleration
+field from the completed step. `force-KE` is not the prescribed `dedt` or a
+finite-kick energy increment. These are instantaneous rates, not accumulated
+Runge--Kutta source changes; integrating them does not give an exact discrete
+budget. Viscosity dissipates kinetic energy, not total energy in a periodic ideal
+gas. Vortex stretching, baroclinicity, and magnetic contributions are not included
+in these columns, so they are not a complete 3D, nonbarotropic, or MHD budget.
+The extra columns count toward the existing 20-column history limit.
+
+The `hydro_wz`/`mhd_wz` and `hydro_w2`/`mhd_w2` field outputs now use correctly
+normalized centered derivatives. Relative to the previous implementation, `wz`
+is smaller by two and `w2` (squared vorticity) by four.
+
 ## Sparse Annulus Sampling
 
 `mode_sampling = sparse_annulus` constructs a fixed, global set of two-dimensional

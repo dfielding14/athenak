@@ -287,6 +287,10 @@ class HistoryOutput : public BaseTypeOutput {
   void LoadMHDHistoryData(HistoryData *pdata, Mesh *pm);
   void LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm);
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+
+ private:
+  bool turbulence_history_;
+  void LoadTurbulenceHistoryData(HistoryData *pdata, Mesh *pm);
 };
 
 //----------------------------------------------------------------------------------------
