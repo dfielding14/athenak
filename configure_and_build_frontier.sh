@@ -5,6 +5,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 build_dir="${BUILD_DIR:-${script_dir}/build-frontier-sgs-hip-cpe25.09-cce20-rocm6.4.2}"
+build_jobs="${BUILD_JOBS:-16}"
 
 if git -C "$script_dir" submodule status --recursive | grep -Eq '^[+-U]'; then
   echo "The recorded Kokkos submodule is not initialized at the committed revision." >&2
@@ -35,12 +36,15 @@ cmake --fresh -S "$script_dir" -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   -DPROBLEM=turb \
   -DAthena_ENABLE_MPI=ON \
+  -DAthena_SINGLE_PRECISION=OFF \
   -DKokkos_ENABLE_HIP=ON \
   -DKokkos_ARCH_ZEN3=ON \
   -DKokkos_ARCH_VEGA90A=ON \
+  -DCMAKE_CXX_FLAGS=-munsafe-fp-atomics \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DCMAKE_CXX_COMPILER=CC
 
-printf '\nConfigured successfully. Building with 16 parallel jobs...\n'
-cmake --build "$build_dir" --parallel 16
+printf '\nConfigured successfully. Building with %s parallel jobs...\n' "$build_jobs"
+cmake --build "$build_dir" --parallel "$build_jobs"
 
 printf '\nBuilt executable: %s\n' "$build_dir/src/athena"
