@@ -25,10 +25,10 @@ from bin_convert import (  # noqa: E402
 )
 
 
-def run_athena(output_dir, *overrides, restart=None, input_file=INPUT):
+def run_athena(output_dir, *overrides, restart=None, input_file=INPUT, launcher=()):
     """Run the focused input in an isolated output directory."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    command = [str(ATHENA), "-d", str(output_dir)]
+    command = [*launcher, str(ATHENA), "-d", str(output_dir)]
     if restart is None:
         command.extend(["-i", str(input_file)])
     else:
@@ -70,6 +70,38 @@ def square_mean(values, factor):
     return values.reshape(nz, ny // factor, factor, nx // factor, factor).mean(
         axis=(2, 4)
     )
+
+
+def check_favre_filter(state, sgs, factor):
+    """Check the direct Favre reference and positive-semidefinite SGS stress."""
+    for block in range(state["n_mbs"]):
+        rho = np.asarray(state["mb_data"]["dens"][block], dtype=np.float64)
+        mx = np.asarray(state["mb_data"]["mom1"][block], dtype=np.float64)
+        my = np.asarray(state["mb_data"]["mom2"][block], dtype=np.float64)
+        rho_bar = square_mean(rho, factor)
+        mx_bar = square_mean(mx, factor)
+        my_bar = square_mean(my, factor)
+        expected = {
+            "dens": rho_bar,
+            "velx": mx_bar / rho_bar,
+            "vely": my_bar / rho_bar,
+            "tau_xx": square_mean(mx * mx / rho, factor) - mx_bar * mx_bar / rho_bar,
+            "tau_xy": square_mean(mx * my / rho, factor) - mx_bar * my_bar / rho_bar,
+            "tau_yy": square_mean(my * my / rho, factor) - my_bar * my_bar / rho_bar,
+        }
+        # Fine-grid binary data have already been rounded to float32.
+        stress_tolerance = 5.0e-7 * np.max((mx * mx + my * my) / rho)
+        for name, values in expected.items():
+            np.testing.assert_allclose(
+                sgs["mb_data"][name][block], values, rtol=5.0e-6,
+                atol=stress_tolerance if name.startswith("tau_") else 5.0e-12,
+            )
+        xx, xy, yy = [
+            np.asarray(sgs["mb_data"][name][block], dtype=np.float64)
+            for name in ("tau_xx", "tau_xy", "tau_yy")
+        ]
+        min_eigenvalue = 0.5 * (xx + yy - np.hypot(xx - yy, 2.0 * xy))
+        assert np.min(min_eigenvalue) >= -stress_tolerance
 
 
 def assemble_2d_blocks(data, names):
@@ -134,34 +166,7 @@ def test_2d_sgs_output_matches_direct_favre_filter(tmp_path, factor, block_nx, b
         assembled["x1f"], np.linspace(-0.5, 0.5, sgs["Nx1"] + 1)
     )
 
-    for block in range(state["n_mbs"]):
-        rho = np.asarray(state["mb_data"]["dens"][block], dtype=np.float64)
-        mx = np.asarray(state["mb_data"]["mom1"][block], dtype=np.float64)
-        my = np.asarray(state["mb_data"]["mom2"][block], dtype=np.float64)
-        rho_bar = square_mean(rho, factor)
-        mx_bar = square_mean(mx, factor)
-        my_bar = square_mean(my, factor)
-        expected = {
-            "dens": rho_bar,
-            "velx": mx_bar / rho_bar,
-            "vely": my_bar / rho_bar,
-            "tau_xx": square_mean(mx * mx / rho, factor) - mx_bar * mx_bar / rho_bar,
-            "tau_xy": square_mean(mx * my / rho, factor) - mx_bar * my_bar / rho_bar,
-            "tau_yy": square_mean(my * my / rho, factor) - my_bar * my_bar / rho_bar,
-        }
-        # Fine-grid binary data have already been rounded to float32.
-        stress_tolerance = 5.0e-7 * np.max((mx * mx + my * my) / rho)
-        for name, values in expected.items():
-            np.testing.assert_allclose(
-                sgs["mb_data"][name][block], values, rtol=5.0e-6,
-                atol=stress_tolerance if name.startswith("tau_") else 5.0e-12,
-            )
-        xx, xy, yy = [
-            np.asarray(sgs["mb_data"][name][block], dtype=np.float64)
-            for name in ("tau_xx", "tau_xy", "tau_yy")
-        ]
-        min_eigenvalue = 0.5 * (xx + yy - np.hypot(xx - yy, 2.0 * xy))
-        assert np.min(min_eigenvalue) >= -stress_tolerance
+    check_favre_filter(state, sgs, factor)
 
     assert np.all(np.asarray(force["mb_data"]["force3"]) == 0.0)
     assert np.all(np.asarray(state["mb_data"]["mom3"]) == 0.0)

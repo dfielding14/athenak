@@ -26,7 +26,6 @@
 #include "globals.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
-#include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
 #include "sgs_moments.hpp"
@@ -239,63 +238,13 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
   // So start with clean vector of output MeshBlock info, and re-compute
   outmbs.clear();
 
-  // loop over all MeshBlocks
-  // set size & starting indices of output arrays, adjusted accordingly if gz included
+  // Use active-cell bounds; unsupported selections are rejected by the constructor.
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
   auto &size  = pm->pmb_pack->pmb->mb_size;
   for (int m=0; m<(pm->pmb_pack->nmb_thispack); ++m) {
-    // skip if MeshBlock ID is specified and not equal to this ID
-    if (out_params.gid >= 0 && m != out_params.gid) { continue; }
-
-    int ois,oie,ojs,oje,oks,oke;
-
-    if (out_params.include_gzs) {
-      int nout1 = indcs.nx1 + 2*(indcs.ng);
-      int nout2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
-      int nout3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
-      ois = 0; oie = nout1-1;
-      ojs = 0; oje = nout2-1;
-      oks = 0; oke = nout3-1;
-    } else {
-      ois = indcs.is; oie = indcs.ie;
-      ojs = indcs.js; oje = indcs.je;
-      oks = indcs.ks; oke = indcs.ke;
-    }
-
-    // DBF: I have never checked if slicing works with coarsened data
-    // check for slicing in each dimension, adjust start/end indices accordingly
-    if (out_params.slice1) {
-      // skip this MB if slice is out of range
-      if (out_params.slice_x1 <  size.h_view(m).x1min ||
-          out_params.slice_x1 >= size.h_view(m).x1max) { continue; }
-      // set index of slice
-      ois = CellCenterIndex(out_params.slice_x1, indcs.nx1,
-                            size.h_view(m).x1min, size.h_view(m).x1max);
-      ois += indcs.is;
-      oie = ois;
-    }
-
-    if (out_params.slice2) {
-      // skip this MB if slice is out of range
-      if (out_params.slice_x2 <  size.h_view(m).x2min ||
-          out_params.slice_x2 >= size.h_view(m).x2max) { continue; }
-      // set index of slice
-      ojs = CellCenterIndex(out_params.slice_x2, indcs.nx2,
-                            size.h_view(m).x2min, size.h_view(m).x2max);
-      ojs += indcs.js;
-      oje = ojs;
-    }
-
-    if (out_params.slice3) {
-      // skip this MB if slice is out of range
-      if (out_params.slice_x3 <  size.h_view(m).x3min ||
-          out_params.slice_x3 >= size.h_view(m).x3max) { continue; }
-      // set index of slice
-      oks = CellCenterIndex(out_params.slice_x3, indcs.nx3,
-                            size.h_view(m).x3min, size.h_view(m).x3max);
-      oks += indcs.ks;
-      oke = oks;
-    }
+    int ois = indcs.is, oie = indcs.ie;
+    int ojs = indcs.js, oje = indcs.je;
+    int oks = indcs.ks, oke = indcs.ke;
 
     // set coordinate geometry information for MB
     Real x1min = size.h_view(m).x1min;
@@ -308,15 +257,6 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
     int id = pm->pmb_pack->pmb->mb_gid.h_view(m);
     outmbs.emplace_back(id,ois,oie,ojs,oje,oks,oke,x1min,x1max,x2min,x2max,x3min,x3max);
   }
-
-  std::fill(noutmbs.begin(), noutmbs.end(), 0);
-  noutmbs[global_variable::my_rank] = outmbs.size();
-#if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(MPI_IN_PLACE, noutmbs.data(), global_variable::nranks,
-                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-#endif
-  noutmbs_min = *std::min_element(noutmbs.begin(), noutmbs.end());
-  noutmbs_max = *std::max_element(noutmbs.begin(), noutmbs.end());
 
   // get number of output vars and MBs, then realloc outarray (HostArray)
   int nout_vars_with_moments;
@@ -582,9 +522,6 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
 
 void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   Kokkos::Profiling::ScopedRegion region("cbin/write");
-  // check if slicing
-  bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3);
-
   // create filename: "cbin_"+"file_id"+"_"+"coarsening_factor"+"/file_basename"
   // + "." + "file_id" + "." + XXXXX + ".cbin"
   // where XXXXX = 5-digit file_number
@@ -802,48 +739,37 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       FatalCoarsenedBinaryError("Coarsened binary data were not written completely.");
     }
   } else {
-    // check if elements larger than 2^31
-    if (data_size*nb_mbs<=2147483648) {
-      // now write binary data in parallel
-      std::size_t myoffset=header_offset;
+    // write data over each MeshBlock sequentially and in parallel
+    // calculate max/min number of MeshBlocks across all ranks
+    noutmbs_max = pm->nmb_eachrank[0];
+    noutmbs_min = pm->nmb_eachrank[0];
+    for (int i=0; i<(global_variable::nranks); ++i) {
+      noutmbs_max = std::max(noutmbs_max,pm->nmb_eachrank[i]);
+      noutmbs_min = std::min(noutmbs_min,pm->nmb_eachrank[i]);
+    }
+    for (int m=0;  m<noutmbs_max; ++m) {
+      char *pdata=&(data[m*data_size]);
+      std::size_t myoffset=header_offset + data_size*m;
       if (!single_file_per_rank) {
         myoffset += data_size*ns_mbs;
       }
-      cbinfile.Write_any_type_at_all(data,(data_size*nb_mbs),myoffset,"byte",
-                                      single_file_per_rank);
-    } else {
-      // write data over each MeshBlock sequentially and in parallel
-      // calculate max/min number of MeshBlocks across all ranks
-      noutmbs_max = pm->nmb_eachrank[0];
-      noutmbs_min = pm->nmb_eachrank[0];
-      for (int i=0; i<(global_variable::nranks); ++i) {
-        noutmbs_max = std::max(noutmbs_max,pm->nmb_eachrank[i]);
-        noutmbs_min = std::min(noutmbs_min,pm->nmb_eachrank[i]);
-      }
-      for (int m=0;  m<noutmbs_max; ++m) {
-        char *pdata=&(data[m*data_size]);
-        std::size_t myoffset=header_offset + data_size*m;
-        if (!single_file_per_rank) {
-          myoffset += data_size*ns_mbs;
+      // every rank has a MB to write, so write collectively
+      if (m < noutmbs_min) {
+        if (cbinfile.Write_any_type_at_all(pdata,(data_size),myoffset,"byte",
+                                            single_file_per_rank) != data_size) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "binary data not written correctly to binary file, "
+              << "binary file is broken." << std::endl;
+          exit(EXIT_FAILURE);
         }
-        // every rank has a MB to write, so write collectively
-        if (m < noutmbs_min) {
-          if (cbinfile.Write_any_type_at_all(pdata,(data_size),myoffset,"byte",
-                                              single_file_per_rank) != data_size) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "binary data not written correctly to binary file, "
-                << "binary file is broken." << std::endl;
-            exit(EXIT_FAILURE);
-          }
-        // some ranks are finished writing, so use non-collective write
-        } else if (m < pm->nmb_thisrank) {
-          if (cbinfile.Write_any_type_at(pdata,(data_size),myoffset,"byte",
-                                          single_file_per_rank) != data_size) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                 << std::endl << "binary data not written correctly to binary file, "
-                 << "binary file is broken." << std::endl;
-            exit(EXIT_FAILURE);
-          }
+      // some ranks are finished writing, so use non-collective write
+      } else if (m < pm->nmb_thisrank) {
+        if (cbinfile.Write_any_type_at(pdata,(data_size),myoffset,"byte",
+                                        single_file_per_rank) != data_size) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+               << std::endl << "binary data not written correctly to binary file, "
+               << "binary file is broken." << std::endl;
+          exit(EXIT_FAILURE);
         }
       }
     }
