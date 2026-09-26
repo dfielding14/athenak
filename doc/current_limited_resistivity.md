@@ -80,6 +80,13 @@ integrals and maxima use MPI maxima. Harris additionally records `x_q`, `x_etaJ`
 by $B_0v_{A0}$. `x_Ez` uses interpolated velocity and field plus the native-edge
 resistive EMF; it is not the Riemann solver's numerical EMF. These diagnostics
 assume the principal X point remains at the domain center.
+Harris histories also record `ref_etaJz` and `ref_Ez` at the positive-x boundary
+on the sheet midplane. The open single-sheet deck initially has no O point;
+the boundary is a fixed flux reference, and its generally nonzero electric
+field must be subtracted. For $\psi=A_z(x_{\rm ref},0)-A_z(0,0)$,
+$d\psi/dt=E_z(0,0)-E_z(x_{\rm ref},0)$. Uniform sheet diffusion therefore gives
+zero reference-subtracted rate even though the individual electric fields are
+nonzero.
 
 For an independent flux-based rate, supply verified X/O positions on the same
 midplane to the postprocessor; it does not track changing topology:

@@ -250,10 +250,12 @@ namespace {
 // q/eta maxima use actual closure edges. Fractions and eta J^2 are cell-centered
 // reconstructed proxies, not the exact discrete magnetic-energy loss. The central
 // X diagnostics assume the symmetric Harris X remains at the domain midpoint.
+// Reference diagnostics use the positive-x boundary at the same y, not an O point.
 void ResistiveHistory(HistoryData *pdata, Mesh *pm) {
-  pdata->nhist = history_harris ? 10 : 6;
+  pdata->nhist = history_harris ? 12 : 6;
   const char *labels[] = {"q_max_edge", "eta_max_ed", "frac_qstar", "frac_q1",
-                         "etaJ2_cc", "heat_frac", "x_q", "x_etaJ", "x_etaJz", "x_Ez"};
+                         "etaJ2_cc", "heat_frac", "x_q", "x_etaJ", "x_etaJz", "x_Ez",
+                         "ref_etaJz", "ref_Ez"};
   for (int n=0; n<pdata->nhist; ++n) {
     pdata->label[n] = labels[n];
     pdata->hdata[n] = 0.0;
@@ -271,7 +273,7 @@ void ResistiveHistory(HistoryData *pdata, Mesh *pm) {
   const auto params = resist != nullptr && resist->current_limited ?
       resist->current_limited_params : history_params;
   const Real dfloor = pack->pmhd->peos->eos_data.dfloor;
-  const Real xc = history_xc, yc = history_yc;
+  const Real xc = history_xc, yc = history_yc, xref = pm->mesh_size.x1max;
   const Real enorm = history_b0*history_b0/sqrt(history_density);
   array_sum::GlobalSum sums;
   Real maxq = 0.0, maxeta = 0.0;
@@ -310,23 +312,30 @@ void ResistiveHistory(HistoryData *pdata, Mesh *pm) {
     if (harris) {
       const Real x = LeftEdgeX(i-indcs.is,nx1,s.x1min,s.x1max);
       const Real y = LeftEdgeX(j-indcs.js,nx2,s.x2min,s.x2max);
-      if (fabs(x-xc) < 1.0e-10*s.dx1 && fabs(y-yc) < 1.0e-10*s.dx2) {
+      for (int point=0; point<2; ++point) {
+        const int ei = i + point;
+        const bool at_point = point == 0 ? fabs(x-xc) < 1.0e-10*s.dx1 :
+            i == indcs.ie && fabs(x+s.dx1-xref) < 1.0e-10*s.dx1;
+        if (!at_point || fabs(y-yc) >= 1.0e-10*s.dx2) continue;
         const auto edge = current_limited::EdgeState(b,w,s,params,dfloor,
-            multi_d,three_d,2,m,k,j,i);
+            multi_d,three_d,2,m,k,j,ei);
         Real vx = 0.0, vy = 0.0;
         for (int dj=-1; dj<=0; ++dj) {
           for (int di=-1; di<=0; ++di) {
-            vx += 0.25*w(m,IVX,k,j+dj,i+di);
-            vy += 0.25*w(m,IVY,k,j+dj,i+di);
+            vx += 0.25*w(m,IVX,k,j+dj,ei+di);
+            vy += 0.25*w(m,IVY,k,j+dj,ei+di);
           }
         }
-        const Real bx = 0.5*(b.x1f(m,k,j-1,i) + b.x1f(m,k,j,i));
-        const Real by = 0.5*(b.x2f(m,k,j,i-1) + b.x2f(m,k,j,i));
-        local.the_array[5] = edge.q;
-        local.the_array[6] = edge.eta*sqrt(SQR(edge.j1)+SQR(edge.j2)+SQR(edge.j3))/enorm;
-        local.the_array[7] = edge.eta*edge.j3/enorm;
-        local.the_array[8] = (vy*bx-vx*by+edge.eta*edge.j3)/enorm;
-        local.the_array[9] = 1.0;
+        const Real bx = 0.5*(b.x1f(m,k,j-1,ei) + b.x1f(m,k,j,ei));
+        const Real by = 0.5*(b.x2f(m,k,j,ei-1) + b.x2f(m,k,j,ei));
+        const int offset = point == 0 ? 7 : 10;
+        local.the_array[offset] = edge.eta*edge.j3/enorm;
+        local.the_array[offset+1] = (vy*bx-vx*by+edge.eta*edge.j3)/enorm;
+        local.the_array[offset+2] = 1.0;
+        if (point == 0) {
+          local.the_array[5] = edge.q;
+          local.the_array[6] = edge.eta*sqrt(SQR(edge.j1)+SQR(edge.j2)+SQR(edge.j3))/enorm;
+        }
       }
     }
     sum += local;
@@ -335,11 +344,11 @@ void ResistiveHistory(HistoryData *pdata, Mesh *pm) {
 
   Real maxima[2] = {maxq,maxeta};
 #if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(MPI_IN_PLACE,sums.the_array,10,MPI_ATHENA_REAL,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,sums.the_array,13,MPI_ATHENA_REAL,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,maxima,2,MPI_ATHENA_REAL,MPI_MAX,MPI_COMM_WORLD);
 #endif
-  if (harris && sums.the_array[9] == 0.0) {
-    ResistiveTestFatal("central X edge was not found for history output");
+  if (harris && (sums.the_array[9] == 0.0 || sums.the_array[12] == 0.0)) {
+    ResistiveTestFatal("central X or boundary reference edge was not found for history output");
   }
   // HistoryOutput performs MPI_SUM afterward; publish global ratios/maxima on rank 0 only.
   if (global_variable::my_rank != 0) return;
@@ -351,6 +360,7 @@ void ResistiveHistory(HistoryData *pdata, Mesh *pm) {
   pdata->hdata[5] = sums.the_array[3] > 0.0 ? sums.the_array[4]/sums.the_array[3] : 0.0;
   if (harris && sums.the_array[9] > 0.0) {
     for (int n=6; n<10; ++n) pdata->hdata[n] = sums.the_array[n-1]/sums.the_array[9];
+    for (int n=10; n<12; ++n) pdata->hdata[n] = sums.the_array[n]/sums.the_array[12];
   }
 }
 
