@@ -217,3 +217,7 @@ refinement and matches the ideal control; halving the finest timestep changes
 the mean flux rate by 0.0066%. The coarse run reaches only $q_{\max}=0.2266$.
 High-current and steady reconnection remain unvalidated. The report includes
 reproduction commands, retained diagnostic tables, timings, and a GPU handoff.
+
+The [GPU Harris comparison plan](harris_gpu_comparison_plan.md) specifies a new
+control with the same background diffusivity as the model runs, three closure
+variants, synchronized movies, and flux-based reconnection-rate measurements.
