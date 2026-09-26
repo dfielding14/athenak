@@ -34,11 +34,13 @@ input_file = "inputs/lwave_rad.athinput"
 
 
 # run test
-def test_run():
+@pytest.mark.parametrize("integrator", ["rk2", "rk4"])
+def test_run(integrator):
     """Run a single test."""
     try:
         for res in _res:
-            results = testutils.run(input_file, arguments(res))
+            results = testutils.run(
+                input_file, arguments(res) + [f"time/integrator={integrator}"])
             assert results, f"1D radiation hydro linear wave run failed for {res}."
         maxerror, errorratio = errors[("rad-hydro")]
         data = athena_read.error_dat("rad_linwave-errs.dat")

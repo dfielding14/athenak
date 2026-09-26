@@ -304,8 +304,12 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 
 Real Driver::SourceTermHistoryWeight(int stage) const {
   Real weight = beta[stage-1];
+  Real secondary_weight = 0.0;
   for (int later = stage + 1; later <= nexp_stages; ++later) {
-    weight *= gam0[later-1];
+    // Propagate this source increment through both RK registers. RK4 also
+    // carries earlier increments into u1 before each later stage update.
+    if (integrator == "rk4") secondary_weight += delta[later-1]*weight;
+    weight = gam0[later-1]*weight + gam1[later-1]*secondary_weight;
   }
   return weight;
 }
@@ -676,8 +680,8 @@ void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm) {
     (void) pz4c->ClearRecv(this, -1);
     (void) pz4c->RecvU(this, 0);
     (void) pz4c->Z4cBoundaryRHS(this, 0);
-    (void) pz4c->ApplyPhysicalBCs(this, 0);
-    (void) pz4c->Prolongate(this, 0);
+    (void) pz4c->Prolongate(this, 0); // coarse grid BCs and prolongation
+    (void) pz4c->ApplyPhysicalBCs(this, 0); // fine grid BCs
   }
 
   // Initialize HYDRO: ghost zones and primitive variables (everywhere)
@@ -695,8 +699,8 @@ void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm) {
     (void) phydro->ClearSend(this, -4); // stage = -4 only clear SendU_Shr
     (void) phydro->ClearRecv(this, -4); // stage = -4 only clear RecvU_Shr
     (void) phydro->RecvU_Shr(this, 0);
-    (void) phydro->ApplyPhysicalBCs(this, 0);
-    (void) phydro->Prolongate(this, 0);
+    (void) phydro->Prolongate(this, 0); // coarse grid BCs and prolongation
+    (void) phydro->ApplyPhysicalBCs(this, 0); // fine grid BCs
     (void) phydro->ConToPrim(this, 0);
   }
 
@@ -720,8 +724,8 @@ void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm) {
     (void) pmhd->ClearRecv(this, -4); // stage = -4 only clear RecvU_Shr, SendB_Shr
     (void) pmhd->RecvU_Shr(this, 0);
     (void) pmhd->RecvB_Shr(this, 0);
-    (void) pmhd->ApplyPhysicalBCs(this, 0);
-    (void) pmhd->Prolongate(this, 0);
+    (void) pmhd->Prolongate(this, 0); // coarse grid BCs and prolongation
+    (void) pmhd->ApplyPhysicalBCs(this, 0); // fine grid BCs
     if (pdyngr == nullptr) {
       (void) pmhd->ConToPrim(this, 0);
     } else {
@@ -742,8 +746,8 @@ void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm) {
     (void) prad->ClearSend(this, -1);
     (void) prad->ClearRecv(this, -1);
     (void) prad->RecvI(this, 0);
-    (void) prad->ApplyPhysicalBCs(this, 0);
-    (void) prad->Prolongate(this, 0);
+    (void) prad->Prolongate(this, 0); // coarse grid BCs and prolongation
+    (void) prad->ApplyPhysicalBCs(this, 0); // fine grid BCs
   }
 
   return;

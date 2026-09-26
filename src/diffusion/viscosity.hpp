@@ -32,6 +32,7 @@ class Viscosity {
   // function to add viscous fluxes to Hydro and/or MHD fluxes
   void IsotropicViscousFlux(const DvceArray5D<Real> &w, const Real nu,
                             const EOS_Data &eos, DvceFaceFld5D<Real> &f);
+  void NewTimeStep();
 
  private:
   MeshBlockPack* pmy_pack;

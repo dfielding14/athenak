@@ -55,7 +55,7 @@ def _assert_history_rate(data, gross, net, rtol=2.0e-12, atol=1.0e-13):
                       atol=1.0e-12)
 
 
-@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
+@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3", "rk4"])
 def test_constant_powerlaw_history_weights(integrator):
     """Constant cooling should give the same interval rate for all RK schemes."""
     data = _run_case(
@@ -63,6 +63,27 @@ def test_constant_powerlaw_history_weights(integrator):
         [f"time/integrator={integrator}"],
     )
     _assert_history_rate(data, gross=1.0e-2, net=1.0e-2)
+
+
+@pytest.mark.parametrize("physics", ["hydro", "mhd"])
+def test_rk4_temperature_dependent_history(physics):
+    """History retains the actual stage cooling over several timesteps."""
+    data = _run_case(
+        f"cooling_rk4_interval_{physics}",
+        ["time/integrator=rk4", "time/nlim=8", "time/tlim=1.0",
+         "cooling/cooling_slope=2.0", "cooling/cooling_reference_value=1.0",
+         "output1/dcycle=4"],
+        input_file=HYDRO_INPUT if physics == "hydro" else MHD_INPUT,
+        physics=physics,
+    )
+    elapsed = np.diff(data["time"])
+    valid = elapsed > 0.0
+    assert np.count_nonzero(valid) >= 2
+    energy_loss = -np.diff(data["tot-E"])[valid]
+    np.testing.assert_allclose(data["cool_net"][1:][valid]*elapsed[valid],
+                               energy_loss, rtol=1.0e-10, atol=1.0e-12)
+    np.testing.assert_allclose(data["cool_gross"], data["cool_net"],
+                               rtol=1.0e-12, atol=1.0e-13)
 
 
 @pytest.mark.parametrize(

@@ -81,6 +81,11 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
   kappa_ceiling = pin->GetOrAddReal(block,"cond_ceiling",
                   static_cast<Real>(std::numeric_limits<float>::max()));
   sat_hflux = pin->GetOrAddBoolean(block,"sat_hflux",false);
+  if (tdep_kappa && pmy_pack->punit == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "Temperature-dependent conduction requires a <units> block" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -404,10 +409,6 @@ void Conduction::TempDependentHeatFlux(const DvceArray5D<Real> &w0, const EOS_Da
 //! \brief Compute new time step for thermal conduction.
 
 void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
-  if (sat_hflux == true) {
-    dtnew = static_cast<Real>(std::numeric_limits<float>::max());
-    return;
-  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;
@@ -424,22 +425,19 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   Real kappa0 = kappa;
   bool tdepkappa = tdep_kappa;
   Real kappaceil = kappa_ceiling;
-  Real fac;
-  if (pmy_pack->pmesh->three_d) {
-    fac = 1.0/6.0;
-  } else if (pmy_pack->pmesh->two_d) {
-    fac = 0.25;
-  } else {
-    fac = 0.5;
+  const int ndim = three_d ? 3 : (multi_d ? 2 : 1);
+  Real temp_unit = 1.0;
+  Real kappa_unit = 1.0;
+  if (tdepkappa) {
+    temp_unit = pmy_pack->punit->temperature_cgs();
+    kappa_unit = pmy_pack->punit->pressure_cgs()*pmy_pack->punit->velocity_cgs()*
+                 pmy_pack->punit->length_cgs()/temp_unit;
   }
-
-  Real temp_unit = pmy_pack->punit->temperature_cgs();
-  Real kappa_unit = pmy_pack->punit->pressure_cgs()*pmy_pack->punit->velocity_cgs()*
-                    pmy_pack->punit->length_cgs()/pmy_pack->punit->temperature_cgs();
 
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 
-  // find smallest timestep for thermal conduction in each cell
+  // Saturation reduces the flux but leaves ordinary diffusion at weak gradients.
+  // Use the unsaturated face coefficients as a conservative bound in either case.
   Kokkos::parallel_reduce("cond_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
     // compute m,k,j,i indices of thread and call function
@@ -454,23 +452,37 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
     if (tdepkappa) {
       Real temp = 1.0;
       if (use_e) {
-        temp = w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)*gm1;
+        temp = w0_(m,IEN,k,j,i)/w0_(m,IDN,k,j,i)*gm1;
       } else {
-        temp = w0(m,ITM,k,j,i);
+        temp = w0_(m,ITM,k,j,i);
       }
       kappa_ = KappaTemp(temp*temp_unit,kappaceil)/kappa_unit;
     }
 
-    min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/kappa_*w0_(m,IDN,k,j,i)/gm1);
-    if (multi_d) {
-      min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+    Real row_sum = 0.0;
+    for (int dir=0; dir<ndim; ++dir) {
+      const int di = (dir == 0), dj = (dir == 1), dk = (dir == 2);
+      const Real dx = (dir == 0) ? size.d_view(m).dx1 :
+                      ((dir == 1) ? size.d_view(m).dx2 : size.d_view(m).dx3);
+      Real kappa_l = kappa_, kappa_r = kappa_;
+      if (tdepkappa) {
+        const Real temp_l = use_e ?
+            gm1*w0_(m,IEN,k-dk,j-dj,i-di)/w0_(m,IDN,k-dk,j-dj,i-di) :
+            w0_(m,ITM,k-dk,j-dj,i-di);
+        const Real temp_r = use_e ?
+            gm1*w0_(m,IEN,k+dk,j+dj,i+di)/w0_(m,IDN,k+dk,j+dj,i+di) :
+            w0_(m,ITM,k+dk,j+dj,i+di);
+        kappa_l = KappaTemp(temp_l*temp_unit,kappaceil)/kappa_unit;
+        kappa_r = KappaTemp(temp_r*temp_unit,kappaceil)/kappa_unit;
+      }
+      // Each face uses the arithmetic mean of its two adjacent cell coefficients.
+      row_sum += (kappa_ + 0.5*(kappa_l + kappa_r))/SQR(dx);
     }
-    if (three_d) {
-      min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/kappa_*w0_(m,IDN,k,j,i)/gm1);
+    const Real rate = gm1*row_sum/w0_(m,IDN,k,j,i);
+    if (rate > 0.0) {
+      min_dt = fmin(min_dt, 1.0/rate);
     }
   }, Kokkos::Min<Real>(dtnew));
-
-  dtnew *= fac;
 
   return;
 }

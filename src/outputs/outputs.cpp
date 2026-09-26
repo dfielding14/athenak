@@ -374,7 +374,9 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
 
         // Backward compatibility: if variable_1 doesn't exist but variable does,
         // treat 'variable' as alias for 'variable_1'
-        if (opar.pdf_ndim == 0 && pin->DoesParameterExist(opar.block_name, "variable")) {
+        if (opar.pdf_ndim <= 2 &&
+            !pin->DoesParameterExist(opar.block_name, "variable_1") &&
+            pin->DoesParameterExist(opar.block_name, "variable")) {
           opar.pdf_ndim = 1;
           opar.pdf_variables[0] = opar.variable;  // already parsed above
           opar.pdf_nbin[0] = pin->GetInteger(opar.block_name, "nbin");

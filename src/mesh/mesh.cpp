@@ -598,6 +598,7 @@ void Mesh::NewTimeStep(const Real tlim) {
     dt = std::min(dt, (cfl_no)*(pmb_pack->phydro->dtnew) );
     // viscosity timestep
     if (pmb_pack->phydro->pvisc != nullptr) {
+      pmb_pack->phydro->pvisc->NewTimeStep();
       dt = std::min(dt, (cfl_no)*(pmb_pack->phydro->pvisc->dtnew) );
     }
     // thermal conduction timestep
@@ -614,6 +615,7 @@ void Mesh::NewTimeStep(const Real tlim) {
     dt = std::min(dt, (cfl_no)*(pmb_pack->pmhd->dtnew) );
     // viscosity timestep
     if (pmb_pack->pmhd->pvisc != nullptr) {
+      pmb_pack->pmhd->pvisc->NewTimeStep();
       dt = std::min(dt, (cfl_no)*(pmb_pack->pmhd->pvisc->dtnew) );
     }
     // resistivity timestep

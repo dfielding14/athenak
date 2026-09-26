@@ -71,9 +71,9 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.recvb     = tl["stagen"]->AddTask(&MHD::RecvB, this, id.sendb);
   id.sendb_shr = tl["stagen"]->AddTask(&MHD::SendB_Shr, this, id.recvb);
   id.recvb_shr = tl["stagen"]->AddTask(&MHD::RecvB_Shr, this, id.sendb_shr);
-  id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.recvb_shr);
-  id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.bcs);
-  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.prol);
+  id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.recvb_shr);
+  id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.prol);
+  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.bcs);
   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
 
   // assemble "after_stagen" task list
@@ -159,7 +159,7 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::CopyCons
-//! \brief Simple task list function that copies u0 --> u1, and b0 --> b1 in first stage
+//! \brief Copy the initial state and accumulate the secondary RK4 registers.
 
 TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
   if (stage == 1) {
@@ -167,6 +167,34 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
     Kokkos::deep_copy(DevExeSpace(), b1.x1f, b0.x1f);
     Kokkos::deep_copy(DevExeSpace(), b1.x2f, b0.x2f);
     Kokkos::deep_copy(DevExeSpace(), b1.x3f, b0.x3f);
+  } else if (pdrive->integrator == "rk4") {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    int is = indcs.is, ie = indcs.ie;
+    int js = indcs.js, je = indcs.je;
+    int ks = indcs.ks, ke = indcs.ke;
+    int nmb1 = pmy_pack->nmb_thispack - 1;
+    Real delta = pdrive->delta[stage-1];
+    auto u0_ = u0;
+    auto u1_ = u1;
+    auto b0_ = b0;
+    auto b1_ = b1;
+    par_for("rk4_copy_cons", DevExeSpace(), 0, nmb1, 0, nmhd+nscalars-1,
+            ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+      u1_(m,n,k,j,i) += delta*u0_(m,n,k,j,i);
+    });
+    par_for("rk4_copy_b1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x1f(m,k,j,i) += delta*b0_.x1f(m,k,j,i);
+    });
+    par_for("rk4_copy_b2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x2f(m,k,j,i) += delta*b0_.x2f(m,k,j,i);
+    });
+    par_for("rk4_copy_b3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x3f(m,k,j,i) += delta*b0_.x3f(m,k,j,i);
+    });
   }
   return TaskStatus::complete;
 }
@@ -499,7 +527,9 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
   // do not apply BCs if domain is strictly periodic
   if (pmy_pack->pmesh->strictly_periodic) return TaskStatus::complete;
 
-  // physical BCs
+  // Step 3: apply physical BCs to the fine array. This is called *after* prolongation,
+  //         so that the corner ghost zones between a coarse neighbor and a physical
+  //         boundary read valid data.
   pbval_u->HydroBCs((pmy_pack), (pbval_u->u_in), u0);
   pbval_b->BFieldBCs((pmy_pack), (pbval_b->b_in), b0);
 
@@ -520,12 +550,21 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {  // only prolongate with SMR/AMR
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
     pbval_b->FillCoarseInBndryFC(b0, coarse_b0);
+
+    // Step 1: apply physical BCs to the coarse array, so the prolongation stencil
+    //         reads valid data in coarse ghost zones that sit at a physical boundary.
+    if (!(pmy_pack->pmesh->strictly_periodic)) {
+      pbval_u->HydroBCsCoarse((pmy_pack), (pbval_u->u_in), coarse_u0);
+      pbval_b->BFieldBCsCoarse((pmy_pack), (pbval_b->b_in), coarse_b0);
+    }
+
     if (pmy_pack->pmesh->pmr->prolong_prims) {
       pbval_u->ConsToPrimCoarseBndry(coarse_u0, coarse_b0, coarse_w0);
       pbval_u->ProlongateCC(w0, coarse_w0);
       pbval_b->ProlongateFC(b0, coarse_b0);
       pbval_u->PrimToConsFineBndry(w0, b0, u0);
     } else {
+      // Step 2: prolongate fine ghost zones from the coarse array.
       pbval_u->ProlongateCC(u0, coarse_u0);
       pbval_b->ProlongateFC(b0, coarse_b0);
     }

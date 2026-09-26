@@ -31,22 +31,32 @@ Viscosity::Viscosity(std::string block, MeshBlockPack *pp,
   pmy_pack(pp) {
   // Read coefficient of isotropic kinematic shear viscosity (must be present)
   nu_iso = pin->GetReal(block,"viscosity");
+  NewTimeStep();
+}
 
-  // viscous timestep on MeshBlock(s) in this pack
+//----------------------------------------------------------------------------------------
+//! \brief Refresh the viscous stability bound, including after mesh refinement.
+
+void Viscosity::NewTimeStep() {
   dtnew = std::numeric_limits<float>::max();
+  if (nu_iso == 0.0) return;
   auto size = pmy_pack->pmb->mb_size;
-  Real fac;
-  if (pp->pmesh->three_d) {
-    fac = 1.0/6.0;
-  } else if (pp->pmesh->two_d) {
-    fac = 0.25;
-  } else {
-    fac = 0.5;
-  }
-  for (int m=0; m<(pp->nmb_thispack); ++m) {
-    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/nu_iso);
-    if (pp->pmesh->multi_d) {dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/nu_iso);}
-    if (pp->pmesh->three_d) {dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/nu_iso);}
+  for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
+    Real inv_dx2_sum = 1.0/SQR(size.h_view(m).dx1);
+    Real inv_dx2_max = inv_dx2_sum;
+    if (pmy_pack->pmesh->multi_d) {
+      const Real inv_dx2 = 1.0/SQR(size.h_view(m).dx2);
+      inv_dx2_sum += inv_dx2;
+      inv_dx2_max = std::max(inv_dx2_max, inv_dx2);
+    }
+    if (pmy_pack->pmesh->three_d) {
+      const Real inv_dx2 = 1.0/SQR(size.h_view(m).dx3);
+      inv_dx2_sum += inv_dx2;
+      inv_dx2_max = std::max(inv_dx2_max, inv_dx2);
+    }
+    // The longitudinal viscous mode includes the additional grad(div(v))/3 term.
+    const Real rate = 2.0*nu_iso*(inv_dx2_sum + inv_dx2_max/3.0);
+    dtnew = std::min(dtnew, 1.0/rate);
   }
 }
 
