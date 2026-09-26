@@ -99,6 +99,12 @@ def test_campaign_boundary_budget_and_history_cadence(tmp_path, monkeypatch):
     snapshots[next(reversed(snapshots))]["Time"] = 2.001
     with pytest.raises(ValueError, match="does not cover"):
         campaign.analyze(case, tmp_path, 1e-6)
+    # A restarted case may have history before its first binary snapshot.
+    snapshots[next(reversed(snapshots))]["Time"] = 2.0
+    next(iter(snapshots)).unlink()
+    summary = campaign.analyze(case, tmp_path, 1e-6)
+    assert summary["start"] == final and summary["history_start"] == 0
+    assert summary["max_q"] == 2 and summary["max_q_occupancy"] == 0.2
 
 
 def test_campaign_field_restriction_preserves_affine_fields(tmp_path, monkeypatch):

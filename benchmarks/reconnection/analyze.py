@@ -145,8 +145,8 @@ def analyze(case, output, null_tolerance):
             t = query
             for row, time in zip(rows, t):
                 row["time"] = float(time)
-            in_window = (history["time"] >= query[0]) & (history["time"] <= query[-1])
-            maxima = {name: float(np.max(history[name][in_window])) if in_window.any() else np.nan
+            history_start, history_end = history["time"][0], history["time"][-1]
+            maxima = {name: float(np.max(history[name]))
                       for name in ("q_max_edge", "frac_qstar", "frac_q1")}
         for name in names:
             values = np.interp(query, history["time"], history[name], left=np.nan, right=np.nan)
@@ -169,6 +169,7 @@ def analyze(case, output, null_tolerance):
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader(); writer.writerows(rows)
     return dict(case=str(case.resolve()), start=t[0], end=t[-1], snapshots=len(t),
+                history_start=history_start, history_end=history_end,
                 max_q=maxima["q_max_edge"], max_q_occupancy=maxima["frac_q1"],
                 max_qstar_occupancy=maxima["frac_qstar"],
                 X_verified_every_dump=all(r["fixed_X_verified"] for r in rows),
