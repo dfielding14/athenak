@@ -1,0 +1,229 @@
+{
+  "description": "Allocated rank-seconds are MPI ranks times launcher wall seconds, not measured CPU time.",
+  "case_count": 13,
+  "total_wall_seconds": 1834.497877583839,
+  "total_allocated_rank_seconds": 5503.493632751517,
+  "cases": [
+    {
+      "case": "cl-cpd2-pilot",
+      "status": "partial",
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "grid": [
+        400,
+        200
+      ],
+      "ranks": 3,
+      "final_time": 0.09255709,
+      "final_cycle": 100,
+      "wall_seconds": 13.822257332969457,
+      "sts_sweeps": 200,
+      "sts_stages": 1000,
+      "allocated_rank_seconds": 41.46677199890837
+    },
+    {
+      "case": "cl-cpd2-short",
+      "status": "complete",
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "grid": [
+        400,
+        200
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 22,
+      "wall_seconds": 3.2337495419196784,
+      "sts_sweeps": 44,
+      "sts_stages": 216,
+      "allocated_rank_seconds": 9.701248625759035
+    },
+    {
+      "case": "cl-cpd2-t1",
+      "status": "complete",
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "grid": [
+        400,
+        200
+      ],
+      "ranks": 3,
+      "final_time": 1.0,
+      "final_cycle": 1081,
+      "wall_seconds": 131.54433662514202,
+      "sts_sweeps": 1962,
+      "sts_stages": 9806,
+      "allocated_rank_seconds": 394.63300987542607
+    },
+    {
+      "case": "cl-cpd2-t5",
+      "status": "complete",
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "grid": [
+        400,
+        200
+      ],
+      "ranks": 3,
+      "final_time": 5.0,
+      "final_cycle": 5402,
+      "wall_seconds": 615.8409407499712,
+      "sts_sweeps": 8642,
+      "sts_stages": 43210,
+      "allocated_rank_seconds": 1847.5228222499136
+    },
+    {
+      "case": "cl-cpd4-short",
+      "status": "complete",
+      "model": "current_limited",
+      "cells_per_di": 4,
+      "grid": [
+        800,
+        400
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 44,
+      "wall_seconds": 33.173032250022516,
+      "sts_sweeps": 88,
+      "sts_stages": 608,
+      "allocated_rank_seconds": 99.51909675006755
+    },
+    {
+      "case": "cl-cpd8-cfl02-short",
+      "status": "complete",
+      "model": "current_limited",
+      "cells_per_di": 8,
+      "grid": [
+        1600,
+        800
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 173,
+      "wall_seconds": 653.4249863340519,
+      "sts_sweeps": 346,
+      "sts_stages": 3110,
+      "allocated_rank_seconds": 1960.2749590021558
+    },
+    {
+      "case": "cl-cpd8-short",
+      "status": "complete",
+      "model": "current_limited",
+      "cells_per_di": 8,
+      "grid": [
+        1600,
+        800
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 87,
+      "wall_seconds": 338.99123629182577,
+      "sts_sweeps": 174,
+      "sts_stages": 1558,
+      "allocated_rank_seconds": 1016.9737088754773
+    },
+    {
+      "case": "constant-cpd2-short",
+      "status": "complete",
+      "model": "constant",
+      "cells_per_di": 2,
+      "grid": [
+        400,
+        200
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 22,
+      "wall_seconds": 0.5641896249726415,
+      "sts_sweeps": 0,
+      "sts_stages": 0,
+      "allocated_rank_seconds": 1.6925688749179244
+    },
+    {
+      "case": "constant-cpd4-short",
+      "status": "complete",
+      "model": "constant",
+      "cells_per_di": 4,
+      "grid": [
+        800,
+        400
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 44,
+      "wall_seconds": 3.0422001250553876,
+      "sts_sweeps": 0,
+      "sts_stages": 0,
+      "allocated_rank_seconds": 9.126600375166163
+    },
+    {
+      "case": "constant-cpd8-short",
+      "status": "complete",
+      "model": "constant",
+      "cells_per_di": 8,
+      "grid": [
+        1600,
+        800
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 87,
+      "wall_seconds": 19.37744312500581,
+      "sts_sweeps": 0,
+      "sts_stages": 0,
+      "allocated_rank_seconds": 58.132329375017434
+    },
+    {
+      "case": "ideal-cpd2-short",
+      "status": "complete",
+      "model": "ideal",
+      "cells_per_di": 2,
+      "grid": [
+        400,
+        200
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 22,
+      "wall_seconds": 0.5419717081822455,
+      "sts_sweeps": 0,
+      "sts_stages": 0,
+      "allocated_rank_seconds": 1.6259151245467365
+    },
+    {
+      "case": "ideal-cpd4-short",
+      "status": "complete",
+      "model": "ideal",
+      "cells_per_di": 4,
+      "grid": [
+        800,
+        400
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 44,
+      "wall_seconds": 2.855043833842501,
+      "sts_sweeps": 0,
+      "sts_stages": 0,
+      "allocated_rank_seconds": 8.565131501527503
+    },
+    {
+      "case": "ideal-cpd8-short",
+      "status": "complete",
+      "model": "ideal",
+      "cells_per_di": 8,
+      "grid": [
+        1600,
+        800
+      ],
+      "ranks": 3,
+      "final_time": 0.02,
+      "final_cycle": 87,
+      "wall_seconds": 18.086490040877834,
+      "sts_sweeps": 0,
+      "sts_stages": 0,
+      "allocated_rank_seconds": 54.2594701226335
+    }
+  ]
+}

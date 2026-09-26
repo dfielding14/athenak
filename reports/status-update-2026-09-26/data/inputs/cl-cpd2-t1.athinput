@@ -1,0 +1,34 @@
+# Restart overrides; mesh and physics are inherited.
+
+<time>
+tlim = 1.0
+
+<time>
+nlim = -1
+
+<time>
+cfl_number = 0.4
+
+<time>
+sts_max_dt_ratio = 32
+
+<output1>
+dt = 0.1
+
+<output2>
+dt = 0.1
+
+<output4>
+dt = 0.1
+
+<output5>
+dt = 0.1
+
+<output3>
+dt = 0.01
+
+<output6>
+file_type = rst
+
+<output6>
+dt = 1

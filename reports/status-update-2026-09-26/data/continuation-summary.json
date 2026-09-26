@@ -1,0 +1,88 @@
+{
+  "cases": [
+    "cl-cpd2-pilot",
+    "cl-cpd2-t1",
+    "cl-cpd2-t5"
+  ],
+  "interval": [
+    0.0,
+    5.0
+  ],
+  "max_q": 0.22658462898247853,
+  "max_qstar_occupancy": 0.0,
+  "max_q1_occupancy": 0.0,
+  "fixed_X_verified_every_dump": true,
+  "finite_every_dump": true,
+  "density_min": 0.9995867314940147,
+  "pressure_min": 0.09993129187091251,
+  "max_abs_divb": 1.652318254007773e-10,
+  "geometry_initial_final": {
+    "delta": [
+      0.020215204185870393,
+      0.017557409595161787
+    ],
+    "delta_local_di": [
+      5.712151264994714,
+      4.9047057874979
+    ],
+    "X_local_di_cells": [
+      1.4155930575405469,
+      1.4318827963067826
+    ]
+  },
+  "topology_transitions_midplane": [
+    {
+      "time": 0.0,
+      "counts": {
+        "stationary_midplane": 1,
+        "nulls_midplane": 1,
+        "O_candidates_midplane": 0
+      }
+    },
+    {
+      "time": 0.200727,
+      "counts": {
+        "stationary_midplane": 5,
+        "nulls_midplane": 5,
+        "O_candidates_midplane": 2
+      }
+    },
+    {
+      "time": 0.400611,
+      "counts": {
+        "stationary_midplane": 3,
+        "nulls_midplane": 3,
+        "O_candidates_midplane": 2
+      }
+    }
+  ],
+  "energies_per_unit_depth": {
+    "total_energy_snapshot": {
+      "initial": 0.334974408395739,
+      "final": 0.33481673390413746,
+      "change": -0.0001576744916015338
+    },
+    "magnetic_energy_bcc": {
+      "initial": 0.22994837757195893,
+      "final": 0.2292774344823425,
+      "change": -0.0006709430896164326
+    },
+    "kinetic_energy": {
+      "initial": 0.0,
+      "final": 3.326673752787873e-07,
+      "change": 3.326673752787873e-07
+    },
+    "internal_energy": {
+      "initial": 0.10502603082378015,
+      "final": 0.10553896675441972,
+      "change": 0.0005129359306395714
+    }
+  },
+  "joule_proxy_time_integral": 0.00038398273817052617,
+  "psi_change": -9.497328169043862e-05,
+  "physical_EMF_time_integral": -6.849416263643485e-05,
+  "flux_change_minus_physical_EMF_integral": -2.6479119054003772e-05,
+  "outward_energy_flux_approx_time_integral": 8.202358913977619e-05,
+  "energy_balance_approx": -7.565090246175761e-05,
+  "limitations": "Coarse startup/onset pilot only, no current-limit activation. Fixed positive-x boundary reference is not an O point. Midplane topology only. Joule heating is a reconstructed proxy; magnetic/internal energy changes also include mechanical work and open-boundary transport. Boundary energy uses snapshot extrapolation and mixed output cadence, requiring convergence; this is not an exact numerical conservation test."
+}

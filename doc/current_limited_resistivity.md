@@ -209,3 +209,11 @@ An MPI launcher, NumPy, h5py, pytest, and a C++ compiler are required. The
 `ATHENA_BASELINE` comparison is skipped if that executable is not supplied.
 Final run logs include STS sweep/stage counts in addition to cycles and runtime;
 these work counters restart from zero when a checkpoint is resumed.
+
+The [local Harris pilot report](../reports/status-update-2026-09-26/STATUS_UPDATE.md)
+records the Release checks, 2/4/8-cell startup comparisons, controls, timestep
+test, and coarse continuation to $t=5$. The startup discrepancy decreases with
+refinement and matches the ideal control; halving the finest timestep changes
+the mean flux rate by 0.0066%. The coarse run reaches only $q_{\max}=0.2266$.
+High-current and steady reconnection remain unvalidated. The report includes
+reproduction commands, retained diagnostic tables, timings, and a GPU handoff.

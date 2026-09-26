@@ -1,0 +1,164 @@
+# Stage-1 fiducial single sheet, L=1, d_i/L=1/200 at rho_up=1, 5.12 cells per d_i, S0=1e6. Outflow x boundaries let islands leave. This is a benchmark deck; shorten tlim and reduce nx1/nx2 for a smoke run, not for a physical resolution claim. No reconnection rate is imposed.
+# Current-limited closure: ion interpretation, fixed upstream b_rec=1.
+# pressure is the upstream gas pressure; density is the upstream mass density.
+<job>
+basename = resistive_harris
+
+<mesh>
+nghost = 2
+nx1 = 1024
+nx2 = 512
+nx3 = 1
+x1min = -0.5
+x1max = 0.5
+x2min = -0.25
+x2max = 0.25
+x3min = -0.5
+x3max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+ix2_bc = outflow
+ox2_bc = outflow
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+sts_integrator = rkl2
+sts_max_dt_ratio = 8
+nlim = -1
+tlim = 5
+ndiag = 100
+
+<mhd>
+eos = ideal
+gamma = 1.6666666666666667
+reconstruct = plm
+rsolver = hlld
+ohmic_resistivity = 1e-06
+resistivity_model = current_limited
+eta_max = 0.005
+d_i = 0.005
+b_rec_method = constant
+b_rec = 1.0
+resistivity_integrator = sts
+
+<problem>
+pgen_name = resistive_tests
+test = harris
+user_hist = true
+density = 1
+pressure = 0.1
+b0 = 1
+guide_field = 0.0
+width = 0.02
+wave_n1 = 1
+wave_n2 = 0
+wave_n3 = 0
+sheet_density = 1.0
+perturbation = gaussian
+perturbation_flux = 0.0001
+perturbation_width = 0.1
+
+<output1>
+file_type = bin
+variable = mhd_u_bcc
+id = state
+data_precision = real
+dt = 0.02
+
+<output2>
+file_type = bin
+variable = mhd_divb
+id = divb
+data_precision = real
+dt = 0.02
+
+<output3>
+file_type = hst
+data_format = %24.16e
+dt = 0.02
+
+<output4>
+file_type = bin
+variable = mhd_eta
+id = eta
+data_precision = real
+dt = 0.02
+
+<output5>
+file_type = bin
+variable = mhd_q
+id = q
+data_precision = real
+dt = 0.02
+
+<time>
+tlim = 0.02
+
+<time>
+nlim = -1
+
+<time>
+cfl_number = 0.4
+
+<time>
+sts_max_dt_ratio = 32.0
+
+<mesh>
+nx1 = 400
+
+<mesh>
+nx2 = 200
+
+<meshblock>
+nx1 = 40
+
+<meshblock>
+nx2 = 40
+
+<mhd>
+resistivity_model = constant
+
+<mhd>
+ohmic_resistivity = 0
+
+<mhd>
+resistivity_integrator = explicit
+
+<time>
+sts_integrator = none
+
+<output5>
+variable = mhd_bmag
+
+<output5>
+id = bmag
+
+<output1>
+dt = 0.002
+
+<output2>
+dt = 0.002
+
+<output4>
+dt = 0.002
+
+<output5>
+dt = 0.002
+
+<output3>
+dt = 0.001
+
+<output6>
+file_type = rst
+
+<output6>
+dt = 1

@@ -1,0 +1,30 @@
+{
+  "system": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "python": "3.13.13 (main, Apr  7 2026, 18:19:01) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "interpreter": "/Users/dbf75/.uv/envs/interactive/.venv/bin/python3",
+  "cmake": "cmake version 4.3.2",
+  "mpi": "mpirun (Open MPI) 5.0.9",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)",
+  "packages": {
+    "numpy": "2.2.6",
+    "h5py": "3.13.0",
+    "pytest": "8.4.1",
+    "matplotlib": "3.10.8"
+  },
+  "cmake_cache": {
+    "Athena_ENABLE_MPI": "ON",
+    "Athena_ENABLE_OPENMP": "OFF",
+    "CMAKE_CXX_COMPILER": "/usr/bin/c++",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "Kokkos_ENABLE_DEBUG": "OFF",
+    "Kokkos_ENABLE_DEBUG_BOUNDS_CHECK": "OFF",
+    "Kokkos_ENABLE_OPENMP": "OFF",
+    "Kokkos_ENABLE_SERIAL": "ON",
+    "Athena_SINGLE_PRECISION": "OFF"
+  },
+  "max_build_parallelism": 3,
+  "simulation_ranks": 3,
+  "numeric_analysis_threads": 1,
+  "combined_cpu_limit": 4,
+  "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934"
+}

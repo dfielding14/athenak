@@ -166,7 +166,7 @@ def analyze(case, output, null_tolerance):
         row["energy_balance_approx"] = row["tot-E"]/row["depth"]-initial_energy+lost
         row["etaJ2_cc"] /= row["depth"]
     with (output/f"{case.name}.csv").open("w") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader(); writer.writerows(rows)
     return dict(case=str(case.resolve()), start=t[0], end=t[-1], snapshots=len(t),
                 history_start=history_start, history_end=history_end,

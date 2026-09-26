@@ -1,0 +1,788 @@
+{
+  "cl-cpd2-pilot": {
+    "status": "partial",
+    "physics": {
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "nx1": 400,
+      "nx2": 200,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 1e-06,
+      "resistivity_integrator": "sts"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-pilot/input.athinput",
+      "-t",
+      "00:03:00"
+    ],
+    "arguments": {
+      "binary": "build-reconnection-release/src/athena",
+      "output": "build-reconnection-release/campaign/cl-cpd2-pilot",
+      "cells_per_di": 2,
+      "model": "current_limited",
+      "tlim": 5.0,
+      "cfl": 0.4,
+      "sts_ratio": 32,
+      "ranks": 3,
+      "output_dt": 0.02,
+      "history_dt": 0.005,
+      "restart_dt": 1,
+      "nlim": 100,
+      "restart": null,
+      "wall_limit": "00:03:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "8306d78e27c7ed996cab419554574bbdf93a2e03",
+    "git_status": " M doc/current_limited_resistivity.md\n M src/pgen/tests/resistive_tests.cpp\n M tst/test_suite/diffusion/test_current_limited_mpicpu.py\n?? benchmarks/\n?? tst/test_log.txt\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448490.801744,
+    "returncode": 0,
+    "wall_seconds": 13.822257332969457,
+    "final_time": 0.09255709,
+    "final_cycle": 100,
+    "termination": "cycle limit",
+    "sts_sweeps": 200,
+    "sts_stages": 1000,
+    "reached_tlim": false
+  },
+  "cl-cpd2-short": {
+    "status": "complete",
+    "physics": {
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "nx1": 400,
+      "nx2": 200,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 1e-06,
+      "resistivity_integrator": "sts"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-short",
+      "cells_per_di": 2,
+      "model": "current_limited",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n?? vis/python/__pycache__/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448711.7526221,
+    "returncode": 0,
+    "wall_seconds": 3.2337495419196784,
+    "final_time": 0.02,
+    "final_cycle": 22,
+    "termination": "time limit",
+    "sts_sweeps": 44,
+    "sts_stages": 216,
+    "reached_tlim": true
+  },
+  "cl-cpd2-t1": {
+    "status": "complete",
+    "physics": {
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "nx1": 400,
+      "nx2": 200,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 1e-06,
+      "resistivity_integrator": "sts",
+      "inherited_from": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-pilot/rst/resistive_harris.00001.rst"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-t1/input.athinput",
+      "-r",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-pilot/rst/resistive_harris.00001.rst",
+      "-t",
+      "00:04:00"
+    ],
+    "arguments": {
+      "binary": "build-reconnection-release/src/athena",
+      "output": "build-reconnection-release/campaign/cl-cpd2-t1",
+      "cells_per_di": null,
+      "model": null,
+      "tlim": 1.0,
+      "cfl": 0.4,
+      "sts_ratio": 32,
+      "ranks": 3,
+      "output_dt": 0.1,
+      "history_dt": 0.01,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": "build-reconnection-release/campaign/cl-cpd2-pilot/rst/resistive_harris.00001.rst",
+      "wall_limit": "00:04:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448556.0680902,
+    "returncode": 0,
+    "wall_seconds": 131.54433662514202,
+    "final_time": 1.0,
+    "final_cycle": 1081,
+    "termination": "time limit",
+    "sts_sweeps": 1962,
+    "sts_stages": 9806,
+    "reached_tlim": true
+  },
+  "cl-cpd2-t5": {
+    "status": "complete",
+    "physics": {
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "nx1": 400,
+      "nx2": 200,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 1e-06,
+      "resistivity_integrator": "sts",
+      "inherited_from": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-t1/rst/resistive_harris.00002.rst"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-t5/input.athinput",
+      "-r",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-t1/rst/resistive_harris.00002.rst",
+      "-t",
+      "00:15:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-t5",
+      "cells_per_di": 2,
+      "model": "current_limited",
+      "tlim": 5.0,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.1,
+      "history_dt": 0.01,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd2-t1/rst/resistive_harris.00002.rst",
+      "wall_limit": "00:15:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "31a9512de56238593491025e80639d8a64b5afe7",
+    "git_status": "?? reports/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790449830.427436,
+    "returncode": 0,
+    "wall_seconds": 615.8409407499712,
+    "final_time": 5.0,
+    "final_cycle": 5402,
+    "termination": "time limit",
+    "sts_sweeps": 8642,
+    "sts_stages": 43210,
+    "reached_tlim": true
+  },
+  "cl-cpd4-short": {
+    "status": "complete",
+    "physics": {
+      "model": "current_limited",
+      "cells_per_di": 4,
+      "nx1": 800,
+      "nx2": 400,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 1e-06,
+      "resistivity_integrator": "sts"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd4-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd4-short",
+      "cells_per_di": 4,
+      "model": "current_limited",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n?? vis/python/__pycache__/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448716.378637,
+    "returncode": 0,
+    "wall_seconds": 33.173032250022516,
+    "final_time": 0.02,
+    "final_cycle": 44,
+    "termination": "time limit",
+    "sts_sweeps": 88,
+    "sts_stages": 608,
+    "reached_tlim": true
+  },
+  "cl-cpd8-cfl02-short": {
+    "status": "complete",
+    "physics": {
+      "model": "current_limited",
+      "cells_per_di": 8,
+      "nx1": 1600,
+      "nx2": 800,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 1e-06,
+      "resistivity_integrator": "sts"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd8-cfl02-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd8-cfl02-short",
+      "cells_per_di": 8,
+      "model": "current_limited",
+      "tlim": 0.02,
+      "cfl": 0.2,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": " M tst/test_suite/diffusion/test_reconnection_flux_cpu.py\n?? benchmarks/reconnection/analyze.py\n?? benchmarks/reconnection/compare.py\n?? reports/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790449132.49498,
+    "returncode": 0,
+    "wall_seconds": 653.4249863340519,
+    "final_time": 0.02,
+    "final_cycle": 173,
+    "termination": "time limit",
+    "sts_sweeps": 346,
+    "sts_stages": 3110,
+    "reached_tlim": true
+  },
+  "cl-cpd8-short": {
+    "status": "complete",
+    "physics": {
+      "model": "current_limited",
+      "cells_per_di": 8,
+      "nx1": 1600,
+      "nx2": 800,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 1e-06,
+      "resistivity_integrator": "sts"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd8-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/cl-cpd8-short",
+      "cells_per_di": 8,
+      "model": "current_limited",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n?? vis/python/__pycache__/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448755.7351239,
+    "returncode": 0,
+    "wall_seconds": 338.99123629182577,
+    "final_time": 0.02,
+    "final_cycle": 87,
+    "termination": "time limit",
+    "sts_sweeps": 174,
+    "sts_stages": 1558,
+    "reached_tlim": true
+  },
+  "constant-cpd2-short": {
+    "status": "complete",
+    "physics": {
+      "model": "constant",
+      "cells_per_di": 2,
+      "nx1": 400,
+      "nx2": 200,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 5e-06,
+      "resistivity_integrator": "explicit"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/constant-cpd2-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/constant-cpd2-short",
+      "cells_per_di": 2,
+      "model": "constant",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n?? vis/python/__pycache__/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448715.083394,
+    "returncode": 0,
+    "wall_seconds": 0.5641896249726415,
+    "final_time": 0.02,
+    "final_cycle": 22,
+    "termination": "time limit",
+    "sts_sweeps": 0,
+    "sts_stages": 0,
+    "reached_tlim": true
+  },
+  "constant-cpd4-short": {
+    "status": "complete",
+    "physics": {
+      "model": "constant",
+      "cells_per_di": 4,
+      "nx1": 800,
+      "nx2": 400,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 5e-06,
+      "resistivity_integrator": "explicit"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/constant-cpd4-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/constant-cpd4-short",
+      "cells_per_di": 4,
+      "model": "constant",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n?? vis/python/__pycache__/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448749.645623,
+    "returncode": 0,
+    "wall_seconds": 3.0422001250553876,
+    "final_time": 0.02,
+    "final_cycle": 44,
+    "termination": "time limit",
+    "sts_sweeps": 0,
+    "sts_stages": 0,
+    "reached_tlim": true
+  },
+  "constant-cpd8-short": {
+    "status": "complete",
+    "physics": {
+      "model": "constant",
+      "cells_per_di": 8,
+      "nx1": 1600,
+      "nx2": 800,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 5e-06,
+      "resistivity_integrator": "explicit"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/constant-cpd8-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/constant-cpd8-short",
+      "cells_per_di": 8,
+      "model": "constant",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/analyze.py\n?? benchmarks/reconnection/compare.py\n?? reports/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790449094.824129,
+    "returncode": 0,
+    "wall_seconds": 19.37744312500581,
+    "final_time": 0.02,
+    "final_cycle": 87,
+    "termination": "time limit",
+    "sts_sweeps": 0,
+    "sts_stages": 0,
+    "reached_tlim": true
+  },
+  "ideal-cpd2-short": {
+    "status": "complete",
+    "physics": {
+      "model": "ideal",
+      "cells_per_di": 2,
+      "nx1": 400,
+      "nx2": 200,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 0,
+      "resistivity_integrator": "explicit"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/ideal-cpd2-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/ideal-cpd2-short",
+      "cells_per_di": 2,
+      "model": "ideal",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n?? vis/python/__pycache__/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448715.739604,
+    "returncode": 0,
+    "wall_seconds": 0.5419717081822455,
+    "final_time": 0.02,
+    "final_cycle": 22,
+    "termination": "time limit",
+    "sts_sweeps": 0,
+    "sts_stages": 0,
+    "reached_tlim": true
+  },
+  "ideal-cpd4-short": {
+    "status": "complete",
+    "physics": {
+      "model": "ideal",
+      "cells_per_di": 4,
+      "nx1": 800,
+      "nx2": 400,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 0,
+      "resistivity_integrator": "explicit"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/ideal-cpd4-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/ideal-cpd4-short",
+      "cells_per_di": 4,
+      "model": "ideal",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": "?? benchmarks/reconnection/__pycache__/\n?? benchmarks/reconnection/analyze.py\n?? vis/python/__pycache__/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790448752.7832808,
+    "returncode": 0,
+    "wall_seconds": 2.855043833842501,
+    "final_time": 0.02,
+    "final_cycle": 44,
+    "termination": "time limit",
+    "sts_sweeps": 0,
+    "sts_stages": 0,
+    "reached_tlim": true
+  },
+  "ideal-cpd8-short": {
+    "status": "complete",
+    "physics": {
+      "model": "ideal",
+      "cells_per_di": 8,
+      "nx1": 1600,
+      "nx2": 800,
+      "meshblock": [
+        40,
+        40
+      ],
+      "ohmic_resistivity": 0,
+      "resistivity_integrator": "explicit"
+    },
+    "command": [
+      "mpirun",
+      "-np",
+      "3",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "-i",
+      "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/ideal-cpd8-short/input.athinput",
+      "-t",
+      "00:20:00"
+    ],
+    "arguments": {
+      "binary": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/src/athena",
+      "output": "/Users/dbf75/.codex/worktrees/c43e/athenak-DF/build-reconnection-release/campaign/ideal-cpd8-short",
+      "cells_per_di": 8,
+      "model": "ideal",
+      "tlim": 0.02,
+      "cfl": 0.4,
+      "sts_ratio": 32.0,
+      "ranks": 3,
+      "output_dt": 0.002,
+      "history_dt": 0.001,
+      "restart_dt": 1,
+      "nlim": -1,
+      "restart": null,
+      "wall_limit": "00:20:00"
+    },
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "git_head": "5f3821ff948e7798cbaf27140e67d25b197c2d09",
+    "git_status": " M tst/test_suite/diffusion/test_reconnection_flux_cpu.py\n?? benchmarks/reconnection/analyze.py\n?? benchmarks/reconnection/compare.py\n?? reports/\n",
+    "binary_sha256": "63bf55d8304b7806b20b82644cad7394cf6096ab88c1b573fe535b52112ad934",
+    "started_unix": 1790449114.2985961,
+    "returncode": 0,
+    "wall_seconds": 18.086490040877834,
+    "final_time": 0.02,
+    "final_cycle": 87,
+    "termination": "time limit",
+    "sts_sweeps": 0,
+    "sts_stages": 0,
+    "reached_tlim": true
+  }
+}

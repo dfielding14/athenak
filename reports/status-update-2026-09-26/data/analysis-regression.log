@@ -1,0 +1,5 @@
+Recorded from the completed tool output; this is not a new test run.
+Command: PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 /Users/dbf75/.uv/envs/interactive/.venv/bin/python3 -m pytest -q tst/test_suite/diffusion/test_reconnection_flux_cpu.py
+
+....                                                                     [100%]
+4 passed in 0.18s

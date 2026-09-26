@@ -1,0 +1,205 @@
+{
+  "flux_budgets": [
+    {
+      "case": "cl-cpd2-short",
+      "model": "current_limited",
+      "cells_per_di": 2,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 1.927439827193448e-06,
+      "mean_physical_EMF_difference": 6.964570862970994e-08,
+      "mean_rate_discrepancy": 1.8577941185637382e-06,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "cl-cpd4-short",
+      "model": "current_limited",
+      "cells_per_di": 4,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 5.767163136420172e-07,
+      "mean_physical_EMF_difference": 7.087167242074566e-08,
+      "mean_rate_discrepancy": 5.058446412212715e-07,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "cl-cpd8-short",
+      "model": "current_limited",
+      "cells_per_di": 8,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 2.0392398151572737e-07,
+      "mean_physical_EMF_difference": 7.162285527406178e-08,
+      "mean_rate_discrepancy": 1.323011262416656e-07,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "constant-cpd2-short",
+      "model": "constant",
+      "cells_per_di": 2,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 2.0995354143545162e-06,
+      "mean_physical_EMF_difference": 2.388684617299485e-07,
+      "mean_rate_discrepancy": 1.8606669526245678e-06,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "constant-cpd4-short",
+      "model": "constant",
+      "cells_per_di": 4,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 7.505866636592937e-07,
+      "mean_physical_EMF_difference": 2.430656922111604e-07,
+      "mean_rate_discrepancy": 5.075209714481333e-07,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "constant-cpd8-short",
+      "model": "constant",
+      "cells_per_di": 8,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 3.7878949115652044e-07,
+      "mean_physical_EMF_difference": 2.4580184471883817e-07,
+      "mean_rate_discrepancy": 1.3298764643768226e-07,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "ideal-cpd2-short",
+      "model": "ideal",
+      "cells_per_di": 2,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 1.8568544423595618e-06,
+      "mean_physical_EMF_difference": 8.690803017082105e-27,
+      "mean_rate_discrepancy": 1.8568544423595618e-06,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "ideal-cpd4-short",
+      "model": "ideal",
+      "cells_per_di": 4,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 5.051557207631167e-07,
+      "mean_physical_EMF_difference": 7.971182560856442e-27,
+      "mean_rate_discrepancy": 5.051557207631167e-07,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "ideal-cpd8-short",
+      "model": "ideal",
+      "cells_per_di": 8,
+      "cfl": 0.4,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 1.319181738929846e-07,
+      "mean_physical_EMF_difference": 7.672311666281284e-27,
+      "mean_rate_discrepancy": 1.319181738929846e-07,
+      "fixed_X_verified_every_dump": true
+    },
+    {
+      "case": "cl-cpd8-cfl02-short",
+      "model": "current_limited",
+      "cells_per_di": 8,
+      "cfl": 0.2,
+      "start": 0.0,
+      "end": 0.02,
+      "mean_flux_rate": 2.0391061695602432e-07,
+      "mean_physical_EMF_difference": 7.162016780876417e-08,
+      "mean_rate_discrepancy": 1.3229044914726014e-07,
+      "fixed_X_verified_every_dump": true
+    }
+  ],
+  "Bcc_differences": [
+    {
+      "coarse": "cl-cpd2-short",
+      "fine": "cl-cpd4-short",
+      "time": 0.02,
+      "B1_L1": 6.400998376646281e-05,
+      "B1_Linf": 0.0007366739703534853,
+      "B2_L1": 8.356025355822085e-09,
+      "B2_Linf": 2.6970861816268354e-07,
+      "B3_L1": 0.0,
+      "B3_Linf": 0.0
+    },
+    {
+      "coarse": "cl-cpd4-short",
+      "fine": "cl-cpd8-short",
+      "time": 0.02,
+      "B1_L1": 1.3197944130445777e-05,
+      "B1_Linf": 0.00014885725234331515,
+      "B2_L1": 2.1015098703548e-09,
+      "B2_Linf": 1.0439257943121397e-07,
+      "B3_L1": 0.0,
+      "B3_Linf": 0.0
+    },
+    {
+      "coarse": "constant-cpd2-short",
+      "fine": "constant-cpd4-short",
+      "time": 0.02,
+      "B1_L1": 6.391697053950592e-05,
+      "B1_Linf": 0.0007356866212477331,
+      "B2_L1": 8.383044216496897e-09,
+      "B2_Linf": 2.6873819940120884e-07,
+      "B3_L1": 0.0,
+      "B3_Linf": 0.0
+    },
+    {
+      "coarse": "constant-cpd4-short",
+      "fine": "constant-cpd8-short",
+      "time": 0.02,
+      "B1_L1": 1.3176829115876879e-05,
+      "B1_Linf": 0.0001487523113375966,
+      "B2_L1": 2.0608441416960937e-09,
+      "B2_Linf": 1.0596097953241308e-07,
+      "B3_L1": 0.0,
+      "B3_Linf": 0.0
+    },
+    {
+      "coarse": "ideal-cpd2-short",
+      "fine": "ideal-cpd4-short",
+      "time": 0.02,
+      "B1_L1": 6.404123214247461e-05,
+      "B1_Linf": 0.0007370241098391128,
+      "B2_L1": 8.342393143718101e-09,
+      "B2_Linf": 2.697878159790353e-07,
+      "B3_L1": 0.0,
+      "B3_Linf": 0.0
+    },
+    {
+      "coarse": "ideal-cpd4-short",
+      "fine": "ideal-cpd8-short",
+      "time": 0.02,
+      "B1_L1": 1.3205240048387285e-05,
+      "B1_Linf": 0.00014887838849353408,
+      "B2_L1": 2.1224704837038886e-09,
+      "B2_Linf": 1.1540190982244763e-07,
+      "B3_L1": 0.0,
+      "B3_Linf": 0.0
+    },
+    {
+      "coarse": "cl-cpd8-short",
+      "fine": "cl-cpd8-cfl02-short",
+      "time": 0.02,
+      "B1_L1": 1.3453585680103065e-08,
+      "B1_Linf": 8.30765188641891e-07,
+      "B2_L1": 9.558619657434057e-11,
+      "B2_Linf": 3.84439345416359e-08,
+      "B3_L1": 0.0,
+      "B3_Linf": 0.0
+    }
+  ],
+  "field_norms": "B0=1 code units; L1 is domain mean absolute error, Linf is maximum",
+  "interpretation": "Startup comparison only; physical EMFs are not numerical CT EMFs"
+}
