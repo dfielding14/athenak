@@ -100,14 +100,17 @@ def test_harris_initial_pressure_balance(tmp_path, guide):
                                rtol=2e-14, atol=2e-14)
 
 
-@pytest.mark.parametrize("mode", ["explicit", "sts"])
+@pytest.mark.parametrize("mode, sts_ratio", [("explicit", 8), ("sts", 8), ("sts", 32)],
+                         ids=["explicit", "sts8", "sts32"])
 @pytest.mark.parametrize("diagonal", [False, True])
-def test_nonlinear_forcefree_spatial_convergence(tmp_path, mode, diagonal):
+def test_nonlinear_forcefree_spatial_convergence(tmp_path, mode, sts_ratio, diagonal,
+                                               record_property):
     errors, kinetic = [], []
     for nx in (16, 32) if diagonal else (32, 64):
         directory = tmp_path / str(nx)
         k2 = (2 * math.pi)**2 * (2 if diagonal else 1)
         flags = [f"mesh/nx1={nx}", f"mhd/d_i={3 / math.sqrt(k2)}",
+                 f"time/sts_max_dt_ratio={sts_ratio}",
                  f"time/tlim={0.12 / (2 if diagonal else 1)}"]
         if diagonal:
             flags += [f"mesh/nx2={nx}", "meshblock/nx2=16", "problem/wave_n2=1"]
@@ -128,6 +131,8 @@ def test_nonlinear_forcefree_spatial_convergence(tmp_path, mode, diagonal):
         assert m1 < 0.2 * m0
         assert e1 - m1 - k1 > e0 - m0 - k0
         kinetic.append(k1)
+    record_property("amplitude_errors", errors)
+    record_property("kinetic_energies", kinetic)
     assert errors[1] < 0.5 * errors[0], errors
     assert errors[1] < 0.01, errors
     # A rotated staggered field is only discretely force-free to truncation error.
