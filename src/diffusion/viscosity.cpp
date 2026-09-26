@@ -9,6 +9,8 @@
 //  Viscosity may be added to Hydro and/or MHD independently.
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <iostream>
 #include <string> // string
@@ -19,6 +21,27 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "viscosity.hpp"
+
+namespace {
+
+parabolic::DiffusionSelection ParseViscosityIntegrator(const std::string &block,
+                                                        ParameterInput *pin) {
+  std::string integrator =
+      pin->GetOrAddString(block, "viscosity_integrator", "explicit");
+  if (integrator == "explicit") {
+    return parabolic::DiffusionSelection::explicit_only;
+  }
+  if (integrator == "sts") {
+    return parabolic::DiffusionSelection::sts_only;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<" << block << ">/viscosity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor:
@@ -31,6 +54,13 @@ Viscosity::Viscosity(std::string block, MeshBlockPack *pp,
   pmy_pack(pp) {
   // Read coefficient of isotropic kinematic shear viscosity (must be present)
   nu_iso = pin->GetReal(block,"viscosity");
+  mode = ParseViscosityIntegrator(block, pin);
+  if (mode == parabolic::DiffusionSelection::sts_only &&
+      (!std::isfinite(nu_iso) || nu_iso <= 0.0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "STS requires positive constant isotropic viscosity" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   NewTimeStep();
 }
 

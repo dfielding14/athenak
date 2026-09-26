@@ -7,8 +7,11 @@
 //  \brief Implements functions for Resistivity class.
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string>
 
 // Athena++ headers
 #include "athena.hpp"
@@ -17,6 +20,26 @@
 #include "resistivity.hpp"
 #include "current_density.hpp"
 
+namespace {
+
+parabolic::DiffusionSelection ParseResistivityIntegrator(ParameterInput *pin) {
+  std::string integrator = pin->GetOrAddString("mhd", "resistivity_integrator",
+                                               "explicit");
+  if (integrator == "explicit") {
+    return parabolic::DiffusionSelection::explicit_only;
+  }
+  if (integrator == "sts") {
+    return parabolic::DiffusionSelection::sts_only;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<mhd>/resistivity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // ctor: also calls Resistivity base class constructor
 
@@ -24,22 +47,35 @@ Resistivity::Resistivity(MeshBlockPack *pp, ParameterInput *pin) :
   pmy_pack(pp) {
   // Read parameters for Ohmic diffusion (if any)
   eta_ohm = pin->GetReal("mhd","ohmic_resistivity");
+  mode = ParseResistivityIntegrator(pin);
+  if (mode == parabolic::DiffusionSelection::sts_only &&
+      (!std::isfinite(eta_ohm) || eta_ohm <= 0.0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "STS requires positive constant Ohmic resistivity" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  NewTimeStep();
+}
 
-  // resistive timestep on MeshBlock(s) in this pack
+//----------------------------------------------------------------------------------------
+//! \brief Refresh the resistive stability bound after evolution or mesh refinement.
+
+void Resistivity::NewTimeStep() {
   dtnew = std::numeric_limits<float>::max();
+  if (eta_ohm == 0.0) return;
   auto size = pmy_pack->pmb->mb_size;
   Real fac;
-  if (pp->pmesh->three_d) {
+  if (pmy_pack->pmesh->three_d) {
     fac = 1.0/6.0;
-  } else if (pp->pmesh->two_d) {
+  } else if (pmy_pack->pmesh->two_d) {
     fac = 0.25;
   } else {
     fac = 0.5;
   }
-  for (int m=0; m<(pp->nmb_thispack); ++m) {
+  for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
     dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/eta_ohm);
-    if (pp->pmesh->multi_d) {dtnew = std::min(dtnew,fac*SQR(size.h_view(m).dx2)/eta_ohm);}
-    if (pp->pmesh->three_d) {dtnew = std::min(dtnew,fac*SQR(size.h_view(m).dx3)/eta_ohm);}
+    if (pmy_pack->pmesh->multi_d) {dtnew = std::min(dtnew,fac*SQR(size.h_view(m).dx2)/eta_ohm);}
+    if (pmy_pack->pmesh->three_d) {dtnew = std::min(dtnew,fac*SQR(size.h_view(m).dx3)/eta_ohm);}
   }
 }
 

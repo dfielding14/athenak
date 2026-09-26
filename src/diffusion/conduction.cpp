@@ -10,6 +10,8 @@
 
 #include <float.h>
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <string>
 #include <iostream> // cout
@@ -23,6 +25,27 @@
 #include "eos/eos.hpp"
 #include "conduction.hpp"
 #include "units/units.hpp"
+
+namespace {
+
+parabolic::DiffusionSelection ParseConductivityIntegrator(const std::string &block,
+                                                           ParameterInput *pin) {
+  std::string integrator =
+      pin->GetOrAddString(block, "conductivity_integrator", "explicit");
+  if (integrator == "explicit") {
+    return parabolic::DiffusionSelection::explicit_only;
+  }
+  if (integrator == "sts") {
+    return parabolic::DiffusionSelection::sts_only;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<" << block << ">/conductivity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
 
 KOKKOS_INLINE_FUNCTION
 Real VanLeerLimiter(const Real a, const Real b) {
@@ -57,6 +80,7 @@ Real KappaTemp(Real temp, Real ceiling) {
 
 Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin) :
   pmy_pack(pp) {
+  dtnew = static_cast<Real>(std::numeric_limits<float>::max());
   // Check that EOS is ideal
   if (pmy_pack->phydro != nullptr) {
     const bool &is_ideal = pmy_pack->phydro->peos->eos_data.is_ideal;
@@ -81,6 +105,14 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
   kappa_ceiling = pin->GetOrAddReal(block,"cond_ceiling",
                   static_cast<Real>(std::numeric_limits<float>::max()));
   sat_hflux = pin->GetOrAddBoolean(block,"sat_hflux",false);
+  mode = ParseConductivityIntegrator(block, pin);
+  if (mode == parabolic::DiffusionSelection::sts_only &&
+      (!std::isfinite(kappa) || kappa <= 0.0 || tdep_kappa || sat_hflux)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "STS requires positive constant isotropic thermal conduction "
+              << "without saturated heat flux" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (tdep_kappa && pmy_pack->punit == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "Temperature-dependent conduction requires a <units> block" << std::endl;

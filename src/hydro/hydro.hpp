@@ -13,6 +13,7 @@
 #include <string>
 
 #include "athena.hpp"
+#include "diffusion/sts_types.hpp"
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
 #include "bvals/bvals.hpp"
@@ -97,6 +98,10 @@ class Hydro {
 
   // following only used for time-evolving flow
   DvceArray5D<Real> u1;       // conserved variables at intermediate step
+  DvceArray5D<Real> u_sts0;   // conserved variables at start of STS sweep
+  DvceArray5D<Real> u_sts1;   // previous STS stage state
+  DvceArray5D<Real> u_sts2;   // second previous STS stage state
+  DvceArray5D<Real> u_sts_rhs;  // cached first-stage RKL2 operator contribution
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
   Real dtnew;
 
@@ -108,6 +113,12 @@ class Hydro {
   bool uflxidn_saved = false;
   DvceFaceFld4D<Real> uflxidnsaved;
 
+  bool has_explicit_viscosity = false;
+  bool has_explicit_conduction = false;
+  bool has_sts_viscosity = false;
+  bool has_sts_conduction = false;
+  bool has_any_sts_diffusion = false;
+
   // container to hold names of TaskIDs
   HydroTaskIDs id;
 
@@ -115,6 +126,7 @@ class Hydro {
   void AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   // ...in "before_stagen_tl" list
   TaskStatus InitRecv(Driver *d, int stage);
+  TaskStatus InitRecvParabolic(Driver *d, int stage);
   // ...in "stagen_tl" list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
@@ -134,6 +146,10 @@ class Hydro {
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus ConToPrimGhostZones(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
+  TaskStatus ClearSTSFlux(Driver *d, int stage);
+  TaskStatus STSFluxes(Driver *d, int stage);
+  TaskStatus STSUpdate(Driver *d, int stage);
+  TaskStatus STSRefreshTimeStep(Driver *d, int stage);
   TaskStatus SaveFlux(Driver *d, int stage);
   // ...in "after_stagen_tl" list
   TaskStatus ClearSend(Driver *d, int stage);
@@ -148,6 +164,7 @@ class Hydro {
   void SetSaveUFlxIdn();
 
  private:
+  void AddSelectedDiffusionFluxes(parabolic::DiffusionSelection selection);
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Hydro
 };
 

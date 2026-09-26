@@ -32,6 +32,34 @@ Other pages give instructions for running the code.
 
 Since AthenaK is very similar to Athena++, the [Athena++ documention](https://github.com/PrincetonUniversity/athena/wiki) may also be helpful.
 
+## Super-time-stepping for diffusion
+
+RKL2 super-time-stepping (STS) is available for Newtonian hydro and MHD. Enable
+it globally and select the diffusion terms to advance with STS, for example:
+
+```ini
+<time>
+sts_integrator = rkl2
+sts_max_dt_ratio = 20  # optional cap relative to the explicit diffusion timestep
+
+<mhd>
+ohmic_resistivity = 0.01
+resistivity_integrator = sts
+```
+
+For either `<hydro>` or `<mhd>`, use `viscosity_integrator = sts` with positive
+`viscosity`, or `conductivity_integrator = sts` with positive `conductivity`.
+Each selector defaults to `explicit`, so selected and explicit terms can coexist.
+The global default is `sts_integrator = none`; `sts_max_dt_ratio = -1` removes
+the optional cap. Hyperbolic and source-term timestep limits still apply.
+
+STS uses second-order RKL2 half-sweeps around the ordinary RK update, with
+diffusion flux/EMF exchanges at each stage and restarts at cycle boundaries.
+It supports constant isotropic viscosity, constant unsaturated isotropic
+conductivity, and constant Ohmic resistivity. Temperature-dependent or saturated
+conduction, relativistic physics, radiation, ion-neutral coupling, and
+shearing-box/orbital advection are not supported with STS.
+
 ## Code papers
 
 For more details on the features and algorithms implemented in AthenaK, see the code papers:

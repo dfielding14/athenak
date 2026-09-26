@@ -33,6 +33,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     coarse_u0("ccons",1,1,1,1,1),
     coarse_w0("cprim",1,1,1,1,1),
     u1("cons1",1,1,1,1,1),
+    u_sts0("u_sts0",1,1,1,1,1),
+    u_sts1("u_sts1",1,1,1,1,1),
+    u_sts2("u_sts2",1,1,1,1,1),
+    u_sts_rhs("u_sts_rhs",1,1,1,1,1),
     uflx("uflx",1,1,1,1,1),
     utest("utest",1,1,1,1,1),
     fofc("fofc",1,1,1,1),
@@ -76,6 +80,16 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   // Viscosity (if requested in input file)
   if (pin->DoesParameterExist("hydro","viscosity")) {
     pvisc = new Viscosity("hydro", ppack, pin);
+    const bool active = (pvisc->nu_iso != 0.0);
+    has_explicit_viscosity =
+        active && pvisc->mode == parabolic::DiffusionSelection::explicit_only;
+    has_sts_viscosity =
+        active && pvisc->mode == parabolic::DiffusionSelection::sts_only;
+    if (active) {
+      ppack->RegisterParabolicProcess(
+          {"hydro/viscosity", parabolic::ParabolicProcessOwner::hydro,
+           pvisc->mode, &(pvisc->dtnew)});
+    }
   } else {
     pvisc = nullptr;
   }
@@ -83,7 +97,23 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   // Thermal conduction (if requested in input file)
   if (pin->DoesParameterExist("hydro","conductivity") ||
       pin->DoesParameterExist("hydro","tdep_conductivity")) {
+    if (!peos->eos_data.is_ideal) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Thermal conduction in Hydro requires ideal gas EOS"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     pcond = new Conduction("hydro", ppack, pin);
+    const bool active = (pcond->kappa != 0.0 || pcond->tdep_kappa);
+    has_explicit_conduction =
+        active && pcond->mode == parabolic::DiffusionSelection::explicit_only;
+    has_sts_conduction =
+        active && pcond->mode == parabolic::DiffusionSelection::sts_only;
+    if (active) {
+      ppack->RegisterParabolicProcess(
+          {"hydro/conductivity", parabolic::ParabolicProcessOwner::hydro,
+           pcond->mode, &(pcond->dtnew)});
+    }
   } else {
     pcond = nullptr;
   }
@@ -101,6 +131,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       legacy_cooling_requested) {
     psrc = new SourceTerms("hydro_srcterms", ppack, pin);
   }
+
+  has_any_sts_diffusion = has_sts_viscosity || has_sts_conduction;
 
   // (3) read time-evolution option [already error checked in driver constructor]
   // Then initialize memory and algorithms for reconstruction and Riemann solvers
@@ -286,6 +318,12 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
       int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
       Kokkos::realloc(u1,       nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+      if (has_any_sts_diffusion) {
+        Kokkos::realloc(u_sts0,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts1,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts2,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts_rhs, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+      }
       Kokkos::realloc(uflx.x1f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(uflx.x2f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(uflx.x3f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
