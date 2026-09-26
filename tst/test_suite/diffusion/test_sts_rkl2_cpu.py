@@ -43,10 +43,11 @@ def flags_for(process, integrator="sts", fluid=None):
     return fluid, args
 
 
-def run_case(directory, fluid, flags=(), ranks=1, extra="", restart=None, check=True):
+def run_case(directory, fluid, flags=(), ranks=1, extra="", restart=None, check=True,
+             input_file="sts_diffusion.athinput", binary=None):
     directory.mkdir(parents=True, exist_ok=True)
-    binary = Path(os.environ.get("ATHENA", "./athena")).resolve()
-    text = (ROOT / "tst/inputs/sts_diffusion.athinput").read_text()
+    binary = Path(binary or os.environ.get("ATHENA", "./athena")).resolve()
+    text = (ROOT / "tst/inputs" / input_file).read_text()
     text = text.replace("<hydro>", f"<{fluid}>").replace(
         "variable = hydro_u", "variable = mhd_u_bcc" if fluid == "mhd"
         else "variable = hydro_u")

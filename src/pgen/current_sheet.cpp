@@ -175,6 +175,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         b0.x3f(m,k+1,j,i) = bg;
       }
     });
+
+    // Add kinetic and magnetic energy after every adjacent face has been initialized.
+    if (eos.is_ideal) {
+      par_for("pgen_cs_energy", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        const Real bx = 0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1));
+        const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
+        const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
+        u0(m,IEN,k,j,i) += 0.5*(bx*bx + by*by + bz*bz) +
+            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+                 SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
+      });
+    }
   }  // End initialization MHD variables
 
   return;

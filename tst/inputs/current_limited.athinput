@@ -1,0 +1,67 @@
+# Small periodic force-free field for current-limited resistivity regressions.
+<job>
+basename = CurrentLimited
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = -1
+tlim = 0.12
+ndiag = 1000
+sts_integrator = none
+sts_max_dt_ratio = 8
+
+<mhd>
+eos = ideal
+gamma = 1.6666666666666667
+reconstruct = plm
+rsolver = hlld
+ohmic_resistivity = 0.1
+resistivity_model = current_limited
+resistivity_integrator = explicit
+eta_max = 1
+d_i = 0.477464829275686
+b_rec = 1
+b_rec_method = constant
+
+<problem>
+pgen_name = resistive_tests
+test = forcefree
+density = 1
+pressure = 1
+b0 = 1
+guide_field = 0
+width = 0.1
+wave_n1 = 1
+wave_n2 = 0
+
+<output1>
+file_type = bin
+variable = mhd_u_bcc
+id = state
+data_precision = real
+dt = 100

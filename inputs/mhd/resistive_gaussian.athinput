@@ -1,0 +1,87 @@
+# Weak transverse Gaussian B_y=b0 exp[-x^2/(2 width^2)]. The analytic constant-eta profile has width^2(t)=width^2+2 eta0 t. q is much smaller than 1e-4.
+# Current-limited closure: ion interpretation, fixed upstream b_rec=1.
+# pressure is the upstream gas pressure; density is the upstream mass density.
+<job>
+basename = resistive_gaussian
+
+<mesh>
+nghost = 2
+nx1 = 256
+nx2 = 1
+nx3 = 1
+x1min = -1
+x1max = 1
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+ix2_bc = periodic
+ox2_bc = periodic
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+sts_integrator = rkl2
+sts_max_dt_ratio = 8
+nlim = -1
+tlim = 0.1
+ndiag = 100
+
+<mhd>
+eos = ideal
+gamma = 1.6666666666666667
+reconstruct = plm
+rsolver = hlld
+ohmic_resistivity = 0.01
+resistivity_model = current_limited
+eta_max = 0.1
+d_i = 0.01
+b_rec_method = constant
+b_rec = 1.0
+resistivity_integrator = sts
+
+<problem>
+pgen_name = resistive_tests
+test = gaussian
+user_hist = true
+density = 1
+pressure = 1
+b0 = 1e-06
+guide_field = 0.0
+width = 0.1
+wave_n1 = 1
+wave_n2 = 0
+wave_n3 = 0
+sheet_density = 1.0
+perturbation = gaussian
+perturbation_flux = 0
+perturbation_width = 0.5
+
+<output1>
+file_type = bin
+variable = mhd_u_bcc
+id = state
+data_precision = real
+dt = 0.01
+
+<output2>
+file_type = bin
+variable = mhd_divb
+id = divb
+data_precision = real
+dt = 0.01
+
+<output3>
+file_type = hst
+data_format = %24.16e
+dt = 0.01

@@ -21,6 +21,7 @@
 #include "outputs/outputs.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "diffusion/resistivity.hpp"
 #include "particles/particles.hpp"
 #include "z4c/z4c.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
@@ -423,6 +424,8 @@ void Driver::BeginSTSSweep(Mesh *pm, STSSweep sweep) {
 //! \brief Set the coefficients for one RKL2 stage.
 
 void Driver::SetSTSStage(int stage) {
+  ++nsts_stages_;
+  if (stage == 1) ++nsts_sweeps_;
   sts.current_stage = stage;
   sts.coeffs = parabolic::ComputeRKL2Coefficients(stage, sts.nstages);
 }
@@ -601,6 +604,9 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
            (elapsed_time < wall_time)) {
       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
 
+      if (pmesh->pmb_pack->pmhd != nullptr && pmesh->pmb_pack->pmhd->presist != nullptr) {
+        pmesh->pmb_pack->pmhd->presist->PrepareBRec();
+      }
       if (sts.enabled) {
         BeginSTSSweep(pmesh, STSSweep::pre);
         for (int sts_stage=1; sts_stage<=sts.nstages; ++sts_stage) {
@@ -791,6 +797,10 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       float pups = static_cast<float>(npart_updated_) / exe_time;
 
       std::cout << std::endl << "MeshBlock-cycles = " << nmb_updated_ << std::endl;
+      if (nsts_stages_ > 0) {
+        std::cout << "STS sweeps = " << nsts_sweeps_
+                  << " STS stages = " << nsts_stages_ << std::endl;
+      }
       std::cout << "cpu time used  = " << exe_time << std::endl;
       std::cout << "zone-cycles/cpu_second = " << zcps << std::endl;
       std::cout << "particle-updates/cpu_second = " << pups << std::endl;
@@ -923,5 +933,6 @@ void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm) {
     (void) prad->ApplyPhysicalBCs(this, 0); // fine grid BCs
   }
 
+  if (pmhd != nullptr && pmhd->presist != nullptr) pmhd->presist->PrepareBRec();
   return;
 }

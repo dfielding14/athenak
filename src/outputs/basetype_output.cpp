@@ -97,7 +97,8 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       exit(EXIT_FAILURE);
     }
     if (((ivar>=19 && ivar<59) || ivar==60 || ivar==61 ||
-         (ivar>=207 && ivar<217)) && (pm->pmb_pack->pmhd == nullptr)) {
+         (ivar>=207 && ivar<217) || (ivar>=219 && ivar<=221)) &&
+        (pm->pmb_pack->pmhd == nullptr)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
          << std::endl
          << "Output of MHD variable requested in <output> block '"
@@ -535,6 +536,11 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       out_params.n_derived += 1;
       int i_derived = out_params.n_derived - 1;
       outvars.emplace_back("j2",i_derived,&(derived_var));
+    }
+
+    if (variable == "mhd_eta" || variable == "mhd_q" || variable == "mhd_brec") {
+      out_params.contains_derived = true;
+      outvars.emplace_back(variable.substr(4), out_params.n_derived++, &(derived_var));
     }
 
     // Added by DBF --- check & update NOUTPUT_CHOICES

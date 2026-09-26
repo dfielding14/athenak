@@ -122,7 +122,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   // Resistivity (only constructed if needed)
-  if (pin->DoesParameterExist("mhd","ohmic_resistivity")) {
+  if (pin->DoesParameterExist("mhd","ohmic_resistivity") ||
+      pin->DoesParameterExist("mhd","resistivity_model")) {
     presist = new Resistivity(ppack, pin);
     const bool active = (presist->eta_ohm != 0.0);
     has_explicit_resistivity =

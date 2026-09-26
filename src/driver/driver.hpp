@@ -78,6 +78,7 @@ class Driver {
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
+  std::uint64_t nsts_sweeps_ = 0, nsts_stages_ = 0; // work in this run (not restarted)
   float lb_efficiency_;         // measure of how efficient was load balancing
   void ResetSTSController();
   void ValidateSTSConfiguration(Mesh *pm);

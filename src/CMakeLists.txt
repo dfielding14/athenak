@@ -124,6 +124,7 @@ add_executable(
         pgen/tests/cshock.cpp
         pgen/tests/divb_amr.cpp
         pgen/tests/diffusion.cpp
+        pgen/tests/resistive_tests.cpp
         pgen/tests/gr_bondi.cpp
         pgen/tests/gr_monopole.cpp
         pgen/tests/linear_wave.cpp

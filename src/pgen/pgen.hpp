@@ -91,6 +91,7 @@ class ProblemGenerator {
   void CShock(ParameterInput *pin, const bool restart);
   void DivBAMR(ParameterInput *pin, const bool restart);
   void Diffusion(ParameterInput *pin, const bool restart);
+  void ResistiveTests(ParameterInput *pin, const bool restart);
   void LinearWave(ParameterInput *pin, const bool restart);
   void LWImplode(ParameterInput *pin, const bool restart);
   void Monopole(ParameterInput *pin, const bool restart);

@@ -56,9 +56,13 @@ the optional cap. Hyperbolic and source-term timestep limits still apply.
 STS uses second-order RKL2 half-sweeps around the ordinary RK update, with
 diffusion flux/EMF exchanges at each stage and restarts at cycle boundaries.
 It supports constant isotropic viscosity, constant unsaturated isotropic
-conductivity, and constant Ohmic resistivity. Temperature-dependent or saturated
+conductivity, and Ohmic resistivity. Temperature-dependent or saturated
 conduction, relativistic physics, radiation, ion-neutral coupling, and
 shearing-box/orbital advection are not supported with STS.
+
+The experimental `resistivity_model = current_limited` uses a bounded nonlinear
+Ohmic coefficient with a prescribed reconnecting field, with either explicit
+or STS integration. See the [model, inputs, and validation limits](doc/current_limited_resistivity.md).
 
 ## Code papers
 

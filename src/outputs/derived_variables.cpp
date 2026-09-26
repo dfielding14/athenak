@@ -24,6 +24,7 @@
 #include "geodesic-grid/geodesic_grid.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "diffusion/resistivity.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "radiation/radiation.hpp"
@@ -205,6 +206,43 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       dv(m,i_dv,k,j,i) = j1*j1 + j2*j2 + j3*j3;
     });
     i_dv += 1; // increment derived variable index
+  }
+
+  // Reconstruct native edge currents at the cell center. These are closure proxies;
+  // the operator evaluates the full current vector and density at each edge.
+  if (name == "mhd_eta" || name == "mhd_q" || name == "mhd_brec") {
+    auto *presist = pm->pmb_pack->pmhd->presist;
+    if (presist == nullptr || (name != "mhd_eta" && !presist->current_limited)) {
+      std::cout << "### FATAL ERROR: " << name
+                << " requires resistivity (q and brec require current_limited)."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb_alloc, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto b = pm->pmb_pack->pmhd->b0;
+    auto w = pm->pmb_pack->pmhd->w0;
+    auto params = presist->current_limited_params;
+    const Real dfloor = pm->pmb_pack->pmhd->peos->eos_data.dfloor;
+    const Real eta = presist->eta_ohm;
+    const bool limited = presist->current_limited;
+    const bool output_q = name == "mhd_q";
+    const bool output_brec = name == "mhd_brec";
+    par_for("resistivity_diagnostic", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      if (output_brec) {
+        dv(m,i_dv,k,j,i) = current_limited::CellBRec(
+            params, multi_d, three_d, m, k, j, i);
+      } else if (limited) {
+        auto state = current_limited::CellState(b, w, size.d_view(m), params, dfloor,
+                                                multi_d, three_d, m, k, j, i);
+        dv(m,i_dv,k,j,i) = output_q ? state.q : state.eta;
+      } else {
+        dv(m,i_dv,k,j,i) = eta;
+      }
+    });
+    i_dv += 1;
   }
 
   // magnitude of curvature = |B^-2 (B.gradB) - B^-4 (BB:gradB)|.

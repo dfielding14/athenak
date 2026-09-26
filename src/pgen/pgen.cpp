@@ -1131,6 +1131,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     SphericalCollapse(pin, false);
   } else if (pgen_fun_name.compare("diffusion") == 0) {
     Diffusion(pin, false);
+  } else if (pgen_fun_name.compare("resistive_tests") == 0) {
+    ResistiveTests(pin, false);
   // else, name not set on command line or input file, print warning and quit
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -1812,6 +1814,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     SphericalCollapse(pin, true);
   } else if (pgen_fun_name.compare("diffusion") == 0) {
     Diffusion(pin, true);
+  } else if (pgen_fun_name.compare("resistive_tests") == 0) {
+    ResistiveTests(pin, true);
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
         << "Problem generator name could not be found in <problem> block in input file"
