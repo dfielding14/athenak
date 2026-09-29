@@ -521,27 +521,21 @@ DecayState IntegrateDecayReference(ParameterInput *pin, Mesh *pm, const TestMode
     s.tperp = (pperp0/rho0)*amp;
   }
 
-  const auto apply_heat_flux = [=](DecayState state, const Real dt) {
-    state.tpar *= std::exp(-chi_parallel*SQR(k_wave)*dt);
-    state.tperp *= std::exp(-chi_perp*SQR(k_wave)*dt);
-    return state;
-  };
-  const auto apply_collision = [=](DecayState state, const Real dt) {
-    const Real piso = ONE_3RD*state.tpar + TWO_3RDS*state.tperp;
-    Real paniso = state.tperp - state.tpar;
-    paniso *= std::exp(-nu_coll*dt);
-    state.tpar = piso - TWO_3RDS*paniso;
-    state.tperp = piso + ONE_3RD*paniso;
-    return state;
-  };
-
-  // Each LF half-sweep is followed by a collision source update over the same
-  // half-cycle duration, so the two updates cover one physical cycle in total.
-  s = apply_heat_flux(s, 0.5*pm->time);
-  s = apply_collision(s, 0.5*pm->time);
-  s = apply_heat_flux(s, 0.5*pm->time);
-  s = apply_collision(s, 0.5*pm->time);
-  return s;
+  // Independent continuous linear system for coupled temperature amplitudes.
+  // Background collisions conserve (T_parallel + 2*T_perp)/3 and decay their
+  // difference at nu_coll. Use its exact 2x2 matrix exponential as the reference.
+  const Real a = -chi_parallel*SQR(k_wave) - TWO_3RDS*nu_coll;
+  const Real b = TWO_3RDS*nu_coll;
+  const Real c = ONE_3RD*nu_coll;
+  const Real d = -chi_perp*SQR(k_wave) - ONE_3RD*nu_coll;
+  const Real half_trace = 0.5*(a + d);
+  const Real gap = std::sqrt(SQR(0.5*(a - d)) + b*c);
+  const Real ep = std::exp((half_trace + gap)*pm->time);
+  const Real em = std::exp((half_trace - gap)*pm->time);
+  const Real even = 0.5*(ep + em);
+  const Real odd = (gap > 0.0) ? 0.5*(ep - em)/gap : pm->time*ep;
+  return {even*s.tpar + odd*((a - half_trace)*s.tpar + b*s.tperp),
+          even*s.tperp + odd*(c*s.tpar + (d - half_trace)*s.tperp)};
 }
 
 void CheckCollisionRelaxation(ParameterInput *pin, Mesh *pm) {

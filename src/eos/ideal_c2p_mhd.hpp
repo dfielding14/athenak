@@ -413,84 +413,41 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void SingleColl_CGLMHD()
-//! \brief Calculates the decay of pressure anisotropy due to scattering over
-//! one time step
+//! \brief Apply physical collisions and monotone soft-limiter relaxation.
 
 KOKKOS_INLINE_FUNCTION
-void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll,
-                       const Real &dtc, const bool &mlim, const bool &flim,
-                       const Real &firehose_threshold, const bool &backup) {
-  Real paniso = w.pp-w.e;
-  Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
-
-  // Apply background collisions
-  Real expdtnu = exp(-nu_coll*dtc);
-  paniso = paniso*expdtnu;
-  w.pp = ONE_3RD*(paniso + 3.0*piso);
-  w.e = w.pp - paniso;
-
-  // Apply limiters
-  Real nudt = lim_coll*dtc;
-  Real nudt_b = cgl::kBackupCollisionRate*dtc;
-  Real bsqr = w.bx*w.bx+w.by*w.by+w.bz*w.bz;
-  Real wpptmp;
-
-  // Firehose block
-  if (flim && backup) { //if using backup
-    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold) &&
-        !cgl::FirehoseHardBoundViolated(paniso, bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    } else if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
-                  + cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
-                - 2.*cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.pp = wpptmp;
-    }
-
-  } else if (flim && (!backup)) { //if not using backup, just standard flim
-    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold)) {
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    }
+void SingleCollRates_CGLMHD(MHDPrim1D &w, const Real nu_coll, const Real lim_coll,
+                            const Real dt, const bool mlim, const bool flim,
+                            const Real firehose_threshold) {
+  const Real initial = w.pp - w.e;
+  Real paniso = initial*exp(-nu_coll*dt);
+  const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+  const Real nudt = lim_coll*dt;
+  if (flim && paniso < firehose_threshold*bsqr) {
+    paniso = (paniso + nudt*firehose_threshold*bsqr)/(1.0 + nudt);
   }
-
-  // Mirror block
-  if (mlim && backup) {
-    if (cgl::MirrorLimiterActive(paniso, bsqr) &&
-        !cgl::MirrorHardBoundViolated(paniso, bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    } else if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
-                  + cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
-                - 2.*cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.pp = wpptmp;
-    }
-
-  } else if (mlim && (!backup)) {  //if not using backup, just standard mlim
-    if (cgl::MirrorLimiterActive(paniso, bsqr)) {
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    }
+  if (mlim && paniso > cgl::kMirrorThreshold*bsqr) {
+    paniso = (paniso + nudt*cgl::kMirrorThreshold*bsqr)/(1.0 + nudt);
   }
+  if (paniso == initial) return;
+  const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
+  w.pp = piso + ONE_3RD*paniso;
+  w.e = piso - TWO_3RDS*paniso;
+}
 
-  return;
+//----------------------------------------------------------------------------------------
+//! \brief Project backup walls and the unconditional fluid firehose wall.
+
+KOKKOS_INLINE_FUNCTION
+void SingleCollWalls_CGLMHD(MHDPrim1D &w, const bool backup) {
+  const Real initial = w.pp - w.e;
+  const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+  Real paniso = fmax(initial, -bsqr);
+  if (backup) paniso = fmin(paniso, cgl::kMirrorHardBound*bsqr);
+  if (paniso == initial) return;
+  const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
+  w.pp = piso + ONE_3RD*paniso;
+  w.e = piso - TWO_3RDS*paniso;
 }
 
 //----------------------------------------------------------------------------------------

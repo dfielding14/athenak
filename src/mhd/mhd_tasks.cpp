@@ -127,7 +127,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.prol);
   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
 
-  if (peos->eos_data.is_cgl && peos->eos_data.coll && !has_cgl_lf_split) {
+  if (peos->eos_data.is_cgl) {
     id.cglcoll = tl["after_timeintegrator"]->AddTask(&MHD::CGLCollisions, this, none);
   }
 
@@ -198,10 +198,8 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     if (has_cgl_lf_split) {
       pend = tl["parabolic_stagen"]->AddTask(&MHD::EndCGLLandauFluidSTSSweep,
                                              this, pc2p);
-      if (peos->eos_data.coll) {
-        pend = tl["parabolic_stagen"]->AddTask(&MHD::STSPostSweepCGLCollisions,
-                                               this, pend);
-      }
+      pend = tl["parabolic_stagen"]->AddTask(&MHD::STSPostSweepCGLCollisions,
+                                             this, pend);
     }
     (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pend);
 
@@ -1073,8 +1071,7 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
 //! \brief Apply CGL pressure-anisotropy relaxation after the hyperbolic update.
 
 TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
-  (void) stage;
-  if (!peos->eos_data.is_cgl || !peos->eos_data.coll) {
+  if (!peos->eos_data.is_cgl) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL collision relaxation");
@@ -1083,8 +1080,12 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
   int n1m1 = indcs.nx1 + 2*ng - 1;
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt,
+  const auto mode = (has_cgl_lf_split && pdrive->sts.enabled)
+      ? CGLCollisionMode::walls_only : CGLCollisionMode::full;
+  peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt, mode,
                    0, n1m1, 0, n2m1, 0, n3m1);
+  // Rates or walls can change fine-cell anisotropy after the last restriction.
+  RestrictU(pdrive, stage);
   RecomputeTimeStepFromCurrentState(pdrive);
   return TaskStatus::complete;
 }

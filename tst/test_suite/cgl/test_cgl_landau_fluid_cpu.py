@@ -564,6 +564,48 @@ def test_cgl_lf_background_collision_advances_one_physical_timestep():
         _cleanup()
 
 
+@pytest.mark.parametrize("soft_limiter", [False, True])
+def test_cgl_collision_rates_once_per_cycle_with_and_without_lf(soft_limiter, tmp_path):
+    histories = []
+    try:
+        for lf in (False, True):
+            flags = []
+            source = (Path(UNIT_INPUT_ROOT) / "cgl_collision_once.athinput").read_text()
+            if lf:
+                source = source.replace("<mhd>", "<mhd>\ncgl_heat_flux = landau_fluid"
+                                        "\ncgl_heat_flux_integrator = sts"
+                                        "\nlf_k_parallel = 6.283185307179586")
+                source = source.replace("<time>", "<time>\nsts_integrator = rkl2")
+            input_path = tmp_path / f"collision_{int(lf)}.athinput"
+            input_path.write_text(source)
+            pperp = 1.2
+            if soft_limiter:
+                pperp = 1.8
+                flags += ["problem/test_mode=limiter_stress",
+                          "problem/limiter_kind=mirror", "problem/pperp0=1.8",
+                          "mhd/nu_coll=0", "mhd/mirror_limiter=true",
+                          "mhd/limiter_nu_coll=10"]
+            basename = f"cgl_ci_once_{int(lf)}"
+            testutils.run(str(input_path), [f"job/basename={basename}", *flags])
+            history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+            assert len(history["time"]) == 21
+            # Uniform rho=B=1: A=log(p_perp/p_parallel), with fixed thermal energy.
+            ratio = np.exp(history["aam-D"])
+            piso = (1.0 + 2.0 * pperp) / 3.0
+            measured = 3.0 * piso * (ratio - 1.0) / (1.0 + 2.0 * ratio)
+            if soft_limiter:
+                expected = np.r_[pperp - 1.0, 0.5 + (pperp - 1.5) * np.cumprod(
+                    1.0 / (1.0 + 10.0 * np.diff(history["time"])))]
+            else:
+                expected = (pperp - 1.0) * np.exp(-10.0 * history["time"])
+            np.testing.assert_allclose(measured, expected, rtol=1.0e-10, atol=0.0)
+            histories.append((history["time"], measured))
+        np.testing.assert_allclose(histories[0], histories[1], rtol=1.0e-10,
+                                   atol=1.0e-14)
+    finally:
+        _cleanup()
+
+
 def test_cgl_collision_refreshes_next_timestep_from_relaxed_state():
     try:
         _run(

@@ -84,12 +84,14 @@ void EquationOfState::PrimToCons(const DvceArray5D<Real> &prim,
 
 void EquationOfState::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                                  DvceArray5D<Real> &cons, const Real dtc,
+                                 const CGLCollisionMode mode,
                                  const int il, const int iu,
                                  const int jl, const int ju, const int kl, const int ku) {
   (void) prim;
   (void) bcc;
   (void) cons;
   (void) dtc;
+  (void) mode;
   (void) il;
   (void) iu;
   (void) jl;

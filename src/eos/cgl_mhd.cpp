@@ -548,6 +548,7 @@ void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
 
 void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const Real dtc,
+                          const CGLCollisionMode mode,
                           const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku) {
   const int nmhd  = pmy_pack->pmhd->nmhd;
@@ -587,10 +588,16 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
     w.by = bcc(m,IBY,k,j,i);
     w.bz = bcc(m,IBZ,k,j,i);
 
-    // call scattering and then p2c function
+    // Leave conserved A untouched when neither rates nor walls change pressures.
+    const Real initial_ppar = w.e;
+    const Real initial_pperp = w.pp;
     HydCons1D u;
-    SingleColl_CGLMHD(w, nu_coll, lim_coll, dtc, mlim && !hardwall,
-                      flim && !hardwall, firehose_threshold, backup);
+    if (mode == CGLCollisionMode::full) {
+      SingleCollRates_CGLMHD(w, nu_coll, lim_coll, dtc, mlim && !hardwall,
+                             flim && !hardwall, firehose_threshold);
+    }
+    SingleCollWalls_CGLMHD(w, backup);
+    if (w.e == initial_ppar && w.pp == initial_pperp) return;
     SingleP2C_CGLMHD(w, bfloor, u);
 
     // Correct conserved anisotropy variable

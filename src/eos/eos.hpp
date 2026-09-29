@@ -24,6 +24,8 @@
 //! everything in a container makes them easier to capture, and pass to inline functions,
 //! inside kernels.
 
+enum class CGLCollisionMode { full, walls_only };
+
 struct EOS_Data {
   Real gamma;        // ratio of specific heats for ideal gas
   Real iso_cs;       // isothermal sound speed
@@ -310,6 +312,7 @@ class EquationOfState {
                           const int jl, const int ju, const int kl, const int ku);
   virtual void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const Real dtc,
+                          const CGLCollisionMode mode,
                           const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
   virtual void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
@@ -479,6 +482,7 @@ class CGLMHD : public EquationOfState {
                   const int jl, const int ju, const int kl, const int ku) override;
   void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                   DvceArray5D<Real> &cons, const Real dtc,
+                  const CGLCollisionMode mode,
                   const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
   void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
