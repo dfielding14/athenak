@@ -5521,3 +5521,18 @@ def test_cgl_lf_hotspot_preserves_minima_and_energy(
         assert "diffusion_times=" in result.stdout
     finally:
         _cleanup()
+
+
+@pytest.mark.parametrize("heating_rate,post_stages", [(0, 7), (3000, 11)])
+def test_cgl_lf_post_sweep_timestep_refresh(heating_rate, post_stages):
+    try:
+        testutils.run(
+            "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput",
+            [f"problem/heating_rate={heating_rate}"],
+        )
+        history = testutils.athena_read.hst("cgl_lf_timestep_refresh.mhd.hst")
+        assert history["lf_nstage"][-1] == 64 * (7 + post_stages)
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd"):
+            assert history[name][-1] == 0
+    finally:
+        Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)

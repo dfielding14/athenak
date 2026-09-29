@@ -51,6 +51,7 @@ enum class TestMode {
   rotated_decay,
   field_reversal,
   density_contact,
+  timestep_refresh,
   hotspot,
   low_field
 };
@@ -144,6 +145,7 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
   if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
   if (mode == "rotated_decay") return TestMode::rotated_decay;
+  if (mode == "timestep_refresh") return TestMode::timestep_refresh;
   if (mode == "density_contact") return TestMode::density_contact;
   if (mode == "field_reversal") return TestMode::field_reversal;
   if (mode == "hotspot") return TestMode::hotspot;
@@ -152,7 +154,7 @@ TestMode ParseMode(ParameterInput *pin) {
        "collision_relaxation, grad_b, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "density_contact, field_reversal, hotspot, or low_field");
+       "density_contact, timestep_refresh, field_reversal, hotspot, or low_field");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -168,6 +170,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::paper_oblique_wave: return "paper_oblique_wave";
     case TestMode::paper_eigen_wave: return "paper_eigen_wave";
     case TestMode::rotated_decay: return "rotated_decay";
+    case TestMode::timestep_refresh: return "timestep_refresh";
     case TestMode::density_contact: return "density_contact";
     case TestMode::field_reversal: return "field_reversal";
     case TestMode::hotspot: return "hotspot";
@@ -1589,6 +1592,74 @@ void CheckFieldReversal(ParameterInput *pin, Mesh *pm) {
           "field reversal amplified the pressure seed");
 }
 
+// A uniform RK source isolates post-sweep timestep refresh from spatial transport.
+Real refresh_heating_rate = 0.0;
+Real refresh_pre_dt = 0.0;
+int refresh_pre_stages = 0;
+
+void HeatTimestepRefresh(Mesh *pm, const Real beta_dt) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const auto &indcs = pm->mb_indcs;
+  const int nmb = pm->pmb_pack->nmb_thispack;
+  const int ncell = nmb*indcs.nx1*indcs.nx2*indcs.nx3;
+  if (refresh_pre_stages == 0) {
+    refresh_pre_stages = pmhd->pcgl_lf->diagnostics.nstage/ncell;
+    refresh_pre_dt = pmhd->pcgl_lf->dtnew;
+  }
+  auto u = pmhd->u0;
+  const Real de = refresh_heating_rate*beta_dt;
+  par_for("cgl_lf_refresh_heating", DevExeSpace(), 0, nmb - 1,
+          indcs.ks, indcs.ke, indcs.js, indcs.je, indcs.is, indcs.ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    u(m,IEN,k,j,i) += de;
+  });
+}
+
+void CheckTimestepRefresh(ParameterInput *pin, Mesh *pm) {
+  auto *lf = pm->pmb_pack->pmhd->pcgl_lf;
+  const auto &indcs = pm->mb_indcs;
+  const int nmb = pm->pmb_pack->nmb_thispack;
+  const int ncell = nmb*indcs.nx1*indcs.nx2*indcs.nx3;
+  const int post_stages = lf->diagnostics.nstage/ncell - refresh_pre_stages;
+  int stages_min[2] = {refresh_pre_stages, post_stages};
+  int stages_max[2] = {refresh_pre_stages, post_stages};
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, stages_min, 2, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, stages_max, 2, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+#endif
+  Require(stages_min[0] == stages_max[0] && stages_min[1] == stages_max[1],
+          "pre/post stage counts differ across MPI ranks");
+  Require(pm->ncycle == 1 && refresh_pre_stages == 7,
+          "timestep refresh requires one cycle with seven pre-sweep stages");
+  Require(refresh_heating_rate > 0.0 ? post_stages > refresh_pre_stages :
+                                      post_stages == refresh_pre_stages,
+          "post-sweep stages did not respond to the RK heating");
+  const Real pressure = 1.0 + (2.0/3.0)*refresh_heating_rate*pm->dt_last_completed;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/pm->mesh_indcs.nx1;
+  const Real chi0 = std::sqrt(8.0/M_PI)/lf->lf_k_parallel;
+  const Real dt0 = 0.5*dx*dx/chi0;
+  RequireRelative("initial uniform LF timestep", refresh_pre_dt, dt0, 2.0e-12);
+  RequireRelative("heated uniform LF timestep", lf->dtnew, dt0/std::sqrt(pressure),
+                  2.0e-12);
+  RequireRelative("refreshed mesh LF timestep", pm->dt_parabolic_sts,
+                  pm->cfl_no*dt0/std::sqrt(pressure), 2.0e-12);
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  for (int m=0; m<nmb; ++m) {
+    for (int i=indcs.is; i<=indcs.ie; ++i) {
+      RequireRelative("heated parallel pressure", w(m,IPR,indcs.ks,indcs.js,i),
+                      pressure, 2.0e-12);
+      RequireRelative("heated perpendicular pressure", w(m,IPP,indcs.ks,indcs.js,i),
+                      pressure, 2.0e-12);
+    }
+  }
+  if (global_variable::my_rank == 0) {
+    std::cout << "CGL LF timestep_refresh: pre_stages=" << stages_min[0]
+              << " post_stages=" << stages_min[1] << " ranks_agree=true"
+              << " final_pressure=" << pressure << " dt_parabolic="
+              << pm->dt_parabolic_sts << std::endl;
+  }
+}
+
 void CheckDensityContact(ParameterInput *pin, Mesh *pm) {
   const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
   const auto &indcs = pm->mb_indcs;
@@ -1627,7 +1698,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
-             mode == TestMode::paper_eigen_wave) {
+             mode == TestMode::paper_eigen_wave ||
+             mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pm);
   } else {
     RequireOneDimensionalSingleBlock(pm);
@@ -1652,6 +1724,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckPaperEigenWave(pin, pm);
   } else if (mode == TestMode::rotated_decay) {
     CheckRotatedDecay(pin, pm);
+  } else if (mode == TestMode::timestep_refresh) {
+    CheckTimestepRefresh(pin, pm);
   } else if (mode == TestMode::density_contact) {
     CheckDensityContact(pin, pm);
   } else if (mode == TestMode::field_reversal) {
@@ -1680,7 +1754,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
-             mode == TestMode::paper_eigen_wave) {
+             mode == TestMode::paper_eigen_wave ||
+             mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pmy_mesh_);
   } else {
     RequireOneDimensionalSingleBlock(pmy_mesh_);
@@ -1707,6 +1782,18 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     user_hist_func = HotSpotHistory;
     hotspot_min_parallel = hotspot_min_perp = 1.0e30;
     hotspot_initial_energy = hotspot_max_energy_error = 0.0;
+  }
+  if (mode == TestMode::timestep_refresh) {
+    Require(user_srcs && rho0 == 1.0 && ppar0 == 1.0 && pperp0 == 1.0 &&
+            pmhd->pcgl_lf != nullptr && pmhd->pcgl_lf->lf_coeff_local &&
+            pmhd->peos->eos_data.nu_coll == 0.0,
+            "timestep refresh requires unit uniform state, local closure, "
+            "and no collisions");
+    refresh_heating_rate = pin->GetOrAddReal("problem", "heating_rate", 3000.0);
+    Require(refresh_heating_rate >= 0.0, "timestep refresh requires nonnegative heating");
+    refresh_pre_stages = 0;
+    refresh_pre_dt = 0.0;
+    user_srcs_func = HeatTimestepRefresh;
   }
   const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
   const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);

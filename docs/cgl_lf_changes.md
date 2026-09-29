@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-D5 (18 of 41 numbered tasks). Candidate checks
+Completed and committed through T-D6 (19 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| D6 | Existing refresh verified by candidate CPU and 1/4-rank MPI tests: heating raises post stages from 7 to 11; integration pending. |
 | E1 | Representation fence already exists and has regression coverage. |
 | E2 | Passive speeds already fixed; constructor-fence candidate passes double/single checks; integration pending. |
 | E3 | Spitzer is implemented; verify it and fix missing-units handling. |
@@ -433,3 +432,19 @@ from cycle 3 to cycle 4, adding hyperbolic evolution before the LF restart. Its
 switch time is adjusted from 2.70e-4 to 2.55e-4 to retain the original three-cycle
 transition; pressure amplitude and all strict/conservation checks stay unchanged.
 All 11 AMR integration tests pass again with D1-D5 integrated.
+
+### T-D6: refresh the post-sweep stability bound
+
+Triage: already fixed. `Mesh::RefreshSTSParabolicTimeStep` performs the local
+minimum and MPI reduction immediately before `Driver::Execute` begins the post
+sweep. No production change is needed. The new `timestep_refresh` pgen mode and
+input heat a uniform state during RK and independently check its analytic
+pressure and timestep, with rank-wide minimum/maximum checks of both stage counts.
+
+Unheated runs retain seven stages in both sweeps (896 cell-stages); heating at
+3000 raises the post sweep to eleven (1152 cell-stages), final pressure
+8.6902392313 and CFL-scaled LF timestep 6.521748e-5. Serial and one/four-rank MPI
+results agree to 2e-12. Removing the existing refresh is a failing negative
+control: the heated post sweep incorrectly retains seven stages. Both new CPU
+cases, all three MPI regressions, all 11 AMR regressions and the 27-case full
+workflow pass. Existing expected values and tolerances are unchanged.
