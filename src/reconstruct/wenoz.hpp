@@ -94,8 +94,8 @@ void WENOZX1(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
      const DvceArray5D<Real> &q, ScrArray2D<Real> &ql, ScrArray2D<Real> &qr) {
   int nvar = q.extent_int(1);
   const Real &dfloor_ = eos.dfloor;
-  // TODO(jmstone): ideal gas only for now
-  Real efloor_ = eos.pfloor/(eos.gamma - 1.0);
+  // CGL primitive slots contain pressures, rather than internal energy.
+  Real efloor_ = eos.is_cgl ? eos.pfloor : eos.pfloor/(eos.gamma - 1.0);
   for (int n=0; n<nvar; ++n) {
     par_for_inner(member, il, iu, [&](const int i) {
       Real &qim2 = q(m,n,k,j,i-2);
@@ -109,9 +109,9 @@ void WENOZX1(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
           ql(IDN,i+1) = fmax(ql(IDN,i+1), dfloor_);
           qr(IDN,i  ) = fmax(qr(IDN,i  ), dfloor_);
         }
-        if (n==IEN) {
-          ql(IEN,i+1) = fmax(ql(IEN,i+1), efloor_);
-          qr(IEN,i  ) = fmax(qr(IEN,i  ), efloor_);
+        if (n==IEN || (eos.is_cgl && n==IPP)) {
+          ql(n,i+1) = fmax(ql(n,i+1), efloor_);
+          qr(n,i  ) = fmax(qr(n,i  ), efloor_);
         }
       }
     });
@@ -130,8 +130,8 @@ void WENOZX2(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
      const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_jp1, ScrArray2D<Real> &qr_j) {
   int nvar = q.extent_int(1);
   const Real &dfloor_ = eos.dfloor;
-  // TODO(jmstone): ideal gas only for now
-  Real efloor_ = eos.pfloor/(eos.gamma - 1.0);
+  // CGL primitive slots contain pressures, rather than internal energy.
+  Real efloor_ = eos.is_cgl ? eos.pfloor : eos.pfloor/(eos.gamma - 1.0);
   for (int n=0; n<nvar; ++n) {
     par_for_inner(member, il, iu, [&](const int i) {
       Real &qjm2 = q(m,n,k,j-2,i);
@@ -145,9 +145,9 @@ void WENOZX2(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
           ql_jp1(IDN,i) = fmax(ql_jp1(IDN,i), dfloor_);
           qr_j  (IDN,i) = fmax(qr_j  (IDN,i), dfloor_);
         }
-        if (n==IEN) {
-          ql_jp1(IEN,i) = fmax(ql_jp1(IEN,i), efloor_);
-          qr_j  (IEN,i) = fmax(qr_j  (IEN,i), efloor_);
+        if (n==IEN || (eos.is_cgl && n==IPP)) {
+          ql_jp1(n,i) = fmax(ql_jp1(n,i), efloor_);
+          qr_j  (n,i) = fmax(qr_j  (n,i), efloor_);
         }
       }
     });
@@ -166,8 +166,8 @@ void WENOZX3(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
      const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_kp1, ScrArray2D<Real> &qr_k) {
   int nvar = q.extent_int(1);
   const Real &dfloor_ = eos.dfloor;
-  // TODO(jmstone): ideal gas only for now
-  Real efloor_ = eos.pfloor/(eos.gamma - 1.0);
+  // CGL primitive slots contain pressures, rather than internal energy.
+  Real efloor_ = eos.is_cgl ? eos.pfloor : eos.pfloor/(eos.gamma - 1.0);
   for (int n=0; n<nvar; ++n) {
     par_for_inner(member, il, iu, [&](const int i) {
       Real &qkm2 = q(m,n,k-2,j,i);
@@ -181,9 +181,9 @@ void WENOZX3(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
           ql_kp1(IDN,i) = fmax(ql_kp1(IDN,i), dfloor_);
           qr_k  (IDN,i) = fmax(qr_k  (IDN,i), dfloor_);
         }
-        if (n==IEN) {
-          ql_kp1(IEN,i) = fmax(ql_kp1(IEN,i), efloor_);
-          qr_k  (IEN,i) = fmax(qr_k  (IEN,i), efloor_);
+        if (n==IEN || (eos.is_cgl && n==IPP)) {
+          ql_kp1(n,i) = fmax(ql_kp1(n,i), efloor_);
+          qr_k  (n,i) = fmax(qr_k  (n,i), efloor_);
         }
       }
     });

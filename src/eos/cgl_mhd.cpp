@@ -147,6 +147,12 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
     }
 
+    // Preserve invalid input evidence: C2P may repair the local energy or A.
+    const bool nonfinite_input = only_testfloors &&
+        (!Kokkos::isfinite(u.mu) ||
+         !Kokkos::isfinite(u.e - 0.5*(SQR(u.mx) + SQR(u.my) + SQR(u.mz))/u.d
+                              - 0.5*(SQR(u.bx) + SQR(u.by) + SQR(u.bz))));
+
     // call c2p function
     // (inline function in ideal_c2p_mhd.hpp file)
     HydPrim1D w;
@@ -161,7 +167,9 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
 
     // set FOFC flag and quit loop if this function called only to check floors
     if (only_testfloors) {
-      if (dfloor_used || efloor_used || tfloor_used) {
+      if (dfloor_used || efloor_used || tfloor_used || nonfinite_input ||
+          !Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp) ||
+          !(w.e >= eos.pfloor) || !(w.pp >= eos.pfloor)) {
         fofc_(m,k,j,i) = true;
         sumd++;  // use dfloor as counter for when either is true
       }

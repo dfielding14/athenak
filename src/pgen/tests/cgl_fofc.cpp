@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -19,6 +20,8 @@
 #include "mhd/rsolvers/llf_mhd_singlestate.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
+#include "reconstruct/ppm.hpp"
+#include "reconstruct/wenoz.hpp"
 
 namespace {
 
@@ -43,6 +46,54 @@ void CheckClose(const std::string &label, Real got, Real expected) {
 template <typename ViewType>
 auto HostCopy(const ViewType &view) {
   return Kokkos::create_mirror_view_and_copy(HostMemSpace(), view);
+}
+
+void CheckReconstructionFloors(const EOS_Data &input_eos) {
+  EOS_Data eos = input_eos;
+  eos.pfloor = 1.0;
+  DvceArray5D<Real> q("cgl_reconstruction_states", 1, 6, 7, 7, 7);
+  DvceArray2D<Real> result("cgl_reconstruction_faces", 12, 4);
+  Kokkos::deep_copy(q, 0.25);
+  const size_t scratch_size = 2*ScrArray2D<Real>::shmem_size(6, 7);
+  par_for_outer("cgl_reconstruction_floor_check", DevExeSpace(), scratch_size, 0,
+                0, 11, KOKKOS_LAMBDA(TeamMember_t member, const int test) {
+    EOS_Data local = eos;
+    local.is_cgl = test < 6;
+    const int method = test % 6;
+    const int dir = method % 3;
+    ScrArray2D<Real> ql(member.team_scratch(0), 6, 7);
+    ScrArray2D<Real> qr(member.team_scratch(0), 6, 7);
+    if (method == 0) {
+      PiecewiseParabolicX1(member, local, true, true, 0, 3, 3, 3, 3, q, ql, qr);
+    } else if (method == 1) {
+      PiecewiseParabolicX2(member, local, true, true, 0, 3, 3, 3, 3, q, ql, qr);
+    } else if (method == 2) {
+      PiecewiseParabolicX3(member, local, true, true, 0, 3, 3, 3, 3, q, ql, qr);
+    } else if (method == 3) {
+      WENOZX1(member, local, true, 0, 3, 3, 3, 3, q, ql, qr);
+    } else if (method == 4) {
+      WENOZX2(member, local, true, 0, 3, 3, 3, 3, q, ql, qr);
+    } else {
+      WENOZX3(member, local, true, 0, 3, 3, 3, 3, q, ql, qr);
+    }
+    member.team_barrier();
+    par_for_inner(member, 0, 0, [&](const int) {
+      result(test,0) = ql(IPR, dir == 0 ? 4 : 3);
+      result(test,1) = qr(IPR, 3);
+      result(test,2) = ql(IPP, dir == 0 ? 4 : 3);
+      result(test,3) = qr(IPP, 3);
+    });
+  });
+  const auto faces = HostCopy(result);
+  for (int test=0; test<12; ++test) {
+    const Real expected = test < 6 ? eos.pfloor : eos.pfloor/(eos.gamma - 1.0);
+    CheckClose("parallel reconstruction floor left", faces(test,0), expected);
+    CheckClose("parallel reconstruction floor right", faces(test,1), expected);
+    CheckClose("perpendicular reconstruction floor left", faces(test,2),
+                test < 6 ? eos.pfloor : 0.25);
+    CheckClose("perpendicular reconstruction floor right", faces(test,3),
+                test < 6 ? eos.pfloor : 0.25);
+  }
 }
 
 MHDPrim1D XState(const decltype(HostCopy(std::declval<DvceArray5D<Real>>())) &w,
@@ -264,6 +315,57 @@ void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
   ++validation_count;
 }
 
+// Exercise the real only_testfloors path before C2P can hide a nonfinite A.
+void CheckNonfiniteDetector(Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const int i = pm->mb_indcs.is, j = pm->mb_indcs.js, k = pm->mb_indcs.ks;
+  auto u = HostCopy(pmhd->u0);
+  const int count_before = pm->ecounter.nfofc;
+  for (const int n : {IEN, IAN}) {
+    const Real original = u(0,n,k,j,i);
+    for (const Real bad : {std::numeric_limits<Real>::quiet_NaN(),
+                           std::numeric_limits<Real>::infinity(),
+                           -std::numeric_limits<Real>::infinity()}) {
+      u(0,n,k,j,i) = bad;
+      Kokkos::deep_copy(pmhd->utest, u);
+      Kokkos::deep_copy(pmhd->fofc, false);
+      pmhd->peos->ConsToPrim(pmhd->utest, pmhd->b0, pmhd->w0, pmhd->bcc0,
+                              true, i, i, j, j, k, k);
+      const auto flags = HostCopy(pmhd->fofc);
+      if (!flags(0,k,j,i)) Fail("nonfinite FOFC input", 0.0, 1.0);
+    }
+    u(0,n,k,j,i) = original;
+  }
+  Kokkos::deep_copy(pmhd->fofc, false);
+  pm->ecounter.nfofc = count_before;
+}
+
+void ValidatePressureStep(Mesh *pm, const Real /*bdt*/) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const auto u = HostCopy(pmhd->u0);
+  const auto w = HostCopy(pmhd->w0);
+  auto &indcs = pm->mb_indcs;
+  for (int i=indcs.is; i<=indcs.ie; ++i) {
+    for (int n=0; n<pmhd->nmhd; ++n) {
+      if (!std::isfinite(u(0,n,indcs.ks,indcs.js,i)) ||
+          !std::isfinite(w(0,n,indcs.ks,indcs.js,i))) {
+        Fail("pressure-step finite state", 0.0, 1.0);
+      }
+    }
+    if (!(w(0,IPR,indcs.ks,indcs.js,i) > 0.0) ||
+        !(w(0,IPP,indcs.ks,indcs.js,i) > 0.0)) {
+      Fail("pressure-step positive pressures", 0.0, 1.0);
+    }
+  }
+}
+
+void FinalizePressureStep(ParameterInput *, Mesh *pm) {
+  ValidatePressureStep(pm, 0.0);
+  CheckClose("pressure-step completed cycles", pm->ncycle, 50.0);
+  std::cout << "CGL pressure-step test passed after 50 cycles; FOFC counts are in "
+            << "the event log" << std::endl;
+}
+
 void FinalizeFOFCMutationTest(ParameterInput *, Mesh *) {
   if (validation_count != 1) {
     std::cout << "CGL FOFC end-to-end test failed: expected one validation, got "
@@ -276,8 +378,10 @@ void FinalizeFOFCMutationTest(ParameterInput *, Mesh *) {
 } // namespace
 
 void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
-  pgen_final_func = FinalizeFOFCMutationTest;
-  user_srcs_func = ValidateFOFCMutation;
+  const bool pressure_step =
+      pin->GetOrAddString("problem", "test_mode", "flux_mutation") == "pressure_step";
+  pgen_final_func = pressure_step ? FinalizePressureStep : FinalizeFOFCMutationTest;
+  user_srcs_func = pressure_step ? ValidatePressureStep : ValidateFOFCMutation;
   if (restart) return;
 
   auto *pmbp = pmy_mesh_->pmb_pack;
@@ -310,23 +414,39 @@ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
     bcc0(m,IBX,k,j,i) = 0.43;
     bcc0(m,IBY,k,j,i) = -0.31;
     bcc0(m,IBZ,k,j,i) = 0.26;
+    if (pressure_step) {
+      // A three-cell peak has 1000:1 perpendicular-pressure contrast.
+      const int distance = abs(i - (is + ie)/2);
+      w0(m,IDN,k,j,i) = 1.0;
+      w0(m,IVX,k,j,i) = 1.0;
+      w0(m,IVY,k,j,i) = 0.0;
+      w0(m,IVZ,k,j,i) = 0.0;
+      w0(m,IPR,k,j,i) = 1.0;
+      w0(m,IPP,k,j,i) = distance == 0 ? 1.0 : (distance == 1 ? 0.25 : 0.001);
+      bcc0(m,IBX,k,j,i) = 2.0;
+      bcc0(m,IBY,k,j,i) = 0.0;
+      bcc0(m,IBZ,k,j,i) = 0.0;
+    }
   });
 
   par_for("cgl_fofc_e2e_b1", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x1f(m,k,j,i) = 0.43;
+    b0.x1f(m,k,j,i) = pressure_step ? 2.0 : 0.43;
   });
   par_for("cgl_fofc_e2e_b2", DevExeSpace(), 0, nmb-1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x2f(m,k,j,i) = -0.31;
+    b0.x2f(m,k,j,i) = pressure_step ? 0.0 : -0.31;
   });
   par_for("cgl_fofc_e2e_b3", DevExeSpace(), 0, nmb-1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x3f(m,k,j,i) = 0.26;
+    b0.x3f(m,k,j,i) = pressure_step ? 0.0 : 0.26;
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
+  CheckReconstructionFloors(pmhd->peos->eos_data);
+  CheckNonfiniteDetector(pmy_mesh_);
   Kokkos::deep_copy(pmhd->fofc, false);
+  if (pressure_step) return;
 
   auto fofc = pmhd->fofc;
   int flag_i = is + 1;

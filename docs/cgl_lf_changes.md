@@ -100,6 +100,26 @@ pass. The deliberate overflow-policy change replaces the +1000 log-ratio
 reference `(ppar,pperp)=(1e-12,3)` with `(2,2)`; the -1000 reference remains
 `(6,1e-12)`.
 
+### T-B3: reconstructed pressures and nonfinite FOFC detection
+
+Triage: still present. All six PPMX/WENOZ directional wrappers now floor both CGL
+pressures at pfloor while retaining ideal-MHD internal-energy floors. The FOFC
+probe records nonfinite incoming internal energy/A before C2P can repair it and
+also checks both recovered pressures for finiteness and floor compliance.
+
+The built-in FOFC pgen checks all six reconstruction paths against fixed
+pressure-floor values, retains ideal-MHD control cases, and injects NaN and both
+infinities into energy and A to exercise the real detector. New PPMX/WENOZ inputs
+evolve a three-cell 1000:1 perpendicular-pressure peak for 50 cycles; both remain
+finite and positive with zero FOFC events. The same profile also remains finite
+with the pre-B3 reconstruction/detector, so the proposed end-to-end NaN negative
+control was not reproduced. Direct pre-fix floor and nonfinite-detection controls
+do fail, confirming the assertions detect the actual defects.
+
+Release build, C++/Python style checks, all 68 selected physical/workflow CPU
+regressions, and the expanded 21-case full workflow pass. The latter bundle is
+`/tmp/cgl-wo1-b3-full`. Existing physical expected values are unchanged.
+
 ## Remaining task triage
 
 All acceptance outcomes below remain unverified until the corresponding task.

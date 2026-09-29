@@ -886,6 +886,19 @@ def test_cgl_lf_explicit_reference_finite_collision_split():
         _cleanup()
 
 
+@pytest.mark.parametrize("method", ("ppmx", "wenoz"))
+def test_cgl_reconstruction_pressure_peak(method):
+    basename = f"cgl_ci_reconstruction_{method}"
+    try:
+        _run_unit(f"cgl_reconstruction_{method}.athinput", basename)
+        rows = Path(f"{basename}.log").read_text().splitlines()
+        count = sum(int(row.split()[-1]) for row in rows
+                    if row and not row.startswith("#"))
+        print(f"{method}: 50 cycles, FOFC count={count}")
+    finally:
+        _cleanup()
+
+
 def test_cgl_fofc_live_flux_mutation():
     try:
         _run("cgl_fofc.athinput", "cgl_ci_fofc")
