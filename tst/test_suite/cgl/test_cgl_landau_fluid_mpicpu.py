@@ -91,12 +91,7 @@ def test_cgl_lf_amr_is_reproducible_across_mpi_decomposition():
 
 
 def test_cgl_lf_quantitative_projection_is_global_across_mpi_ranks():
-    flags = [
-        "meshblock/nx1=32",
-        "time/nlim=0",
-        "problem/reference_steps=1",
-        "problem/wave_rel_tol=1.0e-8",
-    ]
+    flags = ["meshblock/nx1=32"]
     testutils.mpi_run(
         OBLIQUE_INPUT,
         ["job/basename=cgl_mpi_projection_single", *flags],

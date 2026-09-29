@@ -1197,6 +1197,12 @@ void RequireComplexRelative(const std::string &label, const Complex got,
   }
 }
 
+void RequireWaveEvolution(const Real reference_change, const Real tolerance) {
+  Require(reference_change >= 10.0*tolerance,
+          "wave reference changed by less than ten tolerances; "
+          "a frozen state could pass");
+}
+
 void CheckFieldAlignedWave(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   auto w = HostCopy(pmhd->w0);
@@ -1207,12 +1213,17 @@ void CheckFieldAlignedWave(ParameterInput *pin, Mesh *pm) {
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
-  const Real wave_tol = pin->GetOrAddReal("problem", "wave_rel_tol", 2.5e-1);
+  const Real wave_tol = pin->GetOrAddReal("problem", "wave_rel_tol", 1.0e-3);
   const Real c_cgl = std::sqrt(3.0*ppar0/rho0);
   const Complex rho_m = ProjectionToComplex(rho_p);
   const Complex vx_m = ProjectionToComplex(vx_p);
   const Complex ppar_m = ProjectionToComplex(ppar_p);
 
+  RequireWaveEvolution(std::max({
+      ComplexRelativeError(ref.rho, Complex(0.0, -rho0*amp), rho0*amp),
+      ComplexRelativeError(ref.vx, Complex(0.0, -c_cgl*amp), c_cgl*amp),
+      ComplexRelativeError(ref.ppar, Complex(0.0, -3.0*ppar0*amp), 3.0*ppar0*amp)}),
+      wave_tol);
   RequireComplexRelative("field_aligned_wave rho", rho_m, ref.rho, rho0*amp, wave_tol);
   RequireComplexRelative("field_aligned_wave vx", vx_m, ref.vx, c_cgl*amp, wave_tol);
   RequireComplexRelative("field_aligned_wave p_parallel", ppar_m, ref.ppar,
@@ -1372,12 +1383,16 @@ void CheckPaperObliqueWave(ParameterInput *pin, Mesh *pm) {
   const PaperWaveState ref = IntegratePaperWaveReference(pin, pm);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
   const Real p0 = pin->GetOrAddReal("problem", "ppar0", 5.0);
-  const Real wave_tol = pin->GetOrAddReal("problem", "wave_rel_tol", 4.0e-1);
+  const Real wave_tol = pin->GetOrAddReal("problem", "wave_rel_tol", 1.0e-3);
   const Complex vy_m = ProjectionToComplex(ProjectPrimitive(w, pin, pm, IVY));
   const Complex by_m = ProjectionToComplex(ProjectCellField(bcc, pin, pm, IBY));
   const Complex ppar_m = ProjectionToComplex(ProjectPrimitive(w, pin, pm, IPR));
   const Complex pperp_m = ProjectionToComplex(ProjectPrimitive(w, pin, pm, IPP));
 
+  RequireWaveEvolution(std::max({
+      ComplexRelativeError(ref.vy, Complex(0.0, -amp), amp),
+      std::abs(ref.by)/amp, std::abs(ref.ppar)/(p0*amp),
+      std::abs(ref.pperp)/(p0*amp)}), wave_tol);
   RequireComplexRelative("paper_oblique_wave vy", vy_m, ref.vy, amp, wave_tol);
   RequireComplexRelative("paper_oblique_wave By", by_m, ref.by, amp, wave_tol);
   RequireComplexRelative("paper_oblique_wave p_parallel", ppar_m, ref.ppar,
@@ -1422,7 +1437,7 @@ void CheckPaperEigenWave(ParameterInput *pin, Mesh *pm) {
   auto bcc = HostCopy(pmhd->bcc0);
   const PaperWaveState eigen = ReadPaperEigenVector(pin);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
-  const Real wave_tol = pin->GetOrAddReal("problem", "eigen_wave_rel_tol", 7.5e-2);
+  const Real wave_tol = pin->GetOrAddReal("problem", "eigen_wave_rel_tol", 1.0e-3);
   const Real component_floor =
       pin->GetOrAddReal("problem", "eigen_component_floor", 1.0e-4);
   const Real zero_abs_tol =
@@ -1431,6 +1446,7 @@ void CheckPaperEigenWave(ParameterInput *pin, Mesh *pm) {
                        pin->GetReal("problem", "eigen_lambda_im"));
   const Complex phase = std::exp(lambda*pm->time);
   const PaperWaveState ref = (amp*phase)*eigen;
+  RequireWaveEvolution(std::abs(phase - Complex(1.0, 0.0)), wave_tol);
 
   const PaperWaveState measured{
       ProjectionToComplex(ProjectPrimitive(w, pin, pm, IDN)),

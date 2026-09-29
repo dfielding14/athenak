@@ -205,12 +205,12 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G1 (29 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G2 (30 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G2-G4 | Long wave runs, convergence gates and per-cell limiter-map tests have passing candidates; integration pending. |
+| G3-G4 | One-e-fold decay and per-cell limiter-map tests have passing candidates; integration pending. |
 | G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
 | G7 | Update current and retained legacy documentation to match demonstrated coverage. |
 | P1 | Variable-restricted communication and frozen-B BC skip remain. |
@@ -602,3 +602,23 @@ and valid new inputs failed analysis. All 11 mechanism-analysis tests pass,
 including numeric 2/1.4 and archived parallel/oblique policies at a fixed physical
 state. No expected physical values change. The retained legacy cell-centered
 heat-flux diagnostics remain proxies, not independent face-flux oracles.
+
+### T-G2: wave tests reject ineffective evolution and require convergence
+
+All nine eigenmode/oblique/field-wave inputs and eigenmode-generator defaults
+now use a 1e-3 short-run tolerance, replacing 7.5%, 40% or 25% guards. Each pgen
+checker requires the reference evolution to exceed ten tolerance units, so a
+frozen or nearly zero-duration state cannot pass. The former initialization-only
+multi-block and MPI wave tests now evolve through the normal short duration.
+The static-AMR wave already evolved six cycles; its stale 0.75 tolerance is
+replaced by 0.001. Its maximum error is 6.05e-6; evolved MPI one/four-rank
+errors agree (maximum 2.484e-6). Other zero-step checks measure constructor,
+initial-timestep or fixed-flux behavior and remain unchanged.
+
+The new acceptance suite runs each family at 64/128/256 cells to 1.25 periods,
+requiring order at least 1.8 for pure/Alfvén waves and at least 1 for LF-dominated
+waves. Measured orders are 1.95-2.49, with finest-grid errors at most 5.2e-4.
+Three too-short cases and two disabled-LF eigenmodes are rejected. All 23 new
+checks and all 27 full-workflow cases pass. Analytic eigenvalues and amplitudes
+are unchanged; only test times, resolution coverage and tolerances change.
+Optional collisional/entropy Figure 17 eigenbranches remain outside this task.

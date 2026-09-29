@@ -243,7 +243,7 @@ def main() -> None:
     parser.add_argument("--nx1", type=int, default=256)
     parser.add_argument("--tlim", type=float, default=2.0e-3)
     parser.add_argument("--amp", type=float, default=1.0e-5)
-    parser.add_argument("--rel-tol", type=float, default=7.5e-2)
+    parser.add_argument("--rel-tol", type=float, default=1.0e-3)
     args = parser.parse_args()
 
     rho0 = 1.0

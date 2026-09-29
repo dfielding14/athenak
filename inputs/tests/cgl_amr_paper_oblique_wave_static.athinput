@@ -72,7 +72,7 @@ by0 = 1.4142135623730951
 bz0 = 0.5
 amp = 1.0e-5
 reference_steps = 20000
-wave_rel_tol = 7.5e-1
+wave_rel_tol = 1.0e-3
 validation_output = false
 
 <output1>

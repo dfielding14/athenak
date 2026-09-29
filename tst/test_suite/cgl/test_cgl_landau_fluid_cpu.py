@@ -1308,8 +1308,6 @@ def test_cgl_lf_eigen_field_initialization_uses_meshblock_coordinates():
             "cgl_lf_paper_eigen_fast.athinput",
             "cgl_ci_lf_eigen_multiblock",
             "meshblock/nx1=64",
-            "time/nlim=0",
-            "time/tlim=1.0e-6",
         )
     finally:
         _cleanup()
