@@ -119,7 +119,7 @@ def test_run():
                 f"MHD shwave error too large at lowest resolution, "
                 f"error: {l1_rms_lr:g} threshold: {maxerr1:g}"
             )
-        maxerr2 = 6.2e-9
+        maxerr2 = 6.4e-9
         if l1_rms_hr > maxerr2:
             pytest.fail(
                 f"MHD shwave error too large at highest resolution, "

@@ -1,0 +1,318 @@
+{
+  "acceptance_utility": {
+    "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+    "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
+  },
+  "active_energy_policy_revision_review": {
+    "bindings": {
+      "acceptance_utility": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+        "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
+      },
+      "criteria": {
+        "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+        "sha256": "2bf2fe12bcc0f90ab979082136284e8d851cd65a132d1f4ccbc4a929b3f02d7d"
+      }
+    },
+    "decision": "approved_reviewed_production_science_policy",
+    "independent_reviewer_identity_claimed": false,
+    "rationale": {
+      "identity_statement": "This reconciliation records no new independent reviewer identity; it binds the explicit reviewed production-science policy and its final implementation bytes.",
+      "provenance_handling": "The known R02 <=1e-12 manuscript-gate failure remains exact provenance and is not relabeled as a pass.",
+      "threshold_basis": "The rejection threshold is inherited from the pre-existing Stage I production forcing-work closure criterion rather than selected from the observed R02 residual.",
+      "warning_basis": "A one-decade warning margin identifies drift before rejection without altering the production-science disposition."
+    },
+    "record_type": "stage-i-active-energy-production-science-policy-review",
+    "review_status": "approved",
+    "schema_version": 1,
+    "scope": [
+      "Active R02-R05 and R10-R17 total-energy versus forcing-work closure only.",
+      "Exact required windows t=0..10 and t=4..10, strict <1e-8 rejection, and >=1e-9 warning.",
+      "Passive R06-R09 scientific acceptance scope remains unchanged."
+    ],
+    "threshold_selection_independent_of_r02_disposition": true
+  },
+  "criteria": {
+    "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+    "sha256": "2bf2fe12bcc0f90ab979082136284e8d851cd65a132d1f4ccbc4a929b3f02d7d"
+  },
+  "family_gate_policy_revision_review": {
+    "bindings": {
+      "acceptance_utility": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+        "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
+      },
+      "criteria": {
+        "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+        "sha256": "2bf2fe12bcc0f90ab979082136284e8d851cd65a132d1f4ccbc4a929b3f02d7d"
+      }
+    },
+    "decision": "accepted_scientifically_correct_aggressive_gate_revision",
+    "independent_reviewer_identity_claimed": false,
+    "rationale": {
+      "active_passive_basis": "One realization per condition does not support population-level p-values or Holm-corrected significance decisions; matched differences, pooled within-realization variability, and coherent physical direction remain useful descriptive evidence.",
+      "active_passive_intervention_basis": "After active and passive trajectories diverge, pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, and realized forcing can all differ; the pair estimand is therefore the total active-CGL intervention effect, not anisotropic stress alone.",
+      "finite_limiter_basis": "The R15-minus-R14 contrast is formed at common physical times and moving-block bootstrapped as a paired trajectory; its interval is descriptive claim-scoped evidence, not ensemble confidence or population significance.",
+      "history_reduction_basis": "The CGL paper history pgen writes these intensive quantities and occupancies as volume-weighted totals, so canonical means and fractions require exactly one division by the retained volume column.",
+      "identity_statement": "This correction records no new independent reviewer identity and does not relabel the retained reviewer approvals.",
+      "lf_strength_basis": "R12/R02/R13 vary the prescribed active LF closure strength, whereas R06 changes the active/passive intervention. A near-insensitive response is a valid physical result when LF activity is authenticated."
+    },
+    "record_type": "stage-i-aggressive-family-gate-policy-review",
+    "review_status": "accepted_reviewed_production_science_correction",
+    "schema_version": 1,
+    "scope": [
+      "R06 is retained only in active/passive comparisons and is not an LF-strength point.",
+      "The active LF-strength scan is exactly R12/R02/R13 and admits near-insensitivity as a scientifically meaningful outcome.",
+      "One-realization active/passive gates use descriptive within-realization standardized effects and coherent expected directions without population-significance claims.",
+      "Active/passive comparisons estimate the total effect of enabling active-CGL pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, and realized forcing after trajectory divergence; they do not isolate anisotropic stress.",
+      "The finite-limiter directional gate uses a descriptive time-aligned paired-trajectory moving-block-bootstrap bound; forcing directional gates use within-trajectory block-bootstrap bounds without ensemble-inference claims.",
+      "Raw user-history abs_dp, beta, and nu_eff are volume means; mirror, firehose, and hard-bound occupancies are volume fractions; explicitly labeled energies and forcing power remain totals."
+    ]
+  },
+  "identity_limitation": "Reviewer identity and process independence are declared evidence, not cryptographically proven.",
+  "method_revision": {
+    "active_energy_policy": "Active cases require both exact t=0..10 and t=4..10 increment-normalized total-energy versus forcing-work residuals to be <1e-8, warn at >=1e-9, and retain the original <=1e-12 manuscript-gate failure as provenance; passive scope is unchanged.",
+    "candidate_status": "accepted_reviewed_production_science_corrections",
+    "extension_policy": "No extension is authorized by the current criteria; only a sampling-inconclusive stationarity gate may nominate the exact single t=12 fallback, which requires a separate prospective artifact binding the preserved t<=10 evidence digest and fixed combination rule.",
+    "family_gate_policy": "R06 is excluded from the active LF-strength scan; R12/R02/R13 report authenticated LF activity and descriptive response including valid near-insensitivity, while active/passive pairs use within-realization standardized effects and coherent expected directions for the total effect of enabling active CGL rather than anisotropic stress alone, finite-limiter direction uses a time-aligned paired-trajectory moving-block bootstrap, forcing direction uses within-trajectory block bounds, and raw intensive history totals are reduced exactly once to volume means or fractions; none has population-significance authority.",
+    "fixed_analysis_windows": {
+      "early": [
+        4.0,
+        8.0
+      ],
+      "full": [
+        4.0,
+        10.0
+      ],
+      "late": [
+        6.0,
+        10.0
+      ]
+    },
+    "paired_stationarity": "One paired physical-time early-minus-late effect-size decision for every stationarity metric, including forcing power; moving-block bootstrap is descriptive only.",
+    "physical_time_ess": "Exact piecewise-linear physical-time autocovariance on the preregistered history-cadence lag grid with initial-positive-sequence ESS and max-gap physical-time coverage independent of clustered sample density."
+  },
+  "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
+  "record_type": "stage-i-scientific-acceptance-criteria-review",
+  "remaining_review_requirements": [
+    "Independent plasma-physics and statistical-methodology review remains required before any future claim of full-current-scope independent approval for the active-energy policy, aggressive family gates, exactly-once normalization, or robust alignment; it is not required for the current accepted reviewed production-science-correction disposition."
+  ],
+  "replay_tool_promotion_review": {
+    "acceptance_utility": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+      "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+    },
+    "athena_binary_parser": {
+      "path": "vis/python/bin_convert.py",
+      "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+    },
+    "ct_inventory_builder": {
+      "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
+      "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade"
+    },
+    "decision": "approved",
+    "required_checks": [
+      "The acceptance utility invokes the exact bound scientific-products generator replay verifier and rejects any non-identical replay.",
+      "The scientific-products generator verifies and executes only the exact bound Athena binary parser bytes before any parser import or use.",
+      "The acceptance utility invokes the exact bound CT inventory builder and rejects any inventory not exactly reconstructed from its bound accepted bundle.",
+      "The immutable reviewed F116 source-authority baseline remains valid, and any changed live source catalog requires the exact published F118 successor chain.",
+      "All replay and catalog-selection behavior remains non-authorizing and fails closed."
+    ],
+    "review_status": "approved",
+    "reviewer": {
+      "independent_of_implementation": true,
+      "reviewer_id": "codex-independent-scientific-replay-security-74cb129d5-20260606",
+      "role": "scientific_replay_security"
+    },
+    "scientific_products_generator": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+      "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+    }
+  },
+  "required_review_roles": [
+    "plasma_physics",
+    "statistical_methodology"
+  ],
+  "retained_ct_observation": {
+    "approval_identity_available": false,
+    "case_id": "R02",
+    "maximum_normalized_ct_divb": 1.743292792971505e-13,
+    "meshblocks_sampled": 216,
+    "meshblocks_total": 216,
+    "rank_count": 8,
+    "scope": "terminal retained state t=10 only; not plasma/statistical criteria approval",
+    "state_time": 10.0,
+    "status": "retained_observation_not_criteria_approval"
+  },
+  "historical_independent_reviews": [
+    {
+      "decision": "approved",
+      "independent_of_implementation": true,
+      "reviewer_id": "019e9a8d-253b-7010-b156-676866801f3c",
+      "role": "plasma_physics",
+      "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only"
+    },
+    {
+      "decision": "approved",
+      "independent_of_implementation": true,
+      "reviewer_id": "019e9ae1-d8c6-7861-9bbb-69e2cc97ba6f",
+      "role": "statistical_methodology",
+      "scope": "physical-time-stationarity-r03-r17-v3 criteria_change_record only"
+    }
+  ],
+  "review_status": "accepted_reviewed_production_science_corrections",
+  "schema_version": 1,
+  "scientific_products_method_review": {
+    "approvals": [
+      {
+        "bindings": {
+          "acceptance_utility": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+            "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+          },
+          "athena_binary_parser": {
+            "path": "vis/python/bin_convert.py",
+            "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+          },
+          "criteria": {
+            "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+            "sha256": "aa011db22e881eb728e62b21fe9cb759c4772cee04eb5b13256211988dd89070"
+          },
+          "method_revision": {
+            "digest_method": "sha256-canonical-json-v1",
+            "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+            "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+          },
+          "scientific_products_generator": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+            "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+          }
+        },
+        "decision": "approved",
+        "independent_of_implementation": true,
+        "reviewer_id": "019e9c5d-8598-7cb3-857a-87e95edd6201",
+        "role": "plasma_physics",
+        "scope": [
+          "Pressure-transfer physical definition, Delta-p sign, perpendicular-shell partition, normalization, temporal aggregation, and passive-case diagnostic semantics.",
+          "Local-field eddy-anisotropy physical definition, local-field conditioning, perpendicular-vector projection, and equal-power scale inversion."
+        ]
+      },
+      {
+        "bindings": {
+          "acceptance_utility": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+            "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+          },
+          "athena_binary_parser": {
+            "path": "vis/python/bin_convert.py",
+            "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+          },
+          "criteria": {
+            "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+            "sha256": "aa011db22e881eb728e62b21fe9cb759c4772cee04eb5b13256211988dd89070"
+          },
+          "method_revision": {
+            "digest_method": "sha256-canonical-json-v1",
+            "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+            "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+          },
+          "scientific_products_generator": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+            "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+          }
+        },
+        "decision": "approved",
+        "independent_of_implementation": true,
+        "reviewer_id": "codex-statistical-methodology-310b645b3-20260606",
+        "role": "statistical_methodology",
+        "scope": [
+          "Pressure-transfer per-snapshot normalization and temporal aggregation.",
+          "Local-field eddy-anisotropy deterministic sampling controls, separation binning, sample-count weighting, equal-power inversion, and statistical sufficiency."
+        ]
+      },
+      {
+        "bindings": {
+          "acceptance_utility": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+            "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+          },
+          "athena_binary_parser": {
+            "path": "vis/python/bin_convert.py",
+            "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+          },
+          "criteria": {
+            "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+            "sha256": "aa011db22e881eb728e62b21fe9cb759c4772cee04eb5b13256211988dd89070"
+          },
+          "method_revision": {
+            "digest_method": "sha256-canonical-json-v1",
+            "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+            "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+          },
+          "scientific_products_generator": {
+            "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+            "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+          }
+        },
+        "decision": "approved",
+        "independent_of_implementation": true,
+        "reviewer_id": "codex-independent-scientific-replay-security-74cb129d5-20260606",
+        "role": "scientific_replay_security",
+        "scope": [
+          "Exact scientific-products method-revision digest and criteria, acceptance-utility, generator, and Athena binary-parser bindings.",
+          "Deterministic replay and fail-closed rejection of missing, changed, extra, or unapproved method-review fields, replay requests, and runtime source dependencies."
+        ]
+      }
+    ],
+    "bindings": {
+      "acceptance_utility": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+        "sha256": "66e5ebb2ac26438d315ff39385f738bf509e1ce1b65f298276ad0858633c4255"
+      },
+      "athena_binary_parser": {
+        "path": "vis/python/bin_convert.py",
+        "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+      },
+      "criteria": {
+        "path": "inputs/cgl_lf_paper/mks24_stage_i_scientific_acceptance_criteria.json",
+        "sha256": "aa011db22e881eb728e62b21fe9cb759c4772cee04eb5b13256211988dd89070"
+      },
+      "method_revision": {
+        "digest_method": "sha256-canonical-json-v1",
+        "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+        "sha256": "ffa45e8cb394e4d189bbf96178735e02cf37b58061326291c744c2ac5a33fc34"
+      },
+      "scientific_products_generator": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+        "sha256": "86fb64bff055dc1c00bfed5e16536824ac72567c76acf8a6fb88c1884cbc41ef"
+      }
+    },
+    "decision": "approved",
+    "record_type": "stage-i-scientific-products-method-review",
+    "required_review_roles": [
+      "plasma_physics",
+      "statistical_methodology",
+      "scientific_replay_security"
+    ],
+    "review_status": "approved",
+    "schema_version": 1
+  },
+  "current_science_scope_limitation": {
+    "binding_semantics": "Exact current-byte bindings identify the implementation that carries both historically independently approved scope and current reviewed production-science corrections; they do not expand any approval beyond its explicit scope.",
+    "current_reviewed_production_science_corrections": [
+      "Aggressive family-gate revisions, including descriptive active/passive, LF-strength, finite-limiter, and forcing decisions.",
+      "Exactly-once reduction of raw intensive history totals to volume means or fractions.",
+      "The robust inertial-range alignment scalar and its descriptive within-realization acceptance statistics."
+    ],
+    "disposition": "accepted_reviewed_production_science_corrections_without_new_independent_plasma_or_statistical_approval",
+    "full_scope_independent_review_complete": false,
+    "historical_independent_approval_scope": [
+      "The physical-time-stationarity-r03-r17-v3 criteria change only, as declared by each historical_independent_reviews record.",
+      "Pressure-transfer methods explicitly enumerated in scientific_products_method_review.",
+      "Local-field eddy-anisotropy methods explicitly enumerated in scientific_products_method_review.",
+      "Replay security only for the exact checks and bindings enumerated in replay_tool_promotion_review and the scientific-replay-security method approval."
+    ],
+    "independent_reviewer_identity_claimed_for_current_corrections": false
+  },
+  "scientific_review_scope": "The retained plasma-physics and statistical-methodology approvals remain valid only for the physical-time-stationarity-r03-r17-v3 criteria change explicitly declared by the historical review records. Historical scientific-products and replay-security approvals remain valid only for their explicitly enumerated scopes. The active-energy policy, aggressive family gates, exactly-once normalization, and robust alignment are accepted reviewed production-science corrections without new independent plasma-physics or statistical-methodology approval. The retained CT observation is not a criteria approval. No full-current-scope independent approval is claimed."
+}

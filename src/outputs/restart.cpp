@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility> // make_pair
@@ -22,8 +23,11 @@
 #include "geodesic-grid/geodesic_grid.hpp"
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/mesh_refinement.hpp"
+#include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
@@ -65,8 +69,7 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
   adm::ADM* padm = pm->pmb_pack->padm;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   radiation::Radiation* prad = pm->pmb_pack->prad;
-  TurbulenceDriver* pturb=pm->pmb_pack->pturb;
-  int nhydro=0, nmhd=0, nrad=0, nforce=3, nadm=0, nz4c=0;
+  int nhydro=0, nmhd=0, nrad=0, nadm=0, nz4c=0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
   }
@@ -90,6 +93,7 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (pmhd != nullptr) {
+    pmhd->RequireCGLAnisotropyRepresentation("MHD restart output");
     Kokkos::realloc(outarray_mhd, nmb, nmhd, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_mhd, Kokkos::subview(pmhd->u0, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
@@ -106,11 +110,6 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
   if (prad != nullptr) {
     Kokkos::realloc(outarray_rad, nmb, nrad, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_rad, Kokkos::subview(prad->i0, std::make_pair(0,nmb),
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
-  }
-  if (pturb != nullptr) {
-    Kokkos::realloc(outarray_force, nmb, nforce, nout3, nout2, nout1);
-    Kokkos::deep_copy(outarray_force, Kokkos::subview(pturb->force, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (pz4c != nullptr) {
@@ -148,7 +147,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   adm::ADM* padm = pm->pmb_pack->padm;
-  int nhydro=0, nmhd=0, nrad=0, nforce=3, nz4c=0, nadm=0, nco=0;
+  int nhydro=0, nmhd=0, nrad=0, nz4c=0, nadm=0, nco=0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
   }
@@ -198,6 +197,32 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
   pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+  std::stringstream ss_restart_time;
+  ss_restart_time << std::setprecision(std::numeric_limits<Real>::max_digits10)
+                  << pm->time;
+  pin->SetString("time", "restart_time", ss_restart_time.str());
+
+  const bool has_cgl_amr_repair_counters =
+      (pm->pmr != nullptr && pmhd != nullptr && pmhd->peos->eos_data.is_cgl);
+  MeshRefinement::CGLAMRRepairCounterArray cgl_amr_repair_counters{};
+  if (has_cgl_amr_repair_counters) {
+    cgl_amr_repair_counters = pm->pmr->ExportCGLAMRRepairCounters();
+    pin->SetInteger("mesh_refinement", "cgl_amr_repair_restart_version",
+                    MeshRefinement::cgl_amr_repair_restart_version);
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      if (global_variable::my_rank == 0) {
+        MPI_Reduce(MPI_IN_PLACE, cgl_amr_repair_counters.data(),
+                   MeshRefinement::cgl_amr_repair_counter_count, MPI_UINT64_T,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      } else {
+        MPI_Reduce(cgl_amr_repair_counters.data(), cgl_amr_repair_counters.data(),
+                   MeshRefinement::cgl_amr_repair_counter_count, MPI_UINT64_T,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      }
+    }
+#endif
+  }
 
   // create string holding input parameters (copy of input file)
   std::stringstream ost;
@@ -243,6 +268,41 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                            "byte", single_file_per_rank);
   }
 
+  constexpr int nlf_diag = 18;
+  Real lf_diag[nlf_diag] = {};
+  if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
+    const auto &diag = pmhd->pcgl_lf->diagnostics;
+    lf_diag[0] = static_cast<Real>(diag.nstage);
+    lf_diag[1] = static_cast<Real>(diag.dfloor);
+    lf_diag[2] = static_cast<Real>(diag.pfloor);
+    lf_diag[3] = static_cast<Real>(diag.nonfinite);
+    lf_diag[4] = static_cast<Real>(diag.nonpositive);
+    lf_diag[5] = static_cast<Real>(diag.mirror);
+    lf_diag[6] = static_cast<Real>(diag.firehose);
+    lf_diag[7] = static_cast<Real>(diag.hard_bound);
+    lf_diag[8] = static_cast<Real>(diag.qfaces);
+    lf_diag[9] = static_cast<Real>(diag.qpar_cap);
+    lf_diag[10] = static_cast<Real>(diag.qpar_cap10);
+    lf_diag[11] = static_cast<Real>(diag.qperp_cap);
+    lf_diag[12] = static_cast<Real>(diag.qperp_cap10);
+    lf_diag[13] = diag.qpar_work;
+    lf_diag[14] = diag.qperp_work;
+    lf_diag[15] = diag.pressure_work;
+    lf_diag[16] = diag.anisotropic_pressure_work;
+    lf_diag[17] = static_cast<Real>(diag.hardwall_projection);
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      if (global_variable::my_rank == 0) {
+        MPI_Reduce(MPI_IN_PLACE, &lf_diag[0], nlf_diag, MPI_ATHENA_REAL,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      } else {
+        MPI_Reduce(&lf_diag[0], &lf_diag[0], nlf_diag, MPI_ATHENA_REAL,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      }
+    }
+#endif
+  }
+
   //--- STEP 3.  Root process writes internal state of objects that require it
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     // store z4c information
@@ -257,9 +317,34 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                single_file_per_rank);
       }
     }
-    // turbulence driver internal RNG
+    // The modal OU state is authoritative; storing it makes restarts independent of
+    // the MeshBlock layout used to write the checkpoint.
     if (pturb != nullptr) {
+      TurbulenceRestartMetadata metadata = pturb->RestartMetadata();
+      pturb->mode_amp_real.template sync<HostMemSpace>();
+      pturb->mode_amp_imag.template sync<HostMemSpace>();
+      resfile.Write_any_type(&metadata, sizeof(TurbulenceRestartMetadata), "byte",
+                             single_file_per_rank);
       resfile.Write_any_type(&(pturb->rstate), sizeof(RNG_State), "byte",
+                             single_file_per_rank);
+      resfile.Write_any_type(pturb->mode_amp_real.h_view.data(),
+                             3 * pturb->mode_count * sizeof(Real), "byte",
+                             single_file_per_rank);
+      resfile.Write_any_type(pturb->mode_amp_imag.h_view.data(),
+                             3 * pturb->mode_count * sizeof(Real), "byte",
+                             single_file_per_rank);
+      if (pturb->record_injected_work) {
+        resfile.Write_any_type(&(pturb->injected_work), sizeof(Real), "byte",
+                               single_file_per_rank);
+      }
+    }
+    if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
+      resfile.Write_any_type(&lf_diag[0], nlf_diag*sizeof(Real), "byte",
+                             single_file_per_rank);
+    }
+    if (has_cgl_amr_repair_counters) {
+      resfile.Write_any_type(cgl_amr_repair_counters.data(),
+                             sizeof(cgl_amr_repair_counters), "byte",
                              single_file_per_rank);
     }
   }
@@ -282,9 +367,6 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (prad != nullptr) {
     data_size += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
   }
-  if (pturb != nullptr) {
-    data_size += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
-  }
   if (pz4c != nullptr) {
     data_size += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
   } else if (padm != nullptr) {
@@ -302,7 +384,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   IOWrapperSizeT step3size = 3*nco*sizeof(Real);
   if (pz4c != nullptr) step3size += sizeof(Real);
-  if (pturb != nullptr) step3size += sizeof(RNG_State);
+  if (pturb != nullptr) {
+    step3size += sizeof(TurbulenceRestartMetadata) + sizeof(RNG_State) +
+                 6 * pturb->mode_count * sizeof(Real);
+    if (pturb->record_injected_work) step3size += sizeof(Real);
+  }
+  if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) step3size += nlf_diag*sizeof(Real);
+  if (has_cgl_amr_repair_counters) {
+    step3size += sizeof(cgl_amr_repair_counters);
+  }
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank = (step1size + step2size + step3size
@@ -511,43 +601,6 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       }
     }
     offset_myrank += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
-    myoffset = offset_myrank;
-  }
-
-  if (pturb != nullptr) {
-    for (int m=0;  m<noutmbs_max; ++m) {
-      // every rank has a MB to write, so write collectively
-      if (m < noutmbs_min) {
-        // get ptr to cell-centered MeshBlock data
-        auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
-                                          single_file_per_rank) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "cell-centered turb data not written correctly to rst file, "
-          << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
-
-      // some ranks are finished writing, so use non-collective write
-      } else if (m < pm->nmb_thisrank) {
-        // get ptr to MeshBlock data
-        auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
-                                      single_file_per_rank) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "cell-centered turb data not written correctly"
-                    << " to rst file, restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
-      }
-    }
-    offset_myrank += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
     myoffset = offset_myrank;
   }
 

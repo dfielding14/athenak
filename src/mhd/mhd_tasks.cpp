@@ -10,24 +10,50 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <cstdlib>
 
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
-#include "driver/driver.hpp"
 #include "mesh/mesh.hpp"
 #include "coordinates/coordinates.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "bvals/bvals.hpp"
 #include "shearing_box/shearing_box.hpp"
 #include "shearing_box/orbital_advection.hpp"
 #include "mhd/mhd.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
+
+namespace {
+
+bool CGLLFTaskListTraceEnabled() {
+  const char *env = std::getenv("ATHENAK_CGL_LF_TASK_TRACE");
+  return env != nullptr && env[0] != '\0' && env[0] != '0';
+}
+
+void TraceCGLLFTaskList(MeshBlockPack *pmbp, const char *task, const char *point,
+                        int stage) {
+  if (!CGLLFTaskListTraceEnabled()) return;
+  Kokkos::fence();
+  auto *pm = pmbp->pmesh;
+  std::cout << "[cgl_lf_task] rank=" << global_variable::my_rank
+            << " cycle=" << pm->ncycle
+            << " time=" << pm->time
+            << " task=" << task
+            << " point=" << point
+            << " stage=" << stage
+            << " nmb=" << pmbp->nmb_thispack
+            << std::endl;
+}
+
+} // namespace
 
 namespace mhd {
 //----------------------------------------------------------------------------------------
@@ -50,22 +76,48 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.flux      = tl["stagen"]->AddTask(&MHD::Fluxes, this, id.copyu);
   id.sendf     = tl["stagen"]->AddTask(&MHD::SendFlux, this, id.flux);
   id.recvf     = tl["stagen"]->AddTask(&MHD::RecvFlux, this, id.sendf);
-  id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.recvf);
+  id.psendf    = tl["stagen"]->AddTask(&MHD::SendCGLPressureFlux, this, id.recvf);
+  id.precvf    = tl["stagen"]->AddTask(&MHD::RecvCGLPressureFlux, this, id.psendf);
+  id.pwork     = tl["stagen"]->AddTask(&MHD::CGLPressureWork, this, id.precvf);
+  id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.pwork);
   id.srctrms   = tl["stagen"]->AddTask(&MHD::MHDSrcTerms, this, id.rkupdt);
   id.sendu_oa  = tl["stagen"]->AddTask(&MHD::SendU_OA, this, id.srctrms);
   id.recvu_oa  = tl["stagen"]->AddTask(&MHD::RecvU_OA, this, id.sendu_oa);
-  id.restu     = tl["stagen"]->AddTask(&MHD::RestrictU, this, id.recvu_oa);
-  id.sendu     = tl["stagen"]->AddTask(&MHD::SendU, this, id.restu);
-  id.recvu     = tl["stagen"]->AddTask(&MHD::RecvU, this, id.sendu);
-  id.sendu_shr = tl["stagen"]->AddTask(&MHD::SendU_Shr, this, id.recvu);
-  id.recvu_shr = tl["stagen"]->AddTask(&MHD::RecvU_Shr, this, id.sendu_shr);
-  id.efld      = tl["stagen"]->AddTask(&MHD::EField, this, id.recvu_shr);
-  id.sende     = tl["stagen"]->AddTask(&MHD::SendE, this, id.efld);
+  auto *pm = pmy_pack->pmesh;
+  const bool defer_cgl_primitive_restriction =
+      peos->eos_data.is_cgl && pm->multilevel && pm->pmr != nullptr &&
+      pm->pmr->prolong_prims;
+
+  TaskID efld_dependency = id.recvu_oa;
+  if (!defer_cgl_primitive_restriction) {
+    id.restu     = tl["stagen"]->AddTask(&MHD::RestrictU, this, id.recvu_oa);
+    id.sendu     = tl["stagen"]->AddTask(&MHD::SendU, this, id.restu);
+    id.recvu     = tl["stagen"]->AddTask(&MHD::RecvU, this, id.sendu);
+    id.sendu_shr = tl["stagen"]->AddTask(&MHD::SendU_Shr, this, id.recvu);
+    id.recvu_shr = tl["stagen"]->AddTask(&MHD::RecvU_Shr, this, id.sendu_shr);
+    efld_dependency = id.recvu_shr;
+  }
+  id.efld      = tl["stagen"]->AddTask(&MHD::CornerE, this, efld_dependency);
+  id.efldsrc   = tl["stagen"]->AddTask(&MHD::EFieldSrc, this, id.efld);
+  id.sende     = tl["stagen"]->AddTask(&MHD::SendE, this, id.efldsrc);
   id.recve     = tl["stagen"]->AddTask(&MHD::RecvE, this, id.sende);
-  id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve);
+  id.sende_shr = tl["stagen"]->AddTask(&MHD::SendE_Shr, this, id.recve);
+  id.recve_shr = tl["stagen"]->AddTask(&MHD::RecvE_Shr, this, id.sende_shr);
+  id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve_shr);
   id.sendb_oa  = tl["stagen"]->AddTask(&MHD::SendB_OA, this, id.ct);
   id.recvb_oa  = tl["stagen"]->AddTask(&MHD::RecvB_OA, this, id.sendb_oa);
-  id.restb     = tl["stagen"]->AddTask(&MHD::RestrictB, this, id.recvb_oa);
+  TaskID restb_dependency = id.recvb_oa;
+  if (defer_cgl_primitive_restriction) {
+    // CGL primitive restriction recovers live primitives and encodes coarse IAN using B.
+    // Run it only after CornerE/CT and orbital advection have finished with the stage.
+    id.restu     = tl["stagen"]->AddTask(&MHD::RestrictU, this, id.recvb_oa);
+    id.sendu     = tl["stagen"]->AddTask(&MHD::SendU, this, id.restu);
+    id.recvu     = tl["stagen"]->AddTask(&MHD::RecvU, this, id.sendu);
+    id.sendu_shr = tl["stagen"]->AddTask(&MHD::SendU_Shr, this, id.recvu);
+    id.recvu_shr = tl["stagen"]->AddTask(&MHD::RecvU_Shr, this, id.sendu_shr);
+    restb_dependency = id.recvu_shr;
+  }
+  id.restb     = tl["stagen"]->AddTask(&MHD::RestrictB, this, restb_dependency);
   id.sendb     = tl["stagen"]->AddTask(&MHD::SendB, this, id.restb);
   id.recvb     = tl["stagen"]->AddTask(&MHD::RecvB, this, id.sendb);
   id.sendb_shr = tl["stagen"]->AddTask(&MHD::SendB_Shr, this, id.recvb);
@@ -75,106 +127,90 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.prol);
   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
 
+  if (peos->eos_data.is_cgl && peos->eos_data.coll && !has_cgl_lf_split) {
+    id.cglcoll = tl["after_timeintegrator"]->AddTask(&MHD::CGLCollisions, this, none);
+  }
+
   // assemble "after_stagen" task list
   id.csend = tl["after_stagen"]->AddTask(&MHD::ClearSend, this, none);
   // although RecvFlux/U/E/B functions check that all recvs complete, add ClearRecv to
   // task list anyways to catch potential bugs in MPI communication logic
   id.crecv = tl["after_stagen"]->AddTask(&MHD::ClearRecv, this, id.csend);
-  
-  //after time integrator here
-  //needs to return task status - make sure to apply these to the ghost cells as well in the same exact way so is-nghost..
-  id.cglcoll = tl["after_timeintegrator"]->AddTask(&MHD::CGLCollisions, this, none);
+  id.pclear =
+      tl["after_stagen"]->AddTask(&MHD::ClearCGLPressureFlux, this, id.crecv);
 
-  if (has_any_sts_diffusion) {
-    const bool cgl_lf_cell_centered_sts =
-        peos->eos_data.is_cgl && has_sts_conduction && !has_sts_viscosity &&
-        !has_sts_resistivity && pcond != nullptr && pcond->IsCGLLandauFluidHeatFlux();
-    // Fine/coarse flux correction still packs full conserved-flux arrays, so keep
-    // multilevel CGL LF runs on the full variable clear/update path for now.
-    const bool cgl_lf_two_var_sts =
-        cgl_lf_cell_centered_sts && !(pmy_pack->pmesh->multilevel);
+  if (has_any_parabolic_split) {
+    TaskID pinit =
+        tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
+    if (has_cgl_lf_split) {
+      (void) tl["before_parabolic_stagen"]->AddTask(
+          &MHD::BeginCGLLandauFluidSTSSweep, this, pinit);
+    }
 
-    if (cgl_lf_cell_centered_sts) {
-      TaskID pinit = tl["before_parabolic_stagen"]->AddTask(
-          &MHD::InitRecvParabolicCellCentered, this, none);
-      if (cgl_lf_two_var_sts) {
-        (void) tl["before_parabolic_stagen"]->AddTask(
-            &MHD::BeginCGLLandauFluidSTSSweep, this, pinit);
-      }
-
-      TaskID pflux_dep(0);
-      if (!cgl_lf_two_var_sts) {
-        TaskID pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
-        pflux_dep = pclearf;
-      }
-      TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pflux_dep);
-      TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
-      TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
-      TaskID pupdt(0);
-      if (cgl_lf_two_var_sts) {
-        pupdt = tl["parabolic_stagen"]->AddTask(
-            &MHD::CGLLandauFluidSTSUpdateU, this, precvf);
-      } else {
-        pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this, precvf);
-      }
-      TaskID prestu = tl["parabolic_stagen"]->AddTask(&MHD::RestrictU, this, pupdt);
-      TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
-      TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
-      TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, precvu);
-      TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
-      TaskID pc2p(0);
-      if (cgl_lf_two_var_sts) {
-        pc2p = tl["parabolic_stagen"]->AddTask(
-            &MHD::CGLLandauFluidPrimitiveRefresh, this, pprol);
-      } else {
-        pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
-      }
-      TaskID pend(0);
-      if (cgl_lf_two_var_sts) {
-        pend = tl["parabolic_stagen"]->AddTask(
-            &MHD::EndCGLLandauFluidSTSSweep, this, pc2p);
-      } else {
-        pend = pc2p;
-      }
-      TaskID pcglcoll = tl["parabolic_stagen"]->AddTask(
-          &MHD::STSPostSweepCGLCollisions, this, pend);
-      (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pcglcoll);
-
-      TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(
-          &MHD::ClearSendParabolicCellCentered, this, none);
-      (void) tl["after_parabolic_stagen"]->AddTask(
-          &MHD::ClearRecvParabolicCellCentered, this, pcsend);
-    } else {
-      tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
-
-      TaskID pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
-      TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
-      TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
-      TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
-      TaskID pcleare = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSEField, this, precvf);
+    TaskID pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
+    TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
+    TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
+    TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
+    TaskID psendf_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux_Shr, this,
+                                                       precvf);
+    TaskID update_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux_Shr, this,
+                                                              psendf_shr);
+    if (has_any_parabolic_field_update) {
+      TaskID pcleare = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSEField,
+                                                       this, update_dependency);
       TaskID pefld = tl["parabolic_stagen"]->AddTask(&MHD::STSEField, this, pcleare);
       TaskID psende = tl["parabolic_stagen"]->AddTask(&MHD::SendE, this, pefld);
       TaskID precve = tl["parabolic_stagen"]->AddTask(&MHD::RecvE, this, psende);
-      TaskID pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this, precve);
-      TaskID pbstage = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateB, this, pupdt);
-      TaskID prestu = tl["parabolic_stagen"]->AddTask(&MHD::RestrictU, this, pbstage);
-      TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
-      TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
-      TaskID prestb = tl["parabolic_stagen"]->AddTask(&MHD::RestrictB, this, precvu);
+      TaskID psende_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendE_Shr, this, precve);
+      update_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvE_Shr, this,
+                                                         psende_shr);
+    }
+    TaskID pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this,
+                                                   update_dependency);
+    TaskID state_dependency = pupdt;
+    if (has_any_parabolic_field_update) {
+      state_dependency = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateB, this, pupdt);
+    }
+    TaskID prestu = tl["parabolic_stagen"]->AddTask(&MHD::RestrictU, this,
+                                                    state_dependency);
+    TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
+    TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
+    TaskID psendu_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendU_Shr, this, precvu);
+    TaskID boundary_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvU_Shr, this,
+                                                                psendu_shr);
+    if (has_any_parabolic_field_update) {
+      TaskID prestb = tl["parabolic_stagen"]->AddTask(&MHD::RestrictB, this,
+                                                      boundary_dependency);
       TaskID psendb = tl["parabolic_stagen"]->AddTask(&MHD::SendB, this, prestb);
       TaskID precvb = tl["parabolic_stagen"]->AddTask(&MHD::RecvB, this, psendb);
-      TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, precvb);
-      TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
-      TaskID pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
-      TaskID pcglcoll = tl["parabolic_stagen"]->AddTask(
-          &MHD::STSPostSweepCGLCollisions, this, pc2p);
-      (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pcglcoll);
-
-      TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSend, this, none);
-      (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecv, this, pcsend);
+      TaskID psendb_shr = tl["parabolic_stagen"]->AddTask(&MHD::SendB_Shr, this, precvb);
+      boundary_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvB_Shr, this,
+                                                            psendb_shr);
     }
+    TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this,
+                                                  boundary_dependency);
+    TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
+    TaskID pc2p = has_cgl_lf_split ?
+        tl["parabolic_stagen"]->AddTask(&MHD::CGLLandauFluidPrimitiveRefresh,
+                                        this, pprol) :
+        tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
+    TaskID pend = pc2p;
+    if (has_cgl_lf_split) {
+      pend = tl["parabolic_stagen"]->AddTask(&MHD::EndCGLLandauFluidSTSSweep,
+                                             this, pc2p);
+      if (peos->eos_data.coll) {
+        pend = tl["parabolic_stagen"]->AddTask(&MHD::STSPostSweepCGLCollisions,
+                                               this, pend);
+      }
+    }
+    (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pend);
+
+    TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSendParabolic,
+                                                         this, none);
+    (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecvParabolic, this,
+                                                pcsend);
   }
-  
+
   return;
 }
 
@@ -213,6 +249,10 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
     if (pmy_pack->pmesh->multilevel) {
       tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
       if (tstat != TaskStatus::complete) return tstat;
+      if (record_cgl_pressure_work) {
+        tstat = pbval_cgl_pflux->InitFluxRecv(NCGLPressureFlux);
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
     // post receives for fluxes of B, which are used even with uniform grids
     tstat = pbval_b->InitFluxRecv(3);
@@ -231,7 +271,7 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
     }
   }
 
-  // with shearing box boundaries caluclate x2-distance x1-boundaries have sheared and
+  // with shearing box boundaries calculate x2-distance x1-boundaries have sheared and
   // with MPI post receives for U and B
   if (psbox_u != nullptr) {
     // only execute when (3D OR 2d_r_phi)
@@ -244,6 +284,10 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
       if (tstat != TaskStatus::complete) return tstat;
       tstat = psbox_b->InitRecv(time);
       if (tstat != TaskStatus::complete) return tstat;
+      if (stage >= 0) {
+        tstat = psbox_b->InitEMFRecv();
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
   }
 
@@ -252,35 +296,183 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::InitRecvParabolic
-//! \brief Wrapper task list function to post receives for one STS parabolic stage.
+//! \brief Post receive operations required for one STS parabolic stage.
 
 TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
+  TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "begin", stage);
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_init_recv);
   TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
-  if (tstat != TaskStatus::complete) return tstat;
-  tstat = pbval_b->InitRecv(3);
-  if (tstat != TaskStatus::complete) return tstat;
-
+  if (tstat != TaskStatus::complete) {
+    TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_u", stage);
+    return tstat;
+  }
   if (pmy_pack->pmesh->multilevel) {
     tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
-    if (tstat != TaskStatus::complete) return tstat;
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_flux_u", stage);
+      return tstat;
+    }
   }
-  tstat = pbval_b->InitFluxRecv(3);
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->InitRecv(3);
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_b", stage);
+      return tstat;
+    }
+    tstat = pbval_b->InitFluxRecv(3);
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_flux_b", stage);
+      return tstat;
+    }
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    Real time = pmy_pack->pmesh->time;
+    if (pdrive->sts.sweep == Driver::STSSweep::post) {
+      time += pmy_pack->pmesh->dt;
+    }
+    tstat = psbox_u->InitRecv(time);
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_sbox_u", stage);
+      return tstat;
+    }
+    if (has_any_parabolic_cell_update) {
+      tstat = psbox_u->InitFluxRecv();
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_sbox_flux_u", stage);
+        return tstat;
+      }
+    }
+    if (has_any_parabolic_field_update) {
+      tstat = psbox_b->InitRecv(time);
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_sbox_b", stage);
+        return tstat;
+      }
+      tstat = psbox_b->InitEMFRecv();
+    }
+  }
+  TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "end", stage);
   return tstat;
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn TaskStatus MHD::InitRecvParabolicCellCentered
-//! \brief Post receives for a parabolic stage that updates only cell-centered variables.
+//! \fn TaskStatus MHD::ClearSendParabolic
+//! \brief Complete only the sends posted by one STS parabolic stage.
 
-TaskStatus MHD::InitRecvParabolicCellCentered(Driver *pdrive, int stage) {
+TaskStatus MHD::ClearSendParabolic(Driver *pdrive, int stage) {
   (void) pdrive;
-  (void) stage;
-  TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
-  if (tstat != TaskStatus::complete) return tstat;
-
-  if (pmy_pack->pmesh->multilevel) {
-    tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
+  TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "begin", stage);
+  TaskStatus tstat = pbval_u->ClearSend();
+  if (tstat != TaskStatus::complete) {
+    TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_u", stage);
+    return tstat;
   }
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearSend();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_b", stage);
+      return tstat;
+    }
+  }
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxSend();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_flux_u", stage);
+      return tstat;
+    }
+  }
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearFluxSend();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_flux_b", stage);
+      return tstat;
+    }
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->ClearSend();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_sbox_u", stage);
+      return tstat;
+    }
+    if (has_any_parabolic_cell_update) {
+      tstat = psbox_u->ClearFluxSend();
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_sbox_flux_u", stage);
+        return tstat;
+      }
+    }
+    if (has_any_parabolic_field_update) {
+      tstat = psbox_b->ClearSend();
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "wait_sbox_b", stage);
+        return tstat;
+      }
+      tstat = psbox_b->ClearEMFSend();
+    }
+  }
+  TraceCGLLFTaskList(pmy_pack, "ClearSendParabolic", "end", stage);
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ClearRecvParabolic
+//! \brief Complete only the receives posted by one STS parabolic stage.
+
+TaskStatus MHD::ClearRecvParabolic(Driver *pdrive, int stage) {
+  (void) pdrive;
+  TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "begin", stage);
+  TaskStatus tstat = pbval_u->ClearRecv();
+  if (tstat != TaskStatus::complete) {
+    TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_u", stage);
+    return tstat;
+  }
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearRecv();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_b", stage);
+      return tstat;
+    }
+  }
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxRecv();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_flux_u", stage);
+      return tstat;
+    }
+  }
+  if (has_any_parabolic_field_update) {
+    tstat = pbval_b->ClearFluxRecv();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_flux_b", stage);
+      return tstat;
+    }
+  }
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->ClearRecv();
+    if (tstat != TaskStatus::complete) {
+      TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_sbox_u", stage);
+      return tstat;
+    }
+    if (has_any_parabolic_cell_update) {
+      tstat = psbox_u->ClearFluxRecv();
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_sbox_flux_u", stage);
+        return tstat;
+      }
+    }
+    if (has_any_parabolic_field_update) {
+      tstat = psbox_b->ClearRecv();
+      if (tstat != TaskStatus::complete) {
+        TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "wait_sbox_b", stage);
+        return tstat;
+      }
+      tstat = psbox_b->ClearEMFRecv();
+    }
+  }
+  TraceCGLLFTaskList(pmy_pack, "ClearRecvParabolic", "end", stage);
   return tstat;
 }
 
@@ -304,6 +496,7 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
 //! of conserved variables
 
 TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
+  RequireCGLAnisotropyRepresentation("MHD hyperbolic flux evaluation");
   // select which calculate_flux function to call based on rsolver_method
   if (rsolver_method == MHD_RSolver::advect) {
     CalculateFluxes<MHD_RSolver::advect>(pdrive, stage);
@@ -325,6 +518,7 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
     CalculateFluxes<MHD_RSolver::hlle_gr>(pdrive, stage);
   }
 
+  // Terms selected for STS are advanced only in the parabolic half-sweeps.
   AddSelectedDiffusionFluxes(DiffusionSelection::explicit_only);
 
   // call FOFC if necessary
@@ -348,6 +542,7 @@ TaskStatus MHD::SendFlux(Driver *pdrive, int stage) {
   TaskStatus tstat = TaskStatus::complete;
   // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel)  {
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_flux);
     tstat = pbval_u->PackAndSendFluxCC(uflx);
   }
   return tstat;
@@ -362,7 +557,125 @@ TaskStatus MHD::RecvFlux(Driver *pdrive, int stage) {
   TaskStatus tstat = TaskStatus::complete;
   // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel) {
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_flux);
     tstat = pbval_u->RecvAndUnpackFluxCC(uflx);
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Send retained CGL pressure-traction fluxes for AMR flux correction.
+
+TaskStatus MHD::SendCGLPressureFlux(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  if (record_cgl_pressure_work && pmy_pack->pmesh->multilevel) {
+    return pbval_cgl_pflux->PackAndSendFluxCC(cgl_pflux);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Receive retained CGL pressure-traction fluxes for AMR flux correction.
+
+TaskStatus MHD::RecvCGLPressureFlux(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  if (record_cgl_pressure_work && pmy_pack->pmesh->multilevel) {
+    return pbval_cgl_pflux->RecvAndUnpackFluxCC(cgl_pflux);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Accumulate mechanical work from the pressure component of applied CGL fluxes.
+
+TaskStatus MHD::CGLPressureWork(Driver *pdrive, int stage) {
+  if (!record_cgl_pressure_work) {
+    return TaskStatus::complete;
+  }
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, nx1 = indcs.nx1;
+  const int js = indcs.js, nx2 = indcs.nx2;
+  const int ks = indcs.ks, nx3 = indcs.nx3;
+  const int nkji = nx3*nx2*nx1;
+  const int nji = nx2*nx1;
+  const int nmkji = pmy_pack->nmb_thispack*nkji;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  auto w = w0;
+  auto p1 = cgl_pflux.x1f;
+  auto p2 = cgl_pflux.x2f;
+  auto p3 = cgl_pflux.x3f;
+  auto size = pmy_pack->pmb->mb_size;
+  Real pressure_power = 0.0;
+  Real anisotropic_power = 0.0;
+  Kokkos::parallel_reduce("cgl_pressure_work",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int idx, Real &ptotal, Real &paniso) {
+    const int m = idx/nkji;
+    const int k = (idx - m*nkji)/nji + ks;
+    const int j = (idx - m*nkji - (k - ks)*nji)/nx1 + js;
+    const int i = idx - m*nkji - (k - ks)*nji - (j - js)*nx1 + is;
+    const Real dx1 = size.d_view(m).dx1;
+    const Real dx2 = size.d_view(m).dx2;
+    const Real dx3 = size.d_view(m).dx3;
+    const Real volume = dx1*dx2*dx3;
+    for (int n = 0; n < 3; ++n) {
+      Real div_total = (p1(m,ICGLPressureX+n,k,j,i+1)
+                      - p1(m,ICGLPressureX+n,k,j,i))/dx1;
+      Real div_aniso = (p1(m,ICGLAnisPressureX+n,k,j,i+1)
+                      - p1(m,ICGLAnisPressureX+n,k,j,i))/dx1;
+      if (multi_d) {
+        div_total += (p2(m,ICGLPressureX+n,k,j+1,i)
+                    - p2(m,ICGLPressureX+n,k,j,i))/dx2;
+        div_aniso += (p2(m,ICGLAnisPressureX+n,k,j+1,i)
+                    - p2(m,ICGLAnisPressureX+n,k,j,i))/dx2;
+      }
+      if (three_d) {
+        div_total += (p3(m,ICGLPressureX+n,k+1,j,i)
+                    - p3(m,ICGLPressureX+n,k,j,i))/dx3;
+        div_aniso += (p3(m,ICGLAnisPressureX+n,k+1,j,i)
+                    - p3(m,ICGLAnisPressureX+n,k,j,i))/dx3;
+      }
+      ptotal -= volume*w(m,IVX+n,k,j,i)*div_total;
+      paniso -= volume*w(m,IVX+n,k,j,i)*div_aniso;
+    }
+  }, Kokkos::Sum<Real>(pressure_power), Kokkos::Sum<Real>(anisotropic_power));
+
+  const Real beta_dt = pdrive->beta[stage-1]*pmy_pack->pmesh->dt;
+  pcgl_lf->AdvancePressureWorkDiagnostics(
+      beta_dt, pdrive->gam0[stage-1], pdrive->gam1[stage-1], stage,
+      pressure_power, anisotropic_power);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::SendFlux_Shr
+//! \brief Send radial parabolic fluxes to the opposite shearing boundary.
+
+TaskStatus MHD::SendFlux_Shr(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = TaskStatus::complete;
+  if (has_any_parabolic_cell_update && psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->PackAndSendFluxCC(uflx);
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::RecvFlux_Shr
+//! \brief Remap and reconcile radial parabolic fluxes across the shearing boundary.
+
+TaskStatus MHD::RecvFlux_Shr(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = TaskStatus::complete;
+  if (has_any_parabolic_cell_update && psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    tstat = psbox_u->RecvAndCorrectFluxCC(uflx,recon_method);
   }
   return tstat;
 }
@@ -437,7 +750,41 @@ TaskStatus MHD::RecvU_OA(Driver *pdrive, int stage) {
 TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
   // Only execute Mesh function with SMR/AMR
   if (pmy_pack->pmesh->multilevel) {
-    pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
+    TraceCGLLFTaskList(pmy_pack, "RestrictU", "begin", stage);
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_restrict_u);
+    if (pmy_pack->pmesh->pmr->prolong_prims && peos->eos_data.is_cgl) {
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      const int is = indcs.is, ie = indcs.ie;
+      const int js = indcs.js, je = indcs.je;
+      const int ks = indcs.ks, ke = indcs.ke;
+
+      if (cgl_slot_representation == CGLSlotRepresentation::magnetic_moment) {
+        const int dfloor_before = pmy_pack->pmesh->ecounter.neos_dfloor;
+        const int pfloor_before = pmy_pack->pmesh->ecounter.neos_efloor;
+        peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, is, ie, js, je,
+                                               ks, ke);
+        const int dfloor_delta =
+            pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before;
+        const int pfloor_delta =
+            pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before;
+        if (pcgl_lf != nullptr && (dfloor_delta > 0 || pfloor_delta > 0)) {
+          pcgl_lf->RecordAdmissibility(
+              u0, w0, bcc0, peos->eos_data, dfloor_delta, pfloor_delta,
+              pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
+              stage, pdrive->sts.nstages);
+        }
+      } else {
+        RequireCGLAnisotropyRepresentation("CGL AMR primitive restriction");
+        peos->ConsToPrim(u0, b0, w0, bcc0, false, is, ie, js, je, ks, ke);
+      }
+
+      pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
+      pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(
+          this, MeshRefinement::CGLAMRRestrictionScope::coarse_boundary);
+    } else {
+      pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
+    }
+    TraceCGLLFTaskList(pmy_pack, "RestrictU", "end", stage);
   }
   return TaskStatus::complete;
 }
@@ -447,6 +794,7 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to pack/send cell-centered conserved variables
 
 TaskStatus MHD::SendU(Driver *pdrive, int stage) {
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_u);
   TaskStatus tstat = pbval_u->PackAndSendCC(u0, coarse_u0);
   return tstat;
 }
@@ -456,6 +804,7 @@ TaskStatus MHD::SendU(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to receive/unpack cell-centered conserved variables
 
 TaskStatus MHD::RecvU(Driver *pdrive, int stage) {
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_u);
   TaskStatus tstat = pbval_u->RecvAndUnpackCC(u0, coarse_u0);
   return tstat;
 }
@@ -492,16 +841,10 @@ TaskStatus MHD::RecvU_Shr(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn TaskList MHD::EField
-//! \brief Wrapper task list function to compute electric field
+//! \fn TaskList MHD::EFieldSrc
+//! \brief Wrapper task list function to apply source terms to electric field
 
-TaskStatus MHD::EField(Driver *pdrive, int stage) {
-  // Use CT to compute corner E
-  CornerE(pdrive, stage);
-
-  AddSelectedDiffusionEMF(DiffusionSelection::explicit_only);
-  // TODO(@user): Add more resistive effects here
-
+TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
   if (psbox_b != nullptr) {
     // only execute when (2D)
     if (pmy_pack->pmesh->two_d) {
@@ -532,6 +875,40 @@ TaskStatus MHD::SendE(Driver *pdrive, int stage) {
 TaskStatus MHD::RecvE(Driver *pdrive, int stage) {
   TaskStatus tstat = TaskStatus::complete;
   tstat = pbval_b->RecvAndUnpackFluxFC(efld);
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::SendE_Shr
+//! \brief Wrapper task list function to pack/send shearing-box EMF correction buffers
+
+TaskStatus MHD::SendE_Shr(Driver *pdrive, int stage) {
+  TaskStatus tstat = TaskStatus::complete;
+  const bool apply_shearing_correction =
+      (pdrive->sts.sweep == Driver::STSSweep::none) || has_sts_resistivity;
+  if (apply_shearing_correction && psbox_b != nullptr) {
+    // only execute when (3D OR 2d_r_phi)
+    if (pmy_pack->pmesh->three_d || psbox_b->shearing_box_r_phi) {
+      tstat = psbox_b->PackAndSendEMF(efld);
+    }
+  }
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::RecvE_Shr
+//! \brief Wrapper task list function to receive and apply shearing-box EMF correction
+
+TaskStatus MHD::RecvE_Shr(Driver *pdrive, int stage) {
+  TaskStatus tstat = TaskStatus::complete;
+  const bool apply_shearing_correction =
+      (pdrive->sts.sweep == Driver::STSSweep::none) || has_sts_resistivity;
+  if (apply_shearing_correction && psbox_b != nullptr) {
+    // only execute when (3D OR 2d_r_phi)
+    if (pmy_pack->pmesh->three_d || psbox_b->shearing_box_r_phi) {
+      tstat = psbox_b->RecvAndCorrectEMF(efld, recon_method);
+    }
+  }
   return tstat;
 }
 
@@ -618,11 +995,14 @@ TaskStatus MHD::RecvB_Shr(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::ApplyPhysicalBCs
-//! \brief Wrapper task list function to call funtions that set physical and user BCs
+//! \brief Wrapper task list function to call functions that set physical and user BCs
 
 TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
   // do not apply BCs if domain is strictly periodic
   if (pmy_pack->pmesh->strictly_periodic) return TaskStatus::complete;
+
+  TraceCGLLFTaskList(pmy_pack, "ApplyPhysicalBCs", "begin", stage);
+  CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_physical_bcs);
 
   // physical BCs
   pbval_u->HydroBCs((pmy_pack), (pbval_u->u_in), u0);
@@ -633,6 +1013,7 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
     (pmy_pack->pmesh->pgen->user_bcs_func)(pmy_pack->pmesh);
   }
 
+  TraceCGLLFTaskList(pmy_pack, "ApplyPhysicalBCs", "end", stage);
   return TaskStatus::complete;
 }
 
@@ -643,17 +1024,27 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
 
 TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {  // only prolongate with SMR/AMR
+    TraceCGLLFTaskList(pmy_pack, "Prolongate", "begin", stage);
+    CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_prolongate);
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
     pbval_b->FillCoarseInBndryFC(b0, coarse_b0);
     if (pmy_pack->pmesh->pmr->prolong_prims) {
-      pbval_u->ConsToPrimCoarseBndry(coarse_u0, coarse_b0, coarse_w0);
+      const bool cgl_magnetic_moment =
+          peos->eos_data.is_cgl &&
+          cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
+      if (peos->eos_data.is_cgl && !cgl_magnetic_moment) {
+        RequireCGLAnisotropyRepresentation("CGL AMR primitive prolongation");
+      }
+      pbval_u->ConsToPrimCoarseBndry(coarse_u0, coarse_b0, coarse_w0,
+                                     cgl_magnetic_moment);
       pbval_u->ProlongateCC(w0, coarse_w0);
       pbval_b->ProlongateFC(b0, coarse_b0);
-      pbval_u->PrimToConsFineBndry(w0, b0, u0);
+      pbval_u->PrimToConsFineBndry(w0, b0, u0, cgl_magnetic_moment);
     } else {
       pbval_u->ProlongateCC(u0, coarse_u0);
       pbval_b->ProlongateFC(b0, coarse_b0);
     }
+    TraceCGLLFTaskList(pmy_pack, "Prolongate", "end", stage);
   }
   return TaskStatus::complete;
 }
@@ -663,34 +1054,38 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to call ConsToPrim over entire mesh (including gz)
 
 TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TraceCGLLFTaskList(pmy_pack, "ConToPrim", "begin", stage);
+  RequireCGLAnisotropyRepresentation("MHD conserved-to-primitive conversion");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &ng = indcs.ng;
   int n1m1 = indcs.nx1 + 2*ng - 1;
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
   peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
-  if (cgl_lf_admissibility_check && pdrive->sts.enabled &&
-      pdrive->sts.sweep != Driver::STSSweep::none) {
-    return CheckCGLLFAdmissibility(pdrive, stage);
-  }
+  TraceCGLLFTaskList(pmy_pack, "ConToPrim", "end", stage);
   return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn TaskStatus MHD::CGLLandauFluidPrimitiveRefresh
-//! \brief Lightweight CGL LF STS primitive refresh while IAN stores magnetic moment.
+//! \fn TaskStatus MHD::CGLCollisions
+//! \brief Apply CGL pressure-anisotropy relaxation after the hyperbolic update.
 
-TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
+TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
+  (void) stage;
+  if (!peos->eos_data.is_cgl || !peos->eos_data.coll) {
+    return TaskStatus::complete;
+  }
+  RequireCGLAnisotropyRepresentation("CGL collision relaxation");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &ng = indcs.ng;
   int n1m1 = indcs.nx1 + 2*ng - 1;
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, 0, n1m1, 0, n2m1, 0, n3m1);
-  if (cgl_lf_admissibility_check && pdrive->sts.enabled &&
-      pdrive->sts.sweep != Driver::STSSweep::none) {
-    return CheckCGLLFAdmissibility(pdrive, stage);
-  }
+  peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt,
+                   0, n1m1, 0, n2m1, 0, n3m1);
+  RecomputeTimeStepFromCurrentState(pdrive);
   return TaskStatus::complete;
 }
 
@@ -698,8 +1093,8 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
 //! \fn TaskStatus MHD::ClearSend
 //! \brief Wrapper task list function that checks all MPI sends have completed. Used in
 //! TaskList and in Driver::InitBoundaryValuesAndPrimitives()
-//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, U_OA, B_OA, U_Shr, BShr
-//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B,             U_Shr, B_Shr
+//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, E_Shr, U_OA, B_OA, U_Shr, BShr
+//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B, E_Shr,             U_Shr, B_Shr
 //! If stage=(-1):              clears U, B
 //! If stage=(-4):              clears                                 U_Shr, B_Shr
 
@@ -748,6 +1143,10 @@ TaskStatus MHD::ClearSend(Driver *pdrive, int stage) {
       if (tstat != TaskStatus::complete) return tstat;
       tstat = psbox_b->ClearSend();
       if (tstat != TaskStatus::complete) return tstat;
+      if (stage >= 0) {
+        tstat = psbox_b->ClearEMFSend();
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
   }
 
@@ -758,8 +1157,8 @@ TaskStatus MHD::ClearSend(Driver *pdrive, int stage) {
 //! \fn TaskStatus MHD::ClearRecv
 //! \brief Wrapper task list function that checks all MPI receives have completed. Used in
 //! TaskList and in Driver::InitBoundaryValuesAndPrimitives()
-//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, U_OA, B_OA, U_Shr, BShr
-//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B,             U_Shr, B_Shr
+//! If stage=(last stage):      clears U, B, Flx_U, Flx_B, E_Shr, U_OA, B_OA, U_Shr, BShr
+//! If (last stage)>stage>=(0): clears U, B, Flx_U, Flx_B, E_Shr,             U_Shr, B_Shr
 //! If stage=(-1):              clears U, B
 //! If stage=(-4):              clears                                 U_Shr, B_Shr
 
@@ -808,6 +1207,10 @@ TaskStatus MHD::ClearRecv(Driver *pdrive, int stage) {
       if (tstat != TaskStatus::complete) return tstat;
       tstat = psbox_b->ClearRecv();
       if (tstat != TaskStatus::complete) return tstat;
+      if (stage >= 0) {
+        tstat = psbox_b->ClearEMFRecv();
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
   }
 
@@ -815,34 +1218,14 @@ TaskStatus MHD::ClearRecv(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn TaskStatus MHD::ClearSendParabolicCellCentered
-//! \brief Clear sends for a parabolic stage that updates only cell-centered variables.
+//! \brief Clear retained CGL pressure-traction AMR flux communication.
 
-TaskStatus MHD::ClearSendParabolicCellCentered(Driver *pdrive, int stage) {
+TaskStatus MHD::ClearCGLPressureFlux(Driver *pdrive, int stage) {
   (void) pdrive;
-  (void) stage;
-  TaskStatus tstat = pbval_u->ClearSend();
-  if (tstat != TaskStatus::complete) return tstat;
-
-  if (pmy_pack->pmesh->multilevel) {
-    tstat = pbval_u->ClearFluxSend();
+  if (stage >= 0 && record_cgl_pressure_work && pmy_pack->pmesh->multilevel) {
+    TaskStatus tstat = pbval_cgl_pflux->ClearFluxSend();
     if (tstat != TaskStatus::complete) return tstat;
-  }
-  return TaskStatus::complete;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn TaskStatus MHD::ClearRecvParabolicCellCentered
-//! \brief Clear receives for a parabolic stage that updates only cell-centered variables.
-
-TaskStatus MHD::ClearRecvParabolicCellCentered(Driver *pdrive, int stage) {
-  (void) pdrive;
-  (void) stage;
-  TaskStatus tstat = pbval_u->ClearRecv();
-  if (tstat != TaskStatus::complete) return tstat;
-
-  if (pmy_pack->pmesh->multilevel) {
-    tstat = pbval_u->ClearFluxRecv();
+    tstat = pbval_cgl_pflux->ClearFluxRecv();
     if (tstat != TaskStatus::complete) return tstat;
   }
   return TaskStatus::complete;
@@ -859,23 +1242,5 @@ TaskStatus MHD::RestrictB(Driver *pdrive, int stage) {
   }
   return TaskStatus::complete;
 }
-
-//----------------------------------------------------------------------------------------
-//! \fn TaskStatus MHD::CGLCollisions
-//! \brief Wrapper task list function to collisionally decay pressure anisotropy over entire mesh (including gz)
-
-TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) { //need to ensure this only does something when collisions are on
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int &ng = indcs.ng;
-  int n1m1 = indcs.nx1 + 2*ng - 1;
-  int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
-  int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  
-  if (peos->eos_data.coll) {
-    peos->Collisions(w0, bcc0, u0, 0, n1m1, 0, n2m1, 0, n3m1);
-  }
-  return TaskStatus::complete;
-}
-
 
 } // namespace mhd

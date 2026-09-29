@@ -46,13 +46,19 @@ rsolver     = hllc    # Riemann-solver to be used
 gamma       = 1.4   # gamma = C_p/C_v
 
 <problem>
+pgen_name = turb
 
 <turb_driving>
-type = hydro
-tcorr = 0.5           # ~ L / 2 pi urms 
-dedt  = 0.1           # ~ urms^3 / 2 L
-nlow = 1
-nhigh = 2
+turb_flag     = 2
+tcorr         = 0.5           # ~ L / 2 pi urms
+dt_update     = 0.01
+normalization = edot
+dedt          = 0.1           # ~ urms^3 / 2 L
+nlow          = 1
+nhigh         = 2
+spectrum      = parabolic
+sol_fraction  = 1.0
+rseed         = 42
 
 <output1>
 file_type = hst

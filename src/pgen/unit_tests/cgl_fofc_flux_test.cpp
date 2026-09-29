@@ -93,8 +93,8 @@ Real CglFastSpeed(const Real d, const Real pr, const Real pp, const Real bx,
   Real qsq = b2 + 2.0*pp + (2.0*pr - pp)*bhatx2;
   Real radicand = qsq*qsq + 4.0*pp*pp*(1.0 - bhatx2)*bhatx2
                 - 12.0*pr*pp*bhatx2*(2.0 - bhatx2)
-                + 12.0*pr*pp*bhatx2*bhatx2 - 12.0*bx2*pr;
-  return std::sqrt(0.5*(qsq + std::sqrt(std::abs(radicand))/d));
+                + 12.0*pr*pr*bhatx2*bhatx2 - 12.0*bx2*pr;
+  return std::sqrt(0.5*(qsq + std::sqrt(std::abs(radicand)))/d);
 }
 
 Real IsothermalFastSpeed(const Real d, const Real bx, const Real by, const Real bz,
@@ -244,8 +244,12 @@ void CheckGlobalFlux(const std::string &label, const GlobalFlux &got,
 }
 
 void TestUnequalStates(const EOS_Data &eos, bool passive) {
-  GlobalState left{1.30, {0.27, -0.19, 0.11}, 0.91, 0.57, {0.43, -0.31, 0.26}};
-  GlobalState right{0.82, {-0.13, 0.23, -0.17}, 0.63, 1.04, {0.43, 0.18, -0.37}};
+  GlobalState left{1.30, {0.27, -0.19, 0.11}, 0.91, 0.57,
+                   {0.43, -0.31, 0.26}
+  };
+  GlobalState right{0.82, {-0.13, 0.23, -0.17}, 0.63, 1.04,
+                    {0.43, 0.18, -0.37}
+  };
   if (passive) {
     left.ppar = 0.71; left.pperp = 0.88;
     right.ppar = 0.55; right.pperp = 0.92;
@@ -262,12 +266,15 @@ void TestUnequalStates(const EOS_Data &eos, bool passive) {
     std::string label = passive ? "passive.dir" : "active.dir";
     label += std::to_string(dir + 1);
     CheckLocalFlux(label, got, expected);
-    CheckGlobalFlux(label + ".global", ToGlobalFlux(got, dir), ToGlobalFlux(expected, dir));
+    CheckGlobalFlux(label + ".global", ToGlobalFlux(got, dir),
+                    ToGlobalFlux(expected, dir));
   }
 }
 
 void TestEqualStateEMFSigns(const EOS_Data &eos) {
-  GlobalState s{1.17, {0.41, -0.29, 0.23}, 0.76, 1.13, {0.37, -0.22, 0.58}};
+  GlobalState s{1.17, {0.41, -0.29, 0.23}, 0.76, 1.13,
+                {0.37, -0.22, 0.58}
+  };
   Real ephys[3];
   ephys[0] = s.v[2]*s.b[1] - s.v[1]*s.b[2];
   ephys[1] = s.v[0]*s.b[2] - s.v[2]*s.b[0];

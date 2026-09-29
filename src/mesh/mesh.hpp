@@ -11,12 +11,23 @@
 //! MeshBlocks (potentially on different levels) that tile the entire domain.  MeshBlocks
 //! are grouped together into MeshBlockPacks for better performance on GPUs.
 
+#include <cmath>
 #include <cstdint>  // int32_t
 #include <memory>
 #include <string>
 
 #include "athena.hpp"
 #include "diffusion/sts_types.hpp"
+
+namespace mesh_timestep {
+
+inline bool IsFinitePositiveAndAdvancing(const Real time, const Real dt) {
+  const Real next_time = time + dt;
+  return std::isfinite(time) && std::isfinite(dt) && std::isfinite(next_time) &&
+         dt > 0.0 && next_time > time;
+}
+
+} // namespace mesh_timestep
 
 // Define following structure before other "include" files to resolve declarations
 //----------------------------------------------------------------------------------------
@@ -138,8 +149,7 @@ class Mesh {
   // following 1x arrays allocated with length [nranks] in AddCoordinatesAndPhysics()
   int *nprtcl_eachrank;    // number of particles on each rank
 
-  Real time, dt, dtold, dt_last_completed, cfl_no;
-  Real dt_parabolic_sts, sts_max_dt_ratio;
+  Real time, dt, dtold, dt_last_completed, dt_parabolic_sts, sts_max_dt_ratio, cfl_no;
   parabolic::STSIntegrator sts_integrator;
   int ncycle;
   EventCounters ecounter;
@@ -156,6 +166,7 @@ class Mesh {
   void PrintMeshDiagnostics();
   void WriteMeshStructure();
   void NewTimeStep(const Real tlim);
+  void RefreshSTSParabolicTimeStep();
   void AddCoordinatesAndPhysics(ParameterInput *pinput);
   BoundaryFlag GetBoundaryFlag(const std::string& input_string);
   std::string GetBoundaryString(BoundaryFlag input_flag);

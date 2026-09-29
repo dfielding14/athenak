@@ -1,0 +1,260 @@
+# Module: Diffusion
+
+## Overview
+The Diffusion module implements thermal conduction, Navier-Stokes viscosity,
+Ohmic resistivity, passive-scalar diffusion, and fourth-derivative
+hyperviscosity using ordinary explicit integration or second-order RKL2 super
+time stepping (STS).
+For the STS algorithm, operator-selection inputs, variable-coefficient models,
+and verification plots, see [Super Time Stepping](super_time_stepping.md).
+
+## Source Location
+`src/diffusion/`
+
+## Key Components
+
+| File | Purpose | Key Functions |
+|------|---------|---------------|
+| `viscosity.hpp/cpp` | Kinematic/dynamic viscosity | Momentum diffusion |
+| `hyperviscosity.hpp/cpp` | Constant fourth-derivative velocity damping | Cached Laplacian face fluxes |
+| `conduction.hpp/cpp` | Thermal conduction | Heat diffusion |
+| `resistivity.hpp/cpp` | Ohmic resistivity | Magnetic diffusion |
+| `scalar_diffusion.hpp/cpp` | Passive-scalar diffusivity | Per-scalar conservative flux |
+| `sts_rkl2.hpp/cpp` | RKL2 stage construction | STS time integration |
+| `current_density.hpp` | Current calculation | $\mathbf{J} = \nabla \times \mathbf{B}$ |
+
+## Configuration Parameters
+
+### Viscosity
+```ini
+<mhd>  # or <hydro>
+viscosity = 0.01  # Kinematic viscosity coefficient
+```
+
+### Thermal Conduction
+```ini
+<mhd>  # or <hydro>
+conductivity = 0.1  # Thermal conductivity coefficient
+cond_ceiling = 1.0e10  # Optional ceiling value
+```
+
+### Hyperviscosity
+```ini
+<mhd>  # or <hydro>
+hyperviscosity = 1.0e-5
+hyperviscosity_integrator = sts  # explicit or sts
+```
+
+### Resistivity
+```ini
+<mhd>
+ohmic_resistivity = 0.001   # Resistivity coefficient η
+```
+
+### Passive-Scalar Diffusion
+```ini
+<hydro>  # or <mhd>
+nscalars = 2
+scalar_diffusivity = 0.001
+scalar_diffusivity_0 = 0.005
+scalar_diffusivity_1 = 0.05
+scalar_diffusivity_integrator = sts
+```
+
+## Diffusion Equations
+
+### Viscosity (Navier-Stokes)
+
+The viscous force per unit mass (for constant kinematic viscosity $\nu$):
+
+$$\frac{\partial \mathbf{v}}{\partial t} = ... + \nu \nabla^2 \mathbf{v} + \frac{\nu}{3} \nabla(\nabla \cdot \mathbf{v})$$
+
+**Note on bulk viscosity**: AthenaK implements only shear (dynamic) viscosity with the standard assumption that bulk viscosity $\zeta = 0$. This is why the coefficient of the divergence term is $\frac{2\mu}{3}$ (or $\frac{2\nu}{3}$ in kinematic form) rather than $\zeta + \frac{2\mu}{3}$. This assumption is valid for monatomic gases and is commonly used in astrophysical simulations.
+
+### Thermal Conduction
+
+The energy equation with thermal conduction:
+
+$$\frac{\partial E}{\partial t} + \nabla \cdot \mathbf{F}_E = ... - \nabla \cdot \mathbf{q}$$
+
+where the heat flux is:
+
+$$\mathbf{q} = -\kappa \nabla T$$
+
+Note: In the code, $\kappa$ represents thermal **conductivity** (not diffusivity), with units of energy/(length·time·temperature).
+
+### Fourth-Derivative Hyperviscosity
+
+Hyperviscosity is distinct from physical viscosity. For each velocity
+component AthenaK caches $L_i=\nabla_h^2v_i$ and adds the conservative face
+flux
+
+$$
+F^{\rm hv}_{\rho v_i,q}
+=\rho_f\nu_4\left(\partial_qL_i\right)_f .
+$$
+
+For constant density, the conservative update becomes
+
+$$
+\frac{\partial v_i}{\partial t}
+=-\nu_4\left(\nabla_h^2\right)^2v_i .
+$$
+
+For ideal-gas Hydro or MHD the energy flux is
+$F^{\rm hv}_{E,q}=\boldsymbol{v}_f\cdot
+\boldsymbol{F}^{\rm hv}_{\rho\boldsymbol{v},q}$; isothermal runs update
+momentum only. Although the operator uses a fourth spatial derivative, the
+centered discretization is second-order accurate.
+
+### Resistivity (Magnetic Diffusion)
+
+The induction equation with Ohmic resistivity:
+
+$$\frac{\partial \mathbf{B}}{\partial t} = \nabla \times (\mathbf{v} \times \mathbf{B}) - \nabla \times (\eta \mathbf{J})$$
+
+where the current density is:
+
+$$\mathbf{J} = \nabla \times \mathbf{B}$$
+
+For constant resistivity $\eta$, this simplifies to:
+
+$$\frac{\partial \mathbf{B}}{\partial t} = \nabla \times (\mathbf{v} \times \mathbf{B}) + \eta \nabla^2 \mathbf{B}$$
+
+## Numerical Implementation
+
+### Heat Flux Implementation
+
+At x1-faces, the code computes:
+
+$$q_{x,i+1/2} = -\kappa \frac{T_i - T_{i-1}}{\Delta x}$$
+
+where temperature is computed from:
+- **Ideal gas**: $T = (\gamma - 1) e / \rho$ where $e$ is internal energy per unit mass
+- **With ITM variable**: $T$ is stored directly
+
+The energy flux is then updated:
+
+$$F^E_{i+1/2} \mathrel{-}= q_{x,i+1/2}$$
+
+### Resistive Electric Field Implementation
+
+The code uses Ohm's law:
+
+$$\mathbf{E} = -\mathbf{v} \times \mathbf{B} + \eta \mathbf{J}$$
+
+where:
+- The inductive term $-\mathbf{v} \times \mathbf{B}$ is computed in the MHD Riemann solver
+- The resistive term $\eta \mathbf{J}$ is added separately
+
+The current density components at cell edges are computed using:
+
+$$J_x = \frac{\partial B_z}{\partial y} - \frac{\partial B_y}{\partial z}$$
+
+$$J_y = \frac{\partial B_x}{\partial z} - \frac{\partial B_z}{\partial x}$$
+
+$$J_z = \frac{\partial B_y}{\partial x} - \frac{\partial B_x}{\partial y}$$
+
+Note: The code omits the $1/\mu_0$ factor by using normalized units where $\mu_0 = 1$.
+
+### Stability Constraint
+Diffusive CFL condition:
+
+$$\Delta t < \frac{0.5 \Delta x^2}{D}$$
+
+Where $D = \max(\nu, \kappa, \eta)$
+
+For uniform-grid hyperviscosity, let
+$S=\sum_d\Delta x_d^{-2}$ over active dimensions. Its explicit forward-Euler
+limit is
+
+$$
+\Delta t_{\rm hv}=\frac{1}{8\nu_4S^2},
+$$
+
+which scales as $\Delta x^4/\nu_4$. RKL2 STS uses this registered explicit
+limit without changing its recurrence.
+
+## Viscous Stress Tensor
+
+### Definition
+The viscous stress tensor for a Newtonian fluid (with zero bulk viscosity):
+
+$$\tau_{ij} = \mu\left(\frac{\partial v_i}{\partial x_j} + \frac{\partial v_j}{\partial x_i} - \frac{2}{3}\delta_{ij} \nabla \cdot \mathbf{v}\right)$$
+
+where:
+- $\mu = \rho \nu$ is the dynamic (shear) viscosity
+- $\nu$ is the kinematic viscosity (input parameter `viscosity`)
+- The $-\frac{2}{3}\delta_{ij} \nabla \cdot \mathbf{v}$ term ensures the stress tensor is traceless (zero bulk viscosity)
+
+### Viscous Flux Implementation
+The code computes the viscous momentum flux directly. For example, at x1-faces:
+
+$$F^{visc}_{x,1} = -\tau_{11} = -\mu\left(\frac{4}{3}\frac{\partial v_x}{\partial x} - \frac{2}{3}\frac{\partial v_y}{\partial y} - \frac{2}{3}\frac{\partial v_z}{\partial z}\right)$$
+
+$$F^{visc}_{y,1} = -\tau_{12} = -\mu\left(\frac{\partial v_y}{\partial x} + \frac{\partial v_x}{\partial y}\right)$$
+
+$$F^{visc}_{z,1} = -\tau_{13} = -\mu\left(\frac{\partial v_z}{\partial x} + \frac{\partial v_x}{\partial z}\right)$$
+
+
+## Reynolds Numbers
+
+### Kinematic Reynolds
+
+$$\text{Re} = \frac{LV}{\nu}$$
+
+### Magnetic Reynolds
+
+$$\text{Rm} = \frac{LV}{\eta}$$
+
+### Prandtl Number
+
+$$\text{Pr} = \frac{\nu}{\kappa}$$
+
+## Common Applications
+
+### Viscous Shear Flow
+```ini
+<hydro>
+viscosity = 0.1
+```
+
+### MHD Reconnection
+```ini
+<mhd>
+ohmic_resistivity = 0.001
+```
+
+### Thermal Diffusion
+```ini
+<hydro>
+conductivity = 0.01
+```
+
+### Numerical High-Wavenumber Damping
+```ini
+<hydro>
+hyperviscosity = 1.0e-5
+hyperviscosity_integrator = sts
+```
+
+## Performance Considerations
+
+- Ordinary explicit diffusion restricts the cycle timestep by its parabolic
+  stability bound.
+- RKL2 STS can advance selected parabolic operators through a longer cycle
+  timestep using a sequence of stable sub-stages.
+- Per-scalar diffusion stores coefficients in one device array and evaluates
+  all scalar fluxes in one kernel pass.
+- Hyperviscosity allocates reusable storage for three cell-centered velocity
+  Laplacians, computes them once per diffusion evaluation or STS stage, and
+  uses a constant-coefficient block timestep calculation without a device
+  reduction.
+- Hyperviscosity currently requires `nghost >= 2`, a uniform Newtonian Hydro
+  or MHD mesh, and rejects active SMR/AMR or relativistic configurations.
+
+## See Also
+- [MHD Module](mhd.md)
+- [Hydro Module](hydro.md)
+- [Super Time Stepping](super_time_stepping.md)
+- Source: `src/diffusion/`

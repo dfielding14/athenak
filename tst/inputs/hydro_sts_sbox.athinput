@@ -1,0 +1,63 @@
+# Hydro viscosity with RKL2 STS and shearing-periodic radial boundaries.
+
+<job>
+basename = hydro_sts_sbox
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.25
+x1max = 0.25
+ix1_bc = shear_periodic
+ox1_bc = shear_periodic
+nx2 = 32
+x2min = -0.25
+x2max = 0.25
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 4
+x3min = -0.25
+x3max = 0.25
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 4
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 0.30
+nlim = -1
+ndiag = 100000
+sts_integrator = rkl2
+sts_max_dt_ratio = -1.0
+
+<shearing_box>
+qshear = 1.5
+omega0 = 1.0
+
+<hydro>
+eos = isothermal
+reconstruct = plm
+rsolver = hlle
+iso_sound_speed = 1.0
+viscosity = 0.1
+viscosity_integrator = sts
+
+<problem>
+pgen_name = shwave
+ipert = 2
+d0 = 1.0
+amp = 1.0e-3
+nwx = -4
+nwy = 1
+nwz = 0
+
+<output1>
+file_type = bin
+variable = hydro_w
+dt = 0.30

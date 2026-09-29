@@ -120,3 +120,31 @@ void ShearingBox::FindTargetMB(const int igid, const int jshift, int &gid,
   rank = pm->rank_eachmb[gid];
   return;
 }
+
+//----------------------------------------------------------------------------------------
+//! \fn void ShearingBox::FindShearPartnerMB()
+//! \brief Find the MB on the opposite x1 boundary with the requested x2 block shift.
+
+void ShearingBox::FindShearPartnerMB(const int igid, const int jshift, int &gid,
+                                    int &rank) {
+  Mesh *pm = pmy_pack->pmesh;
+  LogicalLocation lloc = pm->lloc_eachmb[igid];
+  std::int32_t nmbx1 = pm->nmb_rootx1 << (lloc.level - pm->root_level);
+  std::int32_t nmbx2 = pm->nmb_rootx2 << (lloc.level - pm->root_level);
+
+  if (lloc.lx1 == 0) {
+    lloc.lx1 = nmbx1 - 1;
+  } else if (lloc.lx1 == (nmbx1 - 1)) {
+    lloc.lx1 = 0;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Shearing partner requested for a MeshBlock that does not "
+              << "touch an x1 boundary" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  lloc.lx2 = static_cast<std::int32_t>((lloc.lx2 + jshift) % nmbx2);
+  if (lloc.lx2 < 0) lloc.lx2 += nmbx2;
+  gid = (pm->ptree->FindMeshBlock(lloc))->GetGID();
+  rank = pm->rank_eachmb[gid];
+}

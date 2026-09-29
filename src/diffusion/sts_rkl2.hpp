@@ -6,8 +6,7 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file sts_rkl2.hpp
-//! \brief Host-side helpers for RKL2 super time stepping stage-count and coefficient
-//! evaluation.
+//! \brief Host-side helpers for RKL2 super time stepping stage-count and coefficients.
 
 #include "athena.hpp"
 
@@ -20,6 +19,9 @@ struct RKL2Coefficients {
   Real gammaj_tilde = 0.0;
 };
 
+// This numerical helper rejects stage counts outside the integer range. A lower,
+// user-configurable policy cap belongs in the driver, where ParameterInput and sweep
+// context are available, and should be added as a separate patch.
 int ComputeRKL2StageCount(Real dt_sweep, Real dt_parabolic_min);
 RKL2Coefficients ComputeRKL2Coefficients(int stage, int nstages);
 

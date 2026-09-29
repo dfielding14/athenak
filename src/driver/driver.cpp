@@ -17,8 +17,6 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
-#include "eos/eos.hpp"
-#include "diffusion/conduction.hpp"
 #include "outputs/outputs.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -26,6 +24,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "ion-neutral/ion-neutral.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/turb_driver.hpp"
 #include "driver.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -300,6 +299,7 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 
 void Driver::ResetSTSController() {
   sts.enabled = false;
+  sts.explicit_split = false;
   sts.integrator = parabolic::STSIntegrator::none;
   sts.sweep = STSSweep::none;
   sts.dt_cycle = 0.0;
@@ -317,8 +317,8 @@ void Driver::ResetSTSController() {
 void Driver::ValidateSTSConfiguration(Mesh *pm) {
   int nsts_processes = 0;
   const parabolic::ParabolicProcessDescriptor *first_sts_process = nullptr;
-  bool has_hydro_sts = false;
-  bool has_mhd_sts = false;
+  const bool has_explicit_cgl_lf =
+      (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->has_explicit_cgl_lf);
 
   for (const auto &process : pm->pmb_pack->parabolic_processes) {
     if (process.UsesSTS()) {
@@ -326,12 +326,15 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
       if (first_sts_process == nullptr) {
         first_sts_process = &process;
       }
-      if (process.owner == parabolic::ParabolicProcessOwner::hydro) {
-        has_hydro_sts = true;
-      } else if (process.owner == parabolic::ParabolicProcessOwner::mhd) {
-        has_mhd_sts = true;
-      }
     }
+  }
+
+  if (has_explicit_cgl_lf &&
+      pm->sts_integrator != parabolic::STSIntegrator::none) {
+    DriverFatalError(__FILE__, __LINE__,
+                     "CGL Landau-fluid explicit reference integration requires "
+                     "<time>/sts_integrator = none and cannot run with STS-selected "
+                     "processes.");
   }
 
   if (pm->sts_integrator == parabolic::STSIntegrator::none) {
@@ -354,47 +357,6 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
                      "STS is not yet supported for <ion-neutral> runs. Disable STS for "
                      "Hydro/MHD or remove the two-fluid ion-neutral configuration.");
   }
-
-  if (has_hydro_sts) {
-    hydro::Hydro *phydro = pm->pmb_pack->phydro;
-    if (phydro == nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "Hydro STS was requested, but no Hydro module is active.");
-    }
-    if (phydro->porb_u != nullptr || phydro->psbox_u != nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "Hydro STS is not yet supported with shearing-box or orbital "
-                       "advection in this CGL port.");
-    }
-  }
-
-  if (has_mhd_sts) {
-    mhd::MHD *pmhd = pm->pmb_pack->pmhd;
-    if (pmhd == nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "MHD STS was requested, but no MHD module is active.");
-    }
-    if (pmhd->peos->eos_data.is_cgl) {
-      if (pmhd->has_sts_viscosity || pmhd->has_sts_resistivity) {
-        DriverFatalError(__FILE__, __LINE__,
-                         "CGL STS currently supports heat flux only. Disable "
-                         "viscosity_integrator = sts and ohmic_resistivity_integrator = sts "
-                         "for <mhd>/eos = cgl.");
-      }
-      if (pmhd->has_sts_conduction &&
-          (pmhd->pcond == nullptr || !pmhd->pcond->IsCGLLandauFluidHeatFlux())) {
-        DriverFatalError(__FILE__, __LINE__,
-                         "CGL heat-flux STS requires "
-                         "<mhd>/cgl_heat_flux = landau_fluid.");
-      }
-    }
-    if (pmhd->porb_u != nullptr || pmhd->porb_b != nullptr ||
-        pmhd->psbox_u != nullptr || pmhd->psbox_b != nullptr) {
-      DriverFatalError(__FILE__, __LINE__,
-                       "MHD STS is not yet supported with shearing-box or orbital "
-                       "advection in this CGL port.");
-    }
-  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -406,6 +368,19 @@ void Driver::RefreshSTSCycleState(Mesh *pm) {
   sts.integrator = pm->sts_integrator;
   sts.dt_cycle = pm->dt;
   sts.dt_parabolic_min = pm->dt_parabolic_sts;
+
+  const bool has_explicit_cgl_lf =
+      (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->has_explicit_cgl_lf);
+  if (has_explicit_cgl_lf) {
+    if (sts.dt_cycle <= 0.0) {
+      return;
+    }
+    sts.explicit_split = true;
+    sts.dt_sweep = 0.5*sts.dt_cycle;
+    sts.nstages = 1;
+    sts.enabled = true;
+    return;
+  }
 
   if (sts.integrator == parabolic::STSIntegrator::none ||
       sts.dt_cycle <= 0.0 ||
@@ -438,7 +413,10 @@ void Driver::BeginSTSSweep(Mesh *pm, STSSweep sweep) {
 void Driver::SetSTSStage(int stage) {
   sts.current_stage = stage;
   sts.coeffs = parabolic::RKL2Coefficients{};
-  if (sts.enabled && sts.integrator == parabolic::STSIntegrator::rkl2) {
+  if (sts.enabled && sts.explicit_split) {
+    sts.coeffs.muj = 1.0;
+    sts.coeffs.muj_tilde = 1.0;
+  } else if (sts.enabled && sts.integrator == parabolic::STSIntegrator::rkl2) {
     sts.coeffs = parabolic::ComputeRKL2Coefficients(stage, sts.nstages);
   }
 }
@@ -528,7 +506,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   if (pionn != nullptr) {
     if (nimp_stages == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "IonNetral MHD can only be run with ImEx integrators."
+          << std::endl << "IonNeutral MHD can only be run with ImEx integrators."
           << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -591,15 +569,24 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       // Work after time integrator indicated by "1" in stage
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
 
-      if (sts.enabled) {
-        BeginSTSSweep(pmesh, STSSweep::post);
-        for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
-          SetSTSStage(sts_stage);
-          ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
-          ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
-          ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
+      const bool has_explicit_cgl_lf =
+          (pmesh->pmb_pack->pmhd != nullptr &&
+           pmesh->pmb_pack->pmhd->has_explicit_cgl_lf);
+      if (pmesh->sts_integrator != parabolic::STSIntegrator::none ||
+          has_explicit_cgl_lf) {
+        if (pmesh->sts_integrator != parabolic::STSIntegrator::none) {
+          pmesh->RefreshSTSParabolicTimeStep();
         }
-        EndSTSSweep();
+        BeginSTSSweep(pmesh, STSSweep::post);
+        if (sts.enabled) {
+          for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
+            SetSTSStage(sts_stage);
+            ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
+            ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
+            ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
+          }
+          EndSTSSweep();
+        }
       }
 
       // Work outside of TaskLists:
@@ -655,6 +642,12 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 //!  and printing diagnostic messages
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
+  // The last cycle can end with AMR after the normal output point. Refresh a
+  // rendered turbulence field only when it no longer matches the final mesh.
+  if (pmesh->pmb_pack->pturb != nullptr) {
+    pmesh->pmb_pack->pturb->RefreshForceAfterMeshChange(this);
+  }
+
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {

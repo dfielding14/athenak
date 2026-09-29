@@ -6,8 +6,7 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file parabolic_process.hpp
-//! \brief Metadata container describing parabolic processes that may later participate in
-//! super time stepping.
+//! \brief Metadata container describing parabolic processes that may use STS.
 
 #include <cassert>
 #include <string>

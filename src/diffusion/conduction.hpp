@@ -26,31 +26,30 @@ class Conduction {
 
   // data
   Real dtnew;
-  std::string iso_cond_type = "none";       // "constant", "spitzer", or "spitzer_limited"
-  std::string cgl_heat_flux_type = "none";  // "landau_fluid" for CGL LF heat flux
-  Real kappa_iso = 0.0;                      // isotropic thermal conductivity
-  Real kappa_iso_limit = 0.0;                // limit to isotropic thermal conductivity
-  Real lf_k_parallel = 0.0;                  // CGL LF |k_parallel| from the closure
-  bool lf_coeff_local = true;                // true: local c_parallel; false: background
-  Real lf_c_parallel0 = 0.0;                 // background c_parallel for LF coefficients
-  parabolic::ParabolicIntegratorMode mode = parabolic::ParabolicIntegratorMode::explicit_mode;
+  Real kappa;         // thermal conductivity
+  bool tdep_kappa;    // temperature-dependent conductivity
+  Real kappa_ceiling; // ceiling of thermal conductivity
+  bool sat_hflux;     // saturation of heat flux
+  bool power_law_kappa = false;
+  Real kappa_tref = 1.0;
+  Real kappa_exponent = 0.0;
+  Real kappa_floor = 0.0;
+  Real power_law_kappa_ceiling;
+  parabolic::ParabolicIntegratorMode mode =
+      parabolic::ParabolicIntegratorMode::explicit_mode;
 
-  // functions
-  bool IsCGLLandauFluidHeatFlux() const { return cgl_heat_flux_type == "landau_fluid"; }
-  void AddHeatFluxes(const DvceArray5D<Real> &w, const EOS_Data &eos,
-                     DvceFaceFld5D<Real> &f);
-  void AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w,
-                                   const DvceArray5D<Real> &bcc,
-                                   const EOS_Data &eos,
-                                   DvceFaceFld5D<Real> &f);
-  void AddIsotropicHeatFluxConstCond(const DvceArray5D<Real> &w, const EOS_Data &eos,
-                                     DvceFaceFld5D<Real> &f);
-  void AddIsotropicHeatFluxSpitzerCond(const DvceArray5D<Real> &w, const EOS_Data &eos,
-                                       DvceFaceFld5D<Real> &f);
+  // function to add heat fluxes to Hydro and/or MHD fluxes
+  void AddHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
+                   DvceFaceFld5D<Real> &f);
+  void IsotropicHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
+                         DvceFaceFld5D<Real> &f);
+  void PowerLawHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
+                        DvceFaceFld5D<Real> &f);
+  void TempDependentHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
+                             DvceFaceFld5D<Real> &f);
   void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_data);
 
  private:
   MeshBlockPack* pmy_pack;
-  DvceArray4D<Real> cgl_lf_tpar, cgl_lf_tperp, cgl_lf_bmag;
 };
 #endif // DIFFUSION_CONDUCTION_HPP_

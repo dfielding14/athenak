@@ -48,5 +48,5 @@ sfloor = 1.0e-12
 bfloor = 1.0e-10
 
 <problem>
-pgen_name = cgl_fofc_end_to_end_test
+pgen_name = cgl_fofc
 user_srcs = true

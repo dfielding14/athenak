@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <cstdio> // fclose
@@ -577,7 +579,8 @@ void Mesh::NewTimeStep(const Real tlim) {
     dtold = 0.;
   }
 
-  // cycle over all MeshBlocks on this rank and find minimum dt.
+  // cycle over all MeshBlocks on this rank and find minimum dt.  Track the legacy
+  // explicit budget separately from the STS-filtered cycle and parabolic budgets.
   Real dt_legacy = 2.0*dt;
   Real dt_cycle_candidate = dt_legacy;
   dt_parabolic_sts = std::numeric_limits<float>::max();
@@ -585,7 +588,8 @@ void Mesh::NewTimeStep(const Real tlim) {
   // Hydro timestep
   if (pmb_pack->phydro != nullptr) {
     dt_legacy = std::min(dt_legacy, (cfl_no)*(pmb_pack->phydro->dtnew) );
-    dt_cycle_candidate = std::min(dt_cycle_candidate, (cfl_no)*(pmb_pack->phydro->dtnew) );
+    dt_cycle_candidate = std::min(dt_cycle_candidate,
+                                  (cfl_no)*(pmb_pack->phydro->dtnew) );
     // source terms timestep
     if (pmb_pack->phydro->psrc != nullptr) {
       dt_legacy = std::min(dt_legacy, (cfl_no)*(pmb_pack->phydro->psrc->dtnew) );
@@ -627,8 +631,8 @@ void Mesh::NewTimeStep(const Real tlim) {
   }
   // Particles timestep
   if (pmb_pack->ppart != nullptr) {
-    dt_legacy = std::min(dt_legacy, (pmb_pack->ppart->dtnew) );
-    dt_cycle_candidate = std::min(dt_cycle_candidate, (pmb_pack->ppart->dtnew) );
+    dt_legacy = std::min(dt_legacy, pmb_pack->ppart->dtnew);
+    dt_cycle_candidate = std::min(dt_cycle_candidate, pmb_pack->ppart->dtnew);
   }
 
 #if MPI_PARALLEL_ENABLED
@@ -651,11 +655,55 @@ void Mesh::NewTimeStep(const Real tlim) {
   } else {
     dt = dt_cycle_candidate;
   }
+  const Real dt_before_tlim = dt;
 
   // limit last time step to stop at tlim *exactly*
   if ( (time < tlim) && ((time + dt) > tlim) ) {dt = tlim - time;}
 
+  const Real time_plus_dt = time + dt;
+  if (!mesh_timestep::IsFinitePositiveAndAdvancing(time, dt)) {
+    std::cout << std::setprecision(std::numeric_limits<Real>::max_digits10)
+              << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Final cycle timestep must be finite, positive, and advance time."
+              << std::endl
+              << "rank=" << global_variable::my_rank
+              << " cycle=" << ncycle
+              << " time=" << time
+              << " tlim=" << tlim
+              << " dt=" << dt
+              << " time_plus_dt=" << time_plus_dt
+              << " dt_before_tlim=" << dt_before_tlim
+              << " dtold=" << dtold
+              << " dt_legacy=" << dt_legacy
+              << " dt_cycle_candidate=" << dt_cycle_candidate
+              << " dt_parabolic_sts=" << dt_parabolic_sts
+              << " cfl_number=" << cfl_no
+              << " sts_integrator=" << static_cast<int>(sts_integrator)
+              << " sts_max_dt_ratio=" << sts_max_dt_ratio
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   return;
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::RefreshSTSParabolicTimeStep()
+// \brief Refresh the globally minimum explicit timestep for STS processes.
+
+void Mesh::RefreshSTSParabolicTimeStep() {
+  dt_parabolic_sts = std::numeric_limits<float>::max();
+  for (const auto &process : pmb_pack->parabolic_processes) {
+    if (process.UsesSTS()) {
+      dt_parabolic_sts = std::min(dt_parabolic_sts, (cfl_no)*(process.ExplicitDt()));
+    }
+  }
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &dt_parabolic_sts, 1, MPI_ATHENA_REAL, MPI_MIN,
+                MPI_COMM_WORLD);
+#endif
 }
 
 //----------------------------------------------------------------------------------------

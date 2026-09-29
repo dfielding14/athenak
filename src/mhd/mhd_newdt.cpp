@@ -8,6 +8,7 @@
 
 #include <math.h>
 
+#include <cstdlib>
 #include <limits>
 #include <iostream>
 #include <algorithm> // min
@@ -18,9 +19,36 @@
 #include "eos/eos.hpp"
 #include "mhd.hpp"
 #include "diffusion/conduction.hpp"
-#include "diffusion/viscosity.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/resistivity.hpp"
+#include "diffusion/scalar_diffusion.hpp"
+#include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
+#include "globals.hpp"
 #include "srcterms/srcterms.hpp"
+
+namespace {
+
+bool CGLNewDtTraceEnabled() {
+  const char *env = std::getenv("ATHENAK_CGL_LF_TASK_TRACE");
+  return env != nullptr && env[0] != '\0' && env[0] != '0';
+}
+
+void TraceCGLNewDt(MeshBlockPack *pmbp, const char *point) {
+  if (!CGLNewDtTraceEnabled()) return;
+  Kokkos::fence();
+  auto *pm = pmbp->pmesh;
+  std::cout << "[cgl_lf_task] rank=" << global_variable::my_rank
+            << " cycle=" << pm->ncycle
+            << " time=" << pm->time
+            << " task=MHDRecomputeTimeStep"
+            << " point=" << point
+            << " stage=0"
+            << " nmb=" << pmbp->nmb_thispack
+            << std::endl;
+}
+
+} // namespace
 
 namespace mhd {
 
@@ -39,9 +67,13 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn void MHD::RecomputeTimeStepFromCurrentState()
-//! \brief recompute MHD and parabolic timestep limits from the current live state.
+//! \brief Recompute hyperbolic and registered parabolic timestep limits.
 
 void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
+  RequireCGLAnisotropyRepresentation("MHD timestep recomputation");
+  if (pcgl_lf != nullptr) {
+    TraceCGLNewDt(pmy_pack, "begin");
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;
@@ -52,12 +84,13 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
   Real dt3 = std::numeric_limits<float>::max();
 
   // capture class variables for kernel
-  auto &w0_ = w0;
-  auto &eos = pmy_pack->pmhd->peos->eos_data;
-  auto &mbsize = pmy_pack->pmb->mb_size;
-  auto &is_special_relativistic_ = pmy_pack->pcoord->is_special_relativistic;
-  auto &is_general_relativistic_ = pmy_pack->pcoord->is_general_relativistic;
-  auto &is_dynamical_relativistic_ = pmy_pack->pcoord->is_dynamical_relativistic;
+  const auto w0_ = w0;
+  const EOS_Data eos = pmy_pack->pmhd->peos->eos_data;
+  const auto mbsize = pmy_pack->pmb->mb_size;
+  const bool is_special_relativistic_ = pmy_pack->pcoord->is_special_relativistic;
+  const bool is_general_relativistic_ = pmy_pack->pcoord->is_general_relativistic;
+  const bool is_dynamical_relativistic_ =
+      pmy_pack->pcoord->is_dynamical_relativistic;
   const int nmkji = (pmy_pack->nmb_thispack)*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
@@ -80,7 +113,7 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
     }, Kokkos::Min<Real>(dt1), Kokkos::Min<Real>(dt2),Kokkos::Min<Real>(dt3));
   } else {
     // find smallest dx/(v +/- Cf) in each direction for mhd problems
-    auto &bcc0_ = bcc0;
+    const auto bcc0_ = bcc0;
 
     Kokkos::parallel_reduce("MHDNudt2",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &min_dt1, Real &min_dt2, Real &min_dt3) {
@@ -100,13 +133,13 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
         max_dv3 = 1.0;
       // timestep in SR MHD
       } else if (is_special_relativistic_) {
-        Real &wd = w0_(m,IDN,k,j,i);
-        Real &ux = w0_(m,IVX,k,j,i);
-        Real &uy = w0_(m,IVY,k,j,i);
-        Real &uz = w0_(m,IVZ,k,j,i);
-        Real &bcc1 = bcc0_(m,IBX,k,j,i);
-        Real &bcc2 = bcc0_(m,IBY,k,j,i);
-        Real &bcc3 = bcc0_(m,IBZ,k,j,i);
+        const Real wd = w0_(m,IDN,k,j,i);
+        const Real ux = w0_(m,IVX,k,j,i);
+        const Real uy = w0_(m,IVY,k,j,i);
+        const Real uz = w0_(m,IVZ,k,j,i);
+        const Real bcc1 = bcc0_(m,IBX,k,j,i);
+        const Real bcc2 = bcc0_(m,IBY,k,j,i);
+        const Real bcc3 = bcc0_(m,IBZ,k,j,i);
 
         Real v2 = SQR(ux) + SQR(uy) + SQR(uz);
         Real lor = sqrt(1.0 + v2);
@@ -130,61 +163,52 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
         max_dv3 = fmax(fabs(lm), lp);
       // timestep in Newtonian MHD
       } else {
-        Real &w_d = w0_(m,IDN,k,j,i);
-        Real &w_e = w0_(m,IEN,k,j,i); //pprl for cgl
-        Real &w_p = w0_(m,IPP,k,j,i); //pprp for cgl
-        Real &w_bx = bcc0_(m,IBX,k,j,i);
-        Real &w_by = bcc0_(m,IBY,k,j,i);
-        Real &w_bz = bcc0_(m,IBZ,k,j,i);
-        
-        //add in calc of bsq, then for cgl if statements, if below floor, correct pressures, and calc mhd fast speed
-        
+        const Real w_d = w0_(m,IDN,k,j,i);
+        const Real w_e = w0_(m,IPR,k,j,i);
+        const Real w_p = w0_(m,IPP,k,j,i);
+        const Real w_bx = bcc0_(m,IBX,k,j,i);
+        const Real w_by = bcc0_(m,IBY,k,j,i);
+        const Real w_bz = bcc0_(m,IBZ,k,j,i);
         Real cf;
-        Real p = eos.IdealGasPressure(w0_(m,IEN,k,j,i));
-        if (eos.is_cgl) {
-          if (eos.passive) {
-            cf = eos.IdealMHDFastSpeed(w_d, w_bx, w_by, w_bz);
-          } else {
-            cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bx, w_by, w_bz, eos.bfloor);
-          }
+        if (eos.is_cgl && !eos.passive) {
+          cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bx, w_by, w_bz, eos.bfloor);
+          max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_by, w_bz, w_bx, eos.bfloor);
+          max_dv2 = fabs(w0_(m,IVY,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bz, w_bx, w_by, eos.bfloor);
+          max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
+        } else if (eos.is_cgl) {
+          cf = eos.IdealMHDFastSpeed(w_d, w_bx, w_by, w_bz);
+          max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, w_by, w_bz, w_bx);
+          max_dv2 = fabs(w0_(m,IVY,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, w_bz, w_bx, w_by);
+          max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
         } else if (eos.is_ideal) {
+          Real p = eos.IdealGasPressure(w0_(m,IEN,k,j,i));
           cf = eos.IdealMHDFastSpeed(w_d, p, w_bx, w_by, w_bz);
+          max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, p, w_by, w_bz, w_bx);
+          max_dv2 = fabs(w0_(m,IVY,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, p, w_bz, w_bx, w_by);
+          max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
         } else {
           cf = eos.IdealMHDFastSpeed(w_d, w_bx, w_by, w_bz);
-        }
-        max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
-
-        if (eos.is_cgl) {
-          if (eos.passive) {
-            cf = eos.IdealMHDFastSpeed(w_d, w_by, w_bz, w_bx);
-          } else {
-            cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_by, w_bz, w_bx, eos.bfloor);
-          }
-        } else if (eos.is_ideal) {
-          cf = eos.IdealMHDFastSpeed(w_d, p, w_by, w_bz, w_bx);
-        } else {
+          max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
           cf = eos.IdealMHDFastSpeed(w_d, w_by, w_bz, w_bx);
-        }
-        max_dv2 = fabs(w0_(m,IVY,k,j,i)) + cf;
-
-        if (eos.is_cgl) {
-          if (eos.passive) {
-            cf = eos.IdealMHDFastSpeed(w_d, w_bz, w_bx, w_by);
-          } else {
-            cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bz, w_bx, w_by, eos.bfloor);
-          }
-        } else if (eos.is_ideal) {
-          cf = eos.IdealMHDFastSpeed(w_d, p, w_bz, w_bx, w_by);
-        } else {
+          max_dv2 = fabs(w0_(m,IVY,k,j,i)) + cf;
           cf = eos.IdealMHDFastSpeed(w_d, w_bz, w_bx, w_by);
+          max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
         }
-        max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
       }
 
       min_dt1 = fmin((mbsize.d_view(m).dx1/max_dv1), min_dt1);
       min_dt2 = fmin((mbsize.d_view(m).dx2/max_dv2), min_dt2);
       min_dt3 = fmin((mbsize.d_view(m).dx3/max_dv3), min_dt3);
     }, Kokkos::Min<Real>(dt1), Kokkos::Min<Real>(dt2),Kokkos::Min<Real>(dt3));
+  }
+  if (pcgl_lf != nullptr) {
+    TraceCGLNewDt(pmy_pack, "after_hyperbolic");
   }
 
   // compute minimum of dt1/dt2/dt3 for 1D/2D/3D problems
@@ -196,15 +220,28 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
   if (pcond != nullptr) {
     pcond->NewTimeStep(w0, peos->eos_data);
   }
+  if (pcgl_lf != nullptr) {
+    pcgl_lf->NewTimeStep(w0, peos->eos_data);
+    TraceCGLNewDt(pmy_pack, "after_cgl_lf");
+  }
   if (pvisc != nullptr) {
     pvisc->NewTimeStep(w0, peos->eos_data);
+  }
+  if (phypervisc != nullptr) {
+    phypervisc->NewTimeStep();
   }
   if (presist != nullptr) {
     presist->NewTimeStep(w0, peos->eos_data);
   }
+  if (pscalar_diff != nullptr) {
+    pscalar_diff->NewTimeStep(w0, nmhd, nscalars);
+  }
   // compute source terms timestep
   if (psrc != nullptr) {
     psrc->NewTimeStep(w0, peos->eos_data);
+  }
+  if (pcgl_lf != nullptr) {
+    TraceCGLNewDt(pmy_pack, "end");
   }
 
   return;

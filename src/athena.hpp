@@ -54,11 +54,12 @@ using Real = double;
 // data types only used in physics modules (defined here to avoid recursive dependencies)
 
 // constants that determine array index of Hydro/MHD variables
-// array indices for conserved: density, momemtum, total energy
-// For CGL conserved arrays, IAN aliases the legacy IMU slot and stores anisotropy A.
-// For CGL primitive arrays, IPP aliases the same slot index and stores p_perpendicular.
-enum VariableIndex {IDN=0, IM1=1, IVX=1, IM2=2, IVY=2, IM3=3, IVZ=3,
-                    IEN=4, IPR=4, IMU=5, IAN=IMU, IPP=5, IYF=6};
+// array indices for conserved: density, momentum, total energy
+// CGL uses an additional slot: IAN stores conserved anisotropy and IPP stores
+// perpendicular pressure in primitive arrays. IYF remains the first scalar
+// slot for the standard five-variable hydro/MHD systems.
+enum VariableIndex {IDN=0, IM1=1, IVX=1, IM2=2, IVY=2, IM3=3, IVZ=3, IEN=4,
+                    ITM=4, IPR=4, IMU=5, IAN=IMU, IPP=5, IYF=5};
 // array indices for components of magnetic field
 enum BFieldIndex {IBX=0, IBY=1, IBZ=2, NMAG=3};
 // array indices for metric matrices in GR
@@ -82,18 +83,19 @@ enum PhysicsModule {HydroDynamics, MagnetoHydroDynamics,
 
 // structs to store primitive/conserved variables in one-dimension
 // (density, velocity/momentum, internal/total energy, [transverse magnetic field])
-// For CGL: primitive e is p_parallel, primitive pp is p_perpendicular
+// For CGL, primitive e is p_parallel and pp is p_perpendicular; conserved mu
+// stores anisotropy A in the legacy IMU/IAN slot.
 struct HydPrim1D {
   Real d, vx, vy, vz, e, pp;
 };
 struct HydCons1D {
-  Real d, mx, my, mz, e, mu;  // For CGL, mu stores conserved anisotropy A.
+  Real d, mx, my, mz, e, mu;
 };
 struct MHDPrim1D {
   Real d, vx, vy, vz, e, pp, bx, by, bz;
 };
 struct MHDCons1D {
-  Real d, mx, my, mz, e, mu, bx, by, bz;  // For CGL, mu stores conserved anisotropy A.
+  Real d, mx, my, mz, e, mu, bx, by, bz;
 };
 
 //----------------------------------------------------------------------------------------
@@ -445,7 +447,7 @@ KOKKOS_INLINE_FUNCTION void par_for_inner(TeamMember_t tmember, const int il,con
   Kokkos::parallel_for(Kokkos::TeamVectorRange(tmember, il, iu+1), function);
 }
 
-#define NREDUCTION_VARIABLES 20
+#define NREDUCTION_VARIABLES 64
 //----------------------------------------------------------------------------------------
 //! \struct summed_array_type
 // Following code is copied from Kokkos wiki pages on building custom reducers.  It allows

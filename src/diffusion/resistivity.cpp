@@ -6,12 +6,11 @@
 //! \file resistivity.cpp
 //  \brief Implements functions for Resistivity class.
 
-#include <float.h>
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
-#include <string> // string
+#include <string>
 
 // Athena++ headers
 #include "athena.hpp"
@@ -43,20 +42,16 @@ parabolic::ParabolicIntegratorMode ParseOhmicResistivityIntegrator(ParameterInpu
 // ctor: also calls Resistivity base class constructor
 
 Resistivity::Resistivity(MeshBlockPack *pp, ParameterInput *pin) :
-    pmy_pack(pp) {
-  // Read parameters for Ohmic resistivity (if any)
-  if (pin->DoesParameterExist("mhd","ohmic_resistivity")) {
-    iso_resist_type = pin->GetString("mhd","ohmic_resistivity");
-    // Check for valid type
-    if (iso_resist_type.compare("constant") != 0) {
-      std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
-                << "Invalid choice for Ohmic resistivity type" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    // constant resistivity
-    eta_ohm = pin->GetReal("mhd","eta_ohm");
-    mode = ParseOhmicResistivityIntegrator(pin);
+  pmy_pack(pp) {
+  // Read parameters for Ohmic diffusion (if any)
+  eta_ohm = pin->GetReal("mhd","ohmic_resistivity");
+  if (eta_ohm < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<mhd>/ohmic_resistivity must be non-negative" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
+  mode = ParseOhmicResistivityIntegrator(pin);
+  dtnew = std::numeric_limits<float>::max();
 }
 
 //----------------------------------------------------------------------------------------
@@ -66,37 +61,43 @@ Resistivity::~Resistivity() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void AddResistiveEMFs()
-//! \brief Wrapper function that adds electric fields for different types of resistivity
-//! Currently only Ohmic resistivity with constant coefficient is implemented.
+//! \fn void Resistivity::NewTimeStep()
+//! \brief Compute new time step for Ohmic resistivity.
 
-void Resistivity::AddResistiveEMFs(const DvceFaceFld4D<Real> &b0,
-    DvceEdgeFld4D<Real> &efld) {
-  AddEMFConstantResist(b0, efld);
+void Resistivity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
+  (void)w0;
+  (void)eos_data;
+  dtnew = std::numeric_limits<float>::max();
+  if (eta_ohm <= 0.0) return;
+  auto size = pmy_pack->pmb->mb_size;
+  Real fac;
+  if (pmy_pack->pmesh->three_d) {
+    fac = 1.0/6.0;
+  } else if (pmy_pack->pmesh->two_d) {
+    fac = 0.25;
+  } else {
+    fac = 0.5;
+  }
+  for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
+    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/eta_ohm);
+    if (pmy_pack->pmesh->multi_d) {
+      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/eta_ohm);
+    }
+    if (pmy_pack->pmesh->three_d) {
+      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/eta_ohm);
+    }
+  }
   return;
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void AddResistiveFluxes()
-//! \brief Wrapper function that adds energy (Poynting) fluxes for different types of
-//! resistivity.
-//! Currently only Ohmic resistivity with constant coefficient is implemented.
-
-void Resistivity::AddResistiveFluxes(const DvceFaceFld4D<Real> &b0,
-    DvceFaceFld5D<Real> &flx) {
-  AddFluxConstantResist(b0, flx);
-  return;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn AddEMFConstantResist()
+//! \fn OhmicEField()
 //  \brief Adds electric field from Ohmic resistivity to corner-centered electric field
 //  Using Ohm's Law to compute the electric field:  E + (v x B) = \eta J, then
 //    E_{inductive} = - (v x B)  [computed in the MHD Riemann solver]
 //    E_{resistive} = \eta J     [computed in this function]
 
-void Resistivity::AddEMFConstantResist(const DvceFaceFld4D<Real> &b0,
-    DvceEdgeFld4D<Real> &efld) {
+void Resistivity::OhmicEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -202,12 +203,13 @@ void Resistivity::AddEMFConstantResist(const DvceFaceFld4D<Real> &b0,
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn AddResistiveFluxConstantResist()
+//! \fn OhmicEnergyFlux()
 //  \brief Adds Poynting flux from Ohmic resistivity to energy flux
 //  Total energy equation is dE/dt = - Div(F) where F = (E X B) = \eta (J X B)
 
-void Resistivity::AddFluxConstantResist(const DvceFaceFld4D<Real> &b,
-                                        DvceFaceFld5D<Real> &flx) {
+
+void Resistivity::OhmicEnergyFlux(const DvceFaceFld4D<Real> &b,
+                                  DvceFaceFld5D<Real> &flx) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -220,6 +222,7 @@ void Resistivity::AddFluxConstantResist(const DvceFaceFld4D<Real> &b,
 
   //------------------------------
   // energy fluxes in x1-direction
+
   auto &flx1 = flx.x1f;
   par_for("ohm_heat1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -248,6 +251,7 @@ void Resistivity::AddFluxConstantResist(const DvceFaceFld4D<Real> &b,
 
   //------------------------------
   // energy fluxes in x2-direction
+
   auto &flx2 = flx.x2f;
   par_for("ohm_heat2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -274,6 +278,7 @@ void Resistivity::AddFluxConstantResist(const DvceFaceFld4D<Real> &b,
 
   //------------------------------
   // energy fluxes in x3-direction
+
   auto &flx3 = flx.x3f;
   par_for("ohm_heat3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -294,33 +299,5 @@ void Resistivity::AddFluxConstantResist(const DvceFaceFld4D<Real> &b,
                              j2ip1*(b.x1f(m,k,j  ,i+1) + b.x1f(m,k-1,j  ,i+1)));
   });
 
-  return;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn void Resistivity::NewTimeStep()
-//! \brief Compute new time step for resistive MHD
-
-void Resistivity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
-  // resistive timestep on MeshBlock(s) in this pack
-  dtnew = std::numeric_limits<float>::max();
-  auto size = pmy_pack->pmb->mb_size;
-  Real fac;
-  if (pmy_pack->pmesh->three_d) {
-    fac = 1.0/6.0;
-  } else if (pmy_pack->pmesh->two_d) {
-    fac = 0.25;
-  } else {
-    fac = 0.5;
-  }
-  for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
-    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/eta_ohm);
-    if (pmy_pack->pmesh->multi_d) {
-      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/eta_ohm);
-    }
-    if (pmy_pack->pmesh->three_d) {
-      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/eta_ohm);
-    }
-  }
   return;
 }

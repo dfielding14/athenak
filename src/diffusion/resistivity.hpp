@@ -14,6 +14,8 @@
 #include "parameter_input.hpp"
 #include "mesh/meshblock.hpp"
 
+struct EOS_Data;
+
 //----------------------------------------------------------------------------------------
 //! \class Resistivity
 //  \brief data and functions that implement various resistive physics
@@ -25,15 +27,13 @@ class Resistivity {
 
   // data
   Real dtnew;
-  std::string iso_resist_type;  // only "constant" implemented
   Real eta_ohm;
-  parabolic::ParabolicIntegratorMode mode = parabolic::ParabolicIntegratorMode::explicit_mode;
+  parabolic::ParabolicIntegratorMode mode =
+      parabolic::ParabolicIntegratorMode::explicit_mode;
 
   // functions to add resistive E-Field and energy flux
-  void AddResistiveEMFs(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
-  void AddResistiveFluxes(const DvceFaceFld4D<Real> &b0, DvceFaceFld5D<Real> &flx);
-  void AddEMFConstantResist(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
-  void AddFluxConstantResist(const DvceFaceFld4D<Real> &b, DvceFaceFld5D<Real> &flx);
+  void OhmicEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
+  void OhmicEnergyFlux(const DvceFaceFld4D<Real> &b, DvceFaceFld5D<Real> &flx);
   void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_data);
 
  private:

@@ -11,18 +11,24 @@
 #include "driver/driver.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "hydro.hpp"
 
 namespace {
 
 KOKKOS_INLINE_FUNCTION
 bool UpdateSTSHydroVariable(const int n, const bool update_momentum,
-                            const bool update_energy) {
+                            const bool update_energy, const bool update_scalars,
+                            const int nhydro) {
   if (update_momentum && (n == IVX || n == IVY || n == IVZ)) {
     return true;
   }
   if (update_energy && n == IEN) {
+    return true;
+  }
+  if (update_scalars && n >= nhydro) {
     return true;
   }
   return false;
@@ -40,15 +46,27 @@ void Hydro::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
   const bool add_viscosity =
       (selection == DiffusionSelection::explicit_only) ? has_explicit_viscosity
                                                        : has_sts_viscosity;
+  const bool add_hyperviscosity =
+      (selection == DiffusionSelection::explicit_only) ? has_explicit_hyperviscosity
+                                                       : has_sts_hyperviscosity;
   const bool add_conduction =
       (selection == DiffusionSelection::explicit_only) ? has_explicit_conduction
                                                        : has_sts_conduction;
+  const bool add_scalar_diffusion =
+      (selection == DiffusionSelection::explicit_only) ? has_explicit_scalar_diffusion
+                                                       : has_sts_scalar_diffusion;
 
   if (add_viscosity && pvisc != nullptr) {
-    pvisc->AddViscousFluxes(w0, peos->eos_data, uflx);
+    pvisc->IsotropicViscousFlux(w0, pvisc->nu_iso, peos->eos_data, uflx);
+  }
+  if (add_hyperviscosity && phypervisc != nullptr) {
+    phypervisc->AddHyperViscousFlux(w0, peos->eos_data, uflx);
   }
   if (add_conduction && pcond != nullptr) {
-    pcond->AddHeatFluxes(w0, peos->eos_data, uflx);
+    pcond->AddHeatFlux(w0, peos->eos_data, uflx);
+  }
+  if (add_scalar_diffusion && pscalar_diff != nullptr) {
+    pscalar_diff->AddScalarDiffusionFlux(w0, nhydro, nscalars, uflx);
   }
 }
 
@@ -95,10 +113,12 @@ TaskStatus Hydro::STSUpdate(Driver *pdrive, int stage) {
   Kokkos::deep_copy(DevExeSpace(), u_sts2, u_sts1);
   Kokkos::deep_copy(DevExeSpace(), u_sts1, u0);
 
-  const bool update_momentum = has_sts_viscosity;
-  const bool update_energy = (has_sts_conduction ||
-                              (has_sts_viscosity && peos->eos_data.is_ideal));
-  if (!(update_momentum || update_energy)) {
+  const bool update_momentum = (has_sts_viscosity || has_sts_hyperviscosity);
+  const bool update_energy =
+      (has_sts_conduction ||
+       ((has_sts_viscosity || has_sts_hyperviscosity) && peos->eos_data.is_ideal));
+  const bool update_scalars = has_sts_scalar_diffusion;
+  if (!(update_momentum || update_energy || update_scalars)) {
     return TaskStatus::complete;
   }
 
@@ -111,6 +131,7 @@ TaskStatus Hydro::STSUpdate(Driver *pdrive, int stage) {
   bool &three_d = pmy_pack->pmesh->three_d;
 
   int nmb1 = pmy_pack->nmb_thispack - 1;
+  int nvars = nhydro + nscalars;
   int nhydro_vars = nhydro;
   Real dt_sweep = pdrive->sts.dt_sweep;
   auto coeffs = pdrive->sts.coeffs;
@@ -127,12 +148,11 @@ TaskStatus Hydro::STSUpdate(Driver *pdrive, int stage) {
   int scr_level = 0;
   size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1);
 
-  // The STS update uses the RKL2 weighted recursion before applying the
-  // current stage's diffusive operator contribution.
   par_for_outer("hydro_sts_update", DevExeSpace(), scr_size, scr_level, 0, nmb1,
-                0, nhydro_vars - 1, ks, ke, js, je,
+                0, nvars - 1, ks, ke, js, je,
   KOKKOS_LAMBDA(TeamMember_t member, const int m, const int n, const int k, const int j) {
-    if (!UpdateSTSHydroVariable(n, update_momentum, update_energy)) {
+    if (!UpdateSTSHydroVariable(n, update_momentum, update_energy, update_scalars,
+                                nhydro_vars)) {
       return;
     }
 
@@ -158,13 +178,14 @@ TaskStatus Hydro::STSUpdate(Driver *pdrive, int stage) {
     }
 
     par_for_inner(member, is, ie, [&](const int i) {
+      const Real delta_u = -dt_sweep*divf(i);
       u0_(m,n,k,j,i) = coeffs.muj*u_sts1_(m,n,k,j,i)
                      + coeffs.nuj*u_sts2_(m,n,k,j,i)
                      + (1.0 - coeffs.muj - coeffs.nuj)*u_sts0_(m,n,k,j,i)
                      + coeffs.gammaj_tilde*u_sts_rhs_(m,n,k,j,i)
-                     - coeffs.muj_tilde*dt_sweep*divf(i);
+                     + coeffs.muj_tilde*delta_u;
       if (stage == 1) {
-        u_sts_rhs_(m,n,k,j,i) = -dt_sweep*divf(i);
+        u_sts_rhs_(m,n,k,j,i) = delta_u;
       }
     });
   });

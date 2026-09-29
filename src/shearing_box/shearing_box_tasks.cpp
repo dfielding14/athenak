@@ -65,7 +65,9 @@ TaskStatus ShearingBox::InitRecv(Real time) {
           FindTargetMB(gid,jshift,sgid,srank);
           if (srank != global_variable::my_rank) {
             // create tag using local ID of *receiving* MeshBlock
-            int tag = CreateBvals_MPI_Tag(gid, ((n<<2) | l));
+            int lid = gid -
+                      pmy_pack->pmesh->gids_eachrank[global_variable::my_rank];
+            int tag = CreateBvals_MPI_Tag(lid, ((n<<2) | l));
 
             // get pointer to variables
             using Kokkos::ALL;
@@ -96,7 +98,9 @@ TaskStatus ShearingBox::InitRecv(Real time) {
           FindTargetMB(gid,jshift,sgid,srank);
           if (srank != global_variable::my_rank) {
             // create tag using local ID of *receiving* MeshBlock
-            int tag = CreateBvals_MPI_Tag(gid, ((n<<2) | l));
+            int lid = gid -
+                      pmy_pack->pmesh->gids_eachrank[global_variable::my_rank];
+            int tag = CreateBvals_MPI_Tag(lid, ((n<<2) | l));
 
             // get pointer to variables
             using Kokkos::ALL;
@@ -129,7 +133,9 @@ TaskStatus ShearingBox::InitRecv(Real time) {
           FindTargetMB(gid,jshift,sgid,srank);
           if (srank != global_variable::my_rank) {
             // create tag using local ID of *receiving* MeshBlock
-            int tag = CreateBvals_MPI_Tag(gid, ((n<<2) | l));
+            int lid = gid -
+                      pmy_pack->pmesh->gids_eachrank[global_variable::my_rank];
+            int tag = CreateBvals_MPI_Tag(lid, ((n<<2) | l));
 
             // get pointer to variables
             using Kokkos::ALL;

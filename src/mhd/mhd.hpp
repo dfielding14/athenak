@@ -21,8 +21,11 @@
 class EquationOfState;
 class Coordinates;
 class Viscosity;
+class HyperViscosity;
 class Resistivity;
 class Conduction;
+class CGLLandauFluid;
+class ScalarDiffusion;
 class SourceTerms;
 class OrbitalAdvectionCC;
 class OrbitalAdvectionFC;
@@ -51,6 +54,9 @@ struct MHDTaskIDs {
   TaskID flux;
   TaskID sendf;
   TaskID recvf;
+  TaskID psendf;
+  TaskID precvf;
+  TaskID pwork;
   TaskID rkupdt;
   TaskID srctrms;
   TaskID sendu_oa;
@@ -61,8 +67,11 @@ struct MHDTaskIDs {
   TaskID sendu_shr;
   TaskID recvu_shr;
   TaskID efld;
+  TaskID efldsrc;
   TaskID sende;
   TaskID recve;
+  TaskID sende_shr;
+  TaskID recve_shr;
   TaskID ct;
   TaskID sendb_oa;
   TaskID recvb_oa;
@@ -75,12 +84,22 @@ struct MHDTaskIDs {
   TaskID prol;
   TaskID c2p;
   TaskID newdt;
+  TaskID cglcoll;
   TaskID csend;
   TaskID crecv;
-  TaskID cglcoll;
+  TaskID pclear;
 };
 
 namespace mhd {
+
+enum class CGLSlotRepresentation {anisotropy, magnetic_moment};
+constexpr int NCGLPressureFlux = 6;
+constexpr int ICGLPressureX = 0;
+constexpr int ICGLPressureY = 1;
+constexpr int ICGLPressureZ = 2;
+constexpr int ICGLAnisPressureX = 3;
+constexpr int ICGLAnisPressureY = 4;
+constexpr int ICGLAnisPressureZ = 5;
 
 //----------------------------------------------------------------------------------------
 //! \class MHD
@@ -95,7 +114,7 @@ class MHD {
   MHD_RSolver rsolver_method;
   EquationOfState *peos;   // chosen EOS
 
-  int nmhd;                // number of mhd variables (5/4 for ideal/isothermal EOS)
+  int nmhd;                // number of mhd variables (6/5/4 for CGL/ideal/isothermal EOS)
   int nscalars;            // number of passive scalars
   DvceArray5D<Real> u0;    // conserved variables
   DvceArray5D<Real> w0;    // primitive variables
@@ -109,6 +128,7 @@ class MHD {
   // Objects containing boundary communication buffers and routines for u and b
   MeshBoundaryValuesCC *pbval_u;
   MeshBoundaryValuesFC *pbval_b;
+  MeshBoundaryValuesCC *pbval_cgl_pflux = nullptr;
   MHDBoundaryFnPtr MHDBoundaryFunc[6];
 
   // Orbital advection and shearing box BCs
@@ -117,10 +137,14 @@ class MHD {
   ShearingBoxCC *psbox_u = nullptr;
   ShearingBoxFC *psbox_b = nullptr;
 
-  // Object(s) for extra physics (viscosity, resistivity, thermal conduction, srcterms)
+  // Object(s) for extra physics
+  // (viscosity, hyperviscosity, resistivity, thermal/scalar diffusion, source terms)
   Viscosity *pvisc = nullptr;
+  HyperViscosity *phypervisc = nullptr;
   Resistivity *presist = nullptr;
   Conduction *pcond = nullptr;
+  CGLLandauFluid *pcgl_lf = nullptr;
+  ScalarDiffusion *pscalar_diff = nullptr;
   SourceTerms *psrc = nullptr;
 
   // following only used for time-evolving flow
@@ -128,13 +152,14 @@ class MHD {
   DvceArray5D<Real> u_sts0;   // conserved variables at start of STS sweep
   DvceArray5D<Real> u_sts1;   // previous STS stage state
   DvceArray5D<Real> u_sts2;   // second previous STS stage state
-  DvceArray5D<Real> u_sts_rhs;  // cached stage-1 RKL2 operator contribution
+  DvceArray5D<Real> u_sts_rhs;  // cached first-stage RKL2 operator contribution
   DvceFaceFld4D<Real> b1;     // face-centered magnetic fields, second register
-  DvceFaceFld4D<Real> b_sts0;   // face-centered magnetic fields at start of STS sweep
-  DvceFaceFld4D<Real> b_sts1;   // previous STS stage magnetic state
-  DvceFaceFld4D<Real> b_sts2;   // second previous STS stage magnetic state
-  DvceFaceFld4D<Real> b_sts_rhs;  // cached stage-1 RKL2 magnetic operator contribution
+  DvceFaceFld4D<Real> b_sts0;  // face-centered magnetic fields at start of STS sweep
+  DvceFaceFld4D<Real> b_sts1;  // previous STS stage magnetic state
+  DvceFaceFld4D<Real> b_sts2;  // second previous STS stage magnetic state
+  DvceFaceFld4D<Real> b_sts_rhs;  // cached first-stage RKL2 magnetic contribution
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
+  DvceFaceFld5D<Real> cgl_pflux;  // retained CGL pressure traction for diagnostics
   DvceEdgeFld4D<Real> efld;   // edge-centered electric fields (fluxes of B)
   // temporary variables used to store face-centered electric fields returned by RS
   DvceArray4D<Real> e3x1, e2x1;
@@ -152,33 +177,49 @@ class MHD {
   bool use_fofc = false;   // flag to enable FOFC
 
   bool has_explicit_viscosity = false;
+  bool has_explicit_hyperviscosity = false;
   bool has_explicit_conduction = false;
   bool has_explicit_resistivity = false;
+  bool has_explicit_scalar_diffusion = false;
   bool has_sts_viscosity = false;
+  bool has_sts_hyperviscosity = false;
   bool has_sts_conduction = false;
+  bool has_sts_cgl_lf = false;
+  bool has_explicit_cgl_lf = false;
+  bool has_cgl_lf_split = false;
+  bool record_cgl_pressure_work = false;
   bool has_sts_resistivity = false;
-  bool has_any_sts_diffusion = false;
-  bool has_any_sts_cell_update = false;
-  bool has_any_sts_field_update = false;
-  bool cgl_lf_admissibility_check = false;
+  bool has_sts_scalar_diffusion = false;
+  bool has_any_parabolic_split = false;
+  bool has_any_parabolic_cell_update = false;
+  bool has_any_parabolic_field_update = false;
+  bool diagnose_nonfinite_rk_update = false;
+  Real diagnose_nonfinite_after_time = -1.0;
+  CGLSlotRepresentation cgl_slot_representation = CGLSlotRepresentation::anisotropy;
 
   // container to hold names of TaskIDs
   MHDTaskIDs id;
 
   // functions...
   void SetSaveWBcc();
+  void RequireCGLAnisotropyRepresentation(const char *consumer) const;
+  void RequireCGLMagneticMomentRepresentation(const char *consumer) const;
   void AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   // ...in "before_timeintegrator" task list
   TaskStatus SaveMHDState(Driver *d, int stage);
   // ...in "before_stagen_tl" task list
   TaskStatus InitRecv(Driver *d, int stage);
   TaskStatus InitRecvParabolic(Driver *d, int stage);
-  TaskStatus InitRecvParabolicCellCentered(Driver *d, int stage);
   // ...in "stagen_tl" task list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
+  TaskStatus SendCGLPressureFlux(Driver *d, int stage);
+  TaskStatus RecvCGLPressureFlux(Driver *d, int stage);
+  TaskStatus CGLPressureWork(Driver *d, int stage);
+  TaskStatus SendFlux_Shr(Driver *d, int stage);
+  TaskStatus RecvFlux_Shr(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
   TaskStatus MHDSrcTerms(Driver *d, int stage);
   TaskStatus SendU_OA(Driver *d, int stage);
@@ -189,9 +230,11 @@ class MHD {
   TaskStatus SendU_Shr(Driver *d, int stage);
   TaskStatus RecvU_Shr(Driver *d, int stage);
   TaskStatus CornerE(Driver *d, int stage);
-  TaskStatus EField(Driver *d, int stage);
+  TaskStatus EFieldSrc(Driver *d, int stage);
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);
+  TaskStatus SendE_Shr(Driver *d, int stage);
+  TaskStatus RecvE_Shr(Driver *d, int stage);
   TaskStatus CT(Driver *d, int stage);
   TaskStatus SendB_OA(Driver *d, int stage);
   TaskStatus RecvB_OA(Driver *d, int stage);
@@ -204,25 +247,24 @@ class MHD {
   TaskStatus Prolongate(Driver* pdrive, int stage);
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
+  TaskStatus CGLCollisions(Driver *d, int stage);
   TaskStatus ClearSTSFlux(Driver *d, int stage);
   TaskStatus ClearSTSEField(Driver *d, int stage);
   TaskStatus STSFluxes(Driver *d, int stage);
   TaskStatus STSEField(Driver *d, int stage);
-  TaskStatus BeginCGLLandauFluidSTSSweep(Driver *d, int stage);
   TaskStatus STSUpdateU(Driver *d, int stage);
-  TaskStatus CGLLandauFluidSTSUpdateU(Driver *d, int stage);
+  TaskStatus STSUpdateB(Driver *d, int stage);
+  TaskStatus BeginCGLLandauFluidSTSSweep(Driver *d, int stage);
   TaskStatus CGLLandauFluidPrimitiveRefresh(Driver *d, int stage);
   TaskStatus EndCGLLandauFluidSTSSweep(Driver *d, int stage);
-  TaskStatus CheckCGLLFAdmissibility(Driver *d, int stage);
-  TaskStatus STSUpdateB(Driver *d, int stage);
   TaskStatus STSPostSweepCGLCollisions(Driver *d, int stage);
   TaskStatus STSRefreshTimeStep(Driver *d, int stage);
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
-  TaskStatus ClearSendParabolicCellCentered(Driver *d, int stage);
-  TaskStatus ClearRecvParabolicCellCentered(Driver *d, int stage);
-  TaskStatus CGLCollisions(Driver *d, int stage);
+  TaskStatus ClearCGLPressureFlux(Driver *d, int stage);
+  TaskStatus ClearSendParabolic(Driver *d, int stage);
+  TaskStatus ClearRecvParabolic(Driver *d, int stage);
 
   // CalculateFluxes function templated over Riemann Solvers
   template <MHD_RSolver T>
@@ -234,8 +276,14 @@ class MHD {
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
 
  private:
-  void AddSelectedDiffusionFluxes(DiffusionSelection selection);
+  void AddSelectedDiffusionFluxes(DiffusionSelection selection,
+                                  Real cgl_dt_sweep = 0.0,
+                                  Real cgl_rkl_weight = 0.0);
   void AddSelectedDiffusionEMF(DiffusionSelection selection);
+  void DiagnoseNonfiniteCGLState(int stage, const char *operation,
+                                 const char *phase, const char *sweep,
+                                 const char *representation,
+                                 DvceArray5D<Real> state);
   void RecomputeTimeStepFromCurrentState(Driver *pdrive);
   MeshBlockPack* pmy_pack;   // ptr to MeshBlockPack containing this MHD
   // temporary variables used to store face-centered electric fields returned by RS

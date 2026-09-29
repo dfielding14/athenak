@@ -26,7 +26,7 @@ _CASES += [
      'DivBAMR3DL{0}'.format(level), 32*32*32, 8,
      ['mesh_refinement/num_levels={0}'.format(level + 1),
       'problem/refine_levels={0}'.format(level),
-      'mesh_refinement/max_nmb_per_rank=16384',
+      'mesh_refinement/max_nmb_per_rank=65536',
       'time/nlim=8'])
     for level in range(1, 6)
 ]

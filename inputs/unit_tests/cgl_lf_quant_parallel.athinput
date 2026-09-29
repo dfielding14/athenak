@@ -42,11 +42,11 @@ ndiag = 1
 eos = cgl
 passive = false
 cgl_heat_flux = landau_fluid
-conductivity_integrator = sts
+cgl_heat_flux_integrator = sts
 lf_k_parallel = 6.283185307179586
 lf_coefficient_mode = background
 lf_c_parallel0 = 1.0
-cgl_lf_admissibility_check = true
+cgl_lf_strict_admissibility = true
 reconstruct = plm
 rsolver = advect
 gamma = 1.666666666666667
@@ -57,7 +57,7 @@ sfloor = 1.0e-12
 bfloor = 1.0e-10
 
 <problem>
-pgen_name = unit_tests/cgl_lf_quantitative_test
+pgen_name = cgl_landau_fluid
 test_mode = parallel_decay
 mode_number = 1
 rho0 = 1.0

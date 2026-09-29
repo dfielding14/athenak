@@ -20,6 +20,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "z4c/z4c.hpp"
 #include "coordinates/adm.hpp"
 #include "outputs.hpp"
@@ -270,9 +271,11 @@ void HistoryOutput::LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm) {
 //  Data is stored in a Real array defined in derived class.
 
 void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
-  auto &eos_data = pm->pmb_pack->pmhd->peos->eos_data;
-  int &nmhd_ = pm->pmb_pack->pmhd->nmhd;
-  int &nscalars_ = pm->pmb_pack->pmhd->nscalars;
+  auto *pmhd = pm->pmb_pack->pmhd;
+  pmhd->RequireCGLAnisotropyRepresentation("MHD history output");
+  auto &eos_data = pmhd->peos->eos_data;
+  int &nmhd_ = pmhd->nmhd;
+  int &nscalars_ = pmhd->nscalars;
 
   // set number of and names of history variables for mhd
   if (eos_data.is_cgl) {
@@ -307,6 +310,31 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     std::ostringstream labelSS;
     labelSS << "scal-" << s;
     pdata->label[nmhd_+6+s] = labelSS.str();
+  }
+  const int lf_begin = nmhd_ + 6 + nscalars_;
+  if (pmhd->pcgl_lf != nullptr) {
+    pdata->label[lf_begin] = "lf_nstage";
+    pdata->label[lf_begin+1] = "lf_dfloor";
+    pdata->label[lf_begin+2] = "lf_pfloor";
+    pdata->label[lf_begin+3] = "lf_nonfin";
+    pdata->label[lf_begin+4] = "lf_nonpos";
+    pdata->label[lf_begin+5] = "lf_mirror";
+    pdata->label[lf_begin+6] = "lf_firehs";
+    pdata->label[lf_begin+7] = "lf_hardbd";
+    pdata->label[lf_begin+8] = "lf_qface";
+    pdata->label[lf_begin+9] = "lf_qprcap";
+    pdata->label[lf_begin+10] = "lf_qpr10";
+    pdata->label[lf_begin+11] = "lf_qpecap";
+    pdata->label[lf_begin+12] = "lf_qpe10";
+    pdata->label[lf_begin+13] = "lf_qprwrk";
+    pdata->label[lf_begin+14] = "lf_qpewrk";
+    pdata->label[lf_begin+15] = "lf_hwproj";
+    pdata->nhist += 16;
+    if (pmhd->record_cgl_pressure_work) {
+      pdata->label[lf_begin+16] = "lf_cpwrk";
+      pdata->label[lf_begin+17] = "lf_cawrk";
+      pdata->nhist += 2;
+    }
   }
 
   // capture class variabels for kernel
@@ -379,6 +407,29 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   // store data into hdata array
   for (int n=0; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
+  if (pmhd->pcgl_lf != nullptr) {
+    const auto &diag = pmhd->pcgl_lf->diagnostics;
+    pdata->hdata[lf_begin] = static_cast<Real>(diag.nstage);
+    pdata->hdata[lf_begin+1] = static_cast<Real>(diag.dfloor);
+    pdata->hdata[lf_begin+2] = static_cast<Real>(diag.pfloor);
+    pdata->hdata[lf_begin+3] = static_cast<Real>(diag.nonfinite);
+    pdata->hdata[lf_begin+4] = static_cast<Real>(diag.nonpositive);
+    pdata->hdata[lf_begin+5] = static_cast<Real>(diag.mirror);
+    pdata->hdata[lf_begin+6] = static_cast<Real>(diag.firehose);
+    pdata->hdata[lf_begin+7] = static_cast<Real>(diag.hard_bound);
+    pdata->hdata[lf_begin+8] = static_cast<Real>(diag.qfaces);
+    pdata->hdata[lf_begin+9] = static_cast<Real>(diag.qpar_cap);
+    pdata->hdata[lf_begin+10] = static_cast<Real>(diag.qpar_cap10);
+    pdata->hdata[lf_begin+11] = static_cast<Real>(diag.qperp_cap);
+    pdata->hdata[lf_begin+12] = static_cast<Real>(diag.qperp_cap10);
+    pdata->hdata[lf_begin+13] = diag.qpar_work;
+    pdata->hdata[lf_begin+14] = diag.qperp_work;
+    pdata->hdata[lf_begin+15] = static_cast<Real>(diag.hardwall_projection);
+    if (pmhd->record_cgl_pressure_work) {
+      pdata->hdata[lf_begin+16] = diag.pressure_work;
+      pdata->hdata[lf_begin+17] = diag.anisotropic_pressure_work;
+    }
   }
 
   return;

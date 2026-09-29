@@ -12,6 +12,7 @@
 #include <cmath>      // fabs(), sin(), cos()
 #include <cstdlib>    // exit()
 #include <iostream>   // endl
+#include <string>
 
 // Athena++ headers
 #include "athena.hpp"
@@ -20,6 +21,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen/pgen.hpp"
 
@@ -30,7 +32,10 @@ namespace {
 
 struct DivBAMRConfig {
   Real rho0 = 1.0;
+  Real density_amp = 0.0;
   Real pgas0 = 10.0;
+  Real ppar0 = 10.0;
+  Real pperp0 = 10.0;
   Real vx0 = 0.08;
   Real vy0 = 0.05;
   Real vz0 = 0.03;
@@ -39,7 +44,16 @@ struct DivBAMRConfig {
   Real guide_b3 = -0.15;
   Real field_amp = 0.25;
   Real field_k = 2.0;
+  Real pressure_amp = 0.0;
+  Real pressure_k = 1.0;
+  Real scalar0 = 0.5;
+  Real scalar_amp = 0.0;
   Real divb_bnorm = 1.0;
+  Real uniform_refine_time = 0.0;
+  Real current_refine_threshold = 1.0;
+  Real current_refine_threshold_after = 1.0;
+  Real current_threshold_switch_time = -1.0;
+  Real current_derefine_fraction = 0.5;
   Real x1min = 0.0;
   Real x1max = 1.0;
   Real x2min = 0.0;
@@ -47,6 +61,8 @@ struct DivBAMRConfig {
   Real x3min = 0.0;
   Real x3max = 1.0;
   int target_level = 0;
+  int refinement_mode = 0;
+  int pressure_mode = 0;
 };
 
 DivBAMRConfig divb_amr;
@@ -99,6 +115,16 @@ KOKKOS_INLINE_FUNCTION
 Real PeriodicDistance(const Real a, const Real b) {
   const Real d = fabs(a - b);
   return fmin(d, 1.0 - d);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PressureDeltaPattern(const Real x1, const Real x2, const Real x3,
+                          const DivBAMRConfig cfg) {
+  const Real x = Phase(x1, cfg.x1min, cfg.x1max, cfg.pressure_k);
+  const Real y = Phase(x2, cfg.x2min, cfg.x2max, cfg.pressure_k);
+  const Real z = Phase(x3, cfg.x3min, cfg.x3max, cfg.pressure_k);
+  return 0.5*std::sin(x + 0.35) + 0.3*std::cos(y - 0.20) +
+         0.2*std::sin(z + x - y);
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -174,7 +200,10 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   }
 
   divb_amr.rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+  divb_amr.density_amp = pin->GetOrAddReal("problem", "density_amp", 0.0);
   divb_amr.pgas0 = pin->GetOrAddReal("problem", "pgas0", 10.0);
+  divb_amr.ppar0 = pin->GetOrAddReal("problem", "ppar0", divb_amr.pgas0);
+  divb_amr.pperp0 = pin->GetOrAddReal("problem", "pperp0", divb_amr.ppar0);
   divb_amr.vx0 = pin->GetOrAddReal("problem", "vx0", 0.08);
   divb_amr.vy0 = pin->GetOrAddReal("problem", "vy0", 0.05);
   divb_amr.vz0 = pin->GetOrAddReal("problem", "vz0", 0.03);
@@ -183,6 +212,74 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   divb_amr.guide_b3 = pin->GetOrAddReal("problem", "guide_b3", -0.15);
   divb_amr.field_amp = pin->GetOrAddReal("problem", "field_amp", 0.25);
   divb_amr.field_k = pin->GetOrAddReal("problem", "field_k", 2.0);
+  divb_amr.pressure_amp = pin->GetOrAddReal("problem", "pressure_amp", 0.0);
+  divb_amr.pressure_k = pin->GetOrAddReal("problem", "pressure_k", 1.0);
+  divb_amr.scalar0 = pin->GetOrAddReal("problem", "scalar0", 0.5);
+  divb_amr.scalar_amp = pin->GetOrAddReal("problem", "scalar_amp", 0.0);
+  if (fabs(divb_amr.density_amp) >= 1.0 ||
+      divb_amr.scalar0 < fabs(divb_amr.scalar_amp)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "divb_amr requires |density_amp| < 1 and "
+              << "scalar0 >= |scalar_amp|." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  const std::string pressure_mode =
+      pin->GetOrAddString("problem", "pressure_mode", "uniform");
+  if (pressure_mode == "uniform") {
+    divb_amr.pressure_mode = 0;
+  } else if (pressure_mode == "sinusoidal_delta") {
+    divb_amr.pressure_mode = 1;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<problem>/pressure_mode = '" << pressure_mode
+              << "' is not implemented; valid choices are "
+              << "[uniform,sinusoidal_delta]." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  divb_amr.uniform_refine_time =
+      pin->GetOrAddReal("problem", "uniform_refine_time", 0.0);
+  const std::string refinement_mode =
+      pin->GetOrAddString("problem", "refinement_mode", "moving_pattern");
+  if (refinement_mode == "moving_pattern") {
+    divb_amr.refinement_mode = 0;
+  } else if (refinement_mode == "uniform_after_time") {
+    divb_amr.refinement_mode = 1;
+  } else if (refinement_mode == "current_threshold") {
+    divb_amr.refinement_mode = 2;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<problem>/refinement_mode = '" << refinement_mode
+              << "' is not implemented; valid choices are "
+              << "[moving_pattern,uniform_after_time,current_threshold]." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  divb_amr.current_refine_threshold =
+      pin->GetOrAddReal("problem", "current_refine_threshold", 1.0);
+  divb_amr.current_refine_threshold_after =
+      pin->GetOrAddReal("problem", "current_refine_threshold_after",
+                        divb_amr.current_refine_threshold);
+  divb_amr.current_threshold_switch_time =
+      pin->GetOrAddReal("problem", "current_threshold_switch_time", -1.0);
+  divb_amr.current_derefine_fraction =
+      pin->GetOrAddReal("problem", "current_derefine_fraction", 0.5);
+  if (divb_amr.refinement_mode == 2) {
+    if (!(divb_amr.current_refine_threshold > 0.0) ||
+        !(divb_amr.current_refine_threshold_after > 0.0) ||
+        divb_amr.current_derefine_fraction < 0.0 ||
+        divb_amr.current_derefine_fraction > 1.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "current_threshold refinement requires "
+                << "<problem>/current_refine_threshold > 0, "
+                << "<problem>/current_refine_threshold_after > 0, and "
+                << "0 <= <problem>/current_derefine_fraction <= 1."
+                << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
   divb_amr.x1min = pmy_mesh_->mesh_size.x1min;
   divb_amr.x1max = pmy_mesh_->mesh_size.x1max;
   divb_amr.x2min = pmy_mesh_->mesh_size.x2min;
@@ -211,9 +308,15 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
 
   int nmb = pmbp->nmb_thispack;
   EOS_Data &eos = pmbp->pmhd->peos->eos_data;
+  const int nmhd = pmbp->pmhd->nmhd;
+  const int nscalars = pmbp->pmhd->nscalars;
   const Real gm1 = eos.gamma - 1.0;
+  const Real cgl_pfloor = eos.pfloor;
+  const bool is_cgl = eos.is_cgl;
   auto &u0 = pmbp->pmhd->u0;
+  auto &w0 = pmbp->pmhd->w0;
   auto &b0 = pmbp->pmhd->b0;
+  auto &bcc0 = pmbp->pmhd->bcc0;
   auto &size = pmbp->pmb->mb_size;
   const auto cfg = divb_amr;
 
@@ -277,19 +380,56 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
 
   par_for("divb_amr_cons", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    const Real rho = cfg.rho0;
-    u0(m,IDN,k,j,i) = rho;
-    u0(m,IM1,k,j,i) = rho*cfg.vx0;
-    u0(m,IM2,k,j,i) = rho*(multi_d ? cfg.vy0 : 0.0);
-    u0(m,IM3,k,j,i) = rho*(three_d ? cfg.vz0 : 0.0);
+    const Real x1 = CellCenterX(i - is, nx1, size.d_view(m).x1min,
+                                size.d_view(m).x1max);
+    const Real x2 = CellCenterX(j - js, nx2, size.d_view(m).x2min,
+                                size.d_view(m).x2max);
+    const Real x3 = CellCenterX(k - ks, nx3, size.d_view(m).x3min,
+                                size.d_view(m).x3max);
+    const Real profile = PressureDeltaPattern(x1, x2, x3, cfg);
+    const Real rho = cfg.rho0*(1.0 + cfg.density_amp*profile);
     const Real bx = 0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1));
     const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
     const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
-    const Real v2 = SQR(cfg.vx0) + (multi_d ? SQR(cfg.vy0) : 0.0)
-                  + (three_d ? SQR(cfg.vz0) : 0.0);
-    u0(m,IEN,k,j,i) = cfg.pgas0/gm1 + 0.5*rho*v2
-                    + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    if (is_cgl) {
+      const Real U0 = cfg.pperp0 + 0.5*cfg.ppar0;
+      Real delta = cfg.pperp0 - cfg.ppar0;
+      if (cfg.pressure_mode == 1) {
+        delta += cfg.pressure_amp*profile;
+      }
+      const Real ppar = fmax(TWO_3RDS*(U0 - delta), cgl_pfloor);
+      const Real pperp = fmax(TWO_3RDS*U0 + ONE_3RD*delta, cgl_pfloor);
+      w0(m,IDN,k,j,i) = rho;
+      w0(m,IVX,k,j,i) = cfg.vx0;
+      w0(m,IVY,k,j,i) = multi_d ? cfg.vy0 : 0.0;
+      w0(m,IVZ,k,j,i) = three_d ? cfg.vz0 : 0.0;
+      w0(m,IPR,k,j,i) = ppar;
+      w0(m,IPP,k,j,i) = pperp;
+      bcc0(m,IBX,k,j,i) = bx;
+      bcc0(m,IBY,k,j,i) = by;
+      bcc0(m,IBZ,k,j,i) = bz;
+    } else {
+      u0(m,IDN,k,j,i) = rho;
+      u0(m,IM1,k,j,i) = rho*cfg.vx0;
+      u0(m,IM2,k,j,i) = rho*(multi_d ? cfg.vy0 : 0.0);
+      u0(m,IM3,k,j,i) = rho*(three_d ? cfg.vz0 : 0.0);
+      const Real v2 = SQR(cfg.vx0) + (multi_d ? SQR(cfg.vy0) : 0.0)
+                    + (three_d ? SQR(cfg.vz0) : 0.0);
+      u0(m,IEN,k,j,i) = cfg.pgas0/gm1 + 0.5*rho*v2
+                      + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    }
+    const Real scalar = fmax(cfg.scalar0 + cfg.scalar_amp*profile, 0.0);
+    for (int n=nmhd; n<(nmhd+nscalars); ++n) {
+      if (is_cgl) {
+        w0(m,n,k,j,i) = scalar;
+      } else {
+        u0(m,n,k,j,i) = rho*scalar;
+      }
+    }
   });
+  if (is_cgl) {
+    pmbp->pmhd->peos->PrimToCons(w0, bcc0, u0, is, ie, js, je, ks, ke);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -298,28 +438,100 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
 
 void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
   Mesh *pmesh = pmbp->pmesh;
-  auto &refine_flag = pmesh->pmr->refine_flag;
-  auto &mblev = pmbp->pmb->mb_lev;
-  auto &mb_size = pmbp->pmb->mb_size;
+  auto refine_flag = pmesh->pmr->refine_flag;
+  auto mblev = pmbp->pmb->mb_lev;
+  auto mb_size = pmbp->pmb->mb_size;
   const int nmb = pmbp->nmb_thispack;
   const int mbs = pmesh->gids_eachrank[global_variable::my_rank];
   const int root_level = pmesh->root_level;
   const bool multi_d = pmesh->multi_d;
   const bool three_d = pmesh->three_d;
   const RegionSize mesh_size = pmesh->mesh_size;
+  auto &indcs = pmesh->mb_indcs;
+  auto bcc = pmbp->pmhd->bcc0;
   const auto cfg = divb_amr;
-  const Real phase = pmesh->time + static_cast<Real>(pmesh->ncycle);
+  const Real mesh_time = pmesh->time;
+  const Real phase = mesh_time + static_cast<Real>(pmesh->ncycle);
 
-  par_for("divb_amr_refinement", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
-    const bool refine_region = InRefinementPattern(
-        mb_size.d_view(m), mesh_size, phase, multi_d, three_d);
+  if (cfg.refinement_mode == 2) {
+    const int is = indcs.is;
+    const int js = indcs.js;
+    const int ks = indcs.ks;
+    const int nx1 = indcs.nx1;
+    const int nx2 = indcs.nx2;
+    const int nx3 = indcs.nx3;
+    const int nkji = nx3*nx2*nx1;
+    const int nji = nx2*nx1;
+    const Real current_threshold =
+        (cfg.current_threshold_switch_time >= 0.0 &&
+         mesh_time >= cfg.current_threshold_switch_time)
+            ? cfg.current_refine_threshold_after
+            : cfg.current_refine_threshold;
+    const Real derefine_threshold =
+        cfg.current_derefine_fraction*current_threshold;
+    par_for_outer("divb_amr_current_refinement", DevExeSpace(), 0, 0, 0, nmb-1,
+    KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
+      Real jmax = 0.0;
+      Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+      [=](const int idx, Real &team_jmax) {
+        int k = idx/nji;
+        int j = (idx - k*nji)/nx1;
+        int i = (idx - k*nji - j*nx1) + is;
+        j += js;
+        k += ks;
+
+        const RegionSize block_size = mb_size.d_view(m);
+        const Real dbz_dx =
+            (bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*block_size.dx1);
+        const Real dby_dx =
+            (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*block_size.dx1);
+        Real dbz_dy = 0.0;
+        Real dbx_dy = 0.0;
+        if (multi_d) {
+          dbz_dy =
+              (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*block_size.dx2);
+          dbx_dy =
+              (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*block_size.dx2);
+        }
+        Real dby_dz = 0.0;
+        Real dbx_dz = 0.0;
+        if (three_d) {
+          dby_dz =
+              (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*block_size.dx3);
+          dbx_dz =
+              (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*block_size.dx3);
+        }
+
+        const Real j1 = dbz_dy - dby_dz;
+        const Real j2 = dbx_dz - dbz_dx;
+        const Real j3 = dby_dx - dbx_dy;
+        team_jmax = fmax(team_jmax, sqrt(SQR(j1) + SQR(j2) + SQR(j3)));
+      }, Kokkos::Max<Real>(jmax));
+
+      const int level = mblev.d_view(m);
+      if (jmax > current_threshold && level < cfg.target_level) {
+        refine_flag.d_view(m + mbs) = 1;
+      } else if (jmax < derefine_threshold && level > root_level) {
+        refine_flag.d_view(m + mbs) = -1;
+      }
+    });
+  } else {
+    par_for("divb_amr_refinement", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
+    bool refine_region = false;
+    if (cfg.refinement_mode == 1) {
+      refine_region = (mesh_time >= cfg.uniform_refine_time);
+    } else {
+      refine_region = InRefinementPattern(
+          mb_size.d_view(m), mesh_size, phase, multi_d, three_d);
+    }
     const int level = mblev.d_view(m);
     if (refine_region && (level < cfg.target_level)) {
       refine_flag.d_view(m + mbs) = 1;
     } else if ((!refine_region) && (level > root_level)) {
       refine_flag.d_view(m + mbs) = -1;
     }
-  });
+    });
+  }
 
   refine_flag.template modify<DevExeSpace>();
   refine_flag.template sync<HostMemSpace>();
@@ -330,7 +542,12 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
 //! \brief Direct discrete divergence diagnostics over active cells.
 
 void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
-  pdata->nhist = 8;
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const bool is_cgl = pmhd->peos->eos_data.is_cgl;
+  if (is_cgl && pm->pmr != nullptr) {
+    pm->pmr->FlushCGLAMRRepairCounters();
+  }
+  pdata->nhist = is_cgl ? 23 : 8;
   pdata->label[0] = "max_divb";
   pdata->label[1] = "max_ndiv";
   pdata->label[2] = "sum_divb";
@@ -339,8 +556,28 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   pdata->label[5] = "sum_n2";
   pdata->label[6] = "vol";
   pdata->label[7] = "ncell";
+  if (is_cgl) {
+    pdata->label[8] = "bad_state";
+    pdata->label[9] = "abs_anis";
+    pdata->label[10] = "amr_cell";
+    pdata->label[11] = "amr_nan";
+    pdata->label[12] = "amr_rho";
+    pdata->label[13] = "amr_U";
+    pdata->label[14] = "amr_ppar";
+    pdata->label[15] = "amr_pperp";
+    pdata->label[16] = "amr_lowB";
+    pdata->label[17] = "amr_fh";
+    pdata->label[18] = "amr_mirr";
+    pdata->label[19] = "amr_dlt";
+    pdata->label[20] = "amr_int";
+    pdata->label[21] = "amr_slp";
+    pdata->label[22] = "crs_d_err";
+    pmhd->RequireCGLAnisotropyRepresentation("divB AMR history output");
+  }
 
-  auto &b = pm->pmb_pack->pmhd->b0;
+  auto &b = pmhd->b0;
+  auto &u = pmhd->u0;
+  auto &w = pmhd->w0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   auto &indcs = pm->mb_indcs;
   const int is = indcs.is;
@@ -355,6 +592,7 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   const bool multi_d = pm->multi_d;
   const bool three_d = pm->three_d;
   const auto cfg = divb_amr;
+  const int nhist = pdata->nhist;
 
   array_sum::GlobalSum sum_this_mb;
   Real max_abs_divb = 0.0;
@@ -394,7 +632,15 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
     hvars.the_array[5] = SQR(norm_divb)*vol;
     hvars.the_array[6] = vol;
     hvars.the_array[7] = 1.0;
-    for (int n=8; n<NREDUCTION_VARIABLES; ++n) {
+    if (is_cgl) {
+      const bool bad_state =
+          (!Kokkos::isfinite(w(m,IDN,k,j,i)) || !Kokkos::isfinite(w(m,IPR,k,j,i)) ||
+           !Kokkos::isfinite(w(m,IPP,k,j,i)) || w(m,IDN,k,j,i) <= 0.0 ||
+           w(m,IPR,k,j,i) <= 0.0 || w(m,IPP,k,j,i) <= 0.0);
+      hvars.the_array[8] = bad_state ? 1.0 : 0.0;
+      hvars.the_array[9] = vol*fabs(u(m,IAN,k,j,i));
+    }
+    for (int n=nhist; n<NREDUCTION_VARIABLES; ++n) {
       hvars.the_array[n] = 0.0;
     }
     max_abs = fmax(max_abs, abs_divb);
@@ -403,9 +649,104 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   }, Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb),
      Kokkos::Max<Real>(max_abs_divb), Kokkos::Max<Real>(max_norm_divb));
 
+  Real max_coarse_delta_error = 0.0;
+  if (is_cgl && pm->multilevel && !pmhd->has_cgl_lf_split) {
+    // Decode the restricted anisotropy with its current field and compare it with
+    // the child Delta selected by primitive restriction.
+    auto &cu = pmhd->coarse_u0;
+    auto &cb = pmhd->coarse_b0;
+    const int cis = indcs.cis, cie = indcs.cie;
+    const int cjs = indcs.cjs, cje = indcs.cje;
+    const int cks = indcs.cks, cke = indcs.cke;
+    const int cnx1 = cie - cis + 1;
+    const int cnx2 = cje - cjs + 1;
+    const int cnx3 = cke - cks + 1;
+    const int cnji = cnx2*cnx1;
+    const int cnkji = cnx3*cnji;
+    const int cnmkji = pm->pmb_pack->nmb_thispack*cnkji;
+    const int nchild_j = multi_d ? 2 : 1;
+    const int nchild_k = three_d ? 2 : 1;
+    const Real bfloor = pmhd->peos->eos_data.bfloor;
+    Kokkos::parallel_reduce(
+        "divb_amr_coarse_delta", Kokkos::RangePolicy<>(DevExeSpace(), 0, cnmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &max_error) {
+      const int m = idx/cnkji;
+      int k = (idx - m*cnkji)/cnji;
+      int j = (idx - m*cnkji - k*cnji)/cnx1;
+      const int i = (idx - m*cnkji - k*cnji - j*cnx1) + cis;
+      j += cjs;
+      k += cks;
+
+      const int fine_i = 2*i - cis;
+      const int fine_j = 2*j - cjs;
+      const int fine_k = 2*k - cks;
+      Real fine_delta = 0.0;
+      int nchild = 0;
+      for (int kk=0; kk<nchild_k; ++kk) {
+        for (int jj=0; jj<nchild_j; ++jj) {
+          for (int ii=0; ii<2; ++ii) {
+            fine_delta += w(m,IPP,fine_k+kk,fine_j+jj,fine_i+ii) -
+                          w(m,IEN,fine_k+kk,fine_j+jj,fine_i+ii);
+            ++nchild;
+          }
+        }
+      }
+      fine_delta /= static_cast<Real>(nchild);
+
+      const Real bx = 0.5*(cb.x1f(m,k,j,i) + cb.x1f(m,k,j,i+1));
+      const Real by = 0.5*(cb.x2f(m,k,j,i) + cb.x2f(m,k,j+1,i));
+      const Real bz = 0.5*(cb.x3f(m,k,j,i) + cb.x3f(m,k+1,j,i));
+      Real p_parallel, p_perp;
+      CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+          cu(m,IDN,k,j,i), cu(m,IM1,k,j,i), cu(m,IM2,k,j,i),
+          cu(m,IM3,k,j,i), cu(m,IEN,k,j,i), cu(m,IAN,k,j,i),
+          bx, by, bz, bfloor, p_parallel, p_perp);
+      max_error = fmax(max_error, fabs((p_perp - p_parallel) - fine_delta));
+    }, Kokkos::Max<Real>(max_coarse_delta_error));
+  }
+
   pdata->hdata[0] = max_abs_divb;
   pdata->hdata[1] = max_norm_divb;
   for (int n=2; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
+  if (is_cgl) {
+    pdata->hdata[10] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_cells_repaired)
+                           : 0.0;
+    pdata->hdata[11] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_nonfinite_repairs)
+                           : 0.0;
+    pdata->hdata[12] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_density_repairs)
+                           : 0.0;
+    pdata->hdata[13] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_energy_repairs)
+                           : 0.0;
+    pdata->hdata[14] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_parallel_repairs)
+                           : 0.0;
+    pdata->hdata[15] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_perp_repairs)
+                           : 0.0;
+    pdata->hdata[16] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_lowb_repairs)
+                           : 0.0;
+    pdata->hdata[17] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_firehose_repairs)
+                           : 0.0;
+    pdata->hdata[18] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_mirror_repairs)
+                           : 0.0;
+    pdata->hdata[19] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_anisotropy_repairs)
+                           : 0.0;
+    pdata->hdata[20] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_interval_repairs)
+                           : 0.0;
+    pdata->hdata[21] = (pm->pmr != nullptr)
+                           ? static_cast<Real>(pm->pmr->cgl_amr_slope_repairs)
+                           : 0.0;
+    pdata->hdata[22] = max_coarse_delta_error;
   }
 }

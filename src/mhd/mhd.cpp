@@ -6,17 +6,22 @@
 //! \file mhd.cpp
 //! \brief implementation of MHD class constructor and assorted functions
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <string>
-#include <algorithm>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "shearing_box/shearing_box.hpp"
 #include "shearing_box/orbital_advection.hpp"
@@ -24,6 +29,34 @@
 #include "mhd/mhd.hpp"
 
 namespace mhd {
+//----------------------------------------------------------------------------------------
+//! \brief Fail if an ordinary CGL consumer sees the temporary LF magnetic-moment slot.
+
+void MHD::RequireCGLAnisotropyRepresentation(const char *consumer) const {
+  if (pcgl_lf != nullptr &&
+      cgl_slot_representation != CGLSlotRepresentation::anisotropy) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << consumer << " cannot run while the CGL IAN slot stores magnetic moment."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Fail if a CGL LF stage callback runs outside its temporary representation.
+
+void MHD::RequireCGLMagneticMomentRepresentation(const char *consumer) const {
+  if (pcgl_lf == nullptr ||
+      cgl_slot_representation != CGLSlotRepresentation::magnetic_moment) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << consumer << " requires the CGL IAN slot to store magnetic moment."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
@@ -37,16 +70,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     coarse_w0("cprim",1,1,1,1,1),
     coarse_b0("cB_fc",1,1,1,1),
     u1("cons1",1,1,1,1,1),
-    u_sts0("cons_sts0",1,1,1,1,1),
-    u_sts1("cons_sts1",1,1,1,1,1),
-    u_sts2("cons_sts2",1,1,1,1,1),
-    u_sts_rhs("cons_sts_rhs",1,1,1,1,1),
+    u_sts0("u_sts0",1,1,1,1,1),
+    u_sts1("u_sts1",1,1,1,1,1),
+    u_sts2("u_sts2",1,1,1,1,1),
+    u_sts_rhs("u_sts_rhs",1,1,1,1,1),
     b1("B_fc1",1,1,1,1),
-    b_sts0("B_sts0",1,1,1,1),
-    b_sts1("B_sts1",1,1,1,1),
-    b_sts2("B_sts2",1,1,1,1),
-    b_sts_rhs("B_sts_rhs",1,1,1,1),
+    b_sts0("b_sts0",1,1,1,1),
+    b_sts1("b_sts1",1,1,1,1),
+    b_sts2("b_sts2",1,1,1,1),
+    b_sts_rhs("b_sts_rhs",1,1,1,1),
     uflx("uflx",1,1,1,1,1),
+    cgl_pflux("cgl_pflux",1,1,1,1,1),
     efld("efld",1,1,1,1),
     wsaved("wsaved",1,1,1,1,1),
     bccsaved("bccsaved",1,1,1,1,1),
@@ -92,20 +126,20 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       peos = new IsothermalMHD(ppack, pin);
       nmhd = 4;
     }
-  
-  // chew-goldberger-low EOS
+
+  // CGL anisotropic MHD EOS
   } else if (eqn_of_state.compare("cgl") == 0) {
     if (pmy_pack->pcoord->is_special_relativistic ||
-        pmy_pack->pcoord->is_general_relativistic) {
+        pmy_pack->pcoord->is_general_relativistic ||
+        pmy_pack->pcoord->is_dynamical_relativistic) {
       std::cout <<"### FATAL ERROR in "<< __FILE__ <<" at line "<< __LINE__ << std::endl
                 <<"<mhd> eos = cgl cannot be used with SR/GR"<< std::endl;
       std::exit(EXIT_FAILURE);
     } else {
-      std::cout <<"Using CGL equation of state"<< std::endl;
       peos = new CGLMHD(ppack, pin);
       nmhd = 6;
-    }  
-    
+    }
+
   // EOS string not recognized
   } else {
     std::cout <<"### FATAL ERROR in "<< __FILE__ <<" at line "<< __LINE__ << std::endl
@@ -115,91 +149,199 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // (2) Initialize scalars, diffusion, source terms
   nscalars = pin->GetOrAddInteger("mhd","nscalars",0);
+  if (peos->eos_data.is_cgl) {
+    diagnose_nonfinite_rk_update =
+        pin->GetOrAddBoolean("mhd", "cgl_diagnose_nonfinite_rk_update", false);
+    diagnose_nonfinite_after_time =
+        pin->GetOrAddReal("mhd", "cgl_diagnose_nonfinite_after_time", -1.0);
+    const char *diagnostic_environment =
+        std::getenv("ATHENAK_CGL_DIAGNOSE_NONFINITE_RK_UPDATE");
+    if (diagnostic_environment != nullptr) {
+      const std::string value(diagnostic_environment);
+      if (value == "1" || value == "true" || value == "TRUE") {
+        diagnose_nonfinite_rk_update = true;
+      } else if (value != "0" && value != "false" && value != "FALSE") {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "ATHENAK_CGL_DIAGNOSE_NONFINITE_RK_UPDATE must be "
+                  << "0, 1, false, or true" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+    const char *diagnostic_time_environment =
+        std::getenv("ATHENAK_CGL_DIAGNOSE_NONFINITE_AFTER_TIME");
+    if (diagnostic_time_environment != nullptr) {
+      char *end = nullptr;
+      const Real value = std::strtod(diagnostic_time_environment, &end);
+      if (end == diagnostic_time_environment || *end != '\0' ||
+          !std::isfinite(value)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "ATHENAK_CGL_DIAGNOSE_NONFINITE_AFTER_TIME must be "
+                  << "a finite real number" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      diagnose_nonfinite_after_time = value;
+    }
+  }
 
   // Viscosity (only constructed if needed)
-  if (pin->DoesParameterExist("mhd","isotropic_viscosity")) {
+  if (pin->DoesParameterExist("mhd","viscosity")) {
     pvisc = new Viscosity("mhd", ppack, pin);
-    has_sts_viscosity = (pvisc->mode == parabolic::ParabolicIntegratorMode::sts);
-    has_explicit_viscosity =
+    const bool active = (pvisc->nu_iso > 0.0 || pvisc->nu_floor > 0.0);
+    has_sts_viscosity = active &&
+        (pvisc->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_viscosity = active &&
         (pvisc->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
-    ppack->RegisterParabolicProcess({"mhd/isotropic_viscosity",
-                                     parabolic::ParabolicProcessOwner::mhd,
-                                     pvisc->mode,
-                                     parabolic::ParabolicUpdateShape::cell_centered,
-                                     &(pvisc->dtnew)});
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/viscosity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       pvisc->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(pvisc->dtnew)});
+    }
   } else {
     pvisc = nullptr;
+  }
+
+  // Fourth-derivative numerical viscosity (only constructed if needed)
+  if (pin->DoesParameterExist("mhd", "hyperviscosity")) {
+    phypervisc = new HyperViscosity("mhd", ppack, pin);
+    const bool active = (phypervisc->nu4 > 0.0);
+    has_sts_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/hyperviscosity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       phypervisc->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(phypervisc->dtnew)});
+    }
+  } else {
+    phypervisc = nullptr;
   }
 
   // Resistivity (only constructed if needed)
   if (pin->DoesParameterExist("mhd","ohmic_resistivity")) {
     presist = new Resistivity(ppack, pin);
-    has_sts_resistivity = (presist->mode == parabolic::ParabolicIntegratorMode::sts);
-    has_explicit_resistivity =
+    const bool active = (presist->eta_ohm > 0.0);
+    has_sts_resistivity = active &&
+        (presist->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_resistivity = active &&
         (presist->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
-    ppack->RegisterParabolicProcess({"mhd/ohmic_resistivity",
-                                     parabolic::ParabolicProcessOwner::mhd,
-                                     presist->mode,
-                                     parabolic::ParabolicUpdateShape::cell_and_face,
-                                     &(presist->dtnew)});
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/ohmic_resistivity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       presist->mode,
+                                       parabolic::ParabolicUpdateShape::cell_and_face,
+                                       &(presist->dtnew)});
+    }
   } else {
     presist = nullptr;
   }
 
-  // Thermal conduction / CGL Landau-fluid heat flux (only constructed if needed)
-  const bool has_isotropic_conduction = pin->DoesParameterExist("mhd","isotropic_conduction");
-  const bool has_cgl_heat_flux = pin->DoesParameterExist("mhd","cgl_heat_flux");
-  if (has_cgl_heat_flux && !peos->eos_data.is_cgl) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<mhd>/cgl_heat_flux requires <mhd>/eos = cgl" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (peos->eos_data.is_cgl && has_isotropic_conduction) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "Ordinary <mhd>/isotropic_conduction is not a CGL Landau-fluid "
-              << "heat flux and is disabled for <mhd>/eos = cgl. Use "
-              << "<mhd>/cgl_heat_flux = landau_fluid with "
-              << "<mhd>/conductivity_integrator = sts." << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (has_isotropic_conduction || has_cgl_heat_flux) {
-    if (peos->eos_data.is_ideal || peos->eos_data.is_cgl) {
-      pcond = new Conduction("mhd", ppack, pin);
-      if (peos->eos_data.is_cgl && !pcond->IsCGLLandauFluidHeatFlux()) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl
-                  << "CGL heat flux must be requested with "
-                  << "<mhd>/cgl_heat_flux = landau_fluid." << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      if (pcond->IsCGLLandauFluidHeatFlux() &&
-          pcond->mode != parabolic::ParabolicIntegratorMode::sts) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl
-                  << "CGL Landau-fluid heat flux is STS-only. Set "
-                  << "<mhd>/conductivity_integrator = sts and "
-                  << "<time>/sts_integrator = rkl2." << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      has_sts_conduction = (pcond->mode == parabolic::ParabolicIntegratorMode::sts);
-      has_explicit_conduction =
-          (pcond->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
-      std::string process_name = pcond->IsCGLLandauFluidHeatFlux() ?
-                                 "mhd/cgl_heat_flux" : "mhd/isotropic_conduction";
-      ppack->RegisterParabolicProcess({process_name,
+  // Thermal conduction (only constructed if needed)
+  if (pin->DoesParameterExist("mhd","conductivity") ||
+      pin->DoesParameterExist("mhd","tdep_conductivity")) {
+    if (peos->eos_data.is_cgl) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Ordinary <mhd>/conductivity is disabled for <mhd>/eos = cgl. "
+                << "Use <mhd>/cgl_heat_flux = landau_fluid when that process is enabled."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    pcond = new Conduction("mhd", ppack, pin);
+    const bool active = pcond->power_law_kappa ?
+        (pcond->kappa > 0.0 || pcond->kappa_floor > 0.0) :
+        (pcond->kappa > 0.0 || pcond->tdep_kappa);
+    has_sts_conduction = active &&
+        (pcond->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_conduction = active &&
+        (pcond->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/conductivity",
                                        parabolic::ParabolicProcessOwner::mhd,
                                        pcond->mode,
                                        parabolic::ParabolicUpdateShape::cell_centered,
                                        &(pcond->dtnew)});
-    } else {
-      std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
-                << "Thermal conduction in MHD requires ideal gas or CGL EOS" << std::endl;
-      std::exit(EXIT_FAILURE);
     }
   } else {
     pcond = nullptr;
+  }
+
+  // CGL Landau-fluid heat flux always uses its dedicated split state lifecycle.
+  if (pin->DoesParameterExist("mhd", "cgl_heat_flux")) {
+    if (!peos->eos_data.is_cgl) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<mhd>/cgl_heat_flux requires <mhd>/eos = cgl" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    pcgl_lf = new CGLLandauFluid(ppack, pin);
+    has_sts_cgl_lf = (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_cgl_lf =
+        (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    has_cgl_lf_split = (has_sts_cgl_lf || has_explicit_cgl_lf);
+    if (has_cgl_lf_split) {
+      const char *boundary_parameters[6] = {
+          "ix1_bc", "ox1_bc", "ix2_bc", "ox2_bc", "ix3_bc", "ox3_bc"};
+      for (int face = 0; face < 6; ++face) {
+        const BoundaryFlag boundary = pmy_pack->pmesh->mesh_bcs[face];
+        if (boundary == BoundaryFlag::inflow || boundary == BoundaryFlag::user) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "CGL Landau-fluid split integration does not support <mesh>/"
+                    << boundary_parameters[face] << " = "
+                    << pmy_pack->pmesh->GetBoundaryString(boundary) << "." << std::endl
+                    << "During LF stages the CGL IAN slot temporarily stores magnetic "
+                    << "moment; fixed-inflow data and user callbacks do not have a "
+                    << "magnetic-moment-aware boundary contract." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+    }
+    record_cgl_pressure_work =
+        pin->GetOrAddBoolean("mhd", "cgl_lf_record_pressure_work", false);
+    if (record_cgl_pressure_work && pmy_pack->pmesh->multilevel &&
+        pmy_pack->pmesh->pmr != nullptr && pmy_pack->pmesh->pmr->prolong_prims) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "CGL Landau-fluid pressure-work recording is not supported with "
+                << "AMR primitive prolongation. Set "
+                << "<mhd>/cgl_lf_record_pressure_work = false for LF/STS AMR runs."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    ppack->RegisterParabolicProcess({"mhd/cgl_heat_flux",
+                                     parabolic::ParabolicProcessOwner::mhd,
+                                     pcgl_lf->mode,
+                                     parabolic::ParabolicUpdateShape::cell_centered,
+                                     &(pcgl_lf->dtnew)});
+  }
+
+  // Diffusion of passive scalar concentrations (if requested in input file)
+  if (pin->DoesParameterExist("mhd","scalar_diffusivity")) {
+    if (nscalars > 0) {
+      pscalar_diff = new ScalarDiffusion("mhd", nscalars, ppack, pin);
+      const bool active = (pscalar_diff->kappa_max > 0.0);
+      has_sts_scalar_diffusion = active &&
+          (pscalar_diff->mode == parabolic::ParabolicIntegratorMode::sts);
+      has_explicit_scalar_diffusion = active &&
+          (pscalar_diff->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+      if (active) {
+        ppack->RegisterParabolicProcess({"mhd/scalar_diffusivity",
+                                         parabolic::ParabolicProcessOwner::mhd,
+                                         pscalar_diff->mode,
+                                         parabolic::ParabolicUpdateShape::cell_centered,
+                                         &(pscalar_diff->dtnew)});
+      }
+    } else {
+      std::cout << "### WARNING: <mhd>/scalar_diffusivity ignored because nscalars=0"
+                << std::endl;
+    }
   }
 
   // Source terms (if needed)
@@ -207,21 +349,35 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
   }
 
-  has_any_sts_diffusion = (has_sts_viscosity || has_sts_conduction || has_sts_resistivity);
-  has_any_sts_cell_update = (has_sts_viscosity || has_sts_conduction ||
-                             (has_sts_resistivity && peos->eos_data.is_ideal));
-  has_any_sts_field_update = has_sts_resistivity;
-  cgl_lf_admissibility_check =
-      pin->GetOrAddBoolean("mhd", "cgl_lf_admissibility_check", false);
-  if (cgl_lf_admissibility_check &&
-      (!peos->eos_data.is_cgl || !has_sts_conduction ||
-       pcond == nullptr || !pcond->IsCGLLandauFluidHeatFlux())) {
+  if (has_sts_cgl_lf &&
+      (has_sts_viscosity || has_sts_hyperviscosity || has_sts_conduction ||
+       has_sts_resistivity || has_sts_scalar_diffusion)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<mhd>/cgl_lf_admissibility_check requires CGL Landau-fluid "
-              << "heat flux with STS." << std::endl;
+              << "CGL Landau-fluid STS cannot yet be combined with other MHD STS "
+              << "processes." << std::endl;
     std::exit(EXIT_FAILURE);
   }
+
+  if (has_explicit_cgl_lf &&
+      (has_sts_viscosity || has_sts_hyperviscosity || has_sts_conduction ||
+       has_sts_resistivity || has_sts_scalar_diffusion || has_explicit_viscosity ||
+       has_explicit_hyperviscosity || has_explicit_conduction ||
+       has_explicit_resistivity || has_explicit_scalar_diffusion)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "CGL Landau-fluid explicit reference integration cannot yet be "
+              << "combined with other active MHD parabolic processes." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  has_any_parabolic_cell_update = (has_sts_viscosity || has_sts_hyperviscosity ||
+                                    has_sts_conduction || has_cgl_lf_split ||
+                                    has_sts_scalar_diffusion ||
+                                    (has_sts_resistivity && peos->eos_data.is_ideal));
+  has_any_parabolic_field_update = has_sts_resistivity;
+  has_any_parabolic_split =
+      (has_any_parabolic_cell_update || has_any_parabolic_field_update);
 
   // (3) read time-evolution option [already error checked in driver constructor]
   // Then initialize memory and algorithms for reconstruction and Riemann solvers
@@ -263,6 +419,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   pbval_u->InitializeBuffers((nmhd+nscalars));
   pbval_b = new MeshBoundaryValuesFC(ppack, pin);
   pbval_b->InitializeBuffers(3);
+  if (record_cgl_pressure_work) {
+    pbval_cgl_pflux = new MeshBoundaryValuesCC(ppack, pin, false);
+    pbval_cgl_pflux->InitializeBuffers(NCGLPressureFlux);
+  }
 
   // Orbital advection and shearing box BCs (if requested in input file)
   if (pin->DoesBlockExist("shearing_box")) {
@@ -374,29 +534,26 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (evolution_t.compare("dynamic") == 0) {
       // LLF solver
       if (rsolver.compare("llf") == 0) {
-        if (eqn_of_state.compare("cgl") == 0) {
-          std::cout <<"### FATAL ERROR in "<< __FILE__ <<" at line "<< __LINE__ << std::endl
-          <<"<mhd> llf cannot be used with CGL"<< std::endl;
+        if (peos->eos_data.is_cgl) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "<mhd>/rsolver = llf is not implemented for CGL"
+                    << std::endl;
           std::exit(EXIT_FAILURE);
-        } else {
-          rsolver_method = MHD_RSolver::llf;
-        }          
+        }
+        rsolver_method = MHD_RSolver::llf;
       // HLLE solver
       } else if (rsolver.compare("hlle") == 0) {
-        if (eqn_of_state.compare("cgl") == 0) {
-          rsolver_method = MHD_RSolver::hlle_cgl;
-        } else {
-          rsolver_method = MHD_RSolver::hlle;
-        }           
+        rsolver_method = peos->eos_data.is_cgl ?
+                         MHD_RSolver::hlle_cgl : MHD_RSolver::hlle;
       // HLLD solver
       } else if (rsolver.compare("hlld") == 0) {
-        if (eqn_of_state.compare("cgl") == 0) {
-          std::cout <<"### FATAL ERROR in "<< __FILE__ <<" at line "<< __LINE__ << std::endl
-          <<"<mhd> hlld cannot be used with CGL"<< std::endl;
+        if (peos->eos_data.is_cgl) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "<mhd>/rsolver = hlld is not implemented for CGL"
+                    << std::endl;
           std::exit(EXIT_FAILURE);
-        } else {
-            rsolver_method = MHD_RSolver::hlld;
-        }   
+        }
+        rsolver_method = MHD_RSolver::hlld;
       // Roe solver
       // } else if (rsolver.compare("roe") == 0) {
       //   rsolver_method = MHD_RSolver::roe;
@@ -428,30 +585,42 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
       int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
       Kokkos::realloc(u1,     nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-      Kokkos::realloc(u_sts0, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-      Kokkos::realloc(u_sts1, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-      Kokkos::realloc(u_sts2, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-      Kokkos::realloc(u_sts_rhs, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+      if (has_any_parabolic_cell_update) {
+        Kokkos::realloc(u_sts0,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts1,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts2,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts_rhs, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+      }
       Kokkos::realloc(b1.x1f, nmb, ncells3, ncells2, ncells1+1);
       Kokkos::realloc(b1.x2f, nmb, ncells3, ncells2+1, ncells1);
       Kokkos::realloc(b1.x3f, nmb, ncells3+1, ncells2, ncells1);
-      Kokkos::realloc(b_sts0.x1f, nmb, ncells3, ncells2, ncells1+1);
-      Kokkos::realloc(b_sts0.x2f, nmb, ncells3, ncells2+1, ncells1);
-      Kokkos::realloc(b_sts0.x3f, nmb, ncells3+1, ncells2, ncells1);
-      Kokkos::realloc(b_sts1.x1f, nmb, ncells3, ncells2, ncells1+1);
-      Kokkos::realloc(b_sts1.x2f, nmb, ncells3, ncells2+1, ncells1);
-      Kokkos::realloc(b_sts1.x3f, nmb, ncells3+1, ncells2, ncells1);
-      Kokkos::realloc(b_sts2.x1f, nmb, ncells3, ncells2, ncells1+1);
-      Kokkos::realloc(b_sts2.x2f, nmb, ncells3, ncells2+1, ncells1);
-      Kokkos::realloc(b_sts2.x3f, nmb, ncells3+1, ncells2, ncells1);
-      Kokkos::realloc(b_sts_rhs.x1f, nmb, ncells3, ncells2, ncells1+1);
-      Kokkos::realloc(b_sts_rhs.x2f, nmb, ncells3, ncells2+1, ncells1);
-      Kokkos::realloc(b_sts_rhs.x3f, nmb, ncells3+1, ncells2, ncells1);
+      if (has_any_parabolic_field_update) {
+        Kokkos::realloc(b_sts0.x1f,    nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts0.x2f,    nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts0.x3f,    nmb, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(b_sts1.x1f,    nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts1.x2f,    nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts1.x3f,    nmb, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(b_sts2.x1f,    nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts2.x2f,    nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts2.x3f,    nmb, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(b_sts_rhs.x1f, nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts_rhs.x2f, nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts_rhs.x3f, nmb, ncells3+1, ncells2, ncells1);
+      }
 
       // allocate fluxes, electric fields
       Kokkos::realloc(uflx.x1f, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1+1);
       Kokkos::realloc(uflx.x2f, nmb, (nmhd+nscalars), ncells3, ncells2+1, ncells1);
       Kokkos::realloc(uflx.x3f, nmb, (nmhd+nscalars), ncells3+1, ncells2, ncells1);
+      if (record_cgl_pressure_work) {
+        Kokkos::realloc(cgl_pflux.x1f, nmb, NCGLPressureFlux,
+                        ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(cgl_pflux.x2f, nmb, NCGLPressureFlux,
+                        ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(cgl_pflux.x3f, nmb, NCGLPressureFlux,
+                        ncells3+1, ncells2, ncells1);
+      }
       Kokkos::realloc(efld.x1e, nmb, ncells3+1, ncells2+1, ncells1);
       Kokkos::realloc(efld.x2e, nmb, ncells3+1, ncells2, ncells1+1);
       Kokkos::realloc(efld.x3e, nmb, ncells3, ncells2+1, ncells1+1);
@@ -489,9 +658,16 @@ MHD::~MHD() {
   if (porb_u != nullptr) {delete porb_u;}
   delete pbval_b;
   delete pbval_u;
+  if (pbval_cgl_pflux != nullptr) {delete pbval_cgl_pflux;}
   if (psrc!= nullptr) {delete psrc;}
+  if (pscalar_diff != nullptr) {delete pscalar_diff;}
+  if (pcgl_lf != nullptr) {
+    pcgl_lf->ReportProfile("shutdown");
+    delete pcgl_lf;
+  }
   if (pcond != nullptr) {delete pcond;}
   if (presist!= nullptr) {delete presist;}
+  if (phypervisc != nullptr) {delete phypervisc;}
   if (pvisc != nullptr) {delete pvisc;}
   delete peos;
 }

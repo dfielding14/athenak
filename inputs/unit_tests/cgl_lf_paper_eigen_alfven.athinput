@@ -42,11 +42,11 @@ ndiag = 1
 eos = cgl
 passive = false
 cgl_heat_flux = landau_fluid
-conductivity_integrator = sts
+cgl_heat_flux_integrator = sts
 lf_k_parallel = 6.28318530717958623e+00
 lf_coefficient_mode = background
 lf_c_parallel0 = 2.23606797749978981e+00
-cgl_lf_admissibility_check = true
+cgl_lf_strict_admissibility = true
 reconstruct = plm
 rsolver = hlle
 gamma = 1.666666666666667
@@ -57,7 +57,7 @@ sfloor = 1.0e-12
 bfloor = 1.0e-10
 
 <problem>
-pgen_name = unit_tests/cgl_lf_quantitative_test
+pgen_name = cgl_landau_fluid
 test_mode = paper_eigen_wave
 eigen_branch = alfven
 mode_number = 1

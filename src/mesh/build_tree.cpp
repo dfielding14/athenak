@@ -4,13 +4,14 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file build_tree.cpp
-//! \brief Functions to build MeshBlockTreee, both for new runs and restarts
+//! \brief Functions to build MeshBlock, both for new runs and restarts
 
 #include <iostream>
 #include <cinttypes>
 #include <cstdlib>
 #include <limits> // numeric_limits<>
 #include <memory> // make_unique<>
+#include <string>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -334,8 +335,8 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   time = pin->GetOrAddReal("time", "start_time", 0.0);
   dt   = std::numeric_limits<float>::max();
   dt_parabolic_sts = std::numeric_limits<float>::max();
-  cfl_no = pin->GetReal("time", "cfl_number");
   LoadSTSConfig(this, pin);
+  cfl_no = pin->GetReal("time", "cfl_number");
   ncycle = 0;
   if (global_variable::my_rank == 0) {PrintMeshDiagnostics();}
 

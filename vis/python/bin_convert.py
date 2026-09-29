@@ -85,7 +85,6 @@ The read_*(...) functions return a filedata dictionary-like object with
 
 import numpy as np
 import os
-import h5py
 import glob
 
 
@@ -455,15 +454,6 @@ def read_all_ranks_binary(rank0_filename):
             + os.path.basename(rank0_filename)
         )
     )
-    file_sizes = np.array([os.path.getsize(file) for file in rank_files])
-    if len(np.unique(file_sizes)) > 1:
-        unique_file_sizes = np.unique(file_sizes)
-        larger_file_size = max(unique_file_sizes)
-        rank_files = [
-            file
-            for file, size in zip(rank_files, file_sizes)
-            if size == larger_file_size
-        ]
 
     # Read the rank 0 file to get the metadata
     rank0_filedata = read_binary(rank_files[0])
@@ -1716,6 +1706,9 @@ def write_athdf(filename, fdata, varsize_bytes=4, locsize_bytes=8):
     """
     Writes an athdf (hdf5) file from a loaded python filedata object.
 
+    This conversion helper requires the optional h5py package. Reading Athena
+    binary output does not.
+
     args:
       filename      - string
           filename for output athdf (hdf5) file
@@ -1726,6 +1719,8 @@ def write_athdf(filename, fdata, varsize_bytes=4, locsize_bytes=8):
       locsize_bytes - int (default=8, options=4,8)
           number of bytes to use for output location data
     """
+
+    import h5py
 
     if varsize_bytes not in [4, 8]:
         raise ValueError(f"varsizebytes must be 4 or 8, not {varsize_bytes}")

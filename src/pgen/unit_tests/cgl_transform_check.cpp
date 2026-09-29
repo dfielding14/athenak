@@ -6,6 +6,7 @@
 //! \file cgl_transform_check.cpp
 //! \brief Unit-style checks for CGL conserved anisotropy and magnetic-moment transforms.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -20,7 +21,8 @@
 
 namespace {
 
-void RequireClose(const char *label, const Real got, const Real expected, const Real tol) {
+void RequireClose(const char *label, const Real got, const Real expected,
+                  const Real tol) {
   const Real err = std::abs(got - expected);
   const Real scale = std::max(static_cast<Real>(1.0), std::abs(expected));
   if (err > tol*scale) {

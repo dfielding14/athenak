@@ -1,0 +1,9630 @@
+"""Local-fixture regressions for retained Stage I recost publication."""
+
+from __future__ import annotations
+
+import ast
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+import errno
+import fcntl
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+import textwrap
+from types import SimpleNamespace
+
+import pytest
+
+
+REPOSITORY = Path(__file__).resolve().parents[3]
+STAGE_I = REPOSITORY / "scripts/frontier/cgl_lf_stage_i.py"
+CHECKPOINT = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_checkpoint.py"
+RECOST = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_recost.py"
+RECOST_TEST = REPOSITORY / "tst/test_suite/cgl/test_cgl_lf_stage_i_recost.py"
+SOURCE_AUTHORITY_TEST = (
+    REPOSITORY / "tst/test_suite/cgl/test_cgl_lf_stage_i_source_authority.py"
+)
+PRODUCTION_ROOT = "/lustre/orion/ast207/proj-shared/dfielding/CGL"
+ARTIFACT = "mks24_stage_i_E03_forcing_policy_R02_t7p25_recost_evidence.json"
+V2_ARTIFACT = "mks24_stage_i_E03_forcing_policy_F114_recost_evidence.json"
+EPOCH = "E03-forcing-policy"
+EPOCH_SLUG = "E03_forcing_policy"
+
+
+def sha256(path: Path) -> str:
+    """Return one retained fixture digest."""
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_json(path: Path, value: object) -> None:
+    """Write stable fixture JSON."""
+
+    if path.exists():
+        path.chmod(0o644)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def load_checkpoint_module():
+    """Load the retained companion without executing its CLI."""
+
+    spec = importlib.util.spec_from_file_location("cgl_lf_stage_i_checkpoint", CHECKPOINT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_source_authority_test_module():
+    """Load the source-authority fixtures without invoking pytest."""
+
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_source_authority_test_fixture", SOURCE_AUTHORITY_TEST
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def force_checkpoint_renameat2_einval(path: Path) -> None:
+    """Make one fixture checkpoint model Orion renameat2 flag rejection."""
+
+    retained = path.read_text()
+    marker = (
+        '    """Perform one descriptor-relative Linux renameat2 operation."""\n\n'
+        "    source = require_entry_name(source, label)\n"
+    )
+    replacement = (
+        '    """Perform one descriptor-relative Linux renameat2 operation."""\n\n'
+        "    raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))\n"
+    )
+    assert retained.count(marker) == 1
+    path.write_text(retained.replace(marker, replacement))
+    path.chmod(0o755)
+
+
+def install_checkpoint_fixture_historical_contract(path: Path, contract) -> None:
+    """Install one fixed disposable-root contract into a copied checkpoint utility."""
+
+    retained = path.read_text()
+    marker = "\ndef main() -> int:\n"
+    assignments = "\n".join(
+        (
+            f"F115_CATALOG_README_SHA256 = {contract.F115_CATALOG_README_SHA256!r}",
+            (
+                "F115_CATALOG_SHA256SUMS_SHA256 = "
+                f"{contract.F115_CATALOG_SHA256SUMS_SHA256!r}"
+            ),
+            f"F116_CATALOG_README_SHA256 = {contract.F116_CATALOG_README_SHA256!r}",
+            (
+                "F116_CATALOG_SHA256SUMS_SHA256 = "
+                f"{contract.F116_CATALOG_SHA256SUMS_SHA256!r}"
+            ),
+            (
+                "F115_DECLARATION_CONTRACT_SHA256 = "
+                f"{contract.F115_DECLARATION_CONTRACT_SHA256!r}"
+            ),
+            f"F115_CONTRACT_SHA256 = {contract.F115_CONTRACT_SHA256!r}",
+            f"F116_CONTRACT_SHA256 = {contract.F116_CONTRACT_SHA256!r}",
+        )
+    )
+    assert retained.count(marker) == 1
+    path.write_text(retained.replace(marker, f"\n{assignments}\n{marker}", 1))
+    path.chmod(0o755)
+
+
+def leave_lustre_json_post_link_state(module, target: Path, value: object,
+                                      monkeypatch, *, mode: int = 0o644) -> Path:
+    """Interrupt one forced-EINVAL JSON publication after link and before unlink."""
+
+    real_unlink = module.os.unlink
+    interrupted = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def interrupt_temporary_unlink(name, *args, **kwargs):
+        nonlocal interrupted
+        directory_descriptor = kwargs.get("dir_fd")
+        if (
+            not interrupted
+            and isinstance(name, str)
+            and directory_descriptor is not None
+            and module.json_temporary_target_name(name) == target.name
+        ):
+            temporary_profile = os.stat(
+                name, dir_fd=directory_descriptor, follow_symlinks=False
+            )
+            public_profile = os.stat(
+                target.name, dir_fd=directory_descriptor, follow_symlinks=False
+            )
+            if (
+                module.profile_identity(temporary_profile)
+                == module.profile_identity(public_profile)
+                and temporary_profile.st_nlink == public_profile.st_nlink == 2
+            ):
+                interrupted = True
+                raise OSError(errno.EIO, os.strerror(errno.EIO))
+        return real_unlink(name, *args, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "unlink", interrupt_temporary_unlink)
+    with pytest.raises(OSError, match=os.strerror(errno.EIO)):
+        module.write_json(target, value, mode=mode)
+    monkeypatch.setattr(module.os, "unlink", real_unlink)
+    assert interrupted
+    temporaries = module.json_temporary_entries(target)
+    assert len(temporaries) == 1
+    return temporaries[0]
+
+
+def load_current_recost_test_module():
+    """Load the current generator's fixture builders for an end-to-end probe."""
+
+    name = f"_cgl_lf_stage_i_current_recost_test_{os.getpid()}_{id(object())}"
+    spec = importlib.util.spec_from_file_location(name, RECOST_TEST)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def recost_fixture(tmp_path):
+    """Create one staged-only local recost boundary."""
+
+    repository = tmp_path / "repository"
+    frontier = repository / "scripts/frontier"
+    frontier.mkdir(parents=True)
+    checkpoint = frontier / CHECKPOINT.name
+    checkpoint.write_bytes(CHECKPOINT.read_bytes())
+    checkpoint.chmod(0o755)
+    stage_i = frontier / STAGE_I.name
+    stage_i.write_text(
+        STAGE_I.read_text().replace(
+            PRODUCTION_ROOT,
+            str(tmp_path / "local-canonical-sentinel"),
+        )
+    )
+    stage_i.chmod(0o644)
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(["git", "add", "."], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CGL fixture",
+            "-c",
+            "user.email=cgl-fixture@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Create local checkpoint fixture",
+        ],
+        cwd=repository,
+        check=True,
+    )
+    root = tmp_path / "root"
+    subprocess.run(
+        [
+            "/usr/bin/python3.11",
+            "-I",
+            "-S",
+            "-B",
+            str(stage_i),
+            "--root",
+            str(root),
+            "--allow-local-root",
+            "init",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    accounting = root / "accounting"
+    generator = accounting / "utilities/generate_test_recost.py"
+    generator.parent.mkdir()
+    generator.write_text("#!/usr/bin/env python3\n# retained test generator\n")
+    generator.chmod(0o755)
+    scheduler = accounting / "12345.stage_i.sacct.txt"
+    scheduler.write_text("12345|COMPLETED|0:0|1|2340\n")
+    scheduler.chmod(0o644)
+    queue = tmp_path / "squeue.txt"
+    queue.write_text("")
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    source_bundle = root / "source-archives/athenak-legacy-fixture.bundle"
+    source_bundle.parent.mkdir()
+    subprocess.run(
+        ["git", "bundle", "create", str(source_bundle), "--all"],
+        cwd=repository,
+        check=True,
+    )
+    source_bundle.chmod(0o644)
+    profile = {
+        "athena_timeout": "00:55:00",
+        "nodes": 1,
+        "segment": "R02/s19_rankio_t7p25_t7p5",
+        "slurm_walltime": "01:05:00",
+        "source_bundle": str(source_bundle),
+        "source_bundle_sha256": sha256(source_bundle),
+        "threshold_seconds": 2700,
+    }
+    counts = {
+        "transactions": 0,
+        "reservations": 0,
+        "active_reservations": 0,
+        "ledger_rows": 0,
+        "manifests": 0,
+    }
+    payload = {
+        "execution_epoch": EPOCH,
+        "authorization": {"sole_next_segment_profile": profile},
+        "reconcile": {"counts": counts},
+        "provenance": {
+            "stage_i_helper_sha256": sha256(stage_i),
+            "generator_sha256": sha256(generator),
+            "scheduler_sha256": sha256(scheduler),
+        },
+    }
+    staged = accounting / f"{ARTIFACT}.staged"
+    write_json(staged, payload)
+    staged.chmod(0o644)
+    return {
+        "root": root,
+        "repository": repository,
+        "checkpoint": checkpoint,
+        "stage_i": stage_i,
+        "accounting": accounting,
+        "generator": generator,
+        "scheduler": scheduler,
+        "queue": queue,
+        "source_bundle": source_bundle,
+        "source_bundle_revisions": [revision],
+        "profile": profile,
+        "counts": counts,
+        "staged": staged,
+        "artifact_sha256": sha256(staged),
+        "canonical": accounting / ARTIFACT,
+        "audit": accounting / f"{ARTIFACT}.publication_audit.json",
+        "stage_i_transactions": (
+            accounting / f"mks24_stage_i_{EPOCH_SLUG}_transactions"
+        ),
+        "recost_transactions": (
+            accounting / f"mks24_stage_i_{EPOCH_SLUG}_recost_transactions"
+        ),
+        "recost_forensics": (
+            accounting / f"mks24_stage_i_{EPOCH_SLUG}_recost_forensics"
+            / ARTIFACT
+        ),
+        "recost_forensics_root": (
+            accounting / f"mks24_stage_i_{EPOCH_SLUG}_recost_forensics"
+        ),
+        "lock": root / f".mks24_stage_i_{EPOCH_SLUG}.lock",
+    }
+
+
+def fake_v2_generator_source() -> str:
+    """Return a small generator-interface double that reauthenticates all inputs."""
+
+    return textwrap.dedent(
+        """\
+        #!/usr/bin/env python3
+        import hashlib
+        import json
+        from pathlib import Path
+
+
+        def digest(path):
+            return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+        class Tracker:
+            def __init__(self, bindings):
+                self.bindings = bindings
+
+            def reauthenticate_all(self):
+                for path, expected in self.bindings:
+                    if digest(path) != expected:
+                        raise ValueError(f"tracked V2 input checksum changed: {path}")
+
+
+        class Build:
+            def __init__(self, payload, tracker, reconcile, helper_path, helper_sha256,
+                         helper_revision, matrix_path, matrix_sha256, matrix_revision,
+                         storage):
+                self.payload = payload
+                self.tracker = tracker
+                self.reconcile = reconcile
+                self.helper_path = helper_path
+                self.helper_sha256 = helper_sha256
+                self.helper_revision = helper_revision
+                self.matrix_path = matrix_path
+                self.matrix_sha256 = matrix_sha256
+                self.matrix_revision = matrix_revision
+                self.storage_available_bytes = storage["available_bytes"]
+                self.storage_retained_stage_i_bytes = storage["retained_stage_i_bytes"]
+                self.storage_required_safety_bytes = storage["required_safety_bytes"]
+                self.projected_storage_bytes = storage[
+                    "projected_authorized_wave_growth_bytes"
+                ]
+                self.storage_measurements = ("fixture-directory-measurement",)
+
+
+        def build_payload(args, root, source_path, repository, generator_sha256, *,
+                          stage_i_lock_held=False):
+            request = json.loads(args.request.read_text())
+            inputs = request["inputs"]
+            bindings = [
+                (args.request, args.expected_request_sha256),
+                (source_path, generator_sha256),
+            ]
+            helper_path = repository / "scripts/frontier/cgl_lf_stage_i.py"
+            helper = inputs["stage_i_helper"]
+            bindings.append((helper_path, helper["sha256"]))
+            matrix = inputs["matrix"]
+            matrix_path = repository / matrix["path"]
+            bindings.append((matrix_path, matrix["sha256"]))
+            for key in (
+                "reconciliation", "ledger", "reservations", "storage_evidence",
+                "ceiling_evidence", "ceiling_publication_audit",
+                "predecessor_recost", "predecessor_recost_publication_audit",
+            ):
+                item = inputs[key]
+                bindings.append((root / item["path"], item["sha256"]))
+            bundle = inputs["source_bundle"]
+            bindings.append((root / bundle["path"], bundle["sha256"]))
+            for key in ("manifests", "scheduler_evidence"):
+                for item in inputs[key]:
+                    bindings.append((root / item["path"], item["sha256"]))
+            readiness = inputs["r17_readiness_evidence"]
+            if readiness is not None:
+                bindings.append((root / readiness["path"], readiness["sha256"]))
+            artifact = root / "accounting" / f"{request['artifact_name']}.staged"
+            if not artifact.exists():
+                artifact = root / "accounting" / request["artifact_name"]
+            reconcile = json.loads((root / inputs["reconciliation"]["path"]).read_text())
+            return Build(
+                artifact.read_bytes(),
+                Tracker(bindings),
+                reconcile,
+                helper_path,
+                helper["sha256"],
+                helper["revision"],
+                matrix_path,
+                matrix["sha256"],
+                matrix["revision"],
+                json.loads(artifact.read_text())["storage"],
+            )
+
+
+        def run_authenticated_reconcile(helper_path, helper_sha256, root, *,
+                                         stage_i_lock_held=False):
+            return json.loads((root / "accounting/v2_reconciliation.json").read_text())
+
+
+        def require_empty_transaction_stores(root):
+            return None
+
+
+        def require_live_storage_boundary(root, available_bytes, retained_stage_i_bytes,
+                                          required_safety_bytes, projected_growth_bytes):
+            return None
+
+
+        def require_directory_measurement_boundaries(measurements):
+            if measurements != ("fixture-directory-measurement",):
+                raise ValueError("fixture directory measurement boundary differs")
+        """
+    )
+
+
+def bounded_profile(repository: Path, source_bundle: Path, revision: str,
+                    case_id: str, segment: str, nodes: int) -> dict[str, object]:
+    """Return one exact fresh V2 bounded-wave profile."""
+
+    executable = repository / "build/bin/athena"
+    build_manifest = repository / "build/build_manifest.json"
+    input_file = repository / "inputs/cgl_lf_paper/v2_fixture.in"
+    return {
+        "acceptance_criterion": f"{case_id} fixture acceptance",
+        "acceptance_policy": f"{case_id} fixture policy",
+        "athena_walltime": "01:50:00",
+        "build_manifest": str(build_manifest),
+        "build_manifest_sha256": sha256(build_manifest),
+        "case_id": case_id,
+        "controller_walltime_max_seconds": 7200,
+        "cpus_per_task": 7,
+        "estimated_storage_bytes": 1024,
+        "executable": str(executable),
+        "executable_revision": revision,
+        "executable_sha256": sha256(executable),
+        "input_file": str(input_file),
+        "input_revision": revision,
+        "input_sha256": sha256(input_file),
+        "nodes": nodes,
+        "output_layout": "rank-local",
+        "segment": segment,
+        "parent_job_id": None,
+        "parent_result": None,
+        "parent_segment": None,
+        "restart_file": None,
+        "restart_file_sha256": None,
+        "restart_time": None,
+        "ranks_per_node": 8,
+        "time_tlim_target": (
+            0.12
+            if case_id == "R12" and segment == "s01_rankio_t0_t0p12"
+            else 0.25
+        ),
+        "walltime": "02:00:00",
+        "source_bundle": str(source_bundle),
+        "source_bundle_sha256": sha256(source_bundle),
+    }
+
+
+@pytest.fixture
+def bounded_recost_fixture(recost_fixture):
+    """Replace the sole-profile fixture with one exact generalized V2 packet."""
+
+    fixture = recost_fixture
+    root = fixture["root"]
+    repository = fixture["repository"]
+    matrix = repository / "inputs/cgl_lf_paper/mks24_stage_i_manifest.json"
+    matrix.parent.mkdir(parents=True)
+    write_json(matrix, {"fixture": "V2 matrix"})
+    executable = repository / "build/bin/athena"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("fixture executable\n")
+    build_manifest = repository / "build/build_manifest.json"
+    write_json(build_manifest, {"fixture": "build"})
+    input_file = repository / "inputs/cgl_lf_paper/v2_fixture.in"
+    input_file.write_text("<problem>\nfixture = true\n")
+    live_recost = fixture["repository"] / "scripts/frontier/cgl_lf_stage_i_recost.py"
+    live_recost.write_text(fake_v2_generator_source())
+    live_recost.chmod(0o755)
+    subprocess.run(["git", "add", "."], cwd=fixture["repository"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CGL fixture",
+            "-c",
+            "user.email=cgl-fixture@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Add bounded recost generator",
+        ],
+        cwd=fixture["repository"],
+        check=True,
+    )
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=fixture["repository"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    fixture["generator"].write_bytes(live_recost.read_bytes())
+    fixture["generator"].chmod(0o755)
+    source_bundle = root / "source-archives/athenak-fixture.bundle"
+    source_bundle.parent.mkdir(exist_ok=True)
+    subprocess.run(
+        ["git", "bundle", "create", str(source_bundle), "--all"],
+        cwd=fixture["repository"],
+        check=True,
+    )
+    source_bundle.chmod(0o644)
+    fixture["scheduler"].write_text(
+        "12345|cgl_mks24_E03_forcing_policy_R02_s28_rankio_t9p75_t10|"
+        "COMPLETED|0:0|1|2340|2026-06-04T01:00:00+00:00|"
+        "2026-06-04T01:39:00+00:00\n"
+    )
+    second_scheduler = fixture["accounting"] / "23456.stage_i.sacct.txt"
+    second_scheduler.write_text(
+        "23456|cgl_mks24_E03_forcing_policy_R03_s00_rankio_t0_t0p5|"
+        "COMPLETED|0:0|1|1800|2026-06-04T02:00:00+00:00|"
+        "2026-06-04T02:30:00+00:00\n"
+    )
+    second_scheduler.chmod(0o644)
+    r12_scheduler = fixture["accounting"] / "4766856.stage_i.sacct.txt"
+    r12_scheduler.write_text(
+        "4766856|cgl_mks24_E03_forcing_policy_R12_s00_rankio_t0_t0p25|"
+        "COMPLETED|0:0|4|7200|2026-06-04T03:00:00+00:00|"
+        "2026-06-04T05:00:00+00:00\n"
+    )
+    r12_scheduler.chmod(0o644)
+    scheduler_evidence = [
+        {
+            "path": str(fixture["scheduler"].relative_to(root)),
+            "sha256": sha256(fixture["scheduler"]),
+            "job_id": "12345",
+            "job_name": "cgl_mks24_E03_forcing_policy_R02_s28_rankio_t9p75_t10",
+            "state": "COMPLETED",
+            "exit_code": "0:0",
+            "nodes": 1,
+            "elapsed_seconds": 2340,
+            "submitted_utc": "2026-06-04T01:00:00+00:00",
+            "completed_utc": "2026-06-04T01:39:00+00:00",
+        },
+        {
+            "path": str(second_scheduler.relative_to(root)),
+            "sha256": sha256(second_scheduler),
+            "job_id": "23456",
+            "job_name": "cgl_mks24_E03_forcing_policy_R03_s00_rankio_t0_t0p5",
+            "state": "COMPLETED",
+            "exit_code": "0:0",
+            "nodes": 1,
+            "elapsed_seconds": 1800,
+            "submitted_utc": "2026-06-04T02:00:00+00:00",
+            "completed_utc": "2026-06-04T02:30:00+00:00",
+        },
+        {
+            "path": str(r12_scheduler.relative_to(root)),
+            "sha256": sha256(r12_scheduler),
+            "job_id": "4766856",
+            "job_name": "cgl_mks24_E03_forcing_policy_R12_s00_rankio_t0_t0p25",
+            "state": "COMPLETED",
+            "exit_code": "0:0",
+            "nodes": 4,
+            "elapsed_seconds": 7200,
+            "submitted_utc": "2026-06-04T03:00:00+00:00",
+            "completed_utc": "2026-06-04T05:00:00+00:00",
+        },
+    ]
+    profiles = [
+        bounded_profile(
+            repository, source_bundle, revision, "R04", "s00_rankio_t0_t0p25", 4
+        ),
+        bounded_profile(
+            repository, source_bundle, revision, "R12", "s01_rankio_t0_t0p12", 4
+        ),
+    ]
+    authorization = {
+        "mode": "bounded-wave",
+        "authorizing": False,
+        "authorized_next_profiles": profiles,
+        "bounded_concurrency": {
+            "max_active_segments": 4,
+            "max_wave_nodes": 8,
+            "r17_exclusive_and_last": True,
+        },
+        "controller_consumption_state": (
+            "non-authorizing advisory bounded wave pending promoted controller "
+            "consumption and generalized checkpoint support"
+        ),
+        "non_authorizing_reason": (
+            "Controller consumption remains a separate promoted transition."
+        ),
+    }
+    reconcile_completed = subprocess.run(
+        [
+            "/usr/bin/python3.11",
+            "-I",
+            "-S",
+            "-B",
+            str(fixture["stage_i"]),
+            "--root",
+            str(root),
+            "--allow-local-root",
+            "reconcile",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    reconcile = json.loads(reconcile_completed.stdout)
+    reconciliation = fixture["accounting"] / "v2_reconciliation.json"
+    write_json(reconciliation, reconcile)
+    ledger = fixture["accounting"] / f"mks24_stage_i_{EPOCH_SLUG}_node_hours.csv"
+    reservations = fixture["accounting"] / f"mks24_stage_i_{EPOCH_SLUG}_reservations.json"
+    reservations.chmod(0o644)
+    storage_evidence = fixture["accounting"] / "v2_storage_evidence.json"
+    write_json(storage_evidence, {"fixture": "storage"})
+    f113 = fixture["accounting"] / (
+        "mks24_stage_i_E03_forcing_policy_F113_controller_transition_evidence.json"
+    )
+    write_json(f113, {"fixture": "F113 ceiling"})
+    f113_audit = f113.with_name(f"{f113.name}.publication_audit.json")
+    f113_audit_value = {"fixture": "F113 publication audit"}
+    write_json(f113_audit, f113_audit_value)
+    predecessor = fixture["accounting"] / (
+        "mks24_stage_i_E03_forcing_policy_F113_recost_evidence.json"
+    )
+    generated = datetime.now(timezone.utc).replace(microsecond=0)
+    predecessor_generated = generated - timedelta(hours=1)
+    predecessor_published = generated - timedelta(minutes=30)
+    write_json(
+        predecessor,
+        {
+            "checkpoint": "F-113",
+            "execution_epoch": EPOCH,
+            "generated_utc": predecessor_generated.isoformat(),
+            "record_type": "stage-i-barrier-recost-checkpoint",
+        },
+    )
+    predecessor_audit = predecessor.with_name(
+        f"{predecessor.name}.publication_audit.json"
+    )
+    write_json(
+        predecessor_audit,
+        {
+            "artifact": {
+                "links": 1,
+                "mode": "0644",
+                "path": str(predecessor),
+                "sha256": sha256(predecessor),
+            },
+            "execution_epoch": EPOCH,
+            "published_utc": predecessor_published.isoformat(),
+            "record_type": "observed-publication",
+        },
+    )
+    inputs = {
+        "reconciliation": {
+            "path": str(reconciliation.relative_to(root)),
+            "sha256": sha256(reconciliation),
+        },
+        "ledger": {
+            "path": str(ledger.relative_to(root)),
+            "sha256": sha256(ledger),
+        },
+        "reservations": {
+            "path": str(reservations.relative_to(root)),
+            "sha256": sha256(reservations),
+        },
+        "manifests": [],
+        "scheduler_evidence": [
+            {"path": item["path"], "sha256": item["sha256"]}
+            for item in scheduler_evidence
+        ],
+        "storage_evidence": {
+            "path": str(storage_evidence.relative_to(root)),
+            "sha256": sha256(storage_evidence),
+        },
+        "source_bundle": {
+            "path": str(source_bundle.relative_to(root)),
+            "sha256": sha256(source_bundle),
+            "verified_revisions": [revision],
+        },
+        "matrix": {
+            "path": str(matrix.relative_to(repository)),
+            "revision": revision,
+            "sha256": sha256(matrix),
+        },
+        "stage_i_helper": {
+            "revision": revision,
+            "sha256": sha256(fixture["stage_i"]),
+        },
+        "ceiling_evidence": {
+            "path": str(f113.relative_to(root)),
+            "sha256": sha256(f113),
+        },
+        "ceiling_publication_audit": {
+            "path": str(f113_audit.relative_to(root)),
+            "sha256": sha256(f113_audit),
+        },
+        "predecessor_recost": {
+            "path": str(predecessor.relative_to(root)),
+            "sha256": sha256(predecessor),
+        },
+        "predecessor_recost_publication_audit": {
+            "path": str(predecessor_audit.relative_to(root)),
+            "sha256": sha256(predecessor_audit),
+        },
+        "r17_readiness_evidence": None,
+    }
+    request = fixture["accounting"] / "v2_recost_request.json"
+    request_value = {
+        "schema_version": 1,
+        "record_type": "stage-i-barrier-recost-request",
+        "checkpoint": "F-114",
+        "artifact_name": V2_ARTIFACT,
+        "execution_epoch": EPOCH,
+        "generated_utc": generated.isoformat(),
+        "expires_utc": (generated + timedelta(hours=1)).isoformat(),
+        "scope": "fixture V2 bounded-wave recost",
+        "barrier": {
+            "recorded_segments": [
+                {
+                    "case_id": "R02",
+                    "segment": "s28_rankio_t9p75_t10",
+                    "job_id": "12345",
+                    "result": "accepted",
+                },
+                {
+                    "case_id": "R03",
+                    "segment": "s00_rankio_t0_t0p5",
+                    "job_id": "23456",
+                    "result": "clean_partial",
+                },
+                {
+                    "case_id": "R12",
+                    "segment": "s00_rankio_t0_t0p25",
+                    "job_id": "4766856",
+                    "result": "clean_partial",
+                },
+            ],
+        },
+        "inputs": inputs,
+        "authorization": {
+            "mode": "bounded-wave",
+            "max_wave_nodes": 8,
+            "profiles": profiles,
+        },
+    }
+    write_json(request, request_value)
+    predecessor_binding = {
+        "artifact_name": predecessor.name,
+        "path": str(predecessor),
+        "sha256": sha256(predecessor),
+        "publication_audit_path": str(predecessor_audit),
+        "publication_audit_sha256": sha256(predecessor_audit),
+        "checkpoint": "F-113",
+        "generated_utc": predecessor_generated.isoformat(),
+        "published_utc": predecessor_published.isoformat(),
+    }
+    budget = {
+        "actual_plus_authorized_wave_node_hours": "12",
+        "actual_stage_i_node_hours": "0",
+        "authorized_wave_reserved_node_hours": "12",
+        "case_breakdown": {},
+        "computed_remaining_stage_i_node_hours": "12",
+        "computed_stage_i_margin_node_hours": "88",
+        "computed_stage_i_total_node_hours": "12",
+        "method": "authenticated fixture projection",
+        "project_ceiling_node_hours": "100",
+        "promoted_stage_i_envelope_node_hours": "100",
+    }
+    projection_sha256 = hashlib.sha256(
+        (json.dumps(budget, sort_keys=True) + "\n").encode()
+    ).hexdigest()
+    lineage_sha256 = hashlib.sha256(b"authenticated fixture lineages").hexdigest()
+    projected_storage = sum(profile["estimated_storage_bytes"] for profile in profiles)
+    provenance = {
+        "request_sha256": sha256(request),
+        "generator_sha256": sha256(fixture["generator"]),
+        "generator_revision": revision,
+        "stage_i_helper_sha256": sha256(fixture["stage_i"]),
+        "stage_i_helper_revision": revision,
+        "matrix_sha256": sha256(matrix),
+        "matrix_revision": revision,
+        "source_bundle_sha256": sha256(source_bundle),
+        "source_bundle_verified_revisions": [revision],
+        "ceiling_evidence_sha256": sha256(f113),
+        "ceiling_publication_audit_sha256": sha256(f113_audit),
+        "storage_evidence_sha256": sha256(storage_evidence),
+        "reconciliation_sha256": sha256(reconciliation),
+        "ledger_sha256": sha256(ledger),
+        "reservations_sha256": sha256(reservations),
+        "scheduler_evidence": scheduler_evidence,
+        "predecessor_recost_sha256": sha256(predecessor),
+        "predecessor_recost_publication_audit_sha256": sha256(predecessor_audit),
+        "authenticated_lineages_sha256": lineage_sha256,
+        "computed_projection_sha256": projection_sha256,
+        "r17_readiness_evidence_sha256": None,
+    }
+    payload = {
+        "schema_version": 1,
+        "record_type": "stage-i-barrier-recost-checkpoint",
+        "checkpoint": "F-114",
+        "artifact_name": V2_ARTIFACT,
+        "execution_epoch": EPOCH,
+        "generated_utc": request_value["generated_utc"],
+        "expires_utc": request_value["expires_utc"],
+        "scope": request_value["scope"],
+        "predecessor_recost": predecessor_binding,
+        "authorization": authorization,
+        "barrier": {
+            "job_ids": ["12345", "23456", "4766856"],
+            "recorded_segments": request_value["barrier"]["recorded_segments"],
+            "scheduler_evidence": scheduler_evidence,
+        },
+        "budget": budget,
+        "storage": {
+            "available_bytes": 10000,
+            "retained_stage_i_bytes": 0,
+            "required_safety_bytes": 1000,
+            "projected_authorized_wave_growth_bytes": projected_storage,
+            "headroom_after_authorized_wave_and_safety_bytes": (
+                10000 - 1000 - projected_storage
+            ),
+        },
+        "ledger": {
+            "rows": 0,
+            "sha256": sha256(ledger),
+            "cumulative_stage_i_node_hours": "0",
+        },
+        "reservations": {
+            "rows": 0,
+            "sha256": sha256(reservations),
+            "active": 0,
+        },
+        "manifests": {
+            "rows": 0,
+            "bindings": [],
+            "authenticated_lineages_sha256": lineage_sha256,
+        },
+        "r17_readiness": None,
+        "promoted_f113": {
+            "path": str(f113),
+            "sha256": sha256(f113),
+            "publication_audit_path": str(f113_audit),
+            "publication_audit_sha256": sha256(f113_audit),
+            "publication_audit": f113_audit_value,
+        },
+        "reconcile": reconcile,
+        "provenance": provenance,
+    }
+    fixture["staged"].unlink()
+    fixture["staged"] = fixture["accounting"] / f"{V2_ARTIFACT}.staged"
+    write_json(fixture["staged"], payload)
+    fixture["canonical"] = fixture["accounting"] / V2_ARTIFACT
+    fixture["audit"] = fixture["accounting"] / f"{V2_ARTIFACT}.publication_audit.json"
+    fixture["recost_forensics"] = fixture["recost_forensics_root"] / V2_ARTIFACT
+    fixture.update(
+        {
+            "artifact_name": V2_ARTIFACT,
+            "authorization": authorization,
+            "scheduler_evidence": scheduler_evidence,
+            "scheduler_files": [fixture["scheduler"], second_scheduler, r12_scheduler],
+            "source_bundle": source_bundle,
+            "source_bundle_sha256": sha256(source_bundle),
+            "stage_i_revision": revision,
+            "generator_revision": revision,
+            "source_bundle_revisions": [revision],
+            "request": request,
+            "request_sha256": sha256(request),
+            "inputs": inputs,
+            "evidence_files": {
+                "reconciliation": reconciliation,
+                "ledger": ledger,
+                "reservations": reservations,
+                "storage": storage_evidence,
+                "f113": f113,
+                "f113_audit": f113_audit,
+                "predecessor": predecessor,
+                "predecessor_audit": predecessor_audit,
+                "matrix": matrix,
+            },
+            "artifact_sha256": sha256(fixture["staged"]),
+        }
+    )
+    return fixture
+
+
+def replace_bounded_artifact(fixture, payload: dict[str, object]) -> None:
+    """Replace one staged bounded artifact and refresh its external digest."""
+
+    write_json(fixture["staged"], payload)
+    fixture["artifact_sha256"] = sha256(fixture["staged"])
+
+
+def mutate_bounded_artifact(fixture, mutate) -> None:
+    """Mutate one V2 artifact while retaining an exact external digest."""
+
+    payload = json.loads(fixture["staged"].read_text())
+    mutate(payload)
+    replace_bounded_artifact(fixture, payload)
+
+
+def mutate_bounded_authorization(fixture, mutate) -> None:
+    """Mutate the expected and retained bounded authorization together."""
+
+    authorization = json.loads(json.dumps(fixture["authorization"]))
+    mutate(authorization)
+    payload = json.loads(fixture["staged"].read_text())
+    payload["authorization"] = authorization
+    fixture["authorization"] = authorization
+    replace_bounded_artifact(fixture, payload)
+
+
+def mutate_bounded_scheduler_evidence(fixture, mutate) -> None:
+    """Mutate both retained scheduler-evidence lists and the expected packet."""
+
+    evidence = json.loads(json.dumps(fixture["scheduler_evidence"]))
+    mutate(evidence)
+    payload = json.loads(fixture["staged"].read_text())
+    payload["provenance"]["scheduler_evidence"] = evidence
+    payload["barrier"]["scheduler_evidence"] = evidence
+    fixture["scheduler_evidence"] = evidence
+    replace_bounded_artifact(fixture, payload)
+
+
+def checkpoint_command(fixture, action: str, *extra: str,
+                       utility_sha256: str | None = None,
+                       artifact_sha256: str | None = None,
+                       root: Path | None = None,
+                       queue_file: Path | None = None,
+                       include_queue_fixture: bool = True,
+                       generator_relative_path: str | None = None) -> list[str]:
+    """Build one fully bound local companion invocation."""
+
+    counts = fixture["counts"]
+    if "recommendations" in fixture:
+        packet = [
+            "--recost-recommendations-json",
+            json.dumps(fixture["recommendations"], sort_keys=True),
+            "--v2-scheduler-evidence-json",
+            json.dumps(fixture["scheduler_evidence"], sort_keys=True),
+            "--recost-request-relative-path",
+            str(fixture["request"].relative_to(fixture["root"])),
+            "--expected-request-sha256",
+            fixture["request_sha256"],
+            "--independent-review-relative-path",
+            str(fixture["independent_review"].relative_to(fixture["root"])),
+            "--expected-independent-review-sha256",
+            fixture["independent_review_sha256"],
+            "--source-bundle-relative-path",
+            str(fixture["source_bundle"].relative_to(fixture["root"])),
+            "--expected-source-bundle-sha256",
+            fixture["source_bundle_sha256"],
+            "--expected-stage-i-revision",
+            fixture["stage_i_revision"],
+            "--expected-generator-revision",
+            fixture["generator_revision"],
+            "--expected-source-bundle-verified-revisions-json",
+            json.dumps(fixture["source_bundle_revisions"]),
+            "--expected-artifact-mode",
+            "0444",
+            "--artifact-authorization-pointer",
+            "/recommendations",
+        ]
+    elif "authorization" in fixture:
+        packet = [
+            "--authorized-v2-json",
+            json.dumps(fixture["authorization"], sort_keys=True),
+            "--v2-scheduler-evidence-json",
+            json.dumps(fixture["scheduler_evidence"], sort_keys=True),
+            "--recost-request-relative-path",
+            str(fixture["request"].relative_to(fixture["root"])),
+            "--expected-request-sha256",
+            fixture["request_sha256"],
+            "--source-bundle-relative-path",
+            str(fixture["source_bundle"].relative_to(fixture["root"])),
+            "--expected-source-bundle-sha256",
+            fixture["source_bundle_sha256"],
+            "--expected-stage-i-revision",
+            fixture["stage_i_revision"],
+            "--expected-generator-revision",
+            fixture["generator_revision"],
+            "--expected-source-bundle-verified-revisions-json",
+            json.dumps(fixture["source_bundle_revisions"]),
+        ]
+    else:
+        packet = [
+            "--scheduler-relative-path",
+            str(fixture["scheduler"].relative_to(fixture["root"])),
+            "--expected-scheduler-sha256",
+            sha256(fixture["scheduler"]),
+            "--authorized-next-segment-profile-json",
+            json.dumps(fixture["profile"], sort_keys=True),
+            "--expected-source-bundle-verified-revisions-json",
+            json.dumps(fixture["source_bundle_revisions"]),
+        ]
+    command = [
+        sys.executable,
+        str(fixture["checkpoint"]),
+        "--root",
+        str(root or fixture["root"]),
+        "--allow-local-root",
+        "--expected-utility-sha256",
+        utility_sha256 or sha256(fixture["checkpoint"]),
+        "--expected-stage-i-sha256",
+        sha256(fixture["stage_i"]),
+        action,
+        "--artifact-name",
+        fixture.get("artifact_name", ARTIFACT),
+        "--expected-artifact-sha256",
+        artifact_sha256 or fixture["artifact_sha256"],
+        "--generator-relative-path",
+        generator_relative_path or str(fixture["generator"].relative_to(fixture["root"])),
+        "--expected-generator-sha256",
+        sha256(fixture["generator"]),
+        *packet,
+        "--expected-transactions",
+        str(counts["transactions"]),
+        "--expected-reservations",
+        str(counts["reservations"]),
+        "--expected-active-reservations",
+        str(counts["active_reservations"]),
+        "--expected-ledger-rows",
+        str(counts["ledger_rows"]),
+        "--expected-manifests",
+        str(counts["manifests"]),
+        *extra,
+    ]
+    if include_queue_fixture:
+        command[9:9] = ["--squeue-file", str(queue_file or fixture["queue"])]
+    return command
+
+
+def run_checkpoint(fixture, action: str, *extra: str, **kwargs):
+    """Run one local companion command without raising on rejection."""
+
+    return subprocess.run(
+        checkpoint_command(fixture, action, *extra, **kwargs),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def assert_rejected(completed: subprocess.CompletedProcess, pattern: str) -> None:
+    """Require one fail-closed companion rejection."""
+
+    assert completed.returncode == 1
+    assert pattern in completed.stderr
+
+
+def schema2_review_probe(tmp_path: Path, reviewed_utc: str):
+    """Create one minimal authenticated schema-2 independent-review probe."""
+
+    root = tmp_path / "review-root"
+    accounting = root / "accounting"
+    accounting.mkdir(parents=True)
+    artifact_name = "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json"
+    artifact_sha256 = "a" * 64
+    review = accounting / f"{artifact_name}.independent_review.json"
+    write_json(
+        review,
+        {
+            "schema_version": 1,
+            "record_type": "stage-i-recost-recommendation-independent-review",
+            "execution_epoch": EPOCH,
+            "reviewed_utc": reviewed_utc,
+            "decision": "approved-for-publication",
+            "reviewer": {
+                "agent_id": "fixture-independent-schema2-reviewer",
+                "independent_from_generator": True,
+            },
+            "candidate": {
+                "path": str(accounting / artifact_name),
+                "sha256": artifact_sha256,
+            },
+            "scope": {"non_authorizing": True},
+        },
+    )
+    review.chmod(0o444)
+    args = SimpleNamespace(
+        independent_review_relative_path=str(review.relative_to(root)),
+        expected_independent_review_sha256=sha256(review),
+        expected_artifact_sha256=artifact_sha256,
+    )
+    return load_checkpoint_module(), root, artifact_name, args
+
+
+def strengthen_f115_f116_source_authority_fixture(campaign, source_test) -> None:
+    """Give the shared source-authority fixture the full checkpoint contract."""
+
+    authority = source_test.authority
+    root = campaign.root
+    f115_paths = {key: root / relative for key, relative in authority.F115_PATHS.items()}
+    f115_subject = source_test.git(
+        campaign.repository, "show", "-s", "--format=%s", campaign.f115_head
+    ).stdout.strip()
+    f115_bundle_digest = sha256(campaign.f115_bundle)
+    sole = {
+        "segment": "s02_fixture",
+        "source_bundle": str(campaign.f115_bundle),
+        "source_bundle_sha256": f115_bundle_digest,
+    }
+    f115_evidence = json.loads(f115_paths["evidence"].read_text())
+    f115_evidence["implementation"]["commit"] = campaign.f115_head
+    f115_evidence["implementation"]["subject"] = f115_subject
+    f115_evidence["authorization"] = {
+        "sole_next_segment_profile": sole,
+        "supersedes_f114_profile_only_where_explicitly_listed": {
+            "segment": {
+                "from": "s01_fixture",
+                "reason": "s01 is an immutable cancelled no-start manifest and directory",
+                "to": sole["segment"],
+            },
+            "source_bundle": {
+                "from": str(root / "source-archives/retained-cancelled-source.bundle"),
+                "to": str(campaign.f115_bundle),
+            },
+            "source_bundle_sha256": {
+                "from": "1" * 64,
+                "to": f115_bundle_digest,
+            },
+        },
+    }
+    write_json(f115_paths["evidence"], f115_evidence)
+    f115_paths["evidence"].chmod(0o444)
+    f115_evidence_digest = sha256(f115_paths["evidence"])
+
+    f115_review_digests = {}
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(f115_paths[key].read_text())
+        review["published_f115"]["sha256"] = f115_evidence_digest
+        write_json(f115_paths[key], review)
+        f115_paths[key].chmod(0o444)
+        f115_review_digests[key] = sha256(f115_paths[key])
+
+    f115_audit = json.loads(f115_paths["publication_audit"].read_text())
+    f115_audit["artifact"]["sha256"] = f115_evidence_digest
+    f115_audit["independent_reviews"]["reviews_bind_exact_published_f115_sha256"] = (
+        f115_evidence_digest
+    )
+    f115_audit["independent_reviews"]["provenance_security"]["sha256"] = (
+        f115_review_digests["provenance_review"]
+    )
+    f115_audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        f115_review_digests["plasma_review"]
+    )
+    f115_audit["authority_and_enforcement"] = {
+        "authorization_kind": "procedural-pre-prepare-sole-profile-authority",
+        "direct_sbatch_authorized": False,
+        "enforcement_chain": ["Fixture permits only the exact sole-next profile."],
+        "f115_authority": source_test.published_binding(
+            f115_paths["evidence"], f115_evidence_digest, "0444"
+        ),
+        "reuse_cancelled_job_or_s01_authorized": False,
+        "shared_root_acknowledgement_authorized_by_f115": False,
+        "shared_root_acknowledgement_requires_separate_exact_isolation_review_after_prepare": (
+            True
+        ),
+        "sole_next_segment_profile": sole,
+    }
+    write_json(f115_paths["publication_audit"], f115_audit)
+    f115_paths["publication_audit"].chmod(0o444)
+    f115_audit_digest = sha256(f115_paths["publication_audit"])
+    campaign.f115_digests = {
+        "evidence_sha256": f115_evidence_digest,
+        "publication_audit_sha256": f115_audit_digest,
+        "provenance_review_sha256": f115_review_digests["provenance_review"],
+        "plasma_review_sha256": f115_review_digests["plasma_review"],
+    }
+    campaign.f115_bindings = {
+        key: {
+            "path": authority.F115_PATHS[key].as_posix(),
+            "sha256": (
+                f115_evidence_digest
+                if key == "evidence"
+                else f115_audit_digest
+                if key == "publication_audit"
+                else f115_review_digests[key]
+            ),
+        }
+        for key in authority.F115_PATHS
+    }
+
+    readme_path = root / "source-archives/README.md"
+    marker = b"## AthenaK\n\n"
+    f115_block = (
+        f"`{campaign.f115_bundle.name}` records complete history through commit "
+        f"`{campaign.f115_head}` (`{f115_subject}`). Its SHA-256 is "
+        f"`{f115_bundle_digest}`.\n\n"
+    ).encode()
+    readme = readme_path.read_bytes()
+    assert marker in readme and campaign.f115_bundle.name.encode() not in readme
+    readme_path.chmod(0o644)
+    readme_path.write_bytes(readme.replace(marker, marker + f115_block, 1))
+
+    f116_paths = {key: root / relative for key, relative in authority.F116_PATHS.items()}
+    f116_evidence = json.loads(f116_paths["evidence"].read_text())
+    f116_evidence["predecessor_authorities"]["historical_f115"] = campaign.f115_bindings
+    f116_evidence["source_archive_catalog"]["after"]["readme_sha256"] = sha256(readme_path)
+    write_json(f116_paths["evidence"], f116_evidence)
+    f116_paths["evidence"].chmod(0o444)
+    f116_evidence_digest = sha256(f116_paths["evidence"])
+    common_candidate = str(root.parent / "exact-f116-evidence.candidate")
+    f116_review_digests = {}
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(f116_paths[key].read_text())
+        review["reviewed_candidate"] = {
+            "path": common_candidate,
+            "sha256": f116_evidence_digest,
+        }
+        review["published_f116"]["sha256"] = f116_evidence_digest
+        write_json(f116_paths[key], review)
+        f116_paths[key].chmod(0o444)
+        f116_review_digests[key] = sha256(f116_paths[key])
+
+    f116_audit = json.loads(f116_paths["publication_audit"].read_text())
+    f116_audit["artifact"]["sha256"] = f116_evidence_digest
+    f116_audit["historical_f115_authority"] = campaign.f115_digests
+    f116_audit["source_archive_catalog"]["readme"]["sha256"] = sha256(readme_path)
+    f116_audit["independent_reviews"]["reviews_bind_exact_published_f116_sha256"] = (
+        f116_evidence_digest
+    )
+    f116_audit["independent_reviews"]["provenance_security"]["sha256"] = (
+        f116_review_digests["provenance_review"]
+    )
+    f116_audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        f116_review_digests["plasma_review"]
+    )
+    write_json(f116_paths["publication_audit"], f116_audit)
+    f116_paths["publication_audit"].chmod(0o444)
+    f116_audit_digest = sha256(f116_paths["publication_audit"])
+    campaign.f116_digests = {
+        "evidence_sha256": f116_evidence_digest,
+        "publication_audit_sha256": f116_audit_digest,
+        "provenance_review_sha256": f116_review_digests["provenance_review"],
+        "plasma_review_sha256": f116_review_digests["plasma_review"],
+    }
+    campaign.f116_bindings = {
+        key: {
+            "path": authority.F116_PATHS[key].as_posix(),
+            "sha256": (
+                f116_evidence_digest
+                if key == "evidence"
+                else f116_audit_digest
+                if key == "publication_audit"
+                else f116_review_digests[key]
+            ),
+        }
+        for key in authority.F116_PATHS
+    }
+    campaign.refresh_candidates()
+
+
+def install_fixture_historical_contract(
+    checkpoint,
+    f115_paths: dict[str, Path],
+    f116_paths: dict[str, Path],
+    f115_readme: bytes,
+    f115_sums: bytes,
+    f116_readme: bytes,
+    f116_sums: bytes,
+) -> None:
+    """Freeze one disposable-root historical contract before hostile mutation."""
+
+    f115 = {key: json.loads(path.read_text()) for key, path in f115_paths.items()}
+    f116 = {key: json.loads(path.read_text()) for key, path in f116_paths.items()}
+    checkpoint.F115_CATALOG_README_SHA256 = hashlib.sha256(f115_readme).hexdigest()
+    checkpoint.F115_CATALOG_SHA256SUMS_SHA256 = hashlib.sha256(f115_sums).hexdigest()
+    checkpoint.F116_CATALOG_README_SHA256 = hashlib.sha256(f116_readme).hexdigest()
+    checkpoint.F116_CATALOG_SHA256SUMS_SHA256 = hashlib.sha256(f116_sums).hexdigest()
+    checkpoint.F115_DECLARATION_CONTRACT_SHA256 = (
+        checkpoint.historical_f115_declaration_contract_sha256(
+            f115["evidence"], f115["publication_audit"]
+        )
+    )
+    checkpoint.F115_CONTRACT_SHA256 = {
+        key: checkpoint.historical_contract_sha256(
+            f115[key], checkpoint.F115_CONTRACT_DYNAMIC_PATHS[key]
+        )
+        for key in checkpoint.F115_CONTRACT_DYNAMIC_PATHS
+    }
+    checkpoint.F116_CONTRACT_SHA256 = {
+        key: checkpoint.historical_contract_sha256(
+            f116[key], checkpoint.F116_CONTRACT_DYNAMIC_PATHS[key]
+        )
+        for key in checkpoint.F116_CONTRACT_DYNAMIC_PATHS
+    }
+
+
+def complete_f115_f116_contract_fixture(campaign, source_test, checkpoint) -> None:
+    """Replace the lightweight shared fixture with the complete historical contract."""
+
+    authority = source_test.authority
+    root = campaign.root
+    archives = root / "source-archives"
+    f115_paths = {key: root / relative for key, relative in authority.F115_PATHS.items()}
+    f116_paths = {key: root / relative for key, relative in authority.F116_PATHS.items()}
+    retained_f115 = json.loads(f115_paths["evidence"].read_text())
+    retained_f113 = retained_f115.get("predecessors", {}).get(
+        "f113_controller_transition",
+        {"path": "accounting/f113.json", "sha256": "2" * 64},
+    )
+    f115_subject = source_test.git(
+        campaign.repository, "show", "-s", "--format=%s", campaign.f115_head
+    ).stdout.strip()
+    f115_parent_result = source_test.git(
+        campaign.repository, "rev-parse", f"{campaign.f115_head}^", check=False
+    )
+    f115_parent = (
+        f115_parent_result.stdout.strip()
+        if f115_parent_result.returncode == 0
+        else "0" * 40
+    )
+    f115_tree = source_test.git(
+        campaign.repository, "rev-parse", f"{campaign.f115_head}^{{tree}}"
+    ).stdout.strip()
+    f115_bundle_digest = sha256(campaign.f115_bundle)
+    sole = checkpoint.expected_historical_f115_sole_profile(
+        root, Path(campaign.f115_bundle.relative_to(root).as_posix()), f115_bundle_digest
+    )
+    marker = b"## AthenaK\n\n"
+    f115_block = (
+        f"`{campaign.f115_bundle.name}` records complete history through commit "
+        f"`{campaign.f115_head}` (`{f115_subject}`). Its SHA-256 is "
+        f"`{f115_bundle_digest}`.\n\n"
+    ).encode()
+    f115_readme = b"# Source archives\n\n" + marker + f115_block + b"Historical bundles.\n"
+    f115_sums = f"{f115_bundle_digest}  {campaign.f115_bundle.name}\n".encode()
+    f116 = json.loads(f116_paths["evidence"].read_text())
+    bridge = f116["implementation"]["intermediate_36140_bundle"]
+    current = f116["implementation"]["current_source_bundle"]
+    f116_readme = f115_readme.replace(
+        marker, marker + checkpoint.historical_f116_catalog_readme_block(bridge, current), 1
+    )
+    f116_sums = f115_sums + (
+        f"{bridge['sha256']}  {Path(bridge['path']).name}\n"
+        f"{current['sha256']}  {Path(current['path']).name}\n"
+    ).encode()
+    archives.joinpath("README.md").chmod(0o644)
+    archives.joinpath("README.md").write_bytes(f116_readme)
+    archives.joinpath("SHA256SUMS").chmod(0o644)
+    archives.joinpath("SHA256SUMS").write_bytes(f116_sums)
+
+    def declared(path: str, mode: str, digest: str = "2" * 64) -> dict[str, object]:
+        return {"path": path, "sha256": digest, "mode": mode, "links": 1}
+
+    generated = "2026-01-01T00:00:00+00:00"
+    published = "2026-01-01T00:00:01+00:00"
+    reviewed = "2026-01-01T00:00:02+00:00"
+    audit_generated = "2026-01-01T00:00:03+00:00"
+    reconcile = {
+        "consistent": True,
+        "controller_commit": campaign.f115_head,
+        "counts": {
+            "active_reservations": 0,
+            "ledger_rows": 1,
+            "manifests": 1,
+            "reservations": 1,
+            "transactions": 0,
+        },
+        "issues": [],
+    }
+    f115 = {
+        "schema_version": 1,
+        "record_type": "stage-i-source-bundle-recovery-supersession-evidence",
+        "checkpoint": "F-115",
+        "execution_epoch": checkpoint.EXECUTION_EPOCH,
+        "generated_utc": generated,
+        "scope": {
+            "relationship": "source-bundle-binding-and-cancelled-segment-identity-supersession",
+            "summary": "Exact fixture F115 historical authority.",
+            "does_not_change": checkpoint.F115_SCOPE_DOES_NOT_CHANGE,
+        },
+        "predecessors": {
+            "f113_controller_transition": declared(
+                retained_f113["path"], "0644", retained_f113["sha256"]
+            ),
+            "f114_clean_partial_recost": declared("accounting/f114.json", "0644"),
+            "f114_publication_audit": declared("accounting/f114.audit.json", "0644"),
+            "reviewed_intermediate_recovery_bundle": declared(
+                "source-archives/intermediate.bundle", "0644"
+            ),
+        },
+        "incident": {
+            "corrupt_live_bundle": declared(
+                checkpoint.F115_F114_BUNDLE_RELATIVE.as_posix(), "0644", "3" * 64
+            ),
+            "evidence": declared("accounting/incident.json", "0444"),
+            "expected_sha256": checkpoint.F115_F114_BUNDLE_SHA256,
+            "observed_sha256": "3" * 64,
+            "resolution": "superseded without changing or deleting immutable incident evidence",
+        },
+        "cancelled_submission": {
+            "allocated_nodes": 0,
+            "elapsed_seconds": 0,
+            "exit_code": "0:0",
+            "job_id": "4766485",
+            "reusable": False,
+            "state": "CANCELLED",
+            "evidence": {
+                key: declared(
+                    f"accounting/{key}.fixture",
+                    "0644" if key == "live_cancelled_manifest" else "0444",
+                )
+                for key in (
+                    "authorization", "live_cancelled_manifest", "post_cancel_sacct",
+                    "post_cancel_squeue", "pre_cancel_hold", "publication_audit",
+                    "scheduler_batch_script", "submitted_manifest",
+                )
+            },
+        },
+        "implementation": {
+            "commit": campaign.f115_head,
+            "cpu_regression_suite": declared(
+                "/fixture/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py", "0644", "4" * 64
+            ),
+            "parent_commit": f115_parent,
+            "source_archive_catalog": {
+                "b0d3_bundle_retained": True,
+                "corrupt_c7_bundle_absent_from_active_ledger": True,
+                "new_bundle_present_exactly_once": True,
+                "readme": declared(
+                    "source-archives/README.md", "0644", hashlib.sha256(f115_readme).hexdigest()
+                ),
+                "sha256sums": declared(
+                    "source-archives/SHA256SUMS", "0644", hashlib.sha256(f115_sums).hexdigest()
+                ),
+            },
+            "source_bundle": {
+                "complete_history": True,
+                "head": campaign.f115_head,
+                "links": 1,
+                "mode": "0644",
+                "path": campaign.f115_bundle.relative_to(root).as_posix(),
+                "sha256": f115_bundle_digest,
+                "verified_revisions": [campaign.f115_head],
+            },
+            "stage_i_helper": declared(
+                "/fixture/scripts/frontier/cgl_lf_stage_i.py", "0644", "6" * 64
+            ),
+            "subject": f115_subject,
+            "tree": f115_tree,
+        },
+        "authorization": {
+            "sole_next_segment_profile": sole,
+            "supersedes_f114_profile_only_where_explicitly_listed": {
+                "segment": {
+                    "from": checkpoint.F115_F114_SEGMENT,
+                    "reason": "s01 is an immutable cancelled no-start manifest and directory",
+                    "to": checkpoint.F115_SEGMENT,
+                },
+                "source_bundle": {
+                    "from": str(root / checkpoint.F115_F114_BUNDLE_RELATIVE),
+                    "to": str(campaign.f115_bundle),
+                },
+                "source_bundle_sha256": {
+                    "from": checkpoint.F115_F114_BUNDLE_SHA256,
+                    "to": f115_bundle_digest,
+                },
+            },
+        },
+        "validation": {
+            "canonical_reconcile": reconcile,
+            "focused_stage_i_tests": "passed",
+            "full_active_source_archive_checksum_ledger": "passed",
+            "isolated_clone_strict_fsck": "passed",
+            "scheduler_queue_observation": {
+                "cgl_workflow_jobs": [],
+                "effect": "fixture non-authorizing observation",
+                "observed_utc": generated,
+                "unrelated_user_jobs": [],
+            },
+            "source_bundle_verify": "complete history passed",
+            "targeted_cancellation_replay_tests": "passed",
+        },
+        "publication_requirements": checkpoint.F115_PUBLICATION_REQUIREMENTS,
+    }
+    write_json(f115_paths["evidence"], f115)
+    f115_paths["evidence"].chmod(0o444)
+    f115_digest = sha256(f115_paths["evidence"])
+    siblings = [
+        {
+            "path": sole["restart_file"] if index == 0 else f"/fixture/restart-{index}.rst",
+            "sha256": f"{index + 1:064x}",
+        }
+        for index in range(8)
+    ]
+    plasma_verified = {
+        "authorization_limitations": checkpoint.F115_PLASMA_AUTHORIZATION_LIMITATIONS,
+        "executable": {
+            "path": sole["executable"], "revision": sole["executable_revision"],
+            "sha256": sole["executable_sha256"],
+        },
+        "input": {
+            "case_name": "paper_standard_active_alfvenic_beta100",
+            "path": "/fixture/cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+            "revision": sole["executable_revision"], "sha256": "8" * 64,
+        },
+        "matrix": {
+            "path": sole["matrix"],
+            "r03_input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+            "r03_resolution": "192x192x384", "sha256": sole["matrix_sha256"],
+        },
+        "parent": {
+            "case_id": sole["case_id"], "job_id": sole["parent_job_id"],
+            "result": sole["parent_result"], "segment": sole["parent_segment"],
+        },
+        "resources": {
+            key: sole[key]
+            for key in ("athena_walltime", "cpus_per_task", "nodes", "ranks_per_node", "walltime")
+        },
+        "restart": {
+            "all_eight_siblings_authenticated": True, "binary_time": sole["restart_time"],
+            "marker_mode": "legacy_default_precision", "rank_count": 8,
+            "siblings": siblings, "terminal_restart": siblings[0],
+        },
+        "s02": {
+            "cancelled_s01_job_id": "4766485", "cancelled_s01_no_start": True,
+            "cancelled_s01_reusable": False, "segment": sole["segment"], "valid": True,
+        },
+        "source_bundle": {
+            "complete_history": True, "head": campaign.f115_head,
+            "path": str(campaign.f115_bundle), "sha256": f115_bundle_digest,
+        },
+        "target": {
+            "override": sole["override"], "restart_time": sole["restart_time"],
+            "time_tlim_target": sole["time_tlim_target"],
+        },
+    }
+    candidate = str(root.parent / "exact-f115-evidence.candidate")
+    review_digests = {}
+    for key, kind, decision, reviewer in (
+        ("provenance_review", "provenance-security", "approved-for-publication",
+         checkpoint.F115_PROVENANCE_REVIEWER),
+        ("plasma_review", "plasma-scientific-continuation", "approved",
+         checkpoint.F115_PLASMA_REVIEWER),
+    ):
+        review = {
+            "schema_version": 1,
+            "record_type": "stage-i-source-bundle-recovery-supersession-independent-review",
+            "checkpoint": "F-115", "execution_epoch": checkpoint.EXECUTION_EPOCH,
+            "review_kind": kind, "decision": decision,
+            "reviewed_candidate": {"path": candidate, "sha256": f115_digest},
+            "published_f115": {"path": str(f115_paths["evidence"]), "sha256": f115_digest},
+            "reviewer": reviewer, "reviewed_utc": reviewed,
+        }
+        if key == "provenance_review":
+            review.update({
+                "scope": checkpoint.F115_PROVENANCE_REVIEW_SCOPE,
+                "findings": [{"severity": "none", "summary": "Exact fixture authority."}],
+                "limitations": ["Read-only exact-byte fixture review."],
+            })
+        else:
+            review["verified"] = plasma_verified
+        write_json(f115_paths[key], review)
+        f115_paths[key].chmod(0o444)
+        review_digests[key] = sha256(f115_paths[key])
+    audit = {
+        "schema_version": 1,
+        "record_type": "stage-i-source-bundle-recovery-supersession-publication-audit",
+        "checkpoint": "F-115", "execution_epoch": checkpoint.EXECUTION_EPOCH,
+        "published_utc": published, "audit_generated_utc": audit_generated,
+        "artifact": source_test.published_binding(f115_paths["evidence"], f115_digest, "0444"),
+        "independent_reviews": {
+            "reviews_bind_exact_published_f115_sha256": f115_digest,
+            "provenance_security": source_test.published_binding(
+                f115_paths["provenance_review"], review_digests["provenance_review"], "0444"
+            ),
+            "plasma_scientific_continuation": source_test.published_binding(
+                f115_paths["plasma_review"], review_digests["plasma_review"], "0444"
+            ),
+        },
+        "authority_and_enforcement": {
+            "authorization_kind": "procedural-pre-prepare-sole-profile-authority",
+            "direct_sbatch_authorized": False, "enforcement_chain": checkpoint.F115_ENFORCEMENT_CHAIN,
+            "f115_authority": source_test.published_binding(f115_paths["evidence"], f115_digest, "0444"),
+            "reuse_cancelled_job_or_s01_authorized": False,
+            "shared_root_acknowledgement_authorized_by_f115": False,
+            "shared_root_acknowledgement_requires_separate_exact_isolation_review_after_prepare": True,
+            "sole_next_segment_profile": sole,
+        },
+        "exact_state_snapshot_before_prepare": {
+            "manifest_inventory": [{"path": "runs/fixture/manifest.json", "sha256": "9" * 64}],
+            "manifest_inventory_sha256": "a" * 64,
+            "node_hours_ledger": declared(str(root / "accounting/node_hours.csv"), "0644"),
+            "qualification_approval": declared(str(root / "accounting/qualification.json"), "0644"),
+            "reconcile_observation": reconcile, "reconcile_observation_sha256": "b" * 64,
+            "reservations": declared(str(root / "accounting/reservations.json"), "0644"),
+        },
+        "prior_rejected_audit_candidates": [
+            {"closed_findings": ["Closed fixture finding."], "published": False, "sha256": "c" * 64}
+        ],
+        "publication": "atomic-write-fsync-rename-fsync-under-canonical-stage-i-lock",
+        "reproducible_implementation_authority": {
+            "authoritative_source_bundle": {
+                "complete_history": True, "head": campaign.f115_head, "links": 1, "mode": "0644",
+                "path": str(campaign.f115_bundle), "sha256": f115_bundle_digest,
+            },
+            "committed_cpu_regression_suite": {
+                "path": "tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py", "sha256": "d" * 64
+            },
+            "committed_stage_i_helper": {
+                "path": "scripts/frontier/cgl_lf_stage_i.py", "sha256": "6" * 64
+            },
+            "f115_live_cpu_suite_observation": {
+                "interpretation": "fixture observational and non-authorizing", "sha256": "4" * 64
+            },
+        },
+        "review_requirement": (
+            "Obtain independent approval of these exact final publication-audit "
+            "candidate bytes before canonical audit publication."
+        ),
+        "source_archive_catalog": {
+            "corrupt_c7_absent_from_active_checksum_ledger": True,
+            "corrupt_c7_retained_as_incident_evidence": True,
+            "full_active_checksum_ledger": "passed", "new_bundle_present_exactly_once": True,
+            "readme": declared(str(archives / "README.md"), "0644", hashlib.sha256(f115_readme).hexdigest()),
+            "sha256sums": declared(str(archives / "SHA256SUMS"), "0644", hashlib.sha256(f115_sums).hexdigest()),
+        },
+        "validation": {
+            "declared_f115_bindings_authenticated": 19, "focused_stage_i_tests": "passed",
+            "full_active_source_archive_checksum_ledger": "passed", "git_bundle_verify": "passed",
+            "isolated_clone_strict_fsck": "passed",
+            "scheduler_queue_observation": {"observed_utc": audit_generated},
+            "targeted_cancellation_replay_tests": "passed",
+        },
+    }
+    write_json(f115_paths["publication_audit"], audit)
+    f115_paths["publication_audit"].chmod(0o444)
+    campaign.f115_bindings = {
+        key: {"path": authority.F115_PATHS[key].as_posix(), "sha256": sha256(path)}
+        for key, path in f115_paths.items()
+    }
+    campaign.f115_digests = {
+        "evidence_sha256": f115_digest,
+        "publication_audit_sha256": sha256(f115_paths["publication_audit"]),
+        "provenance_review_sha256": review_digests["provenance_review"],
+        "plasma_review_sha256": review_digests["plasma_review"],
+    }
+    f116["predecessor_authorities"]["historical_f115"] = campaign.f115_bindings
+    f116["source_archive_catalog"]["before"]["readme_sha256"] = hashlib.sha256(f115_readme).hexdigest()
+    f116["source_archive_catalog"]["before"]["sha256sums_sha256"] = hashlib.sha256(f115_sums).hexdigest()
+    f116["source_archive_catalog"]["after"]["readme_sha256"] = hashlib.sha256(f116_readme).hexdigest()
+    f116["source_archive_catalog"]["after"]["sha256sums_sha256"] = hashlib.sha256(f116_sums).hexdigest()
+    write_json(f116_paths["evidence"], f116)
+    f116_paths["evidence"].chmod(0o444)
+    f116_digest = sha256(f116_paths["evidence"])
+    review_digests = {}
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(f116_paths[key].read_text())
+        review["reviewed_candidate"] = {
+            "path": str(root.parent / "exact-f116-evidence.candidate"), "sha256": f116_digest
+        }
+        review["published_f116"]["sha256"] = f116_digest
+        write_json(f116_paths[key], review)
+        f116_paths[key].chmod(0o444)
+        review_digests[key] = sha256(f116_paths[key])
+    f116_audit = json.loads(f116_paths["publication_audit"].read_text())
+    f116_audit["artifact"]["sha256"] = f116_digest
+    f116_audit["historical_f115_authority"] = campaign.f115_digests
+    f116_audit["source_archive_catalog"]["readme"]["sha256"] = hashlib.sha256(f116_readme).hexdigest()
+    f116_audit["source_archive_catalog"]["sha256sums"]["sha256"] = hashlib.sha256(f116_sums).hexdigest()
+    f116_audit["independent_reviews"]["reviews_bind_exact_published_f116_sha256"] = f116_digest
+    f116_audit["independent_reviews"]["provenance_security"]["sha256"] = review_digests["provenance_review"]
+    f116_audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = review_digests["plasma_review"]
+    write_json(f116_paths["publication_audit"], f116_audit)
+    f116_paths["publication_audit"].chmod(0o444)
+    campaign.f116_bindings = {
+        key: {"path": authority.F116_PATHS[key].as_posix(), "sha256": sha256(path)}
+        for key, path in f116_paths.items()
+    }
+    campaign.f116_digests = {
+        "evidence_sha256": f116_digest,
+        "publication_audit_sha256": sha256(f116_paths["publication_audit"]),
+        "provenance_review_sha256": review_digests["provenance_review"],
+        "plasma_review_sha256": review_digests["plasma_review"],
+    }
+    install_fixture_historical_contract(
+        checkpoint,
+        f115_paths,
+        f116_paths,
+        f115_readme,
+        f115_sums,
+        f116_readme,
+        f116_sums,
+    )
+    campaign.refresh_candidates()
+
+
+def f118_committed_tools_probe(tmp_path: Path, monkeypatch):
+    """Publish the authoritative fixture's exact F115/F116/F118 chain."""
+
+    module = load_checkpoint_module()
+    source_test = load_source_authority_test_module()
+    campaign = source_test.Campaign.create(tmp_path)
+    strengthen_f115_f116_source_authority_fixture(campaign, source_test)
+    complete_f115_f116_contract_fixture(campaign, source_test, module)
+    evidence = json.loads(campaign.evidence_candidate.read_text())
+    implementation = evidence["implementation"]
+    bridge = implementation["intermediate_36140_bundle"]
+    predecessor = implementation["predecessor_current_source_bundle"]
+    current = implementation["current_source_bundle"]
+    old_readme = (campaign.root / "source-archives/README.md").read_bytes()
+    old_sums = (campaign.root / "source-archives/SHA256SUMS").read_bytes()
+    new_readme, new_sums = source_test.authority.catalog_payloads(
+        old_readme,
+        old_sums,
+        bridge_name=Path(bridge["path"]).name,
+        predecessor_name=Path(predecessor["path"]).name,
+        final_name=Path(current["path"]).name,
+        final_sha256=current["sha256"],
+        final_revision=current["head"],
+        final_subject=current["subject"],
+    )
+    campaign.final_target.write_bytes(campaign.final_bundle.read_bytes())
+    campaign.final_target.chmod(0o644)
+    (campaign.root / "source-archives/README.md").write_bytes(new_readme)
+    (campaign.root / "source-archives/README.md").chmod(0o644)
+    (campaign.root / "source-archives/SHA256SUMS").write_bytes(new_sums)
+    (campaign.root / "source-archives/SHA256SUMS").chmod(0o644)
+    for relative, candidate in (
+        (module.F118_RELATIVE, campaign.evidence_candidate),
+        (module.F118_PROVENANCE_REVIEW_RELATIVE, campaign.provenance_candidate),
+        (module.F118_PLASMA_REVIEW_RELATIVE, campaign.plasma_candidate),
+        (module.F118_PUBLICATION_AUDIT_RELATIVE, campaign.audit_candidate),
+    ):
+        path = campaign.root / relative
+        path.write_bytes(candidate.read_bytes())
+        path.chmod(0o444)
+    final_binding = {
+        "path": current["path"],
+        "sha256": current["sha256"],
+        "verified_revisions": current["verified_revisions"],
+    }
+    monkeypatch.setattr(
+        module,
+        "initial_source_path",
+        lambda: campaign.repository / "scripts/frontier/cgl_lf_stage_i_checkpoint.py",
+    )
+    return module, campaign.root, evidence, final_binding
+
+
+def legacy_plaintext_f118_committed_tools_probe(tmp_path: Path, monkeypatch):
+    """Create the former lightweight fixture retained for negative probes."""
+
+    module = load_checkpoint_module()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    for relative, mode_text in module.F116_REQUIRED_TOOLS.items():
+        path = repository / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(f"fixture committed tool {relative}\n".encode())
+        path.chmod(int(mode_text, 8))
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(["git", "add", "."], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=F116 checkpoint fixture",
+            "-c",
+            "user.email=f116-checkpoint@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Commit exact F116 tools",
+        ],
+        cwd=repository,
+        check=True,
+    )
+    historical_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    historical_tools = [
+        {
+            "path": relative,
+            "revision": historical_head,
+            "sha256": sha256(repository / relative),
+            "mode": module.F116_REQUIRED_TOOLS[relative],
+        }
+        for relative in sorted(module.F116_REQUIRED_TOOLS)
+    ]
+    marker = repository / "F118-current-source.marker"
+    marker.write_text("fixture F118 current source revision\n")
+    subprocess.run(["git", "add", "."], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=F118 checkpoint fixture",
+            "-c",
+            "user.email=f118-checkpoint@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Commit exact F118 tools",
+        ],
+        cwd=repository,
+        check=True,
+    )
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    tools = [
+        {
+            "path": relative,
+            "revision": head,
+            "sha256": sha256(repository / relative),
+            "mode": module.F116_REQUIRED_TOOLS[relative],
+        }
+        for relative in sorted(module.F116_REQUIRED_TOOLS)
+    ]
+    root = tmp_path / "root"
+    accounting = root / "accounting"
+    source_archives = root / "source-archives"
+    accounting.mkdir(parents=True)
+    source_archives.mkdir()
+    bridge_path = source_archives / "bridge.bundle"
+    historical_path = source_archives / "f116.bundle"
+    current_path = source_archives / "f118.bundle"
+    readme = source_archives / "README.md"
+    sums = source_archives / "SHA256SUMS"
+    for path, payload in (
+        (bridge_path, b"fixture bridge bundle\n"),
+        (historical_path, b"fixture historical F116 bundle\n"),
+        (current_path, b"fixture current F118 bundle\n"),
+    ):
+        path.write_bytes(payload)
+        path.chmod(0o644)
+    old_readme = (
+        "## AthenaK\n\n"
+        f"Retained bridge `{bridge_path.name}` and F116 current `{historical_path.name}`.\n"
+    ).encode()
+    old_sums = (
+        f"{sha256(bridge_path)}  {bridge_path.name}\n"
+        f"{sha256(historical_path)}  {historical_path.name}\n"
+    ).encode()
+    readme.write_bytes(old_readme)
+    sums.write_bytes(old_sums)
+    readme.chmod(0o644)
+    sums.chmod(0o644)
+    bridge = {
+        "path": bridge_path.relative_to(root).as_posix(),
+        "sha256": sha256(bridge_path),
+        "complete_history": True,
+        "head": historical_head,
+        "advertised_tip": {
+            "revision": historical_head,
+            "name": "refs/heads/feature/cgl-landau-fluid",
+        },
+        "verified_revisions": [historical_head],
+        "selected_as_current": False,
+        "role": "retained-non-current-bridge",
+    }
+    historical_current = {
+        "path": historical_path.relative_to(root).as_posix(),
+        "sha256": sha256(historical_path),
+        "complete_history": True,
+        "head": historical_head,
+        "advertised_tip": {"revision": historical_head, "name": "HEAD"},
+        "verified_revisions": [historical_head],
+        "selected_as_current": True,
+        "candidate_path": str(tmp_path / "f116.bundle.candidate"),
+        "subject": "Commit exact historical F116 tools",
+    }
+    generated = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=3)
+    historical_evidence = {
+        "schema_version": 1,
+        "record_type": "stage-i-current-source-authority-supersession-evidence",
+        "checkpoint": "F-116",
+        "execution_epoch": EPOCH,
+        "generated_utc": (generated - timedelta(minutes=3)).isoformat(),
+        "scope": {},
+        "predecessor_authorities": {},
+        "implementation": {
+            "publisher": next(
+                item
+                for item in historical_tools
+                if item["path"] == module.F116_PUBLISHER_RELATIVE
+            ),
+            "committed_tools": historical_tools,
+            "intermediate_36140_bundle": bridge,
+            "current_source_bundle": historical_current,
+        },
+        "source_archive_catalog": {
+            "before": {},
+            "after": {
+                "readme_sha256": hashlib.sha256(old_readme).hexdigest(),
+                "sha256sums_sha256": hashlib.sha256(old_sums).hexdigest(),
+                "bridge_listed_exactly_once": True,
+                "final_bundle_listed_exactly_once": True,
+                "corrupt_c7_listed": False,
+                "historical_f115_preserved": True,
+                "sole_current_source_bundle": historical_current["path"],
+            },
+        },
+        "authorization": {},
+        "validation": {},
+        "publication_requirements": {},
+    }
+    historical_bindings = {}
+    for key, relative in {
+        "evidence": module.F116_RELATIVE,
+        "publication_audit": module.F116_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": module.F116_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": module.F116_PLASMA_REVIEW_RELATIVE,
+    }.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        value = historical_evidence if key == "evidence" else {"historical": key}
+        path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+        path.chmod(0o444)
+        historical_bindings[key] = {
+            "path": relative.as_posix(),
+            "sha256": sha256(path),
+        }
+    predecessor = dict(historical_current)
+    predecessor.pop("candidate_path")
+    predecessor["selected_as_current"] = False
+    predecessor["role"] = "retained-non-current-predecessor"
+    current = {
+        "path": current_path.relative_to(root).as_posix(),
+        "sha256": sha256(current_path),
+        "complete_history": True,
+        "head": head,
+        "advertised_tip": {"revision": head, "name": "HEAD"},
+        "verified_revisions": [historical_head, head],
+        "selected_as_current": True,
+        "candidate_path": str(tmp_path / "f118.bundle.candidate"),
+        "subject": "Commit exact F118 tools",
+    }
+    catalog_before = {
+        "readme_sha256": hashlib.sha256(old_readme).hexdigest(),
+        "sha256sums_sha256": hashlib.sha256(old_sums).hexdigest(),
+        "bridge_listed_exactly_once": True,
+        "predecessor_current_source_bundle_listed_exactly_once": True,
+        "final_bundle_listed": False,
+        "corrupt_c7_listed": False,
+        "historical_f115_preserved": True,
+    }
+    new_readme = old_readme.replace(
+        b"## AthenaK\n\n",
+        b"## AthenaK\n\n" + module.f118_catalog_readme_block(current),
+        1,
+    )
+    new_sums = old_sums + f"{current['sha256']}  {current_path.name}\n".encode()
+    readme.write_bytes(new_readme)
+    sums.write_bytes(new_sums)
+    readme.chmod(0o644)
+    sums.chmod(0o644)
+    catalog_after = {
+        "readme_sha256": sha256(readme),
+        "sha256sums_sha256": sha256(sums),
+        "bridge_listed_exactly_once": True,
+        "predecessor_current_source_bundle_listed_exactly_once": True,
+        "final_bundle_listed_exactly_once": True,
+        "corrupt_c7_listed": False,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+        "all_prior_checksum_entries_preserved": True,
+        "sole_current_source_bundle": current["path"],
+    }
+    evidence = {
+        "schema_version": 1,
+        "record_type": "stage-i-current-source-authority-supersession-evidence",
+        "checkpoint": "F-118",
+        "execution_epoch": EPOCH,
+        "generated_utc": generated.isoformat(),
+        "scope": {
+            "relationship": "current-source-selection-only-supersession",
+            "summary": "Select exact committed final tooling source without execution authority.",
+            "preserves": module.F118_PRESERVES,
+            "does_not_authorize": module.F118_DOES_NOT_AUTHORIZE,
+        },
+        "predecessor_authorities": {"historical_f116": historical_bindings},
+        "implementation": {
+            "publisher": next(
+                item for item in tools if item["path"] == module.F116_PUBLISHER_RELATIVE
+            ),
+            "committed_tools": tools,
+            "intermediate_36140_bundle": bridge,
+            "predecessor_current_source_bundle": predecessor,
+            "current_source_bundle": current,
+        },
+        "source_archive_catalog": {"before": catalog_before, "after": catalog_after},
+        "authorization": module.F118_AUTHORIZATION,
+        "validation": module.F118_VALIDATION_CLAIMS,
+        "publication_requirements": module.F118_PUBLICATION_REQUIREMENTS,
+    }
+    evidence_path = root / module.F118_RELATIVE
+    write_json(evidence_path, evidence)
+    evidence_path.chmod(0o444)
+    verified = {
+        "authorization_broadening": False,
+        "bridge_selected_as_current": False,
+        "predecessor_current_source_bundle_selected_as_current": False,
+        "corrupt_c7_excluded": True,
+        "current_source_selection_only": True,
+        "final_bundle_sha256": current["sha256"],
+        "final_head": head,
+        "historical_f115_preserved": True,
+        "historical_f116_preserved": True,
+    }
+    review_paths = {}
+    for key, relative, kind, decision, reviewer in (
+        (
+            "provenance_review",
+            module.F118_PROVENANCE_REVIEW_RELATIVE,
+            "provenance-security",
+            "approved-for-publication",
+            "fixture-F118-provenance-reviewer",
+        ),
+        (
+            "plasma_review",
+            module.F118_PLASMA_REVIEW_RELATIVE,
+            "plasma-scientific-continuation",
+            "approved",
+            "fixture-F118-plasma-reviewer",
+        ),
+    ):
+        path = root / relative
+        write_json(
+            path,
+            {
+                "schema_version": 1,
+                "record_type": (
+                    "stage-i-current-source-authority-supersession-independent-review"
+                ),
+                "checkpoint": "F-118",
+                "execution_epoch": EPOCH,
+                "review_kind": kind,
+                "decision": decision,
+                "reviewed_candidate": {
+                    "path": str(tmp_path / "f118-evidence.candidate.json"),
+                    "sha256": sha256(evidence_path),
+                },
+                "published_f118": {
+                    "path": str(evidence_path),
+                    "sha256": sha256(evidence_path),
+                },
+                "reviewer": {"agent_id": reviewer, "identity": reviewer},
+                "reviewed_utc": (generated + timedelta(minutes=1)).isoformat(),
+                "findings": ["Exact F118 source-selection-only authority verified."],
+                "limitations": [
+                    module.INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION
+                ],
+                "verified": verified,
+            },
+        )
+        path.chmod(0o444)
+        review_paths[key] = path
+    audit_path = root / module.F118_PUBLICATION_AUDIT_RELATIVE
+    write_json(
+        audit_path,
+        {
+            "schema_version": 1,
+            "record_type": (
+                "stage-i-current-source-authority-supersession-publication-audit"
+            ),
+            "checkpoint": "F-118",
+            "execution_epoch": EPOCH,
+            "published_utc": (generated + timedelta(minutes=2)).isoformat(),
+            "artifact": {
+                "path": str(evidence_path),
+                "sha256": sha256(evidence_path),
+                "mode": "0444",
+                "links": 1,
+            },
+            "independent_reviews": {
+                "reviews_bind_exact_published_f118_sha256": sha256(evidence_path),
+                "provenance_security": {
+                    "path": str(review_paths["provenance_review"]),
+                    "sha256": sha256(review_paths["provenance_review"]),
+                    "mode": "0444",
+                    "links": 1,
+                },
+                "plasma_scientific_continuation": {
+                    "path": str(review_paths["plasma_review"]),
+                    "sha256": sha256(review_paths["plasma_review"]),
+                    "mode": "0444",
+                    "links": 1,
+                },
+            },
+            "historical_f116_authority": {
+                f"{key}_sha256": binding["sha256"]
+                for key, binding in historical_bindings.items()
+            },
+            "source_archive_catalog": {
+                "readme": {
+                    "path": str(readme),
+                    "sha256": sha256(readme),
+                    "mode": "0644",
+                    "links": 1,
+                },
+                "sha256sums": {
+                    "path": str(sums),
+                    "sha256": sha256(sums),
+                    "mode": "0644",
+                    "links": 1,
+                },
+                "bridge_bundle": {
+                    "path": str(bridge_path),
+                    "sha256": sha256(bridge_path),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": historical_head,
+                    "role": "retained-non-current-bridge",
+                    "selected_as_current": False,
+                },
+                "predecessor_current_source_bundle": {
+                    "path": str(historical_path),
+                    "sha256": sha256(historical_path),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": historical_head,
+                    "role": "retained-non-current-predecessor",
+                    "selected_as_current": False,
+                },
+                "current_source_bundle": {
+                    "path": str(current_path),
+                    "sha256": sha256(current_path),
+                    "mode": "0644",
+                    "links": 1,
+                    "head": head,
+                    "selected_as_current": True,
+                },
+                "corrupt_c7_absent_from_active_checksum_ledger": True,
+                "sole_current_source_bundle": str(current_path),
+            },
+            "authority_and_enforcement": module.F118_AUTHORIZATION,
+            "publication": (
+                "recoverable-forward-transaction-with-publication-audit-commit-marker-"
+                "under-stage-i-lock"
+            ),
+        },
+    )
+    audit_path.chmod(0o444)
+    final_binding = {
+        "path": current["path"],
+        "sha256": current["sha256"],
+        "verified_revisions": current["verified_revisions"],
+    }
+    monkeypatch.setattr(
+        module,
+        "initial_source_path",
+        lambda: repository / "scripts/frontier/cgl_lf_stage_i_checkpoint.py",
+    )
+    return module, root, evidence, final_binding
+
+
+def f118_source_authority_probe(tmp_path: Path, monkeypatch):
+    """Return one complete F118 six-part binding and matching checkpoint arguments."""
+
+    module, root, evidence, final_binding = f118_committed_tools_probe(
+        tmp_path, monkeypatch
+    )
+    binding = {"checkpoint": "F-118", "final_source_bundle": final_binding}
+    for key, relative in {
+        "evidence": module.F118_RELATIVE,
+        "provenance_review": module.F118_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": module.F118_PLASMA_REVIEW_RELATIVE,
+        "publication_audit": module.F118_PUBLICATION_AUDIT_RELATIVE,
+    }.items():
+        binding[key] = {"path": relative.as_posix(), "sha256": sha256(root / relative)}
+    args = SimpleNamespace(
+        source_bundle_relative_path=final_binding["path"],
+        expected_source_bundle_sha256=final_binding["sha256"],
+        expected_source_bundle_verified_revisions_json=final_binding["verified_revisions"],
+    )
+    return module, root, evidence, final_binding, binding, args
+
+
+def mutate_f118_probe_record(root: Path, binding: dict[str, object], key: str, mutate) -> None:
+    """Mutate one F118 retained record and refresh only its external binding."""
+
+    relative = Path(binding[key]["path"])
+    path = root / relative
+    value = json.loads(path.read_text())
+    mutate(value)
+    write_json(path, value)
+    path.chmod(0o444)
+    binding[key]["sha256"] = sha256(path)
+
+
+def rebind_historical_f116_chain(
+    module,
+    root: Path,
+    evidence: dict[str, object],
+) -> None:
+    """Self-rebind F116 reviews/audit and the outer F118 predecessor declaration."""
+
+    paths = {
+        "evidence": root / module.F116_RELATIVE,
+        "publication_audit": root / module.F116_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": root / module.F116_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": root / module.F116_PLASMA_REVIEW_RELATIVE,
+    }
+    evidence_digest = sha256(paths["evidence"])
+    review_digests = {}
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(paths[key].read_text())
+        review["reviewed_candidate"]["sha256"] = evidence_digest
+        review["published_f116"]["sha256"] = evidence_digest
+        write_json(paths[key], review)
+        paths[key].chmod(0o444)
+        review_digests[key] = sha256(paths[key])
+
+    f116 = json.loads(paths["evidence"].read_text())
+    f115_bindings = f116["predecessor_authorities"]["historical_f115"]
+    audit = json.loads(paths["publication_audit"].read_text())
+    audit["artifact"]["sha256"] = evidence_digest
+    audit["historical_f115_authority"] = {
+        f"{key}_sha256": binding["sha256"] for key, binding in f115_bindings.items()
+    }
+    audit["independent_reviews"]["reviews_bind_exact_published_f116_sha256"] = (
+        evidence_digest
+    )
+    audit["independent_reviews"]["provenance_security"]["sha256"] = review_digests[
+        "provenance_review"
+    ]
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        review_digests["plasma_review"]
+    )
+    write_json(paths["publication_audit"], audit)
+    paths["publication_audit"].chmod(0o444)
+
+    outer = evidence["predecessor_authorities"]["historical_f116"]
+    for key, path in paths.items():
+        outer[key]["sha256"] = sha256(path)
+
+
+def mutate_historical_f116_record(
+    module,
+    root: Path,
+    evidence: dict[str, object],
+    key: str,
+    mutate,
+) -> None:
+    """Mutate and fully self-rebind one hostile historical F116 record."""
+
+    relative = {
+        "evidence": module.F116_RELATIVE,
+        "publication_audit": module.F116_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": module.F116_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": module.F116_PLASMA_REVIEW_RELATIVE,
+    }[key]
+    path = root / relative
+    value = json.loads(path.read_text())
+    mutate(value)
+    write_json(path, value)
+    path.chmod(0o444)
+    rebind_historical_f116_chain(module, root, evidence)
+
+
+def mutate_historical_f115_record(
+    module,
+    root: Path,
+    evidence: dict[str, object],
+    key: str,
+    mutate,
+) -> None:
+    """Mutate nested F115 and fully self-rebind it through F116 and F118."""
+
+    relatives = {
+        "evidence": module.F115_RELATIVE,
+        "publication_audit": module.F115_PUBLICATION_AUDIT_RELATIVE,
+        "provenance_review": module.F115_PROVENANCE_REVIEW_RELATIVE,
+        "plasma_review": module.F115_PLASMA_REVIEW_RELATIVE,
+    }
+    paths = {name: root / relative for name, relative in relatives.items()}
+    path = paths[key]
+    value = json.loads(path.read_text())
+    mutate(value)
+    write_json(path, value)
+    path.chmod(0o444)
+
+    f115_evidence_digest = sha256(paths["evidence"])
+    review_digests = {}
+    for review_key in ("provenance_review", "plasma_review"):
+        review = json.loads(paths[review_key].read_text())
+        review["reviewed_candidate"]["sha256"] = f115_evidence_digest
+        review["published_f115"]["sha256"] = f115_evidence_digest
+        write_json(paths[review_key], review)
+        paths[review_key].chmod(0o444)
+        review_digests[review_key] = sha256(paths[review_key])
+    audit = json.loads(paths["publication_audit"].read_text())
+    audit["artifact"]["sha256"] = f115_evidence_digest
+    audit["independent_reviews"]["reviews_bind_exact_published_f115_sha256"] = (
+        f115_evidence_digest
+    )
+    audit["independent_reviews"]["provenance_security"]["sha256"] = review_digests[
+        "provenance_review"
+    ]
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        review_digests["plasma_review"]
+    )
+    audit["authority_and_enforcement"]["f115_authority"]["sha256"] = (
+        f115_evidence_digest
+    )
+    write_json(paths["publication_audit"], audit)
+    paths["publication_audit"].chmod(0o444)
+
+    f116_path = root / module.F116_RELATIVE
+    f116 = json.loads(f116_path.read_text())
+    for record_key, record_path in paths.items():
+        f116["predecessor_authorities"]["historical_f115"][record_key]["sha256"] = sha256(
+            record_path
+        )
+    write_json(f116_path, f116)
+    f116_path.chmod(0o444)
+    rebind_historical_f116_chain(module, root, evidence)
+
+
+def mutate_historical_f115_review_pair(
+    module, root: Path, evidence: dict[str, object], mutate
+) -> None:
+    """Mutate both F115 reviews identically and fully self-rebind the chain."""
+
+    for relative in (module.F115_PROVENANCE_REVIEW_RELATIVE,
+                     module.F115_PLASMA_REVIEW_RELATIVE):
+        path = root / relative
+        value = json.loads(path.read_text())
+        mutate(value)
+        write_json(path, value)
+        path.chmod(0o444)
+    mutate_historical_f115_record(
+        module, root, evidence, "provenance_review", lambda value: None
+    )
+
+
+def mutate_historical_f116_review_pair(
+    module, root: Path, evidence: dict[str, object], mutate
+) -> None:
+    """Mutate both F116 reviews identically and fully self-rebind the chain."""
+
+    for relative in (module.F116_PROVENANCE_REVIEW_RELATIVE,
+                     module.F116_PLASMA_REVIEW_RELATIVE):
+        path = root / relative
+        value = json.loads(path.read_text())
+        mutate(value)
+        write_json(path, value)
+        path.chmod(0o444)
+    mutate_historical_f116_record(
+        module, root, evidence, "provenance_review", lambda value: None
+    )
+
+
+def self_rebind_historical_catalog_chain(
+    module, root: Path, evidence: dict[str, object]
+) -> None:
+    """Rebind a hostile live catalog through F115, F116, and outer F118."""
+
+    readme_path = root / "source-archives/README.md"
+    sums_path = root / "source-archives/SHA256SUMS"
+    readme = readme_path.read_bytes() + b"\nHostile self-rebound predecessor policy.\n"
+    original_sums = sums_path.read_bytes()
+    hostile = root / "source-archives/hostile-self-rebound.bundle"
+    hostile.write_bytes(b"hostile self-rebound source archive\n")
+    hostile.chmod(0o644)
+
+    implementation = evidence["implementation"]
+    current = implementation["current_source_bundle"]
+    f118_block = module.f118_catalog_readme_block(current)
+    marker = b"## AthenaK\n\n"
+    f116_readme = readme.replace(marker + f118_block, marker, 1)
+    f118_line = f"{current['sha256']}  {Path(current['path']).name}\n".encode()
+    f116_path = root / module.F116_RELATIVE
+    f116 = json.loads(f116_path.read_text())
+    bridge = f116["implementation"]["intermediate_36140_bundle"]
+    predecessor = f116["implementation"]["current_source_bundle"]
+    f116_block = module.historical_f116_catalog_readme_block(bridge, predecessor)
+    f115_readme = f116_readme.replace(marker + f116_block, marker, 1)
+    f116_suffix = (
+        f"{bridge['sha256']}  {Path(bridge['path']).name}\n"
+        f"{predecessor['sha256']}  {Path(predecessor['path']).name}\n"
+    ).encode()
+    assert original_sums.endswith(f116_suffix + f118_line)
+    hostile_line = f"{sha256(hostile)}  {hostile.name}\n".encode()
+    f115_sums = original_sums[: -len(f116_suffix + f118_line)] + hostile_line
+    f116_sums = f115_sums + f116_suffix
+    sums = f116_sums + f118_line
+    readme_path.write_bytes(readme)
+    sums_path.write_bytes(sums)
+
+    f115_path = root / module.F115_RELATIVE
+    f115 = json.loads(f115_path.read_text())
+    f115["implementation"]["source_archive_catalog"]["readme"]["sha256"] = (
+        hashlib.sha256(f115_readme).hexdigest()
+    )
+    f115["implementation"]["source_archive_catalog"]["sha256sums"]["sha256"] = (
+        hashlib.sha256(f115_sums).hexdigest()
+    )
+    write_json(f115_path, f115)
+    f115_path.chmod(0o444)
+    f115_audit_path = root / module.F115_PUBLICATION_AUDIT_RELATIVE
+    f115_audit = json.loads(f115_audit_path.read_text())
+    f115_audit["source_archive_catalog"]["readme"]["sha256"] = (
+        hashlib.sha256(f115_readme).hexdigest()
+    )
+    f115_audit["source_archive_catalog"]["sha256sums"]["sha256"] = (
+        hashlib.sha256(f115_sums).hexdigest()
+    )
+    write_json(f115_audit_path, f115_audit)
+    f115_audit_path.chmod(0o444)
+
+    f116["source_archive_catalog"]["before"]["readme_sha256"] = hashlib.sha256(
+        f115_readme
+    ).hexdigest()
+    f116["source_archive_catalog"]["before"]["sha256sums_sha256"] = hashlib.sha256(
+        f115_sums
+    ).hexdigest()
+    f116["source_archive_catalog"]["after"]["readme_sha256"] = hashlib.sha256(
+        f116_readme
+    ).hexdigest()
+    f116["source_archive_catalog"]["after"]["sha256sums_sha256"] = hashlib.sha256(
+        f116_sums
+    ).hexdigest()
+    write_json(f116_path, f116)
+    f116_path.chmod(0o444)
+    f116_audit_path = root / module.F116_PUBLICATION_AUDIT_RELATIVE
+    f116_audit = json.loads(f116_audit_path.read_text())
+    f116_audit["source_archive_catalog"]["readme"]["sha256"] = hashlib.sha256(
+        f116_readme
+    ).hexdigest()
+    f116_audit["source_archive_catalog"]["sha256sums"]["sha256"] = hashlib.sha256(
+        f116_sums
+    ).hexdigest()
+    write_json(f116_audit_path, f116_audit)
+    f116_audit_path.chmod(0o444)
+
+    evidence["source_archive_catalog"]["before"]["readme_sha256"] = hashlib.sha256(
+        f116_readme
+    ).hexdigest()
+    evidence["source_archive_catalog"]["before"]["sha256sums_sha256"] = hashlib.sha256(
+        f116_sums
+    ).hexdigest()
+    evidence["source_archive_catalog"]["after"]["readme_sha256"] = hashlib.sha256(
+        readme
+    ).hexdigest()
+    evidence["source_archive_catalog"]["after"]["sha256sums_sha256"] = hashlib.sha256(
+        sums
+    ).hexdigest()
+    mutate_historical_f115_record(module, root, evidence, "evidence", lambda value: None)
+
+
+def rebind_f118_probe_chain(root: Path, binding: dict[str, object]) -> None:
+    """Refresh exact F118 review/audit digest bindings after one adversarial mutation."""
+
+    evidence = root / binding["evidence"]["path"]
+    evidence_digest = sha256(evidence)
+    binding["evidence"]["sha256"] = evidence_digest
+    for key in ("provenance_review", "plasma_review"):
+        path = root / binding[key]["path"]
+        value = json.loads(path.read_text())
+        value["reviewed_candidate"]["sha256"] = evidence_digest
+        value["published_f118"]["sha256"] = evidence_digest
+        write_json(path, value)
+        path.chmod(0o444)
+        binding[key]["sha256"] = sha256(path)
+    audit_path = root / binding["publication_audit"]["path"]
+    audit = json.loads(audit_path.read_text())
+    audit["artifact"]["sha256"] = evidence_digest
+    audit["independent_reviews"]["reviews_bind_exact_published_f118_sha256"] = (
+        evidence_digest
+    )
+    audit["independent_reviews"]["provenance_security"]["sha256"] = binding[
+        "provenance_review"
+    ]["sha256"]
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = binding[
+        "plasma_review"
+    ]["sha256"]
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    binding["publication_audit"]["sha256"] = sha256(audit_path)
+
+
+def rebind_complete_f118_source_authority(
+    module,
+    root: Path,
+    evidence: dict[str, object],
+    binding: dict[str, object],
+) -> None:
+    """Fully self-rebind one hostile nested authority through complete F118."""
+
+    evidence_path = root / module.F118_RELATIVE
+    write_json(evidence_path, evidence)
+    evidence_path.chmod(0o444)
+    audit_path = root / module.F118_PUBLICATION_AUDIT_RELATIVE
+    audit = json.loads(audit_path.read_text())
+    audit["historical_f116_authority"] = {
+        f"{key}_sha256": retained["sha256"]
+        for key, retained in evidence["predecessor_authorities"]["historical_f116"].items()
+    }
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    rebind_f118_probe_chain(root, binding)
+
+
+def rebind_f118_live_catalog(root: Path, binding: dict[str, object]) -> None:
+    """Rebind declared F118 after-state digests to adversarial live catalog bytes."""
+
+    readme = root / "source-archives/README.md"
+    sums = root / "source-archives/SHA256SUMS"
+    evidence_path = root / binding["evidence"]["path"]
+    evidence = json.loads(evidence_path.read_text())
+    evidence["source_archive_catalog"]["after"]["readme_sha256"] = sha256(readme)
+    evidence["source_archive_catalog"]["after"]["sha256sums_sha256"] = sha256(sums)
+    write_json(evidence_path, evidence)
+    evidence_path.chmod(0o444)
+    audit_path = root / binding["publication_audit"]["path"]
+    audit = json.loads(audit_path.read_text())
+    audit["source_archive_catalog"]["readme"]["sha256"] = sha256(readme)
+    audit["source_archive_catalog"]["sha256sums"]["sha256"] = sha256(sums)
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    rebind_f118_probe_chain(root, binding)
+
+
+def validate_rebound_f118_catalog_transition(module, root: Path, evidence: dict[str, object]):
+    """Validate adversarial live catalog bytes with self-consistent transition digests."""
+
+    implementation = evidence["implementation"]
+    current = implementation["current_source_bundle"]
+    bridge = implementation["intermediate_36140_bundle"]
+    predecessor = implementation["predecessor_current_source_bundle"]
+    readme = (root / "source-archives/README.md").read_bytes()
+    sums = (root / "source-archives/SHA256SUMS").read_bytes()
+    marker = b"## AthenaK\n\n"
+    block = module.f118_catalog_readme_block(current)
+    old_readme = readme.replace(marker + block, marker, 1)
+    final_line = f"{current['sha256']}  {Path(current['path']).name}\n".encode()
+    assert sums.endswith(final_line)
+    old_sums = sums[: -len(final_line)]
+    before = dict(evidence["source_archive_catalog"]["before"])
+    after = dict(evidence["source_archive_catalog"]["after"])
+    before["readme_sha256"] = hashlib.sha256(old_readme).hexdigest()
+    before["sha256sums_sha256"] = hashlib.sha256(old_sums).hexdigest()
+    after["readme_sha256"] = hashlib.sha256(readme).hexdigest()
+    after["sha256sums_sha256"] = hashlib.sha256(sums).hexdigest()
+    f115_evidence = json.loads((root / module.F115_RELATIVE).read_text())
+    historical_f115_bundle = dict(f115_evidence["implementation"]["source_bundle"])
+    historical_f115_bundle["subject"] = f115_evidence["implementation"]["subject"]
+    f115_catalog = f115_evidence["implementation"]["source_archive_catalog"]
+    historical_f115 = {
+        "bundle": historical_f115_bundle,
+        "catalog_before_f116": {
+            "readme_sha256": f115_catalog["readme"]["sha256"],
+            "sha256sums_sha256": f115_catalog["sha256sums"]["sha256"],
+        },
+    }
+    return module.validate_f118_catalog_transition(
+        root,
+        current,
+        bridge,
+        predecessor,
+        historical_f115,
+        before,
+        after,
+    )
+
+
+def install_exact_source_authority_chain_for_recost_fixture(
+    recost_test,
+    checkpoint_contract,
+    fixture: dict[str, object],
+    temporary: Path,
+) -> None:
+    """Replace the generator fixture's weak source records with the exact contract."""
+
+    source_test = load_source_authority_test_module()
+    authority = source_test.authority
+    repository = fixture["repository"]
+    root = fixture["root"]
+    accounting = fixture["accounting"]
+    assert all(isinstance(item, Path) for item in (repository, root, accounting))
+    archives = root / "source-archives"
+    candidates = temporary / "exact-source-authority-candidates"
+    candidates.mkdir()
+    source_test.git(repository, "config", "user.email", "fixture@example.invalid")
+    source_test.git(repository, "config", "user.name", "checkpoint integration fixture")
+
+    for relative in (*authority.F115_PATHS.values(), *authority.F116_PATHS.values(),
+                     *authority.F118_PATHS.values()):
+        path = root / relative
+        if path.exists():
+            path.chmod(0o644)
+
+    f115_head = source_test.git(repository, "rev-parse", "HEAD").stdout.strip()
+    f115_bundle = archives / f"athenak-feature-cgl-through-{f115_head[:9]}.bundle"
+    source_test.git(repository, "bundle", "create", str(f115_bundle), "HEAD")
+    f115_bundle.chmod(0o644)
+    f115_bindings, f115_digests = source_test.Campaign._publish_f115(
+        root, repository, f115_bundle, f115_head
+    )
+    f115_paths = {key: root / relative for key, relative in authority.F115_PATHS.items()}
+    f115_evidence = json.loads(f115_paths["evidence"].read_text())
+    f115_evidence["predecessors"] = {
+        "f113_controller_transition": {
+            "path": fixture["ceiling"].relative_to(root).as_posix(),
+            "sha256": sha256(fixture["ceiling"]),
+        }
+    }
+    f115_paths["evidence"].chmod(0o644)
+    source_test.write_json(f115_paths["evidence"], f115_evidence, 0o444)
+    for key in ("provenance_review", "plasma_review"):
+        review = json.loads(f115_paths[key].read_text())
+        review["published_f115"]["sha256"] = sha256(f115_paths["evidence"])
+        f115_paths[key].chmod(0o644)
+        source_test.write_json(f115_paths[key], review, 0o444)
+    f115_audit = json.loads(f115_paths["publication_audit"].read_text())
+    f115_audit["artifact"]["sha256"] = sha256(f115_paths["evidence"])
+    f115_audit["independent_reviews"]["reviews_bind_exact_published_f115_sha256"] = (
+        sha256(f115_paths["evidence"])
+    )
+    f115_audit["independent_reviews"]["provenance_security"]["sha256"] = sha256(
+        f115_paths["provenance_review"]
+    )
+    f115_audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = (
+        sha256(f115_paths["plasma_review"])
+    )
+    f115_paths["publication_audit"].chmod(0o644)
+    source_test.write_json(f115_paths["publication_audit"], f115_audit, 0o444)
+    f115_bindings = {
+        key: {"path": authority.F115_PATHS[key].as_posix(), "sha256": sha256(path)}
+        for key, path in f115_paths.items()
+    }
+    f115_digests = {
+        "evidence_sha256": sha256(f115_paths["evidence"]),
+        "publication_audit_sha256": sha256(f115_paths["publication_audit"]),
+        "provenance_review_sha256": sha256(f115_paths["provenance_review"]),
+        "plasma_review_sha256": sha256(f115_paths["plasma_review"]),
+    }
+    source_test.write_bytes(
+        archives / "README.md", b"# Source archives\n\n## AthenaK\n\nHistorical bundles.\n", 0o644
+    )
+    source_test.write_bytes(
+        archives / "SHA256SUMS",
+        f"{sha256(f115_bundle)}  {f115_bundle.name}\n".encode(),
+        0o644,
+    )
+
+    bridge_marker = repository / "checkpoint-integration-bridge.marker"
+    bridge_marker.write_text("exact bridge source\n")
+    source_test.git(repository, "add", bridge_marker.name)
+    source_test.git(repository, "commit", "-m", "Commit exact bridge source")
+    bridge_head = source_test.git(repository, "rev-parse", "HEAD").stdout.strip()
+    source_test.git(
+        repository,
+        "update-ref",
+        "refs/heads/feature/cgl-landau-fluid",
+        bridge_head,
+    )
+    bridge_bundle = archives / f"athenak-feature-cgl-through-{bridge_head[:9]}.bundle"
+    source_test.git(
+        repository,
+        "bundle",
+        "create",
+        str(bridge_bundle),
+        "refs/heads/feature/cgl-landau-fluid",
+    )
+    bridge_bundle.chmod(0o644)
+
+    f116_marker = repository / "checkpoint-integration-f116.marker"
+    f116_marker.write_text("exact F116 source\n")
+    source_test.git(repository, "add", f116_marker.name)
+    source_test.git(repository, "commit", "-m", "Commit exact F116 source")
+    f116_head = source_test.git(repository, "rev-parse", "HEAD").stdout.strip()
+    f116_bundle = archives / f"athenak-feature-cgl-through-{f116_head[:9]}.bundle"
+    source_test.git(repository, "bundle", "create", str(f116_bundle), "HEAD")
+    f116_bundle.chmod(0o644)
+    f116_bindings, f116_digests = source_test.Campaign._publish_f116(
+        root,
+        repository,
+        f115_bindings,
+        f115_digests,
+        f115_head,
+        bridge_bundle,
+        bridge_head,
+        f116_bundle,
+        f116_head,
+    )
+
+    final_marker = repository / "checkpoint-integration-f118.marker"
+    final_marker.write_text("exact F118 source\n")
+    source_test.git(repository, "add", final_marker.name)
+    source_test.git(repository, "commit", "-m", "Commit exact F118 source")
+    final_head = source_test.git(repository, "rev-parse", "HEAD").stdout.strip()
+    final_bundle = candidates / f"athenak-feature-cgl-through-{final_head[:9]}.bundle"
+    source_test.git(repository, "bundle", "create", str(final_bundle), "HEAD")
+    final_bundle.chmod(0o644)
+    campaign = source_test.Campaign(
+        repository=repository,
+        root=root,
+        candidates=candidates,
+        publisher=repository / authority.PUBLISHER_RELATIVE,
+        f115_head=f115_head,
+        bridge_head=bridge_head,
+        f116_head=f116_head,
+        final_head=final_head,
+        f115_bundle=f115_bundle,
+        bridge_bundle=bridge_bundle,
+        f116_bundle=f116_bundle,
+        final_bundle=final_bundle,
+        evidence_candidate=candidates / f"{authority.F118_NAME}.candidate",
+        provenance_candidate=(
+            candidates / f"{authority.F118_NAME}.provenance_security_review.json.candidate"
+        ),
+        plasma_candidate=(
+            candidates / f"{authority.F118_NAME}.plasma_scientific_review.json.candidate"
+        ),
+        audit_candidate=(
+            candidates / f"{authority.F118_NAME}.publication_audit.json.candidate"
+        ),
+        f115_bindings=f115_bindings,
+        f115_digests=f115_digests,
+        f116_bindings=f116_bindings,
+        f116_digests=f116_digests,
+        final_verified_revisions=[
+            fixture["f113_revision"],
+            f115_head,
+            bridge_head,
+            f116_head,
+            final_head,
+        ],
+        reviewer_ids={"provenance": "fixture-provenance", "plasma": "fixture-plasma"},
+        authorization=dict(authority.AUTHORIZATION),
+        subject_override=None,
+        expected={},
+    )
+    strengthen_f115_f116_source_authority_fixture(campaign, source_test)
+    complete_f115_f116_contract_fixture(campaign, source_test, checkpoint_contract)
+    f116_bindings = campaign.f116_bindings
+    source_test.write_bytes(campaign.final_target, final_bundle.read_bytes(), 0o644)
+    old_readme = (archives / "README.md").read_bytes()
+    old_sums = (archives / "SHA256SUMS").read_bytes()
+    new_readme, new_sums = authority.catalog_payloads(
+        old_readme,
+        old_sums,
+        bridge_name=bridge_bundle.name,
+        predecessor_name=f116_bundle.name,
+        final_name=final_bundle.name,
+        final_sha256=sha256(final_bundle),
+        final_revision=final_head,
+        final_subject=source_test.git(
+            repository, "show", "-s", "--format=%s", final_head
+        ).stdout.strip(),
+    )
+    source_test.write_bytes(archives / "README.md", new_readme, 0o644)
+    source_test.write_bytes(archives / "SHA256SUMS", new_sums, 0o644)
+    for relative, candidate in (
+        (authority.F118_PATHS["evidence"], campaign.evidence_candidate),
+        (authority.F118_PATHS["provenance_review"], campaign.provenance_candidate),
+        (authority.F118_PATHS["plasma_review"], campaign.plasma_candidate),
+        (authority.F118_PATHS["publication_audit"], campaign.audit_candidate),
+    ):
+        source_test.write_bytes(root / relative, candidate.read_bytes(), 0o444)
+
+    fixture.update(
+        {
+            "source_bundle": campaign.final_target,
+            "f116_source_bundle": f116_bundle,
+            "historical_source_bundle": f115_bundle,
+            "source_authority": root / authority.F118_PATHS["evidence"],
+            "source_authority_audit": root / authority.F118_PATHS["publication_audit"],
+            "source_authority_provenance_review": (
+                root / authority.F118_PATHS["provenance_review"]
+            ),
+            "source_authority_plasma_review": root / authority.F118_PATHS["plasma_review"],
+            "f116_source_authority": root / authority.F116_PATHS["evidence"],
+            "f116_source_authority_audit": root / authority.F116_PATHS["publication_audit"],
+            "f116_source_authority_provenance_review": (
+                root / authority.F116_PATHS["provenance_review"]
+            ),
+            "f116_source_authority_plasma_review": (
+                root / authority.F116_PATHS["plasma_review"]
+            ),
+            "historical_source_authority": root / authority.F115_PATHS["evidence"],
+            "historical_source_authority_audit": (
+                root / authority.F115_PATHS["publication_audit"]
+            ),
+            "historical_source_authority_provenance_review": (
+                root / authority.F115_PATHS["provenance_review"]
+            ),
+            "historical_source_authority_plasma_review": (
+                root / authority.F115_PATHS["plasma_review"]
+            ),
+        }
+    )
+    request = json.loads(fixture["request"].read_text())
+    source_bundle_binding = {
+        "path": campaign.final_target.relative_to(root).as_posix(),
+        "sha256": sha256(campaign.final_target),
+        "verified_revisions": campaign.final_verified_revisions,
+    }
+    request["inputs"]["source_bundle"] = source_bundle_binding
+    request["inputs"]["source_authority"] = {
+        "checkpoint": "F-118",
+        "evidence": {
+            "path": authority.F118_PATHS["evidence"].as_posix(),
+            "sha256": sha256(fixture["source_authority"]),
+        },
+        "publication_audit": {
+            "path": authority.F118_PATHS["publication_audit"].as_posix(),
+            "sha256": sha256(fixture["source_authority_audit"]),
+        },
+        "provenance_review": {
+            "path": authority.F118_PATHS["provenance_review"].as_posix(),
+            "sha256": sha256(fixture["source_authority_provenance_review"]),
+        },
+        "plasma_review": {
+            "path": authority.F118_PATHS["plasma_review"].as_posix(),
+            "sha256": sha256(fixture["source_authority_plasma_review"]),
+        },
+        "final_source_bundle": dict(source_bundle_binding),
+    }
+    for profile in request["recommendations"]["profiles"]:
+        profile["source_bundle"] = str(campaign.final_target)
+        profile["source_bundle_sha256"] = sha256(campaign.final_target)
+    write_json(fixture["request"], request)
+    recost_test.refresh_storage(fixture)
+    recost_test.refresh_request(fixture)
+    assert checkpoint_contract.validate_historical_f116_authority(
+        root, repository, f116_bindings
+    )["current"]["head"] == f116_head
+
+
+def f119_failed_f117_predecessor_probe(tmp_path: Path, monkeypatch):
+    """Create one exact local F119 failed-F117 predecessor transition."""
+
+    module = load_checkpoint_module()
+    recost_test = load_current_recost_test_module()
+    root = tmp_path / "root"
+    artifact, recost, audit, audit_value, request_generated = (
+        recost_test.legacy_f114_arguments(module, root, monkeypatch)
+    )
+    failed_paths = recost_test.write_failed_f117_attempt(module, root)
+    failed = {
+        "checkpoint": "F-117",
+        **{
+            key: {
+                "path": module.F117_FAILED_ATTEMPT_RELATIVES[key].as_posix(),
+                "sha256": sha256(path),
+            }
+            for key, path in failed_paths.items()
+        },
+        "status": "authenticated-unpromoted-failed-attempt",
+    }
+    predecessor = {
+        "path": str(artifact),
+        "artifact_name": artifact.name,
+        "sha256": sha256(artifact),
+        "publication_audit_path": str(audit),
+        "publication_audit_sha256": sha256(audit),
+        "independent_review_path": None,
+        "independent_review_sha256": None,
+        "checkpoint": "F-114",
+        "generated_utc": recost["generated_utc"],
+        "published_utc": audit_value["published_utc"],
+        "bootstrap": module.F119_LEGACY_BOOTSTRAP,
+        "superseded_failed_attempt": failed,
+    }
+    request_inputs = {
+        "reconciliation": {"fixture": True},
+        "ledger": {"fixture": True},
+        "reservations": {"fixture": True},
+        "manifests": [],
+        "scheduler_evidence": [],
+        "storage_evidence": {"fixture": True},
+        "source_bundle": {"fixture": True},
+        "matrix": {"fixture": True},
+        "stage_i_helper": {"fixture": True},
+        "ceiling_evidence": {"fixture": True},
+        "ceiling_publication_audit": {"fixture": True},
+        "source_authority": {"checkpoint": "F-118"},
+        "qualification_approval": {"fixture": True},
+        "predecessor_recost": {
+            "path": artifact.relative_to(root).as_posix(),
+            "sha256": sha256(artifact),
+        },
+        "predecessor_recost_independent_review": None,
+        "predecessor_recost_publication_audit": {
+            "path": audit.relative_to(root).as_posix(),
+            "sha256": sha256(audit),
+        },
+        "r17_readiness_evidence": None,
+        "r17_readiness_independent_review": None,
+        "r17_readiness_publication_audit": None,
+    }
+    provenance = {
+        "predecessor_recost_sha256": sha256(artifact),
+        "predecessor_recost_independent_review_sha256": None,
+        "predecessor_recost_publication_audit_sha256": sha256(audit),
+    }
+    return {
+        "module": module,
+        "root": root,
+        "artifact": artifact,
+        "audit": audit,
+        "failed_paths": failed_paths,
+        "predecessor": predecessor,
+        "request_inputs": request_inputs,
+        "provenance": provenance,
+        "request_generated": request_generated.isoformat(),
+    }
+
+
+def validate_f119_probe(probe, *, checkpoint: str = "F-119",
+                        artifact_name: str | None = None) -> None:
+    """Run the checkpoint's exact F119 predecessor validator."""
+
+    probe["module"].validate_f119_failed_f117_predecessor(
+        probe["predecessor"],
+        probe["request_inputs"],
+        probe["provenance"],
+        probe["root"],
+        artifact_name or probe["module"].F119_ARTIFACT_NAME,
+        checkpoint,
+        probe["request_generated"],
+    )
+
+
+def test_checkpoint_rejects_schema2_review_predating_artifact_before_publication(
+    tmp_path,
+):
+    generated = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=1)
+    module, root, artifact_name, args = schema2_review_probe(
+        tmp_path, (generated - timedelta(seconds=1)).isoformat()
+    )
+    with pytest.raises(ValueError, match="predates artifact generation"):
+        module.schema2_independent_review(
+            root,
+            artifact_name,
+            args,
+            artifact_generated_utc=generated.isoformat(),
+        )
+
+
+def test_checkpoint_rejects_future_schema2_review_before_publication(tmp_path):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    generated = now - timedelta(hours=1)
+    module, root, artifact_name, args = schema2_review_probe(
+        tmp_path, (now + timedelta(hours=1)).isoformat()
+    )
+    with pytest.raises(ValueError, match="independent review is in the future"):
+        module.schema2_independent_review(
+            root,
+            artifact_name,
+            args,
+            artifact_generated_utc=generated.isoformat(),
+        )
+
+
+def test_checkpoint_rejects_publication_predating_schema2_review(tmp_path):
+    generated = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=1)
+    reviewed = generated + timedelta(minutes=30)
+    module, root, artifact_name, args = schema2_review_probe(
+        tmp_path, reviewed.isoformat()
+    )
+    with pytest.raises(ValueError, match="publication predates independent review"):
+        module.schema2_independent_review(
+            root,
+            artifact_name,
+            args,
+            artifact_generated_utc=generated.isoformat(),
+            publication_published_utc=(reviewed - timedelta(seconds=1)).isoformat(),
+        )
+
+
+def test_checkpoint_accepts_exact_schema2_review_chronology_boundaries(tmp_path):
+    retained = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=1)
+    module, root, artifact_name, args = schema2_review_probe(
+        tmp_path, retained.isoformat()
+    )
+    binding = module.schema2_independent_review(
+        root,
+        artifact_name,
+        args,
+        artifact_generated_utc=retained.isoformat(),
+        publication_published_utc=retained.isoformat(),
+    )
+    assert binding["sha256"] == args.expected_independent_review_sha256
+
+
+def test_checkpoint_declared_independence_disclaims_cryptographic_identity(tmp_path):
+    retained = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=1)
+    module, root, artifact_name, args = schema2_review_probe(
+        tmp_path, retained.isoformat()
+    )
+    assurance = module.validate_schema2_independent_review(
+        (root / args.independent_review_relative_path).read_bytes(),
+        root,
+        artifact_name,
+        args,
+        artifact_generated_utc=retained.isoformat(),
+        publication_published_utc=retained.isoformat(),
+    )
+    assert assurance["cryptographic_identity_verified"] is False
+    assert (
+        assurance["non_cryptographic_limitation"]
+        == module.INDEPENDENT_REVIEW_NON_CRYPTOGRAPHIC_LIMITATION
+    )
+
+
+def test_checkpoint_accepts_exact_f118_committed_tools(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    module.validate_f118_committed_tools(
+        (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+        final_binding,
+        root,
+    )
+
+
+def test_checkpoint_f118_required_tools_match_source_authority_contract():
+    checkpoint = load_checkpoint_module()
+    source = REPOSITORY / "scripts/frontier/cgl_lf_stage_i_source_authority.py"
+    spec = importlib.util.spec_from_file_location(
+        "_cgl_lf_stage_i_source_authority_contract", source
+    )
+    assert spec is not None and spec.loader is not None
+    authority = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(authority)
+    assert checkpoint.F118_REQUIRED_TOOLS == authority.REQUIRED_TOOLS
+
+
+@pytest.mark.parametrize("mutation", ["missing", "duplicate", "wrong-mode", "wrong-sha"])
+def test_checkpoint_rejects_malformed_f118_committed_tools(
+    tmp_path, monkeypatch, mutation
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    tools = evidence["implementation"]["committed_tools"]
+    if mutation == "missing":
+        tools.pop()
+    elif mutation == "duplicate":
+        tools[1] = dict(tools[0])
+    elif mutation == "wrong-mode":
+        tools[0]["mode"] = "0755" if tools[0]["mode"] == "0644" else "0644"
+    else:
+        tools[0]["sha256"] = "0" * 64
+
+    with pytest.raises(ValueError, match="schema-2 F118 committed"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_accepts_complete_exact_f118_source_authority(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    assert module.validate_f118_source_authority_binding(binding, root, args) == binding
+
+
+def test_checkpoint_rejects_over_authorizing_f118_evidence(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "evidence",
+        lambda value: value["authorization"].__setitem__("prepare_authorized", True),
+    )
+    with pytest.raises(ValueError, match="identity or authority differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_f118_current_bundle_tip_role_drift(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "evidence",
+        lambda value: value["implementation"]["current_source_bundle"][
+            "advertised_tip"
+        ].__setitem__("name", "refs/heads/feature/cgl-landau-fluid"),
+    )
+    with pytest.raises(ValueError, match="current source bundle advertised tip differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_f118_current_bundle_subject_drift(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    evidence["implementation"]["current_source_bundle"]["subject"] = "forged subject"
+    with pytest.raises(ValueError, match="final HEAD subject differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_f118_bridge_drift_from_historical_f116(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    bridge = evidence["implementation"]["intermediate_36140_bundle"]
+    current_head = evidence["implementation"]["current_source_bundle"]["head"]
+    bridge["head"] = current_head
+    bridge["advertised_tip"]["revision"] = current_head
+    bridge["verified_revisions"] = [current_head]
+    with pytest.raises(ValueError, match="bridge bundle filename does not bind its head"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_f118_required_revision_coverage_drift(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    current = evidence["implementation"]["current_source_bundle"]
+    current["verified_revisions"] = [current["head"]]
+    final_binding["verified_revisions"] = [current["head"]]
+    with pytest.raises(ValueError, match="omit F116 history"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_historical_f116_publisher_contract_drift(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    historical_path = root / module.F116_RELATIVE
+    historical = json.loads(historical_path.read_text())
+    historical["implementation"]["publisher"]["sha256"] = "0" * 64
+    write_json(historical_path, historical)
+    historical_path.chmod(0o444)
+    evidence["predecessor_authorities"]["historical_f116"]["evidence"]["sha256"] = (
+        sha256(historical_path)
+    )
+    with pytest.raises(ValueError, match="historical F116 publisher differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_forged_historical_f116_provenance_review(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "provenance_review",
+        lambda value: value.__setitem__("decision", "rejected"),
+    )
+    with pytest.raises(ValueError, match="historical F116 provenance_review identity or review"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_distinct_historical_f116_review_candidates(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "plasma_review",
+        lambda value: value["reviewed_candidate"].__setitem__(
+            "path", str(tmp_path / "different-f116-evidence.candidate")
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F116 plasma_review identity or review"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_forged_historical_f116_publication_audit(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "publication_audit",
+        lambda value: value["authority_and_enforcement"].__setitem__(
+            "direct_sbatch_authorized", True
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F116 publication audit authority differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_broadened_historical_f116_authorization(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["authorization"].__setitem__("prepare_authorized", True),
+    )
+    with pytest.raises(ValueError, match="historical F116 evidence identity or authority"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_forged_historical_f116_subject(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"]["current_source_bundle"].__setitem__(
+            "subject", "forged historical subject"
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F116 current source subject differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_forged_nested_f115_subject(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"].__setitem__(
+            "subject", "forged nested F115 subject"
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 implementation Git identity differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_rebound_nested_f115_authorized_source(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["authorization"]["sole_next_segment_profile"].__setitem__(
+            "source_bundle", str(tmp_path / "rebound-source.bundle")
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 sole-next profile differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_rebound_nested_f115_sole_execution_profile(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+
+    def rebind(value):
+        value["authorization"]["sole_next_segment_profile"].update(
+            {
+                "case_id": "R99",
+                "nodes": 4096,
+                "walltime": "99:00:00",
+                "segment": "s99_rankio_t0_t99",
+            }
+        )
+
+    mutate_historical_f115_record(module, root, evidence, "evidence", rebind)
+    with pytest.raises(ValueError, match="historical F115 sole-next profile differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_nested_f115_review_candidate_rebinding(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "plasma_review",
+        lambda value: value["reviewed_candidate"].__setitem__(
+            "path", str(tmp_path / "different-f115.candidate")
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 plasma_review identity differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_over_authorizing_nested_f115_plasma_verification(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "plasma_review",
+        lambda value: value["verified"]["authorization_limitations"].__setitem__(
+            "authorization_broadening", True
+        ),
+    )
+    with pytest.raises(ValueError, match="plasma verification over-authorizes"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_over_authorizing_nested_f115_enforcement_text(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "publication_audit",
+        lambda value: value["authority_and_enforcement"].__setitem__(
+            "enforcement_chain", ["Direct submission is authorized."]
+        ),
+    )
+    with pytest.raises(ValueError, match="publication audit over-authorizes"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+@pytest.mark.parametrize(
+    ("record", "field"),
+    (("evidence", "generated_utc"), ("plasma_review", "reviewed_utc"),
+     ("publication_audit", "audit_generated_utc")),
+)
+def test_checkpoint_rejects_malformed_nested_f115_timestamp(
+    tmp_path, monkeypatch, record, field
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module, root, evidence, record, lambda value: value.__setitem__(field, "not-utc")
+    )
+    with pytest.raises(ValueError, match="historical F115"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_nested_f115_evidence_extra_authority(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value.__setitem__("prepare_authorized", True),
+    )
+    with pytest.raises(ValueError, match="historical F115 evidence schema differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+@pytest.mark.parametrize(("field", "value"), (("mode", "0777"), ("links", 2)))
+def test_checkpoint_rejects_nested_f115_bundle_declaration_lie(
+    tmp_path, monkeypatch, field, value
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda retained: retained["implementation"]["source_bundle"].__setitem__(
+            field, value
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 source-bundle declaration differs"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_forged_nested_f115_authority(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "publication_audit",
+        lambda value: value["authority_and_enforcement"].__setitem__(
+            "direct_sbatch_authorized", True
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 publication audit over-authorizes"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_nested_f115_cancelled_job_reuse_authority(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "publication_audit",
+        lambda value: value["authority_and_enforcement"].__setitem__(
+            "reuse_cancelled_job_or_s01_authorized", True
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 publication audit over-authorizes"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+@pytest.mark.parametrize(
+    ("record", "probe"),
+    (
+        ("evidence", "predecessor"),
+        ("evidence", "cancellation"),
+        ("evidence", "helper"),
+        ("evidence", "parent"),
+        ("evidence", "tree"),
+        ("plasma_review", "plasma-input"),
+        ("plasma_review", "restart-sibling"),
+        ("publication_audit", "state-snapshot"),
+        ("publication_audit", "audit-claim"),
+    ),
+)
+def test_checkpoint_rejects_self_rebound_f115_exact_contract_class(
+    tmp_path, monkeypatch, record, probe
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+
+    def rebind(value):
+        if probe == "predecessor":
+            value["predecessors"]["f114_clean_partial_recost"]["path"] = (
+                "accounting/hostile-f114.json"
+            )
+        elif probe == "cancellation":
+            value["cancelled_submission"]["evidence"]["authorization"]["sha256"] = "f" * 64
+        elif probe == "helper":
+            value["implementation"]["stage_i_helper"]["path"] = "/hostile/stage_i.py"
+        elif probe == "parent":
+            value["implementation"]["parent_commit"] = value["implementation"]["commit"]
+        elif probe == "tree":
+            value["implementation"]["tree"] = value["implementation"]["commit"]
+        elif probe == "plasma-input":
+            value["verified"]["input"]["path"] = "/hostile/input.athinput"
+        elif probe == "restart-sibling":
+            value["verified"]["restart"]["siblings"][1]["sha256"] = "f" * 64
+        elif probe == "state-snapshot":
+            value["exact_state_snapshot_before_prepare"]["manifest_inventory_sha256"] = (
+                "f" * 64
+            )
+        elif probe == "audit-claim":
+            value["validation"]["focused_stage_i_tests"] = "999 hostile tests passed"
+        else:
+            raise AssertionError(probe)
+
+    mutate_historical_f115_record(module, root, evidence, record, rebind)
+    with pytest.raises(ValueError, match="historical F115"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_self_rebound_identical_f115_review_candidate_paths(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_review_pair(
+        module,
+        root,
+        evidence,
+        lambda value: value["reviewed_candidate"].__setitem__(
+            "path", str(tmp_path / "hostile-identical-f115.candidate")
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 .* exact historical contract"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_self_rebound_f115_review_content(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "provenance_review",
+        lambda value: value["findings"][0].__setitem__(
+            "summary", "Hostile self-rebound finding."
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 .* exact historical contract"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_self_rebound_valid_f115_review_timestamp(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f115_record(
+        module,
+        root,
+        evidence,
+        "plasma_review",
+        lambda value: value.__setitem__(
+            "reviewed_utc", "2026-01-01T00:00:02.500000+00:00"
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F115 .* exact historical contract"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_self_rebound_f116_review_identity_and_content(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+
+    def rebind(value):
+        value["reviewed_candidate"]["path"] = str(
+            tmp_path / "hostile-identical-f116.candidate"
+        )
+        value["reviewer"]["identity"] = "hostile self-rebound reviewer"
+        value["findings"] = ["hostile self-rebound finding"]
+        value["limitations"] = [
+            *value["limitations"],
+            "hostile self-rebound limitation",
+        ]
+
+    mutate_historical_f116_review_pair(module, root, evidence, rebind)
+    with pytest.raises(ValueError, match="historical F116 .* exact historical contract"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_self_rebound_valid_f116_review_timestamp(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    mutate_historical_f116_review_pair(
+        module,
+        root,
+        evidence,
+        lambda value: value.__setitem__(
+            "reviewed_utc", value["reviewed_utc"].replace("+00:00", "Z")
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F116 .* exact historical contract"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_full_chain_rejects_self_rebound_f116_current_candidate_path(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"]["current_source_bundle"].__setitem__(
+            "candidate_path", str(tmp_path / "hostile-f116-current.bundle.candidate")
+        ),
+    )
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116 evidence differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+@pytest.mark.parametrize(
+    "bundle",
+    ("intermediate_36140_bundle", "current_source_bundle"),
+)
+def test_checkpoint_full_chain_rejects_self_rebound_f116_bundle_revision_inventory(
+    tmp_path, monkeypatch, bundle
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+
+    def rebind(value):
+        revisions = value["implementation"][bundle]["verified_revisions"]
+        assert len(revisions) > 1
+        value["implementation"][bundle]["verified_revisions"] = list(reversed(revisions))
+
+    mutate_historical_f116_record(module, root, evidence, "evidence", rebind)
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116 evidence differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_full_chain_rejects_candidate_path_added_to_f116_bridge(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"]["intermediate_36140_bundle"].__setitem__(
+            "candidate_path", str(tmp_path / "hostile-f116-bridge.bundle.candidate")
+        ),
+    )
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116 bridge bundle"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+@pytest.mark.parametrize("declaration", ("publisher", "committed_tool"))
+def test_checkpoint_full_chain_rejects_self_rebound_f116_tool_declaration(
+    tmp_path, monkeypatch, declaration
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+
+    def rebind(value):
+        implementation = value["implementation"]
+        if declaration == "publisher":
+            implementation["publisher"]["path"] = "scripts/frontier/hostile-publisher.py"
+        else:
+            implementation["committed_tools"][0]["path"] = (
+                "scripts/frontier/hostile-committed-tool.py"
+            )
+
+    mutate_historical_f116_record(module, root, evidence, "evidence", rebind)
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F116"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_full_chain_rejects_self_rebound_f115_bundle_revision_inventory(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+
+    def rebind(value):
+        value["implementation"]["source_bundle"]["verified_revisions"].append("f" * 40)
+
+    mutate_historical_f115_record(module, root, evidence, "evidence", rebind)
+    rebind_complete_f118_source_authority(module, root, evidence, binding)
+    with pytest.raises(ValueError, match="historical F115"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_self_rebound_f115_f116_catalog_trust_root(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    self_rebind_historical_catalog_chain(module, root, evidence)
+    with pytest.raises(ValueError, match="historical F115 catalog README"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_plaintext_f118_current_bundle(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    current = evidence["implementation"]["current_source_bundle"]
+    path = root / current["path"]
+    path.write_text("not a Git bundle\n")
+    path.chmod(0o644)
+    current["sha256"] = sha256(path)
+    final_binding["sha256"] = current["sha256"]
+    with pytest.raises(ValueError, match="F118 current source bundle header is invalid"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_plaintext_f118_bridge_bundle(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    bridge = evidence["implementation"]["intermediate_36140_bundle"]
+    path = root / bridge["path"]
+    path.write_text("not a Git bundle\n")
+    path.chmod(0o644)
+    bridge["sha256"] = sha256(path)
+    mutate_historical_f116_record(
+        module,
+        root,
+        evidence,
+        "evidence",
+        lambda value: value["implementation"]["intermediate_36140_bundle"].__setitem__(
+            "sha256", bridge["sha256"]
+        ),
+    )
+    with pytest.raises(ValueError, match="historical F116 bridge bundle header is invalid"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    (
+        ("candidate_path", "relative-f118.bundle", "candidate path is not an absolute normalized"),
+        (
+            "path",
+            "source-archives/nested/athenak-feature-cgl-through-000000000.bundle",
+            "normalized direct child of source-archives",
+        ),
+    ),
+)
+def test_checkpoint_rejects_relative_or_nested_f118_current_bundle_declaration(
+    tmp_path, monkeypatch, field, value, match
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    current = evidence["implementation"]["current_source_bundle"]
+    current[field] = value
+    if field == "path":
+        final_binding["path"] = value
+    with pytest.raises(ValueError, match=match):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_f118_current_filename_not_bound_to_head(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    current = evidence["implementation"]["current_source_bundle"]
+    current["path"] = "source-archives/athenak-feature-cgl-through-000000000.bundle"
+    final_binding["path"] = current["path"]
+    with pytest.raises(ValueError, match="filename does not bind its head"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_non_normalized_nested_f118_candidate(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    evidence["implementation"]["current_source_bundle"]["candidate_path"] = str(
+        tmp_path / "nested" / ".." / "f118.bundle"
+    )
+    with pytest.raises(ValueError, match="candidate path is not an absolute normalized"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+def test_checkpoint_rejects_nonexistent_f118_verified_revision(tmp_path, monkeypatch):
+    module, root, evidence, final_binding = f118_committed_tools_probe(tmp_path, monkeypatch)
+    missing = "f" * 40
+    evidence["implementation"]["current_source_bundle"]["verified_revisions"].append(missing)
+    with pytest.raises(ValueError, match="does not contain requested revision"):
+        module.validate_f118_committed_tools(
+            (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode(),
+            final_binding,
+            root,
+        )
+
+
+@pytest.mark.parametrize(
+    ("review_key", "decision"),
+    (("provenance_review", "rejected"), ("plasma_review", "changes-required")),
+)
+def test_checkpoint_rejects_nonapproved_f118_review(
+    tmp_path, monkeypatch, review_key, decision
+):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        review_key,
+        lambda value: value.__setitem__("decision", decision),
+    )
+    with pytest.raises(ValueError, match="identity or decision differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+@pytest.mark.parametrize(
+    "record_key", ("provenance_review", "plasma_review", "publication_audit")
+)
+def test_checkpoint_rejects_missing_f118_review_or_audit(
+    tmp_path, monkeypatch, record_key
+):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    (root / binding[record_key]["path"]).unlink()
+    with pytest.raises(OSError):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_over_authorizing_f118_publication_audit(
+    tmp_path, monkeypatch
+):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "publication_audit",
+        lambda value: value["authority_and_enforcement"].__setitem__(
+            "scheduler_mutation_authorized", True
+        ),
+    )
+    with pytest.raises(ValueError, match="publication audit identity or authority differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_f118_audit_review_digest_drift(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "publication_audit",
+        lambda value: value["independent_reviews"]["provenance_security"].__setitem__(
+            "sha256", "0" * 64
+        ),
+    )
+    with pytest.raises(ValueError, match="provenance review publication differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_distinct_f118_review_candidate_paths(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "plasma_review",
+        lambda value: value["reviewed_candidate"].__setitem__(
+            "path", str(tmp_path / "different-f118-evidence.candidate.json")
+        ),
+    )
+    audit_path = root / binding["publication_audit"]["path"]
+    audit = json.loads(audit_path.read_text())
+    audit["independent_reviews"]["plasma_scientific_continuation"]["sha256"] = binding[
+        "plasma_review"
+    ]["sha256"]
+    write_json(audit_path, audit)
+    audit_path.chmod(0o444)
+    binding["publication_audit"]["sha256"] = sha256(audit_path)
+    with pytest.raises(ValueError, match="identity or decision differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_false_f118_catalog_before_digest(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    mutate_f118_probe_record(
+        root,
+        binding,
+        "evidence",
+        lambda value: value["source_archive_catalog"]["before"].__setitem__(
+            "readme_sha256", "0" * 64
+        ),
+    )
+    rebind_f118_probe_chain(root, binding)
+    with pytest.raises(ValueError, match="catalog predecessor authority differs"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_rebound_f118_live_readme(tmp_path, monkeypatch):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    readme = root / "source-archives/README.md"
+    readme.write_text("## AthenaK\n\nRebound arbitrary current-source catalog.\n")
+    readme.chmod(0o644)
+    rebind_f118_live_catalog(root, binding)
+    with pytest.raises(ValueError, match="exact single append block"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_non_append_only_f118_live_sha256sums(
+    tmp_path, monkeypatch
+):
+    module, root, _, _, binding, args = f118_source_authority_probe(
+        tmp_path, monkeypatch
+    )
+    sums = root / "source-archives/SHA256SUMS"
+    lines = sums.read_bytes().splitlines(keepends=True)
+    extra = root / "source-archives/rebound-extra.bundle"
+    extra.write_bytes(b"rebound arbitrary source archive\n")
+    extra.chmod(0o644)
+    sums.write_bytes(
+        b"".join(lines[:-1])
+        + f"{sha256(extra)}  {extra.name}\n".encode()
+        + lines[-1]
+    )
+    sums.chmod(0o644)
+    rebind_f118_live_catalog(root, binding)
+    with pytest.raises(ValueError, match="does not derive from F116 catalog_after"):
+        module.validate_f118_source_authority_binding(binding, root, args)
+
+
+def test_checkpoint_rejects_rebound_historical_f115_readme_entry(tmp_path, monkeypatch):
+    module, root, evidence, _ = f118_committed_tools_probe(tmp_path, monkeypatch)
+    f115 = json.loads((root / module.F115_RELATIVE).read_text())
+    digest = f115["implementation"]["source_bundle"]["sha256"]
+    readme = root / "source-archives/README.md"
+    payload = readme.read_bytes()
+    exact = f"`{digest}`".encode()
+    assert payload.count(exact) == 1
+    readme.write_bytes(payload.replace(exact, f"`{'0' * 64}`".encode(), 1))
+    with pytest.raises(ValueError, match="does not preserve the exact F115 archive entry"):
+        validate_rebound_f118_catalog_transition(module, root, evidence)
+
+
+def test_checkpoint_rejects_rebound_historical_f115_checksum_entry(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _ = f118_committed_tools_probe(tmp_path, monkeypatch)
+    f115 = json.loads((root / module.F115_RELATIVE).read_text())
+    bundle = f115["implementation"]["source_bundle"]
+    sums = root / "source-archives/SHA256SUMS"
+    payload = sums.read_bytes()
+    exact = f"{bundle['sha256']}  {Path(bundle['path']).name}\n".encode()
+    assert payload.count(exact) == 1
+    sums.write_bytes(payload.replace(exact, f"{'0' * 64}  {Path(bundle['path']).name}\n".encode()))
+    with pytest.raises(
+        ValueError,
+        match="historical F116 SHA256SUMS differs from canonical bytes",
+    ):
+        validate_rebound_f118_catalog_transition(module, root, evidence)
+
+
+def test_checkpoint_rejects_arbitrary_historical_f116_readme_text(tmp_path, monkeypatch):
+    module, root, evidence, _ = f118_committed_tools_probe(tmp_path, monkeypatch)
+    readme = root / "source-archives/README.md"
+    payload = readme.read_bytes()
+    readme.write_bytes(payload + b"\nHostile arbitrary historical F116 policy text.\n")
+    with pytest.raises(ValueError, match="historical F116 README"):
+        validate_rebound_f118_catalog_transition(module, root, evidence)
+
+
+def test_checkpoint_rejects_historical_f116_hostile_extra_checksum_entry(
+    tmp_path, monkeypatch
+):
+    module, root, evidence, _ = f118_committed_tools_probe(tmp_path, monkeypatch)
+    sums = root / "source-archives/SHA256SUMS"
+    lines = sums.read_bytes().splitlines(keepends=True)
+    sums.write_bytes(
+        b"".join(lines[:-1])
+        + f"{'e' * 64}  hostile-extra.bundle\n".encode()
+        + lines[-1]
+    )
+    with pytest.raises(ValueError, match="historical F116 SHA256SUMS"):
+        validate_rebound_f118_catalog_transition(module, root, evidence)
+
+
+def test_checkpoint_accepts_exact_f119_failed_f117_predecessor(tmp_path, monkeypatch):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    validate_f119_probe(probe)
+    write_json(
+        probe["root"] / "accounting" / f"{probe['module'].F119_ARTIFACT_NAME}.publication_audit.json",
+        {"record_type": "stage-i-recost-recommendation-publication-audit"},
+    )
+    validate_f119_probe(probe)
+
+
+@pytest.mark.parametrize("operation", ("missing", "mutated"))
+@pytest.mark.parametrize("failed_key", ("packet", "request", "reconciliation", "storage"))
+def test_checkpoint_f119_rejects_failed_f117_quartet_drift(
+    tmp_path, monkeypatch, failed_key, operation
+):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    path = probe["failed_paths"][failed_key]
+    if operation == "missing":
+        path.unlink()
+    else:
+        path.write_bytes(path.read_bytes() + b"\n")
+        path.chmod(0o644)
+    with pytest.raises((OSError, ValueError)):
+        validate_f119_probe(probe)
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json",
+        "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json.staged",
+        "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json.independent_review.json",
+        "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json.publication_audit.json",
+        "mks24_stage_i_E03_forcing_policy_F117_recost_request.json.independent_review.json",
+    ),
+)
+def test_checkpoint_f119_rejects_any_f117_promoted_namespace(
+    tmp_path, monkeypatch, name
+):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    write_json(probe["root"] / "accounting" / name, {"forbidden": True})
+    with pytest.raises(ValueError, match="requires no F117 artifact"):
+        validate_f119_probe(probe)
+
+
+@pytest.mark.parametrize("target", ("predecessor", "audit"))
+@pytest.mark.parametrize("operation", ("empty", "mutated"))
+def test_checkpoint_f119_rejects_empty_or_mutated_legacy_predecessor(
+    tmp_path, monkeypatch, target, operation
+):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    path = probe["artifact"] if target == "predecessor" else probe["audit"]
+    path.write_bytes(b"" if operation == "empty" else path.read_bytes() + b"\n")
+    path.chmod(0o644)
+    with pytest.raises(ValueError, match="checksum has changed"):
+        validate_f119_probe(probe)
+
+
+def test_checkpoint_f119_rejects_mutated_supersession_identity(tmp_path, monkeypatch):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    probe["predecessor"]["superseded_failed_attempt"]["status"] = "over-authorized"
+    with pytest.raises(ValueError, match="supersession binding differs"):
+        validate_f119_probe(probe)
+
+
+def test_checkpoint_f119_rejects_extended_request_input_schema(tmp_path, monkeypatch):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    probe["request_inputs"]["unreviewed_authority"] = True
+    with pytest.raises(ValueError, match="schema-2 F119 request inputs schema differs"):
+        validate_f119_probe(probe)
+
+
+@pytest.mark.parametrize("identity_source", ("predecessor", "request", "provenance"))
+def test_checkpoint_non_f119_rejects_unmarked_legacy_f114_identity(
+    tmp_path, monkeypatch, identity_source
+):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    probe["predecessor"].pop("bootstrap")
+    probe["predecessor"].pop("superseded_failed_attempt")
+    if identity_source != "predecessor":
+        probe["predecessor"] = {}
+    if identity_source != "request":
+        probe["request_inputs"]["predecessor_recost"] = {
+            "path": "accounting/not-legacy.json",
+            "sha256": "0" * 64,
+        }
+        probe["request_inputs"]["predecessor_recost_publication_audit"] = {
+            "path": "accounting/not-legacy.json.publication_audit.json",
+            "sha256": "0" * 64,
+        }
+    if identity_source != "provenance":
+        probe["provenance"]["predecessor_recost_sha256"] = "0" * 64
+        probe["provenance"]["predecessor_recost_publication_audit_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="restricted to exact F119"):
+        validate_f119_probe(
+            probe,
+            checkpoint="F-118",
+            artifact_name="mks24_stage_i_E03_forcing_policy_F118_recost_evidence.json",
+        )
+
+
+@pytest.mark.parametrize("checkpoint_number", (116, 117, 118, 120, 200))
+def test_checkpoint_failed_f117_supersession_is_f119_only(
+    tmp_path, monkeypatch, checkpoint_number
+):
+    probe = f119_failed_f117_predecessor_probe(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="restricted to exact F119"):
+        validate_f119_probe(
+            probe,
+            checkpoint=f"F-{checkpoint_number}",
+            artifact_name=(
+                f"mks24_stage_i_E03_forcing_policy_F{checkpoint_number}_"
+                "recost_evidence.json"
+            ),
+        )
+
+
+def test_checkpoint_rejects_artifact_review_candidate_path_race(tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    candidate = tmp_path / "independent-review.candidate.json"
+    candidate.write_bytes(b'{"review": "exact candidate"}\n')
+    candidate.chmod(0o444)
+    expected = sha256(candidate)
+    with module.authenticated_artifact_review_candidate(
+        candidate, root, expected
+    ) as (_, descriptor, retained):
+        retired = candidate.with_suffix(".retired")
+        candidate.rename(retired)
+        candidate.write_bytes(retained)
+        candidate.chmod(0o444)
+        with pytest.raises(ValueError, match="pathname changed during installation"):
+            module.require_artifact_review_candidate_stable(
+                candidate, descriptor, expected
+            )
+
+
+def test_checkpoint_rejects_artifact_review_candidate_checksum_drift(tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    candidate = tmp_path / "independent-review.candidate.json"
+    candidate.write_bytes(b'{"review": "unexpected candidate"}\n')
+    candidate.chmod(0o444)
+    with pytest.raises(ValueError, match="candidate checksum has changed"):
+        with module.authenticated_artifact_review_candidate(
+            candidate, root, "0" * 64
+        ):
+            pass
+
+
+def test_checkpoint_rejects_relative_artifact_review_candidate(tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    with pytest.raises(ValueError, match="absolute normalized path"):
+        with module.authenticated_artifact_review_candidate(
+            Path("independent-review.candidate.json"), root, "0" * 64
+        ):
+            pass
+
+
+def test_checkpoint_rejects_in_root_artifact_review_candidate(tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    candidate = root / "independent-review.candidate.json"
+    candidate.write_bytes(b'{"review": "in-root candidate"}\n')
+    candidate.chmod(0o444)
+    with pytest.raises(ValueError, match="must be external to the Stage I root"):
+        with module.authenticated_artifact_review_candidate(
+            candidate, root, sha256(candidate)
+        ):
+            pass
+
+
+def test_checkpoint_artifact_review_scope_is_exactly_non_authorizing(tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    artifact_name = "mks24_stage_i_E03_forcing_policy_F117_recost_evidence.json"
+    expected = "1" * 64
+    reviewed = datetime.now(timezone.utc) - timedelta(seconds=1)
+    review = {
+        "schema_version": 1,
+        "record_type": "stage-i-recost-recommendation-independent-review",
+        "execution_epoch": EPOCH,
+        "reviewed_utc": reviewed.isoformat(),
+        "decision": "approved-for-publication",
+        "reviewer": {
+            "agent_id": "independent-checkpoint-reviewer",
+            "independent_from_generator": True,
+        },
+        "candidate": {
+            "path": str(root / "accounting" / artifact_name),
+            "sha256": expected,
+        },
+        "scope": {"non_authorizing": True},
+    }
+    args = SimpleNamespace(
+        expected_artifact_sha256=expected,
+        expected_generator_revision="2" * 40,
+    )
+    retained = (json.dumps(review, sort_keys=True) + "\n").encode()
+    assurance = module.validate_schema2_independent_review(
+        retained,
+        root,
+        artifact_name,
+        args,
+        artifact_generated_utc=(reviewed - timedelta(seconds=1)).isoformat(),
+    )
+    assert assurance["strict_distinct_role_and_agent_declarations"] is True
+
+    review["scope"]["artifact_review_waiver"] = "forbidden"
+    with pytest.raises(ValueError, match="independent review differs"):
+        module.validate_schema2_independent_review(
+            (json.dumps(review, sort_keys=True) + "\n").encode(),
+            root,
+            artifact_name,
+            args,
+            artifact_generated_utc=(reviewed - timedelta(seconds=1)).isoformat(),
+        )
+
+
+def test_checkpoint_rejects_artifact_review_target_create_race(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    target = accounting / "artifact.independent_review.json"
+    retained = b'{"review": "exact candidate"}\n'
+    expected = hashlib.sha256(retained).hexdigest()
+    descriptor = os.open(accounting, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    real_renameat2 = module.renameat2
+    raced = False
+
+    def racing_renameat2(parent, source, selected_target, flags, label):
+        nonlocal raced
+        if (
+            not raced
+            and parent == descriptor
+            and selected_target == target.name
+            and flags == module.RENAME_NOREPLACE
+        ):
+            raced = True
+            injected = os.open(
+                target.name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o444,
+                dir_fd=descriptor,
+            )
+            os.write(injected, b"raced target\n")
+            os.close(injected)
+        return real_renameat2(parent, source, selected_target, flags, label)
+
+    monkeypatch.setattr(module, "renameat2", racing_renameat2)
+    try:
+        with pytest.raises(ValueError, match="already exists or changed"):
+            module.create_artifact_review(descriptor, target, retained, expected)
+    finally:
+        os.close(descriptor)
+    assert raced
+    assert target.read_bytes() == b"raced target\n"
+
+
+def test_checkpoint_cleans_only_exact_failed_artifact_review_create(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    target = accounting / "artifact.independent_review.json"
+    retained = b'{"review": "exact candidate"}\n'
+    expected = hashlib.sha256(retained).hexdigest()
+    descriptor = os.open(accounting, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    observed = []
+
+    def fail_write(_descriptor, _retained):
+        entries = list(accounting.iterdir())
+        observed.append((target.exists(), [entry.lstat().st_mode & 0o777 for entry in entries]))
+        raise OSError("simulated artifact-review write failure")
+
+    monkeypatch.setattr(module, "write_descriptor_bytes", fail_write)
+    try:
+        with pytest.raises(OSError, match="simulated artifact-review write failure"):
+            module.create_artifact_review(descriptor, target, retained, expected)
+    finally:
+        os.close(descriptor)
+    assert observed == [(False, [0o600])]
+    assert not target.exists()
+    assert list(accounting.iterdir()) == []
+
+
+def test_checkpoint_atomic_retirement_retains_substituted_inode(tmp_path, monkeypatch):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    escaped = tmp_path / "escaped"
+    substitute = tmp_path / "substitute"
+    victim.write_bytes(b"authenticated victim\n")
+    substitute.write_bytes(b"raced substitute\n")
+    real_renameat2_between = module.renameat2_between
+    raced = False
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    with module.bound_parent_descriptor(victim, "retirement race") as parent:
+        expected = os.stat(victim.name, dir_fd=parent, follow_symlinks=False)
+
+        def racing_renameat2_between(
+            selected_parent, source, target_parent, target, flags, label
+        ):
+            nonlocal raced
+            if (
+                not raced
+                and selected_parent == parent
+                and source == victim.name
+                and flags == module.RENAME_NOREPLACE
+                and "retirement" in label
+            ):
+                raced = True
+                os.rename(
+                    victim.name,
+                    escaped.name,
+                    src_dir_fd=parent,
+                    dst_dir_fd=parent,
+                )
+                os.rename(
+                    substitute.name,
+                    victim.name,
+                    src_dir_fd=parent,
+                    dst_dir_fd=parent,
+                )
+            return real_renameat2_between(
+                selected_parent, source, target_parent, target, flags, label
+            )
+
+        monkeypatch.setattr(module, "renameat2_between", racing_renameat2_between)
+        with pytest.raises(ValueError, match="retained as .cgl-checkpoint-retired"):
+            module.unlink_bound_entry(parent, victim.name, expected, "raced victim")
+
+    assert raced
+    assert not victim.exists()
+    assert escaped.read_bytes() == b"authenticated victim\n"
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    assert next(iter(retired)).read_bytes() == b"raced substitute\n"
+
+
+def test_checkpoint_atomic_retirement_has_no_python_unlink_race_hook(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"authenticated victim\n")
+
+    def forbidden_unlink(*_args, **_kwargs):
+        raise AssertionError("retirement must not expose a Python unlink race hook")
+
+    monkeypatch.setattr(module.os, "unlink", forbidden_unlink)
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+    with module.bound_parent_descriptor(victim, "retirement") as parent:
+        expected = os.stat(victim.name, dir_fd=parent, follow_symlinks=False)
+        module.unlink_bound_entry(parent, victim.name, expected, "authenticated victim")
+
+    assert not victim.exists()
+    assert list(tmp_path.iterdir()) == []
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    assert next(iter(retired)).read_bytes() == b"authenticated victim\n"
+
+
+@pytest.mark.parametrize("drift", ["mode", "link"])
+def test_checkpoint_atomic_retirement_rejects_same_inode_security_drift(
+    tmp_path, monkeypatch, drift,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    linked = tmp_path / "linked"
+    victim.write_bytes(b"authenticated victim\n")
+    real_renameat2_between = module.renameat2_between
+    raced = False
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    with module.bound_parent_descriptor(victim, "retirement security drift") as parent:
+        expected = os.stat(victim.name, dir_fd=parent, follow_symlinks=False)
+
+        def drift_before_retirement(
+            source_parent, source, target_parent, target, flags, label
+        ):
+            nonlocal raced
+            if (
+                not raced
+                and source == victim.name
+                and flags == module.RENAME_NOREPLACE
+                and "retirement" in label
+            ):
+                raced = True
+                if drift == "mode":
+                    os.chmod(victim.name, 0o666, dir_fd=source_parent)
+                else:
+                    os.link(
+                        victim.name,
+                        linked.name,
+                        src_dir_fd=source_parent,
+                        dst_dir_fd=source_parent,
+                    )
+            return real_renameat2_between(
+                source_parent, source, target_parent, target, flags, label
+            )
+
+        monkeypatch.setattr(module, "renameat2_between", drift_before_retirement)
+        with pytest.raises(ValueError, match="changed during atomic retirement"):
+            module.unlink_bound_entry(parent, victim.name, expected, "drifted victim")
+
+    assert raced
+    assert not victim.exists()
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    retained = next(iter(retired))
+    assert retained.read_bytes() == b"authenticated victim\n"
+    if drift == "mode":
+        assert retained.stat().st_mode & 0o777 == 0o666
+    else:
+        assert retained.stat().st_nlink == 2
+        assert linked.stat().st_ino == retained.stat().st_ino
+
+
+def test_checkpoint_atomic_retirement_durably_records_public_name_reappearance(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"authenticated victim\n")
+    real_renameat2_between = module.renameat2_between
+    real_fsync = module.os.fsync
+    fsynced_directories = []
+    reappeared = False
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced_directories.append(module.profile_identity(profile))
+        return result
+
+    with module.bound_parent_descriptor(victim, "retirement reappearance") as parent:
+        expected = os.stat(victim.name, dir_fd=parent, follow_symlinks=False)
+        parent_identity = module.profile_identity(os.fstat(parent))
+        forensic_parent_identity = module.profile_identity(tmp_path.parent.stat())
+
+        def reappear_after_retirement(
+            source_parent, source, target_parent, target, flags, label
+        ):
+            nonlocal reappeared
+            result = real_renameat2_between(
+                source_parent, source, target_parent, target, flags, label
+            )
+            if (
+                not reappeared
+                and source == victim.name
+                and flags == module.RENAME_NOREPLACE
+                and "retirement" in label
+            ):
+                reappeared = True
+                descriptor = os.open(
+                    source,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o644,
+                    dir_fd=source_parent,
+                )
+                os.write(descriptor, b"reappeared public name\n")
+                os.close(descriptor)
+            return result
+
+        monkeypatch.setattr(module, "renameat2_between", reappear_after_retirement)
+        monkeypatch.setattr(module.os, "fsync", observe_fsync)
+        with pytest.raises(ValueError, match="public name reappeared during retirement"):
+            module.unlink_bound_entry(parent, victim.name, expected, "reappeared victim")
+
+    assert reappeared
+    assert victim.read_bytes() == b"reappeared public name\n"
+    assert parent_identity in fsynced_directories
+    assert forensic_parent_identity in fsynced_directories
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    retained = next(iter(retired))
+    assert module.profile_identity(retained.stat()) == module.profile_identity(expected)
+    assert retained.read_bytes() == b"authenticated victim\n"
+
+
+def test_checkpoint_atomic_retirement_durably_records_post_rename_exception(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"authenticated victim\n")
+    real_renameat2_between = module.renameat2_between
+    real_fsync = module.os.fsync
+    fsynced_directories = []
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced_directories.append(module.profile_identity(profile))
+        return result
+
+    with module.bound_parent_descriptor(victim, "retirement post-rename failure") as parent:
+        expected = os.stat(victim.name, dir_fd=parent, follow_symlinks=False)
+        parent_identity = module.profile_identity(os.fstat(parent))
+        forensic_parent_identity = module.profile_identity(tmp_path.parent.stat())
+
+        def fail_after_retirement(
+            source_parent, source, target_parent, target, flags, label
+        ):
+            real_renameat2_between(
+                source_parent, source, target_parent, target, flags, label
+            )
+            raise OSError("simulated post-rename retirement failure")
+
+        monkeypatch.setattr(module, "renameat2_between", fail_after_retirement)
+        monkeypatch.setattr(module.os, "fsync", observe_fsync)
+        with pytest.raises(OSError, match="simulated post-rename retirement failure"):
+            module.unlink_bound_entry(parent, victim.name, expected, "failed victim")
+
+    assert not victim.exists()
+    assert parent_identity in fsynced_directories
+    assert forensic_parent_identity in fsynced_directories
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    retained = next(iter(retired))
+    assert module.profile_identity(retained.stat()) == module.profile_identity(expected)
+    assert retained.read_bytes() == b"authenticated victim\n"
+
+
+def test_checkpoint_absent_json_publication_does_not_clobber_raced_target(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "target.json"
+    real_renameat2 = module.renameat2
+    raced = False
+
+    def racing_renameat2(parent, source, selected_target, flags, label):
+        nonlocal raced
+        if (
+            not raced
+            and selected_target == target.name
+            and flags == module.RENAME_NOREPLACE
+            and label == "JSON atomic write"
+        ):
+            raced = True
+            descriptor = os.open(
+                target.name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o644,
+                dir_fd=parent,
+            )
+            os.write(descriptor, b"raced target\n")
+            os.close(descriptor)
+        return real_renameat2(parent, source, selected_target, flags, label)
+
+    monkeypatch.setattr(module, "renameat2", racing_renameat2)
+    with pytest.raises(ValueError, match="JSON atomic write target already exists"):
+        module.write_json(target, {"must_not": "clobber"})
+
+    assert raced
+    assert target.read_bytes() == b"raced target\n"
+    temporaries = list(tmp_path.glob(f".{target.name}.*.tmp"))
+    assert len(temporaries) == 1
+    assert json.loads(temporaries[0].read_text()) == {"must_not": "clobber"}
+
+
+def test_checkpoint_json_write_rejects_initially_unsafe_parent_before_mutation(
+    tmp_path,
+):
+    module = load_checkpoint_module()
+    parent = tmp_path / "unsafe-parent"
+    parent.mkdir()
+    parent.chmod(0o777)
+    target = parent / "state.json"
+
+    with pytest.raises(ValueError, match="exceeds trusted profile 0755"):
+        module.write_json(target, {"must_not": "be-created"})
+
+    assert list(parent.iterdir()) == []
+
+
+def test_checkpoint_json_publication_rejects_forged_same_inode_bytes(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "target.json"
+    real_renameat2 = module.renameat2
+    forged = None
+
+    def forge_before_rename(parent, source, selected_target, flags, label):
+        nonlocal forged
+        if forged is None and label == "JSON atomic write":
+            descriptor = os.open(source, os.O_WRONLY | os.O_NOFOLLOW, dir_fd=parent)
+            try:
+                forged = b"x" * os.fstat(descriptor).st_size
+                os.pwrite(descriptor, forged, 0)
+            finally:
+                os.close(descriptor)
+        return real_renameat2(parent, source, selected_target, flags, label)
+
+    monkeypatch.setattr(module, "renameat2", forge_before_rename)
+    with pytest.raises(ValueError, match="content digest changed during mutation"):
+        module.write_json(target, {"must": "remain authenticated"})
+
+    assert forged is not None
+    assert target.read_bytes() == forged
+
+
+def test_checkpoint_json_temporary_cleanup_retires_mode_zero_crash_remnant(tmp_path):
+    module = load_checkpoint_module()
+    target = tmp_path / "state.json"
+    temporary = tmp_path / f".{target.name}.123.{'0' * 32}.tmp"
+    temporary.write_bytes(b"interrupted JSON payload\n")
+    temporary.chmod(0o000)
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    module.remove_json_temporaries(
+        module.json_temporary_entries(target),
+        "JSON crash temporary",
+    )
+
+    assert not temporary.exists()
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    assert next(iter(retired)).stat().st_mode & 0o777 == 0o000
+
+
+def test_checkpoint_json_temporary_cleanup_fails_closed_on_substitution(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "state.json"
+    temporary = tmp_path / f".{target.name}.123.{'0' * 32}.tmp"
+    escaped = tmp_path / "escaped"
+    substitute = tmp_path / "substitute"
+    temporary.write_bytes(b"authenticated JSON temporary\n")
+    temporary.chmod(0o000)
+    substitute.write_bytes(b"raced substitute\n")
+    substitute.chmod(0o000)
+    real_renameat2_between = module.renameat2_between
+    raced = False
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    def racing_renameat2_between(
+        source_parent, source, target_parent, selected_target, flags, label
+    ):
+        nonlocal raced
+        if (
+            not raced
+            and source == temporary.name
+            and flags == module.RENAME_NOREPLACE
+            and "retirement" in label
+        ):
+            raced = True
+            os.rename(
+                temporary.name,
+                escaped.name,
+                src_dir_fd=source_parent,
+                dst_dir_fd=source_parent,
+            )
+            os.rename(
+                substitute.name,
+                temporary.name,
+                src_dir_fd=source_parent,
+                dst_dir_fd=source_parent,
+            )
+        return real_renameat2_between(
+            source_parent, source, target_parent, selected_target, flags, label
+        )
+
+    monkeypatch.setattr(module, "renameat2_between", racing_renameat2_between)
+    with pytest.raises(ValueError, match="changed during atomic retirement"):
+        module.remove_json_temporaries(
+            module.json_temporary_entries(target),
+            "JSON crash temporary",
+        )
+
+    assert raced
+    assert not temporary.exists()
+    assert escaped.exists()
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    assert next(iter(retired)).stat().st_mode & 0o777 == 0o000
+
+
+def test_checkpoint_json_forward_replacement_does_not_clobber_reappeared_target(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "target.json"
+    substitute = tmp_path / "substitute"
+    target.write_bytes(b"authenticated predecessor\n")
+    substitute.write_bytes(b"raced substitute\n")
+    predecessor = target.read_bytes()
+    real_rename_bound_noreplace = module.rename_bound_noreplace
+    raced = False
+
+    def race_before_publication(parent, source, selected_target, expected, label, **kwargs):
+        nonlocal raced
+        if not raced and selected_target == target.name and label == "JSON atomic write":
+            raced = True
+            os.rename(
+                substitute.name,
+                target.name,
+                src_dir_fd=parent,
+                dst_dir_fd=parent,
+            )
+        return real_rename_bound_noreplace(
+            parent, source, selected_target, expected, label, **kwargs
+        )
+
+    monkeypatch.setattr(module, "rename_bound_noreplace", race_before_publication)
+    with pytest.raises(ValueError, match="target already exists"):
+        module.write_json(target, {"new": "payload"})
+
+    assert raced
+    assert target.read_bytes() == b"raced substitute\n"
+    temporaries = list(tmp_path.glob(f".{target.name}.*.tmp"))
+    assert len(temporaries) == 1
+    assert json.loads(temporaries[0].read_text()) == {"new": "payload"}
+    retired = list(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+    assert any(path.read_bytes() == predecessor for path in retired)
+
+
+def test_checkpoint_json_forward_replacement_operates_when_renameat2_is_unsupported(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "target.json"
+    target.write_bytes(b"authenticated predecessor\n")
+    predecessor = target.read_bytes()
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    module.write_json(target, {"new": "payload"})
+
+    assert json.loads(target.read_text()) == {"new": "payload"}
+    assert not list(tmp_path.glob(f".{target.name}.*.tmp"))
+    retired = list(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+    assert any(path.read_bytes() == predecessor for path in retired)
+
+
+def test_checkpoint_forensic_publication_does_not_clobber_raced_target(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "forensic"
+    source.write_bytes(b"authenticated forensic bytes\n")
+    source.chmod(0o444)
+    expected = sha256(source)
+    real_renameat2 = module.renameat2
+    raced = False
+
+    def racing_renameat2(parent, temporary, selected_target, flags, label):
+        nonlocal raced
+        if (
+            not raced
+            and selected_target == target.name
+            and flags == module.RENAME_NOREPLACE
+            and label == "recost forensic publication"
+        ):
+            raced = True
+            descriptor = os.open(
+                target.name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o444,
+                dir_fd=parent,
+            )
+            os.write(descriptor, b"raced forensic target\n")
+            os.close(descriptor)
+        return real_renameat2(parent, temporary, selected_target, flags, label)
+
+    monkeypatch.setattr(module, "renameat2", racing_renameat2)
+    with pytest.raises(ValueError, match="recost forensic publication target already exists"):
+        module.copy_forensic(source, target, expected, expected_mode=0o444)
+
+    assert raced
+    assert target.read_bytes() == b"raced forensic target\n"
+    retained = list(tmp_path.glob(".cgl-checkpoint-forensic-*"))
+    assert len(retained) == 1
+    assert retained[0].read_bytes() == source.read_bytes()
+
+
+def test_checkpoint_forensic_publication_rejects_forged_same_inode_bytes(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "forensic"
+    source.write_bytes(b"authenticated forensic bytes\n")
+    source.chmod(0o444)
+    expected = sha256(source)
+    real_renameat2 = module.renameat2
+    forged = None
+
+    def forge_before_rename(parent, temporary, selected_target, flags, label):
+        nonlocal forged
+        if forged is None and label == "recost forensic publication":
+            os.chmod(temporary, 0o644, dir_fd=parent)
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_NOFOLLOW, dir_fd=parent)
+            try:
+                forged = b"x" * os.fstat(descriptor).st_size
+                os.pwrite(descriptor, forged, 0)
+            finally:
+                os.close(descriptor)
+                os.chmod(temporary, 0o444, dir_fd=parent)
+        return real_renameat2(parent, temporary, selected_target, flags, label)
+
+    monkeypatch.setattr(module, "renameat2", forge_before_rename)
+    with pytest.raises(ValueError, match="content digest changed during mutation"):
+        module.copy_forensic(source, target, expected, expected_mode=0o444)
+
+    assert forged is not None
+    assert target.read_bytes() == forged
+
+
+def test_checkpoint_forensic_copy_recovers_deterministic_owner_only_temporary(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "forensic"
+    source.write_bytes(b"authenticated forensic bytes\n")
+    source.chmod(0o444)
+    expected = sha256(source)
+    real_fchmod = module.os.fchmod
+
+    def interrupt_before_forensic_mode_publication(descriptor, mode):
+        if mode == 0o444:
+            raise OSError("simulated forensic interruption at mode 0600")
+        return real_fchmod(descriptor, mode)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module.os, "fchmod", interrupt_before_forensic_mode_publication)
+        with pytest.raises(OSError, match="simulated forensic interruption"):
+            module.copy_forensic(source, target, expected, expected_mode=0o444)
+
+    temporary = tmp_path / module.forensic_temporary_name(target)
+    assert temporary.exists()
+    assert temporary.stat().st_mode & 0o777 == 0o600
+
+    module.copy_forensic(source, target, expected, expected_mode=0o444)
+
+    assert target.read_bytes() == source.read_bytes()
+    assert target.stat().st_mode & 0o777 == 0o444
+    assert not temporary.exists()
+
+
+def test_checkpoint_forensic_recovery_rejects_same_inode_forgery_during_fsync(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    destination = tmp_path / "forensic"
+    source.write_bytes(b"authenticated forensic bytes\n")
+    source.chmod(0o444)
+    destination.write_bytes(source.read_bytes())
+    destination.chmod(0o444)
+    expected = sha256(source)
+    identity = module.profile_identity(destination.stat())
+    real_fsync = module.os.fsync
+    forged = False
+
+    def forge_during_directory_fsync(descriptor):
+        nonlocal forged
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode) and not forged:
+            forged = True
+            destination.chmod(0o644)
+            writable = os.open(destination, os.O_WRONLY | os.O_NOFOLLOW)
+            try:
+                os.pwrite(writable, b"x" * destination.stat().st_size, 0)
+            finally:
+                os.close(writable)
+                destination.chmod(0o444)
+        return result
+
+    monkeypatch.setattr(module.os, "fsync", forge_during_directory_fsync)
+    with pytest.raises(ValueError, match="content digest changed during mutation"):
+        module.recover_or_copy_forensic(
+            source,
+            destination,
+            expected,
+            expected_mode=0o444,
+            simulate_interruption_before_directory_fsync=False,
+        )
+
+    assert forged
+    assert module.profile_identity(destination.stat()) == identity
+    assert sha256(destination) != expected
+
+
+def test_checkpoint_forensic_recovery_rejects_moved_namespace_during_fsync(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    sources = tmp_path / "sources"
+    sources.mkdir()
+    source = sources / "source"
+    source.write_bytes(b"authenticated forensic bytes\n")
+    source.chmod(0o444)
+    live = tmp_path / "live"
+    live.mkdir()
+    destination = live / "forensic"
+    destination.write_bytes(source.read_bytes())
+    destination.chmod(0o444)
+    detached = tmp_path / "detached"
+    real_fsync = module.os.fsync
+    moved = False
+
+    def move_during_directory_fsync(descriptor):
+        nonlocal moved
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode) and not moved:
+            moved = True
+            live.rename(detached)
+            live.mkdir()
+        return result
+
+    monkeypatch.setattr(module.os, "fsync", move_during_directory_fsync)
+    with pytest.raises(ValueError, match="parent path changed during mutation"):
+        module.recover_or_copy_forensic(
+            source,
+            destination,
+            sha256(source),
+            expected_mode=0o444,
+            simulate_interruption_before_directory_fsync=False,
+        )
+
+    assert moved
+    assert not destination.exists()
+    assert (detached / destination.name).read_bytes() == source.read_bytes()
+    assert list(live.iterdir()) == []
+
+
+def test_checkpoint_forensic_temporary_cleanup_fails_closed_on_substitution(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    destination = tmp_path / "forensic"
+    temporary = tmp_path / module.forensic_temporary_name(destination)
+    escaped = tmp_path / "escaped"
+    substitute = tmp_path / "substitute"
+    temporary.write_bytes(b"authenticated forensic temporary\n")
+    temporary.chmod(0o000)
+    substitute.write_bytes(b"raced substitute\n")
+    substitute.chmod(0o000)
+    real_renameat2_between = module.renameat2_between
+    raced = False
+    before = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    def racing_renameat2_between(
+        source_parent, source, target_parent, selected_target, flags, label
+    ):
+        nonlocal raced
+        if (
+            not raced
+            and source == temporary.name
+            and flags == module.RENAME_NOREPLACE
+            and "retirement" in label
+        ):
+            raced = True
+            os.rename(
+                temporary.name,
+                escaped.name,
+                src_dir_fd=source_parent,
+                dst_dir_fd=source_parent,
+            )
+            os.rename(
+                substitute.name,
+                temporary.name,
+                src_dir_fd=source_parent,
+                dst_dir_fd=source_parent,
+            )
+        return real_renameat2_between(
+            source_parent, source, target_parent, selected_target, flags, label
+        )
+
+    monkeypatch.setattr(module, "renameat2_between", racing_renameat2_between)
+    with pytest.raises(ValueError, match="changed during atomic retirement"):
+        module.remove_forensic_temporaries(tmp_path, "recost forensic temporary")
+
+    assert raced
+    assert not temporary.exists()
+    assert escaped.exists()
+    retired = set(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    assert next(iter(retired)).stat().st_mode & 0o777 == 0o000
+
+
+def expose_legacy_canonical(fixture) -> None:
+    """Replace one staged fixture with an unattested canonical-only artifact."""
+
+    fixture["staged"].rename(fixture["canonical"])
+
+
+def bind_legacy_source_bundle(fixture) -> Path:
+    """Embed one exact F114-compatible source bundle in a sole-profile fixture."""
+
+    return fixture["source_bundle"]
+
+
+def test_checkpoint_promotes_and_audits_local_recost(recost_fixture):
+    fixture = recost_fixture
+    staged = run_checkpoint(fixture, "verify-staged-recost")
+    assert staged.returncode == 0, staged.stderr
+    promoted = run_checkpoint(fixture, "promote-recost")
+    assert promoted.returncode == 0, promoted.stderr
+    assert fixture["canonical"].is_file()
+    assert not fixture["staged"].exists()
+    assert fixture["audit"].is_file()
+    audit = json.loads(fixture["audit"].read_text())
+    assert audit["utility"]["committed"] is False
+    assert list(fixture["recost_transactions"].iterdir()) == []
+    forensic = list(fixture["recost_forensics"].iterdir())
+    assert len(forensic) == 1
+    assert sha256(forensic[0]) == sha256(fixture["canonical"])
+    verified = run_checkpoint(fixture, "verify-promoted-recost")
+    assert verified.returncode == 0, verified.stderr
+    audited = run_checkpoint(
+        fixture, "audit-recost", "--publication-state", "promoted"
+    )
+    assert audited.returncode == 0, audited.stderr
+
+
+def test_checkpoint_authenticates_legacy_f114_source_bundle(recost_fixture):
+    fixture = recost_fixture
+    bind_legacy_source_bundle(fixture)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert completed.returncode == 0, completed.stderr
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        ("source_bundle",),
+        ("source_bundle_sha256",),
+        ("source_bundle", "source_bundle_sha256"),
+    ],
+)
+def test_checkpoint_requires_complete_legacy_f114_source_bundle(
+    recost_fixture,
+    missing,
+):
+    fixture = recost_fixture
+    for key in missing:
+        fixture["profile"].pop(key)
+    payload = json.loads(fixture["staged"].read_text())
+    payload["authorization"]["sole_next_segment_profile"] = fixture["profile"]
+    write_json(fixture["staged"], payload)
+    fixture["artifact_sha256"] = sha256(fixture["staged"])
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(
+        completed,
+        "sole-profile mode requires a complete legacy source-bundle binding",
+    )
+
+
+def test_checkpoint_requires_legacy_f114_source_bundle_revisions(recost_fixture):
+    fixture = recost_fixture
+    command = checkpoint_command(fixture, "verify-staged-recost")
+    option = command.index("--expected-source-bundle-verified-revisions-json")
+    del command[option:option + 2]
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert_rejected(
+        completed,
+        "sole-profile mode requires source-bundle verified revisions",
+    )
+
+
+def test_checkpoint_rejects_legacy_source_revisions_without_helper_binding(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    fixture["source_bundle_revisions"] = ["f" * 40]
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(
+        completed,
+        "legacy source-bundle revisions do not bind the Stage I helper",
+    )
+
+
+def test_checkpoint_rejects_legacy_f114_source_bundle_digest_drift(recost_fixture):
+    fixture = recost_fixture
+    bundle = bind_legacy_source_bundle(fixture)
+    bundle.write_bytes(bundle.read_bytes() + b"\nforged drift\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "legacy sole-profile source bundle checksum has changed")
+
+
+def test_checkpoint_rejects_invalid_legacy_f114_git_bundle(recost_fixture):
+    fixture = recost_fixture
+    bundle = bind_legacy_source_bundle(fixture)
+    bundle.write_text("not a git bundle\n")
+    fixture["profile"]["source_bundle_sha256"] = sha256(bundle)
+    payload = json.loads(fixture["staged"].read_text())
+    payload["authorization"]["sole_next_segment_profile"] = fixture["profile"]
+    write_json(fixture["staged"], payload)
+    fixture["artifact_sha256"] = sha256(fixture["staged"])
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "source bundle header is invalid or unexpectedly large")
+
+
+def test_checkpoint_rejects_legacy_bundle_without_isolated_revision_coverage(
+    recost_fixture,
+    tmp_path,
+):
+    fixture = recost_fixture
+    unrelated = tmp_path / "unrelated-repository"
+    unrelated.mkdir()
+    (unrelated / "unrelated.txt").write_text("unrelated history\n")
+    subprocess.run(["git", "init", "-q"], cwd=unrelated, check=True)
+    subprocess.run(["git", "add", "."], cwd=unrelated, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CGL fixture",
+            "-c",
+            "user.email=cgl-fixture@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Create unrelated bundle history",
+        ],
+        cwd=unrelated,
+        check=True,
+    )
+    bundle = fixture["root"] / "source-archives/unrelated.bundle"
+    subprocess.run(
+        ["git", "bundle", "create", str(bundle), "--all"],
+        cwd=unrelated,
+        check=True,
+    )
+    bundle.chmod(0o644)
+    fixture["profile"]["source_bundle"] = str(bundle)
+    fixture["profile"]["source_bundle_sha256"] = sha256(bundle)
+    payload = json.loads(fixture["staged"].read_text())
+    payload["authorization"]["sole_next_segment_profile"] = fixture["profile"]
+    write_json(fixture["staged"], payload)
+    fixture["artifact_sha256"] = sha256(fixture["staged"])
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "source bundle does not contain requested revision")
+
+
+def test_checkpoint_rejects_legacy_bundle_path_replacement_during_verification(
+    recost_fixture,
+    monkeypatch,
+):
+    fixture = recost_fixture
+    replacement = fixture["root"] / "source-archives/replacement.bundle"
+    subprocess.run(
+        ["git", "bundle", "create", str(replacement), "--all"],
+        cwd=fixture["repository"],
+        check=True,
+    )
+    replacement.chmod(0o644)
+    module = load_checkpoint_module()
+    args = module.parser().parse_args(
+        checkpoint_command(fixture, "verify-staged-recost")[2:]
+    )
+    original = module.git_descriptor_run
+    swapped = False
+
+    def replace_path(repository, descriptor, arguments, *, capture_output=False):
+        nonlocal swapped
+        if not swapped:
+            os.replace(replacement, fixture["source_bundle"])
+            swapped = True
+        return original(
+            repository,
+            descriptor,
+            arguments,
+            capture_output=capture_output,
+        )
+
+    monkeypatch.setattr(module, "git_descriptor_run", replace_path)
+    monkeypatch.setattr(module, "initial_source_path", lambda: fixture["checkpoint"])
+    monkeypatch.setattr(module, "repository_root", lambda _source: fixture["repository"])
+    with pytest.raises(ValueError, match="source bundle pathname changed"):
+        module.authenticate_legacy_profile_source_bundle(fixture["root"], args)
+
+
+def test_checkpoint_rejects_legacy_bundle_mode_change_during_verification(
+    recost_fixture,
+    monkeypatch,
+):
+    fixture = recost_fixture
+    module = load_checkpoint_module()
+    args = module.parser().parse_args(
+        checkpoint_command(fixture, "verify-staged-recost")[2:]
+    )
+    original = module.git_descriptor_run
+    changed = False
+
+    def change_mode(repository, descriptor, arguments, *, capture_output=False):
+        nonlocal changed
+        if not changed:
+            fixture["source_bundle"].chmod(0o600)
+            changed = True
+        return original(
+            repository,
+            descriptor,
+            arguments,
+            capture_output=capture_output,
+        )
+
+    monkeypatch.setattr(module, "git_descriptor_run", change_mode)
+    monkeypatch.setattr(module, "initial_source_path", lambda: fixture["checkpoint"])
+    monkeypatch.setattr(module, "repository_root", lambda _source: fixture["repository"])
+    with pytest.raises(ValueError, match="source bundle mode is 0600, expected 0644"):
+        module.authenticate_legacy_profile_source_bundle(fixture["root"], args)
+
+
+def test_checkpoint_adopts_and_audits_legacy_canonical_recost(recost_fixture):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    adopted = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert adopted.returncode == 0, adopted.stderr
+    audit = json.loads(fixture["audit"].read_text())
+    assert audit["record_type"] == "legacy-canonical-adoption"
+    assert audit["original_publication_transition_observed"] is False
+    assert audit["original_publication_method"] == "unknown"
+    assert audit["original_publisher"] == "unknown"
+    assert audit["present_authentication"] == {
+        "canonical_artifact": "authenticated-under-stage-i-lock",
+        "no_queued_cgl_jobs": "required-under-stage-i-lock",
+        "reconciliation": "clean-required-under-stage-i-lock",
+    }
+    assert list(fixture["recost_transactions"].iterdir()) == []
+    forensic = list(fixture["recost_forensics"].iterdir())
+    assert len(forensic) == 1
+    assert sha256(forensic[0]) == sha256(fixture["canonical"])
+    verified = run_checkpoint(fixture, "verify-promoted-recost")
+    assert verified.returncode == 0, verified.stderr
+
+
+@pytest.mark.parametrize(
+    ("hook", "pattern"),
+    [
+        (
+            "--simulate-adoption-interruption-after-journal",
+            "simulated interruption after legacy adoption journal",
+        ),
+        (
+            "--simulate-adoption-interruption-before-forensic-directory-fsync",
+            "simulated interruption before forensic directory fsync",
+        ),
+        (
+            "--simulate-adoption-interruption-after-forensic",
+            "simulated interruption after legacy adoption forensic copy",
+        ),
+        (
+            "--simulate-adoption-interruption-before-audit-directory-fsync",
+            "simulated interruption before JSON directory fsync",
+        ),
+        (
+            "--simulate-adoption-interruption-after-audit",
+            "simulated interruption after legacy adoption audit",
+        ),
+    ],
+)
+def test_checkpoint_resumes_interrupted_legacy_canonical_adoption(recost_fixture,
+                                                                  hook, pattern):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    interrupted = run_checkpoint(fixture, "adopt-legacy-canonical", hook)
+    assert_rejected(interrupted, pattern)
+    assert len(list(fixture["recost_transactions"].iterdir())) == 1
+    resumed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert resumed.returncode == 0, resumed.stderr
+    assert list(fixture["recost_transactions"].iterdir()) == []
+    assert json.loads(fixture["audit"].read_text())["record_type"] == (
+        "legacy-canonical-adoption"
+    )
+
+
+@pytest.mark.parametrize(
+    ("hook", "pattern", "linked_record"),
+    [
+        (
+            "--simulate-adoption-interruption-after-journal",
+            "simulated interruption after legacy adoption journal",
+            "journal",
+        ),
+        (
+            "--simulate-adoption-interruption-after-forensic",
+            "simulated interruption after legacy adoption forensic copy",
+            "journal",
+        ),
+        (
+            "--simulate-adoption-interruption-before-audit-directory-fsync",
+            "simulated interruption before JSON directory fsync",
+            "audit",
+        ),
+    ],
+)
+def test_checkpoint_lustre_recovers_exact_linked_json_lifecycle_state(
+    recost_fixture, hook, pattern, linked_record,
+):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    force_checkpoint_renameat2_einval(fixture["checkpoint"])
+    interrupted = run_checkpoint(fixture, "adopt-legacy-canonical", hook)
+    assert_rejected(interrupted, pattern)
+
+    if linked_record == "audit":
+        public = fixture["audit"]
+    else:
+        public = next(
+            path
+            for path in fixture["recost_transactions"].iterdir()
+            if path.name.endswith(".json")
+        )
+    temporary = public.parent / f".{public.name}.123.{'0' * 32}.tmp"
+    os.link(public, temporary)
+    assert temporary.stat().st_ino == public.stat().st_ino
+    assert temporary.stat().st_nlink == public.stat().st_nlink == 2
+
+    resumed = run_checkpoint(fixture, "adopt-legacy-canonical")
+
+    assert resumed.returncode == 0, resumed.stderr
+    assert not temporary.exists()
+    assert fixture["audit"].stat().st_nlink == 1
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_recovers_mode_zero_prejournal_legacy_adoption_temporary(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    fixture["recost_transactions"].mkdir()
+    fixture["recost_forensics"].mkdir(parents=True)
+    temporary = (
+        fixture["recost_transactions"]
+        / f".interrupted.json.123.{'0' * 32}.tmp"
+    )
+    temporary.write_bytes(b"partial adoption journal")
+    temporary.chmod(0o000)
+
+    resumed = run_checkpoint(fixture, "adopt-legacy-canonical")
+
+    assert resumed.returncode == 0, resumed.stderr
+    assert list(fixture["recost_transactions"].iterdir()) == []
+    assert json.loads(fixture["audit"].read_text())["record_type"] == (
+        "legacy-canonical-adoption"
+    )
+
+
+def test_checkpoint_repairs_interrupted_partial_legacy_adoption_forensic_copy(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    interrupted = run_checkpoint(
+        fixture,
+        "adopt-legacy-canonical",
+        "--simulate-adoption-interruption-after-journal",
+    )
+    assert_rejected(interrupted, "simulated interruption after legacy adoption journal")
+    journal = next(fixture["recost_transactions"].iterdir())
+    transaction_id = json.loads(journal.read_text())["transaction_id"]
+    forensic = (
+        fixture["recost_forensics"]
+        / f"{transaction_id}.{fixture['canonical'].name}.forensic"
+    )
+    forensic.write_bytes(b"partial forensic copy")
+    forensic.chmod(0o444)
+    resumed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert resumed.returncode == 0, resumed.stderr
+    assert sha256(forensic) == sha256(fixture["canonical"])
+
+
+def test_checkpoint_rejects_untrusted_partial_legacy_adoption_forensic_profile(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    interrupted = run_checkpoint(
+        fixture,
+        "adopt-legacy-canonical",
+        "--simulate-adoption-interruption-after-journal",
+    )
+    assert_rejected(interrupted, "simulated interruption after legacy adoption journal")
+    journal = next(fixture["recost_transactions"].iterdir())
+    transaction_id = json.loads(journal.read_text())["transaction_id"]
+    forensic = (
+        fixture["recost_forensics"]
+        / f"{transaction_id}.{fixture['canonical'].name}.forensic"
+    )
+    forensic.write_bytes(b"partial forensic copy")
+    completed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert_rejected(completed, "recost forensic copy mode is 0644, expected 0444")
+
+
+def test_checkpoint_legacy_adoption_rejects_staged_twin(recost_fixture):
+    fixture = recost_fixture
+    os.link(fixture["staged"], fixture["canonical"])
+    completed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert_rejected(completed, "recost artifact has 2 links, expected 1")
+    assert not fixture["audit"].exists()
+
+
+def test_checkpoint_legacy_adoption_rejects_nonempty_queue(recost_fixture):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    fixture["queue"].write_text("67890|cgl_other_root_writer|RUNNING\n")
+    completed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert_rejected(completed, "another CGL job is queued")
+    assert not fixture["audit"].exists()
+
+
+def test_checkpoint_permits_unrelated_account_queue_job(recost_fixture):
+    fixture = recost_fixture
+    fixture["queue"].write_text("67890|pic_unrelated|RUNNING\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert completed.returncode == 0, completed.stderr
+
+
+@pytest.mark.parametrize(
+    "row",
+    (
+        "67890||RUNNING\n",
+        "|pic_unrelated|RUNNING\n",
+        "67890|pic_unrelated|\n",
+        "67890| pic_unrelated|RUNNING\n",
+        " 67890|pic_unrelated|RUNNING\n",
+        "67890|pic_unrelated|RUNNING \n",
+    ),
+)
+def test_checkpoint_rejects_malformed_queue_row(recost_fixture, row):
+    fixture = recost_fixture
+    fixture["queue"].write_text(row)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "squeue output row has")
+
+
+def test_checkpoint_legacy_adoption_rejects_audit_relabeling(recost_fixture):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    adopted = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert adopted.returncode == 0, adopted.stderr
+    audit = json.loads(fixture["audit"].read_text())
+    audit["record_type"] = "observed-publication"
+    write_json(fixture["audit"], audit)
+    completed = run_checkpoint(fixture, "verify-promoted-recost")
+    assert_rejected(completed, "recost publication audit schema differs")
+
+
+def test_checkpoint_legacy_adoption_rejects_preexisting_audit(recost_fixture):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    fixture["audit"].write_text("{}\n")
+    completed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert_rejected(completed, "recost namespace is not canonical-pending-audit-only")
+
+
+def test_checkpoint_legacy_adoption_rejects_preexisting_forensic_root(recost_fixture):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    fixture["recost_forensics_root"].mkdir()
+    completed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert_rejected(completed, "requires an absent recost forensic root")
+    assert fixture["recost_transactions"].is_dir()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_legacy_adoption_rejects_forged_journal(recost_fixture):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    interrupted = run_checkpoint(
+        fixture,
+        "adopt-legacy-canonical",
+        "--simulate-adoption-interruption-after-journal",
+    )
+    assert_rejected(interrupted, "simulated interruption after legacy adoption journal")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["operation"] = "observed-publication"
+    write_json(journal, record)
+    completed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert_rejected(completed, "legacy adoption journal operation binding differs")
+
+
+def test_checkpoint_legacy_adoption_rejects_altered_forensic_copy(recost_fixture):
+    fixture = recost_fixture
+    expose_legacy_canonical(fixture)
+    interrupted = run_checkpoint(
+        fixture,
+        "adopt-legacy-canonical",
+        "--simulate-adoption-interruption-after-forensic",
+    )
+    assert_rejected(interrupted, "simulated interruption after legacy adoption forensic copy")
+    forensic = next(fixture["recost_forensics"].iterdir())
+    forensic.chmod(0o600)
+    completed = run_checkpoint(fixture, "adopt-legacy-canonical")
+    assert_rejected(completed, "recost forensic copy mode is 0600, expected 0444")
+
+
+def test_checkpoint_rejects_self_authentication_failure(recost_fixture):
+    completed = run_checkpoint(
+        recost_fixture, "verify-staged-recost", utility_sha256="0" * 64
+    )
+    assert_rejected(completed, "utility checksum has changed")
+
+
+def test_checkpoint_scrubs_git_repository_override_environment(recost_fixture):
+    environment = dict(os.environ)
+    environment["GIT_DIR"] = "/tmp/checkpoint-fixture-nonexistent-git-dir"
+    completed = subprocess.run(
+        checkpoint_command(recost_fixture, "verify-staged-recost"),
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_checkpoint_scrubs_slurm_routing_environment(monkeypatch):
+    monkeypatch.setenv("SLURM_CLUSTERS", "alternate")
+    monkeypatch.setenv("SLURM_CONF", "/tmp/untrusted-slurm.conf")
+    monkeypatch.setenv("CGL_CHECKPOINT_SENTINEL", "retained")
+    monkeypatch.setenv("LD_PRELOAD", "/tmp/untrusted-loader.so")
+    monkeypatch.setenv("PYTHONPATH", "/tmp/untrusted-python")
+    monkeypatch.setenv("GIT_DIR", "/tmp/untrusted-git")
+    environment = load_checkpoint_module().scheduler_environment()
+    assert not any(key.startswith("SLURM_") for key in environment)
+    assert environment == {
+        "HOME": "/nonexistent",
+        "LC_ALL": "C",
+        "PATH": "/usr/bin:/bin",
+        "XDG_CONFIG_HOME": "/nonexistent",
+    }
+
+
+def test_checkpoint_scheduler_child_is_descriptor_bound_and_sanitized(
+    monkeypatch, tmp_path
+):
+    module = load_checkpoint_module()
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    module.require_empty_queue(tmp_path, False, None)
+
+    command, kwargs = calls[0]
+    descriptor = int(kwargs["executable"].removeprefix("/proc/self/fd/"))
+    assert descriptor in kwargs["pass_fds"]
+    assert command[0] == str(module.SQUEUE)
+    assert kwargs["env"] == module.scheduler_environment()
+    assert kwargs["stdin"] == subprocess.DEVNULL
+    assert kwargs["timeout"] == 120
+
+
+def test_checkpoint_rechecks_queue_directly_before_link(recost_fixture, tmp_path):
+    late_queue = tmp_path / "late-squeue.txt"
+    late_queue.write_text("67890|cgl_late_root_writer|RUNNING\n")
+    completed = run_checkpoint(
+        recost_fixture,
+        "promote-recost",
+        "--pre-link-squeue-file",
+        str(late_queue),
+    )
+    assert_rejected(completed, "another CGL job is queued")
+    assert recost_fixture["staged"].is_file()
+    assert not recost_fixture["canonical"].exists()
+    assert list(recost_fixture["recost_transactions"].iterdir()) == []
+    assert list(recost_fixture["recost_forensics"].iterdir()) == []
+
+
+def test_checkpoint_rejects_shared_queue_fixture_without_opening_it(recost_fixture):
+    completed = run_checkpoint(
+        recost_fixture,
+        "verify-staged-recost",
+        queue_file=Path("/lustre/checkpoint-fixture-must-not-open"),
+    )
+    assert_rejected(completed, "queue fixture must be under local fixture storage /tmp")
+
+
+def test_checkpoint_rejects_nonlocal_offline_root_without_opening_it(recost_fixture):
+    completed = run_checkpoint(
+        recost_fixture,
+        "verify-staged-recost",
+        root=Path("/autofs/checkpoint-fixture-must-not-open"),
+    )
+    assert_rejected(completed, "offline fixture root must be under local fixture storage /tmp")
+
+
+def test_checkpoint_requires_offline_queue_fixture(recost_fixture):
+    completed = run_checkpoint(
+        recost_fixture,
+        "verify-staged-recost",
+        include_queue_fixture=False,
+    )
+    assert_rejected(completed, "offline fixture root requires --squeue-file")
+
+
+def test_checkpoint_rejects_queue_fixture_symlink(recost_fixture, tmp_path):
+    queue = tmp_path / "shared-queue-link"
+    queue.symlink_to("/lustre/checkpoint-fixture-must-not-resolve")
+    completed = run_checkpoint(
+        recost_fixture,
+        "verify-staged-recost",
+        queue_file=queue,
+    )
+    assert completed.returncode == 1
+    assert not recost_fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_offline_root_symlink_without_resolving_it(recost_fixture,
+                                                                      tmp_path):
+    root = tmp_path / "shared-root-link"
+    root.symlink_to("/lustre/checkpoint-fixture-must-not-resolve", target_is_directory=True)
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost", root=root)
+    assert completed.returncode == 1
+    assert not recost_fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_lock_contention(recost_fixture):
+    recost_fixture["lock"].write_text("")
+    recost_fixture["lock"].chmod(0o644)
+    with recost_fixture["lock"].open("a+") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        completed = run_checkpoint(recost_fixture, "promote-recost")
+        assert_rejected(completed, "another Stage I mutation holds")
+    assert recost_fixture["staged"].is_file()
+    assert not recost_fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_nonempty_stage_i_lock(recost_fixture):
+    fixture = recost_fixture
+    fixture["lock"].write_text("forged retained lock content\n")
+    fixture["lock"].chmod(0o644)
+    completed = run_checkpoint(fixture, "promote-recost")
+    assert_rejected(completed, "Stage I lock must be empty")
+    assert fixture["staged"].is_file()
+    assert not fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_stage_i_lock_path_replacement_after_flock(
+    monkeypatch,
+    tmp_path,
+):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    lock.write_text("")
+    lock.chmod(0o644)
+    real_flock = module.fcntl.flock
+    replaced = False
+
+    def replace_named_lock_after_acquisition(descriptor, operation):
+        nonlocal replaced
+        real_flock(descriptor, operation)
+        if operation == module.fcntl.LOCK_EX | module.fcntl.LOCK_NB and not replaced:
+            replaced = True
+            lock.unlink()
+            lock.write_text("")
+            lock.chmod(0o644)
+
+    monkeypatch.setattr(module.fcntl, "flock", replace_named_lock_after_acquisition)
+    with pytest.raises(ValueError, match="Stage I lock path changed while locking"):
+        with module.promotion_lock({"root": root, "lock": lock}):
+            raise AssertionError("replaced lock must not enter the mutation boundary")
+
+
+def test_checkpoint_lock_replacement_blocks_next_write(tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    lock.write_text("")
+    lock.chmod(0o644)
+    target = root / "must-not-be-created.json"
+
+    with pytest.raises(ValueError, match="Stage I lock path changed while mutation is active"):
+        with module.promotion_lock({"root": root, "lock": lock}):
+            lock.rename(root / "retired-lock")
+            lock.write_text("")
+            lock.chmod(0o644)
+            module.write_json(target, {"forbidden": True})
+
+    assert not target.exists()
+
+
+def test_checkpoint_lustre_noreplace_fallback_uses_hard_link(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"published through hard link\n")
+    source_identity = module.profile_identity(source.stat())
+    real_linkat = module.linkat_descriptor_noreplace
+    linked = []
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def observe_linkat(descriptor, target_parent, target_name, label):
+        linked.append((target_name, label))
+        return real_linkat(descriptor, target_parent, target_name, label)
+
+    def forbidden_posix_rename(*_args, **_kwargs):
+        raise AssertionError("file no-replace fallback must not use POSIX rename")
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", observe_linkat)
+    monkeypatch.setattr(module.os, "rename", forbidden_posix_rename)
+    with module.bound_parent_descriptor(source, "Lustre no-replace") as parent:
+        module.rename_bound_noreplace(
+            parent,
+            source.name,
+            target.name,
+            source.stat(),
+            "Lustre no-replace",
+        )
+
+    assert linked == [(target.name, "Lustre no-replace")]
+    assert not source.exists()
+    assert module.profile_identity(target.stat()) == source_identity
+    assert target.stat().st_nlink == 1
+    assert target.read_bytes() == b"published through hard link\n"
+
+
+def test_checkpoint_lustre_noreplace_fallback_rejects_target_race(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"authenticated source\n")
+    real_linkat = module.linkat_descriptor_noreplace
+    raced = False
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def race_target(descriptor, target_parent, target_name, label):
+        nonlocal raced
+        if not raced:
+            raced = True
+            injected = os.open(
+                target_name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o644,
+                dir_fd=target_parent,
+            )
+            os.write(injected, b"raced target\n")
+            os.close(injected)
+        return real_linkat(descriptor, target_parent, target_name, label)
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", race_target)
+    with module.bound_parent_descriptor(source, "Lustre no-replace race") as parent:
+        with pytest.raises(ValueError, match="target already exists"):
+            module.rename_bound_noreplace(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                "Lustre no-replace race",
+            )
+
+    assert raced
+    assert source.read_bytes() == b"authenticated source\n"
+    assert target.read_bytes() == b"raced target\n"
+
+
+def test_checkpoint_lustre_noreplace_reconciles_post_unlink_exception(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"durably published\n")
+    source_identity = module.profile_identity(source.stat())
+    real_unlink = module.os.unlink
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def unlink_then_raise(name, *args, **kwargs):
+        real_unlink(name, *args, **kwargs)
+        if name == source.name:
+            raise OSError(errno.EIO, os.strerror(errno.EIO))
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "unlink", unlink_then_raise)
+    with module.bound_parent_descriptor(source, "Lustre unlink reconcile") as parent:
+        module.rename_bound_noreplace(
+            parent,
+            source.name,
+            target.name,
+            source.stat(),
+            "Lustre unlink reconcile",
+        )
+
+    assert not source.exists()
+    assert module.profile_identity(target.stat()) == source_identity
+    assert target.stat().st_nlink == 1
+
+
+def test_checkpoint_lustre_noreplace_retries_exact_two_link_state(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"retryable publication\n")
+    real_unlink = module.os.unlink
+    reject_unlink = True
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def interrupt_source_unlink(name, *args, **kwargs):
+        if name == source.name and reject_unlink:
+            raise OSError(errno.EIO, os.strerror(errno.EIO))
+        return real_unlink(name, *args, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module.os, "unlink", interrupt_source_unlink)
+    with module.bound_parent_descriptor(source, "retryable no-replace") as parent:
+        with pytest.raises(OSError, match=os.strerror(errno.EIO)):
+            module.rename_bound_noreplace(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                "retryable no-replace",
+            )
+        assert source.stat().st_nlink == target.stat().st_nlink == 2
+        assert source.stat().st_ino == target.stat().st_ino
+        reject_unlink = False
+        module.rename_bound_noreplace(
+            parent,
+            source.name,
+            target.name,
+            source.stat(),
+            "retryable no-replace",
+        )
+
+    assert not source.exists()
+    assert target.stat().st_nlink == 1
+    assert target.read_bytes() == b"retryable publication\n"
+
+
+def test_checkpoint_lustre_noreplace_rejects_same_inode_byte_drift(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"authenticated bytes\n")
+    real_linkat = module.linkat_descriptor_noreplace
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def mutate_after_link(descriptor, target_parent, target_name, label):
+        result = real_linkat(descriptor, target_parent, target_name, label)
+        opened = os.open(source.name, os.O_WRONLY | os.O_NOFOLLOW, dir_fd=target_parent)
+        try:
+            os.pwrite(opened, b"x" * source.stat().st_size, 0)
+        finally:
+            os.close(opened)
+        return result
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", mutate_after_link)
+    with module.bound_parent_descriptor(source, "drifted no-replace") as parent:
+        with pytest.raises(ValueError, match="content digest changed"):
+            module.rename_bound_noreplace(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                "drifted no-replace",
+            )
+
+    assert source.stat().st_ino == target.stat().st_ino
+    assert source.stat().st_nlink == target.stat().st_nlink == 2
+
+
+@pytest.mark.parametrize(
+    ("name", "mode"),
+    [
+        ("state.json", 0o644),
+        ("artifact.publication_audit.json", 0o444),
+    ],
+)
+def test_checkpoint_write_json_retries_exact_lustre_post_link_state(
+    tmp_path, monkeypatch, name, mode,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / name
+    value = {"state": "durable-publication"}
+
+    temporary = leave_lustre_json_post_link_state(
+        module, target, value, monkeypatch, mode=mode
+    )
+
+    assert temporary.stat().st_ino == target.stat().st_ino
+    assert temporary.stat().st_nlink == target.stat().st_nlink == 2
+    module.write_json(target, value, mode=mode)
+
+    assert not temporary.exists()
+    assert target.stat().st_nlink == 1
+    assert target.stat().st_mode & 0o777 == mode
+    assert json.loads(target.read_text()) == value
+
+
+@pytest.mark.parametrize(
+    ("state", "pattern"),
+    [
+        (
+            "wrong-name",
+            "requires exactly one correctly named temporary",
+        ),
+        (
+            "different-inode",
+            "do not select the same exact two-link inode",
+        ),
+        (
+            "public-absent",
+            "linked temporary without its exact public name",
+        ),
+        (
+            "extra-link",
+            "public name has 3 links",
+        ),
+    ],
+)
+def test_checkpoint_write_json_recovery_rejects_nonexact_two_link_states(
+    tmp_path, state, pattern,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "state.json"
+    value = {"state": "authenticated"}
+    payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+    temporary = tmp_path / f".{target.name}.123.{'0' * 32}.tmp"
+    extra = tmp_path / "extra-link"
+
+    if state == "wrong-name":
+        target.write_bytes(payload)
+        os.link(target, tmp_path / "wrong-temporary")
+    elif state == "different-inode":
+        target.write_bytes(payload)
+        os.link(target, extra)
+        temporary.write_bytes(payload)
+    elif state == "public-absent":
+        temporary.write_bytes(payload)
+        os.link(temporary, extra)
+    else:
+        target.write_bytes(payload)
+        os.link(target, temporary)
+        os.link(target, extra)
+
+    with pytest.raises(ValueError, match=pattern):
+        module.write_json(target, value)
+
+    if target.exists():
+        assert target.read_bytes() == payload
+    if temporary.exists():
+        assert temporary.read_bytes() == payload
+
+
+def test_checkpoint_lustre_retirement_is_deterministic_and_retryable(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"retryable retirement\n")
+    real_unlink = module.os.unlink
+    reject_unlink = True
+
+    def unsupported_renameat2_between(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def interrupt_source_unlink(name, *args, **kwargs):
+        if name == victim.name and reject_unlink:
+            raise OSError(errno.EIO, os.strerror(errno.EIO))
+        return real_unlink(name, *args, **kwargs)
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2_between)
+    monkeypatch.setattr(module.os, "unlink", interrupt_source_unlink)
+    with module.bound_parent_descriptor(victim, "retryable retirement") as parent:
+        expected = victim.stat()
+        retired_name = module.deterministic_retirement_name(
+            parent, victim.name, expected
+        )
+        retired = tmp_path.parent / retired_name
+        with pytest.raises(OSError, match=os.strerror(errno.EIO)):
+            module.unlink_bound_entry(
+                parent, victim.name, expected, "retryable retirement"
+            )
+        assert victim.stat().st_ino == retired.stat().st_ino
+        assert victim.stat().st_nlink == retired.stat().st_nlink == 2
+        reject_unlink = False
+        module.unlink_bound_entry(
+            parent, victim.name, victim.stat(), "retryable retirement"
+        )
+
+    assert not victim.exists()
+    assert retired.stat().st_nlink == 1
+    assert retired.read_bytes() == b"retryable retirement\n"
+
+
+def test_checkpoint_lustre_retirement_rejects_deterministic_target_collision(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"authenticated retirement\n")
+
+    def unsupported_renameat2_between(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2_between)
+    with module.bound_parent_descriptor(victim, "retirement collision") as parent:
+        expected = victim.stat()
+        retired = tmp_path.parent / module.deterministic_retirement_name(
+            parent, victim.name, expected
+        )
+        retired.write_bytes(b"collision\n")
+        with pytest.raises(ValueError, match="deterministic forensic name"):
+            module.unlink_bound_entry(
+                parent, victim.name, expected, "retirement collision"
+            )
+
+    assert victim.read_bytes() == b"authenticated retirement\n"
+    assert retired.read_bytes() == b"collision\n"
+
+
+def test_checkpoint_lustre_retirement_mode_zero_fails_closed(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"mode-zero forensic bytes\n")
+    victim.chmod(0o000)
+
+    def unsupported_renameat2_between(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2_between)
+    with module.bound_parent_descriptor(victim, "mode-zero retirement") as parent:
+        expected = victim.stat()
+        retired = tmp_path.parent / module.deterministic_retirement_name(
+            parent, victim.name, expected
+        )
+        with pytest.raises(ValueError, match="exact readable-byte authentication"):
+            module.unlink_bound_entry(
+                parent, victim.name, expected, "mode-zero retirement"
+            )
+
+    assert victim.exists()
+    assert victim.stat().st_mode & 0o777 == 0o000
+    assert not retired.exists()
+
+
+def test_checkpoint_lustre_exchange_fails_closed_without_fallback_mutation(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"new\n")
+    target.write_bytes(b"old\n")
+    source_identity = module.profile_identity(source.stat())
+    target_identity = module.profile_identity(target.stat())
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    def forbidden_mutation(*_args, **_kwargs):
+        raise AssertionError("unsupported exchange must not issue a fallback mutation")
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "linkat_descriptor_noreplace", forbidden_mutation)
+    monkeypatch.setattr(module.os, "rename", forbidden_mutation)
+    with module.bound_parent_descriptor(source, "Lustre exchange") as parent:
+        with pytest.raises(ValueError, match="requires RENAME_EXCHANGE support"):
+            module.exchange_bound_entries(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                target.stat(),
+                "Lustre exchange",
+            )
+
+    assert module.profile_identity(source.stat()) == source_identity
+    assert module.profile_identity(target.stat()) == target_identity
+    assert source.read_bytes() == b"new\n"
+    assert target.read_bytes() == b"old\n"
+    assert not list(tmp_path.glob(".cgl-checkpoint-replaced-*"))
+
+
+def test_checkpoint_exchange_race_does_not_clobber_substitute(tmp_path, monkeypatch):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    substitute = tmp_path / "substitute"
+    escaped = tmp_path / "escaped"
+    source.write_bytes(b"new\n")
+    target.write_bytes(b"old\n")
+    substitute.write_bytes(b"substitute\n")
+    real_renameat2 = module.renameat2
+
+    with module.bound_parent_descriptor(source, "exchange") as parent:
+        source_profile = os.stat(source.name, dir_fd=parent, follow_symlinks=False)
+        target_profile = os.stat(target.name, dir_fd=parent, follow_symlinks=False)
+
+        def race_after_exchange(
+            selected_parent, source_name, target_name, flags, label
+        ):
+            real_renameat2(selected_parent, source_name, target_name, flags, label)
+            if flags == module.RENAME_EXCHANGE and "rollback" not in label:
+                os.rename(
+                    target_name,
+                    escaped.name,
+                    src_dir_fd=selected_parent,
+                    dst_dir_fd=selected_parent,
+                )
+                os.rename(
+                    substitute.name,
+                    target_name,
+                    src_dir_fd=selected_parent,
+                    dst_dir_fd=selected_parent,
+                )
+
+        monkeypatch.setattr(module, "renameat2", race_after_exchange)
+        with pytest.raises(ValueError, match="names changed after atomic exchange"):
+            module.exchange_bound_entries(
+                parent,
+                source.name,
+                target.name,
+                source_profile,
+                target_profile,
+                "raced exchange",
+            )
+
+    assert target.read_bytes() == b"substitute\n"
+    assert escaped.read_bytes() == b"new\n"
+    assert source.read_bytes() == b"old\n"
+
+
+@pytest.mark.parametrize("operation", ["noreplace", "exchange"])
+def test_checkpoint_post_rename_exception_is_durably_recorded(
+    tmp_path, monkeypatch, operation,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"new\n")
+    if operation == "exchange":
+        target.write_bytes(b"old\n")
+    real_renameat2 = module.renameat2
+    real_fsync = module.os.fsync
+    fsynced_directories = []
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced_directories.append(module.profile_identity(profile))
+        return result
+
+    def fail_after_successful_rename(parent, source_name, target_name, flags, label):
+        real_renameat2(parent, source_name, target_name, flags, label)
+        raise OSError("simulated exception after successful namespace mutation")
+
+    monkeypatch.setattr(module.os, "fsync", observe_fsync)
+    monkeypatch.setattr(module, "renameat2", fail_after_successful_rename)
+    with module.bound_parent_descriptor(source, "post-rename durability") as parent:
+        parent_identity = module.profile_identity(os.fstat(parent))
+        source_profile = os.stat(source.name, dir_fd=parent, follow_symlinks=False)
+        if operation == "noreplace":
+            with pytest.raises(OSError, match="after successful namespace mutation"):
+                module.rename_bound_noreplace(
+                    parent, source.name, target.name, source_profile, "durable rename"
+                )
+        else:
+            target_profile = os.stat(target.name, dir_fd=parent, follow_symlinks=False)
+            with pytest.raises(OSError, match="after successful namespace mutation"):
+                module.exchange_bound_entries(
+                    parent,
+                    source.name,
+                    target.name,
+                    source_profile,
+                    target_profile,
+                    "durable exchange",
+                )
+
+    assert parent_identity in fsynced_directories
+    assert target.read_bytes() == b"new\n"
+    if operation == "noreplace":
+        assert not source.exists()
+    else:
+        assert source.read_bytes() == b"old\n"
+
+
+def test_checkpoint_exchange_never_rolls_back_after_lock_loss(tmp_path, monkeypatch):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    lock.write_text("")
+    lock.chmod(0o644)
+    source = root / "source"
+    target = root / "target"
+    source.write_bytes(b"new\n")
+    target.write_bytes(b"old\n")
+    real_renameat2_between = module.renameat2_between
+    mutations = []
+
+    def lose_lock_after_exchange(
+        source_parent, source_name, target_parent, target_name, flags, label
+    ):
+        mutations.append(label)
+        result = real_renameat2_between(
+            source_parent, source_name, target_parent, target_name, flags, label
+        )
+        if len(mutations) == 1:
+            lock.rename(root / "retired-lock")
+            lock.write_text("")
+            lock.chmod(0o644)
+        return result
+
+    monkeypatch.setattr(module, "renameat2_between", lose_lock_after_exchange)
+    with pytest.raises(ValueError, match="Stage I lock path changed while mutation is active"):
+        with module.promotion_lock({"root": root, "lock": lock}):
+            with module.bound_parent_descriptor(source, "lock-loss exchange") as parent:
+                module.exchange_bound_entries(
+                    parent,
+                    source.name,
+                    target.name,
+                    source.stat(),
+                    target.stat(),
+                    "lock-loss exchange",
+                )
+
+    assert mutations == ["lock-loss exchange"]
+    assert source.read_bytes() == b"old\n"
+    assert target.read_bytes() == b"new\n"
+
+
+def test_checkpoint_exchange_never_rolls_back_after_parent_loss(tmp_path, monkeypatch):
+    module = load_checkpoint_module()
+    live = tmp_path / "live"
+    live.mkdir()
+    source = live / "source"
+    target = live / "target"
+    source.write_bytes(b"new\n")
+    target.write_bytes(b"old\n")
+    detached = tmp_path / "detached"
+    real_renameat2_between = module.renameat2_between
+    mutations = []
+
+    def detach_parent_after_exchange(
+        source_parent, source_name, target_parent, target_name, flags, label
+    ):
+        mutations.append(label)
+        result = real_renameat2_between(
+            source_parent, source_name, target_parent, target_name, flags, label
+        )
+        if len(mutations) == 1:
+            live.rename(detached)
+            live.mkdir()
+        return result
+
+    monkeypatch.setattr(module, "renameat2_between", detach_parent_after_exchange)
+    with pytest.raises(ValueError, match="parent path changed during mutation"):
+        with module.bound_parent_descriptor(source, "parent-loss exchange") as parent:
+            module.exchange_bound_entries(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                target.stat(),
+                "parent-loss exchange",
+            )
+
+    assert mutations == ["parent-loss exchange"]
+    assert (detached / source.name).read_bytes() == b"old\n"
+    assert (detached / target.name).read_bytes() == b"new\n"
+    assert list(live.iterdir()) == []
+
+
+def test_checkpoint_publication_link_uses_authenticated_source_descriptor(tmp_path):
+    module = load_checkpoint_module()
+    staged = tmp_path / "staged"
+    retired = tmp_path / "retired"
+    canonical = tmp_path / "canonical"
+    staged.write_bytes(b"authenticated staged bytes\n")
+
+    with module.bound_parent_descriptor(staged, "publication") as parent:
+        descriptor = os.open(staged.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+        try:
+            identity = module.profile_identity(os.fstat(descriptor))
+            staged.rename(retired)
+            staged.write_bytes(b"raced staged pathname\n")
+            module.link_descriptor_noreplace(
+                descriptor,
+                parent,
+                canonical.name,
+                identity,
+                "canonical publication",
+            )
+        finally:
+            os.close(descriptor)
+
+    assert canonical.read_bytes() == b"authenticated staged bytes\n"
+    assert staged.read_bytes() == b"raced staged pathname\n"
+
+
+def test_checkpoint_rejects_stage_i_lock_through_symlinked_parent(tmp_path):
+    module = load_checkpoint_module()
+    real_parent = tmp_path / "real-parent"
+    real_root = real_parent / "root"
+    real_root.mkdir(parents=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(real_parent, target_is_directory=True)
+    root = alias / "root"
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    with pytest.raises(OSError):
+        with module.promotion_lock({"root": root, "lock": lock}):
+            raise AssertionError("symlinked lock path must not enter the mutation boundary")
+    assert not (real_root / lock.name).exists()
+
+
+def test_checkpoint_canonical_root_alias_cannot_bypass_authority_digest_pins(
+    tmp_path, monkeypatch
+):
+    module = load_checkpoint_module()
+    canonical = tmp_path / "canonical"
+    relative = Path("accounting/source-authority.json")
+    record = canonical / relative
+    record.parent.mkdir(parents=True)
+    write_json(record, {"fixture": True})
+    record.chmod(0o444)
+    alias = tmp_path / "canonical-alias"
+    alias.symlink_to(canonical, target_is_directory=True)
+    monkeypatch.setattr(module, "DEFAULT_ROOT", canonical)
+
+    assert module.is_production_root(alias)
+    with pytest.raises(ValueError, match="canonical digest differs"):
+        module.read_source_authority_record_set(
+            alias,
+            {"record": {"path": relative.as_posix(), "sha256": sha256(record)}},
+            {"record": relative},
+            {"record": "f" * 64},
+            "hostile canonical alias",
+        )
+
+
+def test_checkpoint_production_contract_is_not_defined_by_fixture_truth(
+    tmp_path, monkeypatch
+):
+    module = load_checkpoint_module()
+    canonical = tmp_path / "canonical"
+    fixture = tmp_path / "fixture"
+    relative = Path("accounting/source-authority.json")
+    for root in (canonical, fixture):
+        record = root / relative
+        record.parent.mkdir(parents=True)
+        write_json(record, {"synthetic_fixture_claim": "self-consistent"})
+        record.chmod(0o444)
+    monkeypatch.setattr(module, "DEFAULT_ROOT", canonical)
+    fixture_digest = sha256(fixture / relative)
+    bindings = {
+        "record": {"path": relative.as_posix(), "sha256": fixture_digest}
+    }
+
+    assert not module.is_production_root(fixture)
+    loaded = module.read_source_authority_record_set(
+        fixture,
+        bindings,
+        {"record": relative},
+        {"record": "f" * 64},
+        "explicit fixture",
+    )
+    assert loaded["record"][1] == fixture_digest
+    with pytest.raises(ValueError, match="canonical digest differs"):
+        module.read_source_authority_record_set(
+            canonical,
+            bindings,
+            {"record": relative},
+            {"record": "f" * 64},
+            "production contract",
+        )
+
+
+def test_checkpoint_locked_reconcile_uses_in_process_report(monkeypatch, tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    lock.write_text("")
+    lock.chmod(0o644)
+    helper = tmp_path / "stage_i_helper.py"
+    helper.write_text(
+        """
+import fcntl
+import json
+from pathlib import Path
+import sys
+
+def reconcile_report(root):
+    return {
+        "execution_epoch": "E03-forcing-policy",
+        "consistent": True,
+        "counts": {
+            "transactions": 0,
+            "reservations": 0,
+            "active_reservations": 0,
+            "ledger_rows": 0,
+            "manifests": 0,
+        },
+        "issues": [],
+    }
+
+if __name__ == "__main__":
+    root = Path(sys.argv[sys.argv.index("--root") + 1])
+    with (root / ".mks24_stage_i_E03_forcing_policy.lock").open("r+") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    print(json.dumps(reconcile_report(root)))
+""".lstrip()
+    )
+    helper.chmod(0o644)
+
+    @contextmanager
+    def descriptor(*_args):
+        value = os.open(helper, os.O_RDONLY)
+        try:
+            yield value
+        finally:
+            os.close(value)
+
+    monkeypatch.setattr(module, "stage_i_descriptor", descriptor)
+    args = type(
+        "Args",
+        (),
+        {
+            "expected_stage_i_sha256": sha256(helper),
+            "expected_transactions": 0,
+            "expected_reservations": 0,
+            "expected_active_reservations": 0,
+            "expected_ledger_rows": 0,
+            "expected_manifests": 0,
+        },
+    )()
+    with lock.open("r+") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        report = module.run_reconcile(
+            tmp_path, root, False, args, stage_i_lock_held=True
+        )
+    assert report["consistent"] is True
+
+
+def test_checkpoint_reconcile_child_is_isolated_and_sanitized(monkeypatch, tmp_path):
+    module = load_checkpoint_module()
+    helper = tmp_path / "stage_i_helper.py"
+    helper.write_text("# authenticated fixture helper\n")
+    helper.chmod(0o644)
+    calls = []
+
+    @contextmanager
+    def descriptor(*_args):
+        value = os.open(helper, os.O_RDONLY)
+        try:
+            yield value
+        finally:
+            os.close(value)
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(
+                {
+                    "execution_epoch": EPOCH,
+                    "consistent": True,
+                    "counts": {
+                        "transactions": 0,
+                        "reservations": 0,
+                        "active_reservations": 0,
+                        "ledger_rows": 0,
+                        "manifests": 0,
+                    },
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(module, "stage_i_descriptor", descriptor)
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    args = SimpleNamespace(
+        expected_stage_i_sha256=sha256(helper),
+        expected_transactions=0,
+        expected_reservations=0,
+        expected_active_reservations=0,
+        expected_ledger_rows=0,
+        expected_manifests=0,
+    )
+    module.run_reconcile(tmp_path, tmp_path, True, args)
+
+    command, kwargs = calls[0]
+    assert command[1:4] == ["-I", "-S", "-B"]
+    python_descriptor = int(kwargs["executable"].removeprefix("/proc/self/fd/"))
+    assert python_descriptor in kwargs["pass_fds"]
+    helper_descriptor = next(
+        descriptor for descriptor in kwargs["pass_fds"] if descriptor != python_descriptor
+    )
+    assert kwargs["env"] == module.stage_i_reconcile_environment(
+        tmp_path, helper_descriptor, python_descriptor
+    )
+    assert kwargs["env"][module.STAGE_I_SOURCE_ENV] == str(tmp_path / module.STAGE_I_RELATIVE)
+    assert kwargs["env"][module.STAGE_I_REPOSITORY_ROOT_ENV] == str(tmp_path)
+    assert kwargs["stdin"] == subprocess.DEVNULL
+    assert kwargs["timeout"] == 120
+
+
+def test_checkpoint_normalizes_restricted_lock_after_interruption(recost_fixture):
+    fixture = recost_fixture
+    fixture["lock"].write_text("")
+    fixture["lock"].chmod(0o600)
+    promoted = run_checkpoint(fixture, "promote-recost")
+    assert promoted.returncode == 0, promoted.stderr
+    assert fixture["lock"].stat().st_mode & 0o777 == 0o644
+
+
+def test_checkpoint_creates_exact_profiles_under_restrictive_umask(recost_fixture):
+    fixture = recost_fixture
+    promoted = subprocess.run(
+        checkpoint_command(fixture, "promote-recost"),
+        check=False,
+        capture_output=True,
+        text=True,
+        preexec_fn=lambda: os.umask(0o777),
+    )
+    assert promoted.returncode == 0, promoted.stderr
+    assert fixture["lock"].stat().st_mode & 0o777 == 0o644
+    assert fixture["audit"].stat().st_mode & 0o777 == 0o644
+    forensic = next(fixture["recost_forensics"].iterdir())
+    assert forensic.stat().st_mode & 0o777 == 0o444
+
+
+@pytest.mark.parametrize(
+    "fixture_key",
+    ["recost_transactions", "recost_forensics_root", "recost_forensics"],
+)
+def test_checkpoint_rejects_writable_managed_directory(recost_fixture, fixture_key):
+    fixture = recost_fixture
+    directory = fixture[fixture_key]
+    directory.mkdir(parents=True, exist_ok=True)
+    directory.chmod(0o777)
+    completed = run_checkpoint(fixture, "promote-recost")
+    assert_rejected(completed, "exceeds trusted profile 0755")
+    assert fixture["staged"].is_file()
+    assert not fixture["canonical"].exists()
+
+
+@pytest.mark.parametrize("fixture_key", ["root", "accounting", "stage_i_transactions"])
+def test_checkpoint_rejects_writable_trust_boundary_directory(recost_fixture,
+                                                              fixture_key):
+    fixture = recost_fixture
+    fixture[fixture_key].chmod(0o777)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "exceeds trusted profile 0755")
+    assert fixture["staged"].is_file()
+    assert not fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_namespace_ambiguity_and_hash_mismatch(recost_fixture):
+    ambiguous = recost_fixture["accounting"] / f".{ARTIFACT}.unexpected"
+    ambiguous.write_text("ambiguous\n")
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost")
+    assert_rejected(completed, "recost namespace is not staged-only")
+    ambiguous.unlink()
+    recost_fixture["staged"].write_text("{}\n")
+    completed = run_checkpoint(
+        recost_fixture,
+        "verify-staged-recost",
+        artifact_sha256="f" * 64,
+    )
+    assert_rejected(completed, "recost artifact checksum has changed")
+
+
+def test_checkpoint_rejects_exact_hidden_twin(recost_fixture):
+    hidden = recost_fixture["accounting"] / f".{ARTIFACT}"
+    hidden.write_text("ambiguous\n")
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost")
+    assert_rejected(completed, "recost namespace is not staged-only")
+
+
+def test_checkpoint_rejects_external_evidence_parent_symlink(recost_fixture):
+    fixture = recost_fixture
+    real = fixture["accounting"] / "real-utilities"
+    real.mkdir()
+    escaped = real / "generate_test_recost.py"
+    escaped.write_bytes(fixture["generator"].read_bytes())
+    escaped.chmod(0o755)
+    fixture["generator"].unlink()
+    fixture["generator"].parent.rmdir()
+    fixture["generator"].parent.symlink_to(real, target_is_directory=True)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert completed.returncode == 1
+    assert not fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_stage_i_transaction_and_bad_artifact_mode(recost_fixture):
+    transaction = recost_fixture["stage_i_transactions"] / "unexpected.json"
+    transaction.write_text("{}\n")
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost")
+    assert_rejected(completed, "Stage I transaction directory is not empty")
+    transaction.unlink()
+    recost_fixture["staged"].chmod(0o600)
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost")
+    assert_rejected(completed, "recost artifact mode is 0600, expected 0644")
+
+
+@pytest.mark.parametrize(
+    ("option", "mode", "pattern"),
+    [
+        ("--expected-artifact-mode", "0666", "artifact mode must not exceed 0644"),
+        ("--expected-generator-mode", "0777", "generator mode must not exceed 0755"),
+        (
+            "--expected-scheduler-mode",
+            "0666",
+            "scheduler evidence mode must not exceed 0644",
+        ),
+    ],
+)
+def test_checkpoint_rejects_unsafe_retained_mode_argument(recost_fixture,
+                                                         option,
+                                                         mode,
+                                                         pattern):
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost", option, mode)
+    assert completed.returncode == 2
+    assert pattern in completed.stderr
+
+
+def test_checkpoint_rejects_nonzero_expected_active_reservations(recost_fixture):
+    recost_fixture["counts"]["active_reservations"] = 1
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost")
+    assert_rejected(completed, "expected active reservation count must be zero")
+
+
+def test_checkpoint_rejects_lexical_evidence_traversal(recost_fixture):
+    completed = run_checkpoint(
+        recost_fixture,
+        "verify-staged-recost",
+        generator_relative_path="../outside-generator.py",
+    )
+    assert_rejected(completed, "must be a relative path without '..'")
+
+
+def test_checkpoint_rejects_nonempty_recost_transaction_directory(recost_fixture):
+    recost_fixture["recost_transactions"].mkdir()
+    transaction = recost_fixture["recost_transactions"] / "unexpected.json"
+    transaction.write_text("{}\n")
+    completed = run_checkpoint(recost_fixture, "promote-recost")
+    assert_rejected(completed, "recost transaction directory is not empty")
+    assert recost_fixture["staged"].is_file()
+    assert not recost_fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_staged_artifact_extra_hardlink(recost_fixture, tmp_path):
+    os.link(recost_fixture["staged"], tmp_path / "unexpected-artifact-link.json")
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost")
+    assert_rejected(completed, "recost artifact has 2 links, expected 1")
+    assert recost_fixture["staged"].is_file()
+    assert not recost_fixture["canonical"].exists()
+
+
+def test_checkpoint_rejects_scheduler_leaf_symlink(recost_fixture):
+    scheduler = recost_fixture["scheduler"]
+    retained = scheduler.with_name(f"{scheduler.name}.retained")
+    scheduler.rename(retained)
+    scheduler.symlink_to(retained.name)
+    completed = run_checkpoint(recost_fixture, "verify-staged-recost")
+    assert completed.returncode == 1
+    assert "symbolic links" in completed.stderr
+    assert recost_fixture["staged"].is_file()
+    assert not recost_fixture["canonical"].exists()
+
+
+def test_checkpoint_retains_forensics_and_finalizes_linked_pair(recost_fixture):
+    failed = run_checkpoint(
+        recost_fixture,
+        "promote-recost",
+        "--simulate-post-link-failure",
+    )
+    assert_rejected(failed, "simulated post-link publication failure")
+    staged = recost_fixture["staged"].stat()
+    canonical = recost_fixture["canonical"].stat()
+    assert (staged.st_dev, staged.st_ino) == (canonical.st_dev, canonical.st_ino)
+    assert staged.st_nlink == 2
+    journals = list(recost_fixture["recost_transactions"].iterdir())
+    forensics = list(recost_fixture["recost_forensics"].iterdir())
+    assert len(journals) == 1
+    assert len(forensics) == 1
+    assert sha256(forensics[0]) == sha256(recost_fixture["staged"])
+    journal = json.loads(journals[0].read_text())
+    assert journal["state"] == "ambiguous-after-link-attempt"
+    assert journal["staged_inode_identity"] == {
+        "device": staged.st_dev,
+        "inode": staged.st_ino,
+    }
+
+    finalized = run_checkpoint(recost_fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+    assert recost_fixture["canonical"].is_file()
+    assert recost_fixture["canonical"].stat().st_nlink == 1
+    assert not recost_fixture["staged"].exists()
+    assert recost_fixture["audit"].is_file()
+    assert list(recost_fixture["recost_transactions"].iterdir()) == []
+    verified = run_checkpoint(recost_fixture, "verify-promoted-recost")
+    assert verified.returncode == 0, verified.stderr
+
+
+def test_checkpoint_retains_link_return_interruption_for_recovery(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-link-return-failure")
+    assert_rejected(failed, "simulated failure immediately after recost publication link")
+    staged = fixture["staged"].stat()
+    canonical = fixture["canonical"].stat()
+    assert (staged.st_dev, staged.st_ino) == (canonical.st_dev, canonical.st_ino)
+    assert staged.st_nlink == 2
+    journals = list(fixture["recost_transactions"].iterdir())
+    assert len(journals) == 1
+    journal = json.loads(journals[0].read_text())
+    assert journal["state"] == "ambiguous-after-link-attempt"
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+
+
+def test_checkpoint_recovers_interruption_after_single_link_exchange(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(
+        fixture,
+        "promote-recost",
+        "--simulate-single-link-post-exchange-failure",
+    )
+    assert_rejected(failed, "simulated interruption after canonical copy publication")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    assert record["state"] == "single-link-copy-prepared"
+    assert fixture["canonical"].stat().st_nlink == 1
+    replacement = fixture["accounting"] / record["single_link_replacement_name"]
+    assert fixture["staged"].stat().st_nlink in {2, 3}
+    assert not replacement.exists()
+
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+    assert fixture["canonical"].stat().st_nlink == 1
+    assert not fixture["staged"].exists()
+    assert not replacement.exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_lustre_recovers_interrupted_canonical_publication(recost_fixture):
+    fixture = recost_fixture
+    force_checkpoint_renameat2_einval(fixture["checkpoint"])
+    failed = run_checkpoint(
+        fixture,
+        "promote-recost",
+        "--simulate-single-link-post-exchange-failure",
+    )
+    assert_rejected(failed, "simulated interruption after canonical copy publication")
+
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+    verified = run_checkpoint(fixture, "verify-promoted-recost")
+    assert verified.returncode == 0, verified.stderr
+    assert fixture["canonical"].stat().st_nlink == 1
+    assert not fixture["staged"].exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_checkpoint_recovers_prejournal_single_link_copy(recost_fixture, partial):
+    fixture = recost_fixture
+    failed = run_checkpoint(
+        fixture,
+        "promote-recost",
+        "--simulate-post-link-failure",
+    )
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    replacement = fixture["accounting"] / record["single_link_replacement_name"]
+    if partial:
+        replacement.write_bytes(b"partial canonical copy")
+        replacement.chmod(0o000)
+    else:
+        module = load_checkpoint_module()
+        paths = module.layout(fixture["root"], ARTIFACT)
+        args = module.parser().parse_args(
+            checkpoint_command(fixture, "finalize-linked-pair")[2:]
+        )
+        with module.bound_parent_descriptor(
+            paths["canonical"], "fixture prejournal canonical copy"
+        ) as directory_descriptor:
+            module.prepare_single_link_copy(
+                directory_descriptor,
+                paths,
+                args,
+                replacement.name,
+                expected_staged_identity=module.recovery_staged_identity(record),
+            )
+    assert "canonical_inode_identity" not in record
+
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+    assert fixture["canonical"].stat().st_nlink == 1
+    assert not fixture["staged"].exists()
+    assert not replacement.exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_json_write_rejects_detached_parent(tmp_path, monkeypatch):
+    module = load_checkpoint_module()
+    parent = tmp_path / "accounting"
+    parent.mkdir()
+    target = parent / "state.json"
+    target.write_text('{"old": true}\n')
+    detached = tmp_path / "accounting-detached"
+    original_replacement = module.replace_bound_entry_forward
+    raced = False
+
+    def detach_parent(*args, **kwargs):
+        nonlocal raced
+        result = original_replacement(*args, **kwargs)
+        if not raced:
+            raced = True
+            parent.rename(detached)
+            parent.mkdir()
+        return result
+
+    monkeypatch.setattr(module, "replace_bound_entry_forward", detach_parent)
+    with pytest.raises(ValueError, match="parent path changed during mutation"):
+        module.write_json(target, {"new": True})
+    assert not target.exists()
+    assert json.loads((detached / target.name).read_text()) == {"new": True}
+
+
+def test_checkpoint_recovery_rejects_changed_authorization_context(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    fixture["staged"].chmod(0o666)
+    completed = run_checkpoint(
+        fixture,
+        "finalize-linked-pair",
+        "--expected-artifact-mode",
+        "0666",
+    )
+    assert completed.returncode == 2
+    assert "artifact mode must not exceed 0644" in completed.stderr
+    assert fixture["staged"].exists()
+    assert fixture["canonical"].exists()
+    assert len(list(fixture["recost_transactions"].iterdir())) == 1
+
+
+def test_checkpoint_recovery_rejects_journal_hardlink(recost_fixture, tmp_path):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    os.link(journal, tmp_path / "unexpected-journal-link.json")
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(completed, "recost transaction journal has 2 links, expected 1")
+    assert fixture["staged"].exists()
+    assert fixture["canonical"].exists()
+
+
+def test_checkpoint_recovery_rejects_forensic_mode_change(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    forensic = next(fixture["recost_forensics"].iterdir())
+    forensic.chmod(0o600)
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(completed, "recost forensic copy mode is 0600, expected 0444")
+    assert fixture["staged"].exists()
+    assert fixture["canonical"].exists()
+
+
+def test_checkpoint_recovery_rejects_unsafe_accounting_before_orphan_cleanup(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    orphan = (
+        fixture["recost_transactions"]
+        / f".orphan.json.123.{'0' * 32}.tmp"
+    )
+    orphan.write_text("partial")
+    orphan.chmod(0o000)
+    fixture["accounting"].chmod(0o777)
+    before = set(fixture["accounting"].iterdir())
+
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+
+    assert_rejected(completed, "exceeds trusted profile 0755")
+    assert orphan.exists()
+    assert set(fixture["accounting"].iterdir()) == before
+
+
+@pytest.mark.parametrize("journal_state", ["preparing", "link-pending"])
+def test_checkpoint_retires_interrupted_prepublication_transaction(recost_fixture,
+                                                                    journal_state):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["state"] = journal_state
+    record.pop("ambiguity_recorded_utc")
+    write_json(journal, record)
+    fixture["canonical"].unlink()
+    if journal_state == "preparing":
+        next(fixture["recost_forensics"].iterdir()).chmod(0o400)
+    retired = run_checkpoint(fixture, "retire-preparing")
+    assert retired.returncode == 0, retired.stderr
+    assert fixture["staged"].is_file()
+    assert fixture["staged"].stat().st_nlink == 1
+    assert not fixture["canonical"].exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+    assert list(fixture["recost_forensics"].iterdir()) == []
+
+
+def test_checkpoint_retires_prejournal_partial_copy_from_staged_state(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["state"] = "link-pending"
+    record.pop("ambiguity_recorded_utc")
+    write_json(journal, record)
+    fixture["canonical"].unlink()
+    replacement = fixture["accounting"] / record["single_link_replacement_name"]
+    replacement.write_bytes(b"partial canonical copy")
+    replacement.chmod(0o000)
+
+    retired = run_checkpoint(fixture, "retire-preparing")
+    assert retired.returncode == 0, retired.stderr
+    assert fixture["staged"].is_file()
+    assert fixture["staged"].stat().st_nlink == 1
+    assert not replacement.exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+@pytest.mark.parametrize("mode", [0o000, 0o600])
+def test_checkpoint_retires_orphan_journal_temporary(recost_fixture, mode):
+    fixture = recost_fixture
+    fixture["recost_transactions"].mkdir()
+    fixture["recost_forensics"].mkdir(parents=True)
+    temporary = (
+        fixture["recost_transactions"]
+        / f".orphan.json.123.{'0' * 32}.tmp"
+    )
+    temporary.write_text("partial")
+    temporary.chmod(mode)
+    retired = run_checkpoint(fixture, "retire-preparing")
+    assert retired.returncode == 0, retired.stderr
+    assert fixture["staged"].is_file()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+@pytest.mark.parametrize("legacy_name", [False, True])
+def test_checkpoint_retires_mode_zero_forensic_copy_temporary(
+    recost_fixture, legacy_name,
+):
+    fixture = recost_fixture
+    fixture["recost_transactions"].mkdir()
+    fixture["recost_forensics"].mkdir(parents=True)
+    if legacy_name:
+        name = f".cgl-checkpoint-forensic-{'0' * 32}"
+    else:
+        destination = fixture["recost_forensics"] / "interrupted.forensic"
+        name = (
+            ".cgl-checkpoint-forensic-"
+            f"{hashlib.sha256(destination.name.encode()).hexdigest()}.tmp"
+        )
+    temporary = fixture["recost_forensics"] / name
+    temporary.write_bytes(b"partial forensic copy")
+    temporary.chmod(0o000)
+
+    retired = run_checkpoint(fixture, "retire-preparing")
+
+    assert retired.returncode == 0, retired.stderr
+    assert fixture["staged"].is_file()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+    assert list(fixture["recost_forensics"].iterdir()) == []
+
+
+def test_checkpoint_retires_link_pending_after_forensic_cleanup_interruption(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["state"] = "link-pending"
+    record.pop("ambiguity_recorded_utc")
+    write_json(journal, record)
+    fixture["canonical"].unlink()
+    next(fixture["recost_forensics"].iterdir()).unlink()
+    retired = run_checkpoint(fixture, "retire-preparing")
+    assert retired.returncode == 0, retired.stderr
+    assert fixture["staged"].is_file()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_rejects_forensic_directory_symlink_before_finalize(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    retained = fixture["recost_forensics"].with_name(
+        f"{fixture['recost_forensics'].name}.retained"
+    )
+    fixture["recost_forensics"].rename(retained)
+    fixture["recost_forensics"].symlink_to(retained.name, target_is_directory=True)
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(completed, "recost forensic directory is not a directory")
+    staged = fixture["staged"].stat()
+    canonical = fixture["canonical"].stat()
+    assert (staged.st_dev, staged.st_ino) == (canonical.st_dev, canonical.st_ino)
+    assert staged.st_nlink == 2
+    assert len(list(fixture["recost_transactions"].iterdir())) == 1
+
+
+def test_checkpoint_rejects_extra_forensic_entry(recost_fixture):
+    fixture = recost_fixture
+    promoted = run_checkpoint(fixture, "promote-recost")
+    assert promoted.returncode == 0, promoted.stderr
+    extra = fixture["recost_forensics"] / "unexpected"
+    extra.write_text("unexpected\n")
+    completed = run_checkpoint(fixture, "verify-promoted-recost")
+    assert_rejected(completed, "recost forensic directory entries differ")
+
+
+def test_checkpoint_rechecks_queue_directly_before_recovery_unlink(recost_fixture,
+                                                                   tmp_path):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    late_queue = tmp_path / "late-unlink-squeue.txt"
+    late_queue.write_text("67890|cgl_late_root_writer|RUNNING\n")
+    completed = run_checkpoint(
+        fixture,
+        "finalize-linked-pair",
+        "--pre-unlink-squeue-file",
+        str(late_queue),
+    )
+    assert_rejected(completed, "another CGL job is queued")
+    assert fixture["staged"].is_file()
+    assert fixture["canonical"].is_file()
+    assert len(list(fixture["recost_transactions"].iterdir())) == 1
+
+
+def test_checkpoint_recovery_revalidates_staged_name_before_unlink(recost_fixture):
+    fixture = recost_fixture
+    module = load_checkpoint_module()
+    paths = module.layout(fixture["root"], ARTIFACT)
+    args = module.parser().parse_args(
+        checkpoint_command(fixture, "finalize-linked-pair")[2:]
+    )
+    os.link(fixture["staged"], fixture["canonical"])
+    staged_identity = (
+        fixture["staged"].stat().st_dev,
+        fixture["staged"].stat().st_ino,
+    )
+    replacement = module.single_link_replacement_name("fixture-staged-race")
+
+    def replace_staged_name():
+        retained = fixture["staged"].read_bytes()
+        fixture["staged"].unlink()
+        fixture["staged"].write_bytes(retained)
+        fixture["staged"].chmod(0o644)
+
+    with module.bound_parent_descriptor(
+        paths["canonical"], "fixture staged-name race"
+    ) as directory_descriptor:
+        canonical_identity = module.prepare_single_link_copy(
+            directory_descriptor,
+            paths,
+            args,
+            replacement,
+            expected_staged_identity=staged_identity,
+        )
+        replace_staged_name()
+        with pytest.raises(
+            ValueError,
+            match="staged recost publication link does not select its journaled inode",
+        ):
+            module.complete_single_link_transition(
+                directory_descriptor,
+                paths,
+                args,
+                replacement,
+                staged_identity,
+                canonical_identity,
+            )
+    assert fixture["staged"].is_file()
+    assert fixture["canonical"].is_file()
+    assert fixture["staged"].stat().st_ino != fixture["canonical"].stat().st_ino
+
+
+def test_checkpoint_recovery_rechecks_accounting_profile_before_unlink(recost_fixture):
+    fixture = recost_fixture
+    module = load_checkpoint_module()
+    paths = module.layout(fixture["root"], ARTIFACT)
+    args = module.parser().parse_args(
+        checkpoint_command(fixture, "finalize-linked-pair")[2:]
+    )
+    os.link(fixture["staged"], fixture["canonical"])
+    staged_identity = (
+        fixture["staged"].stat().st_dev,
+        fixture["staged"].stat().st_ino,
+    )
+    replacement = module.single_link_replacement_name("fixture-accounting-race")
+    with module.bound_parent_descriptor(
+        paths["canonical"], "fixture accounting-profile race"
+    ) as directory_descriptor:
+        canonical_identity = module.prepare_single_link_copy(
+            directory_descriptor,
+            paths,
+            args,
+            replacement,
+            expected_staged_identity=staged_identity,
+        )
+    record = {
+        "staged_inode_identity": module.identity_binding(staged_identity),
+        "canonical_inode_identity": module.identity_binding(canonical_identity),
+        "single_link_replacement_name": replacement,
+    }
+    fixture["accounting"].chmod(0o777)
+    with pytest.raises(ValueError, match="exceeds trusted profile 0755"):
+        module.complete_journaled_single_link_transition(
+            paths,
+            fixture["root"],
+            True,
+            str(fixture["queue"]),
+            args,
+            record,
+        )
+    assert fixture["staged"].is_file()
+    assert fixture["canonical"].is_file()
+
+
+def test_checkpoint_single_link_transition_rejects_accounting_mode_drift(
+    recost_fixture, monkeypatch,
+):
+    fixture = recost_fixture
+    module = load_checkpoint_module()
+    paths = module.layout(fixture["root"], ARTIFACT)
+    args = module.parser().parse_args(
+        checkpoint_command(fixture, "finalize-linked-pair")[2:]
+    )
+    os.link(fixture["staged"], fixture["canonical"])
+    staged_identity = (
+        fixture["staged"].stat().st_dev,
+        fixture["staged"].stat().st_ino,
+    )
+    replacement = module.single_link_replacement_name("fixture-mode-drift")
+    original_publish = module.rename_bound_noreplace
+
+    def weaken_after_publication(*publish_args, **publish_kwargs):
+        result = original_publish(*publish_args, **publish_kwargs)
+        fixture["accounting"].chmod(0o777)
+        return result
+
+    monkeypatch.setattr(module, "rename_bound_noreplace", weaken_after_publication)
+    with pytest.raises(ValueError, match="parent path changed during mutation"):
+        with module.bound_parent_descriptor(
+            paths["canonical"], "fixture accounting mode drift"
+        ) as directory_descriptor:
+            canonical_identity = module.prepare_single_link_copy(
+                directory_descriptor,
+                paths,
+                args,
+                replacement,
+                expected_staged_identity=staged_identity,
+            )
+            module.complete_single_link_transition(
+                directory_descriptor,
+                paths,
+                args,
+                replacement,
+                staged_identity,
+                canonical_identity,
+            )
+
+
+def test_checkpoint_recovery_rejects_non_utc_journal_timestamp(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["created_utc"] = "2026-06-02T01:00:00+05:00"
+    write_json(journal, record)
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(completed, "recost journal creation timestamp must use UTC")
+
+
+def test_checkpoint_finalizes_after_orphan_audit_temporary(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    temporary = (
+        fixture["audit"].parent
+        / f".{fixture['audit'].name}.123.{'0' * 32}.tmp"
+    )
+    temporary.write_text("partial")
+    temporary.chmod(0o600)
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+    assert not temporary.exists()
+    assert fixture["audit"].is_file()
+
+
+def test_checkpoint_finalizes_after_mode_zero_orphan_audit_temporary(recost_fixture):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    temporary = (
+        fixture["audit"].parent
+        / f".{fixture['audit'].name}.123.{'0' * 32}.tmp"
+    )
+    temporary.write_text("partial")
+    temporary.chmod(0o000)
+
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+
+    assert finalized.returncode == 0, finalized.stderr
+    assert not temporary.exists()
+    assert fixture["audit"].is_file()
+
+
+@pytest.mark.parametrize(
+    ("fixture_key", "mode_option"),
+    [
+        ("generator", "--expected-generator-mode"),
+        ("scheduler", "--expected-scheduler-mode"),
+    ],
+)
+def test_checkpoint_promoted_audit_rejects_evidence_mode_drift(recost_fixture,
+                                                               fixture_key,
+                                                               mode_option):
+    fixture = recost_fixture
+    promoted = run_checkpoint(fixture, "promote-recost")
+    assert promoted.returncode == 0, promoted.stderr
+    fixture[fixture_key].chmod(0o600)
+    completed = run_checkpoint(
+        fixture,
+        "verify-promoted-recost",
+        mode_option,
+        "0600",
+    )
+    assert completed.returncode == 1
+    assert "binding differs" in completed.stderr
+
+
+@pytest.mark.parametrize("journal_state", ["ambiguous-after-link-attempt", "link-pending"])
+def test_checkpoint_finalizes_canonical_only_recovery(recost_fixture, journal_state):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["state"] = journal_state
+    if journal_state == "link-pending":
+        record.pop("ambiguity_recorded_utc")
+    write_json(journal, record)
+    fixture["staged"].unlink()
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert completed.returncode == 0, completed.stderr
+    assert fixture["canonical"].is_file()
+    assert not fixture["staged"].exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_rejects_replacement_canonical_inode_during_recovery(
+    recost_fixture,
+):
+    fixture = recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    retained = fixture["canonical"].read_bytes()
+    fixture["staged"].unlink()
+    fixture["canonical"].unlink()
+    fixture["canonical"].write_bytes(retained)
+    fixture["canonical"].chmod(0o644)
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(completed, "recost artifact inode identity has changed")
+    assert not fixture["audit"].exists()
+
+
+def test_checkpoint_rejects_forged_descriptor_source_profile(recost_fixture, tmp_path):
+    fixture = recost_fixture
+    root = tmp_path / "forged-source"
+    source = root / "scripts/frontier/cgl_lf_stage_i_checkpoint.py"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(CHECKPOINT.read_bytes())
+    source.chmod(0o644)
+    descriptor = os.memfd_create("forged-cgl-checkpoint")
+    python_descriptor = os.open(Path("/proc/self/exe").resolve(), os.O_RDONLY)
+    try:
+        os.write(descriptor, CHECKPOINT.read_bytes())
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        environment = dict(os.environ)
+        environment["_CGL_LF_RECOST_UTILITY_DESCRIPTOR"] = str(descriptor)
+        environment["_CGL_LF_RECOST_UTILITY_PYTHON_DESCRIPTOR"] = str(python_descriptor)
+        environment["_CGL_LF_RECOST_UTILITY_SOURCE"] = str(source)
+        environment["_CGL_LF_RECOST_REPOSITORY_ROOT"] = str(root)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                f"/proc/self/fd/{descriptor}",
+                *checkpoint_command(fixture, "verify-staged-recost")[2:],
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+            pass_fds=(descriptor, python_descriptor),
+        )
+    finally:
+        os.close(descriptor)
+        os.close(python_descriptor)
+    assert_rejected(completed, "retained utility mode is 0644, expected 0755")
+
+
+def test_checkpoint_promotes_and_audits_bounded_wave(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    verified = run_checkpoint(fixture, "verify-staged-recost")
+    assert verified.returncode == 0, verified.stderr
+    promoted = run_checkpoint(fixture, "promote-recost")
+    assert promoted.returncode == 0, promoted.stderr
+    audit = json.loads(fixture["audit"].read_text())
+    assert audit["authorized_bounded_wave"] == fixture["authorization"]
+    assert "authorized_sole_next_segment_profile" not in audit
+    assert len(audit["scheduler_evidence"]) == 3
+    assert audit["source_bundle"]["sha256"] == sha256(fixture["source_bundle"])
+    assert audit["source_bundle"]["verified_revisions"] == fixture["source_bundle_revisions"]
+    assert audit["generator"]["revision"] == fixture["generator_revision"]
+    assert audit["stage_i_helper"]["revision"] == fixture["stage_i_revision"]
+    context = audit["generalized_publication_context"]
+    assert context["artifact"]["basename"] == V2_ARTIFACT
+    assert context["checkpoint"] == "F-114"
+    assert context["request"]["sha256"] == fixture["request_sha256"]
+    assert context["ledger_tail_job_ids"] == ["12345", "23456", "4766856"]
+    assert context["controller_enforcement"]["bounded_wave_authorizing"] is False
+    assert audit["forensic_copy"]["generalized_vectors"] == "exact-artifact-payload"
+    forensic = Path(audit["forensic_copy"]["path"])
+    assert forensic.read_bytes() == fixture["canonical"].read_bytes()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+    completed = run_checkpoint(fixture, "verify-promoted-recost")
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_checkpoint_finalizes_bounded_wave_linked_pair(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    assert record["authorized_bounded_wave"] == fixture["authorization"]
+    assert record["bounded_wave_scheduler_evidence"] == fixture["scheduler_evidence"]
+    assert record["generalized_publication_context"]["checkpoint"] == "F-114"
+    assert (
+        record["generalized_publication_context"]["inputs"]
+        == json.loads(fixture["request"].read_text())["inputs"]
+    )
+    assert record["forensic_generalized_vectors"] == "exact-artifact-payload"
+    assert "authorized_sole_next_segment_profile" not in record
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+    assert fixture["canonical"].is_file()
+    assert not fixture["staged"].exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_v2_post_link_recovery_survives_request_expiry(
+    bounded_recost_fixture,
+    monkeypatch,
+):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+
+    module = load_checkpoint_module()
+    paths = module.layout(fixture["root"], fixture["artifact_name"])
+    args = module.parser().parse_args(
+        checkpoint_command(fixture, "finalize-linked-pair")[2:]
+    )
+
+    class FutureDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            retained = datetime.now(timezone.utc) + timedelta(days=2)
+            return retained if tz is not None else retained.replace(tzinfo=None)
+
+    monkeypatch.setattr(module, "datetime", FutureDateTime)
+    monkeypatch.setattr(module, "initial_source_path", lambda: fixture["checkpoint"])
+    monkeypatch.setattr(module, "repository_root", lambda _source: fixture["repository"])
+    module.finalize_linked_pair(
+        paths,
+        fixture["repository"],
+        fixture["root"],
+        True,
+        args,
+    )
+    assert fixture["canonical"].is_file()
+    assert not fixture["staged"].exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_v2_post_link_recovery_survives_unrelated_head_movement(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    unrelated = fixture["repository"] / "unrelated.txt"
+    unrelated.write_text("unrelated later repository change\n")
+    subprocess.run(["git", "add", unrelated.name], cwd=fixture["repository"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CGL fixture",
+            "-c",
+            "user.email=cgl-fixture@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Advance unrelated fixture HEAD",
+        ],
+        cwd=fixture["repository"],
+        check=True,
+    )
+    finalized = run_checkpoint(fixture, "finalize-linked-pair")
+    assert finalized.returncode == 0, finalized.stderr
+
+
+def make_v2_transaction_provably_prelink(fixture) -> None:
+    """Convert one simulated post-link interruption to exact staged-only state."""
+
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["state"] = "link-pending"
+    record.pop("ambiguity_recorded_utc")
+    write_json(journal, record)
+    fixture["canonical"].unlink()
+
+
+def test_checkpoint_v2_prelink_retirement_survives_request_expiry(
+    bounded_recost_fixture,
+    monkeypatch,
+):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    make_v2_transaction_provably_prelink(fixture)
+
+    module = load_checkpoint_module()
+    paths = module.layout(fixture["root"], fixture["artifact_name"])
+    args = module.parser().parse_args(
+        checkpoint_command(fixture, "retire-preparing")[2:]
+    )
+
+    class FutureDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            retained = datetime.now(timezone.utc) + timedelta(days=2)
+            return retained if tz is not None else retained.replace(tzinfo=None)
+
+    monkeypatch.setattr(module, "datetime", FutureDateTime)
+    monkeypatch.setattr(module, "initial_source_path", lambda: fixture["checkpoint"])
+    monkeypatch.setattr(module, "repository_root", lambda _source: fixture["repository"])
+    module.retire_preparing(
+        paths,
+        fixture["repository"],
+        fixture["root"],
+        True,
+        args,
+    )
+    assert fixture["staged"].is_file()
+    assert not fixture["canonical"].exists()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_v2_prelink_retirement_survives_unrelated_head_movement(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    make_v2_transaction_provably_prelink(fixture)
+    unrelated = fixture["repository"] / "unrelated-retirement.txt"
+    unrelated.write_text("unrelated later repository change\n")
+    subprocess.run(["git", "add", unrelated.name], cwd=fixture["repository"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CGL fixture",
+            "-c",
+            "user.email=cgl-fixture@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Advance unrelated retirement fixture HEAD",
+        ],
+        cwd=fixture["repository"],
+        check=True,
+    )
+    retired = run_checkpoint(fixture, "retire-preparing")
+    assert retired.returncode == 0, retired.stderr
+    assert fixture["staged"].is_file()
+    assert list(fixture["recost_transactions"].iterdir()) == []
+
+
+def test_checkpoint_v2_pre_link_still_rejects_unrelated_head_movement(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    unrelated = fixture["repository"] / "unrelated.txt"
+    unrelated.write_text("unrelated prepublication repository change\n")
+    subprocess.run(["git", "add", unrelated.name], cwd=fixture["repository"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CGL fixture",
+            "-c",
+            "user.email=cgl-fixture@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Advance prepublication fixture HEAD",
+        ],
+        cwd=fixture["repository"],
+        check=True,
+    )
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(
+        completed,
+        "Stage I recost generator revision differs from repository HEAD",
+    )
+
+
+def test_checkpoint_v2_pre_link_still_rejects_expired_request(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    request = json.loads(fixture["request"].read_text())
+    request["generated_utc"] = (now - timedelta(hours=2)).isoformat()
+    request["expires_utc"] = (now - timedelta(hours=1)).isoformat()
+    write_json(fixture["request"], request)
+    fixture["request_sha256"] = sha256(fixture["request"])
+
+    def bind_expired_request(payload):
+        payload["generated_utc"] = request["generated_utc"]
+        payload["expires_utc"] = request["expires_utc"]
+        payload["provenance"]["request_sha256"] = fixture["request_sha256"]
+
+    mutate_bounded_artifact(fixture, bind_expired_request)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 recost request has expired")
+
+
+def test_checkpoint_bounded_recovery_rejects_changed_packet_context(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    fixture["authorization"]["authorized_next_profiles"][0][
+        "estimated_storage_bytes"
+    ] += 1
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(completed, "recost artifact V2 authorization differs")
+    assert fixture["staged"].is_file()
+    assert fixture["canonical"].is_file()
+
+
+def test_checkpoint_rejects_bounded_wave_duplicate_lane(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def duplicate_lane(authorization):
+        authorization["authorized_next_profiles"][1]["case_id"] = "R04"
+
+    mutate_bounded_authorization(fixture, duplicate_lane)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 profiles duplicate lane R04")
+
+
+def test_checkpoint_rejects_bounded_wave_above_four_lanes(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def add_lanes(authorization):
+        profiles = authorization["authorized_next_profiles"]
+        for case_id in ("R05", "R06", "R07"):
+            retained = json.loads(json.dumps(profiles[0]))
+            retained["case_id"] = case_id
+            retained["nodes"] = 1
+            profiles.append(retained)
+        profiles.sort(key=lambda item: (item["case_id"], item["segment"]))
+        authorization["bounded_concurrency"]["max_wave_nodes"] = 9
+
+    mutate_bounded_authorization(fixture, add_lanes)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded-wave authorization requires 2-4 profiles")
+
+
+def test_checkpoint_rejects_bounded_wave_above_ten_nodes(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def exceed_nodes(authorization):
+        authorization["authorized_next_profiles"][0]["nodes"] = 6
+        authorization["authorized_next_profiles"][1]["nodes"] = 5
+        authorization["bounded_concurrency"]["max_wave_nodes"] = 11
+
+    mutate_bounded_authorization(fixture, exceed_nodes)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 authorization exceeds the 10-node ceiling")
+
+
+def test_checkpoint_rejects_r17_in_bounded_wave(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def insert_r17(authorization):
+        authorization["authorized_next_profiles"][0]["nodes"] = 1
+        authorization["authorized_next_profiles"][1]["case_id"] = "R17"
+        authorization["authorized_next_profiles"][1]["nodes"] = 8
+        authorization["bounded_concurrency"]["max_wave_nodes"] = 9
+
+    mutate_bounded_authorization(fixture, insert_r17)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "R17 is forbidden in bounded-wave mode")
+
+
+def test_checkpoint_rejects_bounded_wave_without_r17_last_binding(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+
+    def remove_last_policy(authorization):
+        authorization["bounded_concurrency"]["r17_exclusive_and_last"] = False
+
+    mutate_bounded_authorization(fixture, remove_last_policy)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "does not preserve R17 exclusive/last")
+
+
+def test_checkpoint_rejects_bounded_scheduler_row_mismatch(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def change_elapsed(evidence):
+        evidence[0]["elapsed_seconds"] += 1
+
+    mutate_bounded_scheduler_evidence(fixture, change_elapsed)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded scheduler evidence differs for job 12345")
+
+
+def test_checkpoint_scheduler_schema_preserves_noncompleted_terminal_identity():
+    module = load_checkpoint_module()
+    evidence = {
+        "path": "accounting/12345.stage_i.sacct.txt",
+        "sha256": "1" * 64,
+        "job_id": "12345",
+        "job_name": "cgl_mks24_E03_forcing_policy_R03_s00_rankio_t0_t0p5",
+        "state": "FAILED",
+        "exit_code": "1:0",
+        "nodes": 1,
+        "elapsed_seconds": 60,
+        "submitted_utc": "2026-06-04T01:00:00+00:00",
+        "completed_utc": "2026-06-04T01:01:00+00:00",
+    }
+    assert module.validate_bounded_scheduler_evidence([evidence]) == [evidence]
+    evidence["state"] = "RUNNING"
+    with pytest.raises(ValueError, match="state is not terminal"):
+        module.validate_bounded_scheduler_evidence([evidence])
+
+
+def test_checkpoint_scheduler_schema_preserves_authenticated_barrier_order():
+    module = load_checkpoint_module()
+    first = {
+        "path": "accounting/23456.stage_i.sacct.txt",
+        "sha256": "1" * 64,
+        "job_id": "23456",
+        "job_name": "cgl_mks24_E03_forcing_policy_R12_s00_rankio_t0_t0p25",
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "nodes": 4,
+        "elapsed_seconds": 60,
+        "submitted_utc": "2026-06-04T01:00:00+00:00",
+        "completed_utc": "2026-06-04T01:01:00+00:00",
+    }
+    second = {
+        "path": "accounting/12345.stage_i.sacct.txt",
+        "sha256": "2" * 64,
+        "job_id": "12345",
+        "job_name": "cgl_mks24_E03_forcing_policy_R03_s02_rankio_t0p312823_t0p5",
+        "state": "COMPLETED",
+        "exit_code": "0:0",
+        "nodes": 1,
+        "elapsed_seconds": 60,
+        "submitted_utc": "2026-06-04T01:00:00+00:00",
+        "completed_utc": "2026-06-04T01:01:00+00:00",
+    }
+    scheduler = module.validate_bounded_scheduler_evidence([first, second])
+    barrier = [
+        {
+            "case_id": "R12",
+            "segment": "s00_rankio_t0_t0p25",
+            "job_id": "23456",
+            "result": "clean_partial",
+        },
+        {
+            "case_id": "R03",
+            "segment": "s02_rankio_t0p312823_t0p5",
+            "job_id": "12345",
+            "result": "accepted",
+        },
+    ]
+    module.validate_bounded_barrier(barrier, scheduler)
+    with pytest.raises(ValueError, match="job order differs"):
+        module.validate_bounded_barrier(list(reversed(barrier)), scheduler)
+
+
+def test_checkpoint_allows_exact_fresh_r12_after_historical_clean_partial(
+    bounded_recost_fixture,
+):
+    module = load_checkpoint_module()
+    fixture = bounded_recost_fixture
+    authorization = json.loads(json.dumps(fixture["authorization"]))
+    profile = authorization["authorized_next_profiles"][1]
+    profile.update(
+        {
+            "segment": "s01_rankio_t0_t0p12",
+            "nodes": 4,
+            "parent_job_id": None,
+            "parent_result": None,
+            "parent_segment": None,
+            "restart_file": None,
+            "restart_file_sha256": None,
+            "restart_time": None,
+            "time_tlim_target": 0.12,
+        }
+    )
+    authorization["bounded_concurrency"]["max_wave_nodes"] = 8
+    args = SimpleNamespace(
+        source_bundle_relative_path=str(
+            fixture["source_bundle"].relative_to(fixture["root"])
+        ),
+        expected_source_bundle_sha256=fixture["source_bundle_sha256"],
+    )
+
+    retained = module.validate_bounded_wave_authorization(
+        authorization, fixture["root"], args
+    )
+    module.validate_fresh_r12_rerun_evidence(
+        retained["authorized_next_profiles"],
+        [module.HISTORICAL_R12_CLEAN_PARTIAL],
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error"),
+    [
+        ({"nodes": 2}, "fresh R12 rerun profile differs"),
+        ({"time_tlim_target": 0.5}, "fresh R12 rerun profile differs"),
+        ({"parent_job_id": "4766856"}, "fresh R12 rerun profile differs"),
+    ],
+)
+def test_checkpoint_rejects_drifted_fresh_r12_decision(
+    bounded_recost_fixture, mutation, error,
+):
+    module = load_checkpoint_module()
+    profile = json.loads(
+        json.dumps(bounded_recost_fixture["authorization"]["authorized_next_profiles"][1])
+    )
+    profile.update(
+        {
+            "segment": "s01_rankio_t0_t0p12",
+            "nodes": 4,
+            "parent_job_id": None,
+            "parent_result": None,
+            "parent_segment": None,
+            "restart_file": None,
+            "restart_file_sha256": None,
+            "restart_time": None,
+            "time_tlim_target": 0.12,
+            **mutation,
+        }
+    )
+    with pytest.raises(ValueError, match=error):
+        module.validate_fresh_r12_rerun_evidence(
+            [profile],
+            [module.HISTORICAL_R12_CLEAN_PARTIAL],
+        )
+
+
+def test_checkpoint_rejects_fresh_r12_without_exact_historical_inventory(
+    bounded_recost_fixture,
+):
+    module = load_checkpoint_module()
+    profile = json.loads(
+        json.dumps(bounded_recost_fixture["authorization"]["authorized_next_profiles"][1])
+    )
+    profile.update(
+        {
+            "segment": "s01_rankio_t0_t0p12",
+            "nodes": 4,
+            "parent_job_id": None,
+            "parent_result": None,
+            "parent_segment": None,
+            "restart_file": None,
+            "restart_file_sha256": None,
+            "restart_time": None,
+            "time_tlim_target": 0.12,
+        }
+    )
+    forged = dict(module.HISTORICAL_R12_CLEAN_PARTIAL)
+    forged["result"] = "accepted"
+    with pytest.raises(ValueError, match="exact historical s00/4766856 clean_partial"):
+        module.validate_fresh_r12_rerun_evidence([profile], [forged])
+
+
+def test_checkpoint_rejects_historical_r12_clean_partial_as_parent(
+    bounded_recost_fixture,
+):
+    module = load_checkpoint_module()
+    fixture = bounded_recost_fixture
+    authorization = json.loads(json.dumps(fixture["authorization"]))
+    profile = authorization["authorized_next_profiles"][1]
+    profile.update(
+        {
+            "segment": "s01_rankio_t0p137193_t0p25",
+            "nodes": 4,
+            "parent_job_id": "4766856",
+            "parent_result": "clean_partial",
+            "parent_segment": "s00_rankio_t0_t0p25",
+            "restart_file": str(fixture["root"] / "runs/R12/restart.rst"),
+            "restart_file_sha256": "1" * 64,
+            "restart_time": 0.1371931229426507,
+            "time_tlim_target": 0.25,
+        }
+    )
+    authorization["bounded_concurrency"]["max_wave_nodes"] = 8
+    args = SimpleNamespace(
+        source_bundle_relative_path=str(
+            fixture["source_bundle"].relative_to(fixture["root"])
+        ),
+        expected_source_bundle_sha256=fixture["source_bundle_sha256"],
+    )
+    with pytest.raises(ValueError, match="historical R12 s00/4766856.*non-authorizing"):
+        module.validate_bounded_wave_authorization(authorization, fixture["root"], args)
+
+
+def test_checkpoint_rejects_historical_r12_s00_as_new_profile(
+    bounded_recost_fixture,
+):
+    module = load_checkpoint_module()
+    fixture = bounded_recost_fixture
+    authorization = json.loads(json.dumps(fixture["authorization"]))
+    authorization["authorized_next_profiles"][1]["segment"] = "s00_rankio_t0_t0p25"
+    args = SimpleNamespace(
+        source_bundle_relative_path=str(
+            fixture["source_bundle"].relative_to(fixture["root"])
+        ),
+        expected_source_bundle_sha256=fixture["source_bundle_sha256"],
+    )
+    with pytest.raises(ValueError, match="inventory-only"):
+        module.validate_bounded_wave_authorization(authorization, fixture["root"], args)
+
+
+def test_checkpoint_rejects_unattached_private_reexecution_environment(
+    monkeypatch,
+    tmp_path,
+):
+    module = load_checkpoint_module()
+    forged_source = tmp_path / "forged-checkpoint.py"
+    forged_source.write_text("raise RuntimeError('forged checkpoint executed')\n")
+    forged_root = tmp_path / "forged-repository"
+    monkeypatch.delenv(module.SELF_DESCRIPTOR_ENV, raising=False)
+    monkeypatch.setenv(module.SELF_SOURCE_ENV, str(forged_source))
+    monkeypatch.setenv(module.ROOT_DIR_ENV, str(forged_root))
+
+    with pytest.raises(ValueError, match="forbidden without an authenticated descriptor"):
+        module.authenticate_self(sha256(CHECKPOINT))
+
+
+def test_checkpoint_git_environment_isolated_from_caller_configuration(monkeypatch):
+    module = load_checkpoint_module()
+    monkeypatch.setenv("PATH", "/tmp/forged-path")
+    monkeypatch.setenv("LD_PRELOAD", "/tmp/forged-loader.so")
+    monkeypatch.setenv("PYTHONPATH", "/tmp/forged-python")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/tmp/forged-global-config")
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/tmp/forged-system-config")
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", "/tmp/forged-objects")
+    environment = module.hardened_git_environment()
+
+    assert environment["GIT_CONFIG_GLOBAL"] == "/dev/null"
+    assert environment["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert environment["GIT_CONFIG_SYSTEM"] == "/dev/null"
+    assert environment["GIT_EXEC_PATH"] == str(module.GIT_EXEC_PATH)
+    assert environment["GIT_OPTIONAL_LOCKS"] == "0"
+    assert environment["LC_ALL"] == "C"
+    assert environment["PATH"] == module.TRUSTED_SYSTEM_PATH
+    assert "LD_PRELOAD" not in environment
+    assert "PYTHONPATH" not in environment
+    assert "GIT_OBJECT_DIRECTORY" not in environment
+
+
+def test_checkpoint_reexec_environment_strips_private_loader_and_interpreter_state(
+    monkeypatch,
+):
+    module = load_checkpoint_module()
+    for name, value in {
+        module.SELF_DESCRIPTOR_ENV: "99",
+        module.SELF_SOURCE_ENV: "/tmp/forged-source",
+        module.ROOT_DIR_ENV: "/tmp/forged-repository",
+        "PATH": "/tmp/forged-path",
+        "LD_PRELOAD": "/tmp/forged-loader.so",
+        "PYTHONPATH": "/tmp/forged-python",
+        "GIT_OBJECT_DIRECTORY": "/tmp/forged-objects",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+    environment = module.reexec_environment(7, 8, CHECKPOINT, REPOSITORY)
+
+    assert environment[module.SELF_DESCRIPTOR_ENV] == "7"
+    assert environment[module.PYTHON_DESCRIPTOR_ENV] == "8"
+    assert environment[module.SELF_SOURCE_ENV] == str(CHECKPOINT)
+    assert environment[module.ROOT_DIR_ENV] == str(REPOSITORY)
+    assert environment["PATH"] == module.TRUSTED_SYSTEM_PATH
+    assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert environment["HOME"] == "/nonexistent"
+    assert environment["XDG_CONFIG_HOME"] == "/nonexistent"
+    assert set(environment) == {
+        module.SELF_DESCRIPTOR_ENV,
+        module.PYTHON_DESCRIPTOR_ENV,
+        module.SELF_SOURCE_ENV,
+        module.ROOT_DIR_ENV,
+        "HOME",
+        "LC_ALL",
+        "PATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "XDG_CONFIG_HOME",
+    }
+    assert "LD_PRELOAD" not in environment
+    assert "PYTHONPATH" not in environment
+    assert "GIT_OBJECT_DIRECTORY" not in environment
+
+
+def test_authenticated_checkpoint_descriptor_controls_private_metadata(monkeypatch):
+    module = load_checkpoint_module()
+    descriptor = os.open(CHECKPOINT, os.O_RDONLY)
+    python_descriptor = os.open(Path("/proc/self/exe").resolve(), os.O_RDONLY)
+    try:
+        monkeypatch.setattr(module, "__file__", f"/proc/self/fd/{descriptor}")
+        monkeypatch.setenv(module.SELF_DESCRIPTOR_ENV, str(descriptor))
+        monkeypatch.setenv(module.PYTHON_DESCRIPTOR_ENV, str(python_descriptor))
+        monkeypatch.setenv(module.SELF_SOURCE_ENV, str(CHECKPOINT))
+        monkeypatch.setenv(module.ROOT_DIR_ENV, str(REPOSITORY))
+        monkeypatch.setattr(module.sys, "flags", type("Flags", (), {"isolated": 1})())
+
+        source, repository = module.authenticate_self(sha256(CHECKPOINT))
+    finally:
+        os.close(descriptor)
+        os.close(python_descriptor)
+
+    assert source == CHECKPOINT
+    assert repository == REPOSITORY
+
+
+def test_authenticated_checkpoint_rejects_nonisolated_python(monkeypatch):
+    module = load_checkpoint_module()
+    descriptor = os.open(CHECKPOINT, os.O_RDONLY)
+    python_descriptor = os.open(Path("/proc/self/exe").resolve(), os.O_RDONLY)
+    try:
+        monkeypatch.setattr(module, "__file__", f"/proc/self/fd/{descriptor}")
+        monkeypatch.setenv(module.SELF_DESCRIPTOR_ENV, str(descriptor))
+        monkeypatch.setenv(module.PYTHON_DESCRIPTOR_ENV, str(python_descriptor))
+        monkeypatch.setenv(module.SELF_SOURCE_ENV, str(CHECKPOINT))
+        monkeypatch.setenv(module.ROOT_DIR_ENV, str(REPOSITORY))
+        monkeypatch.setattr(module.sys, "flags", type("Flags", (), {"isolated": 0})())
+
+        with pytest.raises(ValueError, match="interpreter is not isolated"):
+            module.authenticate_self(sha256(CHECKPOINT))
+    finally:
+        os.close(descriptor)
+        os.close(python_descriptor)
+
+
+def test_checkpoint_rejects_different_root_executable_as_python_descriptor(monkeypatch):
+    module = load_checkpoint_module()
+    descriptor = os.open(module.SQUEUE, os.O_RDONLY)
+    try:
+        monkeypatch.setenv(module.PYTHON_DESCRIPTOR_ENV, str(descriptor))
+        monkeypatch.setattr(module.sys, "flags", type("Flags", (), {"isolated": 1})())
+        with pytest.raises(ValueError, match="is not this interpreter"):
+            module.require_authenticated_python_descriptor()
+    finally:
+        os.close(descriptor)
+
+
+def test_checkpoint_git_execution_is_descriptor_bound(monkeypatch):
+    module = load_checkpoint_module()
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout=b"")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    # This probe validates descriptor-bound execution, independent of whether
+    # the suite itself runs from a linked Git worktree.
+    monkeypatch.setattr(module, "entry_exists", lambda _path: False)
+    module.git_run(REPOSITORY, ["diff", "--quiet", "--", CHECKPOINT.name])
+
+    assert len(calls) == 1
+    command, kwargs = calls[0]
+    descriptor = int(str(kwargs["executable"]).removeprefix("/proc/self/fd/"))
+    assert descriptor in kwargs["pass_fds"]
+    assert command[:4] == [
+        str(module.GIT), "--no-replace-objects", "-C", str(REPOSITORY)
+    ]
+    assert "--no-ext-diff" in command
+    assert "--no-textconv" in command
+    assert f"core.hooksPath={os.devnull}" in command
+    assert kwargs["stdin"] == subprocess.DEVNULL
+    assert kwargs["env"] == module.hardened_git_environment()
+
+
+def test_checkpoint_canonical_actions_require_canonical_repository(tmp_path):
+    module = load_checkpoint_module()
+    with pytest.raises(ValueError, match="canonical use requires"):
+        module.require_canonical_repository(tmp_path, False)
+    module.require_canonical_repository(module.CANONICAL_REPOSITORY_ROOT, False)
+    module.require_canonical_repository(tmp_path, True)
+
+
+def test_checkpoint_rejects_bounded_controller_walltime_maximum_drift(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+
+    def change_maximum(authorization):
+        authorization["authorized_next_profiles"][0][
+            "controller_walltime_max_seconds"
+        ] = 7199
+
+    mutate_bounded_authorization(fixture, change_maximum)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 profile 0 controller walltime maximum differs")
+
+
+def test_checkpoint_rejects_bounded_scheduler_timestamp_drift(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+
+    def change_timestamp(evidence):
+        evidence[0]["completed_utc"] = "2026-06-04T01:40:00+00:00"
+
+    mutate_bounded_scheduler_evidence(fixture, change_timestamp)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded scheduler evidence timestamp differs for job 12345")
+
+
+def test_checkpoint_rejects_bounded_scheduler_invalid_chronology(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+
+    def reverse_chronology(evidence):
+        evidence[0]["completed_utc"] = evidence[0]["submitted_utc"]
+
+    mutate_bounded_scheduler_evidence(fixture, reverse_chronology)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded scheduler evidence 0 chronology is invalid")
+
+
+def test_checkpoint_rejects_bounded_scheduler_barrier_mismatch(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    payload = json.loads(fixture["staged"].read_text())
+    payload["barrier"]["recorded_segments"].pop()
+    replace_bounded_artifact(fixture, payload)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded scheduler evidence job order differs from the barrier")
+
+
+def test_checkpoint_rejects_bounded_scheduler_checksum_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    fixture["scheduler_files"][1].write_text("forged scheduler evidence\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded scheduler evidence 1 checksum has changed")
+
+
+def test_checkpoint_rejects_bounded_source_bundle_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    fixture["source_bundle"].write_text("forged source bundle\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "source bundle checksum has changed")
+
+
+def test_checkpoint_rejects_bounded_uncovered_source_revision(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    fixture["source_bundle_revisions"].append("f" * 40)
+    payload = json.loads(fixture["staged"].read_text())
+    payload["provenance"]["source_bundle_verified_revisions"] = (
+        fixture["source_bundle_revisions"]
+    )
+    replace_bounded_artifact(fixture, payload)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "source bundle does not contain requested revision")
+
+
+def test_checkpoint_rejects_bounded_live_generator_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    live = fixture["repository"] / "scripts/frontier/cgl_lf_stage_i_recost.py"
+    live.write_text(live.read_text() + "\n# forged generator drift\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "Stage I recost generator checksum has changed")
+
+
+def test_checkpoint_rejects_bounded_restart_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    restart = fixture["root"] / "runs/restart.rst"
+    restart.parent.mkdir(parents=True, exist_ok=True)
+    restart.write_text("authenticated restart\n")
+
+    def add_parent(authorization):
+        profile = authorization["authorized_next_profiles"][0]
+        profile.update(
+            {
+                "segment": "s01_rankio_t0p25_t0p5",
+                "parent_job_id": "34567",
+                "parent_result": "clean_partial",
+                "parent_segment": "s00_rankio_t0_t0p25",
+                "restart_file": str(restart),
+                "restart_file_sha256": sha256(restart),
+                "restart_time": 0.25,
+                "time_tlim_target": 0.5,
+            }
+        )
+
+    mutate_bounded_authorization(fixture, add_parent)
+    restart.write_text("forged restart\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded profile 0 restart checksum has changed")
+
+
+def test_checkpoint_rejects_bounded_artifact_count_detail_drift(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    payload = json.loads(fixture["staged"].read_text())
+    payload["reservations"]["rows"] = 1
+    replace_bounded_artifact(fixture, payload)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "recost artifact reservation rows differs")
+
+
+def test_checkpoint_rejects_mixed_bounded_and_sole_scheduler_bindings(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    completed = run_checkpoint(
+        fixture,
+        "verify-staged-recost",
+        "--scheduler-relative-path",
+        str(fixture["scheduler"].relative_to(fixture["root"])),
+        "--expected-scheduler-sha256",
+        sha256(fixture["scheduler"]),
+    )
+    assert_rejected(completed, "V2 mode rejects sole-profile scheduler bindings")
+
+
+def test_checkpoint_rejects_bounded_noncanonical_json_pointer(
+    bounded_recost_fixture,
+):
+    completed = run_checkpoint(
+        bounded_recost_fixture,
+        "verify-staged-recost",
+        "--artifact-authorization-pointer",
+        "/alternate_authorization",
+    )
+    assert_rejected(completed, "V2 mode requires canonical JSON pointer /authorization")
+
+
+def test_checkpoint_v2_matches_current_recost_generator_interface():
+    tree = ast.parse(RECOST.read_text())
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert [argument.arg for argument in functions["build_payload"].args.args] == [
+        "args",
+        "root",
+        "source_path",
+        "repository",
+        "generator_sha256",
+    ]
+    assert "run_authenticated_reconcile" in functions
+    assert "require_empty_transaction_stores" in functions
+    assert "require_live_storage_boundary" in functions
+    assert "require_directory_measurement_boundaries" in functions
+    build_result = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "BuildResult"
+    )
+    fields = {
+        node.target.id
+        for node in build_result.body
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+    }
+    assert fields == {
+        "payload",
+        "tracker",
+        "reconcile",
+        "helper_path",
+        "helper_sha256",
+        "helper_revision",
+        "matrix_path",
+        "matrix_sha256",
+        "matrix_revision",
+        "storage_available_bytes",
+        "storage_retained_stage_i_bytes",
+        "storage_required_safety_bytes",
+        "projected_storage_bytes",
+        "storage_measurements",
+    }
+    checkpoint_tree = ast.parse(CHECKPOINT.read_text())
+    reexecute = next(
+        node
+        for node in checkpoint_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "reexecute_v2_recost"
+    )
+    assert any(
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "require_directory_measurement_boundaries"
+        and len(call.args) == 1
+        and isinstance(call.args[0], ast.Attribute)
+        and isinstance(call.args[0].value, ast.Name)
+        and call.args[0].value.id == "build"
+        and call.args[0].attr == "storage_measurements"
+        for call in ast.walk(reexecute)
+        if isinstance(call, ast.Call)
+    )
+
+
+def test_checkpoint_current_recost_generator_end_to_end(tmp_path, monkeypatch):
+    recost_test = load_current_recost_test_module()
+    checkpoint_contract = load_checkpoint_module()
+    generated = recost_test.recost_fixture.__wrapped__(tmp_path)
+    install_exact_source_authority_chain_for_recost_fixture(
+        recost_test, checkpoint_contract, generated, tmp_path
+    )
+    repository = generated["repository"]
+    root = generated["root"]
+    accounting = generated["accounting"]
+    assert isinstance(repository, Path)
+    assert isinstance(root, Path)
+    assert isinstance(accounting, Path)
+
+    checkpoint = repository / "scripts/frontier/cgl_lf_stage_i_checkpoint.py"
+    checkpoint.write_bytes(CHECKPOINT.read_bytes())
+    checkpoint.chmod(0o755)
+    force_checkpoint_renameat2_einval(checkpoint)
+    install_checkpoint_fixture_historical_contract(checkpoint, checkpoint_contract)
+    retained_generator = accounting / "utilities/cgl_lf_stage_i_recost.py"
+    retained_generator.parent.mkdir()
+    retained_generator.write_bytes(RECOST.read_bytes())
+    retained_generator.chmod(0o755)
+    completed = recost_test.run_generator(generated)
+    assert completed.returncode == 0, completed.stderr
+    staged = generated["output"]
+    request = generated["request"]
+    source_bundle = generated["source_bundle"]
+    helper = generated["helper"]
+    revision = generated["revision"]
+    queue = generated["queue"]
+    assert all(
+        isinstance(item, Path)
+        for item in (staged, request, source_bundle, helper, queue)
+    )
+    assert isinstance(revision, str)
+    artifact = json.loads(staged.read_text())
+    assert set(artifact["provenance"]["source_authority"]) == {
+        "checkpoint",
+        "evidence",
+        "provenance_review",
+        "plasma_review",
+        "publication_audit",
+        "final_source_bundle",
+    }
+    artifact_name = staged.name.removesuffix(".staged")
+    independent_review = accounting / f"{artifact_name}.independent_review.json"
+    review_candidate = tmp_path / f"{artifact_name}.independent_review.candidate.json"
+    write_json(
+        review_candidate,
+        {
+            "schema_version": 1,
+            "record_type": "stage-i-recost-recommendation-independent-review",
+            "execution_epoch": EPOCH,
+            "reviewed_utc": datetime.now(timezone.utc).isoformat(),
+            "decision": "approved-for-publication",
+            "reviewer": {
+                "agent_id": "fixture-independent-schema2-reviewer",
+                "independent_from_generator": True,
+            },
+            "candidate": {
+                "path": str(accounting / artifact_name),
+                "sha256": sha256(staged),
+            },
+            "scope": {"non_authorizing": True},
+        },
+    )
+    review_candidate.chmod(0o444)
+    fixture = {
+        "root": root,
+        "repository": repository,
+        "checkpoint": checkpoint,
+        "stage_i": helper,
+        "accounting": accounting,
+        "generator": retained_generator,
+        "queue": queue,
+        "counts": artifact["reconcile"]["counts"],
+        "staged": staged,
+        "artifact_name": artifact_name,
+        "artifact_sha256": sha256(staged),
+        "canonical": accounting / artifact_name,
+        "audit": accounting / f"{artifact_name}.publication_audit.json",
+        "stage_i_transactions": generated["transaction_store"],
+        "recost_transactions": generated["recost_transaction_store"],
+        "recost_forensics_root": (
+            accounting / f"mks24_stage_i_{EPOCH_SLUG}_recost_forensics"
+        ),
+        "recost_forensics": (
+            accounting / f"mks24_stage_i_{EPOCH_SLUG}_recost_forensics" / artifact_name
+        ),
+        "lock": root / f".mks24_stage_i_{EPOCH_SLUG}.lock",
+        "recommendations": artifact["recommendations"],
+        "scheduler_evidence": artifact["provenance"]["scheduler_evidence"],
+        "source_bundle": source_bundle,
+        "source_bundle_sha256": sha256(source_bundle),
+        "stage_i_revision": artifact["provenance"]["stage_i_helper_revision"],
+        "generator_revision": artifact["provenance"]["generator_revision"],
+        "source_bundle_revisions": artifact["provenance"][
+            "source_bundle_verified_revisions"
+        ],
+        "request": request,
+        "request_sha256": sha256(request),
+        "independent_review": independent_review,
+        "independent_review_sha256": sha256(review_candidate),
+    }
+    candidate_symlink = tmp_path / "artifact-review-candidate-symlink.json"
+    candidate_symlink.symlink_to(review_candidate)
+    rejected = run_checkpoint(
+        fixture,
+        "install-artifact-review",
+        "--artifact-review-candidate",
+        str(candidate_symlink),
+    )
+    assert rejected.returncode == 1
+    assert not independent_review.exists()
+
+    independent_review.symlink_to(review_candidate)
+    rejected = run_checkpoint(
+        fixture,
+        "install-artifact-review",
+        "--artifact-review-candidate",
+        str(review_candidate),
+    )
+    assert_rejected(rejected, "artifact-review target already exists or changed")
+    independent_review.unlink()
+
+    checkpoint_module = load_checkpoint_module()
+    with checkpoint_module.promotion_lock(fixture):
+        rejected = run_checkpoint(
+            fixture,
+            "install-artifact-review",
+            "--artifact-review-candidate",
+            str(review_candidate),
+        )
+    assert_rejected(rejected, "another Stage I mutation holds")
+    installed = run_checkpoint(
+        fixture,
+        "install-artifact-review",
+        "--artifact-review-candidate",
+        str(review_candidate),
+    )
+    assert installed.returncode == 0, installed.stderr
+    assert independent_review.read_bytes() == review_candidate.read_bytes()
+    assert independent_review.stat().st_mode & 0o777 == 0o444
+    assert independent_review.stat().st_nlink == 1
+    assert review_candidate.stat().st_nlink == 1
+    repeated = run_checkpoint(
+        fixture,
+        "install-artifact-review",
+        "--artifact-review-candidate",
+        str(review_candidate),
+    )
+    assert repeated.returncode == 0, repeated.stderr
+
+    retained = staged.read_bytes()
+    forged = json.loads(retained)
+    authority = forged["provenance"]["source_authority"]
+    forged["provenance"]["source_authority"] = {
+        "checkpoint": "F-116",
+        "evidence_sha256": authority["evidence"]["sha256"],
+        "publication_audit_sha256": authority["publication_audit"]["sha256"],
+        "current_source_bundle": authority["final_source_bundle"],
+    }
+    write_json(staged, forged)
+    staged.chmod(0o444)
+    fixture["artifact_sha256"] = sha256(staged)
+    rejected = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(rejected, "schema-2 artifact F118 source authority binding differs")
+    staged.chmod(0o644)
+    staged.write_bytes(retained)
+    staged.chmod(0o444)
+    fixture["artifact_sha256"] = sha256(staged)
+
+    forged = json.loads(retained)
+    forged["authority"]["authorizing"] = True
+    write_json(staged, forged)
+    staged.chmod(0o444)
+    fixture["artifact_sha256"] = sha256(staged)
+    rejected = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(rejected, "improperly grants authority")
+    staged.chmod(0o644)
+    staged.write_bytes(retained)
+    staged.chmod(0o444)
+    fixture["artifact_sha256"] = sha256(staged)
+    verified = run_checkpoint(fixture, "verify-staged-recost")
+    assert verified.returncode == 0, verified.stderr
+    promoted = run_checkpoint(fixture, "promote-recost")
+    assert promoted.returncode == 0, promoted.stderr
+    verified = run_checkpoint(fixture, "verify-promoted-recost")
+    assert verified.returncode == 0, verified.stderr
+    publication_audit = json.loads(fixture["audit"].read_text())
+    assert publication_audit["record_type"] == (
+        "stage-i-recost-recommendation-publication-audit"
+    )
+    assert publication_audit["authority"]["action_authority"] is False
+    assert publication_audit["generalized_publication_context"][
+        "controller_enforcement"
+    ]["launch_authority"] is False
+    assert publication_audit["generalized_publication_context"]["provenance"][
+        "source_authority"
+    ] == artifact["provenance"]["source_authority"]
+    assert fixture["audit"].stat().st_mode & 0o777 == 0o444
+    reviewed = datetime.fromisoformat(
+        json.loads(independent_review.read_text())["reviewed_utc"].replace("Z", "+00:00")
+    )
+    publication_audit["published_utc"] = (
+        reviewed - timedelta(microseconds=1)
+    ).isoformat()
+    write_json(fixture["audit"], publication_audit)
+    fixture["audit"].chmod(0o444)
+    rejected = run_checkpoint(fixture, "verify-promoted-recost")
+    assert_rejected(rejected, "publication predates independent review")
+
+
+def test_checkpoint_v2_preserves_sole_profile_compatibility(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    profile = fixture["authorization"]["authorized_next_profiles"][0]
+    compatibility_keys = (
+        "athena_walltime",
+        "case_id",
+        "nodes",
+        "parent_job_id",
+        "parent_result",
+        "parent_segment",
+        "restart_file",
+        "restart_time",
+        "segment",
+        "source_bundle",
+        "source_bundle_sha256",
+        "time_tlim_target",
+        "walltime",
+    )
+    authorization = {
+        "mode": "sole-next-profile",
+        "authorizing": True,
+        "authorized_next_profiles": [profile],
+        "bounded_concurrency": {
+            "max_active_segments": 4,
+            "max_wave_nodes": profile["nodes"],
+            "r17_exclusive_and_last": True,
+        },
+        "controller_consumption_state": (
+            "sole-profile-compatible-with-existing-checkpoint; "
+            "controller consumption remains pending"
+        ),
+        "sole_next_segment_profile": {
+            key: profile[key] for key in compatibility_keys
+        },
+    }
+    scheduler = fixture["scheduler_evidence"][0]
+    request = json.loads(fixture["request"].read_text())
+    request["authorization"] = {
+        "mode": "sole-next-profile",
+        "max_wave_nodes": profile["nodes"],
+        "profiles": [profile],
+    }
+    request["barrier"]["recorded_segments"] = request["barrier"]["recorded_segments"][:1]
+    request["inputs"]["scheduler_evidence"] = [
+        {"path": scheduler["path"], "sha256": scheduler["sha256"]}
+    ]
+    write_json(fixture["request"], request)
+    fixture["request_sha256"] = sha256(fixture["request"])
+    fixture["authorization"] = authorization
+    fixture["scheduler_evidence"] = [scheduler]
+
+    def mutate(payload):
+        payload["authorization"] = authorization
+        payload["barrier"]["job_ids"] = [scheduler["job_id"]]
+        payload["barrier"]["recorded_segments"] = request["barrier"]["recorded_segments"]
+        payload["barrier"]["scheduler_evidence"] = [scheduler]
+        payload["provenance"]["request_sha256"] = fixture["request_sha256"]
+        payload["provenance"]["scheduler_evidence"] = [scheduler]
+        payload["provenance"]["scheduler_sha256"] = scheduler["sha256"]
+        payload["storage"]["projected_authorized_wave_growth_bytes"] = (
+            profile["estimated_storage_bytes"]
+        )
+        payload["storage"]["headroom_after_authorized_wave_and_safety_bytes"] = (
+            payload["storage"]["available_bytes"]
+            - payload["storage"]["required_safety_bytes"]
+            - profile["estimated_storage_bytes"]
+        )
+
+    mutate_bounded_artifact(fixture, mutate)
+    verified = run_checkpoint(fixture, "verify-staged-recost")
+    assert verified.returncode == 0, verified.stderr
+    promoted = run_checkpoint(fixture, "promote-recost")
+    assert promoted.returncode == 0, promoted.stderr
+    audit = json.loads(fixture["audit"].read_text())
+    assert (
+        audit["generalized_publication_context"]["authorization"][
+            "sole_next_segment_profile"
+        ]
+        == authorization["sole_next_segment_profile"]
+    )
+
+
+def test_checkpoint_v2_rejects_request_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    request = json.loads(fixture["request"].read_text())
+    request["scope"] = "forged scope"
+    write_json(fixture["request"], request)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 recost request checksum has changed")
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        "reconciliation",
+        "ledger",
+        "reservations",
+        "storage",
+        "f113",
+        "f113_audit",
+        "predecessor",
+        "predecessor_audit",
+        "matrix",
+    ],
+)
+def test_checkpoint_v2_rejects_bound_evidence_drift(
+    bounded_recost_fixture,
+    evidence,
+):
+    fixture = bounded_recost_fixture
+    path = fixture["evidence_files"][evidence]
+    path.write_bytes(path.read_bytes() + b"\nforged drift\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "checksum has changed")
+
+
+def test_checkpoint_v2_rejects_helper_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    fixture["stage_i"].write_text(fixture["stage_i"].read_text() + "\n# forged drift\n")
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "Stage I helper must be committed before recost publication")
+
+
+def test_checkpoint_v2_rejects_profile_schema_extension(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def add_field(authorization):
+        authorization["authorized_next_profiles"][0]["unreviewed"] = True
+
+    mutate_bounded_authorization(fixture, add_field)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 profile 0 schema differs")
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement", "error"),
+    [
+        (
+            "artifact_name",
+            "mks24_stage_i_E03_forcing_policy_F115_recost_evidence.json",
+            "V2 artifact basename binding differs",
+        ),
+        ("checkpoint", "F-115", "V2 artifact checkpoint binding differs"),
+        ("generated_utc", "2026-06-04T00:00:00+00:00", "generation timestamp differs"),
+        ("expires_utc", "2026-06-04T00:00:01+00:00", "expiry timestamp differs"),
+    ],
+)
+def test_checkpoint_v2_rejects_artifact_request_identity_drift(
+    bounded_recost_fixture,
+    field,
+    replacement,
+    error,
+):
+    fixture = bounded_recost_fixture
+
+    def mutate(payload):
+        payload[field] = replacement
+
+    mutate_bounded_artifact(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, error)
+
+
+def test_checkpoint_v2_rejects_barrier_job_vector_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def mutate(payload):
+        payload["barrier"]["job_ids"].pop()
+
+    mutate_bounded_artifact(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 artifact barrier ledger-tail bindings differ")
+
+
+def test_checkpoint_v2_rejects_predecessor_digest_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def mutate(payload):
+        payload["predecessor_recost"]["sha256"] = "0" * 64
+
+    mutate_bounded_artifact(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 predecessor recost binding differs")
+
+
+def test_checkpoint_v2_rejects_predecessor_artifact_name_drift(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+
+    def mutate(payload):
+        payload["predecessor_recost"]["artifact_name"] = (
+            "mks24_stage_i_E03_forcing_policy_F112_recost_evidence.json"
+        )
+
+    mutate_bounded_artifact(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 predecessor artifact-name binding differs")
+
+
+def test_checkpoint_v2_rejects_authenticated_lineage_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def mutate(payload):
+        payload["manifests"]["authenticated_lineages_sha256"] = "0" * 64
+
+    mutate_bounded_artifact(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 authenticated-lineage digest differs")
+
+
+def test_checkpoint_v2_rejects_budget_projection_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def mutate(payload):
+        payload["budget"]["computed_stage_i_total_node_hours"] = "99"
+
+    mutate_bounded_artifact(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 artifact budget projection digest differs")
+
+
+def test_checkpoint_v2_rejects_storage_arithmetic_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+
+    def mutate(payload):
+        payload["storage"]["headroom_after_authorized_wave_and_safety_bytes"] += 1
+
+    mutate_bounded_artifact(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "V2 artifact storage arithmetic differs")
+
+
+def test_checkpoint_v2_rejects_authorizing_bounded_artifact(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+
+    def mutate(authorization):
+        authorization["authorizing"] = True
+
+    mutate_bounded_authorization(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "bounded-wave V2 artifact must remain non-authorizing")
+
+
+def test_checkpoint_v2_rejects_missing_controller_transition_disclosure(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+
+    def mutate(authorization):
+        authorization["controller_consumption_state"] = "ready"
+
+    mutate_bounded_authorization(fixture, mutate)
+    completed = run_checkpoint(fixture, "verify-staged-recost")
+    assert_rejected(completed, "does not disclose pending controller enforcement")
+
+
+def test_checkpoint_v2_recovery_rejects_generalized_context_tamper(
+    bounded_recost_fixture,
+):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    journal = next(fixture["recost_transactions"].iterdir())
+    record = json.loads(journal.read_text())
+    record["generalized_publication_context"]["checkpoint"] = "F-999"
+    write_json(journal, record)
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(
+        completed,
+        "recost recovery journal generalized_publication_context binding differs",
+    )
+
+
+def test_checkpoint_v2_recovery_rejects_forensic_drift(bounded_recost_fixture):
+    fixture = bounded_recost_fixture
+    failed = run_checkpoint(fixture, "promote-recost", "--simulate-post-link-failure")
+    assert_rejected(failed, "simulated post-link publication failure")
+    forensic = next(fixture["recost_forensics"].iterdir())
+    forensic.chmod(0o644)
+    forensic.write_text("forged forensic artifact\n")
+    forensic.chmod(0o444)
+    completed = run_checkpoint(fixture, "finalize-linked-pair")
+    assert_rejected(completed, "recost forensic copy checksum has changed")
+
+
+@pytest.mark.parametrize(
+    ("mode", "message"),
+    [(0o770, "group-writable and untrusted"), (0o777, "world-writable and untrusted")],
+)
+def test_checkpoint_lock_rejects_unsafe_writable_ancestor_before_mutation(
+    tmp_path, mode, message,
+):
+    module = load_checkpoint_module()
+    unsafe = tmp_path / "unsafe"
+    unsafe.mkdir()
+    unsafe.chmod(mode)
+    root = unsafe / "root"
+    root.mkdir()
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+
+    with pytest.raises(ValueError, match=message):
+        with module.promotion_lock({"root": root, "lock": lock}):
+            raise AssertionError("unsafe ancestor must not enter the mutation boundary")
+
+    assert not lock.exists()
+
+
+def test_checkpoint_lock_binds_public_root_identity_before_public_write(tmp_path):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    detached = tmp_path / "detached-root"
+    target = root / "forbidden.json"
+
+    with pytest.raises(ValueError, match="Stage I public namespace changed"):
+        with module.promotion_lock({"root": root, "lock": lock}):
+            root.rename(detached)
+            root.mkdir()
+            module.write_json(target, {"forbidden": True})
+
+    assert not target.exists()
+    assert not (detached / target.name).exists()
+
+
+def test_checkpoint_noreplace_preserves_durable_state_after_parent_authority_loss(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    live = tmp_path / "live"
+    live.mkdir()
+    source = live / "source"
+    target = live / "target"
+    source.write_bytes(b"published\n")
+    detached = tmp_path / "detached"
+    real_renameat2_between = module.renameat2_between
+    mutations = []
+
+    def detach_after_rename(
+        source_parent, source_name, target_parent, target_name, flags, label
+    ):
+        mutations.append(label)
+        result = real_renameat2_between(
+            source_parent, source_name, target_parent, target_name, flags, label
+        )
+        live.rename(detached)
+        live.mkdir()
+        return result
+
+    monkeypatch.setattr(module, "renameat2_between", detach_after_rename)
+    with pytest.raises(ValueError, match="parent path changed during mutation"):
+        with module.bound_parent_descriptor(source, "detached no-replace") as parent:
+            module.rename_bound_noreplace(
+                parent,
+                source.name,
+                target.name,
+                source.stat(),
+                "detached no-replace",
+            )
+
+    assert mutations == ["detached no-replace"]
+    assert (detached / target.name).read_bytes() == b"published\n"
+    assert list(live.iterdir()) == []
+
+
+def test_checkpoint_retirement_preserves_durable_state_after_parent_authority_loss(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    live = tmp_path / "live"
+    live.mkdir()
+    victim = live / "victim"
+    victim.write_bytes(b"retire me\n")
+    detached = tmp_path / "detached"
+    real_renameat2_between = module.renameat2_between
+    mutations = []
+    before = set(tmp_path.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    def detach_after_retirement(
+        source_parent, source_name, target_parent, target_name, flags, label
+    ):
+        mutations.append(label)
+        result = real_renameat2_between(
+            source_parent, source_name, target_parent, target_name, flags, label
+        )
+        live.rename(detached)
+        live.mkdir()
+        return result
+
+    monkeypatch.setattr(module, "renameat2_between", detach_after_retirement)
+    with pytest.raises(ValueError, match="parent path changed during mutation"):
+        with module.bound_parent_descriptor(victim, "detached retirement") as parent:
+            module.unlink_bound_entry(
+                parent, victim.name, victim.stat(), "detached retirement"
+            )
+
+    assert mutations == ["detached retirement retirement"]
+    retired = set(tmp_path.glob(".cgl-checkpoint-retired-*.forensic")) - before
+    assert len(retired) == 1
+    assert next(iter(retired)).read_bytes() == b"retire me\n"
+    assert list(live.iterdir()) == []
+
+
+def test_checkpoint_ambiguous_link_is_fsynced_and_classified_before_raise(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.write_bytes(b"linked bytes\n")
+    real_fsync = module.os.fsync
+    fsynced = []
+
+    class AmbiguousLinkat:
+        argtypes = None
+        restype = None
+
+        def __call__(
+            self, _source_parent, source_name, target_parent, target_name, _flags
+        ):
+            os.link(
+                os.fsdecode(source_name),
+                os.fsdecode(target_name),
+                dst_dir_fd=target_parent,
+                follow_symlinks=True,
+            )
+            module.ctypes.set_errno(module.errno.EIO)
+            return -1
+
+    class AmbiguousLibc:
+        linkat = AmbiguousLinkat()
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced.append(module.profile_identity(profile))
+        return result
+
+    monkeypatch.setattr(module.ctypes, "CDLL", lambda *_args, **_kwargs: AmbiguousLibc())
+    monkeypatch.setattr(module.os, "fsync", observe_fsync)
+    with module.bound_parent_descriptor(source, "ambiguous link") as parent:
+        parent_identity = module.profile_identity(os.fstat(parent))
+        descriptor = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+        try:
+            identity = module.profile_identity(os.fstat(descriptor))
+            with pytest.raises(OSError):
+                module.link_descriptor_noreplace(
+                    descriptor, parent, target.name, identity, "ambiguous link"
+                )
+        finally:
+            os.close(descriptor)
+
+    assert target.read_bytes() == source.read_bytes()
+    assert parent_identity in fsynced
+
+
+@pytest.mark.parametrize("attack", ["detach", "insert", "replace"])
+def test_checkpoint_recost_journal_scan_rejects_namespace_change(
+    tmp_path, monkeypatch, attack,
+):
+    module = load_checkpoint_module()
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    journal = transactions / "txn.json"
+    write_json(journal, {"transaction_id": "txn", "state": "preparing"})
+    detached = tmp_path / "detached-transactions"
+    retained_journal = tmp_path / "retained-journal.json"
+    paths = {"recost_transactions": transactions}
+    real_read = module.read_bound_json_object
+    attacked = False
+
+    def attack_after_read(*args, **kwargs):
+        nonlocal attacked
+        retained = real_read(*args, **kwargs)
+        if not attacked and kwargs.get("expected_mode") == 0o644:
+            attacked = True
+            if attack == "detach":
+                transactions.rename(detached)
+                transactions.mkdir()
+            elif attack == "insert":
+                (transactions / "inserted").write_text("concurrent insertion\n")
+            else:
+                journal.rename(retained_journal)
+                write_json(journal, {"transaction_id": "txn", "state": "forged"})
+        return retained
+
+    monkeypatch.setattr(module, "read_bound_json_object", attack_after_read)
+    expected = "parent path changed during mutation" if attack == "detach" else "changed"
+    with pytest.raises(ValueError, match=expected):
+        with module.bound_directory_descriptor(
+            transactions, "recost transaction directory"
+        ) as descriptor:
+            module.recost_journal(paths, descriptor)
+
+    assert attacked
+    if attack == "detach":
+        assert (detached / journal.name).exists()
+    elif attack == "replace":
+        assert retained_journal.exists()
+    else:
+        assert journal.exists()
+
+
+def test_checkpoint_json_predecessor_survives_failed_public_authentication(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "journal.json"
+    target.write_text('{"transaction_id": "old"}\n')
+    old = target.read_bytes()
+    real_authenticate = module.require_bound_entry_security
+    failed = False
+
+    def fail_new_public_authentication(parent, name, expected, label, **kwargs):
+        nonlocal failed
+        result = real_authenticate(parent, name, expected, label, **kwargs)
+        if (
+            not failed
+            and name == target.name
+            and label == "JSON atomic write"
+            and target.read_bytes() != old
+        ):
+            failed = True
+            raise ValueError("simulated failed public journal authentication")
+        return result
+
+    monkeypatch.setattr(
+        module, "require_bound_entry_security", fail_new_public_authentication
+    )
+    with pytest.raises(ValueError):
+        module.write_json(target, {"transaction_id": "new"})
+
+    assert failed
+    assert json.loads(target.read_text()) == {"transaction_id": "new"}
+    assert not list(tmp_path.glob(f".{target.name}.*.tmp"))
+    retired = list(tmp_path.parent.glob(".cgl-checkpoint-retired-*.forensic"))
+    assert any(path.read_bytes() == old for path in retired)
+
+
+def test_checkpoint_recost_journal_exactly_recovers_valid_temp_after_forged_public(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    public = transactions / "txn.json"
+    public.write_text("forged public bytes\n")
+    temporary = transactions / f".{public.name}.123.{'0' * 32}.tmp"
+    expected_record = {"transaction_id": "txn", "state": "link-pending"}
+    write_json(temporary, expected_record)
+    paths = {"recost_transactions": transactions}
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    with module.bound_directory_descriptor(
+        transactions, "recost transaction directory"
+    ) as descriptor:
+        journal, record = module.recost_journal(paths, descriptor)
+
+    assert journal == public
+    assert record == expected_record
+    assert json.loads(public.read_text()) == expected_record
+    assert list(transactions.iterdir()) == [public]
+    retired = list(tmp_path.glob(".cgl-checkpoint-retired-*.forensic"))
+    assert len(retired) == 1
+    assert retired[0].read_bytes() == b"forged public bytes\n"
+
+
+@pytest.mark.parametrize("phase", ["initial-create", "replacement"])
+def test_checkpoint_lustre_recost_journal_recovers_post_link_pre_unlink_state(
+    tmp_path, monkeypatch, phase,
+):
+    module = load_checkpoint_module()
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    public = transactions / "txn.json"
+    if phase == "replacement":
+        write_json(public, {"transaction_id": "txn", "state": "old"})
+    record = {"transaction_id": "txn", "state": phase}
+    temporary = leave_lustre_json_post_link_state(
+        module, public, record, monkeypatch
+    )
+    paths = {"recost_transactions": transactions}
+
+    assert temporary.stat().st_ino == public.stat().st_ino
+    assert temporary.stat().st_nlink == public.stat().st_nlink == 2
+    with module.bound_directory_descriptor(
+        transactions, "recost transaction directory"
+    ) as descriptor:
+        journal, recovered = module.recost_journal(paths, descriptor)
+
+    assert journal == public
+    assert recovered == record
+    assert not temporary.exists()
+    assert public.stat().st_nlink == 1
+    assert list(transactions.iterdir()) == [public]
+
+
+@pytest.mark.parametrize("state", ["public", "retirement-linked", "public-absent"])
+def test_checkpoint_lustre_recost_journal_recovers_every_forward_state(
+    tmp_path, monkeypatch, state,
+):
+    module = load_checkpoint_module()
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    public = transactions / "txn.json"
+    old_record = {"transaction_id": "txn", "state": "old"}
+    new_record = {"transaction_id": "txn", "state": "new"}
+    write_json(public, old_record)
+    old = public.read_bytes()
+    temporary = transactions / f".{public.name}.123.{'0' * 32}.tmp"
+    write_json(temporary, new_record)
+    paths = {"recost_transactions": transactions}
+
+    with module.bound_directory_descriptor(
+        transactions, "fixture recost transaction directory"
+    ) as descriptor:
+        retired = tmp_path / module.deterministic_retirement_name(
+            descriptor, public.name, public.stat()
+        )
+    if state in {"retirement-linked", "public-absent"}:
+        os.link(public, retired)
+    if state == "public-absent":
+        public.unlink()
+
+    def unsupported_renameat2(*_args, **_kwargs):
+        raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+
+    monkeypatch.setattr(module, "renameat2", unsupported_renameat2)
+    monkeypatch.setattr(module, "renameat2_between", unsupported_renameat2)
+    with module.bound_directory_descriptor(
+        transactions, "recost transaction directory"
+    ) as descriptor:
+        journal, record = module.recost_journal(paths, descriptor)
+
+    assert journal == public
+    assert record == new_record
+    assert json.loads(public.read_text()) == new_record
+    assert list(transactions.iterdir()) == [public]
+    retained = [
+        path
+        for path in tmp_path.glob(".cgl-checkpoint-retired-*.forensic")
+        if path.read_bytes() == old
+    ]
+    assert len(retained) == 1
+
+
+@pytest.mark.parametrize("ambiguous", [False, True])
+def test_checkpoint_artifact_review_is_idempotent_for_exact_publication(
+    tmp_path, monkeypatch, ambiguous,
+):
+    module = load_checkpoint_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    target = accounting / "artifact.independent_review.json"
+    retained = b'{"review": "exact candidate"}\n'
+    expected = hashlib.sha256(retained).hexdigest()
+    before_root = set(tmp_path.iterdir())
+    if not ambiguous:
+        target.write_bytes(retained)
+        target.chmod(0o444)
+
+        def forbid_temporary(*_args, **_kwargs):
+            raise AssertionError("exact-existing review must not create a temporary")
+
+        monkeypatch.setattr(module, "write_bound_exclusive", forbid_temporary)
+    else:
+        real_renameat2 = module.renameat2
+
+        def raise_after_publication(*args, **kwargs):
+            real_renameat2(*args, **kwargs)
+            raise OSError("ambiguous success after review publication")
+
+        monkeypatch.setattr(module, "renameat2", raise_after_publication)
+    with module.bound_directory_descriptor(accounting, "accounting directory") as descriptor:
+        identity, created = module.create_artifact_review(
+            descriptor, target, retained, expected
+        )
+
+    assert target.read_bytes() == retained
+    assert identity == (target.stat().st_dev, target.stat().st_ino)
+    assert created is ambiguous
+    assert list(accounting.iterdir()) == [target]
+    assert set(tmp_path.iterdir()) == before_root
+
+
+def test_checkpoint_artifact_review_idempotency_rejects_differing_target(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    target = accounting / "artifact.independent_review.json"
+    target.write_bytes(b"different review\n")
+    target.chmod(0o444)
+    retained = b'{"review": "exact candidate"}\n'
+    expected = hashlib.sha256(retained).hexdigest()
+    before_root = set(tmp_path.iterdir())
+
+    def forbid_temporary(*_args, **_kwargs):
+        raise AssertionError("differing existing review must not create a temporary")
+
+    monkeypatch.setattr(module, "write_bound_exclusive", forbid_temporary)
+
+    with pytest.raises(ValueError, match="already exists or changed"):
+        with module.bound_directory_descriptor(
+            accounting, "accounting directory"
+        ) as descriptor:
+            module.create_artifact_review(descriptor, target, retained, expected)
+
+    assert target.read_bytes() == b"different review\n"
+    assert list(accounting.iterdir()) == [target]
+    assert set(tmp_path.iterdir()) == before_root
+
+
+def test_checkpoint_artifact_review_authenticates_existing_public_name_before_temporary(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    target = accounting / "artifact.independent_review.json"
+    escaped = accounting / "escaped-review.json"
+    retained = b'{"review": "exact candidate"}\n'
+    expected = hashlib.sha256(retained).hexdigest()
+    target.write_bytes(retained)
+    target.chmod(0o444)
+    target_identity = module.profile_identity(target.stat())
+    real_read = module.read_descriptor_bytes
+    replaced = False
+
+    def replace_public_name_after_read(descriptor):
+        nonlocal replaced
+        value = real_read(descriptor)
+        if not replaced and module.profile_identity(os.fstat(descriptor)) == target_identity:
+            replaced = True
+            target.rename(escaped)
+            target.write_bytes(value)
+            target.chmod(0o444)
+        return value
+
+    def forbid_temporary(*_args, **_kwargs):
+        raise AssertionError("changed existing review must not create a temporary")
+
+    monkeypatch.setattr(module, "read_descriptor_bytes", replace_public_name_after_read)
+    monkeypatch.setattr(module, "write_bound_exclusive", forbid_temporary)
+    with pytest.raises(ValueError, match="already exists or changed"):
+        with module.bound_directory_descriptor(
+            accounting, "accounting directory"
+        ) as descriptor:
+            module.create_artifact_review(descriptor, target, retained, expected)
+
+    assert replaced
+    assert target.read_bytes() == retained
+    assert escaped.read_bytes() == retained
+    assert sorted(entry.name for entry in accounting.iterdir()) == sorted(
+        [escaped.name, target.name]
+    )
+
+
+def test_checkpoint_artifact_review_retry_removes_owner_only_create_remnant_without_forensic(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    accounting = tmp_path / "accounting"
+    accounting.mkdir()
+    target = accounting / "artifact.independent_review.json"
+    retained = b'{"review": "exact candidate"}\n'
+    expected = hashlib.sha256(retained).hexdigest()
+    real_open = module.os.open
+    interrupted = False
+    before_forensics = set(tmp_path.glob(".cgl-checkpoint-retired-*.forensic"))
+
+    def create_then_raise(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal interrupted
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if (
+            not interrupted
+            and os.fsdecode(path).startswith(".cgl-checkpoint-review-")
+            and flags & os.O_CREAT
+        ):
+            interrupted = True
+            os.close(descriptor)
+            raise OSError("simulated exception after review temporary create")
+        return descriptor
+
+    monkeypatch.setattr(module.os, "open", create_then_raise)
+    with module.bound_directory_descriptor(accounting, "accounting directory") as descriptor:
+        with pytest.raises(OSError, match="exception after review temporary create"):
+            module.create_artifact_review(descriptor, target, retained, expected)
+
+        temporaries = list(accounting.glob(".cgl-checkpoint-review-*"))
+        assert len(temporaries) == 1
+        assert temporaries[0].stat().st_size == 0
+        assert stat.S_IMODE(temporaries[0].stat().st_mode) == 0o600
+
+        identity, created = module.create_artifact_review(
+            descriptor, target, retained, expected
+        )
+        retry_identity, retry_created = module.create_artifact_review(
+            descriptor, target, retained, expected
+        )
+
+    assert interrupted
+    assert created is True
+    assert retry_created is False
+    assert identity == retry_identity == module.profile_identity(target.stat())
+    assert target.read_bytes() == retained
+    assert list(accounting.iterdir()) == [target]
+    assert set(tmp_path.glob(".cgl-checkpoint-retired-*.forensic")) == before_forensics
+
+
+def test_checkpoint_write_bound_exclusive_durably_retains_ambiguous_create(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "ambiguous.tmp"
+    real_open = module.os.open
+    real_fsync = module.os.fsync
+    fsynced = []
+    injected = False
+
+    def create_then_raise(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal injected
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if not injected and path == target.name and flags & os.O_CREAT:
+            injected = True
+            os.close(descriptor)
+            raise OSError("simulated exception after exclusive create")
+        return descriptor
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced.append(module.profile_identity(profile))
+        return result
+
+    with module.bound_parent_descriptor(target, "ambiguous exclusive create") as parent:
+        parent_identity = module.profile_identity(os.fstat(parent))
+        monkeypatch.setattr(module.os, "open", create_then_raise)
+        monkeypatch.setattr(module.os, "fsync", observe_fsync)
+        with pytest.raises(OSError, match="simulated exception after exclusive create"):
+            module.write_bound_exclusive(
+                parent, target.name, b"must not be written\n", 0o644, "ambiguous create"
+            )
+
+    assert injected
+    assert target.stat().st_size == 0
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert parent_identity in fsynced
+
+
+def test_checkpoint_mkdir_durably_retains_ambiguous_exact_mode_create(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    target = tmp_path / "created"
+    real_mkdir = module.os.mkdir
+    real_fsync = module.os.fsync
+    fsynced = []
+    requested_modes = []
+    injected = False
+
+    def create_then_raise(path, mode=0o777, *, dir_fd=None):
+        nonlocal injected
+        requested_modes.append(mode)
+        real_mkdir(path, mode, dir_fd=dir_fd)
+        if not injected and path == target.name:
+            injected = True
+            raise OSError("simulated exception after mkdir")
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced.append(module.profile_identity(profile))
+        return result
+
+    ambient = os.umask(0o077)
+    try:
+        monkeypatch.setattr(module.os, "mkdir", create_then_raise)
+        monkeypatch.setattr(module.os, "fsync", observe_fsync)
+        with pytest.raises(OSError, match="simulated exception after mkdir"):
+            module.mkdir_durable(target)
+    finally:
+        os.umask(ambient)
+
+    assert injected
+    assert requested_modes == [0o755]
+    assert stat.S_IMODE(target.stat().st_mode) == 0o755
+    assert module.profile_identity(tmp_path.stat()) in fsynced
+    assert module.profile_identity(target.stat()) in fsynced
+    module.mkdir_durable(target)
+
+
+def test_checkpoint_promotion_lock_durably_retains_ambiguous_create(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    root = tmp_path / "root"
+    root.mkdir()
+    lock = root / f".mks24_stage_i_{EPOCH_SLUG}.lock"
+    real_open = module.os.open
+    real_fsync = module.os.fsync
+    fsynced = []
+    injected = False
+
+    def create_then_raise(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal injected
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if not injected and path == lock.name and flags & os.O_CREAT:
+            injected = True
+            os.close(descriptor)
+            raise OSError("simulated exception after lock create")
+        return descriptor
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced.append(module.profile_identity(profile))
+        return result
+
+    monkeypatch.setattr(module.os, "open", create_then_raise)
+    monkeypatch.setattr(module.os, "fsync", observe_fsync)
+    with pytest.raises(OSError, match="simulated exception after lock create"):
+        with module.promotion_lock({"root": root, "lock": lock}):
+            raise AssertionError("ambiguous lock create must fail closed")
+
+    assert injected
+    assert lock.read_bytes() == b""
+    assert stat.S_IMODE(lock.stat().st_mode) == 0o644
+    assert module.profile_identity(root.stat()) in fsynced
+    with module.promotion_lock({"root": root, "lock": lock}):
+        pass
+
+
+def test_checkpoint_forensic_copy_durably_retains_ambiguous_create(
+    tmp_path, monkeypatch,
+):
+    module = load_checkpoint_module()
+    source = tmp_path / "source"
+    target = tmp_path / "forensic"
+    source.write_bytes(b"authenticated forensic bytes\n")
+    source.chmod(0o444)
+    expected = sha256(source)
+    temporary = tmp_path / module.forensic_temporary_name(target)
+    real_open = module.os.open
+    real_fsync = module.os.fsync
+    fsynced = []
+    injected = False
+
+    def create_then_raise(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal injected
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if not injected and path == temporary.name and flags & os.O_CREAT:
+            injected = True
+            os.close(descriptor)
+            raise OSError("simulated exception after forensic create")
+        return descriptor
+
+    def observe_fsync(descriptor):
+        profile = os.fstat(descriptor)
+        result = real_fsync(descriptor)
+        if stat.S_ISDIR(profile.st_mode):
+            fsynced.append(module.profile_identity(profile))
+        return result
+
+    monkeypatch.setattr(module.os, "open", create_then_raise)
+    monkeypatch.setattr(module.os, "fsync", observe_fsync)
+    with pytest.raises(OSError, match="simulated exception after forensic create"):
+        module.copy_forensic(source, target, expected, expected_mode=0o444)
+
+    assert injected
+    assert temporary.stat().st_size == 0
+    assert stat.S_IMODE(temporary.stat().st_mode) == 0o600
+    assert module.profile_identity(tmp_path.stat()) in fsynced
+    module.copy_forensic(source, target, expected, expected_mode=0o444)
+    assert target.read_bytes() == source.read_bytes()
+    assert not temporary.exists()
+
+
+@pytest.mark.parametrize(
+    ("action_name", "first_preflight"),
+    [
+        ("promote", "verify_staged_state"),
+        ("retire_preparing", "require_empty_queue"),
+        ("adopt_legacy_canonical", "require_empty_queue"),
+    ],
+)
+def test_checkpoint_actions_bind_transaction_store_before_first_preflight(
+    tmp_path, monkeypatch, action_name, first_preflight,
+):
+    module = load_checkpoint_module()
+    transactions = tmp_path / "transactions"
+    transactions.mkdir()
+    journal = transactions / "pending.json"
+    journal.write_text('{"state": "pending"}\n')
+    detached = tmp_path / "detached-transactions"
+    paths = {"recost_transactions": transactions}
+
+    @contextmanager
+    def no_lock(_paths):
+        yield
+
+    def detach_during_first_preflight(*_args, **_kwargs):
+        transactions.rename(detached)
+        transactions.mkdir()
+        raise RuntimeError("stop after transaction-store detachment")
+
+    monkeypatch.setattr(module, "promotion_lock", no_lock)
+    monkeypatch.setattr(module, "validate_fixture_options", lambda *_args: None)
+    monkeypatch.setattr(module, first_preflight, detach_during_first_preflight)
+    action = getattr(module, action_name)
+    args = SimpleNamespace(squeue_file=None)
+
+    with pytest.raises(ValueError, match="parent path changed during mutation"):
+        action(paths, tmp_path, tmp_path, False, args)
+
+    assert (detached / journal.name).read_bytes() == b'{"state": "pending"}\n'
+    assert list(transactions.iterdir()) == []

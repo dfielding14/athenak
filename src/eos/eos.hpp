@@ -27,16 +27,17 @@
 struct EOS_Data {
   Real gamma;        // ratio of specific heats for ideal gas
   Real iso_cs;       // isothermal sound speed
-  Real nu_coll;
-  Real lim_coll;
   bool is_ideal;     // flag to denote ideal gas EOS
-  bool is_cgl;       // flag to denote cgl eos
-  bool passive;      // flag to denote isothermal passive CGL evolution
-  bool flim;         // flag for firehose limiter
-  bool mlim;         // flag for mirror limiter
-  bool coll;         // flag for overall collisions
-  bool backup_lim;   // flag for backup limiters
-  Real dfloor, pfloor, tfloor, sfloor, bfloor;  // density, pressure, temperature, entropy floors
+  bool is_cgl;       // flag to denote CGL anisotropic MHD EOS
+  bool passive;      // passive CGL evolution flag
+  bool mlim, flim;   // mirror and firehose limiter flags
+  bool coll;         // enable CGL collision/limiter relaxation
+  bool backup_lim;   // enable backup CGL instability limiters
+  bool hardwall_lim; // project CGL pressure anisotropy to selected instability bounds
+  Real nu_coll, lim_coll;  // physical and limiter collision frequencies
+  Real firehose_threshold;  // selected firehose activation coefficient in B^2 units
+  bool use_e, use_t; // use internal energy density (e) or temperature (t) as primitive
+  Real dfloor, pfloor, tfloor, sfloor, bfloor;  // fluid and magnetic-field floors
   Real gamma_max;    // ceiling on Lorentz factor in SR/GR
   Real sigma_max;    // ceiling on magnetization in MHD
 
@@ -74,30 +75,82 @@ struct EOS_Data {
     Real tmp = bx*bx + ct2 - asq;
     return sqrt(0.5*(qsq + sqrt(tmp*tmp + 4.0*asq*ct2))/d);
   }
-  
-  //NON-RELATIVISTIC CGL MHD: inlined fast magnetosonic speed function
-  KOKKOS_INLINE_FUNCTION
-  Real IdealMHDFastSpeed(const Real d, const Real pr, const Real pp,
-                         const Real bx, const Real by, const Real bz, const Real bflr) const {
 
-    Real bprp2 = by*by + bz*bz;
-    Real bx2 = bx*bx;
-    Real b2 = bx2+bprp2;
-    Real vfms = 1.;
-    if (b2 < bflr*bflr) {//use adiabatic MHD fast speed if below B floor
-        Real p = ONE_3RD*pr+TWO_3RDS*pp;
-        Real asq = 1.666666666666667*p;
-        Real qsq = b2 + asq;
-        Real tmp = b2 - asq;
-        vfms =  sqrt(0.5*(qsq + sqrt(tmp*tmp + 4.0*asq*bprp2))/d);
-    } else {
-        Real bhatx2 = bx2/b2;
-        Real qsq = b2 + 2*pp + (2.*pr - pp)*bhatx2;
-        vfms = sqrt( 0.5*(qsq + sqrt(fabs(qsq*qsq + 4.*pp*pp*(1. - bhatx2)*bhatx2
-                    - 12.*pr*pp*bhatx2*(2.-bhatx2) + 12.*pr*pp*bhatx2*bhatx2 - 12.*bx2*pr )) /d ));
+  // NON-RELATIVISTIC CGL MHD: inlined fast magnetosonic speed function.
+  KOKKOS_INLINE_FUNCTION
+  Real IdealMHDFastSpeed(const Real d, const Real ppar, const Real pperp,
+                         const Real bx, const Real by, const Real bz,
+                         const Real bflr) const {
+    const Real bscale = fmax(fabs(bx), fmax(fabs(by), fabs(bz)));
+    Real bnx = 0.0;
+    Real bny = 0.0;
+    Real bnz = 0.0;
+    if (bscale > 0.0) {
+      bnx = bx/bscale;
+      bny = by/bscale;
+      bnz = bz/bscale;
     }
-    return vfms;
-  }  
+    const Real bnx2 = bnx*bnx;
+    const Real bperpn2 = bny*bny + bnz*bnz;
+    const Real bnorm2 = bnx2 + bperpn2;
+    const Real bfloor = fabs(bflr);
+    bool use_isotropic = (bscale == 0.0);
+    if (!use_isotropic && bfloor > bscale) {
+      use_isotropic = (bscale/bfloor)*sqrt(bnorm2) < 1.0;
+    }
+
+    if (use_isotropic) {
+      const Real ppar_root = sqrt(fabs(ppar));
+      const Real pperp_root = sqrt(fabs(pperp));
+      const Real root_scale = fmax(bscale, fmax(ppar_root, pperp_root));
+      if (root_scale == 0.0) {
+        return 0.0;
+      }
+      const Real br = bscale/root_scale;
+      const Real pparr = ppar_root/root_scale;
+      const Real pperpr = pperp_root/root_scale;
+      const Real b2s = bnorm2*br*br;
+      const Real bperp2s = bperpn2*br*br;
+      const Real ppars = copysign(pparr*pparr, ppar);
+      const Real pperps = copysign(pperpr*pperpr, pperp);
+      const Real as = gamma*(ONE_3RD*ppars + TWO_3RDS*pperps);
+      const Real qs = b2s + as;
+      const Real tmps = b2s - as;
+      const Real factor = 0.5*(qs + sqrt(tmps*tmps + 4.0*as*bperp2s));
+      const Real sqrt_d = sqrt(d);
+      const Real sqrt_factor = sqrt(factor);
+      if (sqrt_factor == 0.0) {
+        return 0.0;
+      }
+      return (sqrt_factor >= 1.0 && root_scale < sqrt_d)
+          ? (root_scale*sqrt_factor)/sqrt_d
+          : (root_scale/sqrt_d)*sqrt_factor;
+    }
+
+    const Real bhatx2 = fmin(bnx2/bnorm2, 1.0);
+    const Real pperp_root = sqrt(fabs(pperp));
+    const Real pparx_root = sqrt(fabs(ppar))*sqrt(bhatx2);
+    const Real root_scale = fmax(bscale, fmax(pperp_root, pparx_root));
+    const Real br = bscale/root_scale;
+    const Real pperpr = pperp_root/root_scale;
+    const Real pparxr = pparx_root/root_scale;
+    const Real b2s = bnorm2*br*br;
+    const Real pperps = copysign(pperpr*pperpr, pperp);
+    const Real pparxs = copysign(pparxr*pparxr, ppar);
+    const Real qs = b2s + (2.0 - bhatx2)*pperps + 2.0*pparxs;
+    const Real tmps = b2s + (2.0 - bhatx2)*pperps - 4.0*pparxs;
+    const Real discs = tmps*tmps
+                     + 4.0*pperps*pperps*bhatx2*(1.0 - bhatx2);
+    const Real factor = 0.5*(qs + sqrt(discs));
+    const Real sqrt_d = sqrt(d);
+    const Real sqrt_factor = sqrt(factor);
+    if (sqrt_factor == 0.0) {
+      return 0.0;
+    }
+    return (sqrt_factor >= 1.0 && root_scale < sqrt_d)
+        ? (root_scale*sqrt_factor)/sqrt_d
+        : (root_scale/sqrt_d)*sqrt_factor;
+  }
 
   // SPECIAL RELATIVISTIC IDEAL GAS HYDRO: inlined maximal sound wave speeds function
   // Inputs:
@@ -255,10 +308,9 @@ class EquationOfState {
   virtual void PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
-                          
-  //virtual function for collisions - only rewritten in CGL eos
   virtual void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
-                          DvceArray5D<Real> &cons, const int il, const int iu,
+                          DvceArray5D<Real> &cons, const Real dtc,
+                          const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
   virtual void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
                                              const DvceArray5D<Real> &bcc,
@@ -409,14 +461,12 @@ class IdealMHD : public EquationOfState {
 
 //----------------------------------------------------------------------------------------
 //! \class CGLMHD
-//! \brief Derived class for cgl EOS in nonrelativistic MHD
+//! \brief Derived class for the anisotropic CGL EOS in nonrelativistic MHD.
 
 class CGLMHD : public EquationOfState {
  public:
-  // Following suppress warnings that Hydro versions are not over-ridden
   using EquationOfState::ConsToPrim;
   using EquationOfState::PrimToCons;
-  using EquationOfState::Collisions;
 
   CGLMHD(MeshBlockPack *pp, ParameterInput *pin);
   void ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
@@ -428,7 +478,8 @@ class CGLMHD : public EquationOfState {
                   DvceArray5D<Real> &cons, const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
   void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
-                  DvceArray5D<Real> &cons, const int il, const int iu,
+                  DvceArray5D<Real> &cons, const Real dtc,
+                  const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
   void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
                                      const DvceArray5D<Real> &bcc,

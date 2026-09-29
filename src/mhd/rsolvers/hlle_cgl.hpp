@@ -28,7 +28,8 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const bool record_pwork, DvceArray5D<Real> pflux) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   int iby = ((ivx-IVX) + 1)%3;
@@ -58,31 +59,33 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     Real &wr_ipp = wr(IPP,i);
     Real &wr_iby = br(iby,i);
     Real &wr_ibz = br(ibz,i);
-    
+
     Real bxi = bx(m,k,j,i);
-    
+
     // Compute the conserved anisotropy A stored in the IAN slot.
     Real pbl = 0.5*(bxi*bxi + SQR(wl_iby) + SQR(wl_ibz));
     Real pbr = 0.5*(bxi*bxi + SQR(wr_iby) + SQR(wr_ibz));
     Real bmagl = sqrt(2.*pbl);
     Real bmagr = sqrt(2.*pbr);
-    
+
     // Firehose parameter
     Real fhl = 1. + (wl_ipp - wl_ipr)/(2.*pbl);
     Real fhr = 1. + (wr_ipp - wr_ipr)/(2.*pbr);
-    
+
     Real anis_l = wl_idn * log(wl_ipp / wl_ipr * SQR(wl_idn)/(bmagl*SQR(bmagl)) );
     Real anis_r = wr_idn * log(wr_ipp / wr_ipr * SQR(wr_idn)/(bmagr*SQR(bmagr)) );
-    
-    Real el = 0.5*wl_ipr + wl_ipp + 0.5*wl_idn*(SQR(wl_ivx)+SQR(wl_ivy)+SQR(wl_ivz)) + pbl;
-    Real er = 0.5*wr_ipr + wr_ipp + 0.5*wr_idn*(SQR(wr_ivx)+SQR(wr_ivy)+SQR(wr_ivz)) + pbr;
+
+    Real el = 0.5*wl_ipr + wl_ipp
+              + 0.5*wl_idn*(SQR(wl_ivx)+SQR(wl_ivy)+SQR(wl_ivz)) + pbl;
+    Real er = 0.5*wr_ipr + wr_ipp
+              + 0.5*wr_idn*(SQR(wr_ivx)+SQR(wr_ivy)+SQR(wr_ivz)) + pbr;
 
     //--- Step 2. Apply floor to magnetic field if necessary
-    
+
     // Involves resetting pprp and pprl each to 1/3*pprl+2/3*pprp, and
     // resetting A assuming pprp=pprl with bfloor as the field.
-    
-    if ( bmagl < bfloor || bmagr < bfloor ){
+
+    if (bmagl < bfloor || bmagr < bfloor) {
       // Revert to (adiabatic) MHD EOS if B < bmag_floor
       // In this case, we calculate flux of E as if in adiabatic MHD, while the
       // conserved variable A does nothing. We set pprp = pprl = 2/3*(E - pb - ke)
@@ -99,12 +102,19 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
       anis_r = wr_idn * log( SQR(wr_idn)/(bfloor*SQR(bfloor)) );
     }
 
-    
+
     //--- Step 3. Compute fast magnetosonic speed in L,R states (MHD used Roe-averaged)
-    
-    //need to use mhd fast speed instead if the bfloor was hit
-    Real cl = eos.IdealMHDFastSpeed(wl_idn, wl_ipr, wl_ipp, bxi, wl_iby, wl_ibz, bfloor);
-    Real cr = eos.IdealMHDFastSpeed(wr_idn, wr_ipr, wr_ipp, bxi, wr_iby, wr_ibz, bfloor);
+
+    // Passive-Delta evolves CGL thermodynamics diagnostically while the flow
+    // follows isothermal MHD, including its numerical signal speeds.
+    Real cl, cr;
+    if (eos.passive) {
+      cl = eos.IdealMHDFastSpeed(wl_idn, bxi, wl_iby, wl_ibz);
+      cr = eos.IdealMHDFastSpeed(wr_idn, bxi, wr_iby, wr_ibz);
+    } else {
+      cl = eos.IdealMHDFastSpeed(wl_idn, wl_ipr, wl_ipp, bxi, wl_iby, wl_ibz, bfloor);
+      cr = eos.IdealMHDFastSpeed(wr_idn, wr_ipr, wr_ipp, bxi, wr_iby, wr_ibz, bfloor);
+    }
 
     //Real sqrtdl = sqrt(wl_idn);
     //Real sqrtdr = sqrt(wr_idn);
@@ -180,14 +190,14 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     MHDCons1D fl,fr;
     fl.d  = wl_idn*vxl;
     fr.d  = wr_idn*vxr;
-    
-    if ( !(eos.passive) ){
+
+    if (!(eos.passive)) {
       fl.mx = wl_idn*wl_ivx*vxl + pbl + wl_ipp - SQR(bxi)*fhl;
       fr.mx = wr_idn*wr_ivx*vxr + pbr + wr_ipp - SQR(bxi)*fhr;
-      
+
       fl.my = wl_idn*wl_ivy*vxl - bxi*wl_iby*fhl;
       fr.my = wr_idn*wr_ivy*vxr - bxi*wr_iby*fhr;
-      
+
       fl.mz = wl_idn*wl_ivz*vxl - bxi*wl_ibz*fhl;
       fr.mz = wr_idn*wr_ivz*vxr - bxi*wr_ibz*fhr;
     } else {
@@ -218,24 +228,24 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     //  fl.mx += (iso_cs*iso_cs)*wl_idn;
     //  fr.mx += (iso_cs*iso_cs)*wr_idn;
     //}
-    
+
     //Energy fluxes
     fl.e = el*vxl + wl_ivx*(wl_ipp + pbl);
     fr.e = er*vxr + wr_ivx*(wr_ipp + pbr);
     fl.e -= bxi*(bxi*wl_ivx + wl_iby*wl_ivy + wl_ibz*wl_ivz)*fhl;
     fr.e -= bxi*(bxi*wr_ivx + wr_iby*wr_ivy + wr_ibz*wr_ivz)*fhr;
-    
+
     //energy fluxes
     //fl.e   = el*vxl + wl_ivx*(wl_ipr + pbl - bxi*bxi);
     //fr.e   = er*vxr + wr_ivx*(wr_ipr + pbr - bxi*bxi);
     //fl.e  -= bxi*(wl_iby*wl_ivy + wl_ibz*wl_ivz);
     //fr.e  -= bxi*(wr_iby*wr_ivy + wr_ibz*wr_ivz);
-    
+
     // Conserved-anisotropy fluxes.
     fl.mu = anis_l*vxl;
     fr.mu = anis_r*vxr;
-    
-    //B/E field fluxes for CT  
+
+    //B/E field fluxes for CT
     fl.by = wl_iby*vxl - bxi*wl_ivy;
     fr.by = wr_iby*vxr - bxi*wr_ivy;
 
@@ -246,13 +256,13 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
 
     Real tmp=0.0;
     if (bp != bm) tmp = 0.5*(bp + bm)/(bp - bm);
-    
+
     // Treat A/rho as the advected scalar, flux is mass_flx*A/rho from upwind side.
     Real fdtmp = 0.5*(fl.d  + fr.d ) + (fl.d  - fr.d )*tmp;
     anis_l /= wl_idn;
     anis_r /= wr_idn;
     Real fmutmp = ( fdtmp >= 0.0 ) ? fdtmp*anis_l : fdtmp*anis_r;
-    
+
     flx(m,IDN,k,j,i) = fdtmp;
     flx(m,ivx,k,j,i) = 0.5*(fl.mx + fr.mx) + (fl.mx - fr.mx)*tmp;
     flx(m,ivy,k,j,i) = 0.5*(fl.my + fr.my) + (fl.my - fr.my)*tmp;
@@ -261,6 +271,35 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     flx(m,IAN,k,j,i) = fmutmp;
     ey(m,k,j,i) = -0.5*(fl.by + fr.by) - (fl.by - fr.by)*tmp;
     ez(m,k,j,i) =  0.5*(fl.bz + fr.bz) + (fl.bz - fr.bz)*tmp;
+
+    if (record_pwork) {
+      Real plx = 0.0, ply = 0.0, plz = 0.0;
+      Real prx = 0.0, pry = 0.0, prz = 0.0;
+      Real alx = 0.0, aly = 0.0, alz = 0.0;
+      Real arx = 0.0, ary = 0.0, arz = 0.0;
+      if (!eos.passive) {
+        const Real danisl = (bmagl > bfloor) ? (wl_ipp - wl_ipr)/(2.0*pbl) : 0.0;
+        const Real danisr = (bmagr > bfloor) ? (wr_ipp - wr_ipr)/(2.0*pbr) : 0.0;
+        alx = -SQR(bxi)*danisl;
+        aly = -bxi*wl_iby*danisl;
+        alz = -bxi*wl_ibz*danisl;
+        arx = -SQR(bxi)*danisr;
+        ary = -bxi*wr_iby*danisr;
+        arz = -bxi*wr_ibz*danisr;
+        plx = wl_ipp + alx;
+        ply = aly;
+        plz = alz;
+        prx = wr_ipp + arx;
+        pry = ary;
+        prz = arz;
+      }
+      pflux(m,ivx-IVX,k,j,i) = 0.5*(plx + prx) + (plx - prx)*tmp;
+      pflux(m,ivy-IVX,k,j,i) = 0.5*(ply + pry) + (ply - pry)*tmp;
+      pflux(m,ivz-IVX,k,j,i) = 0.5*(plz + prz) + (plz - prz)*tmp;
+      pflux(m,3+ivx-IVX,k,j,i) = 0.5*(alx + arx) + (alx - arx)*tmp;
+      pflux(m,3+ivy-IVX,k,j,i) = 0.5*(aly + ary) + (aly - ary)*tmp;
+      pflux(m,3+ivz-IVX,k,j,i) = 0.5*(alz + arz) + (alz - arz)*tmp;
+    }
   });
 
   return;

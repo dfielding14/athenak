@@ -11,6 +11,8 @@
 //! with an ideal gas EOS. Versions for both non-relativistic and relativistic fluids are
 //! provided.
 
+#include "eos/cgl_physics.hpp"
+
 //----------------------------------------------------------------------------------------
 //! \!fn void SingleC2P_IdealMHD()
 //! \brief Converts conserved into primitive variables.  Operates over range of cells
@@ -90,7 +92,8 @@ void SingleP2C_IdealMHD(const MHDPrim1D &w, HydCons1D &u) {
 KOKKOS_INLINE_FUNCTION
 Real CGLConservedAnisotropy(const Real rho, const Real p_parallel,
                             const Real p_perp, const Real bmag) {
-  return rho*log(p_perp/p_parallel*SQR(rho)/(bmag*SQR(bmag)));
+  const Real log_isotropic_anisotropy = 2.0*log(rho) - 3.0*log(bmag);
+  return rho*(log(p_perp) - log(p_parallel) + log_isotropic_anisotropy);
 }
 
 //----------------------------------------------------------------------------------------
@@ -104,10 +107,23 @@ void CGLRecoverPressuresFromInternalEnergyAndAnisotropy(const Real rho,
                                                         const Real bmag,
                                                         Real &p_parallel,
                                                         Real &p_perp) {
-  const Real di = 1.0/rho;
-  const Real p_ratio = bmag*SQR(bmag)*SQR(di)*exp(anisotropy*di);
-  p_parallel = eint/(0.5 + p_ratio);
-  p_perp = p_parallel*p_ratio;
+  const Real log_isotropic_anisotropy = 2.0*log(rho) - 3.0*log(bmag);
+  Real log_p_ratio = anisotropy/rho - log_isotropic_anisotropy;
+  // Preserve exact round trips for isotropic states without a tolerance or limiter.
+  if (Kokkos::isfinite(anisotropy) &&
+      anisotropy == rho*log_isotropic_anisotropy) {
+    log_p_ratio = 0.0;
+  }
+  // Exponentiate only a nonpositive value and recover the smaller pressure by scaling.
+  if (log_p_ratio > 0.0) {
+    const Real inv_p_ratio = exp(-log_p_ratio);
+    p_perp = eint/(1.0 + 0.5*inv_p_ratio);
+    p_parallel = p_perp*inv_p_ratio;
+  } else {
+    const Real p_ratio = exp(log_p_ratio);
+    p_parallel = eint/(0.5 + p_ratio);
+    p_perp = p_parallel*p_ratio;
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -141,7 +157,8 @@ void CGLRecoverPressuresFromTotalEnergyAndAnisotropy(const Real rho, const Real 
 
 //----------------------------------------------------------------------------------------
 //! \fn Real CGLConservedAnisotropyToMagneticMoment()
-//! \brief Convert the IAN/legacy IMU slot from conserved anisotropy A to magnetic moment p_perp/|B|.
+//! \brief Convert the IAN/legacy IMU slot from conserved anisotropy A to
+//! magnetic moment p_perp/|B|.
 
 KOKKOS_INLINE_FUNCTION
 Real CGLConservedAnisotropyToMagneticMoment(const Real rho, const Real mx,
@@ -269,7 +286,8 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
 KOKKOS_INLINE_FUNCTION
 void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
                         HydPrim1D &w,
-                        bool &dfloor_used, bool &efloor_used, bool &tfloor_used, bool &bfloor_used) {
+                        bool &dfloor_used, bool &efloor_used, bool &tfloor_used,
+                        bool &bfloor_used) {
   const Real &dfloor_ = eos.dfloor;
   Real pfloor = eos.pfloor;
   Real bfloor = eos.bfloor;
@@ -309,13 +327,14 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   //  w.e = w.d*sfloor/spe_over_eps;
   //  efloor_used = true;
   //}
-  
+
   // set pressures, apply floors, correcting total energy
   Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   Real bmag = sqrt(bsqr);
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
   Real e_m = 0.5*bsqr;
   Real eint = (u.e - e_k - e_m);
+  bool pressure_floor_used = false;
   if (bmag>bfloor) {
     // Standard CGL EOS
     CGLRecoverPressuresFromInternalEnergyAndAnisotropy(w.d, eint, u.mu, bmag,
@@ -327,30 +346,35 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
     w.pp = w.e;
     bfloor_used = true;
   }
-      
+
   //next use pfloor for pressures
   if (w.e < pfloor && w.pp < pfloor) {
     w.e = pfloor;
     w.pp = pfloor;
     u.e = 1.5*pfloor+ e_k + e_m;
     efloor_used = true;
+    pressure_floor_used = true;
   }
   if (w.e < pfloor) {
     w.e = pfloor;
     u.e = 0.5*pfloor + w.pp + e_k + e_m;
     efloor_used = true;
+    pressure_floor_used = true;
   }
   if (w.pp < pfloor) {
     w.pp = pfloor;
-    u.e = w.e + pfloor + e_k + e_m;
+    u.e = 0.5*w.e + pfloor + e_k + e_m;
     efloor_used = true;
+    pressure_floor_used = true;
   }
-  
-  // The IAN/legacy IMU slot stores A. If bfloor is active, reset A assuming pprl=pprp.
-  if (bfloor_used) {
-    u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bfloor);
+
+  // The IAN/legacy IMU slot stores A. Keep it consistent with any pressure or field-floor
+  // correction so a subsequent C2P conversion recovers the same primitive state.
+  if (pressure_floor_used || bfloor_used) {
+    const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
+    u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag_inv);
   }
-  
+
   return;
 }
 
@@ -364,7 +388,7 @@ KOKKOS_INLINE_FUNCTION
 void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
   Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
   Real bmag = sqrt(bsqr);
-  
+
   u.d  = w.d;
   u.mx = w.d*w.vx;
   u.my = w.d*w.vy;
@@ -372,7 +396,7 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
   //u.e  = w.e + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) +
   //                      (SQR(w.bx) + SQR(w.by) + SQR(w.bz)) );
   // The IAN/legacy IMU slot stores conserved anisotropy A, not true magnetic moment.
-  
+
   // bfloor resets A assuming pprp=pprl.
   if (bmag>bfloor) {
     // Standard CGL EOS
@@ -390,72 +414,82 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
 
 //----------------------------------------------------------------------------------------
 //! \fn void SingleColl_CGLMHD()
-//! \brief Calculates the decay of pressure anisotropy due to scattering over one time step
+//! \brief Calculates the decay of pressure anisotropy due to scattering over
+//! one time step
 
 KOKKOS_INLINE_FUNCTION
-void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll, 
-                       const Real &dtc, const bool &mlim, const bool &flim, 
-                       const bool &backup) {
-  
+void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll,
+                       const Real &dtc, const bool &mlim, const bool &flim,
+                       const Real &firehose_threshold, const bool &backup) {
   Real paniso = w.pp-w.e;
   Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
-  
+
   // Apply background collisions
   Real expdtnu = exp(-nu_coll*dtc);
   paniso = paniso*expdtnu;
   w.pp = ONE_3RD*(paniso + 3.0*piso);
-  w.e = w.pp - paniso;  
-  
+  w.e = w.pp - paniso;
+
   // Apply limiters
   Real nudt = lim_coll*dtc;
-  Real nudt_b = 10000000000.*dtc;
+  Real nudt_b = cgl::kBackupCollisionRate*dtc;
   Real bsqr = w.bx*w.bx+w.by*w.by+w.bz*w.bz;
   Real wpptmp;
-  
+
   // Firehose block
   if (flim && backup) { //if using backup
-
-    if ((paniso <= -0.7*bsqr) && (paniso > -bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e - 0.7*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e + 2.*0.7*bsqr ))/(3.+3.*nudt);
+    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold) &&
+        !cgl::FirehoseHardBoundViolated(paniso, bsqr)) { //in between limiters
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
-    } else if ((paniso <= -bsqr)) {  //beyond backup limiters
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e - bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e + 2.*bsqr ))/(3.+3.*nudt_b);
+    } else if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
+      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
+                  + cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
+      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
+                - 2.*cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
       w.pp = wpptmp;
     }
 
   } else if (flim && (!backup)) { //if not using backup, just standard flim
-
-    if ((paniso <= -0.7*bsqr)) {  
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e - 0.7*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e + 2.*0.7*bsqr ))/(3.+3.*nudt);
+    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold)) {
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
     }
   }
 
   // Mirror block
   if (mlim && backup) {
-
-    if ((paniso >= 0.5*bsqr) && (paniso < bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e + 0.5*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e - bsqr ))/(3.+3.*nudt);
+    if (cgl::MirrorLimiterActive(paniso, bsqr) &&
+        !cgl::MirrorHardBoundViolated(paniso, bsqr)) { //in between limiters
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
-    } else if ((paniso >= 0.5*bsqr)) {  //beyond backup limiters
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e + bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e - 2.*bsqr ))/(3.+3.*nudt_b);
+    } else if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
+      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
+                  + cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
+      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
+                - 2.*cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
       w.pp = wpptmp;
     }
 
   } else if (mlim && (!backup)) {  //if not using backup, just standard mlim
-
-    if ((paniso >= 0.5*bsqr)) {
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e + 0.5*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e - bsqr ))/(3.+3.*nudt);
+    if (cgl::MirrorLimiterActive(paniso, bsqr)) {
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
     }
   }
-  
+
   return;
 }
 

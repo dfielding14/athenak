@@ -7,10 +7,15 @@
 //  \brief implementation of functions in TurbulenceDriver
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
@@ -25,123 +30,412 @@
 #include "eos/ideal_c2p_hyd.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
 #include "turb_driver.hpp"
+#include "globals.hpp"
+
+namespace {
+
+void FatalTurbulenceError(const std::string& message) {
+  std::cout << "### FATAL ERROR in turbulence driver: " << message << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+std::string ForcingNormalizationContext(Real time, int cycle, int update,
+                                        int mode_count, Real dt, Real t0, Real t1,
+                                        Real totvol, Real m0, Real m1) {
+  std::ostringstream msg;
+  msg.precision(std::numeric_limits<Real>::max_digits10);
+  msg << "time=" << time << " cycle=" << cycle << " update=" << update
+      << " mode_count=" << mode_count << " dt=" << dt << " t0=" << t0
+      << " t1=" << t1 << " totvol=" << totvol << " m0=" << m0
+      << " m1=" << m1;
+  return msg.str();
+}
+
+Real NonnegativeEdotRoot(Real dt, Real field_norm, Real linear_work, Real dedt) {
+  using Wide = long double;
+  Wide quadratic = static_cast<Wide>(dt) * static_cast<Wide>(field_norm);
+  Wide linear = static_cast<Wide>(linear_work);
+  Wide rhs = static_cast<Wide>(dedt);
+  Wide scale = std::max({quadratic, std::fabs(linear), rhs});
+  if (scale == 0.0L) {
+    return 0.0;
+  }
+
+  quadratic /= scale;
+  linear /= scale;
+  rhs /= scale;
+  Wide half_discriminant =
+      std::hypot(0.5L * linear, std::sqrt(quadratic) * std::sqrt(rhs));
+  Wide root = 0.0L;
+  if (linear >= 0.0L) {
+    Wide denominator = half_discriminant + 0.5L * linear;
+    if (denominator > 0.0L) {
+      root = rhs / denominator;
+    }
+  } else {
+    root = (half_discriminant - 0.5L * linear) / quadratic;
+  }
+  return static_cast<Real>(root);
+}
+
+std::string NonfiniteForcingStateContext(
+    int density, int momentum1, int momentum2, int momentum3, int energy,
+    int anisotropy, int force1, int force2, int force3, int volume) {
+  std::ostringstream msg;
+  msg << " nonfinite_counts={density:" << density
+      << ",momentum1:" << momentum1
+      << ",momentum2:" << momentum2
+      << ",momentum3:" << momentum3
+      << ",energy:" << energy
+      << ",anisotropy:" << anisotropy
+      << ",force1:" << force1
+      << ",force2:" << force2
+      << ",force3:" << force3
+      << ",volume:" << volume << "}";
+  return msg.str();
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
-TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
-  pmy_pack(pp),
-  force("force",1,1,1,1,1),
-  force_tmp("force_tmp",1,1,1,1,1),
-  xccc("xccc",1),xccs("xccs",1),xcsc("xcsc",1),xcss("xcss",1),
-  xscc("xscc",1),xscs("xscs",1),xssc("xssc",1),xsss("xsss",1),
-  yccc("yccc",1),yccs("yccs",1),ycsc("ycsc",1),ycss("ycss",1),
-  yscc("yscc",1),yscs("yscs",1),yssc("yssc",1),ysss("ysss",1),
-  zccc("zccc",1),zccs("zccs",1),zcsc("zcsc",1),zcss("zcss",1),
-  zscc("zscc",1),zscs("zscs",1),zssc("zssc",1),zsss("zsss",1),
-  kx_mode("kx_mode",1),ky_mode("ky_mode",1),kz_mode("kz_mode",1),
-  xcos("xcos",1,1,1),xsin("xsin",1,1,1),ycos("ycos",1,1,1),
-  ysin("ysin",1,1,1),zcos("zcos",1,1,1),zsin("zsin",1,1,1) {
-  // allocate memory for force registers
+TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
+    : pmy_pack(pp),
+      force("force", 1, 1, 1, 1, 1),
+      mode_amp_real("mode_amp_real", 1, 1),
+      mode_amp_imag("mode_amp_imag", 1, 1),
+      mode_noise_real("mode_noise_real", 1, 1),
+      mode_noise_imag("mode_noise_imag", 1, 1),
+      kx_mode("kx_mode", 1),
+      ky_mode("ky_mode", 1),
+      kz_mode("kz_mode", 1),
+      xcos("xcos", 1, 1, 1),
+      xsin("xsin", 1, 1, 1),
+      ycos("ycos", 1, 1, 1),
+      ysin("ysin", 1, 1, 1),
+      zcos("zcos", 1, 1, 1),
+      zsin("zsin", 1, 1, 1) {
+  // Allocate up to the AMR capacity, matching the evolved fluid arrays.
   int nmb = pmy_pack->nmb_thispack;
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int ncells1 = indcs.nx1 + 2*(indcs.ng);
-  int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
-  int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  int nmb_alloc = std::max(nmb, pmy_pack->pmesh->nmb_maxperrank);
+  auto& indcs = pmy_pack->pmesh->mb_indcs;
+  int ncells1 = indcs.nx1 + 2 * (indcs.ng);
+  int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2 * (indcs.ng)) : 1;
+  int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2 * (indcs.ng)) : 1;
 
-  Kokkos::realloc(force, nmb, 3, ncells3, ncells2, ncells1);
-  Kokkos::realloc(force_tmp, nmb, 3, ncells3, ncells2, ncells1);
-
-  // range of modes including, corresponding to kmin and kmax
-  nlow = pin->GetOrAddInteger("turb_driving", "nlow", 1);
-  nhigh = pin->GetOrAddInteger("turb_driving", "nhigh", 2);
-  // driving type
-  driving_type = pin->GetOrAddInteger("turb_driving", "driving_type", 0);
-  if (driving_type < 0 || driving_type > 2) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "<turb_driving>/driving_type must be 0, 1, or 2" << std::endl;
-    std::exit(EXIT_FAILURE);
+  // Initialize AMR tracking variables
+  current_nmb_ = nmb;
+  Mesh* pm = pmy_pack->pmesh;
+  if (pm->adaptive && pm->pmr != nullptr) {
+    last_nmb_created_ = pm->pmr->nmb_created;
+    last_nmb_deleted_ = pm->pmr->nmb_deleted;
+  } else {
+    last_nmb_created_ = 0;
+    last_nmb_deleted_ = 0;
   }
-  // power-law exponent for isotropic driving
-  expo = pin->GetOrAddReal("turb_driving", "expo", 5.0/3.0);
-  exp_prp = pin->GetOrAddReal("turb_driving", "exp_prp", 5.0/3.0);
-  exp_prl = pin->GetOrAddReal("turb_driving", "exp_prl", 0.0);
-  // energy injection rate
-  dedt = pin->GetOrAddReal("turb_driving", "dedt", 0.0);
-  // correlation time
-  tcorr = pin->GetOrAddReal("turb_driving", "tcorr", 0.0);
 
-  Real nlow_sqr = nlow*nlow;
-  Real nhigh_sqr = nhigh*nhigh;
+  Kokkos::realloc(force, nmb_alloc, 3, ncells3, ncells2, ncells1);
+
+  const std::string block_name = "turb_driving";
+  // Default values are written to restart parameter dumps as text. Use that
+  // same representation from the first cycle so restart comparisons are exact.
+  auto get_serialized_real = [pin, &block_name](const char* name, Real default_value) {
+    pin->GetOrAddReal(block_name, name, default_value);
+    return pin->GetReal(block_name, name);
+  };
+  const std::pair<const char*, const char*> removed_parameters[] = {
+      {"constant_edot", "normalization = edot or normalization = accel_rms"},
+      {"x_turb_scale_height", "sigma_x1"},
+      {"y_turb_scale_height", "sigma_x2"},
+      {"z_turb_scale_height", "sigma_x3"},
+      {"x_turb_center", "center_x1"},
+      {"y_turb_center", "center_x2"},
+      {"z_turb_center", "center_x3"},
+      {"tile_factor", "tile_nx, tile_ny, and tile_nz"},
+      {"tile_driving", "tile_nx, tile_ny, and tile_nz"},
+      {"dt_turb_update", "dt_update"},
+      {"spect_form", "spectrum"}
+  };
+  for (const auto& parameter : removed_parameters) {
+    if (pin->DoesParameterExist(block_name, parameter.first)) {
+      FatalTurbulenceError("removed parameter '" + std::string(parameter.first) +
+                           "'; use '" + std::string(parameter.second) + "'");
+    }
+  }
+
+  // range of modes included, corresponding to kmin and kmax
+  nlow = pin->GetOrAddInteger(block_name, "nlow", 1);
+  nhigh = pin->GetOrAddInteger(block_name, "nhigh", 3);
+  if (nlow < 1 || nhigh < nlow) {
+    FatalTurbulenceError("nlow and nhigh must satisfy 1 <= nlow <= nhigh");
+  }
+  // Peak of power when spectral form is parabolic. Interpret npeak in
+  // tile-local x1 mode units once the tile dimensions have been established.
+  use_npeak = pin->DoesParameterExist(block_name, "npeak");
+  if (use_npeak) {
+    npeak = pin->GetReal(block_name, "npeak");
+    kpeak = 0.0;
+  } else {
+    npeak = 0.0;
+    kpeak = get_serialized_real("kpeak", 4.0 * M_PI);
+  }
+  std::string spectrum_name = pin->GetOrAddString(block_name, "spectrum", "parabolic");
+  if (spectrum_name == "parabolic") {
+    spectrum = TurbSpectrum::parabolic;
+  } else if (spectrum_name == "power_law") {
+    spectrum = TurbSpectrum::power_law;
+  } else {
+    FatalTurbulenceError("spectrum must be parabolic or power_law");
+  }
+  // driving type - 0 for 3D isotropic, 1 for planar (xy) driving
+  driving_type = pin->GetOrAddInteger(block_name, "driving_type", 0);
+  if (driving_type != 0 && driving_type != 1) {
+    FatalTurbulenceError("driving_type must be 0 or 1");
+  }
+  std::string projection_policy_name =
+      pin->GetOrAddString(block_name, "projection_policy", "solenoidal_compressive");
+  if (projection_policy_name == "solenoidal_compressive") {
+    projection_policy = TurbProjectionPolicy::solenoidal_compressive;
+  } else if (projection_policy_name == "mks24_random_unprojected") {
+    projection_policy = TurbProjectionPolicy::mks24_random_unprojected;
+  } else if (projection_policy_name == "mks24_alfvenic_perpendicular") {
+    projection_policy = TurbProjectionPolicy::mks24_alfvenic_perpendicular;
+  } else {
+    FatalTurbulenceError(
+        "projection_policy must be solenoidal_compressive, "
+        "mks24_random_unprojected, or mks24_alfvenic_perpendicular");
+  }
+  if (projection_policy == TurbProjectionPolicy::mks24_random_unprojected &&
+      driving_type != 0) {
+    FatalTurbulenceError("mks24_random_unprojected requires driving_type = 0");
+  }
+  if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular &&
+      driving_type != 1) {
+    FatalTurbulenceError("mks24_alfvenic_perpendicular requires driving_type = 1");
+  }
+  // min kz zero should be 0 for including kz modes and 1 for not including
+  min_kz = pin->GetOrAddInteger(block_name, "min_kz", 0);
+  max_kz = pin->GetOrAddInteger(block_name, "max_kz", nhigh);
+  min_kx = pin->GetOrAddInteger(block_name, "min_kx", 0);
+  max_kx = pin->GetOrAddInteger(block_name, "max_kx", nhigh);
+  min_ky = pin->GetOrAddInteger(block_name, "min_ky", 0);
+  max_ky = pin->GetOrAddInteger(block_name, "max_ky", nhigh);
+  // power-law exponent for isotropic driving
+  expo = get_serialized_real("expo", 5.0 / 3.0);
+  exp_prp = get_serialized_real("exp_prp", 5.0 / 3.0);
+  exp_prl = get_serialized_real("exp_prl", 0.0);
+  physical_k_shell = pin->GetOrAddBoolean(block_name, "physical_k_shell", false);
+  k_shell_unit = get_serialized_real("k_shell_unit", 0.0);
+  isotropic_power_spectrum =
+      pin->GetOrAddBoolean(block_name, "isotropic_power_spectrum", false);
+  if (physical_k_shell && k_shell_unit <= 0.0) {
+    FatalTurbulenceError("k_shell_unit must be positive when physical_k_shell = true");
+  }
+  // correlation time
+  tcorr = get_serialized_real("tcorr", 0.0);
+  if (tcorr < 0.0) {
+    FatalTurbulenceError("tcorr must not be negative");
+  }
+  // update time for the turbulence driver
+  dt_update = get_serialized_real("dt_update", 0.01);
+  // To store fraction of energy in solenoidal modes
+  sol_fraction = get_serialized_real("sol_fraction", 1.0);
+  if (dt_update <= 0.0) {
+    FatalTurbulenceError("dt_update must be greater than zero");
+  }
+  if (sol_fraction < 0.0 || sol_fraction > 1.0) {
+    FatalTurbulenceError("sol_fraction must lie between zero and one");
+  }
+  if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular &&
+      sol_fraction != 1.0) {
+    FatalTurbulenceError(
+        "mks24_alfvenic_perpendicular requires sol_fraction = 1");
+  }
+
+  // random seed for turbulence driving
+  // Non-negative values give reproducible sequences; negative values fall back
+  // to the internal default (seed = 1).
+  rseed = pin->GetOrAddInteger(block_name, "rseed", -1);
+
+  std::string normalization_name =
+      pin->GetOrAddString(block_name, "normalization", "edot");
+  bool has_dedt = pin->DoesParameterExist(block_name, "dedt");
+  bool has_accel_rms = pin->DoesParameterExist(block_name, "accel_rms");
+  if (normalization_name == "edot") {
+    normalization = TurbNormalization::edot;
+    if (!has_dedt) {
+      FatalTurbulenceError("normalization = edot requires dedt");
+    }
+    if (has_accel_rms) {
+      FatalTurbulenceError("accel_rms is not used with normalization = edot");
+    }
+    dedt = pin->GetReal(block_name, "dedt");
+    accel_rms = 0.0;
+    if (dedt < 0.0) {
+      FatalTurbulenceError("dedt must not be negative");
+    }
+  } else if (normalization_name == "accel_rms") {
+    normalization = TurbNormalization::accel_rms;
+    if (!has_accel_rms) {
+      FatalTurbulenceError("normalization = accel_rms requires accel_rms");
+    }
+    if (has_dedt) {
+      FatalTurbulenceError("dedt is not used with normalization = accel_rms");
+    }
+    dedt = 0.0;
+    accel_rms = pin->GetReal(block_name, "accel_rms");
+    if (accel_rms < 0.0) {
+      FatalTurbulenceError("accel_rms must not be negative");
+    }
+  } else {
+    FatalTurbulenceError("normalization must be edot or accel_rms");
+  }
+  record_injected_work =
+      pin->GetOrAddBoolean(block_name, "record_injected_work", false);
+  injected_work = 0.0;
+  injected_work_cycle_start = 0.0;
+
+  sigma_x1 = get_serialized_real("sigma_x1", -1.0);
+  sigma_x2 = get_serialized_real("sigma_x2", -1.0);
+  sigma_x3 = get_serialized_real("sigma_x3", -1.0);
+  center_x1 = get_serialized_real("center_x1", 0.0);
+  center_x2 = get_serialized_real("center_x2", 0.0);
+  center_x3 = get_serialized_real("center_x3", 0.0);
+  std::string localization_name =
+      pin->GetOrAddString(block_name, "localization", "none");
+  if (localization_name == "none") {
+    localization = TurbLocalization::none;
+  } else if (localization_name == "include") {
+    localization = TurbLocalization::include;
+  } else if (localization_name == "exclude") {
+    localization = TurbLocalization::exclude;
+  } else {
+    FatalTurbulenceError("localization must be none, include, or exclude");
+  }
+  bool has_envelope = (sigma_x1 > 0.0 || sigma_x2 > 0.0 || sigma_x3 > 0.0);
+  if (localization == TurbLocalization::none && has_envelope) {
+    FatalTurbulenceError("sigma_x* requires localization = include or exclude");
+  } else if (localization != TurbLocalization::none && !has_envelope) {
+    FatalTurbulenceError("localization requires a positive sigma_x* value");
+  }
+
+  tile_nx = pin->GetOrAddInteger(block_name, "tile_nx", 1);
+  tile_ny = pin->GetOrAddInteger(block_name, "tile_ny", 1);
+  tile_nz = pin->GetOrAddInteger(block_name, "tile_nz", 1);
+
+  domain_x1min = pm->mesh_size.x1min;
+  domain_x2min = pm->mesh_size.x2min;
+  domain_x3min = pm->mesh_size.x3min;
+
+  auto& mesh_indcs_root = pm->mesh_indcs;
+  if (tile_nx < 1 || tile_ny < 1 || tile_nz < 1) {
+    FatalTurbulenceError("tile counts must be greater than or equal to one");
+  }
+
+  if (mesh_indcs_root.nx1 % tile_nx != 0) {
+    FatalTurbulenceError("tile_nx must evenly divide nx1");
+  }
+  if (mesh_indcs_root.nx2 <= 1) {
+    if (tile_ny != 1) {
+      FatalTurbulenceError("tile_ny must be one for a one-dimensional x2 grid");
+    }
+  } else if (mesh_indcs_root.nx2 % tile_ny != 0) {
+    FatalTurbulenceError("tile_ny must evenly divide nx2");
+  }
+  if (mesh_indcs_root.nx3 <= 1) {
+    if (tile_nz != 1) {
+      FatalTurbulenceError("tile_nz must be one for a one-dimensional x3 grid");
+    }
+  } else if (mesh_indcs_root.nx3 % tile_nz != 0) {
+    FatalTurbulenceError("tile_nz must evenly divide nx3");
+  }
+
+  Real lx_global = pm->mesh_size.x1max - pm->mesh_size.x1min;
+  Real ly_global = pm->mesh_size.x2max - pm->mesh_size.x2min;
+  Real lz_global = pm->mesh_size.x3max - pm->mesh_size.x3min;
+
+  tile_lx = lx_global / static_cast<Real>(tile_nx);
+  tile_ly = (tile_ny > 0) ? ly_global / static_cast<Real>(tile_ny) : ly_global;
+  tile_lz = (tile_nz > 0) ? lz_global / static_cast<Real>(tile_nz) : lz_global;
+  if (use_npeak) {
+    kpeak = npeak * 2.0 * M_PI / tile_lx;
+  }
+  if (spectrum == TurbSpectrum::parabolic) {
+    if (nhigh == nlow) {
+      FatalTurbulenceError("parabolic spectrum requires nhigh greater than nlow");
+    }
+    if (use_npeak && (npeak < nlow || npeak > nhigh)) {
+      FatalTurbulenceError("npeak must lie between nlow and nhigh");
+    }
+  }
+
+  inv_tile_lx = (tile_lx > 0.0) ? 1.0 / tile_lx : 0.0;
+  inv_tile_ly = (tile_ly > 0.0) ? 1.0 / tile_ly : 0.0;
+  inv_tile_lz = (tile_lz > 0.0) ? 1.0 / tile_lz : 0.0;
+
+  // decaying/constant energy injection - 1 for decaying, 2 continuously driven
+  turb_flag = pin->GetOrAddInteger(block_name, "turb_flag", 2);
+  if (turb_flag == 1) {
+    tdriv_duration =
+        get_serialized_real("tdriv_duration",
+                            tcorr);  // If not specified, drive for one correlation time
+  } else {
+    tdriv_duration = static_cast<Real>(
+        std::numeric_limits<float>::max());  // For constantly stirred turbulence, set
+                                             // this to float max
+  }
+  tdriv_start = get_serialized_real(
+      "tdriv_start", 0.);  // If not specified, start driving at t=0
+  if (global_variable::my_rank == 0) {
+    std::cout << "Initialising turbulence driving module" << std::endl
+              << " dedt = " << dedt << " tcorr = " << tcorr
+              << " dt_update = " << dt_update << std::endl;
+  }
+  n_turb_updates_yet = 0;
 
   mode_count = 0;
 
+  // Count Cartesian modes
+  const Real dkx = (tile_lx > 0.0) ? 2.0 * M_PI / tile_lx : 0.0;
+  const Real dky = (tile_ly > 0.0) ? 2.0 * M_PI / tile_ly : 0.0;
+  const Real dkz = (tile_lz > 0.0) ? 2.0 * M_PI / tile_lz : 0.0;
   int nkx, nky, nkz;
-  Real nsqr;
-  for (nkx = 0; nkx <= nhigh; nkx++) {
-    for (nky = 0; nky <= nhigh; nky++) {
-      for (nkz = 0; nkz <= nhigh; nkz++) {
+  for (nkx = min_kx; nkx <= max_kx; nkx++) {
+    for (nky = min_ky; nky <= max_ky; nky++) {
+      for (nkz = min_kz; nkz <= max_kz; nkz++) {
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
-        nsqr = 0.0;
-        bool flag_prl = true;
-        if (driving_type == 0) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-        } else if (driving_type == 2) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-        } else if (driving_type == 1) {
-          nsqr = SQR(nkx) + SQR(nky);
-          Real nprlsqr = SQR(nkz);
-          if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-            flag_prl = true;
-          } else {
-            flag_prl = false;
-          }
-        }
-        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
+        if (IsDrivenMode(nkx, nky, nkz, dkx, dky, dkz)) {
           mode_count++;
         }
       }
     }
   }
 
-  Kokkos::realloc(xccc, mode_count);
-  Kokkos::realloc(xccs, mode_count);
-  Kokkos::realloc(xcsc, mode_count);
-  Kokkos::realloc(xcss, mode_count);
-  Kokkos::realloc(xscc, mode_count);
-  Kokkos::realloc(xscs, mode_count);
-  Kokkos::realloc(xssc, mode_count);
-  Kokkos::realloc(xsss, mode_count);
+  if (mode_count == 0) {
+    std::cout << "ERROR: mode_count is 0! Check turbulence driving parameters."
+              << std::endl;
+    std::cout << "  nlow=" << nlow << ", nhigh=" << nhigh << std::endl;
+    std::cout << "  driving_type=" << driving_type << std::endl;
+    exit(EXIT_FAILURE);
+  }
 
-  Kokkos::realloc(yccc, mode_count);
-  Kokkos::realloc(yccs, mode_count);
-  Kokkos::realloc(ycsc, mode_count);
-  Kokkos::realloc(ycss, mode_count);
-  Kokkos::realloc(yscc, mode_count);
-  Kokkos::realloc(yscs, mode_count);
-  Kokkos::realloc(yssc, mode_count);
-  Kokkos::realloc(ysss, mode_count);
+  Kokkos::realloc(mode_amp_real, 3, mode_count);
+  Kokkos::realloc(mode_amp_imag, 3, mode_count);
+  Kokkos::realloc(mode_noise_real, 3, mode_count);
+  Kokkos::realloc(mode_noise_imag, 3, mode_count);
 
-  Kokkos::realloc(zccc, mode_count);
-  Kokkos::realloc(zccs, mode_count);
-  Kokkos::realloc(zcsc, mode_count);
-  Kokkos::realloc(zcss, mode_count);
-  Kokkos::realloc(zscc, mode_count);
-  Kokkos::realloc(zscs, mode_count);
-  Kokkos::realloc(zssc, mode_count);
-  Kokkos::realloc(zsss, mode_count);
-
+  // Allocate Cartesian mode arrays
   Kokkos::realloc(kx_mode, mode_count);
   Kokkos::realloc(ky_mode, mode_count);
   Kokkos::realloc(kz_mode, mode_count);
 
-  Kokkos::realloc(xcos, nmb, mode_count, ncells1);
-  Kokkos::realloc(xsin, nmb, mode_count, ncells1);
-  Kokkos::realloc(ycos, nmb, mode_count, ncells2);
-  Kokkos::realloc(ysin, nmb, mode_count, ncells2);
-  Kokkos::realloc(zcos, nmb, mode_count, ncells3);
-  Kokkos::realloc(zsin, nmb, mode_count, ncells3);
+  Kokkos::realloc(xcos, nmb_alloc, mode_count, ncells1);
+  Kokkos::realloc(xsin, nmb_alloc, mode_count, ncells1);
+  Kokkos::realloc(ycos, nmb_alloc, mode_count, ncells2);
+  Kokkos::realloc(ysin, nmb_alloc, mode_count, ncells2);
+  Kokkos::realloc(zcos, nmb_alloc, mode_count, ncells3);
+  Kokkos::realloc(zsin, nmb_alloc, mode_count, ncells3);
 
   Initialize();
 }
@@ -149,7 +443,30 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
 //----------------------------------------------------------------------------------------
 // destructor
 
-TurbulenceDriver::~TurbulenceDriver() {
+TurbulenceDriver::~TurbulenceDriver() {}
+
+//----------------------------------------------------------------------------------------
+//! \fn IsDrivenMode()
+//  \brief Select a Fourier mode using index-shell or physical-wavenumber bounds.
+
+bool TurbulenceDriver::IsDrivenMode(int nkx, int nky, int nkz, Real dkx, Real dky,
+                                    Real dkz) const {
+  const Real nlow_sqr = SQR(nlow);
+  const Real nhigh_sqr = SQR(nhigh);
+  if (physical_k_shell) {
+    const Real normalized_k2 =
+        (SQR(dkx * nkx) + SQR(dky * nky) + SQR(dkz * nkz)) /
+        SQR(k_shell_unit);
+    return normalized_k2 >= nlow_sqr && normalized_k2 <= nhigh_sqr;
+  }
+  if (driving_type == 0) {
+    const Real nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
+    return nsqr >= nlow_sqr && nsqr <= nhigh_sqr;
+  }
+  const Real nperp_sqr = SQR(nkx) + SQR(nky);
+  const Real nparallel_sqr = SQR(nkz);
+  return nperp_sqr >= nlow_sqr && nperp_sqr <= nhigh_sqr &&
+         nparallel_sqr >= nlow_sqr && nparallel_sqr <= nhigh_sqr;
 }
 
 //----------------------------------------------------------------------------------------
@@ -157,75 +474,66 @@ TurbulenceDriver::~TurbulenceDriver() {
 //  \brief Function to initialize the driver
 
 void TurbulenceDriver::Initialize() {
-  Mesh *pm = pmy_pack->pmesh;
   int nmb = pmy_pack->nmb_thispack;
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int is = indcs.is, ie = indcs.ie;
-  int js = indcs.js, je = indcs.je;
-  int ks = indcs.ks, ke = indcs.ke;
-  int ncells1 = indcs.nx1 + 2*(indcs.ng);
-  int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
-  int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
-  int &nx1 = indcs.nx1;
-  int &nx2 = indcs.nx2;
-  int &nx3 = indcs.nx3;
+  auto& indcs = pmy_pack->pmesh->mb_indcs;
+  int ncells1 = indcs.nx1 + 2 * (indcs.ng);
+  int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2 * (indcs.ng)) : 1;
+  int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2 * (indcs.ng)) : 1;
 
   auto force_ = force;
-  par_for("force_init_pgen",DevExeSpace(),
-          0,nmb-1,0,2,0,ncells3-1,0,ncells2-1,0,ncells1-1,
-  KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
-    force_(m,n,k,j,i) = 0.0;
-  });
+  par_for(
+      "force_init_pgen", DevExeSpace(), 0, nmb - 1, 0, 2, 0, ncells3 - 1, 0, ncells2 - 1,
+      0, ncells1 - 1, KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+        force_(m, n, k, j, i) = 0.0;
+      });
+  for (int dir = 0; dir < 3; ++dir) {
+    for (int n = 0; n < mode_count; ++n) {
+      mode_amp_real.h_view(dir, n) = 0.0;
+      mode_amp_imag.h_view(dir, n) = 0.0;
+      mode_noise_real.h_view(dir, n) = 0.0;
+      mode_noise_imag.h_view(dir, n) = 0.0;
+    }
+  }
+  mode_amp_real.template modify<HostMemSpace>();
+  mode_amp_real.template sync<DevExeSpace>();
+  mode_amp_imag.template modify<HostMemSpace>();
+  mode_amp_imag.template sync<DevExeSpace>();
 
-  rstate.idum = -1;
+  // Initialize RNG state for the Ornstein-Uhlenbeck forcing. Use a negative
+  // idum so that RanSt() takes the initialization branch on first use.
+  if (rseed >= 0) {
+    // Non-negative seeds give reproducible sequences; treat 0 as 1.
+    int seed = (rseed > 0) ? rseed : 1;
+    rstate.idum = -static_cast<decltype(rstate.idum)>(seed);
+  } else {
+    // Negative rseed falls back to internal default seed = 1.
+    rstate.idum = -1;
+  }
+  rstate.iset = 0;
 
   auto kx_mode_ = kx_mode;
   auto ky_mode_ = ky_mode;
   auto kz_mode_ = kz_mode;
 
-  auto xcos_ = xcos;
-  auto xsin_ = xsin;
-  auto ycos_ = ycos;
-  auto ysin_ = ysin;
-  auto zcos_ = zcos;
-  auto zsin_ = zsin;
-
+  // Cartesian plane-wave precomputations
   Real dkx, dky, dkz, kx, ky, kz;
-  Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
-  Real ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
-  Real lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
-  dkx = 2.0*M_PI/lx;
-  dky = 2.0*M_PI/ly;
-  dkz = 2.0*M_PI/lz;
+  Real lx = tile_lx;
+  Real ly = tile_ly;
+  Real lz = tile_lz;
+  dkx = (lx > 0.0) ? 2.0 * M_PI / lx : 0.0;
+  dky = (ly > 0.0) ? 2.0 * M_PI / ly : 0.0;
+  dkz = (lz > 0.0) ? 2.0 * M_PI / lz : 0.0;
 
   int nmode = 0;
   int nkx, nky, nkz;
-  Real nsqr;
-  Real nlow_sqr = nlow*nlow;
-  Real nhigh_sqr = nhigh*nhigh;
-  for (nkx = 0; nkx <= nhigh; nkx++) {
-    for (nky = 0; nky <= nhigh; nky++) {
-      for (nkz = 0; nkz <= nhigh; nkz++) {
+  for (nkx = min_kx; nkx <= max_kx; nkx++) {
+    for (nky = min_ky; nky <= max_ky; nky++) {
+      for (nkz = min_kz; nkz <= max_kz; nkz++) {
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
-        nsqr = 0.0;
-        bool flag_prl = true;
-        if (driving_type == 0) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-        } else if (driving_type == 2) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-        } else if (driving_type == 1) {
-          nsqr = SQR(nkx) + SQR(nky);
-          Real nprlsqr = SQR(nkz);
-          if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-            flag_prl = true;
-          } else {
-            flag_prl = false;
-          }
-        }
-        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
-          kx = dkx*nkx;
-          ky = dky*nky;
-          kz = dkz*nkz;
+        if (IsDrivenMode(nkx, nky, nkz, dkx, dky, dkz)) {
+          kx = dkx * nkx;
+          ky = dky * nky;
+          kz = dkz * nkz;
           kx_mode_.h_view(nmode) = kx;
           ky_mode_.h_view(nmode) = ky;
           kz_mode_.h_view(nmode) = kz;
@@ -242,47 +550,114 @@ void TurbulenceDriver::Initialize() {
   kz_mode_.template modify<HostMemSpace>();
   kz_mode_.template sync<DevExeSpace>();
 
-  auto &size = pmy_pack->pmb->mb_size;
+  BuildBasis();
+}
 
-  par_for("xsin/xcos", DevExeSpace(),0,nmb-1,0,mode_count-1,is,ie,
-  KOKKOS_LAMBDA(int m, int n, int i) {
-    Real &x1min = size.d_view(m).x1min;
-    Real &x1max = size.d_view(m).x1max;
-    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
-    Real k1v = kx_mode_.d_view(n);
-    xsin_(m,n,i) = sin(k1v*x1v);
-    xcos_(m,n,i) = cos(k1v*x1v);
-  });
+//----------------------------------------------------------------------------------------
+//! \fn BuildBasis()
+// \brief Render the geometry-dependent trigonometric basis for current MeshBlocks.
 
-  par_for("ysin/ycos", DevExeSpace(),0,nmb-1,0,mode_count-1,js,je,
-  KOKKOS_LAMBDA(int m, int n, int j) {
-    Real &x2min = size.d_view(m).x2min;
-    Real &x2max = size.d_view(m).x2max;
-    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
-    Real k2v = ky_mode_.d_view(n);
-    ysin_(m,n,j) = sin(k2v*x2v);
-    ycos_(m,n,j) = cos(k2v*x2v);
-    if (ncells2-1 == 0) {
-      ysin_(m,n,j) = 0.0;
-      ycos_(m,n,j) = 1.0;
-    }
-  });
+void TurbulenceDriver::BuildBasis() {
+  int nmb = pmy_pack->nmb_thispack;
+  auto& indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2 * indcs.ng) : 1;
+  int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2 * indcs.ng) : 1;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
 
-  par_for("zsin/zcos", DevExeSpace(),0,nmb-1,0,mode_count-1,ks,ke,
-  KOKKOS_LAMBDA(int m, int n, int k) {
-    Real &x3min = size.d_view(m).x3min;
-    Real &x3max = size.d_view(m).x3max;
-    Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
-    Real k3v = kz_mode_.d_view(n);
-    zsin_(m,n,k) = sin(k3v*x3v);
-    zcos_(m,n,k) = cos(k3v*x3v);
-    if (ncells3-1 == 0) {
-      zsin_(m,n,k) = 0.0;
-      zcos_(m,n,k) = 1.0;
-    }
-  });
+  auto kx_mode_ = kx_mode;
+  auto ky_mode_ = ky_mode;
+  auto kz_mode_ = kz_mode;
+  auto xcos_ = xcos;
+  auto xsin_ = xsin;
+  auto ycos_ = ycos;
+  auto ysin_ = ysin;
+  auto zcos_ = zcos;
+  auto zsin_ = zsin;
 
-  return;
+  auto size_view = pmy_pack->pmb->mb_size;
+  size_view.template modify<HostMemSpace>();
+  size_view.template sync<DevExeSpace>();
+  const int drivingtype = driving_type;
+  const bool retain_z_variation =
+      isotropic_power_spectrum ||
+      projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular;
+  const bool tile_enabled = (tile_nx > 1 || tile_ny > 1 || tile_nz > 1);
+  const int tile_nx_local = tile_nx;
+  const int tile_ny_local = tile_ny;
+  const int tile_nz_local = tile_nz;
+  const Real tile_lx_local = tile_lx;
+  const Real tile_ly_local = tile_ly;
+  const Real tile_lz_local = tile_lz;
+  const Real inv_tile_lx_local = inv_tile_lx;
+  const Real inv_tile_ly_local = inv_tile_ly;
+  const Real inv_tile_lz_local = inv_tile_lz;
+  const Real domain_x1min_local = domain_x1min;
+  const Real domain_x2min_local = domain_x2min;
+  const Real domain_x3min_local = domain_x3min;
+
+  par_for(
+      "turb_basis_x", DevExeSpace(), 0, nmb - 1, 0, mode_count - 1, is, ie,
+      KOKKOS_LAMBDA(int m, int n, int i) {
+        Real x1v = CellCenterX(i - is, nx1, size_view.d_view(m).x1min,
+                               size_view.d_view(m).x1max);
+        Real arg = x1v;
+        if (tile_enabled && tile_nx_local > 1) {
+          Real rel = x1v - domain_x1min_local;
+          int tile_i = static_cast<int>(floor(rel * inv_tile_lx_local));
+          tile_i =
+              (tile_i < 0) ? 0 : ((tile_i >= tile_nx_local) ? tile_nx_local - 1 : tile_i);
+          arg = x1v - (domain_x1min_local + tile_i * tile_lx_local);
+        }
+        xsin_(m, n, i) = sin(kx_mode_.d_view(n) * arg);
+        xcos_(m, n, i) = cos(kx_mode_.d_view(n) * arg);
+      });
+
+  par_for(
+      "turb_basis_y", DevExeSpace(), 0, nmb - 1, 0, mode_count - 1, js, je,
+      KOKKOS_LAMBDA(int m, int n, int j) {
+        Real x2v = CellCenterX(j - js, nx2, size_view.d_view(m).x2min,
+                               size_view.d_view(m).x2max);
+        Real arg = x2v;
+        if (tile_enabled && tile_ny_local > 1) {
+          Real rel = x2v - domain_x2min_local;
+          int tile_j = static_cast<int>(floor(rel * inv_tile_ly_local));
+          tile_j =
+              (tile_j < 0) ? 0 : ((tile_j >= tile_ny_local) ? tile_ny_local - 1 : tile_j);
+          arg = x2v - (domain_x2min_local + tile_j * tile_ly_local);
+        }
+        ysin_(m, n, j) = sin(ky_mode_.d_view(n) * arg);
+        ycos_(m, n, j) = cos(ky_mode_.d_view(n) * arg);
+        if (ncells2 == 1) {
+          ysin_(m, n, j) = 0.0;
+          ycos_(m, n, j) = 1.0;
+        }
+      });
+
+  par_for(
+      "turb_basis_z", DevExeSpace(), 0, nmb - 1, 0, mode_count - 1, ks, ke,
+      KOKKOS_LAMBDA(int m, int n, int k) {
+        Real x3v = CellCenterX(k - ks, nx3, size_view.d_view(m).x3min,
+                               size_view.d_view(m).x3max);
+        Real arg = x3v;
+        if (tile_enabled && tile_nz_local > 1) {
+          Real rel = x3v - domain_x3min_local;
+          int tile_k = static_cast<int>(floor(rel * inv_tile_lz_local));
+          tile_k =
+              (tile_k < 0) ? 0 : ((tile_k >= tile_nz_local) ? tile_nz_local - 1 : tile_k);
+          arg = x3v - (domain_x3min_local + tile_k * tile_lz_local);
+        }
+        zsin_(m, n, k) = sin(kz_mode_.d_view(n) * arg);
+        zcos_(m, n, k) = cos(kz_mode_.d_view(n) * arg);
+        if (ncells3 == 1 || (drivingtype == 1 && !retain_z_variation)) {
+          zsin_(m, n, k) = 0.0;
+          zcos_(m, n, k) = 1.0;
+        }
+      });
 }
 
 //----------------------------------------------------------------------------------------
@@ -293,461 +668,330 @@ void TurbulenceDriver::Initialize() {
 
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
-  auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, start);
-  auto id_add = tl->AddTask(&TurbulenceDriver::AddForcing, this, id_init);
+  //  We check for mesh changes, then initialize modes and update the forcing
+  auto id_resize = tl->AddTask(&TurbulenceDriver::EnsureBasisSize, this, start);
+  auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
+  auto id_add = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
   return;
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn  void IncludeAddForcingTask
+//! \fn  void IncludeForcingTasks
 //  \brief includes task in the stage_run task list for adding random forcing to fluid
 //  as an explicit source terms in each stage of integrator
 //  Called by MeshBlockPack::AddPhysics() function
 
 void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start) {
-  // These must be inserted after update task, but before send_u
+  // These must be inserted after update task, but before the source terms
+  // We apply the forcing in each step of the time integration,
+  // note that we do not update the forcing in each RK stage
   if (pmy_pack->pionn == nullptr) {
     if (pmy_pack->phydro != nullptr) {
       auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->phydro->id.flux, pmy_pack->phydro->id.rkupdt);
+                               pmy_pack->phydro->id.rkupdt, pmy_pack->phydro->id.srctrms);
     }
     if (pmy_pack->pmhd != nullptr) {
       auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->pmhd->id.flux, pmy_pack->pmhd->id.rkupdt);
+                               pmy_pack->pmhd->id.rkupdt, pmy_pack->pmhd->id.srctrms);
     }
   } else {
     auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                            pmy_pack->pionn->id.n_flux, pmy_pack->pionn->id.n_rkupdt);
+                             pmy_pack->pionn->id.n_rkupdt, pmy_pack->pionn->id.n_flux);
   }
-
   return;
 }
 
 //----------------------------------------------------------------------------------------
 //! \fn InitializeModes()
-// \brief Initializes driving, and so is only executed once at start of calc.
-// Cannot be included in constructor since (it seems) Kokkos::par_for not allowed in cons.
+// \brief Evolve the modal OU state to the update index required at the current time.
 
-TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
-  Mesh *pm = pmy_pack->pmesh;
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int is = indcs.is, ie = indcs.ie;
-  int js = indcs.js, je = indcs.je;
-  int ks = indcs.ks, ke = indcs.ke;
-  int &nx1 = indcs.nx1;
-  int &nx2 = indcs.nx2;
-  int &nx3 = indcs.nx3;
-  auto &gindcs = pm->mesh_indcs;
-  int &gnx1 = gindcs.nx1;
-  int &gnx2 = gindcs.nx2;
-  int &gnx3 = gindcs.nx3;
-
-  // Now compute new force using new random amplitudes and phases
-
-  // Zero out new force array
-  auto force_tmp_ = force_tmp;
-  int &nmb = pmy_pack->nmb_thispack;
-  par_for("force_init", DevExeSpace(),0,nmb-1,0,2,ks,ke,js,je,is,ie,
-  KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
-    force_tmp_(m,n,k,j,i) = 0.0;
-  });
-
-  int nlow_sqr = SQR(nlow);
-  int nhigh_sqr = SQR(nhigh);
-  auto mode_count_ = mode_count;
-
-  auto xccc_ = xccc;
-  auto xccs_ = xccs;
-  auto xcsc_ = xcsc;
-  auto xcss_ = xcss;
-  auto xscc_ = xscc;
-  auto xscs_ = xscs;
-  auto xssc_ = xssc;
-  auto xsss_ = xsss;
-
-  auto yccc_ = yccc;
-  auto yccs_ = yccs;
-  auto ycsc_ = ycsc;
-  auto ycss_ = ycss;
-  auto yscc_ = yscc;
-  auto yscs_ = yscs;
-  auto yssc_ = yssc;
-  auto ysss_ = ysss;
-
-  auto zccc_ = zccc;
-  auto zccs_ = zccs;
-  auto zcsc_ = zcsc;
-  auto zcss_ = zcss;
-  auto zscc_ = zscc;
-  auto zscs_ = zscs;
-  auto zssc_ = zssc;
-  auto zsss_ = zsss;
-
-  Real dkx, dky, dkz, kx, ky, kz;
-  Real iky, ikz;
-  Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
-  Real ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
-  Real lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
-  dkx = 2.0*M_PI/lx;
-  dky = 2.0*M_PI/ly;
-  dkz = 2.0*M_PI/lz;
-
-  Real &ex = expo;
-  Real &ex_prp = exp_prp;
-  Real &ex_prl = exp_prl;
-  Real norm, kprl, kprp, kiso;
-
-  int nmode = 0;
-  int nkx, nky, nkz, nsqr;
-  for (nkx = 0; nkx <= nhigh; nkx++) {
-    for (nky = 0; nky <= nhigh; nky++) {
-      for (nkz = 0; nkz <= nhigh; nkz++) {
-        if (nkx == 0 && nky == 0 && nkz == 0) continue;
-        norm = 0.0;
-        nsqr = 0.0;
-        bool flag_prl = true;
-        if (driving_type == 0) {
-          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-        } else if (driving_type == 1) {
-          nsqr = SQR(nkx) + SQR(nky);
-          Real nprlsqr = SQR(nkz);
-          if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-            flag_prl = true;
-          } else {
-            flag_prl = false;
-          }
-        }
-        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
-          kx = dkx*nkx;
-          ky = dky*nky;
-          kz = dkz*nkz;
-
-          // Generate Fourier amplitudes
-          if (driving_type == 0) {
-            kiso = sqrt(SQR(kx) + SQR(ky) + SQR(kz));
-            if (kiso > 1e-16) {
-              norm = 1.0/pow(kiso,(ex+2.0)/2.0);
-            } else {
-              norm = 0.0;
-            }
-            if (nkz != 0) {
-              ikz = 1.0/(dkz*((Real) nkz));
-
-              xccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xccs_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xcsc_.h_view(nmode) = (nky==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              xcss_.h_view(nmode) = (nky==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              xscc_.h_view(nmode) = (nkx==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              xscs_.h_view(nmode) = (nkx==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              xssc_.h_view(nmode) = (nkx==0 || nky==0) ? 0.0 : RanGaussianSt(&(rstate));
-              xsss_.h_view(nmode) = (nkx==0 || nky==0) ? 0.0 : RanGaussianSt(&(rstate));
-
-              yccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              yccs_.h_view(nmode) = RanGaussianSt(&(rstate));
-              ycsc_.h_view(nmode) = (nky==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              ycss_.h_view(nmode) = (nky==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              yscc_.h_view(nmode) = (nkx==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              yscs_.h_view(nmode) = (nkx==0)           ? 0.0 : RanGaussianSt(&(rstate));
-              yssc_.h_view(nmode) = (nkx==0 || nky==0) ? 0.0 : RanGaussianSt(&(rstate));
-              ysss_.h_view(nmode) = (nkx==0 || nky==0) ? 0.0 : RanGaussianSt(&(rstate));
-
-              // imcompressibility
-              zccc_.h_view(nmode) =  ikz*( kx*xscs_.h_view(nmode)+ky*ycss_.h_view(nmode));
-              zccs_.h_view(nmode) = -ikz*( kx*xscc_.h_view(nmode)+ky*ycsc_.h_view(nmode));
-              zcsc_.h_view(nmode) =  ikz*( kx*xsss_.h_view(nmode)-ky*yccs_.h_view(nmode));
-              zcss_.h_view(nmode) =  ikz*(-kx*xssc_.h_view(nmode)+ky*yccc_.h_view(nmode));
-              zscc_.h_view(nmode) =  ikz*(-kx*xccs_.h_view(nmode)+ky*ysss_.h_view(nmode));
-              zscs_.h_view(nmode) =  ikz*( kx*xccc_.h_view(nmode)-ky*yssc_.h_view(nmode));
-              zssc_.h_view(nmode) = -ikz*( kx*xcss_.h_view(nmode)+ky*yscs_.h_view(nmode));
-              zsss_.h_view(nmode) =  ikz*( kx*xcsc_.h_view(nmode)+ky*yscc_.h_view(nmode));
-            } else if (nky != 0) {  // kz == 0
-              iky = 1.0/(dky*((Real) nky));
-
-              xccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xcsc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xscc_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-              xssc_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-              xccs_.h_view(nmode) = 0.0;
-              xscs_.h_view(nmode) = 0.0;
-              xcss_.h_view(nmode) = 0.0;
-              xsss_.h_view(nmode) = 0.0;
-
-              zccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              zcsc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              zscc_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-              zssc_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-              zccs_.h_view(nmode) = 0.0;
-              zcss_.h_view(nmode) = 0.0;
-              zscs_.h_view(nmode) = 0.0;
-              zsss_.h_view(nmode) = 0.0;
-
-              // incompressibility
-              yccc_.h_view(nmode) =  iky*kx*xssc_.h_view(nmode);
-              ycsc_.h_view(nmode) = -iky*kx*xscc_.h_view(nmode);
-              yscc_.h_view(nmode) = -iky*kx*xcsc_.h_view(nmode);
-              yssc_.h_view(nmode) =  iky*kx*xccc_.h_view(nmode);
-              yccs_.h_view(nmode) = 0.0;
-              ycss_.h_view(nmode) = 0.0;
-              yscs_.h_view(nmode) = 0.0;
-              ysss_.h_view(nmode) = 0.0;
-            } else {  // kz == ky == 0, kx != 0 by initial if statement
-              zccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              zscc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              zcsc_.h_view(nmode) = 0.0;
-              zssc_.h_view(nmode) = 0.0;
-              zccs_.h_view(nmode) = 0.0;
-              zcss_.h_view(nmode) = 0.0;
-              zscs_.h_view(nmode) = 0.0;
-              zsss_.h_view(nmode) = 0.0;
-
-              yccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              yscc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              ycsc_.h_view(nmode) = 0.0;
-              yssc_.h_view(nmode) = 0.0;
-              yccs_.h_view(nmode) = 0.0;
-              ycss_.h_view(nmode) = 0.0;
-              yscs_.h_view(nmode) = 0.0;
-              ysss_.h_view(nmode) = 0.0;
-
-              // incompressibility
-              xccc_.h_view(nmode) = 0.0;
-              xscc_.h_view(nmode) = 0.0;
-              xcsc_.h_view(nmode) = 0.0;
-              xssc_.h_view(nmode) = 0.0;
-              xccs_.h_view(nmode) = 0.0;
-              xscs_.h_view(nmode) = 0.0;
-              xcss_.h_view(nmode) = 0.0;
-              xsss_.h_view(nmode) = 0.0;
-            }
-          } else if (driving_type == 2) {
-            kiso = sqrt(SQR(kx) + SQR(ky) + SQR(kz));
-            if (kiso > 1e-16) {
-              norm = 1.0/pow(kiso,(ex+2.0)/2.0);
-            } else {
-              norm = 0.0;
-            }
-            auto rand_coeff = [&](bool sx, bool sy, bool sz) {
-              if ((sx && nkx == 0) || (sy && nky == 0) || (sz && nkz == 0)) {
-                return 0.0;
-              }
-              return RanGaussianSt(&(rstate));
-            };
-            xccc_.h_view(nmode) = rand_coeff(false, false, false);
-            xccs_.h_view(nmode) = rand_coeff(false, false, true);
-            xcsc_.h_view(nmode) = rand_coeff(false, true, false);
-            xcss_.h_view(nmode) = rand_coeff(false, true, true);
-            xscc_.h_view(nmode) = rand_coeff(true, false, false);
-            xscs_.h_view(nmode) = rand_coeff(true, false, true);
-            xssc_.h_view(nmode) = rand_coeff(true, true, false);
-            xsss_.h_view(nmode) = rand_coeff(true, true, true);
-
-            yccc_.h_view(nmode) = rand_coeff(false, false, false);
-            yccs_.h_view(nmode) = rand_coeff(false, false, true);
-            ycsc_.h_view(nmode) = rand_coeff(false, true, false);
-            ycss_.h_view(nmode) = rand_coeff(false, true, true);
-            yscc_.h_view(nmode) = rand_coeff(true, false, false);
-            yscs_.h_view(nmode) = rand_coeff(true, false, true);
-            yssc_.h_view(nmode) = rand_coeff(true, true, false);
-            ysss_.h_view(nmode) = rand_coeff(true, true, true);
-
-            zccc_.h_view(nmode) = rand_coeff(false, false, false);
-            zccs_.h_view(nmode) = rand_coeff(false, false, true);
-            zcsc_.h_view(nmode) = rand_coeff(false, true, false);
-            zcss_.h_view(nmode) = rand_coeff(false, true, true);
-            zscc_.h_view(nmode) = rand_coeff(true, false, false);
-            zscs_.h_view(nmode) = rand_coeff(true, false, true);
-            zssc_.h_view(nmode) = rand_coeff(true, true, false);
-            zsss_.h_view(nmode) = rand_coeff(true, true, true);
-          } else if (driving_type == 1) {
-            kprl = sqrt(SQR(kx));
-            kprp = sqrt(SQR(ky) + SQR(kz));
-            if (kprl > 1e-16 && kprp > 1e-16) {
-              norm = 1.0/pow(kprp,(ex_prp+1.0)/2.0)/pow(kprl,ex_prl/2.0);
-            } else {
-              norm = 0.0;
-            }
-
-            if (nky != 0) {
-              iky = 1.0/(dky*((Real) nky));
-
-              xccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xccs_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xcsc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xcss_.h_view(nmode) = RanGaussianSt(&(rstate));
-              xscc_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-              xscs_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-              xssc_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-              xsss_.h_view(nmode) = (nkx==0) ? 0.0 : RanGaussianSt(&(rstate));
-
-              // incompressibility
-              yccc_.h_view(nmode) =  iky*(kx*xssc_.h_view(nmode));
-              yccs_.h_view(nmode) =  iky*(kx*xsss_.h_view(nmode));
-              ycsc_.h_view(nmode) = -iky*(kx*xscc_.h_view(nmode));
-              ycss_.h_view(nmode) = -iky*(kx*xscs_.h_view(nmode));
-              yscc_.h_view(nmode) = -iky*(kx*xcsc_.h_view(nmode));
-              yscs_.h_view(nmode) = -iky*(kx*xcss_.h_view(nmode));
-              yssc_.h_view(nmode) =  iky*(kx*xccc_.h_view(nmode));
-              ysss_.h_view(nmode) =  iky*(kx*xccs_.h_view(nmode));
-
-              zccc_.h_view(nmode) = 0.0;
-              zccs_.h_view(nmode) = 0.0;
-              zcsc_.h_view(nmode) = 0.0;
-              zcss_.h_view(nmode) = 0.0;
-              zscc_.h_view(nmode) = 0.0;
-              zscs_.h_view(nmode) = 0.0;
-              zssc_.h_view(nmode) = 0.0;
-              zsss_.h_view(nmode) = 0.0;
-            } else {  // ky == 0
-              yccc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              yscc_.h_view(nmode) = RanGaussianSt(&(rstate));
-              ycsc_.h_view(nmode) = 0.0;
-              yssc_.h_view(nmode) = 0.0;
-              yccs_.h_view(nmode) = 0.0;
-              ycss_.h_view(nmode) = 0.0;
-              yscs_.h_view(nmode) = 0.0;
-              ysss_.h_view(nmode) = 0.0;
-
-              // incompressibility
-              xccc_.h_view(nmode) = 0.0;
-              xscc_.h_view(nmode) = 0.0;
-              xcsc_.h_view(nmode) = 0.0;
-              xssc_.h_view(nmode) = 0.0;
-              xccs_.h_view(nmode) = 0.0;
-              xscs_.h_view(nmode) = 0.0;
-              xcss_.h_view(nmode) = 0.0;
-              xsss_.h_view(nmode) = 0.0;
-
-              zccc_.h_view(nmode) = 0.0;
-              zscc_.h_view(nmode) = 0.0;
-              zcsc_.h_view(nmode) = 0.0;
-              zssc_.h_view(nmode) = 0.0;
-              zccs_.h_view(nmode) = 0.0;
-              zcss_.h_view(nmode) = 0.0;
-              zscs_.h_view(nmode) = 0.0;
-              zsss_.h_view(nmode) = 0.0;
-            }
-          }
-          // normalization
-          xccc_.h_view(nmode) *= norm;
-          xscc_.h_view(nmode) *= norm;
-          xcsc_.h_view(nmode) *= norm;
-          xssc_.h_view(nmode) *= norm;
-          xccs_.h_view(nmode) *= norm;
-          xscs_.h_view(nmode) *= norm;
-          xcss_.h_view(nmode) *= norm;
-          xsss_.h_view(nmode) *= norm;
-          yccc_.h_view(nmode) *= norm;
-          yscc_.h_view(nmode) *= norm;
-          ycsc_.h_view(nmode) *= norm;
-          yssc_.h_view(nmode) *= norm;
-          yccs_.h_view(nmode) *= norm;
-          yscs_.h_view(nmode) *= norm;
-          ycss_.h_view(nmode) *= norm;
-          ysss_.h_view(nmode) *= norm;
-          zccc_.h_view(nmode) *= norm;
-          zscc_.h_view(nmode) *= norm;
-          zcsc_.h_view(nmode) *= norm;
-          zssc_.h_view(nmode) *= norm;
-          zccs_.h_view(nmode) *= norm;
-          zscs_.h_view(nmode) *= norm;
-          zcss_.h_view(nmode) *= norm;
-          zsss_.h_view(nmode) *= norm;
-
-          nmode++;
-        }
-      }
-    }
+TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
+  if (pmy_pack == nullptr) {
+    return TaskStatus::complete;
   }
 
-  xccc_.template modify<HostMemSpace>();
-  xccc_.template sync<DevExeSpace>();
-  xccs_.template modify<HostMemSpace>();
-  xccs_.template sync<DevExeSpace>();
-  xcsc_.template modify<HostMemSpace>();
-  xcsc_.template sync<DevExeSpace>();
-  xcss_.template modify<HostMemSpace>();
-  xcss_.template sync<DevExeSpace>();
-  xscc_.template modify<HostMemSpace>();
-  xscc_.template sync<DevExeSpace>();
-  xscs_.template modify<HostMemSpace>();
-  xscs_.template sync<DevExeSpace>();
-  xssc_.template modify<HostMemSpace>();
-  xssc_.template sync<DevExeSpace>();
-  xsss_.template modify<HostMemSpace>();
-  xsss_.template sync<DevExeSpace>();
+  Mesh* pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    return TaskStatus::complete;
+  }
 
-  yccc_.template modify<HostMemSpace>();
-  yccc_.template sync<DevExeSpace>();
-  yccs_.template modify<HostMemSpace>();
-  yccs_.template sync<DevExeSpace>();
-  ycsc_.template modify<HostMemSpace>();
-  ycsc_.template sync<DevExeSpace>();
-  ycss_.template modify<HostMemSpace>();
-  ycss_.template sync<DevExeSpace>();
-  yscc_.template modify<HostMemSpace>();
-  yscc_.template sync<DevExeSpace>();
-  yscs_.template modify<HostMemSpace>();
-  yscs_.template sync<DevExeSpace>();
-  yssc_.template modify<HostMemSpace>();
-  yssc_.template sync<DevExeSpace>();
-  ysss_.template modify<HostMemSpace>();
-  ysss_.template sync<DevExeSpace>();
+  Real current_time = pm->time;
+  if (current_time < tdriv_start) return TaskStatus::complete;
+  Real t_since_start = current_time - tdriv_start;
+  int n_turb_updates_reqd = static_cast<int>(t_since_start / dt_update) + 1;
 
-  zccc_.template modify<HostMemSpace>();
-  zccc_.template sync<DevExeSpace>();
-  zccs_.template modify<HostMemSpace>();
-  zccs_.template sync<DevExeSpace>();
-  zcsc_.template modify<HostMemSpace>();
-  zcsc_.template sync<DevExeSpace>();
-  zcss_.template modify<HostMemSpace>();
-  zcss_.template sync<DevExeSpace>();
-  zscc_.template modify<HostMemSpace>();
-  zscc_.template sync<DevExeSpace>();
-  zscs_.template modify<HostMemSpace>();
-  zscs_.template sync<DevExeSpace>();
-  zssc_.template modify<HostMemSpace>();
-  zssc_.template sync<DevExeSpace>();
-  zsss_.template modify<HostMemSpace>();
-  zsss_.template sync<DevExeSpace>();
+  auto mode_amp_real_ = mode_amp_real;
+  auto mode_amp_imag_ = mode_amp_imag;
+  auto mode_noise_real_ = mode_noise_real;
+  auto mode_noise_imag_ = mode_noise_imag;
 
+  Real dkx, dky, dkz, kx, ky, kz;
+  Real lx = tile_lx;
+  Real ly = tile_ly;
+  Real lz = tile_lz;
+  dkx = (lx > 0.0) ? 2.0 * M_PI / lx : 0.0;
+  dky = (ly > 0.0) ? 2.0 * M_PI / ly : 0.0;
+  dkz = (lz > 0.0) ? 2.0 * M_PI / lz : 0.0;
+
+  Real& ex = expo;
+  Real& ex_prp = exp_prp;
+  Real& ex_prl = exp_prl;
+  const TurbProjectionPolicy projection_policy_ = projection_policy;
+  Real norm, kprl, kprp, kiso;
+  Real khigh = nhigh * fmax(fmax(dkx, dky), dkz);
+  Real klow = nlow * fmin(fmin(dkx, dky), dkz);
+  Real parab_prefact = 0.0;
+  if (spectrum == TurbSpectrum::parabolic) {
+    parab_prefact = -4.0 / pow(khigh - klow, 2.0);
+  }
+  Real& k_peak = kpeak;
+
+  // Now compute new force using new random amplitudes and phases
+  // Advance modal state only when another configured OU update boundary is reached.
+
+  if ((t_since_start < tdriv_duration) ||
+      turb_flag != 1) {  // Update forcing if continuous or t<tdriv_duration
+    for (int i_turb_update = n_turb_updates_yet; i_turb_update < n_turb_updates_reqd;
+         i_turb_update++) {
+      int no_dir = 3;
+      int nmode = 0;
+
+      // Cartesian mode generation
+      int nkx, nky, nkz;
+
+      for (nkx = min_kx; nkx <= max_kx; nkx++) {
+        for (nky = min_ky; nky <= max_ky; nky++) {
+          for (nkz = min_kz; nkz <= max_kz; nkz++) {
+            if (nkx == 0 && nky == 0 && nkz == 0) continue;
+            norm = 0.0;
+            if (IsDrivenMode(nkx, nky, nkz, dkx, dky, dkz)) {
+              kx = dkx * nkx;
+              ky = dky * nky;
+              kz = dkz * nkz;
+
+              Real k[3] = {kx, ky, kz};
+              // Always define kiso; used below for the solenoidal/compressive split
+              kiso = sqrt(SQR(kx) + SQR(ky) + SQR(kz));
+
+              // Generate Fourier amplitudes
+
+              if (driving_type == 0) {
+                if (kiso > 1e-16) {
+                  if (spectrum == TurbSpectrum::power_law) {
+                    norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);  // power-law driving
+                  } else if (spectrum == TurbSpectrum::parabolic) {
+                    norm = fabs(parab_prefact * pow(kiso - k_peak, 2.0) +
+                                1.0);  // parabola in k-space
+                    norm = pow(norm, 0.5) * pow(k_peak / kiso, (no_dir - 1) / 2.0);
+                  } else {
+                    norm = 0.0;
+                  }
+                } else {
+                  norm = 0.0;
+                }
+              } else if (driving_type == 1) {
+                no_dir = 2;
+                if (projection_policy_ ==
+                    TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
+                  // MKS24 paper setup: B0 || z, so k_parallel = kz and
+                  // k_perp = (kx, ky), even though retained modes vary along z.
+                  kprl = fabs(kz);
+                  kprp = sqrt(SQR(kx) + SQR(ky));
+                } else {
+                  // Preserve the historical generic planar-driver convention.
+                  kprl = fabs(kx);
+                  kprp = sqrt(SQR(ky) + SQR(kz));
+                }
+                if (isotropic_power_spectrum && kiso > 1e-16) {
+                  norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);
+                } else if (kprl > 1e-16 && kprp > 1e-16) {
+                  if (spectrum == TurbSpectrum::power_law) {
+                    norm =
+                        1.0 / pow(kprp, (ex_prp + 1.0) / 2.0) / pow(kprl, ex_prl / 2.0);
+                  } else if (spectrum == TurbSpectrum::parabolic) {
+                    norm = fabs(parab_prefact * pow(kprp - k_peak, 2.0) +
+                                1.0);  // parabola in kperp-space
+                    norm = pow(norm, 0.5) * pow(k_peak / kprp, (no_dir - 1) / 2.0);
+                  }
+                } else {
+                  norm = 0.0;
+                }
+              }
+              // Generate complex Fourier amplitudes for this mode:
+              //   amp_real_dir (real part) and amp_imag_dir (imaginary part),
+              // scaled by norm. Also accumulate k·Re(A) and k·Im(A) to construct
+              // solenoidal/compressive projections below.
+              Real k_dot_amp_imag = 0.0;
+              Real k_dot_amp_real = 0.0;
+
+              for (int dir = 0; dir < 3; dir++) {
+                mode_noise_real_.h_view(dir, nmode) = 0.0;
+                mode_noise_imag_.h_view(dir, nmode) = 0.0;
+              }
+              for (int dir = 0; dir < no_dir; dir++) {
+                Real amp_real_dir = norm * RanGaussianSt(&(rstate));
+                Real amp_imag_dir = norm * RanGaussianSt(&(rstate));
+                mode_noise_real_.h_view(dir, nmode) = amp_real_dir;
+                mode_noise_imag_.h_view(dir, nmode) = amp_imag_dir;
+
+                k_dot_amp_imag += k[dir] * amp_imag_dir;  // k·Im(A)
+                k_dot_amp_real += k[dir] * amp_real_dir;  // k·Re(A)
+              }
+
+              // The generic policy preserves the historical full-k
+              // solenoidal/compressive blend. MKS24 random forcing retains
+              // all three independent amplitudes without projection. MKS24
+              // Alfvenic forcing projects only its x/y amplitudes against
+              // k_perp = (kx, ky), while retaining kz phase variation.
+              if (norm > 0. &&
+                  projection_policy_ !=
+                      TurbProjectionPolicy::mks24_random_unprojected) {
+                Real projection_norm_sqr = SQR(kiso);
+                if (projection_policy_ ==
+                    TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
+                  projection_norm_sqr = SQR(kx) + SQR(ky);
+                }
+                for (int dir = 0; dir < no_dir; dir++) {
+                  // Compressible (longitudinal) projections:
+                  //   A_div = k (k·Re(A)) / |k|^2,  B_div = k (k·Im(A)) / |k|^2
+                  Real A_div = 0.0;
+                  Real B_div = 0.0;
+                  if (projection_norm_sqr > 1.0e-32) {
+                    A_div = k[dir] * k_dot_amp_real / projection_norm_sqr;
+                    B_div = k[dir] * k_dot_amp_imag / projection_norm_sqr;
+                  }
+
+                  // Solenoidal parts (divergence-free):
+                  //   A_sol = A - A_div,  B_sol = B - B_div
+                  Real A_sol = mode_noise_real_.h_view(dir, nmode) - A_div;
+                  Real B_sol = mode_noise_imag_.h_view(dir, nmode) - B_div;
+
+                  // Blend in amplitude-space:
+                  //   sol_fraction = 1.0 -> purely solenoidal,
+                  //   sol_fraction = 0.0 -> purely compressive.
+                  mode_noise_real_.h_view(dir, nmode) =
+                      sol_fraction * A_sol + (1.0 - sol_fraction) * A_div;
+                  mode_noise_imag_.h_view(dir, nmode) =
+                      sol_fraction * B_sol + (1.0 - sol_fraction) * B_div;
+                }
+              }
+
+              nmode++;
+            }
+          }
+        }
+      }
+
+      mode_noise_real_.template modify<HostMemSpace>();
+      mode_noise_imag_.template modify<HostMemSpace>();
+
+      Real fcorr, gcorr;
+      if ((tcorr <= 1e-6) || (i_turb_update == 0)) {  // use whitenoise
+        fcorr = 0.0;
+        gcorr = 1.0;
+      } else {
+        fcorr = std::exp(-dt_update / tcorr);
+        gcorr = std::sqrt(1.0 - fcorr * fcorr);
+      }
+      // Modal coefficients are the OU state. Rendering them on another mesh therefore
+      // cannot change the random process or consume additional random numbers.
+      for (int dir = 0; dir < 3; ++dir) {
+        for (int n = 0; n < mode_count; ++n) {
+          mode_amp_real_.h_view(dir, n) =
+              fcorr * mode_amp_real_.h_view(dir, n) +
+              gcorr * mode_noise_real_.h_view(dir, n);
+          mode_amp_imag_.h_view(dir, n) =
+              fcorr * mode_amp_imag_.h_view(dir, n) +
+              gcorr * mode_noise_imag_.h_view(dir, n);
+        }
+      }
+      mode_amp_real_.template modify<HostMemSpace>();
+      mode_amp_real_.template sync<DevExeSpace>();
+      mode_amp_imag_.template modify<HostMemSpace>();
+      mode_amp_imag_.template sync<DevExeSpace>();
+    }  // end of for loop over i_turb_update
+  }
+  n_turb_updates_yet = n_turb_updates_reqd;
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn RenderForce
+//  \brief render the authoritative modal OU state on the current MeshBlock geometry
+
+void TurbulenceDriver::RenderForce() {
+  auto& indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, ie = indcs.ie;
+  const int js = indcs.js, je = indcs.je;
+  const int ks = indcs.ks, ke = indcs.ke;
+  const int nmb = pmy_pack->nmb_thispack;
+  auto force_ = force;
+  auto mode_amp_real_ = mode_amp_real;
+  auto mode_amp_imag_ = mode_amp_imag;
   auto xcos_ = xcos;
   auto xsin_ = xsin;
   auto ycos_ = ycos;
   auto ysin_ = ysin;
   auto zcos_ = zcos;
   auto zsin_ = zsin;
+  const int mode_count_ = mode_count;
 
-  for (int n=0; n<mode_count_; n++) {
-    par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      force_tmp_(m,0,k,j,i) += xccc_.d_view(n)*xcos_(m,n,i)*ycos_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,0,k,j,i) += xccs_.d_view(n)*xcos_(m,n,i)*ycos_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,0,k,j,i) += xcsc_.d_view(n)*xcos_(m,n,i)*ysin_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,0,k,j,i) += xcss_.d_view(n)*xcos_(m,n,i)*ysin_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,0,k,j,i) += xscc_.d_view(n)*xsin_(m,n,i)*ycos_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,0,k,j,i) += xscs_.d_view(n)*xsin_(m,n,i)*ycos_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,0,k,j,i) += xssc_.d_view(n)*xsin_(m,n,i)*ysin_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,0,k,j,i) += xsss_.d_view(n)*xsin_(m,n,i)*ysin_(m,n,j)*zsin_(m,n,k);
+  mode_amp_real_.template sync<DevExeSpace>();
+  mode_amp_imag_.template sync<DevExeSpace>();
+  par_for(
+      "turb_force_zero", DevExeSpace(), 0, nmb - 1, 0, 2, ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(int m, int dir, int k, int j, int i) {
+        force_(m, dir, k, j, i) = 0.0;
+      });
+  par_for(
+      "turb_force_render", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        for (int n = 0; n < mode_count_; ++n) {
+          Real forc_real =
+              (xcos_(m, n, i) * ycos_(m, n, j) - xsin_(m, n, i) * ysin_(m, n, j)) *
+                  zcos_(m, n, k) -
+              (xsin_(m, n, i) * ycos_(m, n, j) + xcos_(m, n, i) * ysin_(m, n, j)) *
+                  zsin_(m, n, k);
+          Real forc_imag =
+              (ycos_(m, n, j) * zsin_(m, n, k) + ysin_(m, n, j) * zcos_(m, n, k)) *
+                  xcos_(m, n, i) +
+              (ycos_(m, n, j) * zcos_(m, n, k) - ysin_(m, n, j) * zsin_(m, n, k)) *
+                  xsin_(m, n, i);
+          for (int dir = 0; dir < 3; ++dir) {
+            force_(m, dir, k, j, i) += mode_amp_real_.d_view(dir, n) * forc_real -
+                                        mode_amp_imag_.d_view(dir, n) * forc_imag;
+          }
+        }
+      });
+}
 
-      force_tmp_(m,1,k,j,i) += yccc_.d_view(n)*xcos_(m,n,i)*ycos_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,1,k,j,i) += yccs_.d_view(n)*xcos_(m,n,i)*ycos_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,1,k,j,i) += ycsc_.d_view(n)*xcos_(m,n,i)*ysin_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,1,k,j,i) += ycss_.d_view(n)*xcos_(m,n,i)*ysin_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,1,k,j,i) += yscc_.d_view(n)*xsin_(m,n,i)*ycos_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,1,k,j,i) += yscs_.d_view(n)*xsin_(m,n,i)*ycos_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,1,k,j,i) += yssc_.d_view(n)*xsin_(m,n,i)*ysin_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,1,k,j,i) += ysss_.d_view(n)*xsin_(m,n,i)*ysin_(m,n,j)*zsin_(m,n,k);
+//----------------------------------------------------------------------------------------
+//! \fn UpdateForcing
+//  \brief render, localize, remove net acceleration, and normalize one forcing field
+//
 
-      force_tmp_(m,2,k,j,i) += zccc_.d_view(n)*xcos_(m,n,i)*ycos_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,2,k,j,i) += zccs_.d_view(n)*xcos_(m,n,i)*ycos_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,2,k,j,i) += zcsc_.d_view(n)*xcos_(m,n,i)*ysin_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,2,k,j,i) += zcss_.d_view(n)*xcos_(m,n,i)*ysin_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,2,k,j,i) += zscc_.d_view(n)*xsin_(m,n,i)*ycos_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,2,k,j,i) += zscs_.d_view(n)*xsin_(m,n,i)*ycos_(m,n,j)*zsin_(m,n,k);
-      force_tmp_(m,2,k,j,i) += zssc_.d_view(n)*xsin_(m,n,i)*ysin_(m,n,j)*zcos_(m,n,k);
-      force_tmp_(m,2,k,j,i) += zsss_.d_view(n)*xsin_(m,n,i)*ysin_(m,n,j)*zsin_(m,n,k);
-    });
+TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
+  if (pmy_pack == nullptr) {
+    return TaskStatus::complete;
   }
+
+  Mesh* pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    return TaskStatus::complete;
+  }
+
+  auto& indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  const int nmb = pmy_pack->nmb_thispack;
+  int& nx1 = indcs.nx1;
+  int& nx2 = indcs.nx2;
+  int& nx3 = indcs.nx3;
+
+  Real dt = pm->dt;
+  Real current_time = pm->time;
+  Real t_since_start = current_time - tdriv_start;
 
   DvceArray5D<Real> u0, u0_;
   if (pmy_pack->phydro != nullptr) u0 = (pmy_pack->phydro->u0);
@@ -759,106 +1003,317 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
     flag_twofl = true;
   }
 
-  const int nmkji = nmb*nx3*nx2*nx1;
-  const int nkji = nx3*nx2*nx1;
-  const int nji  = nx2*nx1;
-  Real t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
+  auto force_ = force;
 
-  Kokkos::parallel_reduce("net_mom_1", Kokkos::RangePolicy<>(DevExeSpace(),0,nmkji),
-  KOKKOS_LAMBDA(const int &idx, Real &sum_t0, Real &sum_t1,
-                                Real &sum_t2, Real &sum_t3) {
-    // compute n,k,j,i indices of thread
-    int m = (idx)/nkji;
-    int k = (idx - m*nkji)/nji;
-    int j = (idx - m*nkji - k*nji)/nx1;
-    int i = (idx - m*nkji - k*nji - j*nx1) + is;
-    k += ks;
-    j += js;
-    Real den = u0(m,IDN,k,j,i);
-    if (flag_twofl) {
-      den += u0_(m,IDN,k,j,i);
+  const int nmkji = nmb * nx3 * nx2 * nx1;
+  const int nkji = nx3 * nx2 * nx1;
+  const int nji = nx2 * nx1;
+  // Copy the DualView handle by value, sync device, and use this in all kernels
+  auto mb_size = pmy_pack->pmb->mb_size;
+  mb_size.template modify<HostMemSpace>();
+  mb_size.template sync<DevExeSpace>();
+
+  const Real sigma_x1_ = sigma_x1;
+  const Real sigma_x2_ = sigma_x2;
+  const Real sigma_x3_ = sigma_x3;
+  const Real center_x1_ = center_x1;
+  const Real center_x2_ = center_x2;
+  const Real center_x3_ = center_x3;
+  const TurbLocalization localization_ = localization;
+
+  if ((pm->ncycle >= 1 || physical_k_shell) && (current_time >= tdriv_start) &&
+      ((t_since_start < tdriv_duration) || turb_flag != 1)) {
+    if (normalization == TurbNormalization::edot &&
+        (!std::isfinite(dt) || dt <= 0.0)) {
+      FatalTurbulenceError(
+          "edot forcing requires a finite positive timestep: " +
+          ForcingNormalizationContext(
+              current_time, pm->ncycle, n_turb_updates_yet, mode_count, dt,
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN(),
+              std::numeric_limits<Real>::quiet_NaN()));
     }
-    sum_t0 += den;
-    sum_t1 += den*force_tmp_(m,0,k,j,i);
-    sum_t2 += den*force_tmp_(m,1,k,j,i);
-    sum_t3 += den*force_tmp_(m,2,k,j,i);
-  }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1),
-     Kokkos::Sum<Real>(t2), Kokkos::Sum<Real>(t3));
+    RenderForce();
 
+    if (localization_ != TurbLocalization::none) {
+      par_for(
+          "force_localization", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+          KOKKOS_LAMBDA(int m, int k, int j, int i) {
+            Real exponent = 0.0;
+            if (sigma_x1_ > 0.0) {
+              Real x1v = CellCenterX(i - is, nx1, mb_size.d_view(m).x1min,
+                                     mb_size.d_view(m).x1max);
+              exponent += SQR(x1v - center_x1_) / (2.0 * SQR(sigma_x1_));
+            }
+            if (sigma_x2_ > 0.0) {
+              Real x2v = CellCenterX(j - js, nx2, mb_size.d_view(m).x2min,
+                                     mb_size.d_view(m).x2max);
+              exponent += SQR(x2v - center_x2_) / (2.0 * SQR(sigma_x2_));
+            }
+            if (sigma_x3_ > 0.0) {
+              Real x3v = CellCenterX(k - ks, nx3, mb_size.d_view(m).x3min,
+                                     mb_size.d_view(m).x3max);
+              exponent += SQR(x3v - center_x3_) / (2.0 * SQR(sigma_x3_));
+            }
+            Real gaussian = std::exp(-exponent);
+            Real weight = (localization_ == TurbLocalization::include) ?
+                          gaussian : (1.0 - gaussian);
+            force_(m, 0, k, j, i) *= weight;
+            force_(m, 1, k, j, i) *= weight;
+            force_(m, 2, k, j, i) *= weight;
+          });
+    }
+
+    Real t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
+    Kokkos::parallel_reduce(
+        "net_mom_1", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+        KOKKOS_LAMBDA(const int& idx, Real& sum_t0, Real& sum_t1, Real& sum_t2,
+                      Real& sum_t3) {
+          // compute n,k,j,i indices of thread
+          int m = (idx) / nkji;
+          int k = (idx - m * nkji) / nji;
+          int j = (idx - m * nkji - k * nji) / nx1;
+          int i = (idx - m * nkji - k * nji - j * nx1) + is;
+          k += ks;
+          j += js;
+          Real vol =
+              mb_size.d_view(m).dx1 * mb_size.d_view(m).dx2 * mb_size.d_view(m).dx3;
+          Real den = u0(m, IDN, k, j, i);
+          if (flag_twofl) {
+            den += u0_(m, IDN, k, j, i);
+          }
+          sum_t0 += den * vol;
+          sum_t1 += den * force_(m, 0, k, j, i) * vol;
+          sum_t2 += den * force_(m, 1, k, j, i) * vol;
+          sum_t3 += den * force_(m, 2, k, j, i) * vol;
+        },
+        Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(t2),
+        Kokkos::Sum<Real>(t3));
 
 #if MPI_PARALLEL_ENABLED
-  Real m[4], gm[4];
-  m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-  MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
+    Real m[4], gm[4];
+    m[0] = t0;
+    m[1] = t1;
+    m[2] = t2;
+    m[3] = t3;
+    MPI_Allreduce(m, gm, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+    t0 = gm[0];
+    t1 = gm[1];
+    t2 = gm[2];
+    t3 = gm[3];
 #endif
 
-  par_for("force_remove_net_mom", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    force_tmp_(m,0,k,j,i) -= t1/t0;
-    force_tmp_(m,1,k,j,i) -= t2/t0;
-    force_tmp_(m,2,k,j,i) -= t3/t0;
-  });
-
-  t0 = 0.0;
-  t1 = 0.0;
-  Kokkos::parallel_reduce("net_mom_2", Kokkos::RangePolicy<>(DevExeSpace(),0,nmkji),
-  KOKKOS_LAMBDA(const int &idx, Real &sum_t0, Real &sum_t1) {
-    // compute n,k,j,i indices of thread
-    int m = (idx)/nkji;
-    int k = (idx - m*nkji)/nji;
-    int j = (idx - m*nkji - k*nji)/nx1;
-    int i = (idx - m*nkji - k*nji - j*nx1) + is;
-    k += ks;
-    j += js;
-
-    Real den  = u0(m,IDN,k,j,i);
-    Real mom1 = u0(m,IM1,k,j,i);
-    Real mom2 = u0(m,IM2,k,j,i);
-    Real mom3 = u0(m,IM3,k,j,i);
-    if (flag_twofl) {
-      den  += u0_(m,IDN,k,j,i);
-      mom1 += u0_(m,IM1,k,j,i);
-      mom2 += u0_(m,IM2,k,j,i);
-      mom3 += u0_(m,IM3,k,j,i);
+    if (!std::isfinite(t0) || !std::isfinite(t1) || !std::isfinite(t2) ||
+        !std::isfinite(t3)) {
+      int bad_density = 0;
+      int bad_momentum1 = 0;
+      int bad_momentum2 = 0;
+      int bad_momentum3 = 0;
+      int bad_energy = 0;
+      int bad_anisotropy = 0;
+      int bad_force1 = 0;
+      int bad_force2 = 0;
+      int bad_force3 = 0;
+      int bad_volume = 0;
+      const int nvar = u0.extent_int(1);
+      Kokkos::parallel_reduce(
+          "nonfinite_forcing_state_audit",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+          KOKKOS_LAMBDA(const int& idx, int& density_count,
+                        int& momentum1_count, int& momentum2_count,
+                        int& momentum3_count, int& energy_count,
+                        int& anisotropy_count, int& force1_count,
+                        int& force2_count, int& force3_count,
+                        int& volume_count) {
+            int m = idx / nkji;
+            int k = (idx - m * nkji) / nji;
+            int j = (idx - m * nkji - k * nji) / nx1;
+            int i = (idx - m * nkji - k * nji - j * nx1) + is;
+            k += ks;
+            j += js;
+            if (!Kokkos::isfinite(u0(m, IDN, k, j, i))) ++density_count;
+            if (!Kokkos::isfinite(u0(m, IM1, k, j, i))) ++momentum1_count;
+            if (!Kokkos::isfinite(u0(m, IM2, k, j, i))) ++momentum2_count;
+            if (!Kokkos::isfinite(u0(m, IM3, k, j, i))) ++momentum3_count;
+            if (nvar > IEN && !Kokkos::isfinite(u0(m, IEN, k, j, i))) {
+              ++energy_count;
+            }
+            if (nvar > IAN && !Kokkos::isfinite(u0(m, IAN, k, j, i))) {
+              ++anisotropy_count;
+            }
+            if (!Kokkos::isfinite(force_(m, 0, k, j, i))) ++force1_count;
+            if (!Kokkos::isfinite(force_(m, 1, k, j, i))) ++force2_count;
+            if (!Kokkos::isfinite(force_(m, 2, k, j, i))) ++force3_count;
+            Real vol = mb_size.d_view(m).dx1 * mb_size.d_view(m).dx2 *
+                       mb_size.d_view(m).dx3;
+            if (!Kokkos::isfinite(vol)) ++volume_count;
+          },
+          Kokkos::Sum<int>(bad_density),
+          Kokkos::Sum<int>(bad_momentum1),
+          Kokkos::Sum<int>(bad_momentum2),
+          Kokkos::Sum<int>(bad_momentum3),
+          Kokkos::Sum<int>(bad_energy),
+          Kokkos::Sum<int>(bad_anisotropy),
+          Kokkos::Sum<int>(bad_force1),
+          Kokkos::Sum<int>(bad_force2),
+          Kokkos::Sum<int>(bad_force3),
+          Kokkos::Sum<int>(bad_volume));
+#if MPI_PARALLEL_ENABLED
+      int bad_local[10] = {
+          bad_density, bad_momentum1, bad_momentum2, bad_momentum3, bad_energy,
+          bad_anisotropy, bad_force1, bad_force2, bad_force3, bad_volume};
+      int bad_global[10];
+      MPI_Allreduce(bad_local, bad_global, 10, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+      bad_density = bad_global[0];
+      bad_momentum1 = bad_global[1];
+      bad_momentum2 = bad_global[2];
+      bad_momentum3 = bad_global[3];
+      bad_energy = bad_global[4];
+      bad_anisotropy = bad_global[5];
+      bad_force1 = bad_global[6];
+      bad_force2 = bad_global[7];
+      bad_force3 = bad_global[8];
+      bad_volume = bad_global[9];
+#endif
+      FatalTurbulenceError(
+          "nonfinite density-weighted forcing moments before net-acceleration "
+          "removal: " +
+          ForcingNormalizationContext(current_time, pm->ncycle,
+                                      n_turb_updates_yet, mode_count, dt, t0,
+                                      t1, 0.0, t2, t3) +
+          NonfiniteForcingStateContext(
+              bad_density, bad_momentum1, bad_momentum2, bad_momentum3,
+              bad_energy, bad_anisotropy, bad_force1, bad_force2, bad_force3,
+              bad_volume));
     }
-    Real v1 = force_tmp_(m,0,k,j,i);
-    Real v2 = force_tmp_(m,1,k,j,i);
-    Real v3 = force_tmp_(m,2,k,j,i);
+    if (t0 <= 0.0) {
+      FatalTurbulenceError(
+          "mass integral is not positive while normalizing forcing: " +
+          ForcingNormalizationContext(current_time, pm->ncycle,
+                                      n_turb_updates_yet, mode_count, dt, t0,
+                                      t1, 0.0, t2, t3));
+    }
+    par_for(
+        "force_remove_net_mom", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          force_(m, 0, k, j, i) -= t1 / t0;
+          force_(m, 1, k, j, i) -= t2 / t0;
+          force_(m, 2, k, j, i) -= t3 / t0;
+        });
 
-    sum_t0 += den*(v1*v1+v2*v2+v3*v3);
-    sum_t1 += mom1*v1+mom2*v2+mom3*v3;
-  }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1));
+    t0 = 0.0;
+    t1 = 0.0;
+    Real totvol = 0.0;
+    bool normalize_edot = (normalization == TurbNormalization::edot);
+    Kokkos::parallel_reduce(
+        "net_mom_2", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+        KOKKOS_LAMBDA(const int& idx, Real& sum_t0, Real& sum_t1, Real& totvol_) {
+          // compute n,k,j,i indices of thread
+          int m = (idx) / nkji;
+          int k = (idx - m * nkji) / nji;
+          int j = (idx - m * nkji - k * nji) / nx1;
+          int i = (idx - m * nkji - k * nji - j * nx1) + is;
+          k += ks;
+          j += js;
+          Real vol =
+              mb_size.d_view(m).dx1 * mb_size.d_view(m).dx2 * mb_size.d_view(m).dx3;
+
+          Real den = u0(m, IDN, k, j, i);
+          Real mom1 = u0(m, IM1, k, j, i);
+          Real mom2 = u0(m, IM2, k, j, i);
+          Real mom3 = u0(m, IM3, k, j, i);
+          if (flag_twofl) {
+            den += u0_(m, IDN, k, j, i);
+            mom1 += u0_(m, IM1, k, j, i);
+            mom2 += u0_(m, IM2, k, j, i);
+            mom3 += u0_(m, IM3, k, j, i);
+          }
+          Real a1 = force_(m, 0, k, j, i);
+          Real a2 = force_(m, 1, k, j, i);
+          Real a3 = force_(m, 2, k, j, i);
+
+          if (normalize_edot) {
+            sum_t0 += den * 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * vol;
+            sum_t1 += (mom1 * a1 + mom2 * a2 + mom3 * a3) * vol;
+          } else {
+            sum_t0 += (a1 * a1 + a2 * a2 + a3 * a3) * vol;
+          }
+          totvol_ += vol;
+        },
+        Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(totvol));
 
 #if MPI_PARALLEL_ENABLED
-  m[0] = t0; m[1] = t1;
-  MPI_Allreduce(m, gm, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  t0 = gm[0]; t1 = gm[1];
+    m[0] = t0;
+    m[1] = t1;
+    m[2] = totvol;
+    MPI_Allreduce(m, gm, 3, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+    t0 = gm[0];
+    t1 = gm[1];
+    totvol = gm[2];
 #endif
 
-  t0 = std::max(t0, 1.0e-20);
-  t1 = std::max(t1, 1.0e-20);
+    Real m0 = std::numeric_limits<Real>::quiet_NaN();
+    Real m1 = std::numeric_limits<Real>::quiet_NaN();
+    if (std::isfinite(totvol) && totvol > 0.0) {
+      m0 = t0 / totvol;
+      m1 = t1 / totvol;
+    }
+    const std::string normalization_context = ForcingNormalizationContext(
+        current_time, pm->ncycle, n_turb_updates_yet, mode_count, dt, t0, t1,
+        totvol, m0, m1);
+    if (!std::isfinite(totvol) || totvol <= 0.0) {
+      FatalTurbulenceError(
+          "volume integral is not finite and positive while normalizing forcing: " +
+          normalization_context);
+    }
+    if (!std::isfinite(t0) || !std::isfinite(t1) || !std::isfinite(m0) ||
+        !std::isfinite(m1)) {
+      FatalTurbulenceError(
+          "nonfinite forcing normalization moments: " + normalization_context);
+    }
 
-  Real m0 = t0, m1 = t1;
-  Real dt = pm->dt;
-  Real dvol = 1.0/(gnx1*gnx2*gnx3);
-  m0 = 0.5*m0*dvol*dt;
-  m1 = m1*dvol;
-
-  Real s;
-  if (m1 >= 0) {
-    s = -m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
-  } else {
-    s = m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
+    Real s = 0.0;
+    if (normalization == TurbNormalization::edot) {
+      // Solve dt*m0*s^2 + m1*s = dedt using its non-negative root.
+      if (m0 > 0.0) {
+        s = NonnegativeEdotRoot(dt, m0, m1, dedt);
+      } else if (dedt > 0.0) {
+        FatalTurbulenceError(
+            "cannot inject non-zero dedt with a zero forcing field: " +
+            normalization_context);
+      }
+    } else {
+      // Match the volume-weighted RMS acceleration independently of AMR layout.
+      if (m0 > 1.0e-30) {
+        s = accel_rms / sqrt(m0);
+      } else if (accel_rms > 0.0) {
+        FatalTurbulenceError(
+            "cannot impose non-zero accel_rms with a zero forcing field: " +
+            normalization_context);
+      }
+    }
+    if (!std::isfinite(s)) {
+      FatalTurbulenceError(
+          "forcing normalization scale is nonfinite: " + normalization_context);
+    }
+    par_for(
+        "force_norm", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          force_(m, 0, k, j, i) *= s;
+          force_(m, 1, k, j, i) *= s;
+          force_(m, 2, k, j, i) *= s;
+        });
+  } else {  // set force to zero
+    par_for(
+        "force_zero", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          force_(m, 0, k, j, i) = 0.0;
+          force_(m, 1, k, j, i) = 0.0;
+          force_(m, 2, k, j, i) = 0.0;
+        });
   }
-  if (m0 == 0.0) s = 0.0;
-
-  par_for("force_norm", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    force_tmp_(m,0,k,j,i) *= s;
-    force_tmp_(m,1,k,j,i) *= s;
-    force_tmp_(m,2,k,j,i) *= s;
-  });
 
   return TaskStatus::complete;
 }
@@ -866,401 +1321,641 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 //----------------------------------------------------------------------------------------
 //! \fn apply forcing
 
-TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
-  Mesh *pm = pmy_pack->pmesh;
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
+//
+// @brief Adds forcing in the turbulence driver.
+//
+// This function applies forcing in the turbulence driver based on the provided
+// driver and stage. It updates the conserved variables with the applied forces
+// and handles both relativistic and non-relativistic cases. Additionally, it
+// supports two-fluid and magnetohydrodynamic (MHD) scenarios.
+//
+// @param pdrive Pointer to the driver object.
+// @param stage The current stage of the driver.
+// @return TaskStatus indicating the completion status of the task.
+//
+// The function performs the following main steps:
+// 1. Applies forcing to the conserved variables using a parallel loop.
+// 2. Handles relativistic transformations if required.
+//
+
+void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
+  if (pmy_pack == nullptr) {
+    return;
+  }
+
+  Mesh* pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    return;
+  }
+
+  auto& indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
-  int &nmb = pmy_pack->nmb_thispack;
-  int &nx1 = indcs.nx1;
-  int &nx2 = indcs.nx2;
-  int &nx3 = indcs.nx3;
+  const int nmb = pmy_pack->nmb_thispack;
+  int& nx1 = indcs.nx1;
+  int& nx2 = indcs.nx2;
+  int& nx3 = indcs.nx3;
 
-  Real dt = pm->dt;
-  Real fcorr, gcorr;
-  if (tcorr <= 1e-6) {  // use whitenoise
-    fcorr = 0.0;
-    gcorr = 1.0;
-  } else {
-    fcorr = std::exp(-dt/tcorr);
-    gcorr = std::sqrt(1.0 - fcorr*fcorr);
-  }
+  Real current_time = pm->time;
+  Real t_since_start = current_time - tdriv_start;
 
-  EquationOfState *peos;
+  EquationOfState* peos;
 
   DvceArray5D<Real> u0, u0_;
-  DvceArray5D<Real> w0;
-  DvceFaceFld4D<Real> *bcc0;
+  DvceArray5D<Real> w0, w0_;
+  DvceFaceFld4D<Real>* bcc0;
   if (pmy_pack->phydro != nullptr) u0 = (pmy_pack->phydro->u0);
+  if (pmy_pack->phydro != nullptr) w0 = (pmy_pack->phydro->w0);
   if (pmy_pack->phydro != nullptr) peos = (pmy_pack->phydro->peos);
   if (pmy_pack->pmhd != nullptr) u0 = (pmy_pack->pmhd->u0);
+  if (pmy_pack->pmhd != nullptr) w0 = (pmy_pack->pmhd->w0);
   if (pmy_pack->pmhd != nullptr) bcc0 = &(pmy_pack->pmhd->b0);
   if (pmy_pack->pmhd != nullptr) peos = pmy_pack->pmhd->peos;
   bool flag_twofl = false;
   if (pmy_pack->pionn != nullptr) {
     u0 = (pmy_pack->phydro->u0);
     u0_ = (pmy_pack->pmhd->u0);
+    w0 = (pmy_pack->phydro->w0);
+    w0_ = (pmy_pack->pmhd->w0);
     flag_twofl = true;
   }
 
   bool flag_relativistic = pmy_pack->pcoord->is_special_relativistic;
-  if (flag_relativistic) {
-    if (pmy_pack->phydro != nullptr) w0 = (pmy_pack->phydro->w0);
-    if (pmy_pack->pmhd != nullptr) w0 = (pmy_pack->pmhd->w0);
-  }
 
   auto force_ = force;
-  auto force_tmp_ = force_tmp;
+  const int nmkji = nmb * nx3 * nx2 * nx1;
+  const int nkji = nx3 * nx2 * nx1;
+  const int nji = nx2 * nx1;
 
-  par_for("force_OU_process",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    force_(m,0,k,j,i) = fcorr*force_(m,0,k,j,i) + gcorr*force_tmp_(m,0,k,j,i);
-    force_(m,1,k,j,i) = fcorr*force_(m,1,k,j,i) + gcorr*force_tmp_(m,1,k,j,i);
-    force_(m,2,k,j,i) = fcorr*force_(m,2,k,j,i) + gcorr*force_tmp_(m,2,k,j,i);
-  });
+  auto eos = peos->eos_data;  // copy-by-value (POD expected)
 
-  par_for("push",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real v1 = force_(m,0,k,j,i);
-    Real v2 = force_(m,1,k,j,i);
-    Real v3 = force_(m,2,k,j,i);
+  if ((current_time >= tdriv_start) &&
+      ((t_since_start < tdriv_duration) || turb_flag != 1)) {
+    par_for(
+        "push", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          Real a1 = force_(m, 0, k, j, i);
+          Real a2 = force_(m, 1, k, j, i);
+          Real a3 = force_(m, 2, k, j, i);
 
-    Real den = u0(m,IDN,k,j,i);
+          Real den = w0(m, IDN, k, j, i);
+          auto& ux = w0(m, IVX, k, j, i);
+          auto& uy = w0(m, IVY, k, j, i);
+          auto& uz = w0(m, IVZ, k, j, i);
+
+          Real Fv = (a1 * ux + a2 * uy + a3 * uz);
+          if (flag_relativistic) {
+            // Compute Lorentz factor
+            Real ut = 1. + ux * ux + uy * uy + uz * uz;
+            ut = sqrt(ut);
+            den /= ut;
+            Fv = (a1 * ux + a2 * uy + a3 * uz) / ut;
+          }
+          u0(m, IM1, k, j, i) += den * a1 * bdt;
+          u0(m, IM2, k, j, i) += den * a2 * bdt;
+          u0(m, IM3, k, j, i) += den * a3 * bdt;
+          if (eos.is_ideal) {
+            u0(m, IEN, k, j, i) +=
+                (Fv + 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * bdt) * den * bdt;
+            // u0(m,IEN,k,j,i) += Fv*den*bdt;
+          }
+
+          if (flag_twofl) {
+            den = u0_(m, IDN, k, j, i);
+            u0_(m, IM1, k, j, i) += den * a1 * bdt;
+            u0_(m, IM2, k, j, i) += den * a2 * bdt;
+            u0_(m, IM3, k, j, i) += den * a3 * bdt;
+            u0_(m, IEN, k, j, i) +=
+                (Fv + 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * bdt) * den * bdt;
+            // u0_(m,IEN,k,j,i) += Fv*den*bdt;
+          }
+        });
+
+    // Relativistic case will require a Lorentz transformation
     if (flag_relativistic) {
-      // Compute Lorentz factor
-      auto &ux = w0(m,IVX,k,j,i);
-      auto &uy = w0(m,IVY,k,j,i);
-      auto &uz = w0(m,IVZ,k,j,i);
+      if (pmy_pack->pmhd != nullptr) {
+        auto& b = *bcc0;
 
-      Real ut = 1. + ux*ux + uy*uy + uz*uz;
-      ut = sqrt(ut);
-      den /= ut;
+        par_for(
+            "net_mom_4", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+            KOKKOS_LAMBDA(int m, int k, int j, int i) {
+              // load single state conserved variables
+              MHDCons1D u;
+              u.d = u0(m, IDN, k, j, i);
+              u.mx = u0(m, IM1, k, j, i);
+              u.my = u0(m, IM2, k, j, i);
+              u.mz = u0(m, IM3, k, j, i);
+              u.e = u0(m, IEN, k, j, i);
 
-      Real Fv = (v1*ux + v2*uy + v3*uz)/ut;
+              u.bx = 0.5 * (b.x1f(m, k, j, i) + b.x1f(m, k, j, i + 1));
+              u.by = 0.5 * (b.x2f(m, k, j, i) + b.x2f(m, k, j + 1, i));
+              u.bz = 0.5 * (b.x3f(m, k, j, i) + b.x3f(m, k + 1, j, i));
 
-      u0(m,IEN,k,j,i) += Fv*den*dt;
-    }
-    u0(m,IM1,k,j,i) += den*v1*dt;
-    u0(m,IM2,k,j,i) += den*v2*dt;
-    u0(m,IM3,k,j,i) += den*v3*dt;
+              // Compute (S^i S_i) (eqn C2)
+              Real s2 = SQR(u.mx) + SQR(u.my) + SQR(u.mz);
+              Real b2 = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+              Real rpar = (u.bx * u.mx + u.by * u.my + u.bz * u.mz) / u.d;
 
-    if (flag_twofl) {
-      den = u0_(m,IDN,k,j,i);
-      u0_(m,IM1,k,j,i) += den*v1*dt;
-      u0_(m,IM2,k,j,i) += den*v2*dt;
-      u0_(m,IM3,k,j,i) += den*v3*dt;
-    }
-  });
+              // call c2p function
+              // (inline function in ideal_c2p_mhd.hpp file)
+              HydPrim1D w;
+              bool dfloor_used = false, efloor_used = false;
+              // bool vceiling_used = false;
+              bool c2p_failure = false;
+              int iter_used = 0;
+              SingleC2P_IdealSRMHD(u, eos, s2, b2, rpar, w, dfloor_used, efloor_used,
+                                   c2p_failure, iter_used);
+              // apply velocity ceiling if necessary
+              Real lor = sqrt(1.0 + SQR(w.vx) + SQR(w.vy) + SQR(w.vz));
+              if (lor > eos.gamma_max) {
+                // vceiling_used = true;
+                Real factor = sqrt((SQR(eos.gamma_max) - 1.0) / (SQR(lor) - 1.0));
+                w.vx *= factor;
+                w.vy *= factor;
+                w.vz *= factor;
+              }
 
-  const int nmkji = nmb*nx3*nx2*nx1;
-  const int nkji = nx3*nx2*nx1;
-  const int nji = nx2*nx1;
+              // Temporarily store primitives in conserved state
+              u0(m, IDN, k, j, i) = w.d;
+              u0(m, IM1, k, j, i) = w.vx;
+              u0(m, IM2, k, j, i) = w.vy;
+              u0(m, IM3, k, j, i) = w.vz;
+              u0(m, IEN, k, j, i) = w.e;
+            });
+      } else {
+        auto eos = peos->eos_data;  // copy-by-value (POD expected)
 
-  // Relativistic case will require a Lorentz transformation
-  if (flag_relativistic) {
-    if (pmy_pack->pmhd != nullptr) {
-      auto &b = *bcc0;
-      auto &eos = peos->eos_data;
+        par_for(
+            "net_mom_4", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+            KOKKOS_LAMBDA(int m, int k, int j, int i) {
+              u0(m, IEN, k, j, i) = fmin(u0(m, IEN, k, j, i), 40. * u0(m, IDN, k, j, i));
 
-      par_for("net_mom_4",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        // load single state conserved variables
-        MHDCons1D u;
-        u.d = u0(m,IDN,k,j,i);
-        u.mx = u0(m,IM1,k,j,i);
-        u.my = u0(m,IM2,k,j,i);
-        u.mz = u0(m,IM3,k,j,i);
-        u.e = u0(m,IEN,k,j,i);
+              // load single state conserved variables
+              HydCons1D u;
+              u.d = u0(m, IDN, k, j, i);
+              u.mx = u0(m, IM1, k, j, i);
+              u.my = u0(m, IM2, k, j, i);
+              u.mz = u0(m, IM3, k, j, i);
+              u.e = u0(m, IEN, k, j, i);
 
-        u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
-        u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
-        u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+              // Compute (S^i S_i) (eqn C2)
+              Real s2 = SQR(u.mx) + SQR(u.my) + SQR(u.mz);
 
-        // Compute (S^i S_i) (eqn C2)
-        Real s2 = SQR(u.mx) + SQR(u.my) + SQR(u.mz);
-        Real b2 = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
-        Real rpar = (u.bx*u.mx + u.by*u.my + u.bz*u.mz)/u.d;
+              // call c2p function
+              // (inline function in ideal_c2p_mhd.hpp file)
+              HydPrim1D w;
+              bool dfloor_used = false, efloor_used = false;
+              // bool vceiling_used = false;
+              bool c2p_failure = false;
+              int iter_used = 0;
+              SingleC2P_IdealSRHyd(u, eos, s2, w, dfloor_used, efloor_used, c2p_failure,
+                                   iter_used);
+              // apply velocity ceiling if necessary
+              Real lor = sqrt(1.0 + SQR(w.vx) + SQR(w.vy) + SQR(w.vz));
+              if (lor > eos.gamma_max) {
+                // vceiling_used = true;
+                Real factor = sqrt((SQR(eos.gamma_max) - 1.0) / (SQR(lor) - 1.0));
+                w.vx *= factor;
+                w.vy *= factor;
+                w.vz *= factor;
+              }
 
-        // call c2p function
-        // (inline function in ideal_c2p_mhd.hpp file)
-        HydPrim1D w;
-        bool dfloor_used = false, efloor_used = false;
-        //bool vceiling_used = false;
-        bool c2p_failure = false;
-        int iter_used = 0;
-        SingleC2P_IdealSRMHD(u, eos, s2, b2, rpar, w, dfloor_used,
-                             efloor_used, c2p_failure, iter_used);
-        // apply velocity ceiling if necessary
-        Real lor = sqrt(1.0 + SQR(w.vx) + SQR(w.vy) + SQR(w.vz));
-        if (lor > eos.gamma_max) {
-          //vceiling_used = true;
-          Real factor = sqrt((SQR(eos.gamma_max) - 1.0) / (SQR(lor) - 1.0));
-          w.vx *= factor;
-          w.vy *= factor;
-          w.vz *= factor;
-        }
+              u0(m, IDN, k, j, i) = w.d;
+              u0(m, IM1, k, j, i) = w.vx;
+              u0(m, IM2, k, j, i) = w.vy;
+              u0(m, IM3, k, j, i) = w.vz;
+              u0(m, IEN, k, j, i) = w.e;
+            });
+      }
 
-        // Temporarily store primitives in conserved state
-        u0(m,IDN,k,j,i) = w.d;
-        u0(m,IM1,k,j,i) = w.vx;
-        u0(m,IM2,k,j,i) = w.vy;
-        u0(m,IM3,k,j,i) = w.vz;
-        u0(m,IEN,k,j,i) = w.e;
-      });
-    } else {
-      auto &eos = peos->eos_data;
+      // remove net momentum
+      Real t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
+      Kokkos::parallel_reduce(
+          "net_mom_3", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+          KOKKOS_LAMBDA(const int& idx, Real& sum_t0, Real& sum_t1, Real& sum_t2,
+                        Real& sum_t3) {
+            // compute n,k,j,i indices of thread
+            int m = (idx) / nkji;
+            int k = (idx - m * nkji) / nji;
+            int j = (idx - m * nkji - k * nji) / nx1;
+            int i = (idx - m * nkji - k * nji - j * nx1) + is;
+            k += ks;
+            j += js;
 
-      par_for("net_mom_4",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        // load single state conserved variables
-        HydCons1D u;
-        u.d = u0(m,IDN,k,j,i);
-        u.mx = u0(m,IM1,k,j,i);
-        u.my = u0(m,IM2,k,j,i);
-        u.mz = u0(m,IM3,k,j,i);
-        u.e = u0(m,IEN,k,j,i);
+            Real u_t = sqrt(1. + u0(m, IVX, k, j, i) * u0(m, IVX, k, j, i) +
+                            u0(m, IVY, k, j, i) * u0(m, IVY, k, j, i) +
+                            u0(m, IVZ, k, j, i) * u0(m, IVZ, k, j, i));
 
-        // Compute (S^i S_i) (eqn C2)
-        Real s2 = SQR(u.mx) + SQR(u.my) + SQR(u.mz);
+            Real den = u0(m, IDN, k, j, i) * u_t;
+            Real mom1 = den * u0(m, IVX, k, j, i);
+            Real mom2 = den * u0(m, IVY, k, j, i);
+            Real mom3 = den * u0(m, IVZ, k, j, i);
 
-        // call c2p function
-        // (inline function in ideal_c2p_mhd.hpp file)
-        HydPrim1D w;
-        bool dfloor_used = false, efloor_used = false;
-        //bool vceiling_used = false;
-        bool c2p_failure = false;
-        int iter_used = 0;
-        SingleC2P_IdealSRHyd(u, eos, s2, w, dfloor_used, efloor_used,
-                             c2p_failure, iter_used);
-        // apply velocity ceiling if necessary
-        Real lor = sqrt(1.0 + SQR(w.vx) + SQR(w.vy) + SQR(w.vz));
-        if (lor > eos.gamma_max) {
-          //vceiling_used = true;
-          Real factor = sqrt((SQR(eos.gamma_max) - 1.0) / (SQR(lor) - 1.0));
-          w.vx *= factor;
-          w.vy *= factor;
-          w.vz *= factor;
-        }
-
-        u0(m,IDN,k,j,i) = w.d;
-        u0(m,IM1,k,j,i) = w.vx;
-        u0(m,IM2,k,j,i) = w.vy;
-        u0(m,IM3,k,j,i) = w.vz;
-        u0(m,IEN,k,j,i) = w.e;
-      });
-    }
-
-    // remove net momentum
-    Real t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
-    Kokkos::parallel_reduce("net_mom_3", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, Real &sum_t0, Real &sum_t1, Real &sum_t2,
-                  Real &sum_t3) {
-      // compute n,k,j,i indices of thread
-      int m = (idx)/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/nx1;
-      int i = (idx - m*nkji - k*nji - j*nx1) + is;
-      k += ks;
-      j += js;
-
-      Real u_t = sqrt(1. + u0(m,IVX,k,j,i)*u0(m,IVX,k,j,i) +
-                           u0(m,IVY,k,j,i)*u0(m,IVY,k,j,i) +
-                           u0(m,IVZ,k,j,i)*u0(m,IVZ,k,j,i));
-
-      Real den = u0(m,IDN,k,j,i)*u_t;
-      Real mom1 = den*u0(m,IVX,k,j,i);
-      Real mom2 = den*u0(m,IVY,k,j,i);
-      Real mom3 = den*u0(m,IVZ,k,j,i);
-
-      sum_t0 += den;
-      sum_t1 += mom1;
-      sum_t2 += mom2;
-      sum_t3 += mom3;
-    }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1),
-       Kokkos::Sum<Real>(t2), Kokkos::Sum<Real>(t3));
+            sum_t0 += den;
+            sum_t1 += mom1;
+            sum_t2 += mom2;
+            sum_t3 += mom3;
+          },
+          Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(t2),
+          Kokkos::Sum<Real>(t3));
 
 #if MPI_PARALLEL_ENABLED
-    Real m[4], gm[4];
-    m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-    MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
+      Real m[4], gm[4];
+      m[0] = t0;
+      m[1] = t1;
+      m[2] = t2;
+      m[3] = t3;
+      MPI_Allreduce(m, gm, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+      t0 = gm[0];
+      t1 = gm[1];
+      t2 = gm[2];
+      t3 = gm[3];
 #endif
 
-    // Compute average velocity
-    Real uA_x = t1/t0;
-    Real uA_y = t2/t0;
-    Real uA_z = t3/t0;
+      // Compute average velocity
+      Real uA_x = t1 / t0;
+      Real uA_y = t2 / t0;
+      Real uA_z = t3 / t0;
 
-    Real uA_0 = sqrt(1. + uA_x*uA_x + uA_y*uA_y + uA_z*uA_z);
-    Real betaA = sqrt(uA_x*uA_x + uA_y*uA_y + uA_z*uA_z)/uA_0;
+      Real uA_0 = sqrt(1. + uA_x * uA_x + uA_y * uA_y + uA_z * uA_z);
+      Real betaA = sqrt(uA_x * uA_x + uA_y * uA_y + uA_z * uA_z) / uA_0;
 
-    Real vx = uA_x/uA_0;
-    Real vy = uA_y/uA_0;
-    Real vz = uA_z/uA_0;
+      Real vx = uA_x / uA_0;
+      Real vy = uA_y / uA_0;
+      Real vz = uA_z / uA_0;
 
-    // LIMIT temp
+      if (pmy_pack->pmhd != nullptr) {
+        auto b = *bcc0;             // copy handle by value
+        auto eos = peos->eos_data;  // copy-by-value (POD expected)
 
-    if (pmy_pack->pmhd != nullptr) {
-      auto &b = *bcc0;
-      auto &eos = peos->eos_data;
+        par_for(
+            "net_mom_4", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+            KOKKOS_LAMBDA(int m, int k, int j, int i) {
+              u0(m, IEN, k, j, i) = fmin(u0(m, IEN, k, j, i), 40. * u0(m, IDN, k, j, i));
 
-      par_for("net_mom_4",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        u0(m,IEN,k,j,i) = fmin(u0(m,IEN,k,j,i), 40.*u0(m,IDN,k,j,i));
+              // load single state conserved variables
+              MHDPrim1D u;
+              u.d = u0(m, IDN, k, j, i);
+              u.vx = u0(m, IM1, k, j, i);
+              u.vy = u0(m, IM2, k, j, i);
+              u.vz = u0(m, IM3, k, j, i);
+              u.e = u0(m, IEN, k, j, i);
 
-        // load single state conserved variables
-        MHDPrim1D u;
-        u.d = u0(m,IDN,k,j,i);
-        u.vx = u0(m,IM1,k,j,i);
-        u.vy = u0(m,IM2,k,j,i);
-        u.vz = u0(m,IM3,k,j,i);
-        u.e = u0(m,IEN,k,j,i);
+              u.bx = 0.5 * (b.x1f(m, k, j, i) + b.x1f(m, k, j, i + 1));
+              u.by = 0.5 * (b.x2f(m, k, j, i) + b.x2f(m, k, j + 1, i));
+              u.bz = 0.5 * (b.x3f(m, k, j, i) + b.x3f(m, k + 1, j, i));
 
-        u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
-        u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
-        u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+              HydCons1D u_out;
+              SingleP2C_IdealSRMHD(u, eos.gamma, u_out);
 
-        HydCons1D u_out;
-        SingleP2C_IdealSRMHD(u, eos.gamma, u_out);
+              Real en = u_out.d + u_out.e;
+              Real sx = u_out.mx;
+              Real sy = u_out.my;
+              Real sz = u_out.mz;
 
-        Real en = u_out.d + u_out.e;
-        Real sx = u_out.mx;
-        Real sy = u_out.my;
-        Real sz = u_out.mz;
+              Real dens = u_out.d;
 
-        Real dens = u_out.d;
+              auto& w = u;
 
-        auto &w = u;
+              Real lorentz = sqrt(1. + w.vx * w.vx + w.vy * w.vy + w.vz * w.vz);
+              Real beta = sqrt(w.vx * w.vx + w.vy * w.vy + w.vz * w.vz) / lorentz;
 
-        Real lorentz = sqrt(1. + w.vx*w.vx + w.vy*w.vy + w.vz*w.vz);
-        Real beta = sqrt(w.vx*w.vx + w.vy*w.vy + w.vz*w.vz)/lorentz;
+              u0(m, IDN, k, j, i) = dens;  // *uA_0*(1.-beta*betaA);
 
-        u0(m,IDN,k,j,i) = dens;  // *uA_0*(1.-beta*betaA);
+              // Does not require knowledge of v
+              u0(m, IEN, k, j, i) = uA_0 * en - uA_0 * (sx * vx + sy * vy + sz * vz);
+              u0(m, IEN, k, j, i) -= u0(m, IDN, k, j, i);
 
-        // Does not require knowledge of v
-        u0(m,IEN,k,j,i) = uA_0*en - uA_0*(sx*vx + sy*vy + sz*vz);
-        u0(m,IEN,k,j,i) -= u0(m,IDN,k,j,i);
+              u0(m, IM1, k, j, i) =
+                  sx + (uA_0 - 1.) / (betaA * betaA) * (sx * vx + sy * vy + sz * vz) * vx;
+              u0(m, IM2, k, j, i) =
+                  sy + (uA_0 - 1.) / (betaA * betaA) * (sx * vx + sy * vy + sz * vz) * vy;
+              u0(m, IM3, k, j, i) =
+                  sz + (uA_0 - 1.) / (betaA * betaA) * (sx * vx + sy * vy + sz * vz) * vz;
 
-        u0(m,IM1,k,j,i) = sx + (uA_0 - 1.)/(betaA*betaA)*(sx*vx + sy*vy + sz*vz)*vx;
-        u0(m,IM2,k,j,i) = sy + (uA_0 - 1.)/(betaA*betaA)*(sx*vx + sy*vy + sz*vz)*vy;
-        u0(m,IM3,k,j,i) = sz + (uA_0 - 1.)/(betaA*betaA)*(sx*vx + sy*vy + sz*vz)*vz;
+              u0(m, IM1, k, j, i) -= uA_0 * en * vx;
+              u0(m, IM2, k, j, i) -= uA_0 * en * vy;
+              u0(m, IM3, k, j, i) -= uA_0 * en * vz;
+            });
+      } else {
+        auto eos = peos->eos_data;  // copy-by-value (POD expected)
 
-        u0(m,IM1,k,j,i) -= uA_0*en*vx;
-        u0(m,IM2,k,j,i) -= uA_0*en*vy;
-        u0(m,IM3,k,j,i) -= uA_0*en*vz;
-      });
-    } else {
-      auto &eos = peos->eos_data;
+        par_for(
+            "net_mom_4", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
+            KOKKOS_LAMBDA(int m, int k, int j, int i) {
+              u0(m, IEN, k, j, i) = fmin(u0(m, IEN, k, j, i), 40. * u0(m, IDN, k, j, i));
 
-      par_for("net_mom_4",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        u0(m,IEN,k,j,i) = fmin(u0(m,IEN,k,j,i), 40.*u0(m,IDN,k,j,i));
+              // load single state conserved variables
+              HydPrim1D u;
+              u.d = u0(m, IDN, k, j, i);
+              u.vx = u0(m, IM1, k, j, i);
+              u.vy = u0(m, IM2, k, j, i);
+              u.vz = u0(m, IM3, k, j, i);
+              u.e = u0(m, IEN, k, j, i);
 
-        // load single state conserved variables
-        HydPrim1D u;
-        u.d = u0(m,IDN,k,j,i);
-        u.vx = u0(m,IM1,k,j,i);
-        u.vy = u0(m,IM2,k,j,i);
-        u.vz = u0(m,IM3,k,j,i);
-        u.e = u0(m,IEN,k,j,i);
+              HydCons1D u_out;
+              SingleP2C_IdealSRHyd(u, eos.gamma, u_out);
 
-        HydCons1D u_out;
-        SingleP2C_IdealSRHyd(u, eos.gamma, u_out);
+              Real en = u_out.d + u_out.e;
+              Real sx = u_out.mx;
+              Real sy = u_out.my;
+              Real sz = u_out.mz;
 
-        Real en = u_out.d + u_out.e;
-        Real sx = u_out.mx;
-        Real sy = u_out.my;
-        Real sz = u_out.mz;
+              Real dens = u_out.d;
 
-        Real dens = u_out.d;
+              auto& w = u;
 
-        auto &w = u;
+              Real lorentz = sqrt(1. + w.vx * w.vx + w.vy * w.vy + w.vz * w.vz);
+              Real beta = sqrt(w.vx * w.vx + w.vy * w.vy + w.vz * w.vz) / lorentz;
 
-        Real lorentz = sqrt(1. + w.vx*w.vx + w.vy*w.vy + w.vz*w.vz);
-        Real beta = sqrt(w.vx*w.vx + w.vy*w.vy + w.vz*w.vz)/lorentz;
+              u0(m, IDN, k, j, i) = dens;  //*uA_0*(1.-beta*betaA);
 
-        u0(m,IDN,k,j,i) = dens;  //*uA_0*(1.-beta*betaA);
-
-        // Does not require knowledge of v
-        u0(m,IEN,k,j,i) = uA_0*en - uA_0*(sx*vx + sy*vy + sz*vz);
-        u0(m,IEN,k,j,i) -= u0(m,IDN,k,j,i);
-        u0(m,IM1,k,j,i) = sx + (uA_0 - 1.)/(betaA*betaA)*(sx*vx + sy*vy + sz*vz)*vx;
-        u0(m,IM2,k,j,i) = sy + (uA_0 - 1.)/(betaA*betaA)*(sx*vx + sy*vy + sz*vz)*vy;
-        u0(m,IM3,k,j,i) = sz + (uA_0 - 1.)/(betaA*betaA)*(sx*vx + sy*vy + sz*vz)*vz;
-        u0(m,IM1,k,j,i) -= uA_0*en*vx;
-        u0(m,IM2,k,j,i) -= uA_0*en*vy;
-        u0(m,IM3,k,j,i) -= uA_0*en*vz;
-      });
-    }
-
-  } else {
-    // remove net momentum
-    Real t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
-    Kokkos::parallel_reduce("net_mom_3", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, Real &sum_t0, Real &sum_t1, Real &sum_t2,
-                  Real &sum_t3) {
-      // compute n,k,j,i indices of thread
-      int m = (idx)/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/nx1;
-      int i = (idx - m*nkji - k*nji - j*nx1) + is;
-      k += ks;
-      j += js;
-
-      Real den = u0(m,IDN,k,j,i);
-      Real mom1 = u0(m,IM1,k,j,i);
-      Real mom2 = u0(m,IM2,k,j,i);
-      Real mom3 = u0(m,IM3,k,j,i);
-      if (flag_twofl) {
-        den += u0_(m,IDN,k,j,i);
-        mom1 += u0_(m,IM1,k,j,i);
-        mom2 += u0_(m,IM2,k,j,i);
-        mom3 += u0_(m,IM3,k,j,i);
+              // Does not require knowledge of v
+              u0(m, IEN, k, j, i) = uA_0 * en - uA_0 * (sx * vx + sy * vy + sz * vz);
+              u0(m, IEN, k, j, i) -= u0(m, IDN, k, j, i);
+              u0(m, IM1, k, j, i) =
+                  sx + (uA_0 - 1.) / (betaA * betaA) * (sx * vx + sy * vy + sz * vz) * vx;
+              u0(m, IM2, k, j, i) =
+                  sy + (uA_0 - 1.) / (betaA * betaA) * (sx * vx + sy * vy + sz * vz) * vy;
+              u0(m, IM3, k, j, i) =
+                  sz + (uA_0 - 1.) / (betaA * betaA) * (sx * vx + sy * vy + sz * vz) * vz;
+              u0(m, IM1, k, j, i) -= uA_0 * en * vx;
+              u0(m, IM2, k, j, i) -= uA_0 * en * vy;
+              u0(m, IM3, k, j, i) -= uA_0 * en * vz;
+            });
       }
+    }  // end relativistic case
+  }
+  return;
+}
 
-      sum_t0 += den;
-      sum_t1 += mom1;
-      sum_t2 += mom2;
-      sum_t3 += mom3;
-    }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1),
-       Kokkos::Sum<Real>(t2), Kokkos::Sum<Real>(t3));
+TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
+  if (pmy_pack == nullptr) {
+    return TaskStatus::complete;
+  }
 
+  Mesh* pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    return TaskStatus::complete;
+  }
+
+  Real dt = pm->dt;
+  Real bdt = dt;
+  if (pdrive != nullptr && stage > 0) {
+    bdt = (pdrive->beta[stage - 1]) * dt;
+  }
+
+  Real forcing_energy_before = 0.0;
+  auto integrated_energy = [&]() {
+    DvceArray5D<Real> u0;
+    if (pmy_pack->phydro != nullptr) u0 = pmy_pack->phydro->u0;
+    if (pmy_pack->pmhd != nullptr) u0 = pmy_pack->pmhd->u0;
+    auto& indcs = pm->mb_indcs;
+    const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+    const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
+    const int nmb = pmy_pack->nmb_thispack;
+    auto mb_size = pmy_pack->pmb->mb_size;
+    mb_size.template modify<HostMemSpace>();
+    mb_size.template sync<DevExeSpace>();
+    Real total = 0.0;
+    Kokkos::parallel_reduce(
+        "turb_injected_energy",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb * nx3 * nx2 * nx1),
+        KOKKOS_LAMBDA(const int idx, Real& energy) {
+          const int m = idx / (nx3 * nx2 * nx1);
+          const int k = (idx - m * nx3 * nx2 * nx1) / (nx2 * nx1) + ks;
+          const int j = (idx - m * nx3 * nx2 * nx1 -
+                         (k - ks) * nx2 * nx1) / nx1 + js;
+          const int i = idx - m * nx3 * nx2 * nx1 - (k - ks) * nx2 * nx1 -
+                        (j - js) * nx1 + is;
+          const Real vol = mb_size.d_view(m).dx1 * mb_size.d_view(m).dx2 *
+                           mb_size.d_view(m).dx3;
+          energy += vol * u0(m, IEN, k, j, i);
+        },
+        Kokkos::Sum<Real>(total));
 #if MPI_PARALLEL_ENABLED
-    Real m[4], gm[4];
-    m[0] = t0; m[1] = t1; m[2] = t2; m[3] = t3;
-    MPI_Allreduce(m, gm, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    t0 = gm[0]; t1 = gm[1]; t2 = gm[2]; t3 = gm[3];
+    Real global_total = 0.0;
+    MPI_Allreduce(&total, &global_total, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+    total = global_total;
 #endif
+    return total;
+  };
 
-    par_for("net_mom_4",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real den = u0(m,IDN,k,j,i);
+  if (record_injected_work) {
+    EquationOfState* peos = nullptr;
+    if (pmy_pack->phydro != nullptr) peos = pmy_pack->phydro->peos;
+    if (pmy_pack->pmhd != nullptr) peos = pmy_pack->pmhd->peos;
+    if (pdrive == nullptr || stage <= 0 || peos == nullptr ||
+        pmy_pack->pionn != nullptr || pmy_pack->pcoord->is_special_relativistic ||
+        !peos->eos_data.is_ideal) {
+      FatalTurbulenceError(
+          "record_injected_work requires a single nonrelativistic ideal/CGL fluid");
+    }
+    if (stage == 1) injected_work_cycle_start = injected_work;
+    forcing_energy_before = integrated_energy();
+  }
 
-      if (flag_relativistic) {
-        auto &ux = w0(m,IVX,k,j,i);
-        auto &uy = w0(m,IVY,k,j,i);
-        auto &uz = w0(m,IVZ,k,j,i);
+  ApplyForcingWithStep(bdt);
 
-        Real ut = 1. + ux*ux + uy*uy + uz*uz;
-        ut = sqrt(ut);
-        den /= ut;
+  if (record_injected_work) {
+    const Real stage_work = integrated_energy() - forcing_energy_before;
+    injected_work = pdrive->gam0[stage - 1] * injected_work +
+                    pdrive->gam1[stage - 1] * injected_work_cycle_start +
+                    stage_work;
+  }
+  return TaskStatus::complete;
+}
 
-        Real Fv_avg = den*(t1*ux + t2*uy + t3*uz)/ut/t0;
+//----------------------------------------------------------------------------------------
+//! \fn EnsureBasisSize()
+// \brief Detect mesh/AMR changes and ensure forcing basis and arrays match current mesh.
+//        Recomputes basis for all blocks when change is detected.
 
-        u0(m,IEN,k,j,i) -= Fv_avg;
-      }
-      u0(m,IM1,k,j,i) -= den*t1/t0;
-      u0(m,IM2,k,j,i) -= den*t2/t0;
-      u0(m,IM3,k,j,i) -= den*t3/t0;
-      if (flag_twofl) {
-        den = u0_(m,IDN,k,j,i);
-        u0_(m,IM1,k,j,i) -= den*t1/t0;
-        u0_(m,IM2,k,j,i) -= den*t2/t0;
-        u0_(m,IM3,k,j,i) -= den*t3/t0;
-      }
-    });
+TaskStatus TurbulenceDriver::EnsureBasisSize(Driver* pdrive, int stage) {
+  if (pmy_pack == nullptr) {
+    return TaskStatus::complete;
+  }
+
+  Mesh* pm = pmy_pack->pmesh;
+  if (pm == nullptr) return TaskStatus::complete;
+
+  // Update cached domain offsets in case AMR has modified the root-grid geometry.
+  domain_x1min = pm->mesh_size.x1min;
+  domain_x2min = pm->mesh_size.x2min;
+  domain_x3min = pm->mesh_size.x3min;
+
+  // --- change detection (idempotent) ---
+  int nmb = pmy_pack->nmb_thispack;
+  int nmb_alloc = std::max(nmb, pm->nmb_maxperrank);
+  bool needs_resize = false;
+  if (nmb != current_nmb_) needs_resize = true;
+  if (pm->adaptive && pm->pmr != nullptr) {
+    if (pm->pmr->nmb_created != last_nmb_created_ ||
+        pm->pmr->nmb_deleted != last_nmb_deleted_) {
+      needs_resize = true;
+    }
+  }
+  if (!needs_resize) return TaskStatus::complete;
+
+  // --- resize/rebuild path ---
+
+  auto& indcs = pmy_pack->pmesh->mb_indcs;
+  int ncells1 = indcs.nx1 + 2 * (indcs.ng);
+  int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2 * (indcs.ng)) : 1;
+  int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2 * (indcs.ng)) : 1;
+
+  // Retain the AMR-capacity allocation used by the fluid state arrays.
+  if (force.extent(0) < nmb_alloc) {
+    Kokkos::realloc(force, nmb_alloc, 3, ncells3, ncells2, ncells1);
+    Kokkos::realloc(xcos, nmb_alloc, mode_count, ncells1);
+    Kokkos::realloc(xsin, nmb_alloc, mode_count, ncells1);
+    Kokkos::realloc(ycos, nmb_alloc, mode_count, ncells2);
+    Kokkos::realloc(ysin, nmb_alloc, mode_count, ncells2);
+    Kokkos::realloc(zcos, nmb_alloc, mode_count, ncells3);
+    Kokkos::realloc(zsin, nmb_alloc, mode_count, ncells3);
+  }
+
+  // Modal coefficients are not modified here. Regridding only changes geometry-
+  // dependent Fourier basis values; UpdateForcing renders the same OU state.
+
+  if (pmy_pack->pmb == nullptr) {
+    return TaskStatus::complete;
+  }
+
+  BuildBasis();
+
+  // Update tracking variables
+  current_nmb_ = nmb;
+
+  if (pm->adaptive && pm->pmr != nullptr) {
+    last_nmb_created_ = pm->pmr->nmb_created;
+    last_nmb_deleted_ = pm->pmr->nmb_deleted;
   }
 
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn RefreshForceAfterMeshChange()
+//  \brief rebuild the rendered output field only when AMR changed the final mesh
+
+void TurbulenceDriver::RefreshForceAfterMeshChange(Driver* pdrive) {
+  if (pmy_pack == nullptr || pmy_pack->pmesh == nullptr) {
+    return;
+  }
+  Mesh* pm = pmy_pack->pmesh;
+  bool mesh_changed = (pmy_pack->nmb_thispack != current_nmb_);
+  if (pm->adaptive && pm->pmr != nullptr) {
+    mesh_changed = mesh_changed || (pm->pmr->nmb_created != last_nmb_created_) ||
+                   (pm->pmr->nmb_deleted != last_nmb_deleted_);
+  }
+  if (!mesh_changed) {
+    return;
+  }
+  (void) EnsureBasisSize(pdrive, 0);
+  (void) UpdateForcing(pdrive, 0);
+}
+
+TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
+  TurbulenceRestartMetadata metadata{};
+  metadata.version = 3;
+  metadata.mode_count = mode_count;
+  metadata.n_updates = n_turb_updates_yet;
+  metadata.nlow = nlow;
+  metadata.nhigh = nhigh;
+  metadata.driving_type = driving_type;
+  metadata.min_kx = min_kx;
+  metadata.max_kx = max_kx;
+  metadata.min_ky = min_ky;
+  metadata.max_ky = max_ky;
+  metadata.min_kz = min_kz;
+  metadata.max_kz = max_kz;
+  metadata.use_npeak = static_cast<int>(use_npeak);
+  metadata.turb_flag = turb_flag;
+  metadata.tile_nx = tile_nx;
+  metadata.tile_ny = tile_ny;
+  metadata.tile_nz = tile_nz;
+  metadata.normalization = static_cast<int>(normalization);
+  metadata.localization = static_cast<int>(localization);
+  metadata.spectrum = static_cast<int>(spectrum);
+  metadata.projection_policy = static_cast<int>(projection_policy);
+  metadata.physical_k_shell = static_cast<int>(physical_k_shell);
+  metadata.isotropic_power_spectrum = static_cast<int>(isotropic_power_spectrum);
+  metadata.record_injected_work = static_cast<int>(record_injected_work);
+  metadata.tcorr = tcorr;
+  metadata.dt_update = dt_update;
+  metadata.dedt = dedt;
+  metadata.accel_rms = accel_rms;
+  metadata.sol_fraction = sol_fraction;
+  metadata.kpeak = kpeak;
+  metadata.npeak = npeak;
+  metadata.expo = expo;
+  metadata.exp_prp = exp_prp;
+  metadata.exp_prl = exp_prl;
+  metadata.tdriv_duration = tdriv_duration;
+  metadata.tdriv_start = tdriv_start;
+  metadata.sigma_x1 = sigma_x1;
+  metadata.sigma_x2 = sigma_x2;
+  metadata.sigma_x3 = sigma_x3;
+  metadata.center_x1 = center_x1;
+  metadata.center_x2 = center_x2;
+  metadata.center_x3 = center_x3;
+  metadata.k_shell_unit = k_shell_unit;
+  return metadata;
+}
+
+void TurbulenceDriver::ValidateRestartMetadata(
+    const TurbulenceRestartMetadata& metadata) const {
+  TurbulenceRestartMetadata expected = RestartMetadata();
+  auto check = [](bool mismatch, const char* key) {
+    if (mismatch) {
+      FatalTurbulenceError("restart turbulence configuration differs for '" +
+                           std::string(key) + "'");
+    }
+  };
+  check(metadata.version != expected.version, "version");
+  check(metadata.mode_count != expected.mode_count, "mode_count");
+  check(metadata.nlow != expected.nlow, "nlow");
+  check(metadata.nhigh != expected.nhigh, "nhigh");
+  check(metadata.driving_type != expected.driving_type, "driving_type");
+  check(metadata.min_kx != expected.min_kx, "min_kx");
+  check(metadata.max_kx != expected.max_kx, "max_kx");
+  check(metadata.min_ky != expected.min_ky, "min_ky");
+  check(metadata.max_ky != expected.max_ky, "max_ky");
+  check(metadata.min_kz != expected.min_kz, "min_kz");
+  check(metadata.max_kz != expected.max_kz, "max_kz");
+  check(metadata.use_npeak != expected.use_npeak, "npeak selection");
+  check(metadata.turb_flag != expected.turb_flag, "turb_flag");
+  check(metadata.tile_nx != expected.tile_nx, "tile_nx");
+  check(metadata.tile_ny != expected.tile_ny, "tile_ny");
+  check(metadata.tile_nz != expected.tile_nz, "tile_nz");
+  check(metadata.normalization != expected.normalization, "normalization");
+  check(metadata.localization != expected.localization, "localization");
+  check(metadata.spectrum != expected.spectrum, "spectrum");
+  check(metadata.projection_policy != expected.projection_policy, "projection_policy");
+  check(metadata.physical_k_shell != expected.physical_k_shell, "physical_k_shell");
+  check(metadata.isotropic_power_spectrum != expected.isotropic_power_spectrum,
+        "isotropic_power_spectrum");
+  check(metadata.record_injected_work != expected.record_injected_work,
+        "record_injected_work");
+  check(metadata.tcorr != expected.tcorr, "tcorr");
+  check(metadata.dt_update != expected.dt_update, "dt_update");
+  check(metadata.dedt != expected.dedt, "dedt");
+  check(metadata.accel_rms != expected.accel_rms, "accel_rms");
+  check(metadata.sol_fraction != expected.sol_fraction, "sol_fraction");
+  check(metadata.npeak != expected.npeak, "npeak");
+  check(metadata.kpeak != expected.kpeak, "kpeak");
+  check(metadata.expo != expected.expo, "expo");
+  check(metadata.exp_prp != expected.exp_prp, "exp_prp");
+  check(metadata.exp_prl != expected.exp_prl, "exp_prl");
+  check(metadata.tdriv_duration != expected.tdriv_duration, "tdriv_duration");
+  check(metadata.tdriv_start != expected.tdriv_start, "tdriv_start");
+  check(metadata.sigma_x1 != expected.sigma_x1, "sigma_x1");
+  check(metadata.sigma_x2 != expected.sigma_x2, "sigma_x2");
+  check(metadata.sigma_x3 != expected.sigma_x3, "sigma_x3");
+  check(metadata.center_x1 != expected.center_x1, "center_x1");
+  check(metadata.center_x2 != expected.center_x2, "center_x2");
+  check(metadata.center_x3 != expected.center_x3, "center_x3");
+  check(metadata.k_shell_unit != expected.k_shell_unit, "k_shell_unit");
 }

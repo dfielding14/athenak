@@ -10,7 +10,7 @@
 //! types of Mesh variables. For Mesh variables, methods for cell-centered and
 //! face-centered fields are currently implemented, based on derived classes from the
 //! generic MeshBoundaryValue class.  A separate ParticlesBoundaryValues class is
-//! implemented for partciles.
+//! implemented for particles.
 
 // identifiers for all 6 faces of a MeshBlock
 enum BoundaryFace {undef=-1, inner_x1, outer_x1, inner_x2, outer_x2, inner_x3, outer_x3};
@@ -177,9 +177,11 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
   void ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons, DvceArray5D<Real> &prim);
   void PrimToConsFineBndry(const DvceArray5D<Real> &prim, DvceArray5D<Real> &cons);
   void ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
-                             DvceArray5D<Real> &prim);
+                             DvceArray5D<Real> &prim,
+                             bool cgl_magnetic_moment=false);
   void PrimToConsFineBndry(const DvceArray5D<Real> &prim, const DvceFaceFld4D<Real> &b,
-                           DvceArray5D<Real> &cons);
+                           DvceArray5D<Real> &cons,
+                           bool cgl_magnetic_moment=false);
 };
 
 //----------------------------------------------------------------------------------------

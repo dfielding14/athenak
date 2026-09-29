@@ -8,6 +8,7 @@
 //! boundary buffers where prolongation is used at fine/coarse level boundaries.  This
 //! enables prolongation in either the conserved or primitive variables.
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <string>
 
@@ -16,7 +17,9 @@
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "mesh/mesh_refinement.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_amr_projection.hpp"
 #include "eos/ideal_c2p_hyd.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
 #include "bvals.hpp"
@@ -24,6 +27,63 @@
 #include "coordinates/coordinates.hpp"
 #include "coordinates/cartesian_ks.hpp"
 #include "coordinates/cell_locations.hpp"
+
+namespace {
+
+KOKKOS_INLINE_FUNCTION
+void RecordCGLAMRRepairMask(
+    const cgl::amr::RepairMask mask,
+    const DvceArray1D<std::uint64_t> &counters) {
+  if (mask == cgl::amr::kNone) return;
+  Kokkos::atomic_increment(
+      &counters(MeshRefinement::cgl_amr_cells_repaired_index));
+  if ((mask & cgl::amr::kNonfiniteThermo) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_nonfinite_repairs_index));
+  }
+  if ((mask & cgl::amr::kDensityFloor) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_density_repairs_index));
+  }
+  if ((mask & cgl::amr::kInternalEnergyFloor) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_energy_repairs_index));
+  }
+  if ((mask & cgl::amr::kParallelPressureFloor) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_parallel_repairs_index));
+  }
+  if ((mask & cgl::amr::kPerpPressureFloor) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_perp_repairs_index));
+  }
+  if ((mask & cgl::amr::kLowFieldIsotropized) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_lowb_repairs_index));
+  }
+  if ((mask & cgl::amr::kFirehoseHardwall) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_firehose_repairs_index));
+  }
+  if ((mask & cgl::amr::kMirrorHardwall) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_mirror_repairs_index));
+  }
+  if ((mask & cgl::amr::kAnisotropyChanged) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_anisotropy_repairs_index));
+  }
+  if ((mask & cgl::amr::kIntervalEnergyExpanded) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_interval_repairs_index));
+  }
+  if ((mask & cgl::amr::kSlopeScaled) != 0u) {
+    Kokkos::atomic_increment(
+        &counters(MeshRefinement::cgl_amr_slope_repairs_index));
+  }
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn void ConsToPrimCoarseBndry()
@@ -301,7 +361,8 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
 //! Only works for MHD, the same function for hydro has different argument list.
 
 void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
-                                 const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim) {
+                                 const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim,
+                                 bool cgl_magnetic_moment) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -320,6 +381,9 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
   auto &eos = pmy_pack->pmhd->peos->eos_data;
   int &nmhd  = pmy_pack->pmhd->nmhd;
   int &nscal = pmy_pack->pmhd->nscalars;
+  const bool is_cgl = eos.is_cgl;
+  auto repair_counters =
+      pmy_pack->pmesh->pmr->cgl_amr_pending_repair_counters;
 
   // Outer loop over (# of MeshBlocks)*(# of buffers)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr), Kokkos::AUTO);
@@ -366,6 +430,9 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         u.my = cons(m,IM2,k,j,i);
         u.mz = cons(m,IM3,k,j,i);
         u.e  = cons(m,IEN,k,j,i);
+        if (is_cgl) {
+          u.mu = cons(m,IAN,k,j,i);
+        }
         // use simple linear average of face-centered fields
         u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
         u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
@@ -373,7 +440,36 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         HydPrim1D w;
 
         bool dfloor_used=false, efloor_used=false, tfloor_used=false;
-        if (is_gr) {
+        if (is_cgl) {
+          MHDPrim1D projected_w;
+          HydCons1D projected_u;
+          const auto slot = cgl_magnetic_moment
+                                ? cgl::amr::magnetic_moment
+                                : cgl::amr::anisotropy;
+          const auto report = cgl::amr::ProjectConservedToCGL(
+              u, eos, slot, projected_w, projected_u);
+          w.d = projected_w.d;
+          w.vx = projected_w.vx;
+          w.vy = projected_w.vy;
+          w.vz = projected_w.vz;
+          w.e = projected_w.e;
+          w.pp = projected_w.pp;
+          const auto core = rbuf[n].iprol[0];
+          const bool in_i = (i >= core.bis && i <= core.bie);
+          const bool in_j = (j >= core.bjs && j <= core.bje);
+          const bool in_k = (k >= core.bks && k <= core.bke);
+          const bool axial_i = (i == core.bis - 1 || i == core.bie + 1) &&
+                               in_j && in_k;
+          const bool axial_j = multi_d &&
+                               (j == core.bjs - 1 || j == core.bje + 1) &&
+                               in_i && in_k;
+          const bool axial_k = three_d &&
+                               (k == core.bks - 1 || k == core.bke + 1) &&
+                               in_i && in_j;
+          if ((in_i && in_j && in_k) || axial_i || axial_j || axial_k) {
+            RecordCGLAMRRepairMask(report.repairs, repair_counters);
+          }
+        } else if (is_gr) {
           Real &x1min = size.d_view(m).x1min;
           Real &x1max = size.d_view(m).x1max;
           // Note indices refer to coarse arrays, so use cis, cnx1
@@ -440,6 +536,9 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         prim(m,IVY,k,j,i) = w.vy;
         prim(m,IVZ,k,j,i) = w.vz;
         prim(m,IEN,k,j,i) = w.e;
+        if (is_cgl) {
+          prim(m,IPP,k,j,i) = w.pp;
+        }
         // No need to store cell-centered fields since they will not be prolongated
         // convert scalars (if any)
         for (int n=nmhd; n<(nmhd+nscal); ++n) {
@@ -447,7 +546,8 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
           if (cons(m,n,k,j,i) < 0.0) {
             cons(m,n,k,j,i) = 0.0;
           }
-          prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
+          const Real density = is_cgl ? w.d : u.d;
+          prim(m,n,k,j,i) = cons(m,n,k,j,i)/density;
         }
       });
     }
@@ -463,7 +563,8 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
 //! Note same function for Hydrodynamics has different argument list.
 
 void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
-                               const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &cons) {
+                               const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &cons,
+                               bool cgl_magnetic_moment) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -479,9 +580,13 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
   auto &spin = pmy_pack->pcoord->coord_data.bh_spin;
   bool &is_sr = pmy_pack->pcoord->is_special_relativistic;
   bool &is_gr = pmy_pack->pcoord->is_general_relativistic;
-  Real &gamma = pmy_pack->pmhd->peos->eos_data.gamma;
+  auto &eos = pmy_pack->pmhd->peos->eos_data;
+  Real &gamma = eos.gamma;
   int &nmhd  = pmy_pack->pmhd->nmhd;
   int &nscal = pmy_pack->pmhd->nscalars;
+  const bool is_cgl = eos.is_cgl;
+  auto repair_counters =
+      pmy_pack->pmesh->pmr->cgl_amr_pending_repair_counters;
 
   // Outer loop over (# of MeshBlocks)*(# of buffers)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr), Kokkos::AUTO);
@@ -526,13 +631,25 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
         w.vy = prim(m,IVY,k,j,i);
         w.vz = prim(m,IVZ,k,j,i);
         w.e  = prim(m,IEN,k,j,i);
+        if (is_cgl) {
+          w.pp = prim(m,IPP,k,j,i);
+        }
         // use simple linear average of face-centered fields
         w.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
         w.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
         w.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
         HydCons1D u;
 
-        if (is_gr) {
+        if (is_cgl) {
+          MHDPrim1D projected_w;
+          const auto slot = cgl_magnetic_moment
+                                ? cgl::amr::magnetic_moment
+                                : cgl::amr::anisotropy;
+          const auto report = cgl::amr::ProjectPrimitiveToCGL(
+              w, eos, slot, projected_w, u);
+          w = projected_w;
+          RecordCGLAMRRepairMask(report.repairs, repair_counters);
+        } else if (is_gr) {
           Real &x1min = size.d_view(m).x1min;
           Real &x1max = size.d_view(m).x1max;
           Real x1v = CellCenterX(i-indcs.is, indcs.nx1, x1min, x1max);
@@ -560,6 +677,9 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
         cons(m,IM2,k,j,i) = u.my;
         cons(m,IM3,k,j,i) = u.mz;
         cons(m,IEN,k,j,i) = u.e;
+        if (is_cgl) {
+          cons(m,IAN,k,j,i) = u.mu;
+        }
 
         // convert scalars (if any)
         for (int n=nmhd; n<(nmhd+nscal); ++n) {

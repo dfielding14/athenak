@@ -1,0 +1,756 @@
+{
+  "active_energy_policy": {
+    "applicability": {
+      "active_cases": [
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R10",
+        "R11",
+        "R12",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17"
+      ],
+      "passive_cases_unchanged": [
+        "R06",
+        "R07",
+        "R08",
+        "R09"
+      ],
+      "passive_scope": "No active-energy closure gate is added to passive R06-R09; their existing passive pressure-work scope is unchanged."
+    },
+    "prior_manuscript_gate_provenance": {
+      "criterion": {
+        "increment_normalized_residual_lte": 1e-12,
+        "status": "preserved_non_authorizing_manuscript_provenance"
+      },
+      "disposition": "The original <=1e-12 manuscript-gate failure is preserved and is not reclassified by the reviewed production-science gate.",
+      "r02_exact_accepted_lineage": {
+        "developed": {
+          "absolute_mismatch": 1.6056489471338864e-11,
+          "delta_forcing_work": 3.8390160480947895,
+          "delta_total_energy": 3.839016048078733,
+          "increment_normalized_residual": 4.182449166709608e-12,
+          "manuscript_gate_result": "fail",
+          "window": [
+            4.0,
+            10.0
+          ]
+        },
+        "whole_lineage": {
+          "absolute_mismatch": 2.0532908706627495e-11,
+          "delta_forcing_work": 6.398470280246185,
+          "delta_total_energy": 6.398470280225652,
+          "increment_normalized_residual": 3.209034004583589e-12,
+          "manuscript_gate_result": "fail",
+          "window": [
+            0.0,
+            10.0
+          ]
+        }
+      }
+    },
+    "production_science_gate": {
+      "absolute_mismatch_reporting": "required_descriptive_evidence",
+      "both_required_windows_must_pass": true,
+      "increment_normalization": "abs(delta_total_energy - delta_forcing_work) / max(abs(delta_total_energy), abs(delta_forcing_work)); exact zero mismatch over an exact zero scale is zero",
+      "increment_normalized_residual_lt": 1e-08,
+      "state_normalized_mismatch": "abs(delta_total_energy - delta_forcing_work) / max(abs(total_energy_start), abs(total_energy_end)); exact zero mismatch over an exact zero scale is zero",
+      "warning_increment_normalized_residual_gte": 1e-09,
+      "window_layout_resolution_reporting": "required"
+    },
+    "required_history_layout": {
+      "forcing_work": {
+        "column": "force_work",
+        "history": "user"
+      },
+      "total_energy": {
+        "column": "tot-E",
+        "history": "mhd"
+      }
+    },
+    "required_windows": {
+      "developed": [
+        4.0,
+        10.0
+      ],
+      "whole_lineage": [
+        0.0,
+        10.0
+      ]
+    },
+    "review_basis": {
+      "numerical_rationale": "Forcing work and total energy are independently accumulated retained history diagnostics across a segmented production lineage; a relative closure tolerance well above roundoff but far below physical energy increments tests implementation-level conservation without treating serialization and accumulation order as plasma physics.",
+      "threshold_basis": "The strict <1e-8 rejection threshold is inherited from the existing Stage I production forcing-work closure criterion and was not selected to erase the known R02 <=1e-12 manuscript-gate failure.",
+      "warning_basis": "The >=1e-9 warning threshold is one decade below rejection and provides escalation without changing pass/fail."
+    },
+    "revision_id": "active-energy-production-science-v1"
+  },
+  "allowed_exclusions": {
+    "blocked_or_external_panels": [
+      "fig3a",
+      "fig3b",
+      "fig4b",
+      "fig5a",
+      "fig6a",
+      "fig6b",
+      "fig7top",
+      "fig10",
+      "fig11top",
+      "fig12bottom",
+      "fig13a",
+      "fig13c"
+    ],
+    "policy": "Only panels already classified blocked_reference or external_model by the exact bound Stage I manifest may be blocked_out_of_scope. Admitted comparison panels may not be dropped after results are visible."
+  },
+  "analysis_windows": {
+    "early": [
+      4.0,
+      8.0
+    ],
+    "full": [
+      4.0,
+      10.0
+    ],
+    "late": [
+      6.0,
+      10.0
+    ]
+  },
+  "authority": "non-authorizing-preregistered-scientific-policy",
+  "canonical_campaign_policy": {
+    "campaign_root": "/lustre/orion/ast207/proj-shared/dfielding/CGL",
+    "controller_path": "/autofs/nccs-svm1_home2/dfielding/athenak-df/scripts/frontier/cgl_lf_stage_i.py",
+    "execution_epoch": "E03-forcing-policy",
+    "ledger_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_node_hours.csv",
+    "reservation_store_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_reservations.json",
+    "run_root": "/lustre/orion/ast207/proj-shared/dfielding/CGL/runs/mks24-stage-i/E03-forcing-policy",
+    "source_archive_root": "/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives"
+  },
+  "case_metrics": {
+    "abs_dp": {
+      "column": "abs_dp",
+      "history": "user",
+      "reduction": "volume_mean",
+      "stationarity_kind": "scalar"
+    },
+    "beta": {
+      "column": "beta",
+      "history": "user",
+      "reduction": "volume_mean",
+      "stationarity_kind": "scalar"
+    },
+    "firehose_occupancy": {
+      "column": "fire_vol",
+      "history": "user",
+      "reduction": "volume_fraction",
+      "stationarity_kind": "occupancy"
+    },
+    "force_power": {
+      "column": "force_pwr",
+      "history": "user",
+      "reduction": "total",
+      "stationarity_kind": "forcing_power"
+    },
+    "hard_occupancy": {
+      "column": "hard_vol",
+      "history": "user",
+      "reduction": "volume_fraction",
+      "stationarity_kind": "occupancy"
+    },
+    "kinetic": {
+      "column": "kinetic",
+      "history": "user",
+      "reduction": "total",
+      "stationarity_kind": "scalar"
+    },
+    "magnetic": {
+      "column": "magnetic",
+      "history": "user",
+      "reduction": "total",
+      "stationarity_kind": "scalar"
+    },
+    "mirror_occupancy": {
+      "column": "mirror_vol",
+      "history": "user",
+      "reduction": "volume_fraction",
+      "stationarity_kind": "occupancy"
+    },
+    "nu_eff": {
+      "column": "nu_eff",
+      "history": "user",
+      "reduction": "volume_mean",
+      "stationarity_kind": "scalar"
+    }
+  },
+  "comparison_panels": [
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig2a",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig2b",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig4a",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig5b",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig7bottom",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig8",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig9",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig11bottom",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig12top",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig13b",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    },
+    {
+      "early_late_vector_drift_rms_lte": 1.5,
+      "id": "fig13d",
+      "maximum_absolute_normalized_residual_lte": 5.0,
+      "normalized_residual_rms_lte": 2.0
+    }
+  ],
+  "criteria_change_record": {
+    "change_id": "physical-time-stationarity-r03-r17-v3",
+    "current_policy": {
+      "analysis_windows": {
+        "early": [
+          4.0,
+          8.0
+        ],
+        "full": [
+          4.0,
+          10.0
+        ],
+        "late": [
+          6.0,
+          10.0
+        ]
+      },
+      "minimum_effective_samples": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "minimum_independent_time_blocks": {
+        "comparison": 2.0,
+        "full": 3.0
+      }
+    },
+    "execution_effect": "No production authorization change or extension is required before applying this fixed policy to retained t<=10 outputs.",
+    "extension_rule": "Only a stationarity gate that is inconclusive solely from sampling adequacy at t=10 may nominate one separately authorized extension to t=12; the prospective artifact must bind the exact preserved t<=10 evidence digest and fixed combination rule.",
+    "outcome_blinding_statement": "Windows, minima, physical-time ESS, and paired-contrast rules were fixed from forcing_tcorr and retained t<=10 support without using R03-R17 acceptance outcomes.",
+    "physics_rationale": "For the fifteen forcing_tcorr=2 cases, t=4 starts after two forcing correlation times; t=4..10 spans three forcing-time blocks and the fixed overlapping t=4..8 and t=6..10 comparison windows each span two, with their centers separated by one forcing correlation time. R11 forcing_tcorr=0.2 is more strongly sampled.",
+    "previous_policy": {
+      "analysis_windows": {
+        "early": [
+          4.0,
+          7.0
+        ],
+        "full": [
+          4.0,
+          10.0
+        ],
+        "late": [
+          7.0,
+          10.0
+        ]
+      },
+      "minimum_effective_samples": {
+        "full": 3.0,
+        "half": 1.5
+      },
+      "minimum_independent_time_blocks": {
+        "full": 3.0,
+        "half": 1.5
+      }
+    },
+    "review_disposition": "approved_by_independent_plasma_and_statistical_review",
+    "statistical_rationale": "Physical-time integrated autocorrelation, max-gap coverage, and ESS prevent clustered output sampling from inflating evidence. At the exact two-block comparison minimum, paired physical effect-size thresholds are pass/fail authority and moving-block bootstrap uncertainty is descriptive only."
+  },
+  "ct_divb_policy": {
+    "claim_scope": "sampled retained-state normalized CT-divB below the preregistered threshold",
+    "historical_limitation": "The frozen E03 executable did not retain a full-time-history max_ndiv diagnostic. This audit cannot establish the maximum between retained restart states.",
+    "inventory_replay_rule": "exact-deterministic-reconstruction-from-bound-accepted-bundle-required",
+    "normalized_ct_divb_lt": 1e-12,
+    "required_state_times": [
+      9,
+      10
+    ],
+    "restart_format": "AthenaK native little-endian binary64 rank-local CGL restart, uniform non-AMR three-dimensional mesh, exact accepted-inspection multi-state inventory-bound siblings",
+    "reviewed_inventory_builder_binding": {
+      "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
+      "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade",
+      "status": "exact_replay_tool_bound"
+    }
+  },
+  "extension_policy": {
+    "current_policy_authorizes_extension": false,
+    "decision": "Evaluate and preserve the fixed t<=10 result first. Only a stationarity gate that is inconclusive solely from sampling adequacy may nominate the exact prospective fallback.",
+    "decision_time": 10.0,
+    "extension_triggers": [
+      "any required stationarity gate has result=inconclusive solely because sampling_adequacy=inconclusive at t=10"
+    ],
+    "forbidden_after_results": [
+      "relax thresholds",
+      "move the analysis windows",
+      "move the convergence interval",
+      "drop failed admitted products",
+      "reclassify failed or inconclusive gates as passed",
+      "use any family, panel, convergence, CT, or product gate as an extension trigger",
+      "use a passed or failed stationarity gate as an extension trigger"
+    ],
+    "non_triggers": [
+      "passed or failed stationarity gate",
+      "missing or unavailable required analysis products",
+      "incomplete retained-state CT coverage",
+      "failed family, panel, convergence, or other plasma-physics gate",
+      "passed or blocked_out_of_scope gate"
+    ],
+    "prospective_extension_rule": {
+      "analysis_windows": {
+        "early": [
+          6.0,
+          10.0
+        ],
+        "full": [
+          6.0,
+          12.0
+        ],
+        "late": [
+          8.0,
+          12.0
+        ]
+      },
+      "authorization": "requires a separately approved non-retrospective criteria artifact and unchanged production authorization",
+      "fixed_combination_rule": {
+        "all_other_t10_results": "unchanged",
+        "eligible_t10_case_result": "inconclusive",
+        "eligible_t10_gate_result": "inconclusive",
+        "eligible_t10_trigger": "sampling_adequacy=inconclusive",
+        "extension_fail": "nominated gate becomes fail",
+        "extension_inconclusive": "nominated gate remains inconclusive",
+        "extension_pass": "nominated gate becomes pass",
+        "preserved_t10_evidence": "exact digest remains immutable and separately reportable",
+        "replaceable_result": "only nominated sampling-inconclusive stationarity gates"
+      },
+      "maximum_extensions": 1,
+      "minimum_effective_samples": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "minimum_independent_time_blocks": {
+        "comparison": 2.0,
+        "full": 3.0
+      },
+      "nominated_endpoint": 12.0,
+      "required_prospective_artifact": {
+        "approval_timing": "independently approved before extension execution and before t>10 outcomes exist",
+        "record_type": "stage-i-scientific-stationarity-extension-prospective-artifact",
+        "required_exact_bindings": [
+          "preserved_t10_case_evidence_sha256",
+          "criteria_sha256",
+          "acceptance_utility_sha256"
+        ]
+      },
+      "threshold_policy": "unchanged from the fixed t<=10 assessment"
+    },
+    "rule": "At t=10, only a sampling-inconclusive stationarity gate may nominate exactly one t=12 extension. Before execution, a separate prospective artifact must bind the exact preserved t<=10 evidence digest and fixed combination rule; no t<=10 pass or fail may be rescued, use no other windows, and permit no further extension."
+  },
+  "family_gates": {
+    "active_passive": {
+      "active_cases": [
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R10",
+        "R11",
+        "R12",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17"
+      ],
+      "activity_absolute_gt": 1e-06,
+      "contrast_metrics": [
+        "abs_dp",
+        "unstable_occupancy",
+        "peak_alignment"
+      ],
+      "decision_mode": "descriptive_within_realization_coherent_direction",
+      "expected_directions": {
+        "abs_dp": "active_lower",
+        "peak_alignment": "active_lower",
+        "unstable_occupancy": "active_lower"
+      },
+      "intervention_scope": {
+        "claim_scope": "descriptive_within_realization",
+        "declaration": "The active/passive comparison estimates the total effect of enabling active-CGL pressure feedback, thermodynamic evolution, characteristic speeds and fluxes, and realized forcing after trajectory divergence; it is not an anisotropic-stress-only comparison.",
+        "enabled_components": [
+          "pressure_feedback",
+          "thermodynamic_evolution",
+          "characteristic_speeds_and_fluxes",
+          "realized_forcing_after_trajectory_divergence"
+        ],
+        "estimand": "total_effect_of_enabling_active_cgl",
+        "excluded_interpretation": "anisotropic_stress_alone"
+      },
+      "minimum_abs_standardized_effect": 0.5,
+      "minimum_coherent_metrics": 2,
+      "minimum_large_effect_metrics": 1,
+      "pairs": [
+        [
+          "R02",
+          "R06"
+        ],
+        [
+          "R03",
+          "R07"
+        ],
+        [
+          "R04",
+          "R08"
+        ],
+        [
+          "R05",
+          "R09"
+        ]
+      ],
+      "passive_cases": [
+        "R06",
+        "R07",
+        "R08",
+        "R09"
+      ],
+      "population_inference": "forbidden_one_realization_per_condition"
+    },
+    "finite_limiter": {
+      "cases": [
+        "R14",
+        "R15"
+      ],
+      "minimum_occupancy": 1e-06,
+      "ordering": "R15 minus R14 late-time nu_eff has a positive descriptive time-aligned paired-trajectory moving-block-bootstrap lower bound"
+    },
+    "forcing": {
+      "alfvenic_cases": [
+        "R02",
+        "R03",
+        "R06",
+        "R07",
+        "R12",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17"
+      ],
+      "alfvenic_parallel_fraction_lte": 1e-10,
+      "random_cases": [
+        "R04",
+        "R05",
+        "R08",
+        "R09",
+        "R10",
+        "R11"
+      ],
+      "random_parallel_fraction_block_lower_95_gt": 0.05
+    },
+    "hardwall": {
+      "cases": [
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R10",
+        "R11",
+        "R12",
+        "R13",
+        "R16",
+        "R17"
+      ],
+      "minimum_occupancy": 1e-06
+    },
+    "lf_strength": {
+      "activity_absolute_gt": 1e-06,
+      "activity_state_normalized_gt": 1e-08,
+      "baseline_case": "R02",
+      "cases": [
+        "R12",
+        "R02",
+        "R13"
+      ],
+      "decision_mode": "descriptive_response_and_activity",
+      "near_insensitivity_abs_standardized_effect_lte": 0.5,
+      "near_insensitivity_is_scientifically_meaningful": true,
+      "required_activity_cases": [
+        "R12",
+        "R02",
+        "R13"
+      ],
+      "required_comparisons": [
+        [
+          "R12",
+          "R02"
+        ],
+        [
+          "R13",
+          "R02"
+        ]
+      ],
+      "response_metric": "peak_alignment"
+    }
+  },
+  "non_authorizing_statement": "This candidate is scientific assessment evidence only and does not authorize simulation execution, canonical publication, or Stage I release.",
+  "record_type": "stage-i-scientific-acceptance-criteria",
+  "required_cases": [
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R08",
+    "R09",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "R16",
+    "R17"
+  ],
+  "resolution_convergence": {
+    "alignment_max_abs_lte": 0.05,
+    "alignment_shells": [
+      4,
+      6,
+      8,
+      12,
+      16,
+      24
+    ],
+    "cases": [
+      "R16",
+      "R02",
+      "R17"
+    ],
+    "common_k_perp_over_pi": [
+      4.0,
+      24.0
+    ],
+    "improvement_ratio_lte": 0.75,
+    "k_coordinate": "physical_k_equals_k_perp_over_pi_times_exact_pi",
+    "resolved_disagreement_sigma_gt": 2.0,
+    "scalar_metrics": [
+      "kinetic",
+      "magnetic",
+      "beta",
+      "unstable_occupancy"
+    ],
+    "scalar_relative_difference_lte": 0.1,
+    "spectral_log_rms_lte": 0.15
+  },
+  "schema_version": 1,
+  "scientific_products_policy": {
+    "contract": {
+      "contract_schema_version": 2,
+      "deterministic_replay_verification": "exact-semantic-replay-from-bound-canonical-case-inputs",
+      "hand_authored_or_unreplayed_products": "inconclusive",
+      "output_schema_version": 1
+    },
+    "reviewed_generator_binding": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+      "sha256": "25079123a142aefda152bb84e46c57743d37bc6a083c0ab9dfb35141171dceaa",
+      "status": "exact_replay_tool_bound"
+    },
+    "reviewed_method_revision": {
+      "athena_binary_parser": {
+        "path": "vis/python/bin_convert.py",
+        "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+      },
+      "immutability": "canonical-json-sha256-current-operational-contract-with-historical-approvals-retained-separately",
+      "methods": {
+        "local_field_eddy_anisotropy": {
+          "admitted_products": [
+            "eddy_anisotropy.velocity_perp",
+            "eddy_anisotropy.magnetic_perp"
+          ],
+          "angle_degrees": 15.0,
+          "bins": 24,
+          "bit_generator": "numpy.random.PCG64",
+          "definition": "solve S2(phi; ell_perp) = S2(phi; ell_parallel), where S2 = <|phi(x+ell) - 2 phi(x) + phi(x-ell)|^2>",
+          "ensemble_aggregation": "sample-count-weighted parallel and perpendicular structure functions followed by equal-power scale inversion",
+          "equal_power_inversion": "log-log interpolation on the strictly increasing parallel structure-function branch at common perpendicular structure-function power",
+          "local_field_conditioning": "three-point local mean magnetic field; separation vectors within 15 degrees of parallel or perpendicular",
+          "normalization": "ell_perp and ell_parallel divided by L_perp = sqrt(Lx Ly)",
+          "perpendicular_vector_projection": "velocity and magnetic vectors projected perpendicular to the three-point local magnetic field before the second-order increment",
+          "samples_per_snapshot": 2000000,
+          "seed": 731,
+          "separation_sampling": "deterministic NumPy PCG64 random lattice separations logarithmically balanced over normalized separation bins"
+        },
+        "pressure_transfer": {
+          "admitted_products": [
+            "pressure_transfer.transfer",
+            "pressure_transfer.transfer_normalized_by_total"
+          ],
+          "definition": "integral <sqrt(rho) u>_k dot [(B/sqrt(rho)) dot grad ((Delta p/B^2) B)] over each perpendicular Fourier shell",
+          "delta_p_definition": "Delta p = p_perp - p_parallel",
+          "normalization": "per-snapshot T_total = E_K (2 pi u_rms / L_perp), with E_K = integral[0.5 rho |u|^2] dV, u_rms = sqrt(<|u|^2>), and L_perp = sqrt(Lx Ly)",
+          "passive_case_semantics": "pressure-anisotropy transfer remains a diagnostic comparison when anisotropic pressure work is not applied to the flow",
+          "perpendicular_shell_partition": "floor(k_perp/dk + 1e-12), with dk = 2 pi / L_parallel",
+          "spatial_discretization": "second-order centered periodic real-space gradients and a full three-dimensional FFT Parseval cross-spectrum",
+          "temporal_aggregation": "arithmetic mean of per-snapshot shell transfer and per-snapshot normalized transfer"
+        }
+      },
+      "revision_id": "pressure-transfer-and-local-field-eddy-anisotropy-v1",
+      "schema_version": 1,
+      "scientific_products_generator": {
+        "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+        "sha256": "25079123a142aefda152bb84e46c57743d37bc6a083c0ab9dfb35141171dceaa"
+      },
+      "status": "exact_method_contract_declared"
+    }
+  },
+  "source_bindings": {
+    "acceptance_utility": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_acceptance.py",
+      "sha256": "a4080fd0c34de87d4d61a17b8adf2fb209abe5988806423ff154d6894d7adbda"
+    },
+    "athena_binary_parser": {
+      "path": "vis/python/bin_convert.py",
+      "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c"
+    },
+    "ct_inventory_builder": {
+      "path": "scripts/frontier/cgl_lf_stage_i_ct_inventory.py",
+      "sha256": "01dc383e88ed40236c839448df276533dfc4e024e7549adbbf29587eda4abade"
+    },
+    "qualification_approval": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_qualification_approval.json",
+      "sha256": "e3fec9f35da42121b902f41ef752021f375aab38bc34c5ff75ae8780bfbca635"
+    },
+    "reference_archive_manifest": {
+      "path": "build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json",
+      "sha256": "33dcfe81b270c8e26cf3b390c4af2dffa341fa2b9096308092ece2f3b2cb619a"
+    },
+    "reviewed_f116_source_authority_evidence": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json",
+      "sha256": "6cdbf9e4d10f1282744c6274aa3ef08afec4c510420296837fdbbdfcefe30a2a"
+    },
+    "reviewed_f116_source_authority_plasma_review": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json.plasma_scientific_review.json",
+      "sha256": "bc4da6897263843f5d233f996539ff047d6ef465b775a9b5cdc8f864de96a6b8"
+    },
+    "reviewed_f116_source_authority_provenance_review": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json.provenance_security_review.json",
+      "sha256": "e9731aab8305505e058c68ae8bb61c9ec5ff4885bde1bee3162719c41ab9bafd"
+    },
+    "reviewed_f116_source_authority_publication_audit": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F116_current_source_authority_supersession_evidence.json.publication_audit.json",
+      "sha256": "3a6168e3039c02656b38ebdfcadffc07a2f151b1a474084307a80a341ba83096"
+    },
+    "scientific_products_generator": {
+      "path": "scripts/frontier/cgl_lf_stage_i_scientific_products.py",
+      "sha256": "25079123a142aefda152bb84e46c57743d37bc6a083c0ab9dfb35141171dceaa"
+    },
+    "stage_i_manifest": {
+      "path": "inputs/cgl_lf_paper/mks24_stage_i_manifest.json",
+      "sha256": "bf31b88b985d1ad4ffe823108dd7c1132bdfa4d5e4a6abde51f66bb7778415c9"
+    },
+    "verified_reference_archive_manifest": {
+      "path": "build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2-verified/manifest.json",
+      "sha256": "087837deeb79d0110ea97bdb522b48a79f835732deecf14cd41318f272d9e8d2"
+    }
+  },
+  "source_catalog_policy": {
+    "baseline_catalog": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/source-archives/SHA256SUMS",
+      "sha256": "a4732ea46003dc39d83591beaf93f5fe475dddf054c2eb57f76bda108fa80854"
+    },
+    "baseline_checkpoint": "F-116",
+    "invalid_or_uncommitted_successor": "fail_closed",
+    "selection_rule": "immutable-reviewed-f116-baseline-or-exact-published-f118-successor",
+    "successor_checkpoint": "F-118",
+    "successor_paths": {
+      "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json",
+      "plasma_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.plasma_scientific_review.json",
+      "provenance_review": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.provenance_security_review.json",
+      "publication_audit": "/lustre/orion/ast207/proj-shared/dfielding/CGL/accounting/mks24_stage_i_E03_forcing_policy_F118_current_source_authority_supersession_evidence.json.publication_audit.json"
+    }
+  },
+  "statistics_policy": {
+    "bootstrap_replicates": 2000,
+    "effective_samples": "physical-time-initial-positive-sequence",
+    "gap_policy": {
+      "expected_history_cadence": 0.02,
+      "maximum_gap_expected_cadence_multiplier": 2.5,
+      "maximum_gap_forcing_tcorr_fraction": 0.25,
+      "rule": "exact endpoint-clipped physical-time coverage with maximum gap <= max(expected cadence * multiplier, authenticated forcing_tcorr * fraction); sample-count and median-cadence density are not acceptance authority"
+    },
+    "minimum_effective_samples": {
+      "comparison": 2.0,
+      "full": 3.0
+    },
+    "minimum_independent_time_blocks": {
+      "comparison": 2.0,
+      "full": 3.0
+    },
+    "stationarity": {
+      "decision_authority": "paired physical-time early-minus-late effect size only; moving-block bootstrap uncertainty is descriptive and never pass/fail authority",
+      "forcing_power_relative_change_lte": 0.1,
+      "occupancy_absolute_change_lte": 0.002,
+      "scalar_relative_change_lte": 0.25
+    },
+    "stationarity_contrast": "paired-physical-time-early-minus-late-effect-size-with-descriptive-bootstrap",
+    "time_average": "endpoint-clipped-trapezoidal",
+    "uncertainty": "deterministic-time-moving-block-bootstrap",
+    "uncertainty_block_duration": "maximum of estimated integrated autocorrelation duration, retained cadence, and authenticated forcing_tcorr"
+  }
+}

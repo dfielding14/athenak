@@ -32,7 +32,10 @@ add_executable(
         coordinates/excision.cpp
 
         diffusion/conduction.cpp
+        diffusion/cgl_landau_fluid.cpp
+        diffusion/hyperviscosity.cpp
         diffusion/resistivity.cpp
+        diffusion/scalar_diffusion.cpp
         diffusion/sts_rkl2.cpp
         diffusion/viscosity.cpp
 
@@ -43,9 +46,9 @@ add_executable(
         dyn_grmhd/dyn_grmhd_fofc.cpp
 
         eos/eos.cpp
+        eos/cgl_mhd.cpp
         eos/ideal_hyd.cpp
         eos/ideal_mhd.cpp
-	eos/cgl_mhd.cpp
         eos/isothermal_hyd.cpp
         eos/isothermal_mhd.cpp
         eos/ideal_srhyd.cpp
@@ -60,7 +63,7 @@ add_executable(
 
         geodesic-grid/geodesic_grid.cpp
         geodesic-grid/spherical_grid.cpp
-	geodesic-grid/gauss_legendre.cpp
+        geodesic-grid/gauss_legendre.cpp
 
         hydro/hydro.cpp
         hydro/hydro_fluxes.cpp
@@ -118,8 +121,14 @@ add_executable(
         pgen/tests/collapse.cpp
         pgen/tests/cpaw.cpp
         pgen/tests/cshock.cpp
+        pgen/tests/cgl_fofc.cpp
+        pgen/tests/cgl_landau_fluid.cpp
+        pgen/tests/cgl_lf_paper.cpp
+        pgen/tests/cgl_lf_sbox.cpp
         pgen/tests/divb_amr.cpp
         pgen/tests/diffusion.cpp
+        pgen/tests/sts_diffusion.cpp
+        pgen/tests/hyperviscous_shear.cpp
         pgen/tests/gr_bondi.cpp
         pgen/tests/gr_monopole.cpp
         pgen/tests/linear_wave.cpp
@@ -132,6 +141,7 @@ add_executable(
         pgen/tests/rad_linear_wave.cpp
         pgen/tests/z4c_boosted_puncture.cpp
         pgen/tests/z4c_linear_wave.cpp
+        pgen/turb.cpp
 
         radiation/radiation.cpp
         radiation/radiation_fluxes.cpp
@@ -188,7 +198,7 @@ add_executable(
 # specify on command line using '-D PROBLEM=file' where 'file' is name of file in
 # pgen/ directory (not including .cpp extension)
 
-if (NOT ${PROBLEM} STREQUAL "built_in_pgens")
+if (NOT ${PROBLEM} STREQUAL "built_in_pgens" AND NOT ${PROBLEM} STREQUAL "turb")
   target_sources(athena
       PRIVATE
           pgen/${PROBLEM}.cpp

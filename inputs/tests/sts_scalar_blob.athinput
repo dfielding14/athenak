@@ -1,0 +1,68 @@
+# An advected two-dimensional scalar blob diffused by RKL2 STS.
+
+<job>
+basename = sts_scalar_blob
+
+<mesh>
+nghost = 2
+nx1 = 128
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 128
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 0.5
+nlim = -1
+ndiag = 100000
+sts_integrator = rkl2
+sts_max_dt_ratio = -1.0
+
+<hydro>
+eos = ideal
+gamma = 1.6666666666667
+reconstruct = plm
+rsolver = hllc
+nscalars = 1
+scalar_diffusivity = 0.004
+scalar_diffusivity_integrator = sts
+
+<problem>
+pgen_name = sts_diffusion
+sts_case = scalar_blob
+pressure = 1.0
+sigma = 0.07
+vx = 0.35
+vy = 0.15
+
+<output1>
+file_type = bin
+variable = hydro_w
+dt = 0.5
+slice_x3 = 0.0
+
+<output2>
+file_type = tab
+variable = hydro_w
+data_format = %18.10e
+dt = 0.5
+slice_x2 = 0.5
+slice_x3 = 0.0
