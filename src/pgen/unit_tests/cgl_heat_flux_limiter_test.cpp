@@ -89,32 +89,58 @@ void CheckBackupLimiterPolicy() {
   constexpr Real ppar = 1.0;
   constexpr Real bsqr = 1.0;
   constexpr Real limiter_rate = 20.0;
+  EOS_Data eos{};
+  eos.firehose_threshold = 2.0;
+  eos.mirror_threshold = 1.0;
+  eos.firehose_backup_factor = 1.0;
+  eos.mirror_backup_factor = 2.0;
+  eos.limiter_backup_nu = 1.0e10;
+  eos.lim_coll = limiter_rate;
+  eos.mlim = true;
   const bool relaxed_backup =
       cgl::EffectiveBackupLimiter(false, true, true, false);
+  RequireClose("default firehose threshold", cgl::FirehoseThreshold(bsqr, eos), -1.0);
+  RequireClose("default mirror threshold", cgl::MirrorThreshold(bsqr, eos), 0.5);
+  RequireClose("default firehose wall", cgl::FirehoseBackupWall(bsqr, eos), -1.0);
+  RequireClose("default mirror wall", cgl::MirrorBackupWall(bsqr, eos), 1.0);
   RequireClose(
       "relaxed mirror ordinary limiter rate",
-      cgl::LimiterCollisionRate(
-          ppar, 1.75, bsqr, limiter_rate, true, false,
-          cgl::kFirehoseObliqueThreshold, relaxed_backup),
-      limiter_rate);
+      cgl::LimiterCollisionRate(ppar, 1.75, bsqr, eos, relaxed_backup), limiter_rate);
   RequireClose(
       "relaxed mirror hard-bound backup rate",
-      cgl::LimiterCollisionRate(
-          ppar, 2.25, bsqr, limiter_rate, true, false,
-          cgl::kFirehoseObliqueThreshold, relaxed_backup),
-      cgl::kBackupCollisionRate);
-  RequireClose(
-      "relaxed firehose hard-bound backup rate",
-      cgl::LimiterCollisionRate(
-          3.0, 1.0, bsqr, limiter_rate, false, true,
-          cgl::kFirehoseParallelThreshold, relaxed_backup),
-      cgl::kBackupCollisionRate);
+      cgl::LimiterCollisionRate(ppar, 2.25, bsqr, eos, relaxed_backup),
+      eos.limiter_backup_nu);
   RequireClose(
       "strict unconfigured hard bound retains finite limiter rate",
-      cgl::LimiterCollisionRate(
-          ppar, 2.25, bsqr, limiter_rate, true, false,
-          cgl::kFirehoseObliqueThreshold, false),
-      limiter_rate);
+      cgl::LimiterCollisionRate(ppar, 2.25, bsqr, eos, false), limiter_rate);
+  eos.mlim = false;
+  eos.flim = true;
+  RequireClose(
+      "relaxed firehose hard-bound backup rate",
+      cgl::LimiterCollisionRate(3.0, 1.0, bsqr, eos, relaxed_backup),
+      eos.limiter_backup_nu);
+  eos.firehose_threshold = 1.4;
+  eos.mirror_threshold = 0.6;
+  eos.firehose_backup_factor = 1.2;
+  eos.mirror_backup_factor = 3.0;
+  eos.limiter_backup_nu = 1234.0;
+  RequireClose("configured firehose threshold", cgl::FirehoseThreshold(2.0, eos), -1.4);
+  RequireClose("configured mirror threshold", cgl::MirrorThreshold(2.0, eos), 0.6);
+  RequireClose("configured firehose wall", cgl::FirehoseBackupWall(2.0, eos), -1.68);
+  RequireClose("configured mirror wall", cgl::MirrorBackupWall(2.0, eos), 1.8);
+  RequireClose("configured backup rate",
+               cgl::LimiterCollisionRate(3.0, 1.0, bsqr, eos, true), 1234.0);
+  Require("disabled backup leaves a soft-firehose state admissible",
+          !cgl::HardBoundViolated(-0.9, 1.0, eos, false));
+  Require("enabled backup detects a state beyond its firehose wall",
+          cgl::HardBoundViolated(-0.9, 1.0, eos, true));
+  Require("fluid firehose bound is unconditional",
+          cgl::HardBoundViolated(-1.1, 1.0, eos, false));
+  Require("a state on the backup wall is admissible",
+          !cgl::HardBoundViolated(cgl::FirehoseBackupWall(1.0, eos), 1.0, eos, true));
+  eos.firehose_backup_factor = 10.0;
+  RequireClose("firehose wall cannot cross fluid wall",
+               cgl::FirehoseBackupWall(2.0, eos), -2.0);
 }
 
 void CheckFiniteOverflowCases() {

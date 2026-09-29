@@ -328,7 +328,16 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "output3_single_file_per_rank": choice(
             "output3", "single_file_per_rank", "false"
         ),
-        "cgl_firehose_threshold": choice("mhd", "cgl_firehose_threshold", "oblique"),
+        "cgl_firehose_threshold": choice("mhd", "cgl_firehose_threshold", "none"),
+        "firehose_threshold": choice(
+            "mhd", "firehose_threshold",
+            "1.4" if choice("mhd", "cgl_firehose_threshold", "none") == "oblique"
+            else "2.0",
+        ),
+        "mirror_threshold": choice("mhd", "mirror_threshold", "1.0"),
+        "mirror_backup_factor": choice("mhd", "mirror_backup_factor", "2.0"),
+        "firehose_backup_factor": choice("mhd", "firehose_backup_factor", "1.0"),
+        "limiter_backup_nu": choice("mhd", "limiter_backup_nu", "1.0e10"),
         "cgl_heat_flux_integrator": choice("mhd", "cgl_heat_flux_integrator", "sts"),
         "cgl_lf_record_pressure_work": choice(
             "mhd", "cgl_lf_record_pressure_work", "false"
@@ -346,7 +355,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "pfloor": choice("mhd", "pfloor", "unspecified"),
         "tfloor": choice("mhd", "tfloor", "unspecified"),
         "bfloor": choice("mhd", "bfloor", "unspecified"),
-        "cgl_collision_split": "two_half_steps_after_lf_sweeps",
+        "cgl_collision_split": "rates_once_at_cycle_end",
     }
     strict_admissibility = choice(
         "mhd", "cgl_lf_strict_admissibility", "false"
@@ -1357,7 +1366,7 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         "",
         "## Cases",
         "",
-        "| Case | Status | LF safety | Firehose policy |",
+        "| Case | Status | LF safety | Firehose threshold |",
         "| --- | --- | --- | --- |",
     ])
     lf_results = diagnostics.get("lf", {})
@@ -1366,7 +1375,9 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         safety = "not applicable"
         if lf is not None:
             safety = "clean" if lf.get("clean") else "failed"
-        policy = case.get("model_choices", {}).get("cgl_firehose_threshold", "n/a")
+        choices = case.get("model_choices", {})
+        policy = choices.get("firehose_threshold",
+                             choices.get("cgl_firehose_threshold", "n/a"))
         lines.append(
             f"| `{case['name']}` | {case['status']} | {safety} | `{policy}` |"
         )

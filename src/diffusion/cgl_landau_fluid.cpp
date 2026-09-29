@@ -257,9 +257,7 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
   const Real bsqr = (bmag <= sqrt_max) ? bmag*bmag
                                        : maximum;
   const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0)) +
-      cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
-                                eos.mlim, eos.flim, eos.firehose_threshold,
-                                backup);
+      cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos, backup);
   face.lf_k = lf_k;
   face.nu = nu;
   return true;
@@ -1636,6 +1634,7 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          int stage, int nstages) {
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
   const EOS_Data eos = eos_in;
+  const bool backup = effective_backup_limiter;
   if (profile_enabled_) {
     profile_last_nstages_ = nstages;
     if (nstages > profile_max_nstages_) {
@@ -1676,19 +1675,10 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
     const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
                      + SQR(bcc(m,IBZ,k,j,i));
     const Real paniso = pperp - ppar;
-    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr)) {
-      ++nmirror;
-      if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
-        ++nhard;
-      }
-    }
-    if (eos.flim &&
-        cgl::FirehoseLimiterActive(paniso, bsqr, eos.firehose_threshold)) {
-      ++nfirehose;
-      if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
-        ++nhard;
-      }
-    }
+    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr, eos)) ++nmirror;
+    if (eos.flim && cgl::FirehoseLimiterActive(paniso, bsqr, eos)) ++nfirehose;
+    if ((eos.mlim || eos.flim) &&
+        cgl::HardBoundViolated(paniso, bsqr, eos, backup)) ++nhard;
   }, Kokkos::Sum<int>(nonfinite), Kokkos::Sum<int>(nonpositive),
      Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
      Kokkos::Sum<int>(hard_bound));

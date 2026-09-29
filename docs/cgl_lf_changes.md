@@ -41,6 +41,9 @@ the post-LF call applies full-cycle rates then walls, after restoring A. Pure CG
 applies the full operator after RK. Wall calls are independent of collision flags.
 The post-sweep timestep refresh and the A/magnetic-moment representation ordering
 are preserved. No-op projections leave conserved A untouched.
+Multilevel runs refresh their coarse representation after each rate/wall call;
+the existing 3D AMR coarse-anisotropy check caught a stale-cache regression when
+this refresh was initially missing. That repair is folded into the A2 change.
 
 The rate/wall helper split needed by T-C2 is introduced here because A2 requires
 it. Configurable thresholds and the extended limiter-map acceptance checks follow
@@ -170,9 +173,35 @@ Double/float constructor tests verify false flags, passive parsing, required rat
 and backup-only rejection. Double/float C2P tests verify sigma_max with momentum,
 energy preservation and the appropriate A/moment invariants. All four focused
 tests, the Release build and style checks pass. The combined physical/AMR suite
-has 78 passes and one 3D coarse-density diagnostic failure; the identical
-crs_d_err=0.08883454088177256 occurs with the retained pre-B3 binary. Original-base
-verification is in progress. No physical expected values were changed.
+had 78 passes and one coarse-anisotropy diagnostic failure (crs_d_err), traced to
+the A2 post-wall coarse-cache refresh and repaired there. No physical expected
+values were changed.
+
+### T-C1: configurable thresholds
+
+Triage: hard-coded thresholds required migration. EOS_Data now holds positive
+firehose/mirror magnetic-pressure coefficients (defaults 2/1), backup factors
+(defaults 1/2 for firehose/mirror), and backup LF suppression rate (default 1e10
+in inverse code time). Shared predicates, limiter calls, AMR projection, LF
+diagnostics, paper diagnostics and reference copies use those values. Parameters
+are validated; legacy oblique/parallel aliases map to 1.4/2, and conflicts with an
+explicit numeric value are rejected. An absent policy now defaults to 2 rather
+than the former oblique value 1.4. Workflow provenance records numeric thresholds
+and the A2 once-per-cycle schedule.
+
+The finite-rate firehose stress fixture explicitly uses backup factor 2, keeping
+its initial -0.85 B^2 state between the -0.7 B^2 soft threshold and the -B^2 wall.
+This is necessary because the new factor-1 default would make that initial state
+violate its enabled backup wall. Direct helper checks cover default/custom
+thresholds and clipped walls. Constructor rejection tests use staged input files,
+and numeric-versus-legacy runs produce identical histories. 79 selected physical
+CPU regressions and all 21 full-workflow cases pass. Double/float closure and
+constructor checks and the AMR projection unit check pass. All numerical decay
+reference values remain unchanged in this task.
+The repaired A2 coarse refresh passes all 11 AMR integration tests on CPU; the
+independent speed and passive-signal checks also pass. C1 retains the existing
+enabled-limiter diagnostic scope; C2 completes unconditional fluid-wall handling
+through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
@@ -180,14 +209,7 @@ All acceptance outcomes below remain unverified until the corresponding task.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| B1 | Energy factor/A reset exist; literal bitwise floor idempotence needs work. |
-| B2 | Density-preserving pressure ratio and density-floor A writeback missing. |
-| B3 | CGL face pressure floors and nonfinite FOFC detection missing. |
-| B4 | Both-side low-B isotropization and imported extreme A remain. |
-| B5 | CGL bfloor positivity/single-precision validation missing. |
-| B6 | CGL-aware prolongation exists; verify and omit obsolete fence. |
-| B7 | Boolean parsing fixed; backup-only validation and sigma_max missing. |
-| C1-C4 | Existing hardwall helpers/policies differ; apply specified parameterized monotone law and align all closure copies. |
+| C2-C4 | Complete the monotone law, additive LF suppression and explicit input migration. |
 | D1-D5 | Face normalization, limited gradients, 2nu perpendicular coefficient, collisional timestep and stiffness factor remain. |
 | D6 | Post-RK parabolic reduction exists; add heating/stage-count acceptance. |
 | E1 | Representation fence already exists and has regression coverage. |

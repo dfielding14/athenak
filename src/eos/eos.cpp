@@ -13,7 +13,6 @@
 #include "mesh/mesh.hpp"
 #include "parameter_input.hpp"
 #include "eos/eos.hpp"
-#include "eos/cgl_physics.hpp"
 
 //----------------------------------------------------------------------------------------
 // EquationOfState constructor
@@ -34,7 +33,11 @@ EquationOfState::EquationOfState(std::string bk, MeshBlockPack* pp, ParameterInp
   eos_data.hardwall_lim = false;
   eos_data.nu_coll = 0.0;
   eos_data.lim_coll = 0.0;
-  eos_data.firehose_threshold = cgl::kFirehoseObliqueThreshold;
+  eos_data.firehose_threshold = 2.0;
+  eos_data.mirror_threshold = 1.0;
+  eos_data.mirror_backup_factor = 2.0;
+  eos_data.firehose_backup_factor = 1.0;
+  eos_data.limiter_backup_nu = 1.0e10;
 }
 
 //----------------------------------------------------------------------------------------

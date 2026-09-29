@@ -88,7 +88,12 @@ reporting is independent of whether `backup_limiters` is enabled.
 | `nu_coll` | `0.0` | Background anisotropy-relaxation frequency. |
 | `mirror_limiter` | `false` | Enable mirror-limiter relaxation. |
 | `firehose_limiter` | `false` | Enable firehose-limiter relaxation. |
-| `cgl_firehose_threshold` | `oblique` | `oblique` activates at `beta Delta <= -1.4`; `parallel` activates at `beta Delta <= -2`. |
+| `firehose_threshold` | `2.0` | Positive $\Lambda_{\rm FH}$; soft firehose threshold $\Delta p=-\Lambda_{\rm FH}B^2/2$. |
+| `mirror_threshold` | `1.0` | Positive $\Lambda_{\rm M}$; soft mirror threshold $\Delta p=+\Lambda_{\rm M}B^2/2$. |
+| `mirror_backup_factor` | `2.0` | Multiplier of the soft mirror threshold; at least 1. |
+| `firehose_backup_factor` | `1.0` | Multiplier of the soft firehose threshold; at least 1. The wall cannot lie below $-B^2$. |
+| `limiter_backup_nu` | `1e10` | Nonnegative LF heat-flux suppression frequency in inverse code time. |
+| `cgl_firehose_threshold` | absent | Legacy alias: `oblique` = 1.4, `parallel` = 2.0. Conflicting explicit numeric values are rejected. |
 | `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
 | `limiter_hardwall` | `false` | With an enabled instability limiter, replace its pressure-relaxation update by an energy-preserving projection to the selected mirror/firehose threshold. |
 | `backup_limiters` | `false` | Apply rapid correction after an emergency bound is crossed. |

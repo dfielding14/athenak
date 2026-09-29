@@ -16,6 +16,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "mhd/mhd.hpp"
 #include "diffusion/conduction.hpp"
 #include "outputs/outputs.hpp"
@@ -93,39 +94,6 @@ void CglLfPaperBField(const int mode, const Real x1, const Real x3,
     bx = -ay_amp*fd3*cos(ph);
     bz =  b0 + ay_amp*fd1*cos(ph);
   }
-}
-
-KOKKOS_INLINE_FUNCTION
-Real CglLfPaperLimiterNu(const Real ppar, const Real pperp, const Real bx,
-                         const Real by, const Real bz, const Real lim_coll,
-                         const bool mlim, const bool flim, const bool backup_lim) {
-  const Real paniso = pperp - ppar;
-  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  const Real limiter_nu = fmax(lim_coll, static_cast<Real>(0.0));
-  const Real backup_nu = static_cast<Real>(1.0e10);
-  Real nu_eff = 0.0;
-
-  if (flim && backup_lim) {
-    if ((paniso <= static_cast<Real>(-0.7)*bsqr) && (paniso > -bsqr)) {
-      nu_eff = fmax(nu_eff, limiter_nu);
-    } else if (paniso <= -bsqr) {
-      nu_eff = fmax(nu_eff, backup_nu);
-    }
-  } else if (flim && paniso <= static_cast<Real>(-0.7)*bsqr) {
-    nu_eff = fmax(nu_eff, limiter_nu);
-  }
-
-  if (mlim && backup_lim) {
-    if ((paniso >= static_cast<Real>(0.5)*bsqr) && (paniso < bsqr)) {
-      nu_eff = fmax(nu_eff, limiter_nu);
-    } else if (paniso >= bsqr) {
-      nu_eff = fmax(nu_eff, backup_nu);
-    }
-  } else if (mlim && paniso >= static_cast<Real>(0.5)*bsqr) {
-    nu_eff = fmax(nu_eff, limiter_nu);
-  }
-
-  return nu_eff;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -360,7 +328,6 @@ void CglLfPaperHistory(HistoryData *pdata, Mesh *pm) {
   const Real tfloor = eos.tfloor;
   const Real bfloor = eos.bfloor;
   const Real nu_coll = eos.nu_coll;
-  const Real lim_coll = eos.lim_coll;
   const bool mlim = eos.mlim;
   const bool flim = eos.flim;
   const bool backup = eos.backup_lim;
@@ -402,14 +369,13 @@ void CglLfPaperHistory(HistoryData *pdata, Mesh *pm) {
     const Real paniso = pperp - ppar;
     const Real beta = (bsqr > SQR(bfloor)) ? 2.0*p_iso/bsqr : 0.0;
 
-    const bool mir = mlim && ((backup && paniso >= 0.5*bsqr && paniso < bsqr) ||
-                              (!backup && paniso >= 0.5*bsqr));
-    const bool fire = flim && ((backup && paniso <= -0.7*bsqr && paniso > -bsqr) ||
-                               (!backup && paniso <= -0.7*bsqr));
-    const bool bmir = mlim && backup && paniso >= bsqr;
-    const bool bfire = flim && backup && paniso <= -bsqr;
+    const bool bmir = mlim && backup && cgl::MirrorHardBoundViolated(paniso, bsqr, eos);
+    const bool bfire = flim && backup &&
+                       cgl::FirehoseHardBoundViolated(paniso, bsqr, eos);
+    const bool mir = mlim && !bmir && cgl::MirrorLimiterActive(paniso, bsqr, eos);
+    const bool fire = flim && !bfire && cgl::FirehoseLimiterActive(paniso, bsqr, eos);
     const Real nu_eff = fmax(nu_coll, static_cast<Real>(0.0)) +
-        CglLfPaperLimiterNu(ppar, pperp, bx, by, bz, lim_coll, mlim, flim, backup);
+        cgl::LimiterCollisionRate(ppar, pperp, bsqr, eos, backup);
 
     array_sum::GlobalSum hvars;
     hvars.the_array[0] = vol;

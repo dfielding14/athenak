@@ -78,10 +78,10 @@ void DeltaInterval(const Real U, const Real bsqr, const Real bmag,
   delta_max = U - 1.5*eos.pfloor;
   if (eos.hardwall_lim && bmag > eos.bfloor) {
     if (eos.flim) {
-      delta_min = fmax(delta_min, eos.firehose_threshold*bsqr);
+      delta_min = fmax(delta_min, cgl::FirehoseThreshold(bsqr, eos));
     }
     if (eos.mlim) {
-      delta_max = fmin(delta_max, cgl::kMirrorThreshold*bsqr);
+      delta_max = fmin(delta_max, cgl::MirrorThreshold(bsqr, eos));
     }
   }
 }
@@ -220,16 +220,16 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
     delta = 0.0;
   } else if (delta < delta_min) {
     if (eos.hardwall_lim && eos.flim &&
-        eos.firehose_threshold*bsqr >= delta_min &&
-        delta < eos.firehose_threshold*bsqr) {
+        cgl::FirehoseThreshold(bsqr, eos) >= delta_min &&
+        delta < cgl::FirehoseThreshold(bsqr, eos)) {
       repairs |= kFirehoseHardwall;
     }
     repairs |= kAnisotropyChanged;
     delta = delta_min;
   } else if (delta > delta_max) {
     if (eos.hardwall_lim && eos.mlim &&
-        cgl::kMirrorThreshold*bsqr <= delta_max &&
-        delta > cgl::kMirrorThreshold*bsqr) {
+        cgl::MirrorThreshold(bsqr, eos) <= delta_max &&
+        delta > cgl::MirrorThreshold(bsqr, eos)) {
       repairs |= kMirrorHardwall;
     }
     repairs |= kAnisotropyChanged;

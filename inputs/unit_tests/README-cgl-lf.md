@@ -30,3 +30,20 @@ of the same linearized Figure 17 CGL system. Regenerate those inputs with
 or CGL-LF linear matrix, identifies the Alfvén, slow-like, and fast-like
 positive-frequency branches, and writes the complex eigenvectors and
 eigenvalues into AthenaK input parameters.
+
+CGL instability thresholds are configured under `<mhd>`. In AthenaK units the
+magnetic pressure is $B^2/2$ and $\Delta p = p_\perp-p_\parallel$. The positive
+coefficients `firehose_threshold` (default 2) and `mirror_threshold` (default 1)
+give soft thresholds $-\Lambda_{\rm FH}B^2/2$ and $+\Lambda_{\rm M}B^2/2$.
+`firehose_backup_factor` (default 1) and `mirror_backup_factor` (default 2)
+multiply these soft thresholds; the firehose backup wall is clipped at $-B^2$.
+Thresholds must be finite and positive; backup factors must be finite and at
+least 1. `limiter_backup_nu` (default $10^{10}$) is a finite, nonnegative LF
+heat-flux suppression frequency in inverse code time, separate from pressure
+projection. The fluid firehose wall at $-B^2$ applies independently of limiter
+flags. Backup-wall diagnostics apply only when the effective backup policy is on.
+
+The legacy `cgl_firehose_threshold = oblique|parallel` maps to numeric
+`firehose_threshold = 1.4|2.0` when the numeric key is absent; conflicting explicit
+values are rejected. `limiter_hardwall` retains its selected-soft-threshold
+projection behavior. The threshold and backup factors do not enable a limiter.

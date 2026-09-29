@@ -1149,6 +1149,58 @@ def test_cgl_lf_eigen_field_initialization_uses_meshblock_coordinates():
         _cleanup()
 
 
+@pytest.mark.parametrize(
+    ("parameter", "value", "bound"),
+    (("firehose_threshold", "0", "> 0"),
+     ("firehose_threshold", "-1", "> 0"),
+     ("mirror_threshold", "0", "> 0"),
+     ("mirror_threshold", "nan", "> 0"),
+     ("mirror_backup_factor", "0.99", ">= 1"),
+     ("firehose_backup_factor", "0.99", ">= 1"),
+     ("firehose_backup_factor", "inf", ">= 1"),
+     ("limiter_backup_nu", "-1", ">= 0"),
+     ("limiter_backup_nu", "nan", ">= 0")),
+)
+def test_cgl_lf_invalid_numeric_threshold_is_rejected(tmp_path, parameter, value, bound):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_decay.athinput").read_text()
+    staged = tmp_path / "invalid_threshold.athinput"
+    staged.write_text(source.replace("<mhd>", f"<mhd>\n{parameter} = {value}", 1))
+    result = subprocess.run(
+        ["./athena", "-i", str(staged)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert f"<mhd>/{parameter} must be finite and {bound}" in result.stdout
+
+
+def test_cgl_lf_conflicting_legacy_threshold_is_rejected(tmp_path):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_firehose_policy.athinput").read_text()
+    staged = tmp_path / "conflicting_threshold.athinput"
+    staged.write_text(source.replace("<mhd>", "<mhd>\nfirehose_threshold = 2.0", 1))
+    result = subprocess.run(
+        ["./athena", "-i", str(staged)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert "firehose_threshold conflicts" in result.stdout
+
+
+def test_cgl_lf_numeric_threshold_matches_legacy_policy(tmp_path):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_firehose_policy.athinput").read_text()
+    staged = tmp_path / "numeric_threshold.athinput"
+    staged.write_text(source.replace("cgl_firehose_threshold = oblique",
+                                     "firehose_threshold = 1.4", 1))
+    try:
+        _run("cgl_lf_firehose_policy.athinput", "cgl_ci_legacy_threshold")
+        testutils.run(str(staged), ["job/basename=cgl_ci_numeric_threshold"])
+        legacy = testutils.athena_read.hst("cgl_ci_legacy_threshold.mhd.hst")
+        numeric = testutils.athena_read.hst("cgl_ci_numeric_threshold.mhd.hst")
+        for key in legacy:
+            np.testing.assert_array_equal(legacy[key], numeric[key])
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_invalid_firehose_threshold_is_rejected():
     command = [
         "./athena",
@@ -1656,6 +1708,12 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
             body = source.split(f"<{block}>", 1)[1].split("<", 1)[0]
             assert "single_file_per_rank = true" in body
         choices = workflow.model_choices(source, [])
+        assert choices["cgl_collision_split"] == "rates_once_at_cycle_end"
+        assert choices["firehose_threshold"] == "2.0"
+        assert choices["mirror_threshold"] == "1.0"
+        assert choices["mirror_backup_factor"] == "2.0"
+        assert choices["firehose_backup_factor"] == "1.0"
+        assert choices["limiter_backup_nu"] == "1.0e10"
         assert choices["time_integrator"] == "rk2"
         assert choices["time_sts_integrator"] == "rkl2"
         assert choices["time_sts_max_dt_ratio"] == "-1.0"

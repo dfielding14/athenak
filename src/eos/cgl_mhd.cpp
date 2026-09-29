@@ -6,6 +6,7 @@
 //! \file cgl_mhd.cpp
 //! \brief derived class that implements ideal gas EOS in nonrelativistic mhd
 
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -29,20 +30,33 @@ void RequireNonnegativeCGLParameter(const char *name, const Real value) {
 }
 
 Real ParseCGLFirehoseThreshold(ParameterInput *pin) {
-  const std::string policy =
-      pin->GetOrAddString("mhd", "cgl_firehose_threshold", "oblique");
-  if (policy == "oblique") {
-    return cgl::kFirehoseObliqueThreshold;
+  Real legacy_threshold = 2.0;
+  if (pin->DoesParameterExist("mhd", "cgl_firehose_threshold")) {
+    const std::string policy = pin->GetString("mhd", "cgl_firehose_threshold");
+    if (policy == "oblique") {
+      legacy_threshold = 1.4;
+    } else if (policy != "parallel") {
+      std::cout << "### FATAL ERROR: <mhd>/cgl_firehose_threshold must be "
+                << "oblique or parallel" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->DoesParameterExist("mhd", "firehose_threshold") &&
+        pin->GetReal("mhd", "firehose_threshold") != legacy_threshold) {
+      std::cout << "### FATAL ERROR: <mhd>/firehose_threshold conflicts with "
+                << "cgl_firehose_threshold; remove the legacy parameter" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
-  if (policy == "parallel") {
-    return cgl::kFirehoseParallelThreshold;
+  return pin->GetOrAddReal("mhd", "firehose_threshold", legacy_threshold);
+}
+
+void RequireCGLThreshold(const char *name, const Real value, const Real lower,
+                         const bool inclusive) {
+  if (!std::isfinite(value) || (inclusive ? value < lower : value <= lower)) {
+    std::cout << "### FATAL ERROR: <mhd>/" << name << " must be finite and "
+              << (inclusive ? ">= " : "> ") << lower << std::endl;
+    std::exit(EXIT_FAILURE);
   }
-  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl
-            << "<mhd>/cgl_firehose_threshold = '" << policy
-            << "' is not implemented; valid choices are [oblique,parallel]."
-            << std::endl;
-  std::exit(EXIT_FAILURE);
 }
 
 } // namespace
@@ -74,6 +88,17 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   eos_data.nu_coll = 0.0;
   eos_data.lim_coll = 0.0;
   eos_data.firehose_threshold = ParseCGLFirehoseThreshold(pin);
+  eos_data.mirror_threshold = pin->GetOrAddReal("mhd", "mirror_threshold", 1.0);
+  eos_data.mirror_backup_factor = pin->GetOrAddReal("mhd", "mirror_backup_factor", 2.0);
+  eos_data.firehose_backup_factor =
+      pin->GetOrAddReal("mhd", "firehose_backup_factor", 1.0);
+  eos_data.limiter_backup_nu = pin->GetOrAddReal("mhd", "limiter_backup_nu", 1.0e10);
+  RequireCGLThreshold("firehose_threshold", eos_data.firehose_threshold, 0.0, false);
+  RequireCGLThreshold("mirror_threshold", eos_data.mirror_threshold, 0.0, false);
+  RequireCGLThreshold("mirror_backup_factor", eos_data.mirror_backup_factor, 1.0, true);
+  RequireCGLThreshold("firehose_backup_factor", eos_data.firehose_backup_factor,
+                       1.0, true);
+  RequireCGLThreshold("limiter_backup_nu", eos_data.limiter_backup_nu, 0.0, true);
   eos_data.sigma_max = pin->GetOrAddReal("mhd","sigma_max",(FLT_MAX));
 
   eos_data.passive = pin->GetOrAddBoolean("mhd", "passive", false);
@@ -180,8 +205,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     const Real bmag = sqrt(bsqr);
     const bool hardwall_used =
         !only_testfloors && eos.hardwall_lim && bmag > eos.bfloor &&
-        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
-                                  eos.firehose_threshold);
+        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos);
 
     // set FOFC flag and quit loop if this function called only to check floors
     if (only_testfloors) {
@@ -307,8 +331,7 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
     const Real bmag = sqrt(bsqr);
     const bool hardwall_used =
         eos.hardwall_lim && bmag > eos.bfloor &&
-        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
-                                  eos.firehose_threshold);
+        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos);
 
     if (dfloor_used) {
       cons(m,IDN,k,j,i) = u.d;
@@ -410,8 +433,7 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     const Real bmag = sqrt(bsqr);
     const bool hardwall_used =
         eos.hardwall_lim && bmag > eos.bfloor &&
-        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos.mlim, eos.flim,
-                                  eos.firehose_threshold);
+        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos);
 
     if (dfloor_used) {
       cons(m,IDN,k,j,i) = u.d;
@@ -581,13 +603,11 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
   const int nmhd  = pmy_pack->pmhd->nmhd;
   const int nscal = pmy_pack->pmhd->nscalars;
   const int nmb = pmy_pack->nmb_thispack;
-  const Real nu_coll = eos_data.nu_coll;
-  const Real lim_coll = eos_data.lim_coll;
+  const EOS_Data eos = eos_data;
   const bool flim = eos_data.flim;
   const bool mlim = eos_data.mlim;
   const bool hardwall = eos_data.hardwall_lim;
   const Real bfloor = eos_data.bfloor;
-  const Real firehose_threshold = eos_data.firehose_threshold;
   const auto *pcgl_lf = pmy_pack->pmhd->pcgl_lf;
   const bool landau_fluid_active = (pcgl_lf != nullptr);
   const bool backup = landau_fluid_active
@@ -620,10 +640,9 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
     const Real initial_pperp = w.pp;
     HydCons1D u;
     if (mode == CGLCollisionMode::full) {
-      SingleCollRates_CGLMHD(w, nu_coll, lim_coll, dtc, mlim && !hardwall,
-                             flim && !hardwall, firehose_threshold);
+      SingleCollRates_CGLMHD(w, eos, dtc, mlim && !hardwall, flim && !hardwall);
     }
-    SingleCollWalls_CGLMHD(w, backup);
+    SingleCollWalls_CGLMHD(w, eos, backup);
     if (w.e == initial_ppar && w.pp == initial_pperp) return;
     SingleP2C_CGLMHD(w, bfloor, u);
 

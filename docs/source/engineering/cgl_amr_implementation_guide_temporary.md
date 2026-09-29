@@ -227,10 +227,10 @@ Delta_min = 3 * pfloor - 2 * U
 Delta_max = U - 1.5 * pfloor
 
 if hardwall firehose:
-    Delta_min = max(Delta_min, firehose_threshold * B^2)
+    Delta_min = max(Delta_min, -0.5 * firehose_threshold * B^2)
 
 if hardwall mirror:
-    Delta_max = min(Delta_max, 0.5 * B^2)
+    Delta_max = min(Delta_max, 0.5 * mirror_threshold * B^2)
 
 if |B| <= bfloor:
     Delta = 0

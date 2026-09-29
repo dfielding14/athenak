@@ -143,7 +143,12 @@ Complete list of all input parameters by block, extracted from source code.
 | `nu_coll` | Real | 0.0 | cgl_mhd.cpp |
 | `mirror_limiter` | bool | false | cgl_mhd.cpp |
 | `firehose_limiter` | bool | false | cgl_mhd.cpp |
-| `cgl_firehose_threshold` | string | oblique (`oblique` or `parallel`) | cgl_mhd.cpp |
+| `firehose_threshold` | Real | 2.0 (positive coefficient of $-B^2/2$) | cgl_mhd.cpp |
+| `mirror_threshold` | Real | 1.0 (positive coefficient of $B^2/2$) | cgl_mhd.cpp |
+| `mirror_backup_factor` | Real | 2.0 (at least 1) | cgl_mhd.cpp |
+| `firehose_backup_factor` | Real | 1.0 (at least 1; wall clipped at $-B^2$) | cgl_mhd.cpp |
+| `limiter_backup_nu` | Real | 1e10 (inverse code time; LF suppression only) | cgl_mhd.cpp |
+| `cgl_firehose_threshold` | string | legacy alias: `oblique` = 1.4, `parallel` = 2.0; conflicts rejected | cgl_mhd.cpp |
 | `limiter_nu_coll` | Real | 0.0 | cgl_mhd.cpp |
 | `limiter_hardwall` | bool | false | cgl_mhd.cpp |
 | `backup_limiters` | bool | false | cgl_mhd.cpp |

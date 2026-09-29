@@ -451,18 +451,17 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
 //! \brief Apply physical collisions and monotone soft-limiter relaxation.
 
 KOKKOS_INLINE_FUNCTION
-void SingleCollRates_CGLMHD(MHDPrim1D &w, const Real nu_coll, const Real lim_coll,
-                            const Real dt, const bool mlim, const bool flim,
-                            const Real firehose_threshold) {
+void SingleCollRates_CGLMHD(MHDPrim1D &w, const EOS_Data &eos,
+                            const Real dt, const bool mlim, const bool flim) {
   const Real initial = w.pp - w.e;
-  Real paniso = initial*exp(-nu_coll*dt);
+  Real paniso = initial*exp(-eos.nu_coll*dt);
   const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
-  const Real nudt = lim_coll*dt;
-  if (flim && paniso < firehose_threshold*bsqr) {
-    paniso = (paniso + nudt*firehose_threshold*bsqr)/(1.0 + nudt);
+  const Real nudt = eos.lim_coll*dt;
+  if (flim && paniso < cgl::FirehoseThreshold(bsqr, eos)) {
+    paniso = (paniso + nudt*cgl::FirehoseThreshold(bsqr, eos))/(1.0 + nudt);
   }
-  if (mlim && paniso > cgl::kMirrorThreshold*bsqr) {
-    paniso = (paniso + nudt*cgl::kMirrorThreshold*bsqr)/(1.0 + nudt);
+  if (mlim && paniso > cgl::MirrorThreshold(bsqr, eos)) {
+    paniso = (paniso + nudt*cgl::MirrorThreshold(bsqr, eos))/(1.0 + nudt);
   }
   if (paniso == initial) return;
   const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
@@ -474,11 +473,14 @@ void SingleCollRates_CGLMHD(MHDPrim1D &w, const Real nu_coll, const Real lim_col
 //! \brief Project backup walls and the unconditional fluid firehose wall.
 
 KOKKOS_INLINE_FUNCTION
-void SingleCollWalls_CGLMHD(MHDPrim1D &w, const bool backup) {
+void SingleCollWalls_CGLMHD(MHDPrim1D &w, const EOS_Data &eos, const bool backup) {
   const Real initial = w.pp - w.e;
   const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
   Real paniso = fmax(initial, -bsqr);
-  if (backup) paniso = fmin(paniso, cgl::kMirrorHardBound*bsqr);
+  if (backup) {
+    paniso = fmax(paniso, cgl::FirehoseBackupWall(bsqr, eos));
+    paniso = fmin(paniso, cgl::MirrorBackupWall(bsqr, eos));
+  }
   if (paniso == initial) return;
   const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
   w.pp = piso + ONE_3RD*paniso;

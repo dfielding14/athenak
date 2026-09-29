@@ -11,16 +11,10 @@
 #include <limits>
 
 #include "athena.hpp"
+#include "eos/eos.hpp"
 
 namespace cgl {
 
-constexpr Real kFirehoseObliqueThreshold = -0.7;
-constexpr Real kFirehoseParallelThreshold = -1.0;
-// Emergency numerical overshoot bound, distinct from either activation policy.
-constexpr Real kFirehoseHardBound = -1.5;
-constexpr Real kMirrorThreshold = 0.5;
-constexpr Real kMirrorHardBound = 1.0;
-constexpr Real kBackupCollisionRate = 1.0e10;
 constexpr Real kSqrtTwoOverPi = 0.7978845608028654;
 constexpr Real kSqrtEightOverPi = 1.5957691216057308;
 constexpr Real kSqrtTwoPi = 2.5066282746310002;
@@ -37,37 +31,64 @@ bool EffectiveBackupLimiter(const bool configured_backup,
           !strict_admissibility);
 }
 
+// Threshold parameters are positive coefficients of magnetic pressure B^2/2.
 KOKKOS_INLINE_FUNCTION
-bool FirehoseLimiterActive(const Real paniso, const Real bsqr,
-                           const Real firehose_threshold) {
-  return paniso <= firehose_threshold*bsqr;
+Real FirehoseThreshold(const Real bsqr, const EOS_Data &eos) {
+  return -0.5*eos.firehose_threshold*bsqr;
 }
 
 KOKKOS_INLINE_FUNCTION
-bool FirehoseHardBoundViolated(const Real paniso, const Real bsqr) {
-  return paniso <= kFirehoseHardBound*bsqr;
+Real MirrorThreshold(const Real bsqr, const EOS_Data &eos) {
+  return 0.5*eos.mirror_threshold*bsqr;
 }
 
 KOKKOS_INLINE_FUNCTION
-bool MirrorLimiterActive(const Real paniso, const Real bsqr) {
-  return paniso >= kMirrorThreshold*bsqr;
+Real FirehoseBackupWall(const Real bsqr, const EOS_Data &eos) {
+  return fmax(eos.firehose_backup_factor*FirehoseThreshold(bsqr, eos), -bsqr);
 }
 
 KOKKOS_INLINE_FUNCTION
-bool MirrorHardBoundViolated(const Real paniso, const Real bsqr) {
-  return paniso >= kMirrorHardBound*bsqr;
+Real MirrorBackupWall(const Real bsqr, const EOS_Data &eos) {
+  return eos.mirror_backup_factor*MirrorThreshold(bsqr, eos);
 }
 
 KOKKOS_INLINE_FUNCTION
-bool ApplyHardwallLimiter(Real &ppar, Real &pperp, const Real bsqr,
-                          const bool mirror, const bool firehose,
-                          const Real firehose_threshold) {
+bool FirehoseLimiterActive(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso <= FirehoseThreshold(bsqr, eos);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool FirehoseHardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso <= FirehoseBackupWall(bsqr, eos);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool MirrorLimiterActive(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso >= MirrorThreshold(bsqr, eos);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool MirrorHardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso >= MirrorBackupWall(bsqr, eos);
+}
+
+// A state on a wall is admissible; disabled backup walls are not constraints.
+KOKKOS_INLINE_FUNCTION
+bool HardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos,
+                       const bool backup) {
+  return paniso < -bsqr ||
+         (backup && (paniso < FirehoseBackupWall(bsqr, eos) ||
+                     paniso > MirrorBackupWall(bsqr, eos)));
+}
+
+KOKKOS_INLINE_FUNCTION
+bool ApplyHardwallLimiter(Real &ppar, Real &pperp, const Real bsqr, const EOS_Data &eos) {
   const Real paniso = pperp - ppar;
   Real limited_anisotropy = paniso;
-  if (firehose && paniso < firehose_threshold*bsqr) {
-    limited_anisotropy = firehose_threshold*bsqr;
-  } else if (mirror && paniso > kMirrorThreshold*bsqr) {
-    limited_anisotropy = kMirrorThreshold*bsqr;
+  if (eos.flim && paniso < FirehoseThreshold(bsqr, eos)) {
+    limited_anisotropy = FirehoseThreshold(bsqr, eos);
+  } else if (eos.mlim && paniso > MirrorThreshold(bsqr, eos)) {
+    limited_anisotropy = MirrorThreshold(bsqr, eos);
   }
   if (limited_anisotropy == paniso) {
     return false;
@@ -82,23 +103,21 @@ bool ApplyHardwallLimiter(Real &ppar, Real &pperp, const Real bsqr,
 
 KOKKOS_INLINE_FUNCTION
 Real LimiterCollisionRate(const Real ppar, const Real pperp, const Real bsqr,
-                          const Real limiter_rate, const bool mirror,
-                          const bool firehose, const Real firehose_threshold,
-                          const bool backup) {
+                          const EOS_Data &eos, const bool backup) {
   const Real paniso = pperp - ppar;
-  const Real rate = fmax(limiter_rate, static_cast<Real>(0.0));
+  const Real rate = fmax(eos.lim_coll, static_cast<Real>(0.0));
   Real nu = 0.0;
-  if (firehose) {
-    if (backup && FirehoseHardBoundViolated(paniso, bsqr)) {
-      nu = kBackupCollisionRate;
-    } else if (FirehoseLimiterActive(paniso, bsqr, firehose_threshold)) {
+  if (eos.flim) {
+    if (backup && FirehoseHardBoundViolated(paniso, bsqr, eos)) {
+      nu = eos.limiter_backup_nu;
+    } else if (FirehoseLimiterActive(paniso, bsqr, eos)) {
       nu = rate;
     }
   }
-  if (mirror) {
-    if (backup && MirrorHardBoundViolated(paniso, bsqr)) {
-      nu = fmax(nu, kBackupCollisionRate);
-    } else if (MirrorLimiterActive(paniso, bsqr)) {
+  if (eos.mlim) {
+    if (backup && MirrorHardBoundViolated(paniso, bsqr, eos)) {
+      nu = fmax(nu, eos.limiter_backup_nu);
+    } else if (MirrorLimiterActive(paniso, bsqr, eos)) {
       nu = fmax(nu, rate);
     }
   }

@@ -22,6 +22,7 @@
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
@@ -33,7 +34,6 @@ constexpr Real kSqrtEightOverPi = 1.5957691216057308;
 constexpr Real kSqrtTwoPi = 2.5066282746310002;
 constexpr Real kSqrtEightPi = 5.013256549262000;
 constexpr Real kThreePiMinusEight = 1.4247779607693793;
-constexpr Real kCGLBackupCollisionRate = 1.0e10;
 
 enum class TestMode {
   parallel_decay,
@@ -307,48 +307,16 @@ Real BackgroundCollisionFrequency(ParameterInput *pin) {
   return GetRealOrZero(pin, "mhd", "nu_coll");
 }
 
-Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp,
-                          const Real bx, const Real by, const Real bz) {
-  const bool mlim = GetBooleanOrFalse(pin, "mhd", "mirror_limiter");
-  const bool flim = GetBooleanOrFalse(pin, "mhd", "firehose_limiter");
-  const bool backup_lim = GetBooleanOrFalse(pin, "mhd", "backup_limiters");
-  const Real lim_coll = std::max(GetRealOrZero(pin, "mhd", "limiter_nu_coll"),
-                                 static_cast<Real>(0.0));
-  const Real paniso = pperp - ppar;
-  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  Real rate = 0.0;
-
-  if (flim && backup_lim) {
-    if ((paniso <= static_cast<Real>(-0.7)*bsqr) && (paniso > -bsqr)) {
-      rate = std::max(rate, lim_coll);
-    } else if (paniso <= -bsqr) {
-      rate = std::max(rate, kCGLBackupCollisionRate);
-    }
-  } else if (flim) {
-    if (paniso <= static_cast<Real>(-0.7)*bsqr) {
-      rate = std::max(rate, lim_coll);
-    }
-  }
-
-  if (mlim && backup_lim) {
-    if ((paniso >= static_cast<Real>(0.5)*bsqr) && (paniso < bsqr)) {
-      rate = std::max(rate, lim_coll);
-    } else if (paniso >= static_cast<Real>(0.5)*bsqr) {
-      rate = std::max(rate, kCGLBackupCollisionRate);
-    }
-  } else if (mlim) {
-    if (paniso >= static_cast<Real>(0.5)*bsqr) {
-      rate = std::max(rate, lim_coll);
-    }
-  }
-
-  return rate;
-}
-
-Real EffectiveCollisionFrequency(ParameterInput *pin, const Real ppar, const Real pperp,
+Real EffectiveCollisionFrequency(ParameterInput *pin, Mesh *pm,
+                                 const Real ppar, const Real pperp,
                                  const Real bx, const Real by, const Real bz) {
-  return std::max(BackgroundCollisionFrequency(pin), static_cast<Real>(0.0)) +
-         LimiterCollisionRate(pin, ppar, pperp, bx, by, bz);
+  const EOS_Data &eos = pm->pmb_pack->pmhd->peos->eos_data;
+  const bool backup = cgl::EffectiveBackupLimiter(
+      eos.backup_lim, true, eos.mlim || eos.flim,
+      GetBooleanOrFalse(pin, "mhd", "cgl_lf_strict_admissibility"));
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  return std::max(eos.nu_coll, static_cast<Real>(0.0)) +
+         cgl::LimiterCollisionRate(ppar, pperp, bsqr, eos, backup);
 }
 
 Real FaceCParallel(ParameterInput *pin, const Real rho, const Real ppar) {
@@ -392,7 +360,7 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const Real pperp = pin->GetOrAddReal("problem", "pperp0", 1.2);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
   const Real cpar = FaceCParallel(pin, rho, ppar);
-  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar, pperp, bx, by, bz);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar, pperp, bx, by, bz);
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real qperp_l = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
   const Real qperp = LimitedHeatFlux(qperp_l, kSqrtTwoOverPi*cpar*pperp);
@@ -457,7 +425,7 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
-  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar0, pperp0, bx0, by0, bz0);
   const Real chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
   const Real chi_perp = ChiPerp(cpar0, lf_k, nu_eff);
   const DecayState expected_state =
@@ -587,7 +555,7 @@ Real LimitedParallelHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
                                    static_cast<Real>(1.0e-30));
   const Real cpar = FaceCParallel(pin, rho0, ppar_face);
   const Real nu_eff = force_collisionless ? 0.0 :
-      EffectiveCollisionFrequency(pin, ppar_face, pperp_face, bx, by, bz);
+      EffectiveCollisionFrequency(pin, pm, ppar_face, pperp_face, bx, by, bz);
   const Real chi_parallel = ChiParallel(cpar, lf_k, nu_eff);
   const Real grad_tpar = (ppar_r/rho0 - ppar_l/rho0)/dx;
   q_unlimited = -chi_parallel*rho0*grad_tpar;
@@ -617,7 +585,7 @@ Real LimitedPerpHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
                                    static_cast<Real>(1.0e-30));
   const Real cpar = FaceCParallel(pin, rho0, ppar_face);
   const Real nu_eff = force_collisionless ? 0.0 :
-      EffectiveCollisionFrequency(pin, ppar_face, pperp_face, bx, by, bz);
+      EffectiveCollisionFrequency(pin, pm, ppar_face, pperp_face, bx, by, bz);
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real grad_tperp = (pperp_r/rho0 - pperp_l/rho0)/dx;
   q_unlimited = -chi_perp*rho0*grad_tperp;
@@ -896,7 +864,7 @@ WaveState IntegrateWaveReference(ParameterInput *pin, Mesh *pm) {
   const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
-  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar0, pperp0, bx0, by0, bz0);
   const Real chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
   const Real c_cgl = std::sqrt(3.0*ppar0/rho0);
 
@@ -1049,7 +1017,7 @@ PaperWaveState IntegratePaperWaveReference(ParameterInput *pin, Mesh *pm) {
   if (pin->DoesParameterExist("mhd", "cgl_heat_flux")) {
     const Real cpar0 = FaceCParallel(pin, rho0, p0);
     const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
-    const Real nu_eff = EffectiveCollisionFrequency(pin, p0, p0, bx0, by0, bz0);
+    const Real nu_eff = EffectiveCollisionFrequency(pin, pm, p0, p0, bx0, by0, bz0);
     chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
     chi_perp = ChiPerp(cpar0, lf_k, nu_eff);
   }

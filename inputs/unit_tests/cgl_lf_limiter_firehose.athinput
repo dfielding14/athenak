@@ -42,6 +42,8 @@ eos = cgl
 passive = false
 firehose_limiter = true
 cgl_firehose_threshold = oblique
+# Keep the finite-rate stress state between the soft threshold and fluid wall.
+firehose_backup_factor = 2.0
 backup_limiters = true
 limiter_nu_coll = 100.0
 cgl_heat_flux = landau_fluid

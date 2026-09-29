@@ -15,8 +15,9 @@
 #include <string>
 
 #include "athena.hpp"
-#include "mesh/meshblock.hpp"
 #include "parameter_input.hpp"
+
+class MeshBlockPack;
 
 //----------------------------------------------------------------------------------------
 //! \struct EOSData
@@ -37,7 +38,11 @@ struct EOS_Data {
   bool backup_lim;   // enable backup CGL instability limiters
   bool hardwall_lim; // project CGL pressure anisotropy to selected instability bounds
   Real nu_coll, lim_coll;  // physical and limiter collision frequencies
-  Real firehose_threshold;  // selected firehose activation coefficient in B^2 units
+  // Delta p = p_perp - p_parallel; magnetic pressure is B^2/2.
+  // Soft thresholds are -firehose_threshold*B^2/2 and +mirror_threshold*B^2/2.
+  Real firehose_threshold, mirror_threshold;
+  Real mirror_backup_factor, firehose_backup_factor;
+  Real limiter_backup_nu;  // heat-flux suppression frequency in inverse code time
   bool use_e, use_t; // use internal energy density (e) or temperature (t) as primitive
   Real dfloor, pfloor, tfloor, sfloor, bfloor;  // fluid and magnetic-field floors
   Real gamma_max;    // ceiling on Lorentz factor in SR/GR

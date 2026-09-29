@@ -79,13 +79,14 @@ void CheckFlowFlux(const std::string &label, const MHDCons1D &got,
   RequireClose(label + ".field-z", got.bz, expected.bz);
 }
 
-void CheckAdmissible(const std::string &label, const MHDPrim1D &state) {
+void CheckAdmissible(const std::string &label, const MHDPrim1D &state,
+                     const EOS_Data &eos) {
   const Real bsqr = kBx*kBx + state.by*state.by + state.bz*state.bz;
   const Real paniso = state.pp - state.e;
   Require(label + " above firehose hard bound",
-          !cgl::FirehoseHardBoundViolated(paniso, bsqr));
+          !cgl::FirehoseHardBoundViolated(paniso, bsqr, eos));
   Require(label + " below mirror hard bound",
-          !cgl::MirrorHardBoundViolated(paniso, bsqr));
+          !cgl::MirrorHardBoundViolated(paniso, bsqr, eos));
 }
 
 void CheckPassiveSignalAndFluxPaths(const EOS_Data &passive) {
@@ -110,10 +111,10 @@ void CheckPassiveSignalAndFluxPaths(const EOS_Data &passive) {
       MakeState(1.21, 0.23, -0.11, 0.07, 1.5, 1.0, kBy, 0.08);
   const MHDPrim1D right_b =
       MakeState(0.83, -0.17, 0.09, -0.04, 1.2, 1.0, kBy - 0.12, -0.05);
-  CheckAdmissible("left state A", left_a);
-  CheckAdmissible("right state A", right_a);
-  CheckAdmissible("left state B", left_b);
-  CheckAdmissible("right state B", right_b);
+  CheckAdmissible("left state A", left_a, passive);
+  CheckAdmissible("right state A", right_a, passive);
+  CheckAdmissible("left state B", left_b, passive);
+  CheckAdmissible("right state B", right_b, passive);
 
   MHDCons1D ua{}, ub{}, fa{}, fb{};
   Real cfa = 0.0;
@@ -151,6 +152,10 @@ void RunCglPassiveFastPathChecks() {
   passive.is_cgl = true;
   passive.passive = true;
   passive.bfloor = 1.0e-10;
+  passive.firehose_threshold = 2.0;
+  passive.mirror_threshold = 1.0;
+  passive.firehose_backup_factor = 1.0;
+  passive.mirror_backup_factor = 2.0;
   CheckPassiveSignalAndFluxPaths(passive);
   std::cout << "Passive CGL signal-speed and flux checks passed" << std::endl;
 }
