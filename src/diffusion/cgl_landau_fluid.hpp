@@ -116,7 +116,8 @@ class CGLLandauFluid {
   void AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1, int stage,
                                       Real pressure_power, Real anisotropic_power);
   void ResetHeatFluxDiagnostics();
-  void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos);
+  void NewTimeStep(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
+                    const EOS_Data &eos);
   void RecordAdmissibility(const DvceArray5D<Real> &u, const DvceArray5D<Real> &w,
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
                            int dfloor_delta, int pfloor_delta,

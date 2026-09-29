@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-D4 (17 of 41 numbered tasks). Candidate checks
+Completed and committed through T-D5 (18 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| D5 | Candidate stiffness-factor patch passes analytic checks and corrected density ladder; integration pending. |
 | D6 | Existing refresh verified by candidate CPU and 1/4-rank MPI tests: heating raises post stages from 7 to 11; integration pending. |
 | E1 | Representation fence already exists and has regression coverage. |
 | E2 | Passive speeds already fixed; constructor-fence candidate passes double/single checks; integration pending. |
@@ -407,3 +406,30 @@ allowed timesteps are 0.0615219138504782, 0.08934960839675515 and
 The Release build, 98 selected CPU checks and 25-case full workflow pass. The full
 workflow now requests validation CSV output only when the input declares that
 parameter, allowing monitoring-only acceptance fixtures without invalid overrides.
+
+### T-D5: conservative density and magnetic stiffness factors
+
+Triage: the LF timestep lacked the face-to-cell stiffness factors. `NewTimeStep`
+now receives fresh cell-centered B, scans both faces in each active direction,
+and multiplies chi by the maximum arithmetic-face-density ratio times
+$\max(1,|B_i|/\bar B_f)$. It does not reuse a stale pre-RK magnitude cache.
+The dimensional fac and cfl multiplier are unchanged.
+
+The corrected LF-only density-contact acceptance passes in safe and fast modes
+at contrasts 10, 50, 200 and 1000, with 1e-6 seeded/unseeded pairs, three cycles,
+sweep ratio 10 and seven stages per half-sweep (2688 cell-stages). Peak difference
+growth is at most its initial value; final growth factors are approximately
+0.2601, 0.6662, 0.8898 and 0.9745. All repair/nonfinite counters remain zero.
+The retained pre-D control grows by 2.33e5 at R=50, 2.17e6 at R=200 and 7.90e6
+at R=1000. A separate pre-D5 control with D1 already fixed also fails at R=50.
+
+Independent initial-dt checks match both the density factor $(R+1)/2$ and the
+reversal-sheet magnetic factor 1.32333161698 (1D/2D). All five D4 uniform
+timesteps are bitwise identical with and without D5. Integrated validation:
+106 selected CPU checks and all 26 workflow cases pass; tolerances unchanged.
+
+The smaller D5 step shifts the AMR churn fixture's time-triggered derefinement
+from cycle 3 to cycle 4, adding hyperbolic evolution before the LF restart. Its
+switch time is adjusted from 2.70e-4 to 2.55e-4 to retain the original three-cycle
+transition; pressure amplitude and all strict/conservation checks stay unchanged.
+All 11 AMR integration tests pass again with D1-D5 integrated.

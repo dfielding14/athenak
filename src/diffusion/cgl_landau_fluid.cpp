@@ -1684,7 +1684,8 @@ void CGLLandauFluid::AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Rea
       + beta_dt*anisotropic_power;
 }
 
-void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_in) {
+void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
+                                 const DvceArray5D<Real> &bcc, const EOS_Data &eos_in) {
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::timestep_reduction);
   const EOS_Data eos = eos_in;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -1721,6 +1722,28 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos
       chi = cgl::PositiveProduct4(cgl::kSqrtEightOverPi, cpar, response, 1.0);
     }
     if (chi > 0.0) {
+      // Use fresh cell fields: the heat-flux scratch magnitudes may predate RK.
+      const Real bcell = ScaledMagneticMagnitude(
+          bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
+      Real stiffness = 0.0;
+      const int ndim = three_d ? 3 : (multi_d ? 2 : 1);
+      for (int dir=0; dir<ndim; ++dir) {
+        for (int offset=-1; offset<=1; offset+=2) {
+          const int in = i + ((dir == 0) ? offset : 0);
+          const int jn = j + ((dir == 1) ? offset : 0);
+          const int kn = k + ((dir == 2) ? offset : 0);
+          const Real rho_face = fmax(
+              static_cast<Real>(0.5)*w(m,IDN,k,j,i) +
+              static_cast<Real>(0.5)*w(m,IDN,kn,jn,in), eos.dfloor);
+          const Real bneighbor = ScaledMagneticMagnitude(
+              bcc(m,IBX,kn,jn,in), bcc(m,IBY,kn,jn,in), bcc(m,IBZ,kn,jn,in));
+          const Real bbar = 0.5*bcell + 0.5*bneighbor;
+          const Real magnetic_factor = (bbar > 0.0)
+              ? fmax(static_cast<Real>(1.0), bcell/bbar) : static_cast<Real>(1.0);
+          stiffness = fmax(stiffness, (rho_face/rho)*magnetic_factor);
+        }
+      }
+      chi *= stiffness;
       min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/chi);
       if (multi_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/chi);
       if (three_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/chi);

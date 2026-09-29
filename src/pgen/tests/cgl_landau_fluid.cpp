@@ -50,6 +50,7 @@ enum class TestMode {
   paper_eigen_wave,
   rotated_decay,
   field_reversal,
+  density_contact,
   hotspot,
   low_field
 };
@@ -143,6 +144,7 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
   if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
   if (mode == "rotated_decay") return TestMode::rotated_decay;
+  if (mode == "density_contact") return TestMode::density_contact;
   if (mode == "field_reversal") return TestMode::field_reversal;
   if (mode == "hotspot") return TestMode::hotspot;
   if (mode == "low_field") return TestMode::low_field;
@@ -150,7 +152,7 @@ TestMode ParseMode(ParameterInput *pin) {
        "collision_relaxation, grad_b, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "field_reversal, hotspot, or low_field");
+       "density_contact, field_reversal, hotspot, or low_field");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -166,6 +168,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::paper_oblique_wave: return "paper_oblique_wave";
     case TestMode::paper_eigen_wave: return "paper_eigen_wave";
     case TestMode::rotated_decay: return "rotated_decay";
+    case TestMode::density_contact: return "density_contact";
     case TestMode::field_reversal: return "field_reversal";
     case TestMode::hotspot: return "hotspot";
     case TestMode::low_field: return "low_field";
@@ -1586,6 +1589,34 @@ void CheckFieldReversal(ParameterInput *pin, Mesh *pm) {
           "field reversal amplified the pressure seed");
 }
 
+void CheckDensityContact(ParameterInput *pin, Mesh *pm) {
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  const auto &indcs = pm->mb_indcs;
+  const Real tpar0 = pin->GetReal("problem", "ppar0")/pin->GetReal("problem", "rho0");
+  const Real tperp0 = pin->GetReal("problem", "pperp0")/pin->GetReal("problem", "rho0");
+  Real deviation = 0.0;
+  for (int i=indcs.is; i<=indcs.ie; ++i) {
+    const Real rho = w(0,IDN,indcs.ks,indcs.js,i);
+    const Real tpar = w(0,IPR,indcs.ks,indcs.js,i)/rho;
+    const Real tperp = w(0,IPP,indcs.ks,indcs.js,i)/rho;
+    Require(std::isfinite(tpar) && std::isfinite(tperp) && tpar > 0.0 && tperp > 0.0,
+            "density contact developed invalid temperatures");
+    deviation = std::max(deviation,
+        std::max(std::abs(tpar/tpar0 - 1.0), std::abs(tperp/tperp0 - 1.0)));
+  }
+  std::cout << "CGL LF density_contact: contrast="
+            << pin->GetReal("problem", "density_contrast")
+            << " cycles=" << pm->ncycle << " max_delta_T=" << deviation
+            << " sweep_ratio=" << 0.5*pm->dt/pm->dt_parabolic_sts << std::endl;
+  Require(pm->ncycle >= 3, "density contact requires at least three cycles");
+  Require(0.5*pm->dt/pm->dt_parabolic_sts >= 10.0 - 1.0e-12,
+          "density contact requires sweep ratio >= 10");
+  // The regression also compares seeded/unseeded runs at every cycle.
+  const Real amp = pin->GetReal("problem", "amp");
+  Require(deviation < 10.0*std::max(amp, static_cast<Real>(1.0e-12)),
+          "density contact amplified its temperature seed");
+}
+
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
@@ -1621,6 +1652,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckPaperEigenWave(pin, pm);
   } else if (mode == TestMode::rotated_decay) {
     CheckRotatedDecay(pin, pm);
+  } else if (mode == TestMode::density_contact) {
+    CheckDensityContact(pin, pm);
   } else if (mode == TestMode::field_reversal) {
     CheckFieldReversal(pin, pm);
   } else if (mode == TestMode::hotspot) {
@@ -1656,6 +1689,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  const Real density_contrast = (mode == TestMode::density_contact) ?
+      pin->GetOrAddReal("problem", "density_contrast", 200.0) : 1.0;
   if (mode == TestMode::field_reversal) {
     Require(user_srcs, "field_reversal requires <problem>/user_srcs = true");
     user_srcs_func = MonitorFieldReversal;
@@ -1699,6 +1734,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     rotated_wave = RotatedWavenumber(pin, pmy_mesh_);
   }
   const Real xmin = pmy_mesh_->mesh_size.x1min;
+  const Real xlength = pmy_mesh_->mesh_size.x1max - xmin;
   const Real reversal_center = 0.5*(xmin + pmy_mesh_->mesh_size.x1max);
   const Real ymin = pmy_mesh_->mesh_size.x2min;
   const Real ymax = pmy_mesh_->mesh_size.x2max;
@@ -1750,7 +1786,13 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real by = (mode == TestMode::grad_b) ? by_amp*s : by0;
     Real bz = bz0;
 
-    if (mode == TestMode::hotspot) {
+    if (mode == TestMode::density_contact) {
+      // Two one-face density jumps, with uniform temperatures plus a small seed.
+      if (x >= xmin + 0.25*xlength && x < xmin + 0.75*xlength) rho *= density_contrast;
+      const Real seed = amp*((q%2 == 0) ? 1.0 : -1.0);
+      ppar = ppar0*(rho/rho0)*(1.0 + seed);
+      pperp = pperp0*(rho/rho0)*(1.0 + seed);
+    } else if (mode == TestMode::hotspot) {
       const Real gaussian = exp(-(SQR(x - hotspot_x) + SQR(y - hotspot_y))/
                                   (2.0*SQR(hotspot_width)));
       ppar = ppar0*(1.0 + 99.0*gaussian);

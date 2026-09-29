@@ -72,7 +72,8 @@ refine_levels = 1
 refinement_mode = current_threshold
 current_refine_threshold = 0.25
 current_refine_threshold_after = 100.0
-current_threshold_switch_time = 2.70e-4
+# Derefine after three cycles with the conservative LF stiffness timestep.
+current_threshold_switch_time = 2.55e-4
 current_derefine_fraction = 0.5
 rho0 = 1.0
 ppar0 = 10.0

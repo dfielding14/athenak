@@ -280,6 +280,17 @@ def test_cgl_lf_field_reversal_stability(dimension, arithmetic, diagnostics):
         history = testutils.athena_read.hst(f"{basename}.mhd.hst")
         assert len(history["time"]) == 21
         cells = 64 if dimension == 1 else 64 * 16
+        # Independent magnetic stiffness for the one-cell tanh sheet.
+        bmag = np.hypot(0.03, np.tanh(np.arange(64) + 0.5 - 32.0))
+        left = np.r_[bmag[0], bmag[:-1]]
+        right = np.r_[bmag[1:], bmag[-1]]
+        stiffness = max(1.0, np.max(2*bmag/(bmag + left)),
+                        np.max(2*bmag/(bmag + right)))
+        fac = 0.5 if dimension == 1 else 0.25
+        chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+        expected_dt = 20.0*0.4*fac/(64**2 * chi * stiffness)
+        np.testing.assert_allclose(history["dt"][0], expected_dt,
+                                   rtol=2.0e-12, atol=0.0)
         # Each of 20 cycles executes two seven-stage RKL2 sweeps at ratio 10.
         assert history["lf_nstage"][-1] == cells * 20 * 2 * 7
         for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
@@ -317,6 +328,49 @@ def test_cgl_lf_uniform_collisional_timestep(cpar, kpar, nu):
             expected_dt = float(Decimal(20)*Decimal("0.4")*Decimal("0.5")
                                 / (Decimal(16)**2 * chi))
         np.testing.assert_allclose(history["dt"][0], expected_dt, rtol=2.0e-12, atol=0.0)
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("contrast", (10, 50, 200, 1000))
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+def test_cgl_lf_density_contact_stability(contrast, arithmetic):
+    try:
+        samples = []
+        for seed in (0.0, 1.0e-6):
+            basename = f"cgl_ci_contact_{contrast}_{arithmetic}_{seed:g}"
+            _run_unit(
+                "cgl_lf_density_contact.athinput", basename,
+                f"problem/density_contrast={contrast}", f"problem/amp={seed:.17g}",
+                f"mhd/cgl_lf_arithmetic={arithmetic}",
+            )
+            by_cycle = {}
+            for path in sorted(Path("tab").glob(f"{basename}.mhd_w.*.tab")):
+                data = testutils.athena_read.tab(str(path))
+                by_cycle[data["cycle"]] = data
+            assert set(by_cycle) == {0, 1, 2, 3}
+            history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+            assert history["lf_nstage"][-1] == 64 * 3 * 2 * 7
+            chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+            expected_dt = 20.0*0.4*0.5/(64**2 * chi * (contrast + 1.0)/2.0)
+            np.testing.assert_allclose(history["dt"][0], expected_dt,
+                                       rtol=2.0e-12, atol=0.0)
+            for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
+                         "lf_hwproj"):
+                assert np.all(history[name] == 0.0)
+            samples.append(by_cycle)
+        growth = []
+        for cycle in range(4):
+            control, seeded = (sample[cycle] for sample in samples)
+            assert control["time"] == seeded["time"]
+            error = max(
+                np.max(np.abs(seeded[name]/seeded["dens"]
+                              - control[name]/control["dens"]))
+                for name in ("eint", "p_perp"))
+            growth.append(error / 1.0e-6)
+        print(f"density contrast={contrast} arithmetic={arithmetic}: growth={growth}, "
+              "stages_per_half_sweep=7, repair_counts=0")
+        assert max(growth) < 10.0
     finally:
         _cleanup()
 
