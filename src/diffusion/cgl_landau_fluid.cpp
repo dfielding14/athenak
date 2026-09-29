@@ -1709,7 +1709,17 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos
     const int i = idx - m*nkji - (k - ks)*nji - (j - js)*nx1 + is;
     const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
     const Real cpar = local ? sqrt(fmax(w(m,IPR,k,j,i)/rho, eos.tfloor)) : cpar0;
-    const Real chi = cgl::kSqrtEightOverPi*cpar/kpar;
+    // Background collisions reduce the parallel diffusivity. Limiter rates
+    // are excluded: additional scattering can only lower the true diffusivity.
+    const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0));
+    const Real collision_over_speed = (cgl::kThreePiMinusEight*nu/cgl::kSqrtEightPi)/cpar;
+    Real chi = cgl::kSqrtEightOverPi*cpar/(kpar + collision_over_speed);
+    if (!Kokkos::isfinite(chi) || (chi == 0.0 && cpar > 0.0)) {
+      // Reuse the closure's scaled response when a finite chi has overflowing
+      // intermediates. Unit rho, pressure and gradient isolate the response.
+      const Real response = -cgl::ParallelHeatFluxRatio(cpar, 1.0, 1.0, kpar, nu, 1.0);
+      chi = cgl::PositiveProduct4(cgl::kSqrtEightOverPi, cpar, response, 1.0);
+    }
     if (chi > 0.0) {
       min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/chi);
       if (multi_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/chi);

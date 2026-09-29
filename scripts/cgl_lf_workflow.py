@@ -21,6 +21,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 2
 HISTORY_LABEL = re.compile(r"\[\d+\]=(\S+)")
 FULL_INPUTS = (
+    "inputs/unit_tests/cgl_lf_uniform_timestep.athinput",
     "inputs/unit_tests/cgl_lf_hotspot.athinput",
     "inputs/unit_tests/cgl_lf_field_reversal_1d.athinput",
     "inputs/unit_tests/cgl_lf_field_reversal_2d.athinput",
@@ -866,8 +867,9 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 Path(source).stem,
                 source,
                 lf_active="cgl_lf_" in Path(source).stem,
-                validation_output=not Path(source).stem.startswith(
-                    ("cgl_reconstruction_", "cgl_lf_field_reversal_", "cgl_lf_hotspot")),
+                validation_output=input_block_value(
+                    (ROOT_DIR / source).read_text(), "problem", "validation_output"
+                ) is not None,
             )
             for source in FULL_INPUTS
         ]

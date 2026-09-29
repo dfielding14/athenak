@@ -289,6 +289,38 @@ def test_cgl_lf_field_reversal_stability(dimension, arithmetic, diagnostics):
         _cleanup()
 
 
+@pytest.mark.parametrize("cpar,kpar,nu", (
+    (1.0, 2.0*np.pi, 0.0),
+    (1.0, 2.0*np.pi, 10.0),
+    (1.0, 2.0*np.pi, 100.0),
+    (1.4e308, 1.4e308, 0.0),
+    (1.0e154, 1.0e-154, 1.4e308),
+))
+def test_cgl_lf_uniform_collisional_timestep(cpar, kpar, nu):
+    from decimal import Decimal, localcontext
+
+    basename = "cgl_ci_uniform_timestep"
+    try:
+        _run_unit(
+            "cgl_lf_uniform_timestep.athinput", basename,
+            f"mhd/lf_c_parallel0={cpar:.17g}", f"mhd/lf_k_parallel={kpar:.17g}",
+            f"mhd/nu_coll={nu:.17g}",
+        )
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        # Independent coefficient evaluation; Decimal avoids reference overflow
+        # in cases that have a finite diffusivity but overflowing intermediates.
+        with localcontext() as context:
+            context.prec = 80
+            pi = Decimal("3.14159265358979323846264338327950288419716939937510")
+            c, k, frequency = (Decimal(str(value)) for value in (cpar, kpar, nu))
+            chi = 8*c*c / ((8*pi).sqrt()*c*k + (3*pi - 8)*frequency)
+            expected_dt = float(Decimal(20)*Decimal("0.4")*Decimal("0.5")
+                                / (Decimal(16)**2 * chi))
+        np.testing.assert_allclose(history["dt"][0], expected_dt, rtol=2.0e-12, atol=0.0)
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_quantitative_decay_and_diagnostics():
     try:
         _run("cgl_lf_decay.athinput", "cgl_ci_decay")

@@ -543,7 +543,7 @@ void CheckCollisionRelaxation(ParameterInput *pin, Mesh *pm) {
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real nu_coll = BackgroundCollisionFrequency(pin);
   const Real rel_tol = pin->GetOrAddReal("problem", "collision_rel_tol", 1.0e-12);
-  Require(nu_coll > 0.0, "collision_relaxation requires positive <mhd>/nu_coll");
+  Require(nu_coll >= 0.0, "collision_relaxation requires nonnegative <mhd>/nu_coll");
 
   Real measured_paniso = 0.0;
   Real measured_piso = 0.0;

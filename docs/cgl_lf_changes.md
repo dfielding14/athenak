@@ -205,12 +205,12 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-D3 (16 of 41 numbered tasks). Candidate checks
+Completed and committed through T-D4 (17 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| D4-D5 | Candidate collisional timestep and stiffness-factor patches pass analytic checks and corrected density ladder; integration pending. |
+| D5 | Candidate stiffness-factor patch passes analytic checks and corrected density ladder; integration pending. |
 | D6 | Existing refresh verified by candidate CPU and 1/4-rank MPI tests: heating raises post stages from 7 to 11; integration pending. |
 | E1 | Representation fence already exists and has regression coverage. |
 | E2 | Passive speeds already fixed; constructor-fence candidate passes double/single checks; integration pending. |
@@ -392,3 +392,18 @@ At c=1, nu=10, k=2*pi, t=0.02 and initial amplitude 1e-4, chi_perp changes from
 (7.65884217595e-5,5.52095332130e-6); the perpendicular-initial pair changes from
 (1.09452264138e-5,8.83592076405e-5) to (1.10419066426e-5,8.98859289040e-5).
 No tolerance changes were needed.
+
+### T-D4: include background collisions in the stability bound
+
+Triage: the LF timestep still used collisionless chi_parallel. It now includes
+background nu, excluding limiter rates as required. The usual arithmetic order
+is retained for nu=0; the existing scaled closure handles otherwise-overflowing
+intermediates. The fac and cfl multipliers are unchanged.
+
+Five independent Decimal checks pass: nu=0/10/100 and two finite-diffusivity
+extremes with overflowing intermediate products. In the ordinary uniform fixture,
+allowed timesteps are 0.0615219138504782, 0.08934960839675515 and
+0.3397988593132476, respectively; before the fix all three used the first value.
+The Release build, 98 selected CPU checks and 25-case full workflow pass. The full
+workflow now requests validation CSV output only when the input declares that
+parameter, allowing monitoring-only acceptance fixtures without invalid overrides.
