@@ -148,6 +148,16 @@ errors in `coordinates/cartesian_ks.hpp` and a mixed float/double `std::min` in
 `diffusion/hyperviscosity.cpp`. The focused constructor and C2P checks compile the
 real affected production sources in float without changing those unrelated files.
 
+### T-B6: primitive prolongation already supported
+
+Triage: already fixed by the merge. `prolong_prims.cpp` uses the CGL projection
+helpers and handles both pressures and the A/magnetic-moment representations.
+No fence is added. Existing smooth/uniform and strong-anisotropy refinement tests
+and the primitive-versus-conserved stage-order test pass on the CPU binary:
+`test_cgl_amr_gpu.py -k 'primitive_smooth or primitive_stage_order'` (2 passed).
+They exercise actual refinement, require zero AMR repairs, and compare the
+no-transfer paths. GPU and MPI execution remain to be checked separately.
+
 ## Remaining task triage
 
 All acceptance outcomes below remain unverified until the corresponding task.
