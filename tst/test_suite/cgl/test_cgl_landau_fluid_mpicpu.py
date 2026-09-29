@@ -134,3 +134,11 @@ def test_cgl_lf_oblique_decay_agrees_across_mpi_ranks():
         four_ranks = run_oblique_decay(axis, 32, nranks=4)
         assert_oblique_agreement(one_block, four_blocks)
         assert_oblique_agreement(one_block, four_ranks)
+
+
+def test_cgl_lf_smr_decay_conserves_energy_across_mpi_ranks():
+    from test_suite.cgl.test_cgl_lf_oblique_decay_cpu import run_smr_decay
+    single = run_smr_decay(nranks=1)
+    multi = run_smr_decay(nranks=4)
+    for name in ("time", "dt", "tot-E", "lf_nstage"):
+        np.testing.assert_allclose(single[name], multi[name], rtol=2.0e-13, atol=0)

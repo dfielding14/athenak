@@ -21,6 +21,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 2
 HISTORY_LABEL = re.compile(r"\[\d+\]=(\S+)")
 FULL_INPUTS = (
+    "inputs/unit_tests/cgl_lf_smr_decay_2d.athinput",
     "inputs/unit_tests/cgl_lf_oblique_decay_2d.athinput",
     "inputs/unit_tests/cgl_lf_timestep_refresh.athinput",
     "inputs/unit_tests/cgl_lf_density_contact.athinput",

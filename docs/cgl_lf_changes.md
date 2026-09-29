@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G5 (33 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G6 (34 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G6 | Add two-level SMR decay/conservation. |
 | G7 | Update current and retained legacy documentation to match demonstrated coverage. |
 | P1 | Variable-restricted communication and frozen-B BC skip remain. |
 | P2 | Two-variable copies/update exist; flux clear remains. |
@@ -681,3 +680,18 @@ Sampled state is bitwise equal between decompositions; summation-order mean
 changes reach 2.78e-14, with Fourier-amplitude changes around 1e-19. The checks
 allow bounded roundoff in global reductions. An isolated old-projection negative
 control fails by approximately 100% on four ranks. Physical references unchanged.
+
+### T-G6: two-level SMR decay and conservation
+
+Triage: no resolved SMR LF decay acceptance case existed. Added the 40-block,
+two-level `cgl_lf_smr_decay_2d.athinput`, CPU/MPI checks in the oblique-decay test
+module and MPI suite, and a full-workflow entry. The test verifies that flux
+communication/correction, restriction and prolongation execute, runs 70 cycles
+for one e-folding, and compares the global amplitude with the continuum decay.
+
+The CPU SMR test and one/four-rank MPI comparison pass: amplitude relative error
+0.00205802 (tolerance 0.01), total-energy drift at most 7.11e-15 (tolerance 2e-13),
+and all repair/admissibility counters zero. The full workflow passes all 29 cases.
+The broader AMR/MPI run exposed two old initialization-only wave callers that
+now correctly fail G2's evolution guard; their repair belongs to the G2 commit.
+No production physics or reference values changed in G6.

@@ -1,6 +1,7 @@
 """Oblique LF decay across blocks, ranks, and refinement interfaces."""
 
 from pathlib import Path
+import subprocess
 import numpy as np
 import pytest
 import test_suite.testutils as testutils
@@ -56,3 +57,44 @@ def assert_oblique_agreement(first, second):
 @pytest.mark.parametrize("axis", ["x", "y"])
 def test_cgl_lf_oblique_decay_agrees_across_blocks(axis):
     assert_oblique_agreement(run_oblique_decay(axis, 64), run_oblique_decay(axis, 32))
+
+
+def run_smr_decay(nranks=0):
+    basename = f"cgl_smr_decay_{nranks}"
+    command = ["./athena", "-i",
+               "../../../inputs/unit_tests/cgl_lf_smr_decay_2d.athinput",
+               f"job/basename={basename}"]
+    if nranks:
+        command = ["mpirun", "-np", str(nranks)] + command
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "Total number of MeshBlocks = 40" in result.stdout
+        assert ("Number of physical levels of refinement = 1 (2 levels total)"
+                in result.stdout)
+        for bucket in ("parabolic_send_flux", "parabolic_recv_flux",
+                       "parabolic_restrict_u", "parabolic_prolongate"):
+            line = next(line for line in result.stdout.splitlines()
+                        if line.startswith(bucket))
+            assert float(line.split()[3]) > 0  # Mean calls/rank in the full STS path.
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        assert len(history["time"]) > 10
+        energy = history["tot-E"]
+        assert np.max(np.abs(energy / energy[0] - 1)) < 2.0e-13
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd"):
+            assert history[name][-1] == 0
+        metrics = dict(np.loadtxt(f"{basename}.rotated_decay.csv", dtype=str,
+                                  delimiter=",", skiprows=1))
+        assert np.isclose(float(metrics["expected_amp"]), 1.0e-4 / np.e,
+                          rtol=1.0e-13, atol=0)
+        assert float(metrics["rel_err"]) < 1.0e-2
+        return history
+    finally:
+        for path in Path(".").glob(f"{basename}.*"):
+            path.unlink()
+        for path in Path("tab").glob(f"{basename}.*"):
+            path.unlink()
+
+
+def test_cgl_lf_smr_decay_conserves_total_energy():
+    run_smr_decay()
