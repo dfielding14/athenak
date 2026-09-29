@@ -87,10 +87,9 @@ on that path explicitly require the magnetic-moment representation. At the end
 of the split LF sweep, AthenaK converts back to conserved anisotropy before
 ordinary hyperbolic evolution, output, or restart.
 
-Representation guards fail fast if an ordinary physical or user boundary
-would interpret the temporary LF representation as conserved anisotropy.
-Periodic boundaries are covered by the production validation described below;
-custom boundaries require their own qualification.
+LF split integration rejects inflow and user boundaries at construction:
+they have no magnetic-moment-aware `IAN` contract, with support deferred to
+WO2. Periodic, outflow, reflecting, and diode boundaries are supported.
 
 ### Magnetic fields and diagnostics
 
@@ -343,9 +342,11 @@ for production science:
    uniform or static-reference problem.
 7. At least one restart crosses a period of active refinement or derefinement.
 
-Mirror, firehose, anisotropy, and hard-wall projection counters are not
-automatically failures in limiter-active physics. Interpret them according to
-the configured closure. Primary repairs and fatal LF counters are the stronger
+AMR mirror/firehose and anisotropy projection counters refer to the unconditional
+fluid wall and explicitly enabled backup walls, not projection onto soft
+scattering thresholds. Such repairs are not automatically failures in a
+deliberate transfer stress test. The historical LF `lf_hwproj` column is zero
+in new runs. Primary repairs and fatal LF counters are the stronger
 numerical safety indicators.
 
 ## Validated Envelope And Remaining Gaps

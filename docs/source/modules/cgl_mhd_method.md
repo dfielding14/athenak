@@ -16,8 +16,8 @@ magneto-immutability literature:
 - Landau-fluid closures approximate collisionless, field-aligned heat fluxes
   using a prescribed parallel closure scale.
 - Microinstability regulation represents unresolved mirror and firehose
-  scattering through finite-rate limiters or energy-preserving hard-wall
-  projections.
+  scattering through finite-rate soft limiters, with energy-preserving fluid
+  and optional backup walls.
 
 The Squire et al. and Majeski et al. turbulence studies use this model class to
 study how pressure anisotropy changes high-beta MHD turbulence. AthenaK is an
@@ -150,9 +150,18 @@ $$
 \right].
 $$
 
-Finite `nu_coll` and finite-rate limiter scattering increase the denominators
-of these responses, reducing the heat flux. The code supports either local
-$c_\parallel$ or a configured background `lf_c_parallel0`.
+Background collisions and active soft/backup limiter rates add at each face,
+reducing the heat flux. The finite-collision coefficients are
+
+$$
+\chi_\parallel=\frac{8c_\parallel^2}{\sqrt{8\pi}c_\parallel|k_\parallel|+(3\pi-8)\nu_{\rm eff}},
+\qquad
+\chi_\perp=\frac{2c_\parallel^2}{\sqrt{2\pi}c_\parallel|k_\parallel|+2\nu_{\rm eff}}.
+$$
+
+The perpendicular form follows SHD97/Sharma and the BGK moment result; the
+$+\nu$ printed in Squire et al. (2023) is deliberately not used. The code
+supports either local $c_\parallel$ or a configured background `lf_c_parallel0`.
 
 ## Free-Streaming Cap
 
@@ -198,25 +207,30 @@ $$
 corresponding to $\Delta p=-B^2$. AthenaK also supports an oblique-firehose
 activation policy at $2\Delta p/B^2=-1.4$ for legacy or diagnostic studies.
 
-Finite-rate limiters relax the anisotropy when the selected threshold is
-crossed. Hard-wall limiters instead project the pressures to the selected
-threshold while preserving
+Finite-rate limiters relax anisotropy monotonically toward the selected soft
+threshold after exact background decay. Rates advance once per full timestep,
+after the LF post sweep or after RK without LF. The defaults are numeric
+`mirror_threshold=1` and `firehose_threshold=2`; the legacy oblique alias maps
+to 1.4. Enabling either limiter requires an explicit `limiter_nu_coll`.
 
-$$
-p_\perp + \frac{1}{2}p_\parallel .
-$$
+At a scheduled wall update, the fluid bound $\Delta p\geq-B^2$ always applies.
+Enabled backup walls default to $[-B^2,B^2]$ and preserve
+$p_\perp+p_\parallel/2$; they are independent of which soft limiter is enabled.
+LF additionally applies walls after its pre sweep and after RK. The old
+`limiter_hardwall=true` soft projection during primitive recovery is rejected;
+a stiff finite rate approaches the soft threshold asymptotically.
 
-These closures model unresolved regulation. They do not resolve mirror,
-firehose, ion-Larmor-radius, or kinetic phase-space physics.
+These are fluid-scale regulation models, not resolved mirror, firehose,
+ion-Larmor-radius, or kinetic phase-space physics.
 
 ## Active And Passive Runs
 
-In active CGL runs, the anisotropic pressure tensor participates in the MHD
-momentum and energy fluxes. In passive-Delta runs, AthenaK still evolves
-diagnostic CGL/LF pressures, but the flow follows the isothermal-MHD passive
-path. Active/passive pairs should therefore be interpreted as a total
-active-CGL model-path comparison, not as a perfectly isolated measurement of
-only one analytic stress term.
+Active CGL applies the anisotropic pressure tensor in the momentum and energy
+fluxes. The former passive-Delta model is disabled because its thermal-energy
+equation is inconsistent; `passive=true` fails at construction until the WO2
+redesign. Its isothermal signal-speed paths remain unit tested. Archived
+active/passive comparisons are retained as historical evidence, not as a
+currently executable controlled experiment.
 
 ## Turbulence Comparisons
 

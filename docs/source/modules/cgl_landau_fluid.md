@@ -72,7 +72,13 @@ this closure is active. Set `cgl_lf_strict_admissibility = true` for
 verification runs to terminate immediately if an LF refresh produces
 non-finite or non-positive thermodynamic state, activates density or pressure
 floors, or crosses an emergency mirror/firehose bound. The fluid firehose bound is always checked; configured backup walls are checked
-only when `backup_limiters` is enabled.
+only when `backup_limiters` is enabled. These checks do not apply soft scattering
+between LF stages; a physical crossing within a stage still fails strict mode.
+
+At a face, $\nu_{\rm eff}$ is the sum of background collisions, one
+`limiter_nu_coll` contribution when an enabled soft threshold is exceeded, and
+one `limiter_backup_nu` contribution when backup limiting is enabled and a
+configured or fluid wall is exceeded. The two limiter contributions add.
 
 The perpendicular closure uses the BGK moment coefficient from SHD97 eq. 49
 and Sharma et al. (2006) eq. 12:
@@ -107,9 +113,9 @@ $\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ for strong collisions.
 | `firehose_backup_factor` | `1.0` | Multiplier of the soft firehose threshold; at least 1. The wall cannot lie below $-B^2$. |
 | `limiter_backup_nu` | `1e10` | Nonnegative LF heat-flux suppression frequency in inverse code time. |
 | `cgl_firehose_threshold` | absent | Legacy alias: `oblique` = 1.4, `parallel` = 2.0. Conflicting explicit numeric values are rejected. |
-| `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
+| `limiter_nu_coll` | required when either limiter is enabled | Nonnegative finite soft-limiter relaxation frequency. |
 | `limiter_hardwall` | `false` | Legacy `true` is rejected. Use finite `limiter_nu_coll` for soft-threshold relaxation. |
-| `backup_limiters` | `false` | Project onto both configured backup walls, independently of which soft limiter is enabled. LF never enables this flag implicitly. |
+| `backup_limiters` | `false` | Project onto both configured backup walls; requires at least one soft limiter to be enabled. LF never enables this flag implicitly. |
 | `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
 | `cgl_lf_diagnostics` | `full` | `full` collects heat-flux face/cap/work diagnostics; `none` skips those reductions for production runs. |
@@ -122,7 +128,7 @@ The performance/safety switches can be overridden by
 `ATHENAK_CGL_LF_DIAGNOSTICS`, `ATHENAK_CGL_LF_ARITHMETIC`,
 `ATHENAK_CGL_LF_STS_FLUX`, `ATHENAK_CGL_LF_PROFILE`, and
 `ATHENAK_CGL_LF_PROFILE_DETAIL`. Production wall-time measurements should keep
-profiling disabled. The current fastest production mode is:
+profiling disabled. An available performance configuration is:
 
 ```ini
 <mhd>
@@ -165,11 +171,9 @@ once, and a coarse/fine interface is owned by its fine-side closure faces.
 Differences between successive rows give interval counts; normalize limiter
 counts by `lf_nstage` and heat-flux-cap counts by `lf_qface`. All cumulative LF
 diagnostic columns are preserved through CGL-LF restart files so interval
-analysis remains continuous across segments. `lf_hwproj` counts applications
-of the algebraic hard-wall constraint during CGL primitive-refresh task
-ranges, including refreshed support/ghost states; it is not a normalized
-active-cell occupancy statistic. It is expected to be nonzero in
-limiter-active hard-wall production intervals and is not a safety violation.
+analysis remains continuous across segments. `lf_hwproj` is retained for old
+history readers and is zero in new runs; old nonzero values describe the
+pre-WO1 primitive-recovery soft projection.
 `lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-applied owned-face
 contractions of the capped heat fluxes with their corresponding temperature
 jumps. They characterize the closure-generated face fluxes; shearing-box
@@ -182,7 +186,7 @@ equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for
 compatibility.
 
-When `cgl_lf_diagnostics = none`, LF admissibility and hard-wall projection
+When `cgl_lf_diagnostics = none`, LF admissibility and threshold-occupancy
 counters remain active, but heat-flux face, cap, and q-work reductions are not
 collected. In that mode the corresponding heat-flux diagnostic columns should
 be treated as intentionally inactive rather than as measured zero cap
@@ -193,12 +197,17 @@ explicit-RK-applied contraction of velocity with the retained CGL
 pressure-traction divergence, and `lf_cawrk` is its `Delta p` anisotropic
 component. The retained face traction is corrected through the same AMR flux
 exchange used by the momentum update before the contraction is evaluated.
-Passive-Delta runs retain zeros for both fields because their diagnostic CGL
-pressures are not applied to flow momentum.
+Archived passive-Delta runs retain zeros for both fields because their
+diagnostic CGL pressures were not applied to flow momentum. New passive runs
+are disabled.
 
 ## Current Restrictions
 
 - CGL is not available for SR, GR, or dynamical-GR MHD.
+- `mhd/passive = true` is disabled pending the WO2 thermal-energy redesign.
+- LF split integration rejects inflow and user boundary conditions because
+  they do not have a magnetic-moment-aware `IAN` contract. Periodic, outflow,
+  reflecting, and diode boundaries remain supported.
 - CGL dynamic runs use `rsolver = hlle`; LLF and HLLD are rejected.
 - Ordinary `<mhd>/conductivity` is rejected with `eos = cgl`.
 - CGL LF with `cgl_heat_flux_integrator = sts` cannot be combined with
@@ -224,10 +233,11 @@ pressures are not applied to flow momentum.
   while `IAN` stores magnetic moment, then refreshes CGL primitives before
   the next stage. The pre-sweep uses the displacement at `t` and the
   post-sweep uses `t + dt`.
-- Modal `<turb_driving>` forcing is supported with CGL LF. It is applied in
-  the ordinary source-term task graph, outside the protected LF
-  magnetic-moment sweep; the routine strict AMR/restart regression exercises
-  this combined path.
+- Modal `<turb_driving>` forcing is supported with CGL LF. One kick and one
+  Ornstein-Uhlenbeck advance occur per cycle before the RK state copy. The
+  momentum kick and zero-net-momentum correction each add their exact kinetic
+  energy change to total energy, preserving thermal energy. This schedule
+  applies to all driven fluids, including two-fluid runs.
 
 ## Verification
 
@@ -235,7 +245,11 @@ Focused unit problems in `inputs/unit_tests/` exercise CGL transforms, CGL
 FOFC, LF parallel and perpendicular decay, magnetic-field-gradient coupling,
 flux limiting, limiter suppression, and a field-aligned wave. Routine
 regressions also exercise analytic uniform collisional relaxation and both
-firehose threshold policies. The LF
+firehose threshold policies. The strengthened acceptance suite additionally
+checks noninteger-period wave convergence, one-e-fold decay, exact cellwise
+limiter relaxation, oblique two-dimensional decay across block/rank layouts,
+and two-level SMR decay with total-energy conservation. See the
+{ref}`measured acceptance table <wo1-acceptance-checks>`. The LF
 quantitative pgen is the built-in `src/pgen/tests/cgl_landau_fluid.cpp`.
 
 A reduced forced-turbulence initializer is registered as
@@ -249,7 +263,7 @@ thermal energy equation is inconsistent. Runtime regressions check this fence;
 direct unit checks retain coverage of the isothermal passive signal-speed path.
 These are reduced smoke cases, not standard paper-resolution runs. Their
 forcing-orientation, seed-continuation, and multi-cycle OU/RK source-work checks
-qualify reduced mechanics, not paper-scale active/passive statistics or
+qualify reduced mechanics, not paper-scale statistics or
 figure diagnostics.
 
 The paper pgen `.user.hst` output retains volume-integrated mass, kinetic,
@@ -259,17 +273,15 @@ rate, and instantaneous forcing power (written using the compact history
 labels `therm_cgl`, `abs_dp`, `mirror_vol`, `fire_vol`, `hard_vol`, and
 `force_pwr`) in addition to forcing-orientation quantities. Paper inputs
 also enable `record_injected_work`, adding cumulative exact net forcing-source
-work, including the zero-net-momentum projection, as `force_work`. The counter
-is advanced as an explicit-RK companion quantity so earlier stage increments
-receive the same final-state weighting as the evolved conserved variables; the
-analyzer uses it with conserved `tot-E` to report an active-Delta global
-energy residual. These histories support reduced global
+work, including the zero-net-momentum projection, as `force_work`. Each once-per-cycle kick adds its measured energy change to this counter
+before the RK stages; the analyzer uses it with conserved `tot-E` to report
+an active-CGL global energy residual. These histories support reduced global
 summaries such as `C_B2`; `.mhd.hst` supplies operator-face heat-flux-cap
 activity and retained snapshots supply spatial diagnostics.
 
 Paper-standard input definitions and the limiter-frequency scan live under
 `inputs/cgl_lf_paper/`. They encode the standard `192x192x384` domain,
-duration, hard-wall baseline, physical forcing shell, binary snapshot
+duration, stiff finite-rate baseline, physical forcing shell, binary snapshot
 cadence, and analysis window. The nine standard definitions cover all eight
 active/passive, Alfvenic/random beta-10/beta-100 series in MKS24 Figure 2(b)
 plus the active Alfvenic beta-1 case. Two `paper-heat-flux` definitions supply
@@ -283,7 +295,8 @@ cases reuse standard definitions. The `paper-standard`, `paper-nulim`,
 `paper-heat-flux`, `paper-compressive`, and `paper-scale-separation`
 workflows require explicit production authorization;
 the presence of these decks is not evidence that paper-scale runs have been
-executed.
+executed. Passive definitions are retained for provenance, but executable
+workflows omit them and list them in `disabled_cases` until WO2.
 
 For CGL `mhd_w` or `mhd_w_bcc` output, the existing `eint` field retains its
 legacy meaning of `p_parallel`; output now also includes `p_perp`. Paper

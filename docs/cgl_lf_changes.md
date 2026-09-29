@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G6 (34 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G7 (35 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G7 | Update current and retained legacy documentation to match demonstrated coverage. |
 | P1 | Variable-restricted communication and frozen-B BC skip remain. |
 | P2 | Two-variable copies/update exist; flux clear remains. |
 | P3 | Reduced refresh region exists; fused temperatures and frozen-B caching remain. |
@@ -695,3 +694,25 @@ and all repair/admissibility counters zero. The full workflow passes all 29 case
 The broader AMR/MPI run exposed two old initialization-only wave callers that
 now correctly fail G2's evolution guard; their repair belongs to the G2 commit.
 No production physics or reference values changed in G6.
+
+### T-G7: current method documentation and bounded validation claims
+
+Updated `docs/cgl_lf_validation.tex`, the retained reproduction plan/runbook,
+and the Sphinx LF module, method primer, code guide, AMR and validation pages.
+They now describe the full-cycle rate/wall schedule, numeric thresholds, the
+BGK perpendicular coefficient, passive/boundary fences, forcing cadence and
+exact kick work, and measured G2-G6 acceptance. The superseded unit-test README
+was removed in G0; the current Sphinx validation guide replaces it. No current
+claim rests on the archived May 24/25 figures: captions identify their dates,
+and retained E02 campaign results are explicitly historical. OU coefficient
+updates retain their configured cadence; only the forcing kick occurs each cycle.
+
+The repository report compiles with its real figure assets to 18 pages; every
+page was rendered and visually inspected, with no clipped text or figures.
+The current PDF is `docs/source/_static/cgl_lf_validation.pdf`. Narrow path/digest
+line-break repairs remove all overfull boxes. Sphinx now enables dollar-math
+and MathJax, and the new acceptance anchor resolves. A full strict Sphinx build
+has only two pre-existing orphan-engineering-document warnings; suppressing
+only that warning class yields a successful build. No scientific figure data
+or historical campaign measurements were regenerated. QA evidence is retained
+in `/tmp/cgl-wo1-g7/evidence.md` and its build logs.

@@ -12,6 +12,33 @@ The Squire heat-flux caps remain
 `q_parallel,max = sqrt(8/pi)*c_parallel*p_parallel` and
 `q_perp,max = sqrt(2/pi)*c_parallel*p_perp`.
 
+## Current WO1 Contract (2026-09-29)
+
+This retained custom pgen contains NP/fast-wave analogues beyond the built-in
+quantitative test pgen. Its smoke output is a mechanics check; the stronger
+operator acceptance suite is documented in
+[the CGL-LF validation guide](source/modules/cgl_landau_fluid_validation.md#wo1-acceptance-checks).
+
+CGL rates advance once per full timestep: exact background decay, then monotone
+backward-Euler relaxation toward the active soft threshold, then walls. With LF,
+walls also follow the pre-sweep and RK step, while rates occur only after the
+post-sweep. The numeric soft-threshold defaults are `firehose_threshold=2` and
+`mirror_threshold=1`; the fluid bound $\Delta p\geq-B^2$ always applies.
+Backup limiting is explicit, requires an enabled soft limiter, and defaults to
+factors 1 (firehose) and 2 (mirror). Enabling a soft limiter requires
+`limiter_nu_coll`; `limiter_hardwall=true` is rejected. Use an explicit stiff
+finite rate such as $10^{10}$, whose approach to the soft threshold remains
+asymptotic. Primitive recovery does not perform soft scattering.
+
+The perpendicular coefficient is
+$\chi_\perp=2c_\parallel^2/(\sqrt{2\pi}c_\parallel|k_\parallel|+2\nu_{\rm eff})$,
+following SHD97/BGK rather than the printed Squire $+\nu$ form. Face collision
+frequency adds background, active soft, and enabled backup rates. Strict LF
+checks require no floors, invalid states, or fluid/enabled-backup wall crossings;
+soft-threshold occupancy itself is allowed. The compatibility `lf_hwproj`
+column is zero in new runs. LF inflow/user boundaries remain disabled because
+they lack a magnetic-moment-aware `IAN` contract.
+
 ## Implemented Pgen Modes
 
 - `mode = turbulence`: periodic `[1,1,2]` boxes with `B0` along `x3`.
@@ -33,7 +60,10 @@ with `x3` as the parallel direction; use
 remain strictly perpendicular to `B0`. `driving_type = 2` selects isotropic
 unprojected random forcing. Set `tcorr` in the same block for a sonic or other
 chosen correlation time. The smoke script selects its random case through
-`driving_type = 2`.
+`driving_type = 2`. The driver updates OU coefficients at the configured
+cadence and applies one kick before the RK state copy per cycle. Both the kick and zero-net-momentum correction
+add their exact kinetic-energy change to total energy, preserving thermal
+energy. These corrections apply to all driven fluids, not only CGL.
 
 ## Passive-Delta Controls — Disabled
 
@@ -79,7 +109,7 @@ limiter-disabled, NP-mode, and fast-wave cases, then writes
 legacy history labels it records finite/time summaries; the synthetic check
 exercises the current analysis formulas separately.
 
-## Tiered Runs
+## Planned Tiers (Not Completed Acceptance Evidence)
 
 Tier 1 local smoke:
 
@@ -91,9 +121,10 @@ Tier 2 nightly:
 
 - `96x96x192`, `t_final = 3 L_perp/vA`.
 - Run `beta0 = 1, 10, 100`, active/passive, Alfvénic and `driving_type=2`
-  random forcing, hard-wall and finite-limiter scans.
-- Acceptance: active CGL-LF reduces limiter occupancy relative to passive-delta,
-  heat-flux cap fractions stay bounded, and energy residuals remain small.
+  random forcing, stiff and finite-limiter scans. Passive roles remain blocked.
+- Numerical acceptance: clean strict diagnostics, resolved convergence, and a
+  declared energy/work residual. Reduced active/passive limiter occupancy is a
+  proposed physics comparison, not a guaranteed numerical pass criterion.
 
 Tier 3 paper grade:
 

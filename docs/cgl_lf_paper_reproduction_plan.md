@@ -1,9 +1,10 @@
 # CGL-LF Paper Reproduction and Stress-Test Plan
 
-This plan targets the CGL-Landau-fluid method on the `CGL-STS-LF` branch after
-adding the Squire heat-flux cap and finite-collision heat-flux coefficients.
-The goals are to reproduce the paper results as closely as this fluid model can
-support, then to push the implementation with deliberately difficult tests.
+This retained plan distinguishes implemented WO1 method checks from proposed
+paper-scale experiments. The current source is authoritative; pre-WO1 local
+measurements and later campaign records do not certify the revised method.
+The goals remain reproduction of supported ion-fluid results followed by
+specified stress tests.
 
 AthenaK uses magnetic fields normalized so that `vA = B/sqrt(rho)`. When
 translating paper parameters that use `B/sqrt(4*pi*rho)`, use `beta = 2*p/B^2`
@@ -11,13 +12,43 @@ for an isotropic pressure in code units. The heat-flux coefficients and caps are
 unchanged because they depend on `c_parallel`, pressure, `lf_k_parallel`, and
 collision frequency, not directly on the magnetic pressure normalization.
 
-## Local Runs Already Completed
+## Current Method Acceptance (2026-09-29 WO1)
 
-The current quantitative pgen already contains a Squire Figure 17-style oblique
+The authoritative pgen is `src/pgen/tests/cgl_landau_fluid.cpp`. Short wave
+checks now require $10^{-3}$ normalized Fourier error and a reference change
+of at least ten tolerances. The $64,128,256$ ladders run to $1.25$ periods and
+require near-second-order weakly damped convergence or at least first order
+for LF-dominated modes. Parallel/perpendicular decay runs reach one e-fold
+over hundreds of cycles with tolerance $0.003$. Cellwise limiter tests compare
+exact background decay and finite backward-Euler relaxation, including walls.
+Two-dimensional $30^\circ$ field tests compare $x/y$ decay across blocks and MPI;
+two-level SMR checks include total-energy conservation. Measured results and
+reproducible test paths are in the
+[validation guide](source/modules/cgl_landau_fluid_validation.md#wo1-acceptance-checks).
+
+The current schedule applies rates once per full timestep, after the LF post
+sweep (or after RK without LF); pre-sweep and RK boundaries apply walls only.
+Soft thresholds default to $\Delta p=-B^2$ and $B^2/2$; backup factors default
+to 1 and 2. `limiter_hardwall=true` is rejected in favor of an explicit finite
+`limiter_nu_coll`, and strictness does not enable backups implicitly.
+The perpendicular coefficient uses the SHD97/BGK $+2\nu_{\rm eff}$ denominator.
+Passive CGL is disabled pending WO2; LF inflow/user boundaries also remain fenced.
+The driver updates OU coefficients at the configured cadence and applies one
+kick before RK per cycle. The kick and momentum removal add their exact
+kinetic-energy changes to total energy. The removed problem-level `forcing_mode` is replaced by explicit
+`<turb_driving>` settings.
+
+## Historical Local Runs (Pre-WO1)
+
+The following measurements predate the 2026-09-29 WO1 update; their original
+execution date was not recorded here. They are preserved as historical evidence,
+not as results for the revised tolerances, coefficient, or collision schedule.
+
+The historical quantitative pgen contained a Squire Figure 17-style oblique
 linear initial-value setup. It seeds a transverse velocity perturbation on the
 Figure 17 background and compares the result with an offline integration of the
 same linearized initial-value problem; it is not an eigenmode initialization.
-I reran the CGL-LF and pure-CGL variants with validation CSV output under
+The CGL-LF and pure-CGL variants were run with validation CSV output under
 `/tmp/athenak_cgl_lf_repro_data`.
 
 | Input | Result |
@@ -35,7 +66,8 @@ I reran the CGL-LF and pure-CGL variants with validation CSV output under
 
 ### Linear CGL-LF Waves
 
-Reproduce Appendix A/Figure 17 at higher fidelity than the current smoke input.
+Future extension beyond WO1: add collisional and nonpropagating branches and
+measure complex frequencies, rather than only their final Fourier amplitudes.
 
 - Background: `rho0=1`, `p_parallel0=p_perp0=5`, `B0=(1,sqrt(2),0.5)`,
   `k=2*pi*xhat`, and `lf_k_parallel=|k|`.
@@ -51,7 +83,7 @@ Reproduce Appendix A/Figure 17 at higher fidelity than the current smoke input.
 
 Implementation status: `src/pgen/tests/cgl_landau_fluid.cpp` now
 initializes supplied complex eigenvectors and compares against their
-\(\exp(\lambda t)\) evolution.  Regenerate the inputs with
+$\exp(\lambda t)$ evolution.  Regenerate the inputs with
 `scripts/generate_cgl_lf_eigenmode_inputs.py`.
 
 ### Driven Alfvénic Turbulence
@@ -65,7 +97,7 @@ figure match.
 - Parameters: `beta0=1,10,100`, `rho0=1`, isotropic initial pressure
   `p0=0.5*beta0*B0^2` in AthenaK units.
 - Heat flux: `lf_k_parallel=4*pi/L_parallel`, local coefficient mode.
-- Limiters: hard-wall reference with `limiter_nu_coll=1e10*vA/L_perp`, plus
+- Limiters: stiff finite-rate reference with `limiter_nu_coll=1e10*vA/L_perp`, plus
   finite-limiter scans.
 - Forcing: Ornstein-Uhlenbeck large-scale incompressible velocity forcing,
   perpendicular to the mean field, with `t_corr=L_parallel/vA`, power over the
@@ -74,7 +106,7 @@ figure match.
 - Duration: at least `10 L_perp/vA`; use restarts for longer saturated
   statistics.
 - Controls: active CGL-LF, pure CGL without LF, ideal/isothermal MHD, and
-  passive-delta if a passive anisotropy force switch is added.
+  passive-delta after the WO2 thermal-energy redesign; it is currently disabled.
 
 Required diagnostics:
 
@@ -157,7 +189,7 @@ Majeski 2024 paper.
 - Forcing modes: Alfvénic incompressible forcing and random forcing; add sonic
   correlation-time runs to deliberately excite compressive fluctuations.
 - Heat flux: `lf_k_parallel=4*pi/L_parallel`.
-- Limiter scan: hard-wall `limiter_nu_coll`, finite `limiter_nu_coll`, and
+- Limiter scan: stiff finite `limiter_nu_coll`, moderate finite rates, and
   limiter disabled for controlled failures.
 - Runtime: `t_final >= 10 L_perp/vA`.
 - Acceptance: active-delta runs should suppress mirror/firehose volume fraction,
@@ -196,7 +228,7 @@ These should become separate CI/smoke, nightly, and HPC-regression tiers.
 10. **Conservation budget**: for every nonlinear problem, track injected power,
     kinetic/magnetic/internal energy, anisotropic work, collisional heating, and
     heat-flux transport so the residual remains at truncation-error level.
-11. **Active/passive-delta divergence**: add a passive-delta mode and show that
+11. **Active/passive-delta divergence**: after the WO2 passive-mode redesign, test whether
     active CGL-LF suppresses threshold occupancy relative to identical MHD-like
     fields.
 12. **Limiter collisionality locality**: create adjacent stable/unstable regions
@@ -207,13 +239,13 @@ These should become separate CI/smoke, nightly, and HPC-regression tiers.
 
 1. Extend the current exact-eigenvector inputs to entropy-like and
    anisotropy-like branches, then scan resolution.
-2. Add a CGL-specific turbulence pgen or extend `turb.cpp` so it initializes
-   `p_parallel`, `p_perp`, total energy, and CGL diagnostics correctly.
-3. Add history diagnostics for anisotropy thresholds, heat-flux cap activity,
-   limiter activity, `Delta p` work, and heat-flux power.
+2. Extend the existing CGL paper pgens only where a proposed experiment needs
+   additional initial conditions; the CGL state initialization is implemented.
+3. Use the existing histories for threshold/cap occupancy, applied forcing and
+   pressure work; distinguish applied face contractions from snapshot proxies.
 4. Add offline Python analysis for Fourier mode fitting, spectra, Brazil plots,
    transfer functions, and run summaries.
-5. Add passive-delta and optional isothermal-electron support if exact Majeski
-   comparisons require them.
+5. Resolve the WO2 passive thermal-energy equation and add optional electron
+   pressure only if the intended Majeski comparison requires it.
 6. Split runs into quick local smoke, nightly quantitative, and HPC paper
    reproduction tiers.

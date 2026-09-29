@@ -8,29 +8,57 @@ operator reference, see [CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md).
 
 ## Validation Tiers
 
-Routine CPU testing covers a quantitative decay case, analytic uniform
-collisional relaxation, oblique/parallel firehose threshold selection, strict
-emergency-bound reporting without automatic correction, limiter occupancy,
-explicit-versus-STS reference comparisons, and the live CGL FOFC regression.
-It also covers the reduced active paper initializer, deterministic turbulence
-seed selection, Alfvenic forcing orientation, nonrelativistic forcing-energy
-work, forcing restart continuation, and passive-Delta flow independence from
-diagnostic pressure anisotropy. A strict two-dimensional AMR/restart
-regression exercises modal turbulence driving, with MPI coverage comparing
-that configuration at one and four ranks. AMR, restart, and live FOFC checks
-also exercise the optional retained RK-integrated CGL pressure-traction work
-path.
-The broader scientific suite is a manual tier because it generates diagnostic
-CSV files and figures and is intended for interpretation, not just pass/fail
-gating.
+Routine CPU tests cover analytic collisional relaxation, configurable thresholds,
+finite-rate limiter updates, strict admissibility, explicit-versus-STS transport,
+FOFC, forcing work and restart continuation. Passive CGL is tested as a constructor
+fence. Active reduced turbulence and AMR/restart tests exercise the coupled path;
+MPI tests compare block layouts and rank counts. The acceptance checks below add
+resolved damping, wave convergence, and SMR conservation. Figure-producing
+workflows remain a manual analysis tier.
+
+(wo1-acceptance-checks)=
+## WO1 Acceptance Checks
+
+The following focused double-precision CPU/MPI results were measured during
+the 2026-09-29 WO1 update.
+They replace the former short-run guard tolerances; the historical figures below
+have not been regenerated from these runs.
+
+| Check | Acceptance and measured result |
+| --- | --- |
+| Field-aligned wave, pure/LF oblique IVP, six pure/LF eigenmodes | Short-run normalized Fourier error $\leq10^{-3}$. Every checker requires the normalized reference change from initialization to be at least ten tolerances, so a frozen state cannot pass. |
+| Long wave ladders | $N_x=64,128,256$ to $1.25$ periods; the multimode oblique IVP uses the Alfvén period. Weakly damped branches require order $\geq1.8$, LF-dominated checks order $\geq1$. Measured orders are about $1.95$–$2.49$, with finest-grid errors below $5.2\times10^{-4}$. Too-short references and LF-disabled compressive eigenmodes are rejected. |
+| Parallel/perpendicular decay, $\nu=0,10$ | $\chi k^2T=1$ at $N_x=128$, 208–649 cycles, relative amplitude tolerance $0.003$. Measured errors are $2.08$–$2.71\times10^{-4}$. An independent two-moment matrix exponential distinguishes swapped coefficients, a factor-two perpendicular coefficient error, and the obsolete $+\nu$ denominator. |
+| Mirror/firehose limiter stress | Cellwise background exponential decay, backward-Euler soft relaxation, then the applicable walls agree within $10^{-12}$ relative to isotropic pressure. Tests cover $\nu_{\rm lim}\Delta t=0,1,10^{10}$, background collisions, and wall ordering. The exact oracle uses uniform LF states or spatially varying zero-advection pure-CGL states; varying LF stress tests instead check transport admissibility. |
+| Two-dimensional oblique-field decay | $B$ at $30^\circ$, wavevector along $x$ or $y$, one e-fold. Measured amplitude errors are $0.0853\%$ and $0.0830\%$. Physical states agree bitwise between one block and $2\times2$ blocks, including four MPI ranks. |
+| Full multilevel LF/STS path | Two-level SMR, 40 blocks, 70 cycles: amplitude error $0.2058\%$, relative total-energy change about $7.1\times10^{-15}$. Profiling confirms the full multilevel path. |
+
+The wave and one-dimensional decay/limiter checks are in
+`tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py`; the multidimensional and
+SMR cases are in `test_cgl_lf_oblique_decay_cpu.py` and
+`test_cgl_landau_fluid_mpicpu.py` in the same directory. They use
+`cgl_lf_oblique_decay_2d.athinput` and `cgl_lf_smr_decay_2d.athinput`.
+The oblique amplitude tolerance is $0.005$; SMR tolerances are $0.01$ for
+amplitude and $2\times10^{-13}$ for relative energy drift. Global reduction
+roundoff is distinct from bitwise equality of the sampled physical states.
+These are tests of the implemented
+ion-fluid equations, not a complete reproduction of Figure 17 or turbulent MKS24
+statistics; collisional and nonpropagating eigenmode branches remain follow-up work.
+
+Run the current wave/decay/limiter acceptance suite from `tst/` with:
+
+```bash
+python run_test_suite.py --cpu --test test_suite/cgl/test_cgl_lf_acceptance_cpu.py
+```
 
 ## Illustrated Validation Note
 
 The illustrated method note originally developed on `CGL-STS-LF` is now
 maintained in this branch as `docs/cgl_lf_validation.tex`. It includes the
-five method-validation figures plus representative reduced MKS24-oriented
-analysis products, with production and reference-admission boundaries called
-out explicitly.
+five historical method figures from the 2026-05-24 bundle and reduced nonlinear
+products from the 2026-05-25 bundle. The WO1 text and acceptance table are current;
+those retained figures are pre-WO1 evidence and do not demonstrate the new
+schedule, coefficient choice, forcing work, or tightened tolerances.
 
 [Download the illustrated CGL-LF validation and MKS24 analysis note
 (PDF)](../_static/cgl_lf_validation.pdf)
@@ -83,10 +111,12 @@ pre-cap face ratios above `10^4` in the extreme-cap cases, aligned thermal
 decay with mean fields directed along `x`, `y`, `z`, and a periodic oblique
 direction, and clean transport shutdown at `|B| <= bfloor`.
 
-Finite-collision LF cases use two collision source updates per cycle, each
-over the corresponding LF half-sweep duration. The routine
-`cgl_lf_collision_relaxation` regression independently checks the analytic
-law `Delta p(t) = Delta p(0) exp(-nu_coll t)`.
+CGL rates advance once per full cycle. With LF, walls follow the pre-sweep and
+RK step; the post-sweep applies exact background decay, then monotone
+backward-Euler soft relaxation over the full timestep, then walls. Without LF,
+rates and walls follow RK. The background reference is
+$\Delta p(t)=\Delta p(0)\exp(-\nu_{\rm coll}t)$. Primitive recovery and
+intermediate LF stages do not apply soft-threshold scattering.
 
 The explicit mode uses the same anisotropy-to-magnetic-moment split lifecycle
 as STS. It is deliberately restricted to standalone reference checks.
@@ -98,8 +128,8 @@ transport, strict monitoring, and conserved prolongation:
 python3 scripts/cgl_lf_workflow.py amr
 ```
 
-For reduced MKS24-oriented turbulence smoke cases, including active Alfvenic,
-active random, and passive-Delta Alfvenic forcing:
+For reduced MKS24-oriented active Alfvenic and active random turbulence smoke
+cases (passive definitions are disabled pending WO2):
 
 ```bash
 python3 scripts/cgl_lf_workflow.py paper-smoke
@@ -109,7 +139,8 @@ This workflow archives the explicit parallel-firehose policy, forcing mode,
 random seed, correlation time, injection parameter, mode bounds, state
 tables, forcing tables, and the physical-shell/common-spectrum settings that
 select the documented `abs(k) in (2*pi/L_parallel)[1,3]` and `k^-2` forcing.
-Paper decks enable restartable cumulative RK-integrated applied source work.
+Paper decks enable restartable cumulative work from the once-per-cycle
+forcing kick, including its zero-net-momentum correction.
 They also enable `cgl_lf_record_pressure_work`, which retains total and
 anisotropic applied hyperbolic CGL pressure-traction work in `lf_cpwrk` and
 `lf_cawrk`.
@@ -117,11 +148,10 @@ The workflow checks clean LF safety diagnostics, positive applied work, active
 global energy/work residual closure, zero parallel
 forcing for the Alfvenic case, and nonzero parallel forcing for the random
 case. Focused CPU regressions separately check fixed-`dedt` first-cycle
-normalization, multi-cycle RK2 companion source-work identity, and
-cumulative-work restart continuation. The
-workflow also archives the explicit passive-Delta choice; a focused
-regression checks that its flow fields are independent of diagnostic initial
-anisotropy. It does not qualify paper-resolution or long-time active/passive
+normalization, one kick per RK1/RK2/RK3 cycle, unchanged thermal energy under
+the kick, and cumulative-work restart continuation. `passive=true` is rejected;
+workflows preserve its catalog entries but omit their execution and record
+`disabled_cases`. These checks do not qualify paper-resolution or long-time
 forcing statistics, or figure-level analysis.
 
 For short reduced nonlinear product-path qualification, including
@@ -176,12 +206,18 @@ reuses its standard definition. The frozen Stage I production manifest
 deduplicates these roles into sixteen mapped executions and excludes the
 unmapped active-Alfvenic beta-1 definition unless a later source audit assigns
 it a displayed result. Defining an input does not constitute a reproduction
-result.
+result. The sixteen-case catalog is historical/future coverage: passive roles
+cannot execute until the WO2 energy-equation redesign is accepted.
 In CGL primitive snapshots, legacy `eint` is `p_parallel` and the dedicated
 `p_perp` output supplies the perpendicular pressure required for paper
 anisotropy analysis.
 
-## Stage I Production Execution
+## Stage I Production Execution And Historical Records
+
+The execution records below predate the 2026-09-29 WO1 changes. They remain
+provenance and cost evidence; no archived executable is qualified for the new
+method by these local tests. Passive roles are currently blocked. The retained
+submission protocol still requires a separately qualified immutable executable.
 
 Paper-production segments are managed separately from the debug qualification
 utility. The tracked controller `scripts/frontier/cgl_lf_stage_i.py`
@@ -402,7 +438,7 @@ summarized from LF history counters over the same selected interval. When the
 selected history contains `lf_cpwrk` and `lf_cawrk`, it additionally reports
 the explicit-RK-applied CGL pressure-traction ledger. That ledger is evaluated
 from the retained traction after the same AMR flux correction used by
-momentum; passive-Delta decks record zero applied pressure work.
+momentum; archived passive-Delta decks record zero applied pressure work.
 When the
 default staged MKS24 manifest is available, `paper-analyze` also writes
 `analysis/reference_provenance.json` with its archive and source-TeX
@@ -797,12 +833,10 @@ validation decks require zero floors, zero nonfinite/nonpositive states, and
 zero hard-bound violations; limiter and cap counts may be nonzero when
 intentionally exercised.
 `lf_mirror` and `lf_firehs` are physical threshold-occupancy counters
-evaluated with the selected policy. `lf_hardbd` is an emergency safety
-counter and is evaluated whether or not corrective `backup_limiters` are
-enabled. `lf_hwproj` is the cumulative number of primitive-refresh
-applications of `limiter_hardwall = true`, including refreshed support/ghost
-states; it records constraint activity rather than an admissibility failure
-and is not a normalized active-cell occupancy. The `lf_q*` columns record
+evaluated with the selected policy. `lf_hardbd` always checks the fluid bound $\Delta p\geq-B^2$ and additionally
+checks configured backup walls only when `backup_limiters=true`.
+`lf_hwproj` is retained for history compatibility and is zero in new runs;
+archived nonzero values describe the former primitive-recovery soft projection. The `lf_q*` columns record
 owned LF operator faces and parallel/perpendicular pre-cap flux ratios above
 `q_max` and `10*q_max`; shared MeshBlock faces are counted once and
 coarse/fine interfaces use the fine-side closure faces. Their interval
@@ -816,13 +850,19 @@ fine-side closure faces own the contraction because their fluxes are
 restricted into the coarse update. These are signed operator contractions,
 not a positivity or total-energy closure condition.
 
-The firehose policy is explicit for threshold-sensitive work:
-`cgl_firehose_threshold = parallel` selects the MKS24 production convention
-`beta Delta <= -2`, while `oblique` selects `beta Delta <= -1.4` for
-comparison studies and backward-compatible operator validation. MKS24
-hard-wall decks additionally set `limiter_hardwall = true`, which projects
-pressures to the selected threshold while preserving CGL internal energy and
-replaces finite-rate limiter pressure relaxation.
+The numeric defaults are `firehose_threshold=2` and `mirror_threshold=1`,
+so the soft thresholds are $-B^2$ and $B^2/2$. Backup factors default to 1
+(firehose) and 2 (mirror); the lower wall never extends below $-B^2$.
+The legacy oblique/parallel alias maps to 1.4/2.0 and cannot conflict with an
+explicit numeric setting. Enabling either soft limiter requires an explicit
+`limiter_nu_coll`; backup-only configurations are rejected. Strictness never
+enables backup limiting implicitly. `limiter_hardwall=true` is rejected; use
+an explicit finite rate, such as $10^{10}$ in code-time units, for a stiff
+soft-threshold approximation. At faces, background, active soft, and enabled
+backup collision frequencies add. The perpendicular closure follows
+$\chi_\perp=2c_\parallel^2/(\sqrt{2\pi}c_\parallel|k_\parallel|+2\nu_{\rm eff})$,
+the SHD97/BGK form; it deliberately differs from the $+\nu$ printed by Squire
+et al. (2023).
 
 The pre-existing `aam-D` label is retained for compatibility. In ordinary
 output and restart state it denotes conserved CGL pressure anisotropy, not
@@ -842,14 +882,16 @@ Threshold-volume columns use the selected firehose policy, whereas
 `hard_vol` is safety-only. For active-Delta bundles, `paper-analyze` compares
 the `force_work` interval difference to the conserved MHD `tot-E` interval
 difference and reports the global residual for qualification; the reduced
-workflow rejects a relative residual of `1.0e-8` or larger. Passive-Delta
+workflow rejects a relative residual of `1.0e-8` or larger. Archived passive-Delta
 bundles retain applied work but are not labeled as an active-CGL energy budget.
 
 The AMR workflow retains both `.user.hst` and `.mhd.hst` products: user
 history provides normalized divB, invalid-state, and anisotropy measures,
-while MHD history provides total energy and LF counters. CGL LF rejects
-`mesh_refinement/prolong_primitives=true`; conserved prolongation is the
-supported AMR path.
+while MHD history provides total energy and LF counters. Both conserved and
+CGL-aware primitive prolongation are supported. With LF primitive prolongation,
+`cgl_lf_record_pressure_work=true` remains fenced. Inflow and user boundaries
+are rejected for LF split integration because of the temporary magnetic-moment
+slot; periodic, outflow, reflecting, and diode boundaries are supported.
 
 The driven AMR interaction deck,
 `inputs/tests/cgl_lf_turb_driving_amr.athinput`, uses fixed RMS acceleration
