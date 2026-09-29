@@ -54,6 +54,17 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
     EquationOfState("mhd", pp, pin) {
   eos_data.is_ideal = true;
   eos_data.is_cgl = true;
+  if (!(eos_data.bfloor > 0.0)) {
+    std::cout << "### FATAL ERROR: <mhd>/bfloor must be positive for CGL"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (sizeof(Real) == sizeof(float) &&
+      eos_data.bfloor*eos_data.bfloor*eos_data.bfloor < FLT_MIN) {
+    std::cout << "### FATAL ERROR: CGL bfloor cubed underflows in single precision; "
+              << "set <mhd>/bfloor explicitly so bfloor^3 >= FLT_MIN" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   eos_data.mlim = false;
   eos_data.flim = false;
   eos_data.backup_lim = false;

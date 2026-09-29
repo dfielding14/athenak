@@ -135,6 +135,19 @@ zero/threshold B and both-weak states are checked too. This is a single physical
 cell update rather than a many-cycle grid run. Release build, changed C++ style,
 and the three built-in FOFC/reconstruction regressions pass.
 
+### T-B5: valid CGL magnetic-field floor
+
+Triage: still present. The constructor rejects nonpositive bfloor and, in float
+builds, bfloor cubed below FLT_MIN. The latter message requests an explicit bfloor.
+The new focused constructor regression links the real EOS and parameter parser;
+it checks zero, negative, default, underflowing and valid floors in both precisions.
+Both precision tests, Release build and style checks pass.
+
+A full single-precision build is independently blocked by existing narrowing
+errors in `coordinates/cartesian_ks.hpp` and a mixed float/double `std::min` in
+`diffusion/hyperviscosity.cpp`. The focused constructor and C2P checks compile the
+real affected production sources in float without changing those unrelated files.
+
 ## Remaining task triage
 
 All acceptance outcomes below remain unverified until the corresponding task.
