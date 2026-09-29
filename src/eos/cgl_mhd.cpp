@@ -169,6 +169,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       // update counter, reset conserved if floor was hit
       if (dfloor_used) {
         cons(m,IDN,k,j,i) = u.d;
+        cons(m,IAN,k,j,i) = u.mu;
         sumd++;
       }
       if (efloor_used) {

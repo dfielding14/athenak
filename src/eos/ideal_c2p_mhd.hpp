@@ -294,8 +294,10 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   Real pfloor = eos.pfloor;
   Real bfloor = eos.bfloor;
 
+  // Preserve the pressure ratio encoded by A before changing its density.
+  const Real original_density = u.d;
   // apply density floor, without changing momentum or energy
-  if (u.d < dfloor_) {
+  if (!(u.d >= dfloor_) || !Kokkos::isfinite(u.d)) {
     u.d = dfloor_;
     dfloor_used = true;
   }
@@ -338,9 +340,20 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   Real eint = (u.e - e_k - e_m);
   bool pressure_floor_used = false;
   if (bmag>bfloor) {
-    // Standard CGL EOS
-    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(w.d, eint, u.mu, bmag,
-                                                       w.e, w.pp);
+    // Check the logarithms without materializing either overflowing exponential.
+    const Real log_exp = u.mu/original_density;
+    const Real log_ratio = log_exp - (2.0*log(original_density) - 3.0*log(bmag));
+    const Real log_max = log(std::numeric_limits<Real>::max());
+    if (!(original_density > 0.0) || !Kokkos::isfinite(original_density) ||
+        !Kokkos::isfinite(log_exp) || !(log_exp < log_max) ||
+        !Kokkos::isfinite(log_ratio) || !(log_ratio < log_max)) {
+      w.e = TWO_3RDS*eint;
+      w.pp = w.e;
+      efloor_used = pressure_floor_used = true;
+    } else {
+      CGLRecoverPressuresFromInternalEnergyAndAnisotropy(original_density, eint,
+                                                         u.mu, bmag, w.e, w.pp);
+    }
   } else {
     // If field goes to zero, CGL is invalid. Revert to (adiabatic) EOS with
     // pprp=pprl=(2/3*pprp+1/3*pprl).
@@ -372,7 +385,7 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
 
   // The IAN/legacy IMU slot stores A. Keep it consistent with any pressure or field-floor
   // correction so a subsequent C2P conversion recovers the same primitive state.
-  if (pressure_floor_used || bfloor_used) {
+  if (dfloor_used || pressure_floor_used || bfloor_used) {
     const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
     u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag_inv);
     // Return the state recovered from the repaired conserved variables. If rounding

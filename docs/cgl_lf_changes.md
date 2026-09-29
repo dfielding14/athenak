@@ -84,6 +84,22 @@ unchanged; the representability correction may raise a floored energy by a few
 ULPs. One million additional deterministic scratch states in each precision
 passed the admissibility and idempotence checks.
 
+### T-B2: preserve anisotropy across density floors
+
+Triage: still present. `SingleC2P_CGLMHD` now recovers the pressure ratio using
+the original density, computes pressures from the internal energy after the
+density change, and resets A at the new density. `ConsToPrim` writes that A back
+with the density. Nonfinite or overflowing anisotropy/ratio logarithms fall back
+to isotropy, set a floor flag and repair A without exponentiating an overflow.
+
+The double/float checker covers four sub-floor densities, three pressure ratios,
+nonzero momentum, invalid densities, NaN/infinite A and both exponential and
+ratio overflow. Ratios are preserved to 1e-12 in double precision, and repaired
+states remain bitwise repeatable. Both precision checks and the Release build
+pass. The deliberate overflow-policy change replaces the +1000 log-ratio
+reference `(ppar,pperp)=(1e-12,3)` with `(2,2)`; the -1000 reference remains
+`(6,1e-12)`.
+
 ## Remaining task triage
 
 All acceptance outcomes below remain unverified until the corresponding task.

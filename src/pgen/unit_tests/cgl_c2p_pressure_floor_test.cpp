@@ -264,6 +264,85 @@ void CheckUnresolvedInternalEnergyFloor() {
   CheckIdempotence("unresolved internal energy", u, w, eos);
 }
 
+void CheckDensityFloorRatios() {
+  EOS_Data eos = MakeCglEOS();
+  eos.dfloor = 1.0e-4;
+  eos.pfloor = 1.0e-12;
+  const Real densities[] = {5.0e-5, 1.0e-5, 1.0e-6, 1.0e-8};
+  const Real ratios[] = {1.0, 0.3, 4.0};
+  const Real tolerance = kSinglePrecision ? 2.0e-5 : 1.0e-12;
+  for (const Real density : densities) {
+    for (const Real ratio : ratios) {
+      MHDCons1D u{};
+      u.d = density;
+      u.mx = 0.2*density;
+      u.bx = 1.0;
+      u.e = 1.0e-3*(0.5 + ratio) + 0.5*SQR(u.mx)/density + 0.5;
+      u.mu = CGLConservedAnisotropy(density, 1.0e-3, 1.0e-3*ratio, 1.0);
+      const Real original_energy = u.e;
+      HydPrim1D w{};
+      bool dfloor_used = false, efloor_used = false;
+      bool tfloor_used = false, bfloor_used = false;
+      SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+      Require("density floor flag", dfloor_used);
+      Require("density floor value", u.d == eos.dfloor && w.d == eos.dfloor);
+      Require("density floor preserves total energy", u.e == original_energy);
+      RequireRelativeClose("density floor preserves pressure ratio", w.pp/w.e,
+                           ratio, tolerance);
+      CheckIdempotence("density floor", u, w, eos);
+    }
+  }
+}
+
+void CheckInvalidAnisotropy() {
+  EOS_Data eos = MakeCglEOS();
+  eos.dfloor = 1.0e-4;
+  eos.pfloor = 1.0e-12;
+  const Real logarithms[] = {std::numeric_limits<Real>::quiet_NaN(),
+                            std::numeric_limits<Real>::infinity(),
+                            -std::numeric_limits<Real>::infinity(), 1000.0,
+                            std::log(std::numeric_limits<Real>::max())
+                                - static_cast<Real>(1.0)};
+  for (const Real logarithm : logarithms) {
+    MHDCons1D u{};
+    u.d = 1.0e-20;
+    u.bx = 1.0;
+    u.e = 3.0e-3 + 0.5;
+    u.mu = u.d*logarithm;
+    HydPrim1D w{};
+    bool dfloor_used = false, efloor_used = false;
+    bool tfloor_used = false, bfloor_used = false;
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+    Require("invalid anisotropy recovery flagged", efloor_used);
+    Require("invalid anisotropy recovers finite A", std::isfinite(u.mu));
+    Require("invalid anisotropy recovers isotropy", w.e == w.pp);
+    Require("invalid anisotropy recovers positive pressures", w.e >= eos.pfloor);
+    CheckIdempotence("invalid anisotropy", u, w, eos);
+  }
+}
+
+void CheckInvalidDensity() {
+  const EOS_Data eos = MakeCglEOS();
+  const Real densities[] = {0.0, -1.0, std::numeric_limits<Real>::quiet_NaN(),
+                            std::numeric_limits<Real>::infinity()};
+  for (const Real density : densities) {
+    MHDCons1D u{};
+    u.d = density;
+    u.bx = 1.0;
+    u.e = 3.5;
+    u.mu = 1.0;
+    HydPrim1D w{};
+    bool dfloor_used = false, efloor_used = false;
+    bool tfloor_used = false, bfloor_used = false;
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+    Require("invalid density recovery flagged", dfloor_used && efloor_used);
+    Require("invalid density floored", u.d == eos.dfloor);
+    Require("invalid density recovers finite A", std::isfinite(u.mu));
+    Require("invalid density recovers isotropy", w.e == w.pp);
+    CheckIdempotence("invalid density", u, w, eos);
+  }
+}
+
 void CheckNegativeInternalEnergyFloor() {
   const EOS_Data eos = MakeCglEOS();
   MHDCons1D u = MakeConserved(2.0, 2.0);
@@ -299,9 +378,12 @@ void RunCglC2PPressureFloorChecks() {
   CheckWideDynamicRangeRoundTrip();
   CheckIsotropicExactRoundTrip();
   CheckExtremeLogRatioFloor("large-positive-log-ratio", 1000.0, 1.0e-11,
-                            1.0e-12, 3.0);
+                            2.0, 2.0);
   CheckExtremeLogRatioFloor("large-negative-log-ratio", -1000.0, 1.0e-11,
                             6.0, 1.0e-12);
+  CheckDensityFloorRatios();
+  CheckInvalidAnisotropy();
+  CheckInvalidDensity();
   CheckNegativeInternalEnergyFloor();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
