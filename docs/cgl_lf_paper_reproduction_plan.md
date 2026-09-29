@@ -49,7 +49,7 @@ Reproduce Appendix A/Figure 17 at higher fidelity than the current smoke input.
   LF modes may converge closer to first order because the heat-flux operator is
   split and limited.
 
-Implementation status: `src/pgen/unit_tests/cgl_lf_quantitative_test.cpp` now
+Implementation status: `src/pgen/tests/cgl_landau_fluid.cpp` now
 initializes supplied complex eigenvectors and compares against their
 \(\exp(\lambda t)\) evolution.  Regenerate the inputs with
 `scripts/generate_cgl_lf_eigenmode_inputs.py`.

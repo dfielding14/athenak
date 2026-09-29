@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-F5 (27 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G0 (28 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G0 | Several files are duplicates; legacy nonlinear wave setups are unique and must be retained. |
 | G1-G4 | References/assertions, long wave runs, actual convergence gates and limiter-map tests need strengthening. |
 | G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
 | G7 | Update current and retained legacy documentation to match demonstrated coverage. |
@@ -560,3 +559,26 @@ run, all seven histories are finite, and the analyzer synthetic check passes.
 The output is `analysis/diagnostics.json`; it contains basic finite/time summaries
 for the retained legacy history labels, rather than the obsolete summary.json.
 Two untouched legacy C++ line-length warnings remain.
+
+### T-G0: remove only superseded local files
+
+All 18 listed files were compared with current equivalents. Five are removed:
+
+| Removed file | Retained replacement |
+| --- | --- |
+| `src/pgen/unit_tests/cgl_lf_quantitative_test.cpp` | `src/pgen/tests/cgl_landau_fluid.cpp`, covering every old mode plus the new acceptance cases |
+| `src/pgen/unit_tests/cgl_fofc_end_to_end_test.cpp` | `src/pgen/tests/cgl_fofc.cpp`, retaining the mutation check and adding reconstruction/NaN/weak-field checks |
+| `src/pgen/diffusion_test.cpp` | Built-in CGL LF parallel/perpendicular/grad-B modes, with quantitative assertions |
+| `inputs/unit_tests/README-cgl-lf.md` | Current Sphinx CGL LF module and validation guide |
+| `docs/cgl_lf_validation.pdf` | `docs/source/_static/cgl_lf_validation.pdf`, the expanded report built from the retained TeX |
+
+The other thirteen remain because they carry unique content: both legacy plan/
+runbook documents; all seven legacy paper inputs (four distinct nonlinear wave
+setups, active calibration, limiter-off control and disabled passive reference);
+the smoke script exercising those inputs; `src/pgen/cgl_lf_paper.cpp` implementing
+the four wave modes absent from the built-in turbulence pgen; `diffusion_2d.cpp`
+with its two-dimensional perpendicular-temperature setup; and `lpaw_paniso.cpp`
+with anisotropic linearly polarized Alfvén initial data. Retained links now name
+the built-in quantitative pgen. No numerical state or expected value changes.
+The default target does not compile the removed custom pgens; its Release build
+and all 27 current full-workflow cases pass after removal.
