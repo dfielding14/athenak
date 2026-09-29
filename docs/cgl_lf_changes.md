@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G7; T-P1 deferred and T-P2/P3/P4 verified
-(39 of 41 numbered tasks resolved). Remaining candidates are listed below.
+Completed and committed through T-G7; T-P1 deferred and T-P2 through T-P5 verified
+(40 of 41 numbered tasks resolved). Remaining candidates are listed below.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| P5 | Conditional allocation exists; finalize its verification record. |
 | P6 | Both side logarithms still evaluated; retain selected-side arithmetic order. |
 
 ## Accepted T-D5 correction
@@ -854,3 +853,18 @@ current executable hashes and all 24 retained output sets were rechecked against
 the verified P3 binaries/post-G outputs. Before/after executable identity is
 exact; the P3 timing table applies unchanged and no new speedup is attributed
 to P4. Repeating identical timing runs would measure host noise only.
+
+### T-P5: conditional STS register allocation already implemented
+
+Triage: already fixed in `MHD::MHD`. Full-size `u_sts0/1/2/rhs` storage is
+allocated only for `has_any_parabolic_cell_update`; full-size magnetic registers
+only for `has_any_parabolic_field_update`. The cell predicate correctly includes
+the explicit LF reference integrator, which also uses the parabolic registers.
+Pure CGL retains only the existing one-element placeholders. No production edit
+or allocation behavior change is needed.
+
+The pure-CGL and LF baseline/P3 runs cover both allocation branches. As for P4,
+after this documentation-only task the CPU/MPI executable hashes and all 24
+output sets were rechecked: unchanged executables, byte-identical post-G output.
+The before/after measurements are the same P3 table; P5 claims no new speedup
+or new memory saving. Expected values unchanged.
