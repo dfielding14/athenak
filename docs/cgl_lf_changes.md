@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G7 (35 of 41 numbered tasks). Candidate checks
-below are scratch evidence until integrated into the branch.
+Completed and committed through T-G7; T-P1 evaluated and deferred under the bitwise rule
+(36 of 41 numbered tasks resolved). Remaining candidates are listed below.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| P1 | Variable-restricted communication and frozen-B BC skip remain. |
 | P2 | Two-variable copies/update exist; flux clear remains. |
 | P3 | Reduced refresh region exists; fused temperatures and frozen-B caching remain. |
 | P4-P5 | Flat LF kernel and conditional allocation exist; require bitwise/timing verification. |
@@ -716,3 +715,68 @@ has only two pre-existing orphan-engineering-document warnings; suppressing
 only that warning class yields a successful build. No scientific figure data
 or historical campaign measurements were regenerated. QA evidence is retained
 in `/tmp/cgl-wo1-g7/evidence.md` and its build logs.
+
+## Performance baseline and acceptance
+
+The final post-G numerical binaries were frozen before P: Release double,
+Kokkos Serial, Apple M4 Max ARM64, Clang `-O3`, with a separate MPI build.
+G7 only changes documentation. Twelve fixed inputs give 24 serial/one-rank/
+four-rank configurations, each repeated three times. Every binary dump,
+16-digit history and full-precision restart (including ghost cells) is compared
+byte-for-byte. The baseline itself is repeatable with zero differences across
+72 runs. Required cases are uniform 1D/2D/3D LF, two-level SMR LF and pure CGL;
+additional cases cover shear, low B, density contrast, velocity, outflow, and
+nonuniform primitive-prolongation SMR with a passive scalar, including an
+interface touching an outflow boundary.
+
+The fixed inputs, hashes, frozen executables, all output files and reproducible
+harness are retained under `/tmp/cgl-wo1-perf/`. `harness.py run --label NAME
+--serial BINARY --mpi MPI_BINARY --repeats 3 --mpi-ranks 1 4 --compare post-g`
+performs the comparison without restaging inputs. Baseline source binaries
+include G6; the later G2 caller correction changes no source or staged fixture.
+`runs/post-g/provenance.json` records source/compiler/input/executable hashes.
+
+Timings below are medians of three runs with identical output/profiling settings.
+Cycle time is the solver's wall-clock timer. Stage time is the sum of existing
+exclusive LF/STS compute timers divided by actual RKL stages. Shared transport
+timers include RK/initialization, so they are recorded separately in JSON and
+are not mislabeled STS-only time. Whole-STS wall time is not available separately;
+no new production timing instrumentation was added. CPU timings are indicative,
+not GPU benchmarks.
+
+### T-P1: rejected non-bitwise communication optimization
+
+Triage: ordinary parabolic CC exchange still sends all variables. A candidate
+added dense offset/count packing to `MeshBoundaryValuesCC::PackAndSendCC` and
+`RecvAndUnpackCC`, used the existing active `InitRecv(nvars)` message sizing,
+and selected IEN/IAN in MHD LF stage tasks. Shared buffer capacity was retained
+for hyperbolic reuse. It also skipped magnetic physical BCs during LF. Shearing
+kept full ordinary exchanges because its remap consumes all freshly filled
+ghosts; a complete compact shear API would require further work.
+
+Both CPU/MPI builds and style checks passed. Twenty-one of 24 configurations
+were byte-identical. The SMR/outflow-boundary case differed reproducibly in
+serial and MPI one/four-rank runs: both final binary state files, full restart,
+and both histories changed. By cycle 4 this includes active cells, not only
+ghosts: maximum absolute energy difference 3.45e-3 and magnetic-component
+differences about 2e-3. The total-energy history first differs at cycle 1 and
+ends 1.56e-6 relative from the baseline. The entire candidate was removed under the work
+order's strict bitwise rule and deferred to WO2. No P1 production change is
+retained. The rejected diff and outputs are preserved in
+`/tmp/cgl-wo1-p12/P1-tested-rejected.patch` and
+`/tmp/cgl-wo1-perf/runs/p1/`. The combined coarse/fine and physical-boundary
+provenance needs resolution before this optimization can be retried.
+
+Baseline and rejected-P1 timings (cycle ms / profiled compute microseconds per
+stage; rejected timings are diagnostic, not a claimed speedup):
+
+| Case | Post-G | Rejected P1 |
+| --- | --- | --- |
+| lf1d-serial-0 | 0.513 / 30.20 | 0.522 / 31.17 |
+| lf2d-serial-0 | 17.949 / 1175.40 | 18.227 / 1199.71 |
+| lf3d-serial-0 | 222.032 / 14492.02 | 223.315 / 14701.98 |
+| smr-serial-0 | 17.653 / 927.78 | 17.171 / 939.89 |
+| pure_cgl-serial-0 | 0.414 / n/a | 0.439 / n/a |
+| lf2d-mpi-4 | 5.315 / 311.00 | 5.292 / 311.31 |
+| lf3d-mpi-4 | 58.974 / 3739.98 | 58.764 / 3763.08 |
+| smr-mpi-4 | 5.452 / 245.65 | 5.264 / 246.23 |
