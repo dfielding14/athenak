@@ -205,12 +205,12 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G7; T-P1 deferred and T-P2/P3 verified
-(38 of 41 numbered tasks resolved). Remaining candidates are listed below.
+Completed and committed through T-G7; T-P1 deferred and T-P2/P3/P4 verified
+(39 of 41 numbered tasks resolved). Remaining candidates are listed below.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| P4-P5 | Flat LF kernel and conditional allocation exist; require bitwise/timing verification. |
+| P5 | Conditional allocation exists; finalize its verification record. |
 | P6 | Both side logarithms still evaluated; retain selected-side arithmetic order. |
 
 ## Accepted T-D5 correction
@@ -838,3 +838,19 @@ this commit (cycle ms / profiled compute microseconds per stage):
 | lf2d-mpi-4 | 4.930 / 283.74 | 4.821 / 277.25 |
 | lf3d-mpi-4 | 55.703 / 3499.44 | 55.044 / 3438.47 |
 | smr-mpi-4 | 5.044 / 215.16 | 5.118 / 217.78 |
+
+### T-P4: flat LF STS update already implemented
+
+Triage: already fixed in the merged source. `MHD::STSUpdateU` selects the flat
+`mhd_sts_update_cgl_lf_u` kernel for the LF-only STS path on uniform and multilevel
+meshes, updating IEN/IAN over live blocks. Its directional divergence order is
+unchanged. The remaining team kernel serves other parabolic operators and the
+explicit reference path, so it is outside this LF STS task. No production edit
+is needed.
+
+The P3 matrix executes this kernel in 1D/2D/3D, SMR and shear and has zero byte
+differences in all 24 configurations. After this documentation-only task, both
+current executable hashes and all 24 retained output sets were rechecked against
+the verified P3 binaries/post-G outputs. Before/after executable identity is
+exact; the P3 timing table applies unchanged and no new speedup is attributed
+to P4. Repeating identical timing runs would measure host noise only.
