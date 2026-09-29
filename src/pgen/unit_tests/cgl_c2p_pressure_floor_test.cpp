@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -98,6 +99,26 @@ MHDCons1D MakeConserved(const Real p_parallel, const Real p_perp) {
   return u;
 }
 
+void CheckIdempotence(const std::string &label, MHDCons1D &u,
+                      const HydPrim1D &first, const EOS_Data &eos) {
+  const MHDCons1D corrected = u;
+  HydPrim1D recovered{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  SingleC2P_CGLMHD(u, eos, recovered, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  Require(label + " no repeated pressure floor", !efloor_used);
+  Require(label + " bitwise conserved state",
+          std::memcmp(&u, &corrected, sizeof(u)) == 0);
+  Require(label + " bitwise primitive state",
+          std::memcmp(&recovered, &first, sizeof(first)) == 0);
+  const Real kinetic = 0.5*(1.0/u.d)*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
+  const Real magnetic = 0.5*(SQR(u.bx) + SQR(u.by) + SQR(u.bz));
+  const Real tolerance = kSinglePrecision ? 32.0*std::numeric_limits<Real>::epsilon()
+                                        : 1.0e-14;
+  RequireRelativeClose(label + " internal energy identity", u.e - kinetic - magnetic,
+                       0.5*first.e + first.pp, tolerance);
+}
+
 void CheckFloorCase(const std::string &label, const Real initial_parallel,
                     const Real initial_perp, const Real expected_parallel,
                     const Real expected_perp) {
@@ -130,21 +151,7 @@ void CheckFloorCase(const std::string &label, const Real initial_parallel,
   RequireClose(label + " conserved anisotropy", u.mu,
                CGLConservedAnisotropy(kDensity, expected_parallel, expected_perp, bmag));
 
-  const MHDCons1D corrected = u;
-  HydPrim1D recovered{};
-  dfloor_used = false;
-  efloor_used = false;
-  tfloor_used = false;
-  bfloor_used = false;
-  SingleC2P_CGLMHD(u, eos, recovered, dfloor_used, efloor_used, tfloor_used, bfloor_used);
-  Require(label + " repeated conversion floor is precision-compatible",
-          !efloor_used || kSinglePrecision);
-  RequireRelativeClose(label + " idempotent p_parallel", recovered.e,
-                       expected_parallel, relative_tolerance);
-  RequireRelativeClose(label + " idempotent p_perp", recovered.pp, expected_perp,
-                       relative_tolerance);
-  RequireClose(label + " idempotent total energy", u.e, corrected.e);
-  RequireClose(label + " idempotent conserved anisotropy", u.mu, corrected.mu);
+  CheckIdempotence(label, u, w, eos);
 }
 
 void CheckWideDynamicRangeRoundTrip() {
@@ -221,20 +228,40 @@ void CheckExtremeLogRatioFloor(const std::string &label, const Real log_p_ratio,
   RequireClose(label + " primitive/conserved energy consistency", u.e,
                0.5*w.e + w.pp + 0.5*SQR(bmag));
 
-  const MHDCons1D corrected = u;
-  HydPrim1D recovered{};
-  dfloor_used = false;
-  efloor_used = false;
-  tfloor_used = false;
-  bfloor_used = false;
-  SingleC2P_CGLMHD(u, eos, recovered, dfloor_used, efloor_used, tfloor_used,
-                   bfloor_used);
-  Require(label + " repeated conversion floor is precision-compatible",
-          !efloor_used || kSinglePrecision);
-  RequireClose(label + " idempotent p_parallel", recovered.e, expected_parallel);
-  RequireClose(label + " idempotent p_perp", recovered.pp, expected_perp);
-  RequireClose(label + " idempotent total energy", u.e, corrected.e);
-  RequireClose(label + " idempotent conserved anisotropy", u.mu, corrected.mu);
+  CheckIdempotence(label, u, w, eos);
+}
+
+void CheckMagneticFloorCase(const Real bmag, const Real pressure) {
+  const EOS_Data eos = MakeCglEOS();
+  MHDCons1D u = MakeConserved(2.0, 1.0);
+  u.bx = bmag;
+  u.by = u.bz = 0.0;
+  u.e = 1.5*pressure + KineticEnergy() + 0.5*SQR(bmag);
+  HydPrim1D w{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  Require("magnetic floor flag", bfloor_used);
+  Require("magnetic floor isotropy", w.e == w.pp);
+  CheckIdempotence("magnetic floor", u, w, eos);
+}
+
+void CheckUnresolvedInternalEnergyFloor() {
+  const EOS_Data eos = MakeCglEOS();
+  MHDCons1D u{};
+  u.d = 1.0;
+  u.mx = 1.0e12;
+  u.bx = 1.0e8;
+  u.e = Kokkos::nextafter(static_cast<Real>(0.5*SQR(u.mx) + 0.5*SQR(u.bx)),
+                          static_cast<Real>(0.0));
+  u.mu = CGLConservedAnisotropy(u.d, 1.0, 1.0, u.bx);
+  HydPrim1D w{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  Require("unresolved internal energy uses floor", efloor_used);
+  Require("representable floor pressures", w.e >= eos.pfloor && w.pp >= eos.pfloor);
+  CheckIdempotence("unresolved internal energy", u, w, eos);
 }
 
 void CheckNegativeInternalEnergyFloor() {
@@ -264,6 +291,11 @@ void RunCglC2PPressureFloorChecks() {
   CheckFloorCase("parallel-only", 0.25, 2.0, kPressureFloor, 2.0);
   CheckFloorCase("perpendicular-only", 2.0, 0.25, 2.0, kPressureFloor);
   CheckFloorCase("both-pressure", 0.25, 0.5, kPressureFloor, kPressureFloor);
+  for (Real pressure : {kPressureFloor, static_cast<Real>(4.0/3.0)}) {
+    CheckMagneticFloorCase(0.0, pressure);
+    CheckMagneticFloorCase(MakeCglEOS().bfloor, pressure);
+  }
+  CheckUnresolvedInternalEnergyFloor();
   CheckWideDynamicRangeRoundTrip();
   CheckIsotropicExactRoundTrip();
   CheckExtremeLogRatioFloor("large-positive-log-ratio", 1000.0, 1.0e-11,

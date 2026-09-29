@@ -67,6 +67,23 @@ collisions: its old pairs were (6.79840239e-5,9.76551990e-6) and
 (2.02951004e-5,8.36901023e-5), respectively; both now use the same independent
 continuous reference above.
 
+### T-B1: pressure-floor consistency
+
+Triage: the perpendicular-energy factor and pressure-floor A writeback were already
+fixed. Repaired states still changed by roundoff on a second conversion. The
+single-state conversion now returns primitives recovered from the repaired
+conserved state and, only when necessary, rounds the corrected energy upward to
+make the floor representable. The density-floor writeback is completed with B2.
+
+The existing double/single precision checker now requires bitwise equality of all
+conserved and primitive values after a second conversion, for each pressure-floor
+branch, zero/threshold magnetic fields, and cancellation-dominated energy. It
+checks the internal-energy identity to 1e-14 in double precision. Both precision
+tests and the Release build pass. Existing expected physical pressures are
+unchanged; the representability correction may raise a floored energy by a few
+ULPs. One million additional deterministic scratch states in each precision
+passed the admissibility and idempotence checks.
+
 ## Remaining task triage
 
 All acceptance outcomes below remain unverified until the corresponding task.

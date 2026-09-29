@@ -11,6 +11,8 @@
 //! with an ideal gas EOS. Versions for both non-relativistic and relativistic fluids are
 //! provided.
 
+#include <limits>
+
 #include "eos/cgl_physics.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -373,6 +375,26 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   if (pressure_floor_used || bfloor_used) {
     const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
     u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag_inv);
+    // Return the state recovered from the repaired conserved variables. If rounding
+    // puts a pressure below its floor, round each energy addition upward so the
+    // next conversion accepts the same conserved state without another repair.
+    CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+        u.d, u.mx, u.my, u.mz, u.e, u.mu, u.bx, u.by, u.bz, bfloor, w.e, w.pp);
+    if (w.e < pfloor || w.pp < pfloor) {
+      efloor_used = true;
+      Real corrected_eint = u.e - e_k - e_m;
+      if (w.e > 0.0 && w.pp > 0.0) {
+        corrected_eint = Kokkos::nextafter(
+            corrected_eint*fmax(pfloor/w.e, pfloor/w.pp),
+            std::numeric_limits<Real>::infinity());
+      }
+      const Real energy_with_kinetic = Kokkos::nextafter(
+          corrected_eint + e_k, std::numeric_limits<Real>::infinity());
+      u.e = Kokkos::nextafter(fmax(u.e, energy_with_kinetic + e_m),
+                             std::numeric_limits<Real>::infinity());
+      CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+          u.d, u.mx, u.my, u.mz, u.e, u.mu, u.bx, u.by, u.bz, bfloor, w.e, w.pp);
+    }
   }
 
   return;
