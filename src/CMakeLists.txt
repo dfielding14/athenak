@@ -141,6 +141,7 @@ add_executable(
         pgen/tests/rad_linear_wave.cpp
         pgen/tests/z4c_boosted_puncture.cpp
         pgen/tests/z4c_linear_wave.cpp
+        pgen/tests/turb_forcing.cpp
         pgen/turb.cpp
 
         radiation/radiation.cpp

@@ -1026,6 +1026,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     Diffusion(pin, is_restart);
   } else if (pgen_fun_name.compare("sts_diffusion") == 0) {
     STSDiffusion(pin, is_restart);
+  } else if (pgen_fun_name.compare("turb_forcing") == 0) {
+    TurbForcing(pin, is_restart);
   } else if (pgen_fun_name.compare("turb") == 0) {
     Turb(pin, is_restart);
   } else if (pgen_fun_name.compare("hyperviscous_shear") == 0) {

@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-F2 (24 of 41 numbered tasks). Candidate checks
+Completed and committed through T-F3 (25 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| F3 | Candidate conserved-momentum work passes single/two-fluid thermal-energy checks; integration pending. |
 | F4 | Candidate axis correction makes all selected planar modes nonzero; integration pending. |
 | F5 | Candidate removes the dead parameter from the retained legacy pgen; integration pending. |
 | G0 | Several files are duplicates; legacy nonlinear wave setups are unique and must be retained. |
@@ -510,3 +509,23 @@ with maximum relative error 5.13e-8. The prior RK2/RK3 schedule gave approximate
 that accumulated forcing work matches the measured energy gain. All 126 selected
 CGL/turbulence checks pass; changed C++ passes style checks. Modal tcorr/dt_update
 behavior is unchanged and receives a direct recurrence check with F3.
+
+### T-F3: exact kinetic work from each fluid's conserved state
+
+Triage: forcing already added energy, but used potentially stale primitive
+velocities; the two-fluid branch also reused the primary fluid's velocity and
+unconditionally wrote the secondary energy slot. `ApplyForcingWithStep` now
+computes each nonrelativistic fluid's exact kinetic-energy increment from its own
+pre-kick conserved momentum and density, guarded by its own `is_ideal` flag.
+Nonrelativistic net-momentum removal already acts on acceleration before the
+kick, so this work includes that correction without a separate energy update.
+The existing relativistic source remains algebraically unchanged.
+
+A direct built-in `turb_forcing` pgen deliberately supplies stale primitives,
+unequal two-fluid densities/velocities, and isothermal passive-scalar sentinels.
+All nine ideal-MHD/CGL/hydro/isothermal and two-fluid combinations pass, with
+maximum thermal/scalar/impulse error 1.78e-15. The previous implementation fails
+this check. The same fixture verifies nonzero modal amplitudes and the exact OU
+hold/update recurrence using tcorr and dt_update. All 23 current turbulence
+regressions pass. These shared-driver repairs apply to every driven fluid;
+existing physical reference values are unchanged.

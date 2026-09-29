@@ -1365,6 +1365,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
     u0_ = (pmy_pack->pmhd->u0);
     w0 = (pmy_pack->phydro->w0);
     w0_ = (pmy_pack->pmhd->w0);
+    peos = pmy_pack->phydro->peos;
     flag_twofl = true;
   }
 
@@ -1376,6 +1377,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
   const int nji = nx2 * nx1;
 
   auto eos = peos->eos_data;  // copy-by-value (POD expected)
+  const bool secondary_is_ideal = flag_twofl && pmy_pack->pmhd->peos->eos_data.is_ideal;
 
   if ((current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
@@ -1386,36 +1388,38 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
           Real a2 = force_(m, 1, k, j, i);
           Real a3 = force_(m, 2, k, j, i);
 
-          Real den = w0(m, IDN, k, j, i);
-          auto& ux = w0(m, IVX, k, j, i);
-          auto& uy = w0(m, IVY, k, j, i);
-          auto& uz = w0(m, IVZ, k, j, i);
-
-          Real Fv = (a1 * ux + a2 * uy + a3 * uz);
+          Real den = u0(m, IDN, k, j, i);
+          Real work = (u0(m, IM1, k, j, i) * a1 +
+                       u0(m, IM2, k, j, i) * a2 +
+                       u0(m, IM3, k, j, i) * a3) * bdt;
           if (flag_relativistic) {
-            // Compute Lorentz factor
-            Real ut = 1. + ux * ux + uy * uy + uz * uz;
-            ut = sqrt(ut);
-            den /= ut;
-            Fv = (a1 * ux + a2 * uy + a3 * uz) / ut;
+            // Preserve the relativistic source and subsequent Lorentz transform.
+            const Real ux = w0(m, IVX, k, j, i);
+            const Real uy = w0(m, IVY, k, j, i);
+            const Real uz = w0(m, IVZ, k, j, i);
+            const Real ut = sqrt(1.0 + ux * ux + uy * uy + uz * uz);
+            den = w0(m, IDN, k, j, i) / ut;
+            work = den * (a1 * ux + a2 * uy + a3 * uz) * bdt / ut;
+          }
+          const Real kick2 = (a1 * a1 + a2 * a2 + a3 * a3) * bdt * bdt;
+          if (eos.is_ideal) {
+            u0(m, IEN, k, j, i) += work + 0.5 * den * kick2;
           }
           u0(m, IM1, k, j, i) += den * a1 * bdt;
           u0(m, IM2, k, j, i) += den * a2 * bdt;
           u0(m, IM3, k, j, i) += den * a3 * bdt;
-          if (eos.is_ideal) {
-            u0(m, IEN, k, j, i) +=
-                (Fv + 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * bdt) * den * bdt;
-            // u0(m,IEN,k,j,i) += Fv*den*bdt;
-          }
 
           if (flag_twofl) {
             den = u0_(m, IDN, k, j, i);
+            if (secondary_is_ideal) {
+              const Real work_secondary =
+                  (u0_(m, IM1, k, j, i) * a1 + u0_(m, IM2, k, j, i) * a2 +
+                   u0_(m, IM3, k, j, i) * a3) * bdt;
+              u0_(m, IEN, k, j, i) += work_secondary + 0.5 * den * kick2;
+            }
             u0_(m, IM1, k, j, i) += den * a1 * bdt;
             u0_(m, IM2, k, j, i) += den * a2 * bdt;
             u0_(m, IM3, k, j, i) += den * a3 * bdt;
-            u0_(m, IEN, k, j, i) +=
-                (Fv + 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * bdt) * den * bdt;
-            // u0_(m,IEN,k,j,i) += Fv*den*bdt;
           }
         });
 

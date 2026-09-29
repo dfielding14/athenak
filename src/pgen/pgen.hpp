@@ -68,6 +68,7 @@ class ProblemGenerator {
   void Diffusion(ParameterInput *pin, const bool restart);
   void STSDiffusion(ParameterInput *pin, const bool restart);
   void Turb(ParameterInput *pin, const bool restart);
+  void TurbForcing(ParameterInput *pin, const bool restart);
   void HyperViscousShear(ParameterInput *pin, const bool restart);
   void LinearWave(ParameterInput *pin, const bool restart);
   void LWImplode(ParameterInput *pin, const bool restart);
