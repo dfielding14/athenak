@@ -1535,9 +1535,11 @@ def test_cgl_lf_paper_fixed_edot_normalization_sets_first_cycle_amplitude():
         _cleanup()
 
 
-def test_cgl_lf_paper_multicycle_forcing_work_follows_rk_state_recurrence():
+@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
+def test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks(integrator):
     try:
-        _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4")
+        _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4",
+                   f"time/integrator={integrator}")
         mhd = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.mhd.hst")
         user = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.user.hst")
         energy_delta = mhd["tot-E"][-1] - mhd["tot-E"][0]

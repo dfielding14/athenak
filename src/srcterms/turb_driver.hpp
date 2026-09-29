@@ -95,7 +95,6 @@ class TurbulenceDriver {
   bool record_injected_work;
 
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
-  void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus InitializeModes(Driver* pdrive, int stage);
   TaskStatus EnsureBasisSize(Driver* pdrive, int stage);
   TaskStatus UpdateForcing(Driver* pdrive, int stage);
@@ -119,7 +118,6 @@ class TurbulenceDriver {
   Real kpeak, npeak;
   bool use_npeak;
   Real tcorr, dedt, tdriv_duration, tdriv_start, k_shell_unit;
-  Real injected_work_cycle_start;
   Real expo, exp_prl, exp_prp;
   int driving_type, turb_flag;
   bool physical_k_shell, isotropic_power_spectrum;

@@ -301,7 +301,6 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   record_injected_work =
       pin->GetOrAddBoolean(block_name, "record_injected_work", false);
   injected_work = 0.0;
-  injected_work_cycle_start = 0.0;
 
   sigma_x1 = get_serialized_real("sigma_x1", -1.0);
   sigma_x2 = get_serialized_real("sigma_x2", -1.0);
@@ -681,33 +680,8 @@ void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
   //  We check for mesh changes, then initialize modes and update the forcing
   auto id_resize = tl->AddTask(&TurbulenceDriver::EnsureBasisSize, this, start);
   auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
-  auto id_add = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
-  return;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn  void IncludeForcingTasks
-//  \brief includes task in the stage_run task list for adding random forcing to fluid
-//  as an explicit source terms in each stage of integrator
-//  Called by MeshBlockPack::AddPhysics() function
-
-void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start) {
-  // These must be inserted after update task, but before the source terms
-  // We apply the forcing in each step of the time integration,
-  // note that we do not update the forcing in each RK stage
-  if (pmy_pack->pionn == nullptr) {
-    if (pmy_pack->phydro != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                               pmy_pack->phydro->id.rkupdt, pmy_pack->phydro->id.srctrms);
-    }
-    if (pmy_pack->pmhd != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                               pmy_pack->pmhd->id.rkupdt, pmy_pack->pmhd->id.srctrms);
-    }
-  } else {
-    auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                             pmy_pack->pionn->id.n_rkupdt, pmy_pack->pionn->id.n_flux);
-  }
+  auto id_update = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  tl->AddTask(&TurbulenceDriver::AddForcing, this, id_update);
   return;
 }
 
@@ -1034,7 +1008,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
   const Real center_x3_ = center_x3;
   const TurbLocalization localization_ = localization;
 
-  if ((pm->ncycle >= 1 || physical_k_shell) && (current_time >= tdriv_start) &&
+  if ((current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
     if (normalization == TurbNormalization::edot &&
         (!std::isfinite(dt) || dt <= 0.0)) {
@@ -1713,11 +1687,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     return TaskStatus::complete;
   }
 
-  Real dt = pm->dt;
-  Real bdt = dt;
-  if (pdrive != nullptr && stage > 0) {
-    bdt = (pdrive->beta[stage - 1]) * dt;
-  }
+  const Real bdt = pm->dt;
 
   Real forcing_energy_before = 0.0;
   auto integrated_energy = [&]() {
@@ -1759,23 +1729,19 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     EquationOfState* peos = nullptr;
     if (pmy_pack->phydro != nullptr) peos = pmy_pack->phydro->peos;
     if (pmy_pack->pmhd != nullptr) peos = pmy_pack->pmhd->peos;
-    if (pdrive == nullptr || stage <= 0 || peos == nullptr ||
+    if (peos == nullptr ||
         pmy_pack->pionn != nullptr || pmy_pack->pcoord->is_special_relativistic ||
         !peos->eos_data.is_ideal) {
       FatalTurbulenceError(
           "record_injected_work requires a single nonrelativistic ideal/CGL fluid");
     }
-    if (stage == 1) injected_work_cycle_start = injected_work;
     forcing_energy_before = integrated_energy();
   }
 
   ApplyForcingWithStep(bdt);
 
   if (record_injected_work) {
-    const Real stage_work = integrated_energy() - forcing_energy_before;
-    injected_work = pdrive->gam0[stage - 1] * injected_work +
-                    pdrive->gam1[stage - 1] * injected_work_cycle_start +
-                    stage_work;
+    injected_work += integrated_energy() - forcing_energy_before;
   }
   return TaskStatus::complete;
 }

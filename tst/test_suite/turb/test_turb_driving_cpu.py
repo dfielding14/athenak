@@ -367,3 +367,26 @@ def test_type_two_rejects_projected_policy(tmp_path):
     assert "driving_type = 2 requires mks24_random_unprojected" in (
         result.stdout + result.stderr
     )
+
+
+@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
+@pytest.mark.parametrize("driving_type", [0, 2])
+def test_once_per_step_power(tmp_path, integrator, driving_type):
+    """Periodic total energy gains dedt*dt on every step, including the first."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": f"driving_type = {driving_type}\nrecord_injected_work = true",
+        "output1": "data_format = %24.16e",
+    })
+    result = run_athena(tmp_path / "run", path, f"time/integrator={integrator}")
+    require_success(result)
+    history = next((tmp_path / "run").glob("*.hydro.hst"))
+    header = history.read_text().splitlines()[1].split()
+    names = [field.split("=", 1)[1] for field in header if "=" in field]
+    data = np.loadtxt(history)
+    dt = np.diff(data[:, names.index("time")])
+    work = np.diff(data[:, names.index("tot-E")])
+    assert np.all(dt >= 0.0)
+    assert np.count_nonzero(dt > 0.0) == 6
+    np.testing.assert_array_equal(work[dt == 0.0], 0.0)
+    np.testing.assert_allclose(work[dt > 0.0] / dt[dt > 0.0], 0.1,
+                               rtol=2e-7, atol=2e-8)

@@ -45,6 +45,12 @@ with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
 cell-centered `force` field is rendered from those coefficients and the
 current MeshBlock geometry.
 
+The force is normalized and applied once per timestep as a full-`dt` kick before
+`CopyCons`, independent of the RK integrator. Ghost cells and primitive variables
+are refreshed before hyperbolic fluxes. OU coefficients remain fixed between
+`dt_update` boundaries; a step crossing multiple boundaries catches up the OU
+recurrence without applying extra fluid kicks.
+
 ## Tiled Evaluation
 
 `tile_nx`, `tile_ny`, and `tile_nz` specify the number of repetitions in each

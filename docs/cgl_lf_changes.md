@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-F1 (23 of 41 numbered tasks). Candidate checks
+Completed and committed through T-F2 (24 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| F2 | Candidate single kick passes RK1/2/3 power checks; integration pending. |
 | F3 | Candidate conserved-momentum work passes single/two-fluid thermal-energy checks; integration pending. |
 | F4 | Candidate axis correction makes all selected planar modes nonzero; integration pending. |
 | F5 | Candidate removes the dead parameter from the retained legacy pgen; integration pending. |
@@ -494,3 +493,20 @@ and the current paper-smoke workflow now passes both enabled cases. Its random
 case explicitly selects the compatible random projection; the fenced passive
 case is recorded as disabled. Nonzero force is verified here; injected power is
 verified with the once-per-cycle schedule in F2. No reference values change.
+
+### T-F2: one full forcing kick before RK
+
+Triage: the merged driver advanced OU coefficients only at their configured
+update boundaries, but applied the fluid kick in each RK stage. For every driven
+fluid, `IncludeInitializeModesTask` now schedules a single full-dt `AddForcing`
+after normalization; the stage registration and RK work recurrence are removed.
+`Driver::Execute` reuses its boundary/primitive refresh before `CopyCons` and the
+first hyperbolic flux. Initial-cycle forcing is normalized as well.
+
+The shared driver affects hydro, MHD and CGL. Six power tests cover driving types
+0/2 and RK1/2/3; every positive-duration step injects dedt=0.1, including the first,
+with maximum relative error 5.13e-8. The prior RK2/RK3 schedule gave approximately
+0.175/0.16518 after an uninjected first cycle. Three CGL multi-cycle cases verify
+that accumulated forcing work matches the measured energy gain. All 126 selected
+CGL/turbulence checks pass; changed C++ passes style checks. Modal tcorr/dt_update
+behavior is unchanged and receives a direct recurrence check with F3.
