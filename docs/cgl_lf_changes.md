@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G3 (31 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G4 (32 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G4 | Per-cell limiter-map tests have a passing candidate; integration pending. |
 | G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
 | G7 | Update current and retained legacy documentation to match demonstrated coverage. |
 | P1 | Variable-restricted communication and frozen-B BC skip remain. |
@@ -645,3 +644,22 @@ samples use dx-squared error budgets 0.048/0.012, while 128 cells retains 0.003.
 The ratio-1000 few-step probe uses 0.04 (measured maximum error 0.003779).
 Those convergence/cost probes are distinct from the strengthened ratio-10
 acceptance and do not relax its criteria.
+
+### T-G4: per-cell limiter relaxation oracle
+
+`CheckLimiterStress` now independently reconstructs each initial cell, applies
+exact background relaxation, the finite backward-Euler soft map and configured
+walls, including the LF pre-wall ordering. It checks final anisotropy and
+conserved isotropic pressure to 1e-12. This analytic comparison is used for
+uniform LF states or nonuniform, zero-advection pure-CGL states, where spatial
+transport cannot invalidate a cellwise collision oracle. The existing nonuniform
+LF stress remains an admissibility test of combined transport and limiting.
+
+All 28 new cases pass: mirror/firehose, pure/LF, limiter nu*dt=0/1/1e10,
+background nu=0/3, and four initially out-of-wall cases verifying the ordering.
+No production formula or existing reference values change.
+
+The one-cycle cellwise oracle is gated to its stated cycle/solver assumptions;
+the existing 20-cycle uniform limiter regression remains supported and checks
+the independent backward-Euler history at every cycle. The final combined run
+caught and repaired an initially overbroad G4 guard that rejected that caller.

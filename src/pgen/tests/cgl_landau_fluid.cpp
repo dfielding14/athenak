@@ -1109,6 +1109,15 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
   const std::string limiter_kind =
       pin->GetOrAddString("problem", "limiter_kind", "mirror");
 
+  const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
+  const bool has_lf = pin->DoesParameterExist("mhd", "cgl_heat_flux");
+  // This cellwise reference describes one cycle without spatial heat transport.
+  // Multi-cycle relaxation is checked independently from the per-cycle history.
+  const bool check_relaxation = (amp == 0.0 || !has_lf) && pm->ncycle == 1 &&
+      pin->GetString("mhd", "rsolver") == "advect";
+  Real max_relaxation_error = 0.0;
   for (int q = 0; q < nx1; ++q) {
     const int i = is + q;
     const Real rho = w(0,IDN,ks,js,i);
@@ -1124,8 +1133,39 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
             "limiter stress produced a nonpositive primitive state");
     Require(!cgl::HardBoundViolated(paniso, bsqr, eos, eos.backup_lim),
             "limiter stress exceeded a configured hard wall");
+    if (check_relaxation) {
+      const Real phase = Wavenumber(pin, pm)*(XCenter(pm, q) - pm->mesh_size.x1min);
+      const Real seed = (limiter_kind == "mirror" ? 1.0 : -1.0)*0.25*amp*std::sin(phase);
+      const Real initial_ppar = ppar0*(1.0 + seed);
+      const Real initial_pperp = pperp0*(1.0 - seed);
+      const Real initial_piso = (initial_ppar + 2.0*initial_pperp)/3.0;
+      const Real mirror = 0.5*eos.mirror_threshold*bsqr;
+      const Real firehose = -0.5*eos.firehose_threshold*bsqr;
+      const Real lower = eos.backup_lim ?
+          std::max(-bsqr, eos.firehose_backup_factor*firehose) : -bsqr;
+      const Real upper = eos.backup_lim ? eos.mirror_backup_factor*mirror :
+          std::numeric_limits<Real>::max();
+      Real expected = initial_pperp - initial_ppar;
+      // The LF pre sweep and RK boundary apply walls before the final rates.
+      if (has_lf) expected = std::min(upper, std::max(lower, expected));
+      expected *= std::exp(-eos.nu_coll*pm->time);
+      if (eos.mlim && expected > mirror) {
+        expected = mirror + (expected - mirror)/(1.0 + eos.lim_coll*pm->time);
+      } else if (eos.flim && expected < firehose) {
+        expected = firehose + (expected - firehose)/(1.0 + eos.lim_coll*pm->time);
+      }
+      expected = std::min(upper, std::max(lower, expected));
+      const Real error = std::abs(paniso - expected)/initial_piso;
+      max_relaxation_error = std::max(max_relaxation_error, error);
+      Require(error <= 1.0e-12,
+              "limiter stress disagrees with one full-step analytic relaxation");
+      RequireRelative("limiter stress conserved isotropic pressure",
+                      (ppar + 2.0*pperp)/3.0, initial_piso, 1.0e-12);
+    }
   }
-  std::cout << "CGL LF limiter_stress passed for " << limiter_kind << std::endl;
+  std::cout << "CGL LF limiter_stress passed for " << limiter_kind
+            << " analytic_relaxation=" << check_relaxation
+            << " max_relaxation_error=" << max_relaxation_error << std::endl;
 }
 
 struct WaveState {

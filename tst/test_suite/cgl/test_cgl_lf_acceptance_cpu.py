@@ -134,3 +134,42 @@ def test_decay_resolves_closure_coefficients(tmp_path, component, nu):
                            2.0/(np.sqrt(2.0*np.pi)*k + nu)):
             wrong = decay_reference(chi_parallel, wrong_perp, nu, data["time"], component)
             assert abs(wrong/reference - 1) > 10.0*tolerance
+
+
+@pytest.mark.parametrize("kind", ("mirror", "firehose"))
+@pytest.mark.parametrize("lf", (False, True), ids=("varying_pure", "uniform_lf"))
+@pytest.mark.parametrize("nudt", (0.0, 1.0, 1.0e10))
+@pytest.mark.parametrize("background_nu", (0.0, 3.0))
+def test_limiter_stress_matches_cellwise_relaxation(
+    tmp_path, kind, lf, nudt, background_nu
+):
+    name = f"cgl_lf_limiter_{kind}"
+    source = (ROOT / "inputs/unit_tests" / f"{name}.athinput").read_text()
+    source = source.replace("<mhd>", f"<mhd>\nnu_coll = {background_nu}", 1)
+    if not lf:
+        source = re.sub(r"^(?:cgl_heat_flux|sts_integrator)\s*=.*\n", "", source,
+                        flags=re.MULTILINE)
+    result = run_case(
+        tmp_path, name, f"problem/amp={0.0 if lf else 0.1}",
+        f"mhd/limiter_nu_coll={nudt/0.005:.17g}", source=source,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "analytic_relaxation=1" in result.stdout
+
+
+@pytest.mark.parametrize("kind", ("mirror", "firehose"))
+@pytest.mark.parametrize("lf", (False, True), ids=("pure", "lf"))
+def test_limiter_stress_matches_wall_ordering(tmp_path, kind, lf):
+    name = f"cgl_lf_limiter_{kind}"
+    source = (ROOT / "inputs/unit_tests" / f"{name}.athinput").read_text()
+    if not lf:
+        source = re.sub(r"^(?:cgl_heat_flux|sts_integrator)\s*=.*\n", "", source,
+                        flags=re.MULTILINE)
+    ppar, pperp = (0.5, 2.0) if kind == "mirror" else (3.0, 1.0)
+    result = run_case(
+        tmp_path, name, "problem/amp=0", f"problem/ppar0={ppar}",
+        f"problem/pperp0={pperp}", "mhd/limiter_nu_coll=200",
+        "mhd/cgl_lf_strict_admissibility=false", source=source,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "analytic_relaxation=1" in result.stdout
