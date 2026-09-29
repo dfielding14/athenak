@@ -180,7 +180,13 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
     npeak = 0.0;
     kpeak = get_serialized_real("kpeak", 4.0 * M_PI);
   }
-  std::string spectrum_name = pin->GetOrAddString(block_name, "spectrum", "parabolic");
+  // Type 2 is isotropic random driving without a solenoidal projection.
+  driving_type = pin->GetOrAddInteger(block_name, "driving_type", 0);
+  if (driving_type < 0 || driving_type > 2) {
+    FatalTurbulenceError("driving_type must be 0, 1, or 2");
+  }
+  std::string spectrum_name = pin->GetOrAddString(
+      block_name, "spectrum", driving_type == 2 ? "power_law" : "parabolic");
   if (spectrum_name == "parabolic") {
     spectrum = TurbSpectrum::parabolic;
   } else if (spectrum_name == "power_law") {
@@ -188,13 +194,10 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   } else {
     FatalTurbulenceError("spectrum must be parabolic or power_law");
   }
-  // driving type - 0 for 3D isotropic, 1 for planar (xy) driving
-  driving_type = pin->GetOrAddInteger(block_name, "driving_type", 0);
-  if (driving_type != 0 && driving_type != 1) {
-    FatalTurbulenceError("driving_type must be 0 or 1");
-  }
   std::string projection_policy_name =
-      pin->GetOrAddString(block_name, "projection_policy", "solenoidal_compressive");
+      pin->GetOrAddString(block_name, "projection_policy",
+                          driving_type == 2 ? "mks24_random_unprojected"
+                                            : "solenoidal_compressive");
   if (projection_policy_name == "solenoidal_compressive") {
     projection_policy = TurbProjectionPolicy::solenoidal_compressive;
   } else if (projection_policy_name == "mks24_random_unprojected") {
@@ -207,8 +210,12 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
         "mks24_random_unprojected, or mks24_alfvenic_perpendicular");
   }
   if (projection_policy == TurbProjectionPolicy::mks24_random_unprojected &&
-      driving_type != 0) {
-    FatalTurbulenceError("mks24_random_unprojected requires driving_type = 0");
+      driving_type != 0 && driving_type != 2) {
+    FatalTurbulenceError("mks24_random_unprojected requires driving_type = 0 or 2");
+  }
+  if (driving_type == 2 &&
+      projection_policy != TurbProjectionPolicy::mks24_random_unprojected) {
+    FatalTurbulenceError("driving_type = 2 requires mks24_random_unprojected");
   }
   if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular &&
       driving_type != 1) {
@@ -459,7 +466,7 @@ bool TurbulenceDriver::IsDrivenMode(int nkx, int nky, int nkz, Real dkx, Real dk
         SQR(k_shell_unit);
     return normalized_k2 >= nlow_sqr && normalized_k2 <= nhigh_sqr;
   }
-  if (driving_type == 0) {
+  if (driving_type == 0 || driving_type == 2) {
     const Real nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
     return nsqr >= nlow_sqr && nsqr <= nhigh_sqr;
   }
@@ -543,6 +550,9 @@ void TurbulenceDriver::Initialize() {
     }
   }
 
+  if (nmode != mode_count) {
+    FatalTurbulenceError("Initialize mode count does not match allocated mode_count");
+  }
   kx_mode_.template modify<HostMemSpace>();
   kx_mode_.template sync<DevExeSpace>();
   ky_mode_.template modify<HostMemSpace>();
@@ -775,7 +785,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
 
               // Generate Fourier amplitudes
 
-              if (driving_type == 0) {
+              if (driving_type == 0 || driving_type == 2) {
                 if (kiso > 1e-16) {
                   if (spectrum == TurbSpectrum::power_law) {
                     norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);  // power-law driving
@@ -882,6 +892,9 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
         }
       }
 
+      if (nmode != mode_count) {
+        FatalTurbulenceError("InitializeModes mode count does not match mode_count");
+      }
       mode_noise_real_.template modify<HostMemSpace>();
       mode_noise_imag_.template modify<HostMemSpace>();
 

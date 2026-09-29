@@ -374,7 +374,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         choices.update({
             "forcing_mode": (
                 "alfvenic_z_perpendicular" if driving_type == "1"
-                else "isotropic_random" if driving_type == "0"
+                else "isotropic_random" if driving_type in ("0", "2")
                 else f"unsupported_{driving_type}"
             ),
             "forcing_seed": choice("turb_driving", "rseed", "-1"),
@@ -445,6 +445,7 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 source,
                 (
                     "turb_driving/driving_type=0",
+                    "turb_driving/projection_policy=mks24_random_unprojected",
                     "turb_driving/rseed=314159",
                     "turb_driving/expo=2.0",
                 ),

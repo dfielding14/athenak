@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-E3 (22 of 41 numbered tasks). Candidate checks
+Completed and committed through T-F1 (23 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| F1 | Candidate restores type-2 random forcing and nonzero modes; integration pending. |
 | F2 | Candidate single kick passes RK1/2/3 power checks; integration pending. |
 | F3 | Candidate conserved-momentum work passes single/two-fluid thermal-energy checks; integration pending. |
 | F4 | Candidate axis correction makes all selected planar modes nonzero; integration pending. |
@@ -480,3 +479,18 @@ conversion can dereference it. Two new regressions check the missing-units error
 and a finite, positive, nonzero thermal update with units, for both unsaturated
 and saturated explicit Spitzer conduction. All six STS diffusion regressions
 pass. Existing reference values and implemented conduction behavior are unchanged.
+
+### T-F1: restore type-2 random forcing
+
+Triage: the merged driver rejected type 2 outright. Its shared `IsDrivenMode`
+now includes type 2 in the isotropic shell, and amplitude construction uses the
+same isotropic spectrum. Type 2 defaults to the retained power-law, unprojected
+random policy; incompatible explicit projection policies fail clearly. Both mode
+initializers verify the selected count against allocation. The pre-existing
+zero-mode exclusions remain, including for nlow=0.
+
+This affects all driven fluids. Three focused type-2/invalid-policy checks pass,
+and the current paper-smoke workflow now passes both enabled cases. Its random
+case explicitly selects the compatible random projection; the fenced passive
+case is recorded as disabled. Nonzero force is verified here; injected power is
+verified with the once-per-cycle schedule in F2. No reference values change.

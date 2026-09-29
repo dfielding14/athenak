@@ -1662,7 +1662,7 @@ def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
     assert "passive_delta must match" in result.stdout
 
 
-def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
+def test_cgl_lf_paper_type_two_rejects_alfvenic_policy():
     command = [
         "./athena",
         "-i",
@@ -1671,7 +1671,7 @@ def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
-    assert "driving_type must be 0" in result.stdout
+    assert "driving_type = 2 requires mks24_random_unprojected" in result.stdout
 
 
 def test_cgl_lf_paper_alfvenic_policy_rejects_compressive_blend():

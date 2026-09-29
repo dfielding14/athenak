@@ -444,7 +444,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `npeak` | Real | — (optional) | turb_driver.cpp:L72 |
 | `kpeak` | Real | 4.0*M_PI | turb_driver.cpp:L78 |
 | `spectrum` | string | `parabolic` | turb_driver.cpp |
-| `driving_type` | int | 0 (`0` three-dimensional, `1` planar) | turb_driver.cpp:L83 |
+| `driving_type` | int | 0 (`0` projected three-dimensional, `1` planar, `2` unprojected isotropic) | turb_driver.cpp:L83 |
 | `min_kz` | int | 0 | turb_driver.cpp:L85 |
 | `max_kz` | int | nhigh | turb_driver.cpp:L86 |
 | `min_kx` | int | 0 | turb_driver.cpp:L87 |

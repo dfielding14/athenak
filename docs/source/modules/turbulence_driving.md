@@ -166,10 +166,10 @@ The following keys belong in `<turb_driving>`.
 | `accel_rms` | required for `accel_rms` | Target volume-weighted RMS acceleration. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive driven mode-radius bounds. |
 | `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is tile-local mode number. |
-| `spectrum` | `parabolic` | `parabolic` or `power_law`. |
+| `spectrum` | `power_law` for type 2, otherwise `parabolic` | `parabolic` or `power_law`. |
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Power-law spectrum exponents. |
 | `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds. |
-| `driving_type` | `0` | `0` for three-dimensional; `1` for planar driving. |
+| `driving_type` | `0` | `0` for three-dimensional projected driving; `1` for planar driving; `2` for isotropic unprojected random driving. |
 | `physical_k_shell` | `false` | Apply `nlow`/`nhigh` to `abs(k)/k_shell_unit`. |
 | `k_shell_unit` | `0.0` | Positive reference wavenumber required by `physical_k_shell`. |
 | `isotropic_power_spectrum` | `false` | Apply `expo` to total `abs(k)` for planar driving. |
