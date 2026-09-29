@@ -14,8 +14,10 @@ solution.
 CGL Landau-fluid heat flux requires `<mhd>/eos = cgl` and
 `<mhd>/conductivity_integrator = sts`.
 
-The LF face fluxes use the finite-collision Squire et al. (2023) coefficients
-when `<mhd>/nu_coll` or active mirror/firehose limiter scattering is present.
+The perpendicular LF diffusivity follows SHD97 eq. 49 / Sharma et al. (2006)
+eq. 12: $\chi_\perp=2c_\parallel^2/(\sqrt{2\pi}c_\parallel k_\parallel+2\nu_{\rm eff})$.
+The factor 2 deliberately differs from Squire et al. (2023) eq. 2.7 and gives
+$\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ in the collisional limit.
 The resulting unlimited flux is then capped with the equation 3.2 form,
 `q = q_L*q_max/(q_max + abs(q_L))`.
 

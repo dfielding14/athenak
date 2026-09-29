@@ -74,6 +74,18 @@ non-finite or non-positive thermodynamic state, activates density or pressure
 floors, or crosses an emergency mirror/firehose bound. The fluid firehose bound is always checked; configured backup walls are checked
 only when `backup_limiters` is enabled.
 
+The perpendicular closure uses the BGK moment coefficient from SHD97 eq. 49
+and Sharma et al. (2006) eq. 12:
+
+$$
+\chi_\perp = \frac{2c_\parallel^2}
+{\sqrt{2\pi}c_\parallel k_\parallel+2\nu_{\rm eff}}.
+$$
+
+The factor $2\nu_{\rm eff}$ deliberately differs from the $+\nu_{\rm eff}$
+printed in Squire et al. (2023) eq. 2.7. It recovers
+$\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ for strong collisions.
+
 ## Closure Controls
 
 | Parameter | Default | Meaning |

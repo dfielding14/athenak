@@ -303,7 +303,7 @@ Real ReferencePerpendicularHeatFlux(
     const Real cparallel, const Real rho, const Real ppar,
     const Real pperp, const Real bmag, const Real lf_k,
     const Real nu, const Real grad_tperp, const Real grad_b) {
-  const Real denominator = cgl::kSqrtTwoPi*cparallel*lf_k + nu;
+  const Real denominator = cgl::kSqrtTwoPi*cparallel*lf_k + 2.0*nu;
   const Real chi_perp = static_cast<Real>(2.0)*cparallel*cparallel/denominator;
   const Real q_unlimited = -chi_perp*(
       rho*grad_tperp -
@@ -456,6 +456,15 @@ void CheckPerpendicularClosureOrdinaryAgreement() {
   RequireRelativeClose("perpendicular ordinary agreement", got, expected);
   Require("perpendicular ordinary ratio finite", std::isfinite(ratio));
   Require("perpendicular ordinary sign preserved", got*ratio > 0.0);
+}
+
+void CheckPerpendicularCollisionalLimit() {
+  // In the BGK limit, the uncapped thermal diffusivity is c_parallel^2/nu.
+  const Real nu = 1.0e16;
+  const Real ratio = cgl::PerpendicularHeatFluxRatio(
+      2.0, 3.0, 12.0, 12.0, 1.0, 1.0, nu, 1.0, 0.0);
+  const Real chi = -ratio*cgl::kSqrtTwoOverPi*2.0*12.0/3.0;
+  RequireRelativeClose("perpendicular BGK limit", chi*nu/4.0, 1.0);
 }
 
 void CheckPerpendicularClosureOverflowEndpoints() {
@@ -810,6 +819,7 @@ void RunCglHeatFluxLimiterChecks() {
   CheckParallelClosureOrdinaryAgreement();
   CheckParallelClosureOverflowEndpoints();
   CheckPerpendicularClosureOrdinaryAgreement();
+  CheckPerpendicularCollisionalLimit();
   CheckPerpendicularClosureOverflowEndpoints();
   CheckPerpendicularClosureCancellationSigns();
   CheckWeightedFluxArithmetic();

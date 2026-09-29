@@ -460,7 +460,7 @@ Real FaceCParallel(ParameterInput *pin, const Real rho, const Real ppar) {
 }
 
 Real ChiPerp(const Real cpar, const Real lf_k, const Real nu_eff) {
-  const Real denom = cgl::kSqrtTwoPi*cpar*lf_k + nu_eff;
+  const Real denom = cgl::kSqrtTwoPi*cpar*lf_k + 2.0*nu_eff;
   return (denom > 0.0) ? static_cast<Real>(2.0)*SQR(cpar)/denom : 0.0;
 }
 
@@ -952,7 +952,8 @@ void CheckPrescribedCollisionRateFlux(ParameterInput *pin, Mesh *pm) {
   const Real pi = std::acos(static_cast<Real>(-1.0));
   const Real chi_par = 8.0*SQR(cpar)/(std::sqrt(8.0*pi)*cpar*lf->lf_k_parallel +
                                       (3.0*pi - 8.0)*nu);
-  const Real chi_perp = 2.0*SQR(cpar)/(std::sqrt(2.0*pi)*cpar*lf->lf_k_parallel + nu);
+  const Real chi_perp = 2.0*SQR(cpar)/(std::sqrt(2.0*pi)*cpar*lf->lf_k_parallel +
+                                     2.0*nu);
   const auto &indcs = pm->mb_indcs;
   DvceFaceFld5D<Real> flux("prescribed_rate_flux", 1, pmhd->nmhd, 1, 1,
                            indcs.nx1 + 2*indcs.ng);

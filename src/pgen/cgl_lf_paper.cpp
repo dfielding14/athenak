@@ -98,7 +98,8 @@ void CglLfPaperBField(const int mode, const Real x1, const Real x3,
 
 KOKKOS_INLINE_FUNCTION
 Real CglLfPaperChiPerp(const Real cpar, const Real lf_k_parallel, const Real nu_eff) {
-  const Real denom = static_cast<Real>(2.5066282746310002)*cpar*lf_k_parallel + nu_eff;
+  const Real denom = static_cast<Real>(2.5066282746310002)*cpar*lf_k_parallel
+                     + 2.0*nu_eff;
   return (denom > 0.0) ? static_cast<Real>(2.0)*SQR(cpar)/denom : 0.0;
 }
 

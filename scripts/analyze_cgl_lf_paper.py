@@ -736,7 +736,7 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
     if backup:
         nu_limiter += np.where(hard, backup_rate, 0.0)
     nu = max(model_float(model, "nu_coll", 0.0) or 0.0, 0.0) + nu_limiter
-    denom_perp = SQRT_TWO_PI * cparallel * kpar + nu
+    denom_perp = SQRT_TWO_PI * cparallel * kpar + 2.0 * nu
     denom_parallel = SQRT_EIGHT_PI * cparallel * kpar + THREE_PI_MINUS_EIGHT * nu
     chi_perp = np.where(denom_perp > 0.0, 2.0 * cparallel ** 2 / denom_perp, 0.0)
     chi_parallel = np.where(

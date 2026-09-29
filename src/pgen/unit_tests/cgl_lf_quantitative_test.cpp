@@ -334,7 +334,7 @@ Real FaceCParallel(ParameterInput *pin, const Real rho, const Real ppar) {
 }
 
 Real ChiPerp(const Real cpar, const Real lf_k, const Real nu_eff) {
-  const Real denom = kSqrtTwoPi*cpar*lf_k + nu_eff;
+  const Real denom = kSqrtTwoPi*cpar*lf_k + 2.0*nu_eff;
   return (denom > 0.0) ? static_cast<Real>(2.0)*SQR(cpar)/denom : 0.0;
 }
 

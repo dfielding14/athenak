@@ -304,8 +304,11 @@ Real PerpendicularHeatFluxRatio(const Real cparallel, const Real rho,
   if (nu == std::numeric_limits<Real>::infinity()) {
     return -0.0*grad_tperp;
   }
+  // Use SHD97 eq. 49 / Sharma et al. (2006) eq. 12: the BGK moment
+  // denominator contains 2 nu, unlike the +nu printed in Squire et al. (2023)
+  // eq. 2.7. Divide before multiplying to retain the overflow-safe form.
   const Real collision_over_speed =
-      (nu/kSqrtTwoPi)/cparallel;
+      (nu/(0.5*kSqrtTwoPi))/cparallel;
   const Real response = 1.0/(lf_k + collision_over_speed);
   const Real temperature_term = rho*grad_tperp/pperp;
   const Real magnetic_term =
@@ -339,7 +342,7 @@ Real PerpendicularHeatFluxRatio(const Real cparallel, const Real rho,
   const Real log_k = Kokkos::log2(lf_k);
   const Real log_collision_over_speed =
       (nu > 0.0)
-          ? Kokkos::log2(nu) - Kokkos::log2(kSqrtTwoPi) -
+          ? 1.0 + Kokkos::log2(nu) - Kokkos::log2(kSqrtTwoPi) -
                 Kokkos::log2(cparallel)
           : negative_infinity;
   const Real log_denom_scale = fmax(log_k, log_collision_over_speed);

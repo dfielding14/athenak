@@ -205,21 +205,21 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-All acceptance outcomes below remain unverified until the corresponding task.
+Completed and committed through T-D3 (16 of 41 numbered tasks). Candidate checks
+below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| C3-C4 | Complete additive LF suppression and explicit numeric input migration. |
-| D1-D5 | Face normalization, limited gradients, 2nu perpendicular coefficient, collisional timestep and stiffness factor remain. |
-| D6 | Post-RK parabolic reduction exists; add heating/stage-count acceptance. |
+| D4-D5 | Candidate collisional timestep and stiffness-factor patches pass analytic checks and corrected density ladder; integration pending. |
+| D6 | Existing refresh verified by candidate CPU and 1/4-rank MPI tests: heating raises post stages from 7 to 11; integration pending. |
 | E1 | Representation fence already exists and has regression coverage. |
-| E2 | Passive speeds fixed; requested thermal-consistency fence remains. |
+| E2 | Passive speeds already fixed; constructor-fence candidate passes double/single checks; integration pending. |
 | E3 | Spitzer is implemented; verify it and fix missing-units handling. |
-| F1 | Type 2 is rejected, so required random-mode support remains. |
-| F2 | OU evolves once but force is RK-staged; implement requested single kick and update work diagnostics/primitive refresh. |
-| F3 | Energy work exists but uses stale primitives and has secondary-fluid issues. |
-| F4 | Generic planar normalization retains the wrong parallel axis. |
-| F5 | Dead parameter survives in the legacy paper pgen. |
+| F1 | Candidate restores type-2 random forcing and nonzero modes; integration pending. |
+| F2 | Candidate single kick passes RK1/2/3 power checks; integration pending. |
+| F3 | Candidate conserved-momentum work passes single/two-fluid thermal-energy checks; integration pending. |
+| F4 | Candidate axis correction makes all selected planar modes nonzero; integration pending. |
+| F5 | Candidate removes the dead parameter from the retained legacy pgen; integration pending. |
 | G0 | Several files are duplicates; legacy nonlinear wave setups are unique and must be retained. |
 | G1-G4 | References/assertions, long wave runs, actual convergence gates and limiter-map tests need strengthening. |
 | G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
@@ -373,3 +373,22 @@ passes direct double/single checks for equal maximum-scale, minimum-normal and
 subnormal slopes, opposite slopes and extrema. Before this correction several
 finite equal-slope means became zero or nonfinite. Both precision regressions
 and the integrated Release build pass.
+
+### T-D3: perpendicular BGK collision coefficient
+
+Triage: the denominator still contained one collision frequency. It now contains
+$2\nu_{\rm eff}$ in the scaled production ratio and its logarithmic fallback,
+both retained quantitative references, the prescribed-rate face-flux reference,
+legacy paper diagnostics, snapshot reconstruction and documentation. The code
+records the deliberate SHD97/Sharma choice versus Squire et al. eq. 2.7.
+The collisionless eigenmode generator requires no change.
+
+The independent strong-collision check verifies $\chi_\perp\nu/c_\parallel^2\to1$.
+Double/single closure tests pass, as do 93 selected CPU checks and all 24 workflow
+cases. The previously verified eight collisionless hotspot cases are unchanged.
+At c=1, nu=10, k=2*pi, t=0.02 and initial amplitude 1e-4, chi_perp changes from
+0.07767107945385573 to 0.05594466633444508. The continuous parallel-initial
+(Tparallel,Tperp) reference changes from (7.65863283905e-5,5.47261320692e-6) to
+(7.65884217595e-5,5.52095332130e-6); the perpendicular-initial pair changes from
+(1.09452264138e-5,8.83592076405e-5) to (1.10419066426e-5,8.98859289040e-5).
+No tolerance changes were needed.
