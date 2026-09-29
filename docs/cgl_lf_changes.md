@@ -209,7 +209,7 @@ All acceptance outcomes below remain unverified until the corresponding task.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| C2-C4 | Complete the monotone law, additive LF suppression and explicit input migration. |
+| C3-C4 | Complete additive LF suppression and explicit numeric input migration. |
 | D1-D5 | Face normalization, limited gradients, 2nu perpendicular coefficient, collisional timestep and stiffness factor remain. |
 | D6 | Post-RK parabolic reduction exists; add heating/stage-count acceptance. |
 | E1 | Representation fence already exists and has regression coverage. |
@@ -243,3 +243,53 @@ A retained pre-D scratch control already reproduces the instability: peak growth
 over three cycles is 1, 2.33e5, 2.17e6 and 7.90e6 for the contrast ladder,
 respectively, at seven stages per half-sweep. Positivity alone misses the R=50
 failure. This is preliminary control evidence, not D5 completion.
+
+### T-C2: monotone finite-rate relaxation and hard-wall projection
+
+Triage: the merged implementation mixed an algebraic soft-threshold projection
+with limiter relaxation. It now applies exact background decay, followed by the
+backward-Euler soft update and the configured hard walls. The fluid firehose wall
+is unconditional. LF strictness no longer enables backup limiters implicitly.
+Legacy `limiter_hardwall=true` fails with migration instructions; 28 shipped true
+settings were removed while preserving their explicit finite rate of 1e10.
+Historical campaign contracts remain historical records.
+
+`SingleCollRates_CGLMHD` uses the stable threshold-plus-residual expression.
+`SingleCollWalls_CGLMHD` rounds a projected pressure inward when necessary, making
+subsequent wall calls exact no-ops. The conserved-A encoder similarly chooses an
+admissible representable value toward isotropy; its fallback bisection is used
+only if a single ULP is insufficient. Energy is not changed. Primitive recovery
+and AMR no longer impose the obsolete soft hardwall; AMR retains positivity,
+weak-field, fluid-wall and configured-backup constraints.
+
+The double/single EOS tests cover the analytic map, monotonicity at rate-times-step
+0, 1 and 1e10, continuity across the former emergency boundary, positivity,
+pressure conservation, exact wall idempotence and encoded-A admissibility on
+10,000 deterministic random states. Larger scratch probes used one million wall
+states and 100,000 AMR states per precision. The pressure-floor/AMR standalone
+suite passes 3 tests; heat-flux policy, constructor and input-matrix checks pass 5.
+
+Changed AMR expectations follow the new physics: the strong-anisotropy fixture
+requires only fluid-wall repairs; the uniform firehose state has final
+$|A|=\log(22/7)$; the mirror-slope fixture has no AMR soft-threshold projection.
+The coarse diagnostic independently clamps the child mean to the coarse hard-wall
+interval before comparing at the original tolerance. The LF 3D churn fixture's
+pressure amplitude changes from 0.5 to 0.49: the former produces a real
+$\Delta p+B^2=-0.005118$ crossing just after derefinement, now caught by the
+unconditional diagnostic. At 0.49 it remains admissible without repairs. No
+per-stage limiter or diagnostic tolerance was added.
+
+Final C2 integration: all 11 AMR tests, 79 selected CPU regressions and all 21
+full-workflow cases pass. Changed C++ passes cpplint. No tolerance was relaxed.
+
+The final shearing regression exposed another fixture outside the new strict
+fluid-wall envelope: its collisionless background fails the first post-RK LF
+stage with 1016 hard-bound violations on both post-G and final binaries.
+Changing only `tst/inputs/cgl_lf_sts_sbox.athinput` background `nu_coll=0` to 30
+keeps its nonzero perturbation, field, strict mode, all tolerances, and analytic
+magnetic references. The full serial/MPI/explicit/restart test passes on both
+binaries, with all 30 output files byte-identical. It completes 38 STS cycles
+to t=0.3 and 106 capped/explicit cycles to t=0.04, with no repairs or hard-bound
+violations. This is a collisional boundary/restart test; the original
+collisionless strict fixture is not claimed to be supported. Evidence:
+`/tmp/cgl-wo1-sbox-final/summary.txt`.

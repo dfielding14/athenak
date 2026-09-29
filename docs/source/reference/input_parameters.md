@@ -150,7 +150,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `limiter_backup_nu` | Real | 1e10 (inverse code time; LF suppression only) | cgl_mhd.cpp |
 | `cgl_firehose_threshold` | string | legacy alias: `oblique` = 1.4, `parallel` = 2.0; conflicts rejected | cgl_mhd.cpp |
 | `limiter_nu_coll` | Real | 0.0 | cgl_mhd.cpp |
-| `limiter_hardwall` | bool | false | cgl_mhd.cpp |
+| `limiter_hardwall` | bool | false; true rejected, migrate to finite `limiter_nu_coll` | cgl_mhd.cpp |
 | `backup_limiters` | bool | false | cgl_mhd.cpp |
 | `cgl_lf_strict_admissibility` | bool | false | cgl_landau_fluid.cpp |
 | `cgl_lf_record_pressure_work` | bool | false | mhd.cpp |

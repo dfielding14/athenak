@@ -501,12 +501,7 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
   effective_backup_limiter = cgl::EffectiveBackupLimiter(
       configured_backup, true, instability_limiter_active,
       strict_admissibility);
-  if (effective_backup_limiter && !configured_backup &&
-      global_variable::my_rank == 0) {
-    std::cout << "CGL Landau-fluid relaxed admissibility enables the emergency "
-              << "hard-bound backup limiter; configured backup_limiters remains false."
-              << std::endl;
-  }
+
   profile_enabled_ =
       CGLProfileEnvValue("ATHENAK_CGL_LF_PROFILE",
                          pin->GetOrAddBoolean("mhd", "cgl_lf_profile", false));
@@ -1677,8 +1672,7 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
     const Real paniso = pperp - ppar;
     if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr, eos)) ++nmirror;
     if (eos.flim && cgl::FirehoseLimiterActive(paniso, bsqr, eos)) ++nfirehose;
-    if ((eos.mlim || eos.flim) &&
-        cgl::HardBoundViolated(paniso, bsqr, eos, backup)) ++nhard;
+    if (cgl::HardBoundViolated(paniso, bsqr, eos, backup)) ++nhard;
   }, Kokkos::Sum<int>(nonfinite), Kokkos::Sum<int>(nonpositive),
      Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
      Kokkos::Sum<int>(hard_bound));

@@ -23,12 +23,8 @@ constexpr Real kThreePiMinusEight = 1.4247779607693793;
 
 KOKKOS_INLINE_FUNCTION
 bool EffectiveBackupLimiter(const bool configured_backup,
-                            const bool landau_fluid_active,
-                            const bool instability_limiter_active,
-                            const bool strict_admissibility) {
-  return configured_backup ||
-         (landau_fluid_active && instability_limiter_active &&
-          !strict_admissibility);
+                            const bool, const bool, const bool) {
+  return configured_backup;
 }
 
 // Threshold parameters are positive coefficients of magnetic pressure B^2/2.
@@ -79,26 +75,6 @@ bool HardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos,
   return paniso < -bsqr ||
          (backup && (paniso < FirehoseBackupWall(bsqr, eos) ||
                      paniso > MirrorBackupWall(bsqr, eos)));
-}
-
-KOKKOS_INLINE_FUNCTION
-bool ApplyHardwallLimiter(Real &ppar, Real &pperp, const Real bsqr, const EOS_Data &eos) {
-  const Real paniso = pperp - ppar;
-  Real limited_anisotropy = paniso;
-  if (eos.flim && paniso < FirehoseThreshold(bsqr, eos)) {
-    limited_anisotropy = FirehoseThreshold(bsqr, eos);
-  } else if (eos.mlim && paniso > MirrorThreshold(bsqr, eos)) {
-    limited_anisotropy = MirrorThreshold(bsqr, eos);
-  }
-  if (limited_anisotropy == paniso) {
-    return false;
-  }
-
-  // Scattering preserves internal energy while pinning Delta p to the bound.
-  const Real piso = ONE_3RD*ppar + TWO_3RDS*pperp;
-  pperp = piso + ONE_3RD*limited_anisotropy;
-  ppar = piso - TWO_3RDS*limited_anisotropy;
-  return true;
 }
 
 KOKKOS_INLINE_FUNCTION

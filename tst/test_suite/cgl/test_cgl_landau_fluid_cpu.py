@@ -649,15 +649,16 @@ def test_cgl_lf_firehose_threshold_policies_are_distinct():
         _cleanup()
 
 
-def test_cgl_lf_hardwall_projects_to_selected_firehose_threshold():
+def test_cgl_lf_stiff_limiter_relaxes_to_selected_firehose_threshold():
     try:
         _run(
             "cgl_lf_firehose_policy.athinput",
-            "cgl_ci_firehose_hardwall",
-            "mhd/limiter_hardwall=true",
+            "cgl_ci_firehose_stiff",
+            "mhd/limiter_nu_coll=1e10",
         )
-        history = testutils.athena_read.hst("cgl_ci_firehose_hardwall.mhd.hst")
-        assert history["lf_hwproj"][-1] > 0.0
+        history = testutils.athena_read.hst("cgl_ci_firehose_stiff.mhd.hst")
+        assert history["lf_hwproj"][-1] == 0.0
+        assert history["lf_firehs"][-1] > 0.0
         assert history["lf_hardbd"][-1] == 0.0
         assert history["lf_nonfin"][-1] == 0.0
         assert history["lf_nonpos"][-1] == 0.0
@@ -703,7 +704,7 @@ def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
         ),
     ),
 )
-def test_cgl_lf_relaxed_mode_recovers_hard_bound_without_explicit_backup(
+def test_cgl_lf_relaxed_mode_obeys_configured_walls(
     input_name, basename, flags
 ):
     try:
@@ -720,7 +721,7 @@ def test_cgl_lf_relaxed_mode_recovers_hard_bound_without_explicit_backup(
         _cleanup()
 
 
-def test_cgl_lf_relaxed_face_backup_matches_explicit_backup():
+def test_cgl_lf_relaxed_mode_does_not_enable_backup():
     common = (
         "mhd/cgl_lf_strict_admissibility=false",
         "problem/pperp0=2.5",
@@ -742,13 +743,12 @@ def test_cgl_lf_relaxed_face_backup_matches_explicit_backup():
         relaxed = _final_tab("cgl_ci_relaxed_face_backup")
         explicit = _final_tab("cgl_ci_explicit_face_backup")
         assert set(relaxed) == set(explicit)
-        for field in relaxed:
-            assert np.array_equal(relaxed[field], explicit[field])
+        assert not np.array_equal(relaxed["p_perp"], explicit["p_perp"])
     finally:
         _cleanup()
 
 
-def test_cgl_lf_fast_arithmetic_relaxed_face_backup_matches_explicit_backup():
+def test_cgl_lf_fast_relaxed_mode_does_not_enable_backup():
     common = (
         "mhd/cgl_lf_strict_admissibility=false",
         "problem/pperp0=2.5",
@@ -779,13 +779,12 @@ def test_cgl_lf_fast_arithmetic_relaxed_face_backup_matches_explicit_backup():
         relaxed = _final_tab("cgl_ci_fast_relaxed_face_backup")
         explicit = _final_tab("cgl_ci_fast_explicit_face_backup")
         assert set(relaxed) == set(explicit)
-        for field in relaxed:
-            assert np.array_equal(relaxed[field], explicit[field])
+        assert not np.array_equal(relaxed["p_perp"], explicit["p_perp"])
     finally:
         _cleanup()
 
 
-def test_cgl_lf_paper_history_reports_effective_relaxed_backup():
+def test_cgl_lf_paper_history_uses_only_configured_backup():
     try:
         _run_paper(
             "cgl_ci_relaxed_effective_nu",
@@ -794,13 +793,14 @@ def test_cgl_lf_paper_history_reports_effective_relaxed_backup():
             "mhd/backup_limiters=false",
             "problem/p_parallel0=1.0",
             "problem/p_perp0=2.25",
+            "mhd/limiter_nu_coll=17.0",
         )
         history = testutils.athena_read.hst(
             "cgl_ci_relaxed_effective_nu.user.hst"
         )
         mean_nu = history["nu_eff"][0] / history["volume"][0]
-        assert np.isclose(mean_nu, 1.0e10, rtol=1.0e-12)
-        assert history["hard_vol"][0] == history["volume"][0]
+        assert np.isclose(mean_nu, 17.0, rtol=1.0e-12)
+        assert history["hard_vol"][0] == 0.0
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
@@ -1247,16 +1247,19 @@ def test_cgl_lf_invalid_runtime_mode_is_rejected(option, expected):
     assert expected in result.stdout + result.stderr
 
 
-def test_cgl_lf_hardwall_requires_instability_limiter():
+def test_cgl_lf_legacy_hardwall_requires_migration(tmp_path):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_decay.athinput").read_text()
+    path = tmp_path / "legacy_hardwall.athinput"
+    path.write_text(source.replace("limiter_hardwall = false", "limiter_hardwall = true"))
     command = [
         "./athena",
         "-i",
-        f"{INPUT_ROOT}/cgl_lf_decay.athinput",
-        "mhd/limiter_hardwall=true",
+        str(path),
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
-    assert "limiter_hardwall requires" in result.stdout
+    assert "limiter_hardwall=true is no longer supported" in result.stdout
+    assert "limiter_nu_coll=1e10" in result.stdout
 
 
 def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force():
@@ -1684,24 +1687,7 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
         "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
         "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
     }
-    hardwall_paths = {
-        "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
-        "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
-        "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
-        "cgl_lf_paper_standard_active_random_beta10.athinput",
-        "cgl_lf_paper_standard_active_random_beta100.athinput",
-        "cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
-        "cgl_lf_paper_standard_passive_alfvenic_beta100.athinput",
-        "cgl_lf_paper_standard_passive_random_beta10.athinput",
-        "cgl_lf_paper_standard_passive_random_beta100.athinput",
-        "cgl_lf_paper_nulim_beta100_hardwall.athinput",
-        "cgl_lf_paper_heat_flux_beta10_strong.athinput",
-        "cgl_lf_paper_heat_flux_beta10_weak.athinput",
-        "cgl_lf_paper_compressive_active_random_beta1.athinput",
-        "cgl_lf_paper_compressive_active_random_beta100_sonic.athinput",
-        "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
-        "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
-    }
+
     for input_path in input_paths:
         source = input_path.read_text()
         for block in ("output2", "output3"):
@@ -1725,8 +1711,7 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
         assert choices["output3_file_type"] == "rst"
         assert choices["output3_dt"] == "1.0"
         assert choices["output3_single_file_per_rank"] == "true"
-        expected_hardwall = "true" if input_path.name in hardwall_paths else "false"
-        assert choices["limiter_hardwall"] == expected_hardwall
+        assert choices["limiter_hardwall"] == "false"
     scale_resolutions = {
         "cgl_lf_paper_scale_separation_beta10_nperp96.athinput": (
             "96", "96", "192"

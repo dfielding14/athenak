@@ -41,9 +41,16 @@ Thresholds must be finite and positive; backup factors must be finite and at
 least 1. `limiter_backup_nu` (default $10^{10}$) is a finite, nonnegative LF
 heat-flux suppression frequency in inverse code time, separate from pressure
 projection. The fluid firehose wall at $-B^2$ applies independently of limiter
-flags. Backup-wall diagnostics apply only when the effective backup policy is on.
+flags. Backup walls and their diagnostics apply only when `backup_limiters` is on;
+LF never enables backup implicitly.
 
 The legacy `cgl_firehose_threshold = oblique|parallel` maps to numeric
 `firehose_threshold = 1.4|2.0` when the numeric key is absent; conflicting explicit
-values are rejected. `limiter_hardwall` retains its selected-soft-threshold
-projection behavior. The threshold and backup factors do not enable a limiter.
+values are rejected. `limiter_hardwall = true` is rejected: remove it and use
+finite `limiter_nu_coll` (for example $10^{10}$ for a stiff soft limiter).
+Rates run once per full cycle; backup and fluid walls also run at the LF/hyperbolic
+boundaries. Primitive recovery and AMR transfer do not project onto soft
+thresholds. AMR enforces positivity, the fluid wall, and any enabled backup walls.
+The finite-rate residual is $(\Delta p_0-\Delta p_{\rm threshold})/(1+\nu_{\rm lim}dt)$,
+so the stiff limit agrees with projection only to that residual and roundoff.
+The threshold and backup factors do not enable a limiter.

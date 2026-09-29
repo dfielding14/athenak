@@ -36,7 +36,6 @@ struct EOS_Data {
   bool mlim, flim;   // mirror and firehose limiter flags
   bool coll;         // enable CGL collision/limiter relaxation
   bool backup_lim;   // enable backup CGL instability limiters
-  bool hardwall_lim; // project CGL pressure anisotropy to selected instability bounds
   Real nu_coll, lim_coll;  // physical and limiter collision frequencies
   // Delta p = p_perp - p_parallel; magnetic pressure is B^2/2.
   // Soft thresholds are -firehose_threshold*B^2/2 and +mirror_threshold*B^2/2.

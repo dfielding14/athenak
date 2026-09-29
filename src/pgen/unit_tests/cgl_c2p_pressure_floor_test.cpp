@@ -12,6 +12,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <random>
 #include <string>
 
 #include "athena.hpp"
@@ -401,6 +402,119 @@ void CheckNegativeInternalEnergyFloor() {
                1.5*kPressureFloor + KineticEnergy() + MagneticEnergy());
 }
 
+// The map is tested directly so roundoff cannot be hidden by C2P repair.
+void CheckCollisionMap() {
+  EOS_Data eos = MakeCglEOS();
+  eos.firehose_threshold = 1.4;
+  eos.mirror_threshold = 1.0;
+  eos.firehose_backup_factor = 1.0;
+  eos.mirror_backup_factor = 2.0;
+  const Real mean_tolerance = kSinglePrecision ? 8.0*std::numeric_limits<Real>::epsilon()
+                                              : 1.0e-14;
+  for (Real nudt : {static_cast<Real>(0.0), static_cast<Real>(1.0),
+                    static_cast<Real>(1.0e10)}) {
+    eos.lim_coll = nudt;
+    Real previous = -std::numeric_limits<Real>::max();
+    for (int n = 0; n <= 80; ++n) {
+      const Real delta = -2.0 + 0.05*n;
+      MHDPrim1D w{};
+      w.bx = 1.0;
+      w.e = 10.0 - TWO_3RDS*delta;
+      w.pp = 10.0 + ONE_3RD*delta;
+      const Real initial = w.pp - w.e;
+      const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
+      const MHDPrim1D original = w;
+      const Real threshold = initial < -0.7 ? -0.7 : 0.5;
+      const Real expected = initial < -0.7 || initial > 0.5
+          ? threshold + (initial - threshold)/(1.0 + nudt) : initial;
+      SingleCollRates_CGLMHD(w, eos, 1.0, true, true);
+      RequireClose("limiter backward Euler", w.pp - w.e, expected);
+      Require("monotone limiter", w.pp - w.e >= previous);
+      previous = w.pp - w.e;
+      RequireRelativeClose("rate mean pressure", ONE_3RD*w.e + TWO_3RDS*w.pp,
+                           piso, mean_tolerance);
+      if (nudt == 0.0) {
+        Require("zero-rate identity", std::memcmp(&w, &original, sizeof(w)) == 0);
+      }
+      if (nudt == 1.0e10 && (initial < -0.7 || initial > 0.5)) {
+        Require("stiff soft-threshold limit",
+                std::abs(w.pp - w.e - threshold) <
+                    (kSinglePrecision ? 4.0e-6 : 2.0e-10));
+      }
+      SingleCollWalls_CGLMHD(w, eos, true);
+      const MHDPrim1D projected = w;
+      SingleCollWalls_CGLMHD(w, eos, true);
+      Require("bitwise idempotent walls", std::memcmp(&w, &projected, sizeof(w)) == 0);
+    }
+  }
+  eos.lim_coll = 1.0;
+  Real adjacent[2];
+  for (int n = 0; n < 2; ++n) {
+    const Real delta = n == 0 ? 0.99 : 1.01;
+    MHDPrim1D w{};
+    w.bx = 1.0;
+    w.e = 3.0 - TWO_3RDS*delta;
+    w.pp = 3.0 + ONE_3RD*delta;
+    SingleCollRates_CGLMHD(w, eos, 1.0, true, false);
+    adjacent[n] = w.pp - w.e;
+  }
+  RequireClose("no backup-band hysteresis", adjacent[1] - adjacent[0], 0.01);
+
+  // Backup walls ignore soft-limiter flags; the fluid firehose wall ignores backup.
+  for (bool backup : {false, true}) {
+    eos.mlim = eos.flim = false;
+    for (Real delta : {static_cast<Real>(-2.0), static_cast<Real>(2.0)}) {
+      MHDPrim1D w{};
+      w.bx = 1.0;
+      w.e = 3.0 - TWO_3RDS*delta;
+      w.pp = 3.0 + ONE_3RD*delta;
+      SingleCollWalls_CGLMHD(w, eos, backup);
+      const Real expected = backup ? (delta < 0.0 ? -0.7 : 1.0)
+                                   : (delta < 0.0 ? -1.0 : delta);
+      RequireClose("independent wall flags", w.pp - w.e, expected);
+    }
+  }
+
+  std::mt19937_64 generator(81);
+  std::uniform_real_distribution<double> exponent(-30.0, 30.0);
+  for (int n = 0; n < 10000; ++n) {
+    MHDPrim1D w{};
+    w.e = std::exp(exponent(generator));
+    w.pp = std::exp(exponent(generator));
+    w.bx = std::exp(exponent(generator));
+    const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
+    eos.nu_coll = n%3 == 0 ? 0.0 : 0.4;
+    eos.lim_coll = n%3 == 0 ? 0.0 : (n%3 == 1 ? 1.0 : 1.0e10);
+    SingleCollRates_CGLMHD(w, eos, 1.0, true, true);
+    SingleCollWalls_CGLMHD(w, eos, n%2);
+    Require("randomized positive pressures", w.e > 0.0 && w.pp > 0.0);
+    Require("randomized wall admissibility",
+            !cgl::HardBoundViolated(w.pp - w.e, SQR(w.bx), eos, n%2));
+    RequireRelativeClose("randomized conserved mean pressure",
+                         ONE_3RD*w.e + TWO_3RDS*w.pp, piso, mean_tolerance);
+    const MHDPrim1D projected = w;
+    SingleCollWalls_CGLMHD(w, eos, n%2);
+    Require("randomized bitwise idempotent walls",
+            std::memcmp(&w, &projected, sizeof(w)) == 0);
+    w.d = std::exp(exponent(generator));
+    const Real eint = 0.5*w.e + w.pp;
+    const Real bmag = fmax(w.bx, eos.bfloor);
+    const Real candidate = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag);
+    const Real admissible = CGLWallAdmissibleAnisotropy(w, eint, candidate, eos, n%2);
+    Real recovered_parallel, recovered_perp;
+    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+        w.d, eint, admissible, bmag, recovered_parallel, recovered_perp);
+    Require("encoded wall admissibility",
+            !cgl::HardBoundViolated(recovered_perp - recovered_parallel,
+                                    SQR(w.bx), eos, n%2));
+    RequireRelativeClose("encoded wall mean pressure",
+                         ONE_3RD*recovered_parallel + TWO_3RDS*recovered_perp,
+                         piso, mean_tolerance);
+    Require("encoded wall fixed point",
+            CGLWallAdmissibleAnisotropy(w, eint, admissible, eos, n%2) == admissible);
+  }
+}
+
 } // namespace
 
 void RunCglC2PPressureFloorChecks() {
@@ -423,6 +537,7 @@ void RunCglC2PPressureFloorChecks() {
   CheckInvalidDensity();
   CheckMagnetizationDensityFloor();
   CheckNegativeInternalEnergyFloor();
+  CheckCollisionMap();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
 }

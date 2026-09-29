@@ -800,7 +800,7 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
   const int js = pm->mb_indcs.js;
   const int ks = pm->mb_indcs.ks;
   const int nx1 = pm->mb_indcs.nx1;
-  const Real backup_tol = pin->GetOrAddReal("problem", "backup_bound_tol", 1.02);
+  const EOS_Data &eos = pmhd->peos->eos_data;
   const std::string limiter_kind =
       pin->GetOrAddString("problem", "limiter_kind", "mirror");
 
@@ -817,13 +817,8 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
             "limiter stress produced a nonfinite state");
     Require(rho > 0.0 && ppar > 0.0 && pperp > 0.0,
             "limiter stress produced a nonpositive primitive state");
-    if (limiter_kind == "mirror") {
-      Require(paniso <= backup_tol*bsqr, "mirror stress exceeded the backup bound");
-    } else if (limiter_kind == "firehose") {
-      Require(paniso >= -backup_tol*bsqr, "firehose stress exceeded the backup bound");
-    } else {
-      Fail("<problem>/limiter_kind must be mirror or firehose");
-    }
+    Require(!cgl::HardBoundViolated(paniso, bsqr, eos, eos.backup_lim),
+            "limiter stress exceeded a configured hard wall");
   }
   std::cout << "CGL LF limiter_stress passed for " << limiter_kind << std::endl;
 }

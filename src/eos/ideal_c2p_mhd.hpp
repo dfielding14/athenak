@@ -157,6 +157,42 @@ void CGLRecoverPressuresFromTotalEnergyAndAnisotropy(const Real rho, const Real 
   }
 }
 
+// A wall pressure can round outside the wall when encoded in the logarithmic A
+// coordinate. Return the nearest admissible representable A toward isotropy.
+KOKKOS_INLINE_FUNCTION
+Real CGLWallAdmissibleAnisotropy(const MHDPrim1D &w, const Real eint,
+                                const Real anisotropy, const EOS_Data &eos,
+                                const bool backup) {
+  const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+  const Real bmag = fmax(sqrt(bsqr), eos.bfloor);
+  Real p_parallel, p_perp;
+  CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+      w.d, eint, anisotropy, bmag, p_parallel, p_perp);
+  if (!cgl::HardBoundViolated(p_perp - p_parallel, bsqr, eos, backup)) {
+    return anisotropy;
+  }
+  Real inside = CGLConservedAnisotropy(w.d, 1.0, 1.0, bmag);
+  Real outside = anisotropy;
+  Real trial = Kokkos::nextafter(outside, inside);
+  CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+      w.d, eint, trial, bmag, p_parallel, p_perp);
+  if (!cgl::HardBoundViolated(p_perp - p_parallel, bsqr, eos, backup)) return trial;
+  outside = trial;
+  // Isotropy is exactly representable by the recovery helper. Bisect only if a
+  // one-ULP correction failed, stopping at adjacent representable coordinates.
+  while (true) {
+    trial = 0.5*inside + 0.5*outside;
+    if (trial == inside || trial == outside) return inside;
+    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+        w.d, eint, trial, bmag, p_parallel, p_perp);
+    if (cgl::HardBoundViolated(p_perp - p_parallel, bsqr, eos, backup)) {
+      outside = trial;
+    } else {
+      inside = trial;
+    }
+  }
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn Real CGLConservedAnisotropyToMagneticMoment()
 //! \brief Convert the IAN/legacy IMU slot from conserved anisotropy A to
@@ -457,11 +493,13 @@ void SingleCollRates_CGLMHD(MHDPrim1D &w, const EOS_Data &eos,
   Real paniso = initial*exp(-eos.nu_coll*dt);
   const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
   const Real nudt = eos.lim_coll*dt;
-  if (flim && paniso < cgl::FirehoseThreshold(bsqr, eos)) {
-    paniso = (paniso + nudt*cgl::FirehoseThreshold(bsqr, eos))/(1.0 + nudt);
+  if (nudt > 0.0 && flim && paniso < cgl::FirehoseThreshold(bsqr, eos)) {
+    const Real threshold = cgl::FirehoseThreshold(bsqr, eos);
+    paniso = threshold + (paniso - threshold)/(1.0 + nudt);
   }
-  if (mlim && paniso > cgl::MirrorThreshold(bsqr, eos)) {
-    paniso = (paniso + nudt*cgl::MirrorThreshold(bsqr, eos))/(1.0 + nudt);
+  if (nudt > 0.0 && mlim && paniso > cgl::MirrorThreshold(bsqr, eos)) {
+    const Real threshold = cgl::MirrorThreshold(bsqr, eos);
+    paniso = threshold + (paniso - threshold)/(1.0 + nudt);
   }
   if (paniso == initial) return;
   const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
@@ -476,15 +514,18 @@ KOKKOS_INLINE_FUNCTION
 void SingleCollWalls_CGLMHD(MHDPrim1D &w, const EOS_Data &eos, const bool backup) {
   const Real initial = w.pp - w.e;
   const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
-  Real paniso = fmax(initial, -bsqr);
-  if (backup) {
-    paniso = fmax(paniso, cgl::FirehoseBackupWall(bsqr, eos));
-    paniso = fmin(paniso, cgl::MirrorBackupWall(bsqr, eos));
-  }
+  const Real lower = backup ? cgl::FirehoseBackupWall(bsqr, eos) : -bsqr;
+  const Real upper = backup ? cgl::MirrorBackupWall(bsqr, eos)
+                            : std::numeric_limits<Real>::max();
+  const Real paniso = fmin(fmax(initial, lower), upper);
   if (paniso == initial) return;
   const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
   w.pp = piso + ONE_3RD*paniso;
   w.e = piso - TWO_3RDS*paniso;
+  // Round toward the admissible side if reconstruction straddled the wall.
+  // One pressure ULP suffices and makes subsequent wall applications exact no-ops.
+  if (w.pp - w.e < lower) w.e = Kokkos::nextafter(w.e, w.pp);
+  if (w.pp - w.e > upper) w.pp = Kokkos::nextafter(w.pp, w.e);
 }
 
 //----------------------------------------------------------------------------------------

@@ -59,19 +59,19 @@ sweep the MHD task graph performs:
 This lifecycle prevents ordinary hyperbolic fluxes, output, and restart state
 from interpreting magnetic moment as pressure anisotropy.
 
-When LF and CGL collisions or limiter scattering are active, each pre/post LF
-half-sweep is followed by a collision source update over that same half-cycle
-duration. Chronologically this is `L(dt/2) C(dt/2) H(dt) L(dt/2) C(dt/2)`,
-where `L`, `C`, and `H` denote LF, collision, and hyperbolic updates. The two
-collision calls therefore advance one physical `dt`, matching the single
-full-step collision interval used when LF is disabled.
+CGL collision rates run once per full timestep. With LF, the pre-sweep and
+hyperbolic boundaries apply only the configured backup walls and the unconditional
+fluid firehose wall; the post-sweep applies exact background decay and monotone
+backward-Euler soft-limiter relaxation over the full timestep, then those walls.
+Without LF, rates and walls run after the hyperbolic timestep. Primitive recovery
+does not apply soft-threshold scattering.
 
 AthenaK records LF-stage health metrics in normal MHD history output whenever
 this closure is active. Set `cgl_lf_strict_admissibility = true` for
 verification runs to terminate immediately if an LF refresh produces
 non-finite or non-positive thermodynamic state, activates density or pressure
-floors, or crosses an emergency mirror/firehose bound. Emergency-bound
-reporting is independent of whether `backup_limiters` is enabled.
+floors, or crosses an emergency mirror/firehose bound. The fluid firehose bound is always checked; configured backup walls are checked
+only when `backup_limiters` is enabled.
 
 ## Closure Controls
 
@@ -95,8 +95,8 @@ reporting is independent of whether `backup_limiters` is enabled.
 | `limiter_backup_nu` | `1e10` | Nonnegative LF heat-flux suppression frequency in inverse code time. |
 | `cgl_firehose_threshold` | absent | Legacy alias: `oblique` = 1.4, `parallel` = 2.0. Conflicting explicit numeric values are rejected. |
 | `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
-| `limiter_hardwall` | `false` | With an enabled instability limiter, replace its pressure-relaxation update by an energy-preserving projection to the selected mirror/firehose threshold. |
-| `backup_limiters` | `false` | Apply rapid correction after an emergency bound is crossed. |
+| `limiter_hardwall` | `false` | Legacy `true` is rejected. Use finite `limiter_nu_coll` for soft-threshold relaxation. |
+| `backup_limiters` | `false` | Project onto both configured backup walls, independently of which soft limiter is enabled. LF never enables this flag implicitly. |
 | `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
 | `cgl_lf_diagnostics` | `full` | `full` collects heat-flux face/cap/work diagnostics; `none` skips those reductions for production runs. |
@@ -124,18 +124,20 @@ At an operator face with `|B| <= bfloor`, LF does not construct a local field
 direction and applies zero heat-flux contribution at that face. The local
 accuracy campaign exercises this shutdown behavior with strict monitoring.
 
-MKS24 production simulations use the mirror threshold `beta Delta >= 1` and
-the parallel-firehose threshold `beta Delta <= -2`; paper reproduction inputs
-must therefore set `cgl_firehose_threshold = parallel` and
-`limiter_hardwall = true` explicitly for their hard-wall closure. In this
-mode, CGL primitive recovery pins newly unstable pressures to the selected
-threshold while preserving `0.5*p_parallel + p_perp`; ordinary `nu_coll`
-relaxation remains enabled, but finite-rate limiter pressure relaxation is
-replaced by the algebraic constraint. The
-oblique-firehose policy remains the default to preserve behavior of existing
-feature-branch inputs. In both policies `lf_mirror` and `lf_firehs` count
-physical threshold occupancy, while `lf_hardbd` counts emergency numerical
-overshoot and is a strict-validation failure.
+The paper inputs explicitly set `firehose_threshold = 2.0` and
+`mirror_threshold = 1.0`, corresponding to $\Delta p=-B^2$ and $B^2/2$.
+Their stiff soft-limiter rate is `limiter_nu_coll = 1e10`. The finite update
+approaches the soft threshold with residual
+$(\Delta p_0-\Delta p_{\rm threshold})/(1+\nu_{\rm lim}\,dt)$;
+it is applied once per cycle. This replaces the former
+`limiter_hardwall = true` soft projection during primitive recovery and AMR
+transfer. Remove that legacy setting when migrating an input, and set
+`backup_limiters` explicitly. Existing finite limiter rates are never overwritten
+by the parser. LF strictness does not change the backup setting.
+
+`lf_mirror` and `lf_firehs` count physical threshold occupancy. `lf_hardbd`
+counts violations of the unconditional fluid wall and enabled backup walls.
+The historical `lf_hwproj` column remains present and is zero for this closure.
 
 Normal `.mhd.hst` output appends cumulative columns when LF is active:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,

@@ -82,7 +82,6 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   eos_data.mlim = false;
   eos_data.flim = false;
   eos_data.backup_lim = false;
-  eos_data.hardwall_lim = false;
   eos_data.coll = false;
   eos_data.gamma = pin->GetOrAddReal("mhd", "gamma", 5.0/3.0);
   eos_data.nu_coll = 0.0;
@@ -110,11 +109,12 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
 
   eos_data.mlim = pin->GetOrAddBoolean("mhd", "mirror_limiter", false);
   eos_data.flim = pin->GetOrAddBoolean("mhd", "firehose_limiter", false);
-  eos_data.hardwall_lim = pin->GetOrAddBoolean("mhd", "limiter_hardwall", false);
-  if (eos_data.hardwall_lim && !(eos_data.mlim || eos_data.flim)) {
+  if (pin->GetOrAddBoolean("mhd", "limiter_hardwall", false)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<mhd>/limiter_hardwall requires mirror_limiter or firehose_limiter"
+              << "<mhd>/limiter_hardwall=true is no longer supported; remove it and "
+              << "set limiter_nu_coll=1e10 for stiff soft-threshold relaxation once "
+              << "per timestep. Set backup_limiters explicitly for backup walls."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -158,9 +158,9 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
   const int nkji = (ku - kl + 1)*nji;
   const int nmkji = nmb*nkji;
 
-  int nfloord_=0, nfloore_=0, nfloort_=0, nhardwall_=0;
+  int nfloord_=0, nfloore_=0, nfloort_=0;
   Kokkos::parallel_reduce("mhd_c2p",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt, int &sumh) {
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/ni;
@@ -201,11 +201,6 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     HydPrim1D w;
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
     SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
-    const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
-    const Real bmag = sqrt(bsqr);
-    const bool hardwall_used =
-        !only_testfloors && eos.hardwall_lim && bmag > eos.bfloor &&
-        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos);
 
     // set FOFC flag and quit loop if this function called only to check floors
     if (only_testfloors) {
@@ -229,10 +224,6 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       }
       if (bfloor_used) {
         cons(m,IAN,k,j,i) = u.mu;
-      }
-      if (hardwall_used) {
-        cons(m,IAN,k,j,i) = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag);
-        sumh++;
       }
 
       //if (tfloor_used) {
@@ -260,8 +251,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
         prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
       }
     }
-  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_),
-     Kokkos::Sum<int>(nhardwall_));
+  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
 
   // store appropriate counters
   if (only_testfloors) {
@@ -270,10 +260,6 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
     pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;
     pmy_pack->pmesh->ecounter.neos_tfloor += nfloort_;
-    if (pmy_pack->pmhd->pcgl_lf != nullptr) {
-      pmy_pack->pmhd->pcgl_lf->diagnostics.hardwall_projection +=
-          static_cast<std::uint64_t>(nhardwall_);
-    }
   }
 
   return;
@@ -301,10 +287,10 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
   const int nkji = (ku - kl + 1)*nji;
   const int nmkji = nmb*nkji;
 
-  int nfloord_=0, nfloore_=0, nfloort_=0, nhardwall_=0;
+  int nfloord_=0, nfloore_=0, nfloort_=0;
   Kokkos::parallel_reduce("mhd_cgl_mub_to_prim",
   Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt, int &sumh) {
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/ni;
@@ -327,11 +313,6 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
     SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
                                        tfloor_used, bfloor_used);
-    const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
-    const Real bmag = sqrt(bsqr);
-    const bool hardwall_used =
-        eos.hardwall_lim && bmag > eos.bfloor &&
-        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos);
 
     if (dfloor_used) {
       cons(m,IDN,k,j,i) = u.d;
@@ -344,10 +325,6 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
     }
     if (bfloor_used) {
       cons(m,IAN,k,j,i) = u.mu;
-    }
-    if (hardwall_used) {
-      cons(m,IAN,k,j,i) = w.pp/bmag;
-      sumh++;
     }
 
     prim(m,IDN,k,j,i) = w.d;
@@ -366,16 +343,11 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
       }
       prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
     }
-  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_),
-     Kokkos::Sum<int>(nhardwall_));
+  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
 
   pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
   pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;
   pmy_pack->pmesh->ecounter.neos_tfloor += nfloort_;
-  if (pmy_pack->pmhd->pcgl_lf != nullptr) {
-    pmy_pack->pmhd->pcgl_lf->diagnostics.hardwall_projection +=
-        static_cast<std::uint64_t>(nhardwall_);
-  }
 
   return;
 }
@@ -403,10 +375,10 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
   const int nkji = (ku - kl + 1)*nji;
   const int nmkji = nmb*nkji;
 
-  int nfloord_=0, nfloore_=0, nfloort_=0, nhardwall_=0;
+  int nfloord_=0, nfloore_=0, nfloort_=0;
   Kokkos::parallel_reduce("mhd_cgl_lf_refresh_prim",
   Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt, int &sumh) {
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/ni;
@@ -429,11 +401,6 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
     SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
                                        tfloor_used, bfloor_used);
-    const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
-    const Real bmag = sqrt(bsqr);
-    const bool hardwall_used =
-        eos.hardwall_lim && bmag > eos.bfloor &&
-        cgl::ApplyHardwallLimiter(w.e, w.pp, bsqr, eos);
 
     if (dfloor_used) {
       cons(m,IDN,k,j,i) = u.d;
@@ -447,10 +414,6 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     if (bfloor_used) {
       cons(m,IAN,k,j,i) = u.mu;
     }
-    if (hardwall_used) {
-      cons(m,IAN,k,j,i) = w.pp/bmag;
-      sumh++;
-    }
     prim(m,IDN,k,j,i) = w.d;
     prim(m,IVX,k,j,i) = w.vx;
     prim(m,IVY,k,j,i) = w.vy;
@@ -459,16 +422,11 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     prim(m,IPP,k,j,i) = w.pp;
 
     (void) sumt;
-  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_),
-     Kokkos::Sum<int>(nhardwall_));
+  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
 
   pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
   pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;
   pmy_pack->pmesh->ecounter.neos_tfloor += nfloort_;
-  if (pmy_pack->pmhd->pcgl_lf != nullptr) {
-    pmy_pack->pmhd->pcgl_lf->diagnostics.hardwall_projection +=
-        static_cast<std::uint64_t>(nhardwall_);
-  }
 
   return;
 }
@@ -606,7 +564,6 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
   const EOS_Data eos = eos_data;
   const bool flim = eos_data.flim;
   const bool mlim = eos_data.mlim;
-  const bool hardwall = eos_data.hardwall_lim;
   const Real bfloor = eos_data.bfloor;
   const auto *pcgl_lf = pmy_pack->pmhd->pcgl_lf;
   const bool landau_fluid_active = (pcgl_lf != nullptr);
@@ -640,11 +597,21 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
     const Real initial_pperp = w.pp;
     HydCons1D u;
     if (mode == CGLCollisionMode::full) {
-      SingleCollRates_CGLMHD(w, eos, dtc, mlim && !hardwall, flim && !hardwall);
+      SingleCollRates_CGLMHD(w, eos, dtc, mlim, flim);
     }
     SingleCollWalls_CGLMHD(w, eos, backup);
     if (w.e == initial_ppar && w.pp == initial_pperp) return;
     SingleP2C_CGLMHD(w, bfloor, u);
+    const Real kinetic = 0.5*(SQR(cons(m,IM1,k,j,i)) + SQR(cons(m,IM2,k,j,i)) +
+                              SQR(cons(m,IM3,k,j,i)))/w.d;
+    const Real magnetic = 0.5*(SQR(w.bx) + SQR(w.by) + SQR(w.bz));
+    const Real eint = cons(m,IEN,k,j,i) - kinetic - magnetic;
+    const Real admissible = CGLWallAdmissibleAnisotropy(w, eint, u.mu, eos, backup);
+    if (admissible != u.mu) {
+      u.mu = admissible;
+      CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+          w.d, eint, u.mu, fmax(sqrt(2.0*magnetic), bfloor), w.e, w.pp);
+    }
 
     // Correct conserved anisotropy variable
     cons(m,IAN,k,j,i) = u.mu;

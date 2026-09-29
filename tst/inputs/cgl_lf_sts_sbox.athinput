@@ -48,7 +48,9 @@ cgl_heat_flux_integrator = sts
 cgl_lf_strict_admissibility = true
 lf_k_parallel = 1.0
 lf_coefficient_mode = local
-nu_coll = 0.0
+# Keep shear-driven anisotropy inside the fluid firehose wall while
+# retaining nonzero LF transport and the original analytic magnetic state.
+nu_coll = 30.0
 reconstruct = plm
 rsolver = hlle
 gamma = 1.666666666666667
