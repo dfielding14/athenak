@@ -701,6 +701,8 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                     (
                         f"mesh/nx1={resolution}",
                         f"meshblock/nx1={resolution}",
+                        # Keep the one-e-fold error budget proportional to dx^2.
+                        f"problem/decay_rel_tol={0.003*(128/int(resolution))**2}",
                     ),
                     validation_output=True,
                     accuracy_study="collisionless_resolution",
@@ -713,7 +715,9 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 cases.append(CaseSpec(
                     f"accuracy_{component}_sts_ratio{suffix}",
                     source,
-                    (f"time/sts_max_dt_ratio={dt_ratio}",),
+                    (f"time/sts_max_dt_ratio={dt_ratio}",
+                     # The ratio-1000 probe deliberately uses only a few large steps.
+                     f"problem/decay_rel_tol={0.04 if dt_ratio == '1000.0' else 0.003}"),
                     validation_output=True,
                     accuracy_study="timestep_sweep",
                     accuracy_parameters=(
@@ -1631,7 +1635,8 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
     disabled_cases = []
     for spec in workflow_cases(args.workflow):
         source = (ROOT_DIR / spec.input_path).read_text(encoding="utf-8")
-        if model_choices(source, spec.overrides)["passive_delta"].lower() in ("true", "1"):
+        passive = model_choices(source, spec.overrides)["passive_delta"].lower()
+        if passive in ("true", "1"):
             reason = "Passive CGL thermal energy equation is disabled pending WO2."
             print(f"Skipping {spec.name}: {reason}")
             disabled_cases.append({"name": spec.name, "reason": reason})

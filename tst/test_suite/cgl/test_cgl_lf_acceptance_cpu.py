@@ -91,3 +91,46 @@ def test_eigen_wave_rejects_disabled_lf(tmp_path, branch):
     result = run_case(tmp_path, name, source=source)
     assert result.returncode != 0
     assert "paper_eigen_wave" in result.stdout and "rel_err=" in result.stdout
+
+
+def decay_reference(chi_parallel, chi_perp, nu, time, component):
+    # Fourier amplitudes of the two pressure moments: LF conduction plus
+    # isotropization that conserves (T_parallel + 2 T_perp)/3.
+    k2 = (2.0*np.pi)**2
+    matrix = np.array([[-chi_parallel*k2 - 2.0*nu/3.0, 2.0*nu/3.0],
+                       [nu/3.0, -chi_perp*k2 - nu/3.0]])
+    values, vectors = np.linalg.eig(matrix)
+    initial = np.eye(2)[component]
+    return (vectors @ (np.exp(values*time)*np.linalg.solve(vectors, initial)))[component]
+
+
+@pytest.mark.parametrize("component", (0, 1), ids=("parallel", "perp"))
+@pytest.mark.parametrize("nu", (0.0, 10.0), ids=("collisionless", "collisional"))
+def test_decay_resolves_closure_coefficients(tmp_path, component, nu):
+    mode = ("parallel", "perp")[component]
+    name = f"cgl_lf_quant_{mode}" + ("_collisional" if nu else "")
+    result = run_case(tmp_path, name, "problem/validation_output=true",
+                      f"problem/validation_output_dir={tmp_path}")
+    assert result.returncode == 0, result.stdout + result.stderr
+    cycles = int(re.findall(r"cycle=(\d+)", result.stdout)[-1])
+    assert cycles >= 100
+    with next(tmp_path.glob("*.csv")).open() as stream:
+        data = {row[0]: float(row[1]) for row in list(csv.reader(stream))[1:]}
+    k = 2.0*np.pi
+    chi_parallel = 8.0/(np.sqrt(8.0*np.pi)*k + (3.0*np.pi - 8.0)*nu)
+    # SHD97/BGK perpendicular moment denominator is +2 nu.
+    chi_perp = 2.0/(np.sqrt(2.0*np.pi)*k + 2.0*nu)
+    assert abs((chi_parallel, chi_perp)[component]*k*k*data["time"] - 1) < 1e-14
+    reference = decay_reference(chi_parallel, chi_perp, nu, data["time"], component)
+    measured = data["measured_sin_amp"]/data["initial_amp"]
+    tolerance = 3.0e-3
+    assert abs(measured/reference - 1) < tolerance
+    assert abs(reference - 1) >= 10.0*tolerance
+    # These mistakes must lie far outside this test's acceptance window.
+    swapped = decay_reference(chi_perp, chi_parallel, nu, data["time"], component)
+    assert abs(swapped/reference - 1) > 10.0*tolerance
+    if nu and component == 1:
+        for wrong_perp in (0.5*chi_perp, 2.0*chi_perp,
+                           2.0/(np.sqrt(2.0*np.pi)*k + nu)):
+            wrong = decay_reference(chi_parallel, wrong_perp, nu, data["time"], component)
+            assert abs(wrong/reference - 1) > 10.0*tolerance

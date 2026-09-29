@@ -205,12 +205,12 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G2 (30 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G3 (31 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G3-G4 | One-e-fold decay and per-cell limiter-map tests have passing candidates; integration pending. |
+| G4 | Per-cell limiter-map tests have a passing candidate; integration pending. |
 | G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
 | G7 | Update current and retained legacy documentation to match demonstrated coverage. |
 | P1 | Variable-restricted communication and frozen-B BC skip remain. |
@@ -622,3 +622,26 @@ Three too-short cases and two disabled-LF eigenmodes are rejected. All 23 new
 checks and all 27 full-workflow cases pass. Analytic eigenvalues and amplitudes
 are unchanged; only test times, resolution coverage and tolerances change.
 Optional collisional/entropy Figure 17 eigenbranches remain outside this task.
+
+### T-G3: resolve one e-folding of parallel and perpendicular decay
+
+The four quantitative inputs now use 128 cells, STS ratio 10 and hundreds of
+cycles to $\chi k^2t=1$, with amplitude tolerance 0.003 and phase tolerance 1e-6.
+An independent Python matrix exponential verifies amplitudes and proves that
+swapped diffusivities, half/double collisional perpendicular diffusivity and the
+old +nu denominator lie more than ten tolerance units away. Measured errors are
+0.000208-0.000271 over 208/208/416/649 cycles; all four new and two existing decay
+checks pass.
+
+For initial amplitude 1e-4, collisionless parallel/perpendicular expected final
+amplitudes are both 3.678794411714424e-5. The collisional parallel-initial pair is
+(1.9221708099735522e-5,1.3784043081777392e-5) at t=0.14484812929181745;
+the perpendicular-initial pair is (1.169172828934281e-5,1.7978744606824823e-5)
+at t=0.45277409930656082. These replace the t=0.02 values recorded in D3 because
+the acceptance duration changes; the reference equations do not.
+
+All 33 accuracy-study cases also pass. Its deliberately coarse 32/64-cell
+samples use dx-squared error budgets 0.048/0.012, while 128 cells retains 0.003.
+The ratio-1000 few-step probe uses 0.04 (measured maximum error 0.003779).
+Those convergence/cost probes are distinct from the strengthened ratio-10
+acceptance and do not relax its criteria.
