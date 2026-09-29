@@ -120,6 +120,21 @@ Release build, C++/Python style checks, all 68 selected physical/workflow CPU
 regressions, and the expanded 21-case full workflow pass. The latter bundle is
 `/tmp/cgl-wo1-b3-full`. Existing physical expected values are unchanged.
 
+### T-B4: weak-field anisotropy transport
+
+Triage: still present. HLLE now isotropizes only the weak-field side, avoids
+division by zero there, and uses the magnetized neighbor's field for weak-upwind
+A transport. LLF uses the same reference field. The LLF reference copy is aligned.
+
+The built-in FOFC test exercises real HLLE/LLF fluxes in a downstream finite-volume
+cell update, including momentum, total energy and induction, followed by real C2P.
+With bfloor=1e-10 and an incoming weak-field mass fraction of 0.1, the old
+downstream pressure ratios 729 and 708.157 become 0.729 and 0.708157, inside
+[0.5,2], without floors. Reverse flow, magnetized-side anisotropy preservation,
+zero/threshold B and both-weak states are checked too. This is a single physical
+cell update rather than a many-cycle grid run. Release build, changed C++ style,
+and the three built-in FOFC/reconstruction regressions pass.
+
 ## Remaining task triage
 
 All acceptance outcomes below remain unverified until the corresponding task.

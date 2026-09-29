@@ -16,7 +16,9 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
+#include "mhd/rsolvers/hlle_cgl.hpp"
 #include "mhd/rsolvers/llf_mhd_singlestate.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
@@ -46,6 +48,123 @@ void CheckClose(const std::string &label, Real got, Real expected) {
 template <typename ViewType>
 auto HostCopy(const ViewType &view) {
   return Kokkos::create_mirror_view_and_copy(HostMemSpace(), view);
+}
+
+// Exercise the reconstructed HLLE path with one face, as the FOFC checks below
+// exercise the single-state LLF path.
+MHDCons1D BelowFloorHlleFlux(const MHDPrim1D left, const MHDPrim1D right,
+                            const EOS_Data eos) {
+  constexpr int nvars = IAN + 1;
+  RegionIndcs indcs{};
+  CoordData coord{};
+  DualArray1D<RegionSize> size("below_floor_size", 1);
+  DvceArray4D<Real> bx("below_floor_bx", 1, 1, 1, 1);
+  DvceArray4D<Real> ey("below_floor_ey", 1, 1, 1, 1);
+  DvceArray4D<Real> ez("below_floor_ez", 1, 1, 1, 1);
+  DvceArray5D<Real> flux("below_floor_flux", 1, nvars, 1, 1, 1);
+  DvceArray5D<Real> pflux("below_floor_pflux", 1, 6, 1, 1, 1);
+  Kokkos::deep_copy(bx, 0.0);
+  const size_t scratch_size = 2*ScrArray2D<Real>::shmem_size(nvars, 1)
+                           + 2*ScrArray2D<Real>::shmem_size(NMAG, 1);
+  par_for_outer("below_floor_hlle", DevExeSpace(), scratch_size, 0, 0, 0,
+  KOKKOS_LAMBDA(TeamMember_t member, const int) {
+    ScrArray2D<Real> wl(member.team_scratch(0), nvars, 1);
+    ScrArray2D<Real> wr(member.team_scratch(0), nvars, 1);
+    ScrArray2D<Real> bl(member.team_scratch(0), NMAG, 1);
+    ScrArray2D<Real> br(member.team_scratch(0), NMAG, 1);
+    par_for_inner(member, 0, 0, [&](const int i) {
+      wl(IDN,i) = left.d; wl(IVX,i) = left.vx;
+      wl(IVY,i) = left.vy; wl(IVZ,i) = left.vz;
+      wl(IPR,i) = left.e; wl(IPP,i) = left.pp;
+      wr(IDN,i) = right.d; wr(IVX,i) = right.vx;
+      wr(IVY,i) = right.vy; wr(IVZ,i) = right.vz;
+      wr(IPR,i) = right.e; wr(IPP,i) = right.pp;
+      bl(IBX,i) = 0.0; bl(IBY,i) = left.by; bl(IBZ,i) = left.bz;
+      br(IBX,i) = 0.0; br(IBY,i) = right.by; br(IBZ,i) = right.bz;
+    });
+    member.team_barrier();
+    mhd::HLLE_CGL(member, eos, indcs, size, coord, 0, 0, 0, 0, 0, IVX,
+                  wl, wr, bl, br, bx, flux, ey, ez, false, pflux);
+  });
+  const auto hf = HostCopy(flux);
+  const auto hy = HostCopy(ey);
+  const auto hz = HostCopy(ez);
+  MHDCons1D f{};
+  f.d = hf(0,IDN,0,0,0); f.mx = hf(0,IM1,0,0,0);
+  f.my = hf(0,IM2,0,0,0); f.mz = hf(0,IM3,0,0,0);
+  f.e = hf(0,IEN,0,0,0); f.mu = hf(0,IAN,0,0,0);
+  f.by = hy(0,0,0,0); f.bz = hz(0,0,0,0);
+  return f;
+}
+
+void CheckBelowFloorTransport(const EOS_Data &input_eos) {
+  EOS_Data eos = input_eos;
+  eos.bfloor = 1.0e-10;
+  eos.dfloor = eos.pfloor = 1.0e-30;
+  eos.passive = false;
+  MHDPrim1D weak{}, strong{};
+  weak.d = strong.d = 1.0;
+  weak.vx = strong.vx = 10.0;
+  weak.e = weak.pp = strong.e = strong.pp = 1.0;
+  weak.by = 1.0e-12;
+  strong.by = 1.0;
+  for (int llf=0; llf<2; ++llf) {
+    auto solve = [&](const MHDPrim1D &left, const MHDPrim1D &right) {
+      MHDCons1D f{};
+      if (llf) {
+        mhd::SingleStateLLF_CGL(left, right, 0.0, eos, f);
+      } else {
+        f = BelowFloorHlleFlux(left, right, eos);
+      }
+      return f;
+    };
+    const std::string name = llf ? "below-floor LLF" : "below-floor HLLE";
+    const MHDCons1D incoming = solve(weak, strong);
+    const MHDCons1D outgoing = solve(strong, strong);
+
+    // One finite-volume downstream-cell update for a 1D transverse-field contact.
+    // Advect a mass fraction f=0.1 from B<bfloor into B=1, including E and induction.
+    MHDCons1D u{};
+    u.d = 1.0; u.mx = 10.0; u.e = 52.0; u.by = 1.0;
+    const Real dt_dx = 0.01;
+    u.d += dt_dx*(incoming.d - outgoing.d);
+    u.mx += dt_dx*(incoming.mx - outgoing.mx);
+    u.my += dt_dx*(incoming.my - outgoing.my);
+    u.mz += dt_dx*(incoming.mz - outgoing.mz);
+    u.e += dt_dx*(incoming.e - outgoing.e);
+    u.mu += dt_dx*(incoming.mu - outgoing.mu);
+    u.by += dt_dx*(outgoing.by - incoming.by);  // stored flux is -F(By)
+    u.bz += dt_dx*(incoming.bz - outgoing.bz);
+    HydPrim1D w{};
+    bool df = false, ef = false, tf = false, bf = false;
+    SingleC2P_CGLMHD(u, eos, w, df, ef, tf, bf);
+    const Real ratio = w.pp/w.e;
+    if (!std::isfinite(ratio) || ratio < 0.5 || ratio > 2.0 || df || ef || tf || bf) {
+      Fail(name + " downstream pperp/ppar", ratio, 1.0);
+    }
+    std::cout << name << " downstream pperp/ppar=" << ratio
+              << " floors=" << df << ef << tf << bf << std::endl;
+    CheckClose(name + " weak upwind A/mass", incoming.mu/incoming.d, 0.0);
+
+    weak.vx = strong.vx = -10.0;
+    const MHDCons1D reverse = solve(strong, weak);
+    CheckClose(name + " reverse weak upwind A/mass", reverse.mu/reverse.d, 0.0);
+    weak.vx = strong.vx = 10.0;
+    strong.e = 0.75; strong.pp = 1.5;
+    const MHDCons1D magnetized = solve(strong, weak);
+    CheckClose(name + " magnetized upwind A/mass",
+                magnetized.mu/magnetized.d, std::log(2.0));
+    if (!llf) CheckClose(name + " magnetized pressure", magnetized.mx, 102.0);
+    strong.e = strong.pp = 1.0;
+    for (const Real bweak : {Real(0.0), eos.bfloor}) {
+      weak.by = bweak;
+      const MHDCons1D mixed = solve(weak, strong);
+      CheckClose(name + " zero/at-floor A/mass", mixed.mu/mixed.d, 0.0);
+    }
+    const MHDCons1D both = solve(weak, weak);
+    CheckClose(name + " both weak A/mass", both.mu/both.d, -3.0*std::log(eos.bfloor));
+    weak.by = 1.0e-12;
+  }
 }
 
 void CheckReconstructionFloors(const EOS_Data &input_eos) {
@@ -443,6 +562,7 @@ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
+  CheckBelowFloorTransport(pmhd->peos->eos_data);
   CheckReconstructionFloors(pmhd->peos->eos_data);
   CheckNonfiniteDetector(pmy_mesh_);
   Kokkos::deep_copy(pmhd->fofc, false);
