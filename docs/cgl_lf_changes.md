@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-E2 (21 of 41 numbered tasks). Candidate checks
+Completed and committed through T-E3 (22 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| E3 | Spitzer is implemented; verify it and fix missing-units handling. |
 | F1 | Candidate restores type-2 random forcing and nonzero modes; integration pending. |
 | F2 | Candidate single kick passes RK1/2/3 power checks; integration pending. |
 | F3 | Candidate conserved-momentum work passes single/two-fluid thermal-energy checks; integration pending. |
@@ -468,3 +467,16 @@ smoke script omits the passive input, and current/retained runbooks mark it disa
 The Release build, 110 selected CPU regressions and three independent constructor
 (double/single precision) and workflow-filter checks pass. No numerical reference
 values change; passive runtime evolution is deliberately unavailable until WO2.
+
+### T-E3: validate implemented Spitzer conduction and require units
+
+Triage: the pre-merge unimplemented-flux finding is obsolete. The current
+`Conduction::AddHeatFlux` calls the live temperature-dependent flux in all active
+directions, and `NewTimeStep` computes its bound. Saturated heat flux already
+rejects STS. No obsolete "not implemented" fence is added.
+
+The constructor now requires a units object for Spitzer conductivity before any
+conversion can dereference it. Two new regressions check the missing-units error
+and a finite, positive, nonzero thermal update with units, for both unsaturated
+and saturated explicit Spitzer conduction. All six STS diffusion regressions
+pass. Existing reference values and implemented conduction behavior are unchanged.

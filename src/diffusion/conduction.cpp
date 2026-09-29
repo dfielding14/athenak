@@ -112,6 +112,12 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
               << "' must be 'constant', 'spitzer', or 'power_law'" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if (tdep_kappa && !power_law_kappa && pmy_pack->punit == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Spitzer conduction requires a <units> block"
+              << " to convert temperature and conductivity" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   kappa_tref = pin->GetOrAddReal(block, "conductivity_tref", 1.0);
   kappa_exponent = pin->GetOrAddReal(block, "conductivity_exponent", 0.0);
   kappa_floor = pin->GetOrAddReal(block, "conductivity_floor", 0.0);
