@@ -293,3 +293,20 @@ to t=0.3 and 106 capped/explicit cycles to t=0.04, with no repairs or hard-bound
 violations. This is a collisional boundary/restart test; the original
 collisionless strict fixture is not claimed to be supported. Evidence:
 `/tmp/cgl-wo1-sbox-final/summary.txt`.
+
+### T-C3: additive LF suppression rates
+
+Triage: the shared limiter helper selected a maximum/replacement rate. It now adds
+soft and configured backup rates, with background collisions added exactly once
+by callers. Threshold equality is admissible and contributes no scattering.
+The existing shared calls update both production transport and retained pgen
+references. The snapshot transport proxy now uses the same numeric parameters,
+configured backup policy and additive rates.
+
+Independent prescribed-rate cases use background 7, soft 11 and backup 101:
+totals are 7, 18, 108 and 119, including a fluid-wall-only activation and scaled
+magnetic fields. Production safe/fast face fluxes are checked against independently
+prescribed totals 18 and 119. The proxy has a separate eight-state rate check.
+Standalone heat-flux tests pass in both precisions; all 84 selected CPU regressions
+pass. Existing expected helper rates change from backup alone to backup plus soft
+(1e10 to 1e10+20 in the fixture, and configured 1234 to 1254).

@@ -54,3 +54,11 @@ thresholds. AMR enforces positivity, the fluid wall, and any enabled backup wall
 The finite-rate residual is $(\Delta p_0-\Delta p_{\rm threshold})/(1+\nu_{\rm lim}dt)$,
 so the stiff limit agrees with projection only to that residual and roundoff.
 The threshold and backup factors do not enable a limiter.
+
+LF suppression uses $\nu_{\rm eff}=\nu_{\rm coll}+\nu_{\rm soft}+\nu_{\rm backup}$.
+The soft contribution is `limiter_nu_coll` when an enabled limiter's threshold
+is exceeded; the backup contribution is `limiter_backup_nu` when
+`backup_limiters = true` and a backup or fluid firehose wall is exceeded.
+Both contributions apply when both tests hold. A state exactly on a threshold
+or wall does not receive that contribution. These frequencies suppress the
+heat flux; pressure backup walls remain projections.

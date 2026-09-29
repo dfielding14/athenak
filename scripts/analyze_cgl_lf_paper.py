@@ -642,7 +642,6 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
         "nu_coll",
         "mirror_limiter",
         "firehose_limiter",
-        "cgl_firehose_threshold",
         "limiter_nu_coll",
         "backup_limiters",
         "dfloor",
@@ -705,42 +704,37 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
         assert cparallel0 is not None
         cparallel = np.full(rho.shape, cparallel0)
 
-    nu_limiter = np.zeros(rho.shape, dtype=float)
     paniso = pperp - ppar
     limiter_rate = max(model_float(model, "limiter_nu_coll", 0.0) or 0.0, 0.0)
-    configured_backup = model_bool(model, "backup_limiters", False)
-    strict_admissibility = model_bool(
-        model, "cgl_lf_strict_admissibility", True
-    )
-    instability_limiter_active = (
-        model_bool(model, "mirror_limiter", False)
-        or model_bool(model, "firehose_limiter", False)
-    )
-    backup = configured_backup or (
-        instability_limiter_active and not strict_admissibility
-    )
-    firehose_policy = str(model.get("cgl_firehose_threshold", "oblique"))
-    if firehose_policy not in FIREHOSE_THRESHOLD_DEFINITIONS:
-        raise ValueError(f"invalid cgl_firehose_threshold={firehose_policy}")
-    firehose_threshold = float(
-        FIREHOSE_THRESHOLD_DEFINITIONS[firehose_policy][
+    backup = model_bool(model, "backup_limiters", False)
+    legacy_firehose = str(model.get("cgl_firehose_threshold", "parallel"))
+    if legacy_firehose not in FIREHOSE_THRESHOLD_DEFINITIONS:
+        raise ValueError(f"invalid cgl_firehose_threshold={legacy_firehose}")
+    default_firehose = -2.0 * float(
+        FIREHOSE_THRESHOLD_DEFINITIONS[legacy_firehose][
             "paniso_over_b2_threshold"
         ]
     )
-    if model_bool(model, "firehose_limiter", False):
-        active = paniso <= firehose_threshold * bsqr
-        hard = paniso <= -1.5 * bsqr
-        rate = np.where(active, limiter_rate, 0.0)
-        if backup:
-            rate = np.where(hard, BACKUP_COLLISION_RATE, rate)
-        nu_limiter = np.maximum(nu_limiter, rate)
-    if model_bool(model, "mirror_limiter", False):
-        active = paniso >= 0.5 * bsqr
-        hard = paniso >= bsqr
-        rate = np.where(active, limiter_rate, 0.0)
-        if backup:
-            rate = np.where(hard, BACKUP_COLLISION_RATE, rate)
-        nu_limiter = np.maximum(nu_limiter, rate)
+    firehose_threshold = model_float(model, "firehose_threshold", default_firehose)
+    mirror_threshold = model_float(model, "mirror_threshold", 1.0)
+    firehose_factor = model_float(model, "firehose_backup_factor", 1.0)
+    mirror_factor = model_float(model, "mirror_backup_factor", 2.0)
+    backup_rate = model_float(model, "limiter_backup_nu", BACKUP_COLLISION_RATE)
+    soft = (
+        model_bool(model, "firehose_limiter", False)
+        & (paniso < -0.5 * firehose_threshold * bsqr)
+    ) | (
+        model_bool(model, "mirror_limiter", False)
+        & (paniso > 0.5 * mirror_threshold * bsqr)
+    )
+    hard = (paniso < np.maximum(
+        -bsqr, -0.5 * firehose_factor * firehose_threshold * bsqr
+    )) | (
+        paniso > 0.5 * mirror_factor * mirror_threshold * bsqr
+    )
+    nu_limiter = np.where(soft, limiter_rate, 0.0)
+    if backup:
+        nu_limiter += np.where(hard, backup_rate, 0.0)
     nu = max(model_float(model, "nu_coll", 0.0) or 0.0, 0.0) + nu_limiter
     denom_perp = SQRT_TWO_PI * cparallel * kpar + nu
     denom_parallel = SQRT_EIGHT_PI * cparallel * kpar + THREE_PI_MINUS_EIGHT * nu
@@ -797,6 +791,13 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
         "cgl_lf_strict_admissibility", "legacy_assumed_true"
     )
     choices_used["effective_backup_limiter"] = backup
+    choices_used.update({
+        "firehose_threshold": firehose_threshold,
+        "mirror_threshold": mirror_threshold,
+        "firehose_backup_factor": firehose_factor,
+        "mirror_backup_factor": mirror_factor,
+        "limiter_backup_nu": backup_rate,
+    })
     if coefficient_mode == "background":
         choices_used["lf_c_parallel0"] = model.get("lf_c_parallel0", "unspecified")
     result: dict[str, object] = {

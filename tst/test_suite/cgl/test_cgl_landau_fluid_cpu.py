@@ -721,6 +721,65 @@ def test_cgl_lf_relaxed_mode_obeys_configured_walls(
         _cleanup()
 
 
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+@pytest.mark.parametrize(("backup", "expected_rate"), (("false", 18), ("true", 119)))
+def test_cgl_lf_face_collision_rates_add(tmp_path, arithmetic, backup, expected_rate):
+    source = Path(
+        f"{UNIT_INPUT_ROOT}/cgl_lf_limiter_heat_flux_suppression.athinput").read_text()
+    source = source.replace("nlim = 1", "nlim = 0", 1)
+    source = source.replace("limiter_nu_coll = 10.0", "limiter_nu_coll = 11.0", 1)
+    source = source.replace("backup_limiters = false", f"backup_limiters = {backup}", 1)
+    source = source.replace("pperp0 = 1.9", "pperp0 = 2.5", 1)
+    source = source.replace(
+        "<mhd>", "<mhd>\nnu_coll = 7.0\nlimiter_backup_nu = 101.0", 1)
+    source = source.replace(
+        "<problem>", f"<problem>\nexpected_nu_eff = {expected_rate}", 1)
+    staged = tmp_path / "additive_collision_rates.athinput"
+    staged.write_text(source)
+    try:
+        result = subprocess.run(
+            ["./athena", "-i", str(staged), "job/basename=cgl_ci_additive_rates"],
+            capture_output=True, text=True, check=False,
+            env=_lf_mode_env(ATHENAK_CGL_LF_ARITHMETIC=arithmetic),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        marker = f"prescribed collision-rate flux passed: nu_eff={expected_rate}"
+        assert marker in result.stdout
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_transport_proxy_uses_additive_configured_rates():
+    spec = importlib.util.spec_from_file_location("cgl_wo1_analyzer", PAPER_ANALYZER_PATH)
+    analyzer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = analyzer
+    spec.loader.exec_module(analyzer)
+    delta = np.array([-1.5, -1.0, -0.75, -0.5, 0.5, 0.75, 1.0, 1.5])[None, None, :]
+    ones = np.ones_like(delta)
+    fields = {"dens": ones, "eint": 8.0*ones, "p_perp": 8.0+delta,
+              "bcc1": ones, "bcc2": 0.0*ones, "bcc3": 0.0*ones}
+    model = {
+        "lf_k_parallel": "1", "lf_coefficient_mode": "background",
+        "lf_c_parallel0": "2", "nu_coll": "7", "mirror_limiter": "true",
+        "firehose_limiter": "true", "firehose_threshold": "1",
+        "mirror_threshold": "1", "firehose_backup_factor": "2",
+        "mirror_backup_factor": "2", "limiter_backup_nu": "101",
+        "limiter_nu_coll": "11", "dfloor": "1e-12", "pfloor": "1e-12",
+        "tfloor": "1e-12", "bfloor": "1e-10",
+        "cgl_lf_strict_admissibility": "false",
+    }
+    for backup, expected in (
+        ("false", [11, 11, 11, 0, 0, 11, 11, 11]),
+        ("true", [112, 11, 11, 0, 0, 11, 11, 112]),
+    ):
+        model["backup_limiters"] = backup
+        result = analyzer.heat_flux_transport_proxy(
+            fields, (1.0, 1.0, 1.0), model, include_local_fields=True)
+        assert result["available"], result
+        np.testing.assert_array_equal(
+            result["local_fields"]["limiter_collision_rate"].ravel(), expected)
+
+
 def test_cgl_lf_relaxed_mode_does_not_enable_backup():
     common = (
         "mhd/cgl_lf_strict_admissibility=false",

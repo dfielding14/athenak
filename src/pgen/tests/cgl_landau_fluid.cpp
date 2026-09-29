@@ -15,6 +15,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -28,6 +29,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "eos/cgl_physics.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
@@ -930,7 +932,57 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
             << " min_unlimited_over_qmax=" << min_unlimited_ratio << std::endl;
 }
 
+// Compare production face fluxes with a prescribed total collision rate, without
+// calling the rate helper in the reference. This fixture has constant B=(1,0,0).
+void CheckPrescribedCollisionRateFlux(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto *lf = pmhd->pcgl_lf;
+  Require(pm->ncycle == 0 && lf != nullptr && !lf->lf_coeff_local,
+          "prescribed-rate flux test requires nlim=0 and background LF coefficients");
+  const Real nu = pin->GetReal("problem", "expected_nu_eff");
+  const Real cpar = lf->lf_c_parallel0;
+  const Real pi = std::acos(static_cast<Real>(-1.0));
+  const Real chi_par = 8.0*SQR(cpar)/(std::sqrt(8.0*pi)*cpar*lf->lf_k_parallel +
+                                      (3.0*pi - 8.0)*nu);
+  const Real chi_perp = 2.0*SQR(cpar)/(std::sqrt(2.0*pi)*cpar*lf->lf_k_parallel + nu);
+  const auto &indcs = pm->mb_indcs;
+  DvceFaceFld5D<Real> flux("prescribed_rate_flux", 1, pmhd->nmhd, 1, 1,
+                           indcs.nx1 + 2*indcs.ng);
+  lf->AddHeatFluxes(pmhd->w0, pmhd->bcc0, pmhd->peos->eos_data, 1.0, 1.0, flux);
+  auto actual = HostCopy(flux.x1f);
+  auto w = HostCopy(pmhd->w0);
+  auto b = HostCopy(pmhd->bcc0);
+  const int js = indcs.js, ks = indcs.ks;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/indcs.nx1;
+  const Real tolerance = 256.0*std::numeric_limits<Real>::epsilon();
+  for (int i = indcs.is; i <= indcs.ie + 1; ++i) {
+    Require(b(0,IBX,ks,js,i) == 1.0 && b(0,IBY,ks,js,i) == 0.0 &&
+            b(0,IBZ,ks,js,i) == 0.0, "prescribed-rate test requires B=(1,0,0)");
+    const Real dl = w(0,IDN,ks,js,i-1), dr = w(0,IDN,ks,js,i);
+    const Real pl = w(0,IPR,ks,js,i-1), pr = w(0,IPR,ks,js,i);
+    const Real tl = w(0,IPP,ks,js,i-1), tr = w(0,IPP,ks,js,i);
+    const Real rho = 0.5*(dl + dr);
+    const Real qpar_l = -chi_par*rho*(pr/dr - pl/dl)/dx;
+    const Real qperp_l = -chi_perp*rho*(tr/dr - tl/dl)/dx;
+    const Real qpar_max = std::sqrt(8.0/pi)*cpar*0.5*(pl + pr);
+    const Real qperp_max = std::sqrt(2.0/pi)*cpar*0.5*(tl + tr);
+    const Real qpar = qpar_l/(1.0 + std::abs(qpar_l)/qpar_max);
+    const Real qperp = qperp_l/(1.0 + std::abs(qperp_l)/qperp_max);
+    const Real expected_energy = qperp + 0.5*qpar;
+    Require(std::abs(actual(0,IEN,ks,js,i) - expected_energy) <=
+                tolerance*std::max(static_cast<Real>(1.0), std::abs(expected_energy)),
+            "prescribed collision rate disagrees with production energy flux");
+    Require(std::abs(actual(0,IAN,ks,js,i) - qperp) <=
+                tolerance*std::max(static_cast<Real>(1.0), std::abs(qperp)),
+            "prescribed collision rate disagrees with production moment flux");
+  }
+  std::cout << "CGL LF prescribed collision-rate flux passed: nu_eff=" << nu << std::endl;
+}
+
 void CheckLimiterHeatFluxSuppression(ParameterInput *pin, Mesh *pm) {
+  if (pin->DoesParameterExist("problem", "expected_nu_eff")) {
+    CheckPrescribedCollisionRateFlux(pin, pm);
+  }
   auto *pmhd = pm->pmb_pack->pmhd;
   auto w = HostCopy(pmhd->w0);
   const int is = pm->mb_indcs.is;

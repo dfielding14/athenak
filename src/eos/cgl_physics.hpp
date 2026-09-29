@@ -77,27 +77,17 @@ bool HardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos,
                      paniso > MirrorBackupWall(bsqr, eos)));
 }
 
+// Background collisions are added by the caller. Soft and backup scattering add.
 KOKKOS_INLINE_FUNCTION
 Real LimiterCollisionRate(const Real ppar, const Real pperp, const Real bsqr,
                           const EOS_Data &eos, const bool backup) {
   const Real paniso = pperp - ppar;
-  const Real rate = fmax(eos.lim_coll, static_cast<Real>(0.0));
-  Real nu = 0.0;
-  if (eos.flim) {
-    if (backup && FirehoseHardBoundViolated(paniso, bsqr, eos)) {
-      nu = eos.limiter_backup_nu;
-    } else if (FirehoseLimiterActive(paniso, bsqr, eos)) {
-      nu = rate;
-    }
-  }
-  if (eos.mlim) {
-    if (backup && MirrorHardBoundViolated(paniso, bsqr, eos)) {
-      nu = fmax(nu, eos.limiter_backup_nu);
-    } else if (MirrorLimiterActive(paniso, bsqr, eos)) {
-      nu = fmax(nu, rate);
-    }
-  }
-  return nu;
+  const bool soft = (eos.flim && paniso < FirehoseThreshold(bsqr, eos)) ||
+                    (eos.mlim && paniso > MirrorThreshold(bsqr, eos));
+  const Real soft_rate = soft ? eos.lim_coll : 0.0;
+  const Real backup_rate = backup && HardBoundViolated(paniso, bsqr, eos, true)
+                               ? eos.limiter_backup_nu : 0.0;
+  return soft_rate + backup_rate;
 }
 
 KOKKOS_INLINE_FUNCTION
