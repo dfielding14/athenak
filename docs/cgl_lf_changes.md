@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-F3 (25 of 41 numbered tasks). Candidate checks
+Completed and committed through T-F4 (26 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| F4 | Candidate axis correction makes all selected planar modes nonzero; integration pending. |
 | F5 | Candidate removes the dead parameter from the retained legacy pgen; integration pending. |
 | G0 | Several files are duplicates; legacy nonlinear wave setups are unique and must be retained. |
 | G1-G4 | References/assertions, long wave runs, actual convergence gates and limiter-map tests need strengthening. |
@@ -529,3 +528,14 @@ this check. The same fixture verifies nonzero modal amplitudes and the exact OU
 hold/update recurrence using tcorr and dt_update. All 23 current turbulence
 regressions pass. These shared-driver repairs apply to every driven fluid;
 existing physical reference values are unchanged.
+
+### T-F4: consistent parallel axis for planar forcing
+
+Triage: the paper-specific planar policy already used z as its parallel axis,
+but the generic policy still used x. `InitializeModes` now uses
+$k_\parallel=|k_z|$ and $k_\perp=\sqrt{k_x^2+k_y^2}$ for every type-1 policy,
+consistent with its selected modes and force components. This affects all fluids
+using the generic planar driver; existing paper-specific behavior is unchanged.
+All 25 turbulence regressions pass, including direct nonzero-power checks for
+every selected planar and type-2 mode. The planar check fails before the fix and
+passes with all 30 selected modes nonzero. No other reference values change.

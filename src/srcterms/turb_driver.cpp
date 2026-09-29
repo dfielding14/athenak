@@ -775,17 +775,9 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
                 }
               } else if (driving_type == 1) {
                 no_dir = 2;
-                if (projection_policy_ ==
-                    TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
-                  // MKS24 paper setup: B0 || z, so k_parallel = kz and
-                  // k_perp = (kx, ky), even though retained modes vary along z.
-                  kprl = fabs(kz);
-                  kprp = sqrt(SQR(kx) + SQR(ky));
-                } else {
-                  // Preserve the historical generic planar-driver convention.
-                  kprl = fabs(kx);
-                  kprp = sqrt(SQR(ky) + SQR(kz));
-                }
+                // The planar force is perpendicular to z for every policy.
+                kprl = fabs(kz);
+                kprp = sqrt(SQR(kx) + SQR(ky));
                 if (isotropic_power_spectrum && kiso > 1e-16) {
                   norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);
                 } else if (kprl > 1e-16 && kprp > 1e-16) {
