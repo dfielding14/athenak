@@ -122,3 +122,15 @@ def test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks():
                                            rtol=2.0e-12, atol=0.0)
     finally:
         Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)
+
+
+def test_cgl_lf_oblique_decay_agrees_across_mpi_ranks():
+    from test_suite.cgl.test_cgl_lf_oblique_decay_cpu import (
+        run_oblique_decay, assert_oblique_agreement,
+    )
+    for axis in ("x", "y"):
+        one_block = run_oblique_decay(axis, 64, nranks=1)
+        four_blocks = run_oblique_decay(axis, 32, nranks=1)
+        four_ranks = run_oblique_decay(axis, 32, nranks=4)
+        assert_oblique_agreement(one_block, four_blocks)
+        assert_oblique_agreement(one_block, four_ranks)

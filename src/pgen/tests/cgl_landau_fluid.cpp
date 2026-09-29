@@ -262,46 +262,59 @@ Projection ProjectTemperature(const HostView &w, ParameterInput *pin, Mesh *pm,
 template <typename HostView>
 Projection ProjectRotatedTemperature(const HostView &w, ParameterInput *pin, Mesh *pm,
                                      const int pidx) {
-  RequireSingleBlock(pm);
-  const int is = pm->mb_indcs.is;
-  const int js = pm->mb_indcs.js;
-  const int ks = pm->mb_indcs.ks;
-  const int nx1 = pm->mb_indcs.nx1;
-  const int nx2 = pm->mb_indcs.nx2;
-  const int nx3 = pm->mb_indcs.nx3;
+  const auto &indcs = pm->mb_indcs;
+  const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
   const RotatedWave wave = RotatedWavenumber(pin, pm);
   const Real xmin = pm->mesh_size.x1min;
   const Real ymin = pm->mesh_size.x2min;
   const Real zmin = pm->mesh_size.x3min;
-  const Real ncells = static_cast<Real>(nx1*nx2*nx3);
+  const Real volume = (pm->mesh_size.x1max - xmin)*(pm->mesh_size.x2max - ymin)
+                    *(pm->mesh_size.x3max - zmin);
+  auto &size = pm->pmb_pack->pmb->mb_size;
+  size.template sync<HostMemSpace>();
   Projection p;
-  for (int qk = 0; qk < nx3; ++qk) {
-    for (int qj = 0; qj < nx2; ++qj) {
-      for (int qi = 0; qi < nx1; ++qi) {
-        const Real value = w(0,pidx,ks + qk,js + qj,is + qi)
-                         / w(0,IDN,ks + qk,js + qj,is + qi);
-        p.mean += value;
+  for (int m=0; m<pm->pmb_pack->nmb_thispack; ++m) {
+    const Real dv = size.h_view(m).dx1*size.h_view(m).dx2*size.h_view(m).dx3;
+    for (int k=ks; k<=indcs.ke; ++k) {
+      for (int j=js; j<=indcs.je; ++j) {
+        for (int i=is; i<=indcs.ie; ++i) {
+          p.mean += w(m,pidx,k,j,i)/w(m,IDN,k,j,i)*dv;
+        }
       }
     }
   }
-  p.mean /= ncells;
-  for (int qk = 0; qk < nx3; ++qk) {
-    const Real z = CellCenterX(qk, nx3, zmin, pm->mesh_size.x3max);
-    for (int qj = 0; qj < nx2; ++qj) {
-      const Real y = CellCenterX(qj, nx2, ymin, pm->mesh_size.x2max);
-      for (int qi = 0; qi < nx1; ++qi) {
-        const Real value = w(0,pidx,ks + qk,js + qj,is + qi)
-                         / w(0,IDN,ks + qk,js + qj,is + qi) - p.mean;
-        const Real x = CellCenterX(qi, nx1, xmin, pm->mesh_size.x1max);
-        const Real phase = wave.kx*(x - xmin) + wave.ky*(y - ymin)
-                         + wave.kz*(z - zmin);
-        p.sin_amp += value*std::sin(phase);
-        p.cos_amp += value*std::cos(phase);
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &p.mean, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+#endif
+  p.mean /= volume;
+  for (int m=0; m<pm->pmb_pack->nmb_thispack; ++m) {
+    const auto &mb = size.h_view(m);
+    const Real dv = mb.dx1*mb.dx2*mb.dx3;
+    for (int qk=0; qk<nx3; ++qk) {
+      const Real z = CellCenterX(qk, nx3, mb.x3min, mb.x3max);
+      for (int qj=0; qj<nx2; ++qj) {
+        const Real y = CellCenterX(qj, nx2, mb.x2min, mb.x2max);
+        for (int qi=0; qi<nx1; ++qi) {
+          const Real value = w(m,pidx,ks + qk,js + qj,is + qi)
+                           /w(m,IDN,ks + qk,js + qj,is + qi) - p.mean;
+          const Real x = CellCenterX(qi, nx1, mb.x1min, mb.x1max);
+          const Real phase = wave.kx*(x - xmin) + wave.ky*(y - ymin)
+                           + wave.kz*(z - zmin);
+          p.sin_amp += value*std::sin(phase)*dv;
+          p.cos_amp += value*std::cos(phase)*dv;
+        }
       }
     }
   }
-  p.sin_amp *= 2.0/ncells;
-  p.cos_amp *= 2.0/ncells;
+#if MPI_PARALLEL_ENABLED
+  Real amplitudes[2] = {p.sin_amp, p.cos_amp};
+  MPI_Allreduce(MPI_IN_PLACE, amplitudes, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  p.sin_amp = amplitudes[0];
+  p.cos_amp = amplitudes[1];
+#endif
+  p.sin_amp *= 2.0/volume;
+  p.cos_amp *= 2.0/volume;
   return p;
 }
 
@@ -676,6 +689,9 @@ void CheckRotatedDecay(ParameterInput *pin, Mesh *pm) {
         << "time," << pm->time << "\n"
         << "initial_amp," << initial_amp << "\n"
         << "measured_amp," << measured_amp << "\n"
+        << "mean," << projection.mean << "\n"
+        << "sin_amp," << projection.sin_amp << "\n"
+        << "cos_amp," << projection.cos_amp << "\n"
         << "expected_amp," << expected_amp << "\n"
         << "chi_parallel," << chi_parallel << "\n"
         << "nu_eff," << nu_eff << "\n"
@@ -1749,7 +1765,7 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
           "quantitative LF tests require <mhd>/eos = cgl");
   const TestMode mode = ParseMode(pin);
-  if (mode == TestMode::rotated_decay || mode == TestMode::field_reversal ||
+  if (mode == TestMode::field_reversal ||
       mode == TestMode::hotspot) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
@@ -1757,7 +1773,7 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
              mode == TestMode::paper_eigen_wave ||
              mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pm);
-  } else {
+  } else if (mode != TestMode::rotated_decay) {
     RequireOneDimensionalSingleBlock(pm);
   }
   if (mode == TestMode::parallel_decay || mode == TestMode::perp_decay) {
@@ -1805,7 +1821,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Fail("quantitative LF tests require <mhd>/eos = cgl");
   }
   const TestMode mode = ParseMode(pin);
-  if (mode == TestMode::rotated_decay || mode == TestMode::field_reversal ||
+  if (mode == TestMode::field_reversal ||
       mode == TestMode::hotspot) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
@@ -1813,7 +1829,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
              mode == TestMode::paper_eigen_wave ||
              mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pmy_mesh_);
-  } else {
+  } else if (mode != TestMode::rotated_decay) {
     RequireOneDimensionalSingleBlock(pmy_mesh_);
   }
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);

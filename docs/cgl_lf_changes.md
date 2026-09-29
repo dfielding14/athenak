@@ -205,12 +205,12 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G4 (32 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G5 (33 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
+| G6 | Add two-level SMR decay/conservation. |
 | G7 | Update current and retained legacy documentation to match demonstrated coverage. |
 | P1 | Variable-restricted communication and frozen-B BC skip remain. |
 | P2 | Two-variable copies/update exist; flux clear remains. |
@@ -663,3 +663,21 @@ The one-cycle cellwise oracle is gated to its stated cycle/solver assumptions;
 the existing 20-cycle uniform limiter regression remains supported and checks
 the independent backward-Euler history at every cycle. The final combined run
 caught and repaired an initially overbroad G4 guard that rejected that caller.
+
+### T-G5: global oblique-decay projection
+
+Triage: the rotated-temperature projection required a single block. It now sums
+cell volumes across all blocks and MPI ranks, then measures mean, sine and cosine
+amplitudes. `ProjectRotatedTemperature` and its guards/CSV output in
+`src/pgen/tests/cgl_landau_fluid.cpp` changed; the new 64-squared oblique input is
+included in the full workflow. CPU and MPI regression checks compare one block,
+a 2-by-2 block layout, and one/four ranks for both x and y temperature modes with
+B=(sqrt(3)/2, 1/2, 0).
+
+Release CPU/MPI builds pass. The two CPU tests and MPI test (six MPI runs) pass:
+one e-folding takes 70/208 cycles, relative amplitude errors are 0.00085305 and
+0.00083045 against a 0.005 tolerance, and no repair/admissibility counters fire.
+Sampled state is bitwise equal between decompositions; summation-order mean
+changes reach 2.78e-14, with Fourier-amplitude changes around 1e-19. The checks
+allow bounded roundoff in global reductions. An isolated old-projection negative
+control fails by approximately 100% on four ranks. Physical references unchanged.
