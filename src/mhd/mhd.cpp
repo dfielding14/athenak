@@ -298,7 +298,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
                     << pmy_pack->pmesh->GetBoundaryString(boundary) << "." << std::endl
                     << "During LF stages the CGL IAN slot temporarily stores magnetic "
                     << "moment; fixed-inflow data and user callbacks do not have a "
-                    << "magnetic-moment-aware boundary contract." << std::endl;
+                    << "magnetic-moment-aware boundary contract; support is deferred to WO2."
+                    << std::endl;
           std::exit(EXIT_FAILURE);
         }
       }

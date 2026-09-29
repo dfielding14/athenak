@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-D6 (19 of 41 numbered tasks). Candidate checks
+Completed and committed through T-E1 (20 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| E1 | Representation fence already exists and has regression coverage. |
 | E2 | Passive speeds already fixed; constructor-fence candidate passes double/single checks; integration pending. |
 | E3 | Spitzer is implemented; verify it and fix missing-units handling. |
 | F1 | Candidate restores type-2 random forcing and nonzero modes; integration pending. |
@@ -448,3 +447,11 @@ results agree to 2e-12. Removing the existing refresh is a failing negative
 control: the heated post sweep incorrectly retains seven stages. Both new CPU
 cases, all three MPI regressions, all 11 AMR regressions and the 27-case full
 workflow pass. Existing expected values and tolerances are unchanged.
+
+### T-E1: representation-aware boundary guard
+
+Triage: already fixed. The `MHD` constructor rejects inflow/user boundaries for
+both explicit and STS LF split integration because IAN temporarily stores
+magnetic moment. The message now points to WO2; the existing policy is unchanged.
+The regression now includes periodic alongside outflow, reflect and diode.
+All ten allowed/rejected boundary cases pass. No reference values change.

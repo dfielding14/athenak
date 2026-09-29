@@ -1279,10 +1279,11 @@ def test_cgl_lf_rejects_representation_blind_boundaries(
     assert expected in output
     assert "IAN slot temporarily stores magnetic moment" in output
     assert "do not have a magnetic-moment-aware boundary contract" in output
+    assert "support is deferred to WO2" in output
 
 
 @pytest.mark.parametrize("integrator", ("sts", "explicit"))
-@pytest.mark.parametrize("boundary", ("reflect", "outflow", "diode"))
+@pytest.mark.parametrize("boundary", ("periodic", "reflect", "outflow", "diode"))
 def test_cgl_lf_allows_representation_preserving_boundaries(integrator, boundary):
     try:
         flags = [
