@@ -107,6 +107,14 @@ class CGLLandauFluid {
   parabolic::ParabolicIntegratorMode mode;
   CGLLFDiagnostics diagnostics;
 
+  void SetFusedPrimitiveRefresh(bool enabled) {
+    fused_primitive_refresh_ = enabled;
+    precomputed_ = false;
+  }
+  bool UsesFusedPrimitiveRefresh() const {return fused_primitive_refresh_;}
+  void RefreshPrimitives(DvceArray5D<Real> &u, const DvceArray5D<Real> &bcc,
+                         DvceArray5D<Real> &w, const EOS_Data &eos,
+                         int il, int iu, int jl, int ju, int kl, int ku);
   void AddHeatFluxes(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
                      const DvceFaceFld4D<Real> &b, const EOS_Data &eos,
                      Real dt_sweep, Real rkl_weight,
@@ -141,6 +149,10 @@ class CGLLandauFluid {
   std::uint64_t profile_counts_[kCGLLFProfileBucketCount] = {};
   Real profile_detail_sink_ = 0.0;
   DvceArray4D<Real> tpar_, tperp_, bmag_;
+  // C2P and LF use different norm expressions; retain both rounding histories.
+  DvceArray4D<Real> bmag_c2p_;
+  bool fused_primitive_refresh_ = false;
+  bool precomputed_ = false;
   Real stage_qpar_work_ = 0.0;
   Real stage_qperp_work_ = 0.0;
   Real sweep_qpar_work_ = 0.0;

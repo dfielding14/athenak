@@ -226,6 +226,8 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     peos->CGLAnisotropyToMagneticMoment(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   cgl_slot_representation = CGLSlotRepresentation::magnetic_moment;
+  pcgl_lf->SetFusedPrimitiveRefresh(has_sts_cgl_lf &&
+      !pmy_pack->pmesh->multilevel && psbox_u == nullptr && psbox_b == nullptr);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);
@@ -612,8 +614,11 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
       RefreshCellCenteredBFromFace(pmy_pack, b0, bcc0, il, iu, jl, ju,
                                    kl, ku);
     }
-    peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju,
-                                           kl, ku);
+    if (pcgl_lf->UsesFusedPrimitiveRefresh()) {
+      pcgl_lf->RefreshPrimitives(u0, bcc0, w0, peos->eos_data, il, iu, jl, ju, kl, ku);
+    } else {
+      peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju, kl, ku);
+    }
   }
   pcgl_lf->RecordAdmissibility(
       u0, w0, bcc0, peos->eos_data,
@@ -654,6 +659,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     peos->CGLMagneticMomentToAnisotropy(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   cgl_slot_representation = CGLSlotRepresentation::anisotropy;
+  pcgl_lf->SetFusedPrimitiveRefresh(false);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "post",
                               STSSweepName(pdrive), "anisotropy", u0);

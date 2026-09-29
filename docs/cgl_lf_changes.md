@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G7; T-P1 deferred and T-P2 verified
-(37 of 41 numbered tasks resolved). Remaining candidates are listed below.
+Completed and committed through T-G7; T-P1 deferred and T-P2/P3 verified
+(38 of 41 numbered tasks resolved). Remaining candidates are listed below.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| P3 | Reduced refresh region exists; fused temperatures and frozen-B caching remain. |
 | P4-P5 | Flat LF kernel and conditional allocation exist; require bitwise/timing verification. |
 | P6 | Both side logarithms still evaluated; retain selected-side arithmetic order. |
 
@@ -805,3 +804,37 @@ the SMR/outflow case that rejected P1. Expected values unchanged. Timings
 | lf2d-mpi-4 | 5.315 / 311.00 | 4.930 / 283.74 |
 | lf3d-mpi-4 | 58.974 / 3739.98 | 55.703 / 3499.44 |
 | smr-mpi-4 | 5.452 / 245.65 | 5.044 / 215.16 |
+
+### T-P3: fuse uniform-grid primitive and temperature refresh
+
+Triage: the one-ghost intermediate/full-ghost final refresh already existed.
+`CGLLandauFluid::RefreshPrimitives` now recovers pressures and writes temperatures
+in the same pass for uniform, non-shearing RKL2 LF. Stage 1 caches the frozen
+magnetic magnitude; separate LF-scaled and C2P raw-square-root values preserve
+the original rounding. A C2P overload accepts the cached norm while retaining
+the original caller interface. The MHD sweep begin/end tasks reset cache state.
+Density/velocity stores are retained when density repair is needed, and all
+energy/moment repairs and floor counters remain. Multilevel, shear and explicit
+reference paths retain their existing refresh. No numerical expression is
+reassociated, and no runtime input option is added.
+
+CPU/MPI Release builds, style and both precision C2P regressions pass. All
+24 configurations times three repeats are byte-identical to post-G. A separate
+uniform 16-block outflow case combines nonuniform density/B, nonzero velocities,
+a scalar and ghost output: serial and MPI one/four ranks, three repeats each,
+also match all eight output files exactly. Its precompute calls fall from 40
+to 8 for 40 stages/four cycles, confirming cache reuse once per half-sweep.
+Auxiliary evidence: `/tmp/cgl-wo1-p3-aux/`; primary matrix:
+`/tmp/cgl-wo1-perf/runs/p3/`. Expected values unchanged. Timings before/after
+this commit (cycle ms / profiled compute microseconds per stage):
+
+| Case | P2 | P3 |
+| --- | --- | --- |
+| lf1d-serial-0 | 0.489 / 27.23 | 0.474 / 25.85 |
+| lf2d-serial-0 | 16.823 / 1093.94 | 16.418 / 1061.74 |
+| lf3d-serial-0 | 211.354 / 13710.46 | 204.298 / 13244.26 |
+| smr-serial-0 | 16.294 / 825.40 | 16.166 / 819.10 |
+| pure_cgl-serial-0 | 0.448 / n/a | 0.436 / n/a |
+| lf2d-mpi-4 | 4.930 / 283.74 | 4.821 / 277.25 |
+| lf3d-mpi-4 | 55.703 / 3499.44 | 55.044 / 3438.47 |
+| smr-mpi-4 | 5.044 / 215.16 | 5.118 / 217.78 |

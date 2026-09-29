@@ -76,11 +76,16 @@ For STS LF transport, MHD owns the split lifecycle:
    magnetic moment.
 2. Each STS stage calls `CGLLandauFluid::AddHeatFluxes`, which assigns every
    LF face consumed by the update; a separate flux clear is unnecessary.
-3. `AddHeatFluxes` precomputes `T_parallel`, `T_perp`, and `|B|`, constructs
+3. `AddHeatFluxes` prepares `T_parallel`, `T_perp`, and `|B|`, constructs
    x1/x2/x3 face states, evaluates capped parallel and perpendicular LF heat
-   fluxes, and writes only `IEN` and `IAN` face fluxes.
+   fluxes, and writes only `IEN` and `IAN` face fluxes. Uniform, non-shearing
+   STS sweeps cache both LF and primitive-recovery magnetic norms at stage 1.
 4. `STSUpdateU` applies the RKL2 update to energy and magnetic moment.
-5. `CGLRefreshPrimFromMagneticMoment` rebuilds CGL primitives between stages.
+5. Primitive recovery rebuilds pressures between stages. On the uniform,
+   non-shearing STS path, `CGLLandauFluid::RefreshPrimitives` also prepares the
+   next stage's temperatures in the same pass. Other paths retain
+   `CGLRefreshPrimFromMagneticMoment`. Intermediate stages refresh one ghost
+   layer; the last stage refreshes all ghosts.
 6. `RecordAdmissibility` updates LF health counters and optionally aborts in
    strict mode.
 7. `EndCGLLandauFluidSTSSweep` converts `IAN` back to conserved anisotropy.

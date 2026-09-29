@@ -259,7 +259,7 @@ KOKKOS_INLINE_FUNCTION
 void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
                                         HydPrim1D &w, bool &dfloor_used,
                                         bool &efloor_used, bool &tfloor_used,
-                                        bool &bfloor_used) {
+                                        bool &bfloor_used, const Real bmag) {
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   const Real dfloor_ = fmax(eos.dfloor, bsqr/eos.sigma_max);
   Real pfloor = eos.pfloor;
@@ -276,7 +276,6 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
   w.vy = di*u.my;
   w.vz = di*u.mz;
 
-  Real bmag = sqrt(bsqr);
   Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
   Real e_m = 0.5*bsqr;
@@ -313,6 +312,16 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
 
   (void) tfloor_used;
   return;
+}
+
+KOKKOS_INLINE_FUNCTION
+void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
+                                        HydPrim1D &w, bool &dfloor_used,
+                                        bool &efloor_used, bool &tfloor_used,
+                                        bool &bfloor_used) {
+  const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                    tfloor_used, bfloor_used, sqrt(bsqr));
 }
 
 //----------------------------------------------------------------------------------------
