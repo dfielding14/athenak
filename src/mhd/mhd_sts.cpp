@@ -163,48 +163,6 @@ TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
   (void) stage;
   TraceCGLLFTask(pmy_pack, "ClearSTSFlux", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_clear_flux);
-  const bool lf_only_sts_cell_update =
-      has_sts_cgl_lf && pcgl_lf != nullptr && !has_sts_viscosity &&
-      !has_sts_hyperviscosity && !has_sts_conduction && !has_sts_resistivity &&
-      !has_sts_scalar_diffusion;
-  if (lf_only_sts_cell_update) {
-    auto flx1 = uflx.x1f;
-    auto flx2 = uflx.x2f;
-    auto flx3 = uflx.x3f;
-    const int nmb = pmy_pack->nmb_thispack;
-    const int n31 = static_cast<int>(flx1.extent(2));
-    const int n21 = static_cast<int>(flx1.extent(3));
-    const int n11 = static_cast<int>(flx1.extent(4));
-    const int n32 = static_cast<int>(flx2.extent(2));
-    const int n22 = static_cast<int>(flx2.extent(3));
-    const int n12 = static_cast<int>(flx2.extent(4));
-    const int n33 = static_cast<int>(flx3.extent(2));
-    const int n23 = static_cast<int>(flx3.extent(3));
-    const int n13 = static_cast<int>(flx3.extent(4));
-    par_for("mhd_sts_clear_cgl_lf_flux1", DevExeSpace(), 0, nmb - 1, 0, 1,
-            0, n31 - 1, 0, n21 - 1, 0, n11 - 1,
-    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
-                  const int i) {
-      const int n = (q == 0) ? IEN : IAN;
-      flx1(m,n,k,j,i) = 0.0;
-    });
-    par_for("mhd_sts_clear_cgl_lf_flux2", DevExeSpace(), 0, nmb - 1, 0, 1,
-            0, n32 - 1, 0, n22 - 1, 0, n12 - 1,
-    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
-                  const int i) {
-      const int n = (q == 0) ? IEN : IAN;
-      flx2(m,n,k,j,i) = 0.0;
-    });
-    par_for("mhd_sts_clear_cgl_lf_flux3", DevExeSpace(), 0, nmb - 1, 0, 1,
-            0, n33 - 1, 0, n23 - 1, 0, n13 - 1,
-    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
-                  const int i) {
-      const int n = (q == 0) ? IEN : IAN;
-      flx3(m,n,k,j,i) = 0.0;
-    });
-    TraceCGLLFTask(pmy_pack, "ClearSTSFlux", "end", stage);
-    return TaskStatus::complete;
-  }
   Kokkos::deep_copy(DevExeSpace(), uflx.x1f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x2f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x3f, 0.0);

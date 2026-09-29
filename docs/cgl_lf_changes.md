@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G7; T-P1 evaluated and deferred under the bitwise rule
-(36 of 41 numbered tasks resolved). Remaining candidates are listed below.
+Completed and committed through T-G7; T-P1 deferred and T-P2 verified
+(37 of 41 numbered tasks resolved). Remaining candidates are listed below.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| P2 | Two-variable copies/update exist; flux clear remains. |
 | P3 | Reduced refresh region exists; fused temperatures and frozen-B caching remain. |
 | P4-P5 | Flat LF kernel and conditional allocation exist; require bitwise/timing verification. |
 | P6 | Both side logarithms still evaluated; retain selected-side arithmetic order. |
@@ -780,3 +779,29 @@ stage; rejected timings are diagnostic, not a claimed speedup):
 | lf2d-mpi-4 | 5.315 / 311.00 | 5.292 / 311.31 |
 | lf3d-mpi-4 | 58.974 / 3739.98 | 58.764 / 3763.08 |
 | smr-mpi-4 | 5.452 / 245.65 | 5.264 / 246.23 |
+
+### T-P2: remove redundant LF flux clearing
+
+Triage: LF STS register copies already select IEN/IAN and live blocks, and the
+update already handles only those two variables. The remaining redundant clear
+was removed from LF parabolic task registration in `MHD::AssembleMHDTasks` and
+its now-unreachable LF branch removed from `MHD::ClearSTSFlux`. Every live LF
+face assigns both updated flux slots before divergence or flux correction;
+non-LF clears and A/magnetic-moment conversions are unchanged. The profiling
+regression now verifies that the removed clear task has no profile row.
+
+Release CPU/MPI builds, style checks and the profiling regression pass. All
+24 configurations, repeated three times, are byte-identical to post-G, including
+the SMR/outflow case that rejected P1. Expected values unchanged. Timings
+(cycle ms / profiled compute microseconds per stage):
+
+| Case | Post-G | P2 |
+| --- | --- | --- |
+| lf1d-serial-0 | 0.513 / 30.20 | 0.489 / 27.23 |
+| lf2d-serial-0 | 17.949 / 1175.40 | 16.823 / 1093.94 |
+| lf3d-serial-0 | 222.032 / 14492.02 | 211.354 / 13710.46 |
+| smr-serial-0 | 17.653 / 927.78 | 16.294 / 825.40 |
+| pure_cgl-serial-0 | 0.414 / n/a | 0.448 / n/a |
+| lf2d-mpi-4 | 5.315 / 311.00 | 4.930 / 283.74 |
+| lf3d-mpi-4 | 58.974 / 3739.98 | 55.703 / 3499.44 |
+| smr-mpi-4 | 5.452 / 245.65 | 5.044 / 215.16 |

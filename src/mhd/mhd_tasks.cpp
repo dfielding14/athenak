@@ -147,7 +147,10 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
           &MHD::BeginCGLLandauFluidSTSSweep, this, pinit);
     }
 
-    TaskID pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
+    TaskID pclearf = none;
+    if (!has_cgl_lf_split) {
+      pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
+    }
     TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
     TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
     TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);

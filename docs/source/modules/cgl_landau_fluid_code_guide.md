@@ -74,8 +74,8 @@ For STS LF transport, MHD owns the split lifecycle:
 
 1. `BeginCGLLandauFluidSTSSweep` converts `IAN` from conserved anisotropy to
    magnetic moment.
-2. Each STS stage clears the LF flux slots and calls
-   `CGLLandauFluid::AddHeatFluxes`.
+2. Each STS stage calls `CGLLandauFluid::AddHeatFluxes`, which assigns every
+   LF face consumed by the update; a separate flux clear is unnecessary.
 3. `AddHeatFluxes` precomputes `T_parallel`, `T_perp`, and `|B|`, constructs
    x1/x2/x3 face states, evaluates capped parallel and perpendicular LF heat
    fluxes, and writes only `IEN` and `IAN` face fluxes.
@@ -164,8 +164,8 @@ time.
 ## STS Fast Paths
 
 The MHD STS update has a CGL-LF-only path when no other MHD STS process is
-active. In that case, flux clearing, state copies, and the update kernel touch
-only `IEN` and `IAN` instead of all MHD variables. This preserves the same RKL2
+active. In that case, state copies and the update kernel touch only `IEN` and
+`IAN` instead of all MHD variables. This preserves the same RKL2
 recurrence while avoiding full-array work for variables that LF does not
 advance.
 

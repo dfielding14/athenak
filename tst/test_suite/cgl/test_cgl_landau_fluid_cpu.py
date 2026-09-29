@@ -202,10 +202,10 @@ def test_cgl_lf_profile_summary_reports_core_buckets():
         assert result.returncode == 0, output
         assert "CGL Landau-fluid profiling enabled" in output
         assert "CGL Landau-fluid profile summary (shutdown)" in output
+        assert "sts_clear_flux" not in output
         for bucket in (
             "heat_flux_precompute",
             "heat_flux_flux1",
-            "sts_clear_flux",
             "sts_update_kernel",
             "primitive_refresh",
             "admissibility",
