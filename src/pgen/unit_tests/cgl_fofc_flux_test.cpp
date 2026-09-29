@@ -78,23 +78,8 @@ EOS_Data MakeCglEOS(bool passive=false) {
 
 Real CglFastSpeed(const Real d, const Real pr, const Real pp, const Real bx,
                   const Real by, const Real bz, const Real bfloor) {
-  // Match EOS_Data::IdealMHDFastSpeed exactly; this test isolates FOFC flux/EMF wiring.
-  Real bprp2 = by*by + bz*bz;
-  Real bx2 = bx*bx;
-  Real b2 = bx2 + bprp2;
-  if (b2 < bfloor*bfloor) {
-    Real p = ONE_3RD*pr + TWO_3RDS*pp;
-    Real asq = (5.0/3.0)*p;
-    Real qsq = b2 + asq;
-    Real tmp = b2 - asq;
-    return std::sqrt(0.5*(qsq + std::sqrt(tmp*tmp + 4.0*asq*bprp2))/d);
-  }
-  Real bhatx2 = bx2/b2;
-  Real qsq = b2 + 2.0*pp + (2.0*pr - pp)*bhatx2;
-  Real radicand = qsq*qsq + 4.0*pp*pp*(1.0 - bhatx2)*bhatx2
-                - 12.0*pr*pp*bhatx2*(2.0 - bhatx2)
-                + 12.0*pr*pr*bhatx2*bhatx2 - 12.0*bx2*pr;
-  return std::sqrt(0.5*(qsq + std::sqrt(std::abs(radicand)))/d);
+  // The independent wave-speed oracle lives in cgl_fast_speed_test.cpp.
+  return MakeCglEOS().IdealMHDFastSpeed(d, pr, pp, bx, by, bz, bfloor);
 }
 
 Real IsothermalFastSpeed(const Real d, const Real bx, const Real by, const Real bz,

@@ -707,15 +707,17 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
     paniso = pperp - ppar
     limiter_rate = max(model_float(model, "limiter_nu_coll", 0.0) or 0.0, 0.0)
     backup = model_bool(model, "backup_limiters", False)
-    legacy_firehose = str(model.get("cgl_firehose_threshold", "parallel"))
-    if legacy_firehose not in FIREHOSE_THRESHOLD_DEFINITIONS:
-        raise ValueError(f"invalid cgl_firehose_threshold={legacy_firehose}")
-    default_firehose = -2.0 * float(
-        FIREHOSE_THRESHOLD_DEFINITIONS[legacy_firehose][
-            "paniso_over_b2_threshold"
-        ]
-    )
-    firehose_threshold = model_float(model, "firehose_threshold", default_firehose)
+    firehose_threshold = model_float(model, "firehose_threshold", None)
+    if firehose_threshold is None:
+        # Old archives contain only the legacy policy; new ones carry the numeric value.
+        legacy_firehose = str(model.get("cgl_firehose_threshold", "parallel"))
+        if legacy_firehose not in FIREHOSE_THRESHOLD_DEFINITIONS:
+            raise ValueError(f"invalid cgl_firehose_threshold={legacy_firehose}")
+        firehose_threshold = -2.0 * float(
+            FIREHOSE_THRESHOLD_DEFINITIONS[legacy_firehose][
+                "paniso_over_b2_threshold"
+            ]
+        )
     mirror_threshold = model_float(model, "mirror_threshold", 1.0)
     firehose_factor = model_float(model, "firehose_backup_factor", 1.0)
     mirror_factor = model_float(model, "mirror_backup_factor", 2.0)

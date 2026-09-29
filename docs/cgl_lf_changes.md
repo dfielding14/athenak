@@ -205,12 +205,12 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-G0 (28 of 41 numbered tasks). Candidate checks
+Completed and committed through T-G1 (29 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| G1-G4 | References/assertions, long wave runs, actual convergence gates and limiter-map tests need strengthening. |
+| G2-G4 | Long wave runs, convergence gates and per-cell limiter-map tests have passing candidates; integration pending. |
 | G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
 | G7 | Update current and retained legacy documentation to match demonstrated coverage. |
 | P1 | Variable-restricted communication and frozen-B BC skip remain. |
@@ -582,3 +582,23 @@ with anisotropic linearly polarized Alfvén initial data. Retained links now nam
 the built-in quantitative pgen. No numerical state or expected value changes.
 The default target does not compile the removed custom pgens; its Release build
 and all 27 current full-workflow cases pass after removal.
+
+### T-G1: independent references and synchronized diagnostics
+
+The final copy audit confirms all A-D closure coefficients, configured additive
+rates and grad-B face normalization are synchronized. Uniform collisions use an
+exact exponential; collisional temperature amplitudes use the independent
+continuous 2x2 system; fast speeds use closed limits and offline Jacobian
+eigenvalues. Limiter rate sharing is checked by fixed literal totals and fluxes
+with independently prescribed frequencies. G2-G6 add time, convergence and
+multi-block checks around these references.
+
+The old expanded speed copy is removed from `cgl_fofc_flux_test.cpp`: that wiring
+test calls the actual EOS speed, whose independent oracle is tested separately.
+Its unequal active/passive flux and equal-state EMF checks pass. The snapshot
+heat-flux proxy now reads canonical numeric firehose metadata before falling
+back to old archived aliases; previously `model_choices` emitted legacy='none'
+and valid new inputs failed analysis. All 11 mechanism-analysis tests pass,
+including numeric 2/1.4 and archived parallel/oblique policies at a fixed physical
+state. No expected physical values change. The retained legacy cell-centered
+heat-flux diagnostics remain proxies, not independent face-flux oracles.
