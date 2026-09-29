@@ -108,7 +108,8 @@ class CGLLandauFluid {
   CGLLFDiagnostics diagnostics;
 
   void AddHeatFluxes(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
-                     const EOS_Data &eos, Real dt_sweep, Real rkl_weight,
+                     const DvceFaceFld4D<Real> &b, const EOS_Data &eos,
+                     Real dt_sweep, Real rkl_weight,
                      DvceFaceFld5D<Real> &f);
   void AdvanceHeatFluxWorkDiagnostics(const parabolic::RKL2Coefficients &coeffs,
                                       int stage, int nstages);

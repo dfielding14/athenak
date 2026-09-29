@@ -349,9 +349,8 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const int left = (face - 1 + nx1)%nx1;
   const int right = face%nx1;
   const Real bx = pin->GetOrAddReal("problem", "b0", 1.0);
-  const Real bz = pin->GetOrAddReal("problem", "bz0", 0.0);
-  const Real by = 0.5*(ByCell(pin, pm, left) + ByCell(pin, pm, right));
-  const Real bmag_face = std::sqrt(SQR(bx) + SQR(by) + SQR(bz));
+  const Real bmag_face = 0.5*BMagCell(pin, pm, left) +
+                           0.5*BMagCell(pin, pm, right);
   const Real bhx = bx/bmag_face;
   const Real grad_b_x = (BMagCell(pin, pm, right) - BMagCell(pin, pm, left))/dx;
   const Real gradpar_b = bhx*grad_b_x;
@@ -360,7 +359,9 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const Real pperp = pin->GetOrAddReal("problem", "pperp0", 1.2);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
   const Real cpar = FaceCParallel(pin, rho, ppar);
-  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar, pperp, bx, by, bz);
+  // The limiter depends only on field magnitude; supply the face Bbar.
+  const Real nu_eff = EffectiveCollisionFrequency(
+      pin, pm, ppar, pperp, bmag_face, 0.0, 0.0);
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real qperp_l = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
   const Real qperp = LimitedHeatFlux(qperp_l, kSqrtTwoOverPi*cpar*pperp);

@@ -325,3 +325,25 @@ input. A paper-smoke workflow probe passed the active and passive Alfvénic case
 its random case exposed a pre-existing incompatible driving-type/projection
 combination in the workflow override. This forcing configuration is addressed in
 batch F. No physical expected value changes in C4.
+
+### T-D1: CT-normal face field and arithmetic cell-magnitude normalization
+
+Triage: still present. `AddHeatFluxes` now receives the frozen CT face field.
+All 12 normal, diagnostic and profile face-state paths use its normal component,
+averaged transverse components and $\bar B=(|B_L|+|B_R|)/2$. The direction vector
+is not renormalized. Inverse-field factors, weak-field cutoff and limiter magnetic
+pressure use the same $\bar B$. Both retained grad-B reference copies were updated;
+`FaceCParallel` had no magnetic-field averaging to change.
+
+New 1D/2D field-reversal inputs run the LF sweep with the existing kinematic
+advection harness, seed 1e-8, guide field 0.03, sweep ratio 10 and 20 cycles.
+All eight safe/fast and full/none cases pass, including profile probe paths, with
+peak growth at most 0.9982 (1D) and 0.9991 (2D), positive pressures and no repairs.
+The 1D negative control reaches 45.27 times the seed after its first half-sweep
+and 1.56e6 by the third pre-sweep (peak pressure perturbation 0.0161188).
+The specified 2D negative control remains stable at its smaller dimensional dt;
+we do not reproduce the review's claimed 1e5 growth per sweep.
+
+All 93 selected CPU checks and 23 full-workflow cases pass. Existing smooth
+references/tolerances were not retuned; grad-B RMS error is 1.0126%. Changed C++
+and Python pass style checks.

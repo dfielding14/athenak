@@ -265,6 +265,30 @@ def test_cgl_lf_profile_detail_reports_directional_probe_buckets():
         _cleanup()
 
 
+@pytest.mark.parametrize("dimension", (1, 2))
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+@pytest.mark.parametrize("diagnostics", ("full", "none"))
+def test_cgl_lf_field_reversal_stability(dimension, arithmetic, diagnostics):
+    basename = f"cgl_ci_reversal_{dimension}d_{arithmetic}_{diagnostics}"
+    try:
+        _run_unit(
+            f"cgl_lf_field_reversal_{dimension}d.athinput", basename,
+            f"mhd/cgl_lf_arithmetic={arithmetic}",
+            f"mhd/cgl_lf_diagnostics={diagnostics}",
+            "mhd/cgl_lf_profile=true", "mhd/cgl_lf_profile_detail=true",
+        )
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        assert len(history["time"]) == 21
+        cells = 64 if dimension == 1 else 64 * 16
+        # Each of 20 cycles executes two seven-stage RKL2 sweeps at ratio 10.
+        assert history["lf_nstage"][-1] == cells * 20 * 2 * 7
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
+                     "lf_hwproj"):
+            assert np.all(history[name] == 0.0)
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_quantitative_decay_and_diagnostics():
     try:
         _run("cgl_lf_decay.athinput", "cgl_ci_decay")

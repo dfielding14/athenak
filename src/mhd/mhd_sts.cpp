@@ -132,7 +132,7 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection,
   }
   if (selection == DiffusionSelection::sts_only && has_cgl_lf_split &&
       pcgl_lf != nullptr) {
-    pcgl_lf->AddHeatFluxes(w0, bcc0, peos->eos_data, cgl_dt_sweep,
+    pcgl_lf->AddHeatFluxes(w0, bcc0, b0, peos->eos_data, cgl_dt_sweep,
                            cgl_rkl_weight, uflx);
   }
   if (add_scalar_diffusion && pscalar_diff != nullptr) {
