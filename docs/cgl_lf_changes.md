@@ -310,3 +310,18 @@ prescribed totals 18 and 119. The proxy has a separate eight-state rate check.
 Standalone heat-flux tests pass in both precisions; all 84 selected CPU regressions
 pass. Existing expected helper rates change from backup alone to backup plus soft
 (1e10 to 1e10+20 in the fixture, and configured 1234 to 1254).
+
+### T-C4: explicit input thresholds and synchronized references
+
+All 29 current paper inputs explicitly state the five numeric threshold/backup
+parameters. Legacy aliases are removed from those inputs. The firehose stress
+fixture explicitly retains threshold 1.4 and backup factor 2; the mirror fixture
+uses thresholds 2/1. Workflow overrides and parameter examples use numeric keys.
+The distinct legacy-policy fixture remains for compatibility checks. References
+already use the shared EOS thresholds from C1/C3.
+
+All 85 selected CPU regressions pass, including literal-key checks of every paper
+input. A paper-smoke workflow probe passed the active and passive Alfvénic cases;
+its random case exposed a pre-existing incompatible driving-type/projection
+combination in the workflow override. This forcing configuration is addressed in
+batch F. No physical expected value changes in C4.

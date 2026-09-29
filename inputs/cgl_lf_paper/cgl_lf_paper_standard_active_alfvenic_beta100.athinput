@@ -39,6 +39,11 @@ tlim = 10.0
 ndiag = 10
 
 <mhd>
+firehose_threshold = 2.0
+mirror_threshold = 1.0
+mirror_backup_factor = 2.0
+firehose_backup_factor = 1.0
+limiter_backup_nu = 1.0e10
 eos = cgl
 passive = false
 cgl_heat_flux = landau_fluid
@@ -50,7 +55,6 @@ lf_coefficient_mode = local
 nu_coll = 0.0
 mirror_limiter = true
 firehose_limiter = true
-cgl_firehose_threshold = parallel
 limiter_nu_coll = 1.0e10
 backup_limiters = false
 reconstruct = plm

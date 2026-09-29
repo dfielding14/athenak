@@ -30,7 +30,8 @@ cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
 lf_k_parallel = 32.0
 lf_coefficient_mode = local
-cgl_firehose_threshold = oblique
+firehose_threshold = 2.0
+mirror_threshold = 1.0
 cgl_lf_strict_admissibility = false
 ```
 
@@ -231,7 +232,7 @@ An active/passive-Delta reduced forced-turbulence initializer is registered as
 `inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput`. They
 initialize `rho0 = 1`, `B0` along `z`, and
 `p_parallel0 = p_perp0 = beta0 B0^2/2`, use the explicit MKS24
-`cgl_firehose_threshold = parallel` policy, and exercise the shared
+`firehose_threshold = 2.0`, `mirror_threshold = 1.0` policy, and exercise the shared
 turbulence driver. Passive mode requires `mhd/passive = true` and
 `problem/passive_delta = true`; a routine regression verifies that changing
 stable diagnostic initial anisotropy does not change its driven flow fields.

@@ -62,3 +62,10 @@ is exceeded; the backup contribution is `limiter_backup_nu` when
 Both contributions apply when both tests hold. A state exactly on a threshold
 or wall does not receive that contribution. These frequencies suppress the
 heat flux; pressure backup walls remain projections.
+
+All paper input files state the numeric threshold and backup defaults explicitly.
+The firehose stress input retains `firehose_threshold = 1.4` and
+`firehose_backup_factor = 2.0`, placing its finite-rate test state between the
+soft threshold and fluid firehose wall. The mirror stress input uses the default
+`firehose_threshold = 2.0`, `mirror_threshold = 1.0`. The separate legacy policy
+fixture remains to check input compatibility.

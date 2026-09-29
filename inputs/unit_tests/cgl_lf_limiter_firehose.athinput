@@ -38,10 +38,11 @@ tlim = 0.005
 ndiag = 1
 
 <mhd>
+firehose_threshold = 1.4
+mirror_threshold = 1.0
 eos = cgl
 passive = false
 firehose_limiter = true
-cgl_firehose_threshold = oblique
 # Keep the finite-rate stress state between the soft threshold and fluid wall.
 firehose_backup_factor = 2.0
 backup_limiters = true

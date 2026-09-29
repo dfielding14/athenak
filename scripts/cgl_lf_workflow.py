@@ -648,7 +648,7 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
             CaseSpec(
                 "paper_convergence_firehose_oblique",
                 source,
-                reduced_overrides(16, "mhd/cgl_firehose_threshold=oblique"),
+                reduced_overrides(16, "mhd/firehose_threshold=1.4"),
                 paper_smoke=True,
             ),
         ]

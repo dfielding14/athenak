@@ -1607,6 +1607,31 @@ def test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit():
     assert "k_shell_unit must be positive" in result.stdout
 
 
+def test_cgl_lf_paper_inputs_explicitly_set_thresholds():
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_workflow_test", PAPER_WORKFLOW_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    workflow = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = workflow
+    spec.loader.exec_module(workflow)
+    expected_thresholds = {
+        "firehose_threshold": "2.0", "mirror_threshold": "1.0",
+        "mirror_backup_factor": "2.0", "firehose_backup_factor": "1.0",
+        "limiter_backup_nu": "1.0e10",
+    }
+    for path in PAPER_PRODUCTION_INPUT_ROOT.glob("*.athinput"):
+        source = path.read_text()
+        assert workflow.input_block_value(source, "mhd", "cgl_firehose_threshold") is None
+        for parameter, expected in expected_thresholds.items():
+            actual = workflow.input_block_value(source, "mhd", parameter)
+            assert actual == expected, path.name
+    for name, firehose in (("firehose", "1.4"), ("mirror", "2.0")):
+        source = Path(f"{UNIT_INPUT_ROOT}/cgl_lf_limiter_{name}.athinput").read_text()
+        assert workflow.input_block_value(source, "mhd", "firehose_threshold") == firehose
+        assert workflow.input_block_value(source, "mhd", "mirror_threshold") == "1.0"
+
+
 def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_workflow_test", PAPER_WORKFLOW_PATH
