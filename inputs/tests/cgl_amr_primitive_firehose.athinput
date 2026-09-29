@@ -52,6 +52,7 @@ mirror_limiter = false
 firehose_limiter = true
 cgl_firehose_threshold = parallel
 limiter_hardwall = true
+limiter_nu_coll = 1.0e10
 reconstruct = plm
 rsolver = hlle
 gamma = 1.666666666666667

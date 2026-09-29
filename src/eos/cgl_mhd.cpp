@@ -93,11 +93,18 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  eos_data.backup_lim = pin->GetOrAddBoolean("mhd", "backup_limiters", false);
+  if (eos_data.backup_lim && !(eos_data.mlim || eos_data.flim)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<mhd>/backup_limiters requires mirror_limiter or firehose_limiter"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (eos_data.mlim || eos_data.flim) {
-    eos_data.lim_coll = pin->GetOrAddReal("mhd", "limiter_nu_coll", 0.0);
+    eos_data.lim_coll = pin->GetReal("mhd", "limiter_nu_coll");
     RequireNonnegativeCGLParameter("limiter_nu_coll", eos_data.lim_coll);
     eos_data.coll = true;
-    eos_data.backup_lim = pin->GetOrAddBoolean("mhd", "backup_limiters", false);
   }
 
   eos_data.nu_coll = pin->GetOrAddReal("mhd", "nu_coll", 0.0);

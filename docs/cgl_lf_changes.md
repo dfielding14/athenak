@@ -158,6 +158,22 @@ and the primitive-versus-conserved stage-order test pass on the CPU binary:
 They exercise actual refinement, require zero AMR repairs, and compare the
 no-transfer paths. GPU and MPI execution remain to be checked separately.
 
+### T-B7: limiter parsing and magnetization density floor
+
+Triage: boolean parsing/defaults were already correct. The constructor now reads
+backup_limiters independently and rejects backup-only configurations. Enabled
+limiters require an explicit limiter_nu_coll; three hardwall AMR inputs now state
+1e10 explicitly (their existing hardwall path still ignores this rate until C2).
+Both A and magnetic-moment C2P enforce density >= max(dfloor,B^2/sigma_max).
+
+Double/float constructor tests verify false flags, passive parsing, required rates
+and backup-only rejection. Double/float C2P tests verify sigma_max with momentum,
+energy preservation and the appropriate A/moment invariants. All four focused
+tests, the Release build and style checks pass. The combined physical/AMR suite
+has 78 passes and one 3D coarse-density diagnostic failure; the identical
+crs_d_err=0.08883454088177256 occurs with the retained pre-B3 binary. Original-base
+verification is in progress. No physical expected values were changed.
+
 ## Remaining task triage
 
 All acceptance outcomes below remain unverified until the corresponding task.

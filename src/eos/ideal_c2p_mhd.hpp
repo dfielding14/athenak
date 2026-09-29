@@ -224,7 +224,8 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
                                         HydPrim1D &w, bool &dfloor_used,
                                         bool &efloor_used, bool &tfloor_used,
                                         bool &bfloor_used) {
-  const Real &dfloor_ = eos.dfloor;
+  const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  const Real dfloor_ = fmax(eos.dfloor, bsqr/eos.sigma_max);
   Real pfloor = eos.pfloor;
   Real bfloor = eos.bfloor;
 
@@ -239,7 +240,6 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
   w.vy = di*u.my;
   w.vz = di*u.mz;
 
-  Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   Real bmag = sqrt(bsqr);
   Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
@@ -290,7 +290,8 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
                         HydPrim1D &w,
                         bool &dfloor_used, bool &efloor_used, bool &tfloor_used,
                         bool &bfloor_used) {
-  const Real &dfloor_ = eos.dfloor;
+  const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  const Real dfloor_ = fmax(eos.dfloor, bsqr/eos.sigma_max);
   Real pfloor = eos.pfloor;
   Real bfloor = eos.bfloor;
 
@@ -333,7 +334,6 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   //}
 
   // set pressures, apply floors, correcting total energy
-  Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   Real bmag = sqrt(bsqr);
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
   Real e_m = 0.5*bsqr;

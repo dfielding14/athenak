@@ -51,6 +51,7 @@ passive = false
 mirror_limiter = true
 firehose_limiter = false
 limiter_hardwall = true
+limiter_nu_coll = 1.0e10
 reconstruct = plm
 rsolver = hlle
 gamma = 1.666666666666667

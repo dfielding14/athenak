@@ -73,6 +73,7 @@ EOS_Data MakeCglEOS() {
   eos.dfloor = 1.0e-12;
   eos.pfloor = kPressureFloor;
   eos.bfloor = 1.0e-12;
+  eos.sigma_max = std::numeric_limits<Real>::max();
   return eos;
 }
 
@@ -343,6 +344,42 @@ void CheckInvalidDensity() {
   }
 }
 
+void CheckMagnetizationDensityFloor() {
+  EOS_Data eos = MakeCglEOS();
+  eos.pfloor = 1.0e-12;
+  eos.sigma_max = 2.0;
+  for (const bool magnetic_moment : {false, true}) {
+    MHDCons1D u{};
+    u.d = 0.25;
+    u.mx = 0.1;
+    u.bx = 2.0;
+    u.e = 2.5 + 0.5*SQR(u.mx)/u.d + 0.5*SQR(u.bx);
+    u.mu = magnetic_moment ? 1.0 : CGLConservedAnisotropy(u.d, 1.0, 2.0, u.bx);
+    const Real original_energy = u.e;
+    HydPrim1D w{};
+    bool dfloor_used = false, efloor_used = false;
+    bool tfloor_used = false, bfloor_used = false;
+    if (magnetic_moment) {
+      SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                         tfloor_used, bfloor_used);
+    } else {
+      SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+    }
+    Require("magnetization density floor flag", dfloor_used);
+    Require("magnetization ceiling", u.d == 2.0 && w.d == 2.0);
+    Require("magnetization floor preserves total energy", u.e == original_energy);
+    if (magnetic_moment) {
+      RequireClose("magnetization floor preserves magnetic moment pressure", w.pp, 2.0);
+      RequireClose("magnetization floor moment internal energy", u.e,
+                   0.5*w.e + w.pp + 0.5*SQR(u.mx)/u.d + 0.5*SQR(u.bx));
+    } else {
+      RequireRelativeClose("magnetization floor preserves pressure ratio", w.pp/w.e,
+                           2.0, kSinglePrecision ? 2.0e-5 : 1.0e-12);
+      CheckIdempotence("magnetization floor", u, w, eos);
+    }
+  }
+}
+
 void CheckNegativeInternalEnergyFloor() {
   const EOS_Data eos = MakeCglEOS();
   MHDCons1D u = MakeConserved(2.0, 2.0);
@@ -384,6 +421,7 @@ void RunCglC2PPressureFloorChecks() {
   CheckDensityFloorRatios();
   CheckInvalidAnisotropy();
   CheckInvalidDensity();
+  CheckMagnetizationDensityFloor();
   CheckNegativeInternalEnergyFloor();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
