@@ -1,5 +1,9 @@
 # Turbulence Driving
 
+The CGL paper problem uses the same `<turb_driving>` block as other problems.
+Forcing geometry, spectrum, and normalization are set there; the removed
+`<problem>/forcing_mode` selector never controlled the driver.
+
 ## Scope
 
 `TurbulenceDriver` applies a stochastic acceleration source to hydro, MHD, or

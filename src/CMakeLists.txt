@@ -199,7 +199,9 @@ add_executable(
 # specify on command line using '-D PROBLEM=file' where 'file' is name of file in
 # pgen/ directory (not including .cpp extension)
 
-if (NOT ${PROBLEM} STREQUAL "built_in_pgens" AND NOT ${PROBLEM} STREQUAL "turb")
+if (${PROBLEM} STREQUAL "turb")
+  set_source_files_properties(pgen/turb.cpp PROPERTIES COMPILE_DEFINITIONS TURB_USER_PROBLEM)
+elseif (NOT ${PROBLEM} STREQUAL "built_in_pgens")
   target_sources(athena
       PRIVATE
           pgen/${PROBLEM}.cpp

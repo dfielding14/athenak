@@ -18,7 +18,7 @@
 #include "eos/eos.hpp"
 #include "eos/cgl_physics.hpp"
 #include "mhd/mhd.hpp"
-#include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "outputs/outputs.hpp"
 #include "pgen.hpp"
 
@@ -43,11 +43,6 @@ CglLfPaperMode ParseMode(const std::string &mode) {
   if (mode == "linear_wave_scan") return CglLfPaperMode::linear_wave_scan;
   FatalInput("<problem>/mode must be turbulence, np_mode, fast_wave, oblique_iaw, "
              "or linear_wave_scan");
-}
-
-void ValidateForcingMode(const std::string &forcing) {
-  if (forcing == "alfvenic" || forcing == "random" || forcing == "sonic_corr") return;
-  FatalInput("<problem>/forcing_mode must be alfvenic, random, or sonic_corr");
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -139,9 +134,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   const std::string mode_name = pin->GetOrAddString("problem", "mode", "turbulence");
   const int mode_id = static_cast<int>(ParseMode(mode_name));
-  const std::string forcing_mode =
-      pin->GetOrAddString("problem", "forcing_mode", "alfvenic");
-  ValidateForcingMode(forcing_mode);
 
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real b0 = pin->GetOrAddReal("problem", "B0", 1.0);
@@ -318,12 +310,12 @@ void CglLfPaperHistory(HistoryData *pdata, Mesh *pm) {
   auto &bcc = pm->pmb_pack->pmhd->bcc0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   EOS_Data eos = pm->pmb_pack->pmhd->peos->eos_data;
-  Conduction *pcond = pm->pmb_pack->pmhd->pcond;
+  auto *lf = pm->pmb_pack->pmhd->pcgl_lf;
 
-  const bool has_lf = (pcond != nullptr) && pcond->IsCGLLandauFluidHeatFlux();
-  const Real lf_k = has_lf ? pcond->lf_k_parallel : 0.0;
-  const bool lf_local = has_lf ? pcond->lf_coeff_local : true;
-  const Real lf_cpar0 = has_lf ? pcond->lf_c_parallel0 : 0.0;
+  const bool has_lf = (lf != nullptr);
+  const Real lf_k = has_lf ? lf->lf_k_parallel : 0.0;
+  const bool lf_local = has_lf ? lf->lf_coeff_local : true;
+  const Real lf_cpar0 = has_lf ? lf->lf_c_parallel0 : 0.0;
   const Real dfloor = eos.dfloor;
   const Real pfloor = eos.pfloor;
   const Real tfloor = eos.tfloor;

@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-F4 (26 of 41 numbered tasks). Candidate checks
+Completed and committed through T-F5 (27 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| F5 | Candidate removes the dead parameter from the retained legacy pgen; integration pending. |
 | G0 | Several files are duplicates; legacy nonlinear wave setups are unique and must be retained. |
 | G1-G4 | References/assertions, long wave runs, actual convergence gates and limiter-map tests need strengthening. |
 | G5-G6 | Generalize rotated-decay projection to volume-weighted multi-block/MPI and add two-level SMR decay/conservation. |
@@ -539,3 +538,25 @@ using the generic planar driver; existing paper-specific behavior is unchanged.
 All 25 turbulence regressions pass, including direct nonzero-power checks for
 every selected planar and type-2 mode. The planar check fails before the fix and
 passes with all 30 selected modes nonzero. No other reference values change.
+
+### T-F5: remove the unused forcing selector
+
+Triage: the built-in paper pgen already has no selector; the retained legacy pgen
+still read and validated a parameter that never affected forcing. Its parser,
+three input keys and smoke-script override are removed. Both runbooks direct
+users to the actual turbulence-driver controls; inferred analysis metadata is
+retained. No physics or numerical reference changes.
+
+Building the retained generator exposed two pre-merge integration problems:
+its history diagnostic used the removed `Conduction` LF API, and the always-built
+turbulence initializer emitted a duplicate `UserProblem` for every custom pgen.
+The diagnostic now reads `pmhd->pcgl_lf`; CMake enables the turbulence wrapper
+only for `PROBLEM=turb`. These minimal compatibility fixes are necessary to
+verify the retained smoke script. Its obsolete analyzer flag/directory argument
+is also replaced by the current history arguments and synthetic check.
+
+The default and legacy paper builds pass. All seven enabled legacy smoke cases
+run, all seven histories are finite, and the analyzer synthetic check passes.
+The output is `analysis/diagnostics.json`; it contains basic finite/time summaries
+for the retained legacy history labels, rather than the obsolete summary.json.
+Two untouched legacy C++ line-length warnings remain.

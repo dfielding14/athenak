@@ -60,7 +60,6 @@ bfloor = 1.0e-10
 
 <problem>
 mode = turbulence
-forcing_mode = alfvenic
 user_hist = true
 rho0 = 1.0
 B0 = 1.0

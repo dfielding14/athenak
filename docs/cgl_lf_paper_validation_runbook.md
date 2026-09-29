@@ -24,6 +24,17 @@ The pgen initializes `rho`, `u`, face-centered `B`, cell-centered `B`, `p_parall
 `p_perp`, and the CGL conserved state. The pressure default is
 `p_parallel0 = p_perp0 = 0.5*beta0*B0^2`.
 
+## Forcing Configuration
+
+Configure forcing in `<turb_driving>`. The removed `<problem>/forcing_mode`
+parameter had no effect. `driving_type = 1` selects planar modal innovations
+with `x3` as the parallel direction; use
+`projection_policy = mks24_alfvenic_perpendicular` when the acceleration must
+remain strictly perpendicular to `B0`. `driving_type = 2` selects isotropic
+unprojected random forcing. Set `tcorr` in the same block for a sonic or other
+chosen correlation time. The smoke script selects its random case through
+`driving_type = 2`.
+
 ## Passive-Delta Controls — Disabled
 
 `mhd/passive = true` is disabled because its thermal energy equation is
@@ -64,7 +75,9 @@ scripts/run_cgl_lf_paper_smoke.sh
 
 The smoke script builds the custom pgen if needed, runs reduced-size active,
 limiter-disabled, NP-mode, and fast-wave cases, then writes
-`summary.json` with `scripts/analyze_cgl_lf_paper.py`.
+`analysis/diagnostics.json` with `scripts/analyze_cgl_lf_paper.py`. For these
+legacy history labels it records finite/time summaries; the synthetic check
+exercises the current analysis formulas separately.
 
 ## Tiered Runs
 
