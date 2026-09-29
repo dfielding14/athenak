@@ -18,6 +18,7 @@
 #endif
 
 #include "athena.hpp"
+#include "diffusion/limiters.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
@@ -768,18 +769,26 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
     Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
     if (multi_d) {
-      ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                 tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-      py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                 tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+      ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+      py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
       byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                   bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
     }
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
     }
@@ -842,18 +851,26 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
     Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
     if (multi_d) {
-      ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                 tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-      py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                 tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+      ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+      py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
       byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                   bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
     }
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
     }
@@ -901,18 +918,26 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
       Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
       if (multi_d) {
-        ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                   tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-        py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                   tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+        ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+        py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
         byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                     bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
       }
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
       }
@@ -960,18 +985,26 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
       Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
       if (multi_d) {
-        ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                   tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-        py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                   tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+        ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+        py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
         byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                     bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
       }
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
       }
@@ -1026,10 +1059,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji2)/nji2 + ks;
     const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
     const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
@@ -1037,10 +1074,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
     Real tz = 0.0, pz = 0.0, bzg = 0.0;
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
     }
@@ -1098,10 +1139,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji2)/nji2 + ks;
     const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
     const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
@@ -1109,10 +1154,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
     Real tz = 0.0, pz = 0.0, bzg = 0.0;
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
     }
@@ -1155,11 +1204,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji2)/nji2 + ks;
       const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
       const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))
@@ -1169,10 +1222,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
       Real tz = 0.0, pz = 0.0, bzg = 0.0;
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
       }
@@ -1215,11 +1272,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji2)/nji2 + ks;
       const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
       const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))
@@ -1229,10 +1290,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
       Real tz = 0.0, pz = 0.0, bzg = 0.0;
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
       }
@@ -1287,16 +1352,24 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji3)/nji3 + ks;
     const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
     const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                          tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
-    const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                          tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                            bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
@@ -1356,16 +1429,24 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji3)/nji3 + ks;
     const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
     const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                          tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
-    const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                          tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                            bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
@@ -1410,20 +1491,28 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji3)/nji3 + ks;
       const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
       const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))
                              /size.d_view(m).dx1;
-      const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                            tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))
+      const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
-      const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                            tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))
+      const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
       const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                              bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))
@@ -1470,20 +1559,28 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji3)/nji3 + ks;
       const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
       const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))
                              /size.d_view(m).dx1;
-      const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                            tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))
+      const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
-      const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                            tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))
+      const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
       const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                              bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))

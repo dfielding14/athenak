@@ -33,6 +33,7 @@
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
+#include "outputs/outputs.hpp"
 
 namespace {
 
@@ -49,6 +50,7 @@ enum class TestMode {
   paper_eigen_wave,
   rotated_decay,
   field_reversal,
+  hotspot,
   low_field
 };
 
@@ -142,12 +144,13 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
   if (mode == "rotated_decay") return TestMode::rotated_decay;
   if (mode == "field_reversal") return TestMode::field_reversal;
+  if (mode == "hotspot") return TestMode::hotspot;
   if (mode == "low_field") return TestMode::low_field;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, "
        "collision_relaxation, grad_b, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "field_reversal, or low_field");
+       "field_reversal, hotspot, or low_field");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -164,6 +167,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::paper_eigen_wave: return "paper_eigen_wave";
     case TestMode::rotated_decay: return "rotated_decay";
     case TestMode::field_reversal: return "field_reversal";
+    case TestMode::hotspot: return "hotspot";
     case TestMode::low_field: return "low_field";
   }
   return "unknown";
@@ -1486,6 +1490,59 @@ void CheckPaperEigenWave(ParameterInput *pin, Mesh *pm) {
             << " zero_abs_tol=" << zero_abs_tol << std::endl;
 }
 
+Real hotspot_min_parallel, hotspot_min_perp, hotspot_initial_energy;
+Real hotspot_initial_parallel, hotspot_initial_perp, hotspot_max_energy_error;
+
+void MonitorHotSpot(Mesh *pm, const Real) {
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  const auto u = HostCopy(pm->pmb_pack->pmhd->u0);
+  const auto &ind = pm->mb_indcs;
+  Real energy = 0.0;
+  for (int j=ind.js; j<=ind.je; ++j) {
+    for (int i=ind.is; i<=ind.ie; ++i) {
+      const Real tpar = w(0,IPR,ind.ks,j,i)/w(0,IDN,ind.ks,j,i);
+      const Real tperp = w(0,IPP,ind.ks,j,i)/w(0,IDN,ind.ks,j,i);
+      Require(std::isfinite(tpar) && std::isfinite(tperp), "hotspot became nonfinite");
+      hotspot_min_parallel = std::min(hotspot_min_parallel, tpar);
+      hotspot_min_perp = std::min(hotspot_min_perp, tperp);
+      energy += u(0,IEN,ind.ks,j,i);
+    }
+  }
+  if (hotspot_initial_energy == 0.0) hotspot_initial_energy = energy;
+  hotspot_max_energy_error = std::max(hotspot_max_energy_error,
+      std::abs(energy/hotspot_initial_energy - 1.0));
+}
+
+void HotSpotHistory(HistoryData *pdata, Mesh *pm) {
+  MonitorHotSpot(pm, 0.0);
+  pdata->nhist = 3;
+  pdata->label[0] = "min_tpar";
+  pdata->label[1] = "min_tperp";
+  pdata->label[2] = "max_energy_error";
+  pdata->hdata[0] = hotspot_min_parallel;
+  pdata->hdata[1] = hotspot_min_perp;
+  pdata->hdata[2] = hotspot_max_energy_error;
+}
+
+void CheckHotSpot(ParameterInput *pin, Mesh *pm) {
+  MonitorHotSpot(pm, 0.0);
+  const Real width = pin->GetReal("problem", "hotspot_width");
+  const Real cpar = pin->GetReal("mhd", "lf_c_parallel0");
+  const Real chi_perp = std::sqrt(2.0/std::acos(-1.0))*cpar/
+                       pin->GetReal("mhd", "lf_k_parallel");
+  const Real diffusion_times = pm->time*chi_perp/SQR(width);
+  std::cout << std::setprecision(17)
+            << "CGL LF hotspot: min_tpar=" << hotspot_min_parallel
+            << " min_tperp=" << hotspot_min_perp
+            << " energy_error=" << hotspot_max_energy_error
+            << " diffusion_times=" << diffusion_times << std::endl;
+  Require(diffusion_times >= 5.0, "hotspot requires at least five diffusion times");
+  Require(hotspot_min_parallel >= hotspot_initial_parallel*(1.0 - 1.0e-12) &&
+          hotspot_min_perp >= hotspot_initial_perp*(1.0 - 1.0e-12),
+          "hotspot fell below its initial temperature minima");
+  Require(hotspot_max_energy_error <= 5.0e-13, "hotspot did not conserve total energy");
+}
+
 Real reversal_peak_deviation = 0.0;
 Real reversal_min_pressure = 1.0;
 Real reversal_ppar0 = 1.0, reversal_pperp0 = 1.0;
@@ -1533,7 +1590,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
           "quantitative LF tests require <mhd>/eos = cgl");
   const TestMode mode = ParseMode(pin);
-  if (mode == TestMode::rotated_decay || mode == TestMode::field_reversal) {
+  if (mode == TestMode::rotated_decay || mode == TestMode::field_reversal ||
+      mode == TestMode::hotspot) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
@@ -1564,6 +1622,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckRotatedDecay(pin, pm);
   } else if (mode == TestMode::field_reversal) {
     CheckFieldReversal(pin, pm);
+  } else if (mode == TestMode::hotspot) {
+    CheckHotSpot(pin, pm);
   } else if (mode == TestMode::low_field) {
     CheckLowField(pin, pm);
   }
@@ -1581,7 +1641,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Fail("quantitative LF tests require <mhd>/eos = cgl");
   }
   const TestMode mode = ParseMode(pin);
-  if (mode == TestMode::rotated_decay || mode == TestMode::field_reversal) {
+  if (mode == TestMode::rotated_decay || mode == TestMode::field_reversal ||
+      mode == TestMode::hotspot) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
@@ -1601,6 +1662,15 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     reversal_min_pressure = std::min(ppar0, pperp0);
     reversal_ppar0 = ppar0;
     reversal_pperp0 = pperp0;
+  }
+  const Real hotspot_width = pin->GetOrAddReal("problem", "hotspot_width", 0.04);
+  if (mode == TestMode::hotspot) {
+    Require(pmy_mesh_->multi_d && !pmy_mesh_->three_d && user_srcs && user_hist,
+            "hotspot requires 2D and user_srcs/user_hist = true");
+    user_srcs_func = MonitorHotSpot;
+    user_hist_func = HotSpotHistory;
+    hotspot_min_parallel = hotspot_min_perp = 1.0e30;
+    hotspot_initial_energy = hotspot_max_energy_error = 0.0;
   }
   const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
   const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
@@ -1631,6 +1701,9 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real reversal_center = 0.5*(xmin + pmy_mesh_->mesh_size.x1max);
   const Real ymin = pmy_mesh_->mesh_size.x2min;
   const Real ymax = pmy_mesh_->mesh_size.x2max;
+  const Real hotspot_x = 0.5*(xmin + pmy_mesh_->mesh_size.x1max) +
+      0.5*(pmy_mesh_->mesh_size.x1max - xmin)/pmy_mesh_->mesh_indcs.nx1;
+  const Real hotspot_y = 0.5*(ymin + ymax) + 0.5*(ymax - ymin)/pmy_mesh_->mesh_indcs.nx2;
   const Real zmin = pmy_mesh_->mesh_size.x3min;
   const Real zmax = pmy_mesh_->mesh_size.x3max;
   const std::string limiter_kind =
@@ -1676,7 +1749,12 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real by = (mode == TestMode::grad_b) ? by_amp*s : by0;
     Real bz = bz0;
 
-    if (mode == TestMode::field_reversal) {
+    if (mode == TestMode::hotspot) {
+      const Real gaussian = exp(-(SQR(x - hotspot_x) + SQR(y - hotspot_y))/
+                                  (2.0*SQR(hotspot_width)));
+      ppar = ppar0*(1.0 + 99.0*gaussian);
+      pperp = pperp0*(1.0 + 99.0*gaussian);
+    } else if (mode == TestMode::field_reversal) {
       by = tanh((x - reversal_center)/block_size.dx1);
       const Real seed = amp*((q%2 == 0) ? 1.0 : -1.0);
       ppar = ppar0*(1.0 + seed);
@@ -1759,4 +1837,9 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
+  if (mode == TestMode::hotspot) {
+    MonitorHotSpot(pmy_mesh_, 0.0);
+    hotspot_initial_parallel = hotspot_min_parallel;
+    hotspot_initial_perp = hotspot_min_perp;
+  }
 }

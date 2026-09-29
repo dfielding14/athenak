@@ -5403,3 +5403,35 @@ def test_cgl_lf_amr_primitive_prolongation_rejects_pressure_work_recording():
         result.stdout
     )
     assert "<mhd>/cgl_lf_record_pressure_work = false" in result.stdout
+
+
+@pytest.mark.parametrize(("angle", "bx", "by"), (
+    (30, 8.660254037844387, 5.0),
+    (45, 7.0710678118654755, 7.0710678118654755),
+))
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+@pytest.mark.parametrize("diagnostics", ("full", "none"))
+def test_cgl_lf_hotspot_preserves_minima_and_energy(
+    angle, bx, by, arithmetic, diagnostics
+):
+    profile = angle == 45 and arithmetic == "safe" and diagnostics == "full"
+    try:
+        result = subprocess.run(
+            ["./athena", "-i", f"{UNIT_INPUT_ROOT}/cgl_lf_hotspot.athinput",
+             "job/basename=cgl_ci_hotspot", f"problem/b0={bx}", f"problem/by0={by}"],
+            capture_output=True, text=True, check=False,
+            env=_lf_mode_env(
+                ATHENAK_CGL_LF_ARITHMETIC=arithmetic,
+                ATHENAK_CGL_LF_DIAGNOSTICS=diagnostics,
+                ATHENAK_CGL_LF_PROFILE="true" if profile else "false",
+                ATHENAK_CGL_LF_PROFILE_DETAIL="true" if profile else "false",
+            ),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        history = testutils.athena_read.hst("cgl_ci_hotspot.user.hst")
+        for name in ("min_tpar", "min_tperp"):
+            assert np.all(history[name] >= history[name][0] * (1.0 - 1.0e-12))
+        assert np.max(history["max_energy"]) <= 5.0e-13
+        assert "diffusion_times=" in result.stdout
+    finally:
+        _cleanup()

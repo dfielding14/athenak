@@ -347,3 +347,29 @@ we do not reproduce the review's claimed 1e5 growth per sweep.
 All 93 selected CPU checks and 23 full-workflow cases pass. Existing smooth
 references/tolerances were not retuned; grad-B RMS error is 1.0126%. Changed C++
 and Python pass style checks.
+
+### T-D2: limit transverse temperature slopes
+
+Triage: the 48 transverse temperature expressions still used arithmetic averages.
+Every transport, diagnostic and profile path now uses the existing four-slope
+van Leer mean. Magnetic-magnitude gradients remain byte-for-byte unchanged.
+The existing limiter definitions were moved to a shared diffusion header so
+Spitzer and LF use the same implementation.
+
+The new 2D Gaussian hotspot has 100x contrast and runs for 10.02 perpendicular
+diffusion times at 30 and 45 degrees. All safe/fast, full/none combinations,
+including profile probes, preserve the initial minimum to 5.9e-14 and total energy
+to 2.7e-14. Before the fix, parallel/perpendicular minima were 0.57863/0.69414 at
+30 degrees and 0.50099/0.60814 at 45 degrees, from initial minima 1. Existing 3D
+x/y/z/oblique smooth-decay checks retain their original tolerances (oblique error
+0.002405 versus tolerance 0.03). The full 24-case workflow passes.
+The eight new Python hotspot regressions pass; the existing 93 selected checks
+also pass. The test reads the history writer's truncated `max_energy` label.
+
+A subsequent independent audit found overflow/underflow in the reused van Leer
+mean for finite extreme slopes. Its ordinary evaluation order is preserved;
+only unusable products/sums use a scaled harmonic mean. The actual header now
+passes direct double/single checks for equal maximum-scale, minimum-normal and
+subnormal slopes, opposite slopes and extrema. Before this correction several
+finite equal-slope means became zero or nonfinite. Both precision regressions
+and the integrated Release build pass.

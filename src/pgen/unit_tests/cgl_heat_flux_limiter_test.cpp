@@ -15,6 +15,7 @@
 
 #include "athena.hpp"
 #include "diffusion/cgl_landau_fluid_arithmetic.hpp"
+#include "diffusion/limiters.hpp"
 #include "diffusion/sts_rkl2.hpp"
 #include "eos/cgl_physics.hpp"
 #include "mesh/mesh.hpp"
@@ -769,9 +770,36 @@ void CheckWeightedRKLCacheAlgebra() {
       state);
 }
 
+void CheckDiffusionSlopeMeans() {
+  // Ordinary inputs retain the legacy evaluation order bit for bit.
+  for (Real sign : {static_cast<Real>(-1.0), static_cast<Real>(1.0)}) {
+    for (Real a : {static_cast<Real>(0.125), static_cast<Real>(1.1),
+                   static_cast<Real>(7.0), static_cast<Real>(1024.0)}) {
+      const Real b = 3.0*a;
+      Require("ordinary van Leer bitwise agreement",
+              VanLeerLimiter(sign*a, sign*b) == 2.0*(sign*a)*(sign*b)/(sign*a+sign*b));
+    }
+    const Real large = 0.75*std::numeric_limits<Real>::max();
+    const Real small = std::numeric_limits<Real>::min();
+    const Real subnormal = 4.0*std::numeric_limits<Real>::denorm_min();
+    for (Real slope : {large, small, subnormal}) {
+      Require("equal finite slopes survive overflow and underflow",
+              VanLeerLimiter(sign*slope, sign*slope) == sign*slope);
+      Require("four equal finite slopes survive overflow and underflow",
+              VL4Limiter(sign*slope, sign*slope, sign*slope, sign*slope) == sign*slope);
+    }
+    Require("finite mean with overflowing twice-a intermediate",
+            VanLeerLimiter(sign*large, sign*0.5) == sign);
+  }
+  Require("opposite slopes vanish", VanLeerLimiter(-1.0, 1.0) == 0.0);
+  Require("zero slope vanishes", VanLeerLimiter(0.0, 1.0) == 0.0);
+  Require("transverse extremum vanishes", VL4Limiter(1.0, 2.0, -1.0, 2.0) == 0.0);
+}
+
 } // namespace
 
 void RunCglHeatFluxLimiterChecks() {
+  CheckDiffusionSlopeMeans();
   CheckModerateValues();
   CheckBackupLimiterPolicy();
   CheckAdditiveCollisionRates();
