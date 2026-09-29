@@ -102,10 +102,14 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
 
   eos_data.passive = pin->GetOrAddBoolean("mhd", "passive", false);
   if (eos_data.passive) {
-    eos_data.iso_cs = pin->GetReal("mhd", "iso_sound_speed");
-  } else {
-    eos_data.iso_cs = 0.0;
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<mhd>/passive=true is disabled: the passive-mode thermal energy "
+              << "equation is inconsistent (review M7), pending the WO2 redesign."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
   }
+  eos_data.iso_cs = 0.0;
 
   eos_data.mlim = pin->GetOrAddBoolean("mhd", "mirror_limiter", false);
   eos_data.flim = pin->GetOrAddBoolean("mhd", "firehose_limiter", false);

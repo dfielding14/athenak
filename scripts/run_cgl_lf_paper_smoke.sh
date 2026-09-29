@@ -38,7 +38,6 @@ run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_active.athinput \
   job/basename=cgl_lf_paper_turb_random \
   problem/forcing_mode=random \
   turb_driving/driving_type=2
-run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_passive.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_limiter_off.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_np_mode.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_fast_wave.athinput

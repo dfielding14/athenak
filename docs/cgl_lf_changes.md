@@ -205,12 +205,11 @@ through AMR transfers and its corresponding diagnostics.
 
 ## Remaining task triage
 
-Completed and committed through T-E1 (20 of 41 numbered tasks). Candidate checks
+Completed and committed through T-E2 (21 of 41 numbered tasks). Candidate checks
 below are scratch evidence until integrated into the branch.
 
 | Tasks | Current code assessment and remaining work |
 | --- | --- |
-| E2 | Passive speeds already fixed; constructor-fence candidate passes double/single checks; integration pending. |
 | E3 | Spitzer is implemented; verify it and fix missing-units handling. |
 | F1 | Candidate restores type-2 random forcing and nonzero modes; integration pending. |
 | F2 | Candidate single kick passes RK1/2/3 power checks; integration pending. |
@@ -455,3 +454,17 @@ both explicit and STS LF split integration because IAN temporarily stores
 magnetic moment. The message now points to WO2; the existing policy is unchanged.
 The regression now includes periodic alongside outflow, reflect and diode.
 All ten allowed/rejected boundary cases pass. No reference values change.
+
+### T-E2: disable the inconsistent passive thermal model
+
+Triage: passive HLLE already uses the isothermal signal speed. `CGLMHD` now
+rejects `passive=true` before reading its sound speed, explaining review M7 and
+the WO2 redesign. Direct unit coverage of the dormant isothermal flux/speed path
+and active-CGL CFL remains. Runtime passive tests now check the explicit fence.
+Executable workflows omit passive cases and record their reason in the manifest;
+historical catalogs and inputs are preserved as disabled references. The legacy
+smoke script omits the passive input, and current/retained runbooks mark it disabled.
+
+The Release build, 110 selected CPU regressions and three independent constructor
+(double/single precision) and workflow-filter checks pass. No numerical reference
+values change; passive runtime evolution is deliberately unavailable until WO2.

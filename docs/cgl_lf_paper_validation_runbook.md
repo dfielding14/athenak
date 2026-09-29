@@ -24,19 +24,19 @@ The pgen initializes `rho`, `u`, face-centered `B`, cell-centered `B`, `p_parall
 `p_perp`, and the CGL conserved state. The pressure default is
 `p_parallel0 = p_perp0 = 0.5*beta0*B0^2`.
 
-## Passive-Delta Controls
+## Passive-Delta Controls — Disabled
 
-Use the existing CGL EOS switch:
+`mhd/passive = true` is disabled because its thermal energy equation is
+inconsistent (review M7). It aborts at construction pending the WO2 redesign,
+including when `iso_sound_speed` is supplied. The isothermal HLLE signal-speed
+path is retained and covered by direct unit checks.
 
-```text
-<mhd>
-passive = true
-iso_sound_speed = sqrt(0.5*beta0*B0^2/rho0)
-```
-
-In passive mode, `p_parallel` and `p_perp` still evolve as CGL/LF thermodynamic
-variables, while the CGL Riemann solver removes anisotropic-pressure feedback from
-the momentum flux.
+`inputs/cgl_lf_paper/cgl_lf_paper_turb_passive.athinput` and the other passive
+inputs are retained as disabled references. The local smoke script omits this
+case, and executable Python workflows skip passive cases and record them under
+`disabled_cases` in the result manifest. Historical case catalogs and archived
+validation records remain unchanged. Passive comparisons in the future run
+matrix below are blocked until WO2.
 
 ## Diagnostics
 
@@ -63,7 +63,7 @@ scripts/run_cgl_lf_paper_smoke.sh
 ```
 
 The smoke script builds the custom pgen if needed, runs reduced-size active,
-passive, limiter-disabled, NP-mode, and fast-wave cases, then writes
+limiter-disabled, NP-mode, and fast-wave cases, then writes
 `summary.json` with `scripts/analyze_cgl_lf_paper.py`.
 
 ## Tiered Runs

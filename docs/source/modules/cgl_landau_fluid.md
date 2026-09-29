@@ -91,8 +91,8 @@ $\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ for strong collisions.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `eos` | required | Set to `cgl` for this feature. |
-| `passive` | `false` | When `true`, evolve CGL/LF pressures diagnostically while mass, momentum, and magnetic-field fluxes use the isothermal-MHD passive-Delta path. |
-| `iso_sound_speed` | required when `passive = true` | Isothermal sound speed used by passive-Delta momentum fluxes and signal speeds. |
+| `passive` | `false` | `true` is disabled: the passive thermal energy equation is inconsistent, pending WO2. |
+| `iso_sound_speed` | unused in active CGL | Retained for the disabled passive model; it does not bypass the `passive=true` fence. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
 | `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
 | `lf_k_parallel` | required | Positive closure wavenumber magnitude. |
@@ -238,16 +238,15 @@ regressions also exercise analytic uniform collisional relaxation and both
 firehose threshold policies. The LF
 quantitative pgen is the built-in `src/pgen/tests/cgl_landau_fluid.cpp`.
 
-An active/passive-Delta reduced forced-turbulence initializer is registered as
-`pgen_name = cgl_lf_paper`; its smoke decks are
-`inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput` and
-`inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput`. They
-initialize `rho0 = 1`, `B0` along `z`, and
+A reduced forced-turbulence initializer is registered as
+`pgen_name = cgl_lf_paper`. Its active smoke deck is
+`inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`; the passive deck
+is retained as a disabled reference pending WO2. These decks initialize `rho0 = 1`, `B0` along `z`, and
 `p_parallel0 = p_perp0 = beta0 B0^2/2`, use the explicit MKS24
 `firehose_threshold = 2.0`, `mirror_threshold = 1.0` policy, and exercise the shared
-turbulence driver. Passive mode requires `mhd/passive = true` and
-`problem/passive_delta = true`; a routine regression verifies that changing
-stable diagnostic initial anisotropy does not change its driven flow fields.
+turbulence driver. `mhd/passive = true` now fails at construction because its
+thermal energy equation is inconsistent. Runtime regressions check this fence;
+direct unit checks retain coverage of the isothermal passive signal-speed path.
 These are reduced smoke cases, not standard paper-resolution runs. Their
 forcing-orientation, seed-continuation, and multi-cycle OU/RK source-work checks
 qualify reduced mechanics, not paper-scale active/passive statistics or

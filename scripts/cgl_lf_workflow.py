@@ -1626,7 +1626,16 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
         )
     build_dir, executable = executable_path(args)
     ensure_executable(args, build_dir, executable)
-    cases = workflow_cases(args.workflow)
+    cases = []
+    disabled_cases = []
+    for spec in workflow_cases(args.workflow):
+        source = (ROOT_DIR / spec.input_path).read_text(encoding="utf-8")
+        if model_choices(source, spec.overrides)["passive_delta"].lower() in ("true", "1"):
+            reason = "Passive CGL thermal energy equation is disabled pending WO2."
+            print(f"Skipping {spec.name}: {reason}")
+            disabled_cases.append({"name": spec.name, "reason": reason})
+        else:
+            cases.append(spec)
     source_status = git_worktree_status()
     print(f"Running CGL-LF {args.workflow} workflow with {executable}")
     case_results = [run_case(spec, executable, paths) for spec in cases]
@@ -1641,6 +1650,7 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
         "executable": str(executable),
         "build_dir": str(build_dir),
         "cases": case_results,
+        "disabled_cases": disabled_cases,
         "diagnostics": {},
     }
     manifest["diagnostics"] = evaluate_manifest(manifest, paths.root)

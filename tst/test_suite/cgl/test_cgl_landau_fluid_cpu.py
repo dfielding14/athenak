@@ -54,10 +54,6 @@ def _run_paper(basename, *flags):
     testutils.run(PAPER_INPUT, [f"job/basename={basename}", *flags])
 
 
-def _run_paper_passive(basename, *flags):
-    testutils.run(PAPER_PASSIVE_INPUT, [f"job/basename={basename}", *flags])
-
-
 def _lf_mode_env(**updates):
     env = os.environ.copy()
     for name in (
@@ -1643,31 +1639,15 @@ def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
         _cleanup()
 
 
-def test_cgl_lf_paper_passive_delta_has_no_anisotropic_flow_feedback():
-    try:
-        _run_paper_passive("cgl_ci_passive_iso", "time/nlim=4")
-        _run_paper_passive(
-            "cgl_ci_passive_aniso",
-            "time/nlim=4",
-            "problem/p_parallel0=5.2",
-            "problem/p_perp0=4.9",
-        )
-        isotropic = _final_variable_tab("cgl_ci_passive_iso", "mhd_w_bcc")
-        anisotropic = _final_variable_tab("cgl_ci_passive_aniso", "mhd_w_bcc")
-        for field in ("dens", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3"):
-            assert np.max(np.abs(isotropic[field] - anisotropic[field])) < 1.0e-12
-        assert np.max(np.abs(isotropic["eint"] - anisotropic["eint"])) > 1.0e-4
-        passive_iso = testutils.athena_read.hst("cgl_ci_passive_iso.mhd.hst")
-        passive_aniso = testutils.athena_read.hst("cgl_ci_passive_aniso.mhd.hst")
-        _assert_clean_lf_history(passive_iso)
-        _assert_clean_lf_history(passive_aniso)
-        assert np.all(passive_iso["lf_cpwrk"] == 0.0)
-        assert np.all(passive_iso["lf_cawrk"] == 0.0)
-        assert np.all(passive_aniso["lf_cpwrk"] == 0.0)
-        assert np.all(passive_aniso["lf_cawrk"] == 0.0)
-    finally:
-        shutil.rmtree("rst", ignore_errors=True)
-        _cleanup()
+def test_cgl_lf_paper_passive_delta_is_disabled():
+    result = subprocess.run(
+        ["./athena", "-i", PAPER_PASSIVE_INPUT],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert "passive=true is disabled" in result.stdout
+    assert "thermal energy equation is inconsistent" in result.stdout
+    assert "WO2 redesign" in result.stdout
 
 
 def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
