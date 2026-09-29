@@ -1,6 +1,8 @@
 # WO1 CGL-LF changes and validation
 
-Status: in progress. Base: `8222de3aa`; branch: `c/cgl-lf-wo1`.
+Status: complete: all 41 numbered tasks resolved. T-P1 is deferred to WO2
+under the required bitwise rule; its candidate is not retained.
+Base: `8222de3aa`; branch: `c/cgl-lf-wo1`.
 The work order controls the design; `CGL_LF_STS_review.md` describes pre-merge
 `2aee609` and is used for derivations rather than current bug status.
 
@@ -203,15 +205,6 @@ independent speed and passive-signal checks also pass. C1 retains the existing
 enabled-limiter diagnostic scope; C2 completes unconditional fluid-wall handling
 through AMR transfers and its corresponding diagnostics.
 
-## Remaining task triage
-
-Completed and committed through T-G7; T-P1 deferred and T-P2 through T-P5 verified
-(40 of 41 numbered tasks resolved). Remaining candidates are listed below.
-
-| Tasks | Current code assessment and remaining work |
-| --- | --- |
-| P6 | Both side logarithms still evaluated; retain selected-side arithmetic order. |
-
 ## Accepted T-D5 correction
 
 The user corrected the inconsistent isothermal/pressure-equilibrium setup. Use
@@ -221,10 +214,10 @@ runs with a 1e-6 temperature seed. Require less than approximately 10-fold growt
 of the difference over three cycles at sweep/parabolic-step ratio at least 10;
 report stage counts. The old 20-cycle positivity criterion is superseded.
 
-A retained pre-D scratch control already reproduces the instability: peak growth
+The retained pre-D control reproduces the instability: peak growth
 over three cycles is 1, 2.33e5, 2.17e6 and 7.90e6 for the contrast ladder,
 respectively, at seven stages per half-sweep. Positivity alone misses the R=50
-failure. This is preliminary control evidence, not D5 completion.
+failure. The corrected D5 results are recorded below.
 
 ### T-C2: monotone finite-rate relaxation and hard-wall projection
 
@@ -868,3 +861,85 @@ after this documentation-only task the CPU/MPI executable hashes and all 24
 output sets were rechecked: unchanged executables, byte-identical post-G output.
 The before/after measurements are the same P3 table; P5 claims no new speedup
 or new memory saving. Expected values unchanged.
+
+### T-P6: evaluate only the selected HLLE anisotropy logarithm
+
+Triage: HLLE still evaluated both side logarithms. `HLLE_CGL` now computes the
+selected upwind value after the unchanged mass-flux sign test, preserving the
+original `rho*log(...)/rho` order and weak-field reference selection. Its unused
+left/right magnetic-moment flux assignments are removed. No reference values
+change.
+
+CPU/MPI builds and style pass. A direct old/new real-header comparison covers
+32,768 states, three directions, active/passive signal paths, both precisions,
+all flux/EMF and pressure-work outputs: zero differences. The full 24-case
+serial/MPI matrix times three repeats matches post-G binary/history/full-restart
+bytes exactly. P4/P5 changed no executable, so the incremental comparison is
+P3 to P6 (cycle ms / profiled compute microseconds per stage):
+
+| Case | P3 | P6 |
+| --- | --- | --- |
+| lf1d-serial-0 | 0.474 / 25.85 | 0.469 / 25.49 |
+| lf2d-serial-0 | 16.418 / 1061.74 | 16.285 / 1052.44 |
+| lf3d-serial-0 | 204.298 / 13244.26 | 202.263 / 13095.76 |
+| smr-serial-0 | 16.166 / 819.10 | 16.011 / 809.41 |
+| pure_cgl-serial-0 | 0.436 / n/a | 0.421 / n/a |
+| lf2d-mpi-4 | 4.821 / 277.25 | 4.825 / 276.79 |
+| lf3d-mpi-4 | 55.044 / 3438.47 | 54.860 / 3427.13 |
+| smr-mpi-4 | 5.118 / 217.78 | 5.109 / 215.66 |
+
+P6's incremental timing changes are small. Across all retained optimizations,
+the required LF cases improve solver cycle time by 8.5-9.3% in serial and
+6.3-9.2% on four MPI ranks relative to post-G. The tiny pure-CGL control varies
+by +1.7%; no LF speedup is inferred from that control. Three repeats and this
+one CPU do not establish GPU or production-scale performance.
+
+## Final validation and observations
+
+- Release CPU and MPI builds pass. The final 187-check physical CPU selection
+  had 186 passes and one G4 caller-guard failure; after repairing that guard,
+  all 30 targeted limiter/collision rechecks pass, including the failed test.
+  The selection includes both precision EOS/speed/closure/constructor checks,
+  AMR, forcing, diffusion, boundary/FOFC and analysis regressions.
+- The strengthened acceptance suite passes all 55 checks. Its 28 limiter cases
+  also pass after the final guard repair. The full workflow passes all 29 cases;
+  the separate G3 accuracy workflow passed all 33 cases.
+- The final MPI suite passes 8 checks, including the corrected collisional
+  shearing serial/MPI/explicit/restart test. Two GPU-allocation tests are skipped
+  on this CPU host; no new GPU validation is claimed.
+- All retained custom targets build: transform round trips, FOFC flux checks,
+  and the seven-case legacy paper smoke with synthetic analyzer checks pass.
+  Logs and diagnostics are under `/tmp/cgl-wo1-final-legacy/`.
+- The 18-page report compiles and was visually checked. The final strict
+  Sphinx build passes with only the existing orphan-document warning class
+  suppressed. The two pre-existing orphan pages are named in G7's QA log.
+- Five baseline campaign/provenance tests remain outside this work order, as
+  listed at the start; 19 campaign/provenance cases were excluded from the
+  focused final CPU selection. Full single-precision application compilation
+  remains blocked by the pre-existing coordinate/hyperviscosity errors noted
+  in B5; the changed math helpers pass their direct single-precision checks.
+- P1 is explicitly deferred to WO2 because it changed active-cell results at
+  an SMR/outflow interface. No part of that candidate is retained. P4/P5 were
+  already implemented. Primitive prolongation and Spitzer conduction were
+  already supported, so their tasks verify support/units instead of adding
+  obsolete fences. These deviations follow the work order's triage rules.
+- The retained legacy cell-centered heat-flux diagnostics are proxies, not
+  independent face-flux references. Historical figures/campaign measurements
+  were preserved and labeled; no renewed paper-scale validation is claimed.
+- The RKL2 coefficients, stage-count/odd-stage rules, Strang half-sweep
+  structure, multidimensional stability factor and mesh CFL multiplier are
+  unchanged. No WO2 physics work was started.
+
+Primary final logs are under `/tmp/cgl-wo1-final/`; performance outputs,
+input/executable hashes, timings and rejected P1 evidence are under
+`/tmp/cgl-wo1-perf/`. Work-order Markdown files and the Kokkos submodule pointer
+are unchanged. No branch was pushed and no PR was opened.
+
+After the final checker/fixture follow-ups, the exact delivered CPU/MPI binaries
+were run through the full fixed matrix again: all 24 configurations times three
+repeats match post-G, with zero output mismatches or repeat nondeterminism.
+`/tmp/cgl-wo1-perf/runs/final/provenance.json` records the final source diff and
+these executable SHA-256 hashes:
+
+- CPU: `71698e4a0c36b337e9b00998a02a9f8f7834c10f10131ecaeacc53442f198fb8`
+- MPI: `7a92a266a18b740487c0d9470fd6bc4f4ddbc82ef219dd94b643b90964893e3e`
