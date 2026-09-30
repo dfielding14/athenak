@@ -1040,6 +1040,11 @@ these executable SHA-256 hashes:
   container. This Mac has no CUDA/HIP compiler, and the fork has no self-hosted
   runners. CUDA compilation is to be verified by the PR check; no GPU runtime
   validation is claimed.
+- The first CUDA 12.6 build found NVCC's extended-lambda access restriction in
+  private timestep helpers. Six affected declarations in hydro, MHD and the
+  turbulence driver now have public access; their numerical bodies are unchanged.
+  The local CPU rebuild is byte-identical to the previously tested binary.
+  The initial compiler diagnostic is retained in `validation/wo1/review/cuda/`.
 
 Durable provenance, output hashes, rejected P1 patch, inputs and review evidence
 are committed under [`validation/wo1/`](validation/wo1/ARCHIVE.md). The P1 issue is

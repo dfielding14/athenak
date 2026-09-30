@@ -105,10 +105,12 @@ class TurbulenceDriver {
   TurbulenceRestartMetadata RestartMetadata() const;
   void ValidateRestartMetadata(const TurbulenceRestartMetadata& metadata) const;
 
- private:
+  // CUDA extended lambdas require their enclosing member to be public.
   void Initialize();
   void BuildBasis();
   void RenderForce();
+
+ private:
   bool IsDrivenMode(int nkx, int nky, int nkz, Real dkx, Real dky, Real dkz) const;
 
   MeshBlockPack* pmy_pack;  // MeshBlockPack containing this driver

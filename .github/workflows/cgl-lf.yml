@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: cgl-lf-${{ github.event.pull_request.number || github.ref }}
+  group: cgl-lf-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -40,12 +40,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake g++ libopenmpi-dev openmpi-bin
           python -m pip install numpy matplotlib pytest
-      - name: Build and run CGL Linux tests
+      - name: Build CGL Linux application
         shell: bash
         run: |
           cmake -S . -B tst/build -DCMAKE_BUILD_TYPE=Release -DAthena_ENABLE_MPI=${{ matrix.mpi }}
           cmake --build tst/build -j 2
           ln -s ../../inputs tst/build/src/inputs
+      - name: Run CGL Linux tests
+        shell: bash
+        run: |
           cd tst
           python - <<'PY'
           import os

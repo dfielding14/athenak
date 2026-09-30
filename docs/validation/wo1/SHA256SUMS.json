@@ -29,6 +29,7 @@
   "review/byte-comparison-results.json.gz": "5b63fe85fd6deef65468fd900f0da249ecc35878535a6f48199da1ff899a6377",
   "review/cpplint.log": "b3656fde091c5f0d9b2705a672cddeb3e289c5fb1939b56879c350806253279d",
   "review/cpu.log": "b7792e720736c3c2207780a0aee7051978f4021cee10b2e78b31e38056a00c49",
+  "review/cuda/initial-failure.txt": "57b5e4aec64bfeee34cbda295f1d713f1f455f4e07e5509afcf12907185aa7af",
   "review/flake8.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "review/focused-recheck.log": "e6d1cc43955b259055cb0eff3f2df7cd90b16fb3023d05d77fb7b4bd755ef761",
   "review/harness_review.py": "4955c987615d9950cbfd0f92f950787633079c9789bd7ae4352841eaa9bf9341",
