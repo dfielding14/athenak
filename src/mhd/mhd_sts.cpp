@@ -212,6 +212,8 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
+  pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
+                              STSSweepName(pdrive), 0, pdrive->sts.nstages, true);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "pre",
                               STSSweepName(pdrive), "anisotropy", u0);
@@ -699,6 +701,8 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   }
   // Synchronize the coarse representation with the final rates/wall update.
   RestrictU(pdrive, stage);
+  pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
+                              STSSweepName(pdrive), stage, pdrive->sts.nstages, true);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "post-sweep-collisions", "post",
                               STSSweepName(pdrive), "anisotropy", u0);

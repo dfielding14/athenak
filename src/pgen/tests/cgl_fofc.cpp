@@ -497,10 +497,17 @@ void FinalizeFOFCMutationTest(ParameterInput *, Mesh *) {
 } // namespace
 
 void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
-  const bool pressure_step =
-      pin->GetOrAddString("problem", "test_mode", "flux_mutation") == "pressure_step";
+  const std::string mode = pin->GetOrAddString("problem", "test_mode", "flux_mutation");
+  const bool pressure_step = mode == "pressure_step";
+  const bool weak_field = mode == "weak_field_transport";
+  const Real weak_velocity = weak_field ? pin->GetReal("problem", "weak_field_velocity")
+                                        : 0.0;
   pgen_final_func = pressure_step ? FinalizePressureStep : FinalizeFOFCMutationTest;
   user_srcs_func = pressure_step ? ValidatePressureStep : ValidateFOFCMutation;
+  if (weak_field) {
+    pgen_final_func = nullptr;
+    user_srcs_func = nullptr;
+  }
   if (restart) return;
 
   auto *pmbp = pmy_mesh_->pmb_pack;
@@ -546,22 +553,37 @@ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
       bcc0(m,IBY,k,j,i) = 0.0;
       bcc0(m,IBZ,k,j,i) = 0.0;
     }
+    if (weak_field) {
+      // A pressure-balanced transverse-field contact moving in either direction.
+      const bool weak_side = (i <= (is + ie)/2) == (weak_velocity > 0.0);
+      w0(m,IDN,k,j,i) = 1.0;
+      w0(m,IVX,k,j,i) = weak_velocity;
+      w0(m,IVY,k,j,i) = w0(m,IVZ,k,j,i) = 0.0;
+      w0(m,IPR,k,j,i) = w0(m,IPP,k,j,i) = weak_side ? 1.5 : 1.0;
+      bcc0(m,IBX,k,j,i) = bcc0(m,IBZ,k,j,i) = 0.0;
+      bcc0(m,IBY,k,j,i) = weak_side ? 1.0e-12 : 1.0;
+    }
   });
 
   par_for("cgl_fofc_e2e_b1", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x1f(m,k,j,i) = pressure_step ? 2.0 : 0.43;
+    b0.x1f(m,k,j,i) = weak_field ? 0.0 : (pressure_step ? 2.0 : 0.43);
   });
   par_for("cgl_fofc_e2e_b2", DevExeSpace(), 0, nmb-1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     b0.x2f(m,k,j,i) = pressure_step ? 0.0 : -0.31;
+    if (weak_field) {
+      const bool weak_side = (i <= (is + ie)/2) == (weak_velocity > 0.0);
+      b0.x2f(m,k,j,i) = weak_side ? 1.0e-12 : 1.0;
+    }
   });
   par_for("cgl_fofc_e2e_b3", DevExeSpace(), 0, nmb-1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x3f(m,k,j,i) = pressure_step ? 0.0 : 0.26;
+    b0.x3f(m,k,j,i) = (pressure_step || weak_field) ? 0.0 : 0.26;
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
+  if (weak_field) return;
   CheckBelowFloorTransport(pmhd->peos->eos_data);
   CheckReconstructionFloors(pmhd->peos->eos_data);
   CheckNonfiniteDetector(pmy_mesh_);

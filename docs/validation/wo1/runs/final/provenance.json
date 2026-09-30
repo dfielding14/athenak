@@ -1,0 +1,18 @@
+{
+  "source_commit": "b3c7d60ed86c63d0dfe4b41055b595a49b55eb2e",
+  "source_patch_sha256": "c0f16c0afc2d86a610cb22dd54267aa3918e0588cc40b47220d1200bf0930e32",
+  "provenance_note": "Final delivered CPU/MPI binaries after G4 checker-only guard fix and C2 shearing fixture nu30 followup. Frozen P inputs unchanged. Supplementary final byte-verification and delivered-binary hash record; earlier isolated P6 timing table remains the performance report. Parent confirms no other builds/simulations during matrix.",
+  "binaries": {
+    "serial": {
+      "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build/src/athena",
+      "sha256": "71698e4a0c36b337e9b00998a02a9f8f7834c10f10131ecaeacc53442f198fb8"
+    },
+    "mpi": {
+      "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build-mpi/src/athena",
+      "sha256": "7a92a266a18b740487c0d9470fd6bc4f4ddbc82ef219dd94b643b90964893e3e"
+    }
+  },
+  "matrix_configurations": 24,
+  "repeats": 3,
+  "byte_comparison_failures": 0
+}

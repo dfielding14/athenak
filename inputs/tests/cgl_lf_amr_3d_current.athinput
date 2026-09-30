@@ -79,8 +79,8 @@ rho0 = 1.0
 ppar0 = 10.0
 pperp0 = 10.1
 pressure_mode = sinusoidal_delta
-# Keep the first post-derefinement LF stage inside the fluid firehose wall.
-pressure_amp = 0.49
+# Derefinement crosses the fluid firehose wall and exercises post-AMR projection.
+pressure_amp = 0.5
 pressure_k = 2.0
 vx0 = 0.08
 vy0 = 0.05

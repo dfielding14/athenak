@@ -1,0 +1,94 @@
+# Frozen scratch input for WO1 byte comparison.
+
+<job>
+basename = shear
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.25
+x1max = 0.25
+ix1_bc = shear_periodic
+ox1_bc = shear_periodic
+nx2 = 16
+x2min = -0.25
+x2max = 0.25
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.25
+x3max = 0.25
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 0.1
+nlim = 10
+ndiag = 100000
+sts_integrator = rkl2
+sts_max_dt_ratio = 20
+
+<shearing_box>
+qshear = 1.5
+omega0 = 1.0
+
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+cgl_lf_strict_admissibility = true
+lf_k_parallel = 1.0
+lf_coefficient_mode = local
+nu_coll = 0.0
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+cgl_lf_profile = true
+cgl_lf_profile_detail = false
+
+<problem>
+pgen_name = cgl_lf_sbox
+rho0 = 1.0
+ppar0 = 1.0
+pperp0 = 1.0
+amp = 0.0001
+bx0 = 1
+by0 = 0.2
+bz0 = 0.1
+nwx = 1
+nwy = 1
+nwz = 1
+validation_output = false
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1
+
+<output2>
+file_type = bin
+variable = mhd_u_bcc
+dcycle = 10
+
+<output3>
+file_type = bin
+variable = mhd_w_bcc
+dcycle = 10
+
+<output4>
+file_type = rst
+dcycle = 10

@@ -773,7 +773,8 @@ def test_cgl_lf_stiff_limiter_relaxes_to_selected_firehose_threshold():
 
 
 @pytest.mark.parametrize("backup", ("false", "true"))
-def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
+@pytest.mark.parametrize("integrator", ("sts", "explicit"))
+def test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry(backup, integrator):
     command = [
         "./athena",
         "-i",
@@ -782,10 +783,14 @@ def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
         f"mhd/backup_limiters={backup}",
         "problem/ppar0=3.0",
         "problem/pperp0=1.0",
+        f"mhd/cgl_heat_flux_integrator={integrator}",
+        f"time/sts_integrator={'rkl2' if integrator == 'sts' else 'none'}",
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "strict admissibility failed" in result.stdout
+    assert "wall checkpoint" in result.stdout
+    assert "sweep=pre stage=0/" in result.stdout
     assert "hard_bound=" in result.stdout
 
 
@@ -1741,7 +1746,13 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
     ])
     assert args.reference_curves == ["fig2.json", "fig13.json"]
     assert args.allow_partial_reference_cases
-    all_paper_inputs = sorted(PAPER_PRODUCTION_INPUT_ROOT.glob("*.athinput"))
+    # This contract covers the 18 campaign inputs and two smoke inputs, not
+    # the additional wave and AMR fixtures sharing their directory.
+    all_paper_inputs = sorted(
+        path for group in ("standard", "nulim", "heat_flux", "compressive",
+                           "scale_separation", "smoke")
+        for path in PAPER_PRODUCTION_INPUT_ROOT.glob(f"cgl_lf_paper_{group}_*.athinput")
+    )
     assert len(all_paper_inputs) == 20
     for input_path in all_paper_inputs:
         source = input_path.read_text()
@@ -2776,7 +2787,7 @@ def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
     assert stage_i.retained_product_paths(product) == groups[0]
 
 
-def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
+def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_bundle_provenance_test", PAPER_STAGE_I_TOOL
     )
@@ -2784,6 +2795,8 @@ def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "GIT", Path("/usr/bin/git").resolve())
 
     repository = tmp_path / "source"
     repository.mkdir()
@@ -3189,6 +3202,8 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "GIT", Path("/usr/bin/git").resolve())
 
     repository = tmp_path / "source"
     script = repository / "scripts" / "frontier" / "stage_i.py"
@@ -3362,6 +3377,8 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "SYSTEM_PYTHON", Path("/usr/bin/python3").resolve())
 
     root = tmp_path / "root"
     paths = stage_i.initialize(root)
@@ -4271,6 +4288,8 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "SYSTEM_PYTHON", Path("/usr/bin/python3").resolve())
     batch_template = (
         "#!/bin/bash\n"
         f"BATCH_SCRIPT_SHA256={stage_i.BATCH_SCRIPT_DIGEST_PLACEHOLDER}\n"

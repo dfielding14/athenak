@@ -1,0 +1,16 @@
+P1 failed the bitwise gate in the SMR/outflow corner fixture on serial, MPI1, and MPI4, identically in all three repeats. All other 21 configurations pass. No within-candidate nondeterminism was found.
+
+Differences reach active cells, not only ghosts or restart metadata. At cycle 4, 68/1600 active density values, 156/1600 active energy values, 85 active Bx values, and 106 active By values differ in float32 binary output. Maximum active-cell absolute differences: rho=3.3974647521972656e-5, energy=3.4515857696533203e-3, Bx=1.7636418342590332e-3, By=1.998409628868103e-3. Momenta and passive scalar also differ. These active-field differences match across serial/MPI1/MPI4.
+
+Total energy history first differs at cycle 1. At cycle 4, baseline=1.7910431818514991, P1=1.7910459729521901, difference=2.7911006910130709e-06, relative difference=1.5583659396351112e-06. AMR density-repair counters are identical.
+
+Final restart files have equal length 330571 bytes but 43203 bytes differ, starting at offset 8827. No metadata normalization was used.
+
+Exact failed paths, relative to each run:
+bin/smr_outflow.mhd_u_bcc.00001.bin
+bin/smr_outflow.mhd_w_bcc.00001.bin
+rst/smr_outflow.00001.rst
+smr_outflow.mhd.hst
+smr_outflow.user.hst
+
+Complete parsed field/history differences: difference-analysis.json. Timing table: comparison.md. Original candidate source patch, binary copies, and stdout/output files are retained.

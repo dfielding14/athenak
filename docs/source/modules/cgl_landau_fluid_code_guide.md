@@ -199,8 +199,11 @@ appends LF columns when the closure is active:
   `cgl_lf_record_pressure_work = true`.
 
 Strict admissibility is controlled by `cgl_lf_strict_admissibility`. In strict
-mode, floors, non-finite or non-positive thermodynamic state, or emergency hard
-bound violations abort the run during LF primitive refresh. The fluid wall
+mode, floors and non-finite or non-positive thermodynamic states abort during
+LF primitive refresh. Hard-bound violations abort at sweep entry or after the
+scheduled end-of-sweep wall projection. Intermediate LF crossings remain in
+`lf_hardbd`, without adding a per-stage projection. Boundary checks do not add
+stage visits or duplicate cumulative diagnostics. The fluid wall
 $\Delta p\geq-B^2$ is always checked; backup walls are checked only when
 explicitly enabled. Relaxed mode does not change `backup_limiters`. The retained
 `lf_hwproj` field is zero in new runs because primitive recovery no longer

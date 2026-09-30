@@ -75,6 +75,10 @@ Restriction follows the complementary ordering:
    fields.
 5. After any face-field repair, boundary data and primitives are refreshed so
    the next reconstruction never consumes stale ghosts.
+6. A walls-only projection is applied against the final field and primitive
+   state, then coarse cell data are restricted again. This corrects crossings
+   introduced by the completed transfer/field repair without repeating collision
+   rates or changing conserved mass, momentum or total energy.
 
 The live primitive state used by corner electric fields and CT is not mutated
 early by the restriction helper. This preserves the normal MHD task ordering

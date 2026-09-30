@@ -1,0 +1,3 @@
+CGL Landau-fluid strict admissibility failed at a split-sweep wall checkpoint: sweep=post stage=21/21 dfloor=0 pfloor=0 nonfinite=0 nonpositive=0 hard_bound=1018
+false CGL Landau-fluid strict admissibility failed at a split-sweep wall checkpoint: sweep=pre stage=0/3 dfloor=0 pfloor=0 nonfinite=0 nonpositive=0 hard_bound=16
+true CGL Landau-fluid strict admissibility failed at a split-sweep wall checkpoint: sweep=pre stage=0/3 dfloor=0 pfloor=0 nonfinite=0 nonpositive=0 hard_bound=16

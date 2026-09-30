@@ -1,10 +1,35 @@
 # WO1 CGL-LF changes and validation
 
-Status: complete: all 41 numbered tasks resolved. T-P1 is deferred to WO2
-under the required bitwise rule; its candidate is not retained.
+Status: the 41-task implementation is complete, but review follow-up found an
+unresolved multi-cycle weak-field transport failure in T-B4. This is a merge
+blocker, not a passed validation. T-P1 is deferred to WO2 under the required
+bitwise rule; its candidate is not retained.
 Base: `8222de3aa`; branch: `c/cgl-lf-wo1`.
 The work order controls the design; `CGL_LF_STS_review.md` describes pre-merge
 `2aee609` and is used for derivations rather than current bug status.
+
+## User-visible changes
+
+- Turbulent forcing now applies one full-step kick before RK for every driven
+  fluid, including hydro and MHD. Existing driven results can change. Each fluid's
+  energy update uses its own conserved momentum; OU coefficient cadence is unchanged.
+- Generic planar forcing now uses z as its parallel axis. The paper-specific
+  policy already used z.
+- The CMake turbulence `UserProblem` wrapper is enabled only for `PROBLEM=turb`,
+  allowing other custom problem generators to link without a duplicate definition.
+- An unspecified firehose threshold now defaults to $\Lambda_{\rm FH}=2$.
+  Set the numeric threshold explicitly to retain another value.
+- `limiter_hardwall=true` now fails at startup. Use finite-rate soft relaxation
+  and the configured backup walls; the fluid firehose wall is always enforced.
+- Passive CGL mode is disabled pending its thermal-model redesign. CGL-LF
+  inflow/user boundaries remain rejected while IAN stores magnetic moment.
+- LF transverse temperature slopes now use the van Leer limiter shared with
+  Spitzer through `diffusion/limiters.hpp`. The shared mean also handles extreme
+  finite slopes without overflowing; magnetic-magnitude slopes are unchanged.
+- Strict LF checks enforce hard walls at sweep entry and after the scheduled
+  end projection. Intermediate crossings remain counted but are not fatal;
+  floors and invalid states still fail immediately. Final post-AMR states also
+  receive a walls-only projection, without repeating rates.
 
 ## Baseline
 
@@ -140,6 +165,16 @@ zero/threshold B and both-weak states are checked too. This is a single physical
 cell update rather than a many-cycle grid run. Release build, changed C++ style,
 and the three built-in FOFC/reconstruction regressions pass.
 
+**Review follow-up: multi-cycle failure.** A pressure-balanced transverse
+contact on 128 cells, with $B=10^{-12}$ entering $B=1$, `bfloor=1e-10`,
+$v_x=\pm10$ and no collisions, passes the first update but exceeds
+$p_\perp/p_\parallel=2$ by cycle 5. By cycle 50 the maximum ratio is about
+$2.46\times10^{10}$, without EOS floors. The supplied weak-field flux change
+therefore does not establish the requested multi-cycle bound. The new
+`cgl_weak_field_transport.athinput` and `test_cgl_weak_field_cpu.py` preserve the
+reproducer. This finding requires a separate design decision; no flux formula
+has been silently substituted to make the test pass.
+
 ### T-B5: valid CGL magnetic-field floor
 
 Triage: still present. The constructor rejects nonpositive bfloor and, in float
@@ -248,26 +283,28 @@ Changed AMR expectations follow the new physics: the strong-anisotropy fixture
 requires only fluid-wall repairs; the uniform firehose state has final
 $|A|=\log(22/7)$; the mirror-slope fixture has no AMR soft-threshold projection.
 The coarse diagnostic independently clamps the child mean to the coarse hard-wall
-interval before comparing at the original tolerance. The LF 3D churn fixture's
-pressure amplitude changes from 0.5 to 0.49: the former produces a real
-$\Delta p+B^2=-0.005118$ crossing just after derefinement, now caught by the
-unconditional diagnostic. At 0.49 it remains admissible without repairs. No
-per-stage limiter or diagnostic tolerance was added.
+interval before comparing at the original tolerance. Review follow-up restores
+the LF 3D churn fixture's pressure amplitude from 0.49 to its original 0.5.
+The completed derefinement/field refresh creates eight violating cells before
+LF starts: the measured minimum $\Delta p+B^2$ changes from $+0.06065$ to
+$-0.004616$. `AdaptiveMeshRefinement` now applies walls only after that final
+field/primitive refresh and restricts the corrected coarse representation.
+The new test checks the post-AMR state before LF can repair or evolve it;
+total-energy drift is $2.49\times10^{-14}$ at the unchanged conservation tolerance.
 
 Final C2 integration: all 11 AMR tests, 79 selected CPU regressions and all 21
 full-workflow cases pass. Changed C++ passes cpplint. No tolerance was relaxed.
 
-The final shearing regression exposed another fixture outside the new strict
-fluid-wall envelope: its collisionless background fails the first post-RK LF
-stage with 1016 hard-bound violations on both post-G and final binaries.
-Changing only `tst/inputs/cgl_lf_sts_sbox.athinput` background `nu_coll=0` to 30
-keeps its nonzero perturbation, field, strict mode, all tolerances, and analytic
-magnetic references. The full serial/MPI/explicit/restart test passes on both
-binaries, with all 30 output files byte-identical. It completes 38 STS cycles
-to t=0.3 and 106 capped/explicit cycles to t=0.04, with no repairs or hard-bound
-violations. This is a collisional boundary/restart test; the original
-collisionless strict fixture is not claimed to be supported. Evidence:
-`/tmp/cgl-wo1-sbox-final/summary.txt`.
+Review follow-up also restores the shearing fixture to `nu_coll=0`. At cycle 8,
+$t=0.06697$, after-RK walls leave all active cells admissible, but the first
+post-LF stage creates 1016 crossings with minimum margin $-9.35\times10^{-7}$.
+This is intermediate LF transport, not a missing after-RK wall call. Strict
+hard-wall checks now occur at sweep entry and after the prescribed end projection;
+every intermediate crossing remains counted. Floors/nonpositive/nonfinite states
+still fail at every stage. Safe and fast RKL2 runs reach $t=0.3$ in 39 cycles,
+recording 1,172,382 hard-bound stage visits; the explicit reference also completes.
+An isolated negative control omitting the end projection fails the exit check,
+and invalid initial states still fail at entry. No per-stage projection is added.
 
 ### T-C3: additive LF suppression rates
 
@@ -706,7 +743,7 @@ only that warning class yields a successful build. No scientific figure data
 or historical campaign measurements were regenerated. QA evidence is retained
 in `/tmp/cgl-wo1-g7/evidence.md` and its build logs.
 
-## Performance baseline and acceptance
+## Performance baseline and acceptance before review follow-up
 
 The final post-G numerical binaries were frozen before P: Release double,
 Kokkos Serial, Apple M4 Max ARM64, Clang `-O3`, with a separate MPI build.
@@ -756,6 +793,17 @@ retained. The rejected diff and outputs are preserved in
 `/tmp/cgl-wo1-p12/P1-tested-rejected.patch` and
 `/tmp/cgl-wo1-perf/runs/p1/`. The combined coarse/fine and physical-boundary
 provenance needs resolution before this optimization can be retried.
+
+This is a WO2 **correctness investigation**, not only a postponed optimization.
+The evidence does not establish whether the candidate's packing was wrong or
+the baseline requires refreshed density, momentum, scalar or magnetic ghosts at
+the coarse/fine outflow interface. Isolate the two candidate changes (compact
+cell exchange and skipped magnetic BCs), then compare those ghost values before
+and after boundary filling, prolongation and flux correction through the first
+differing cycle. Require an explained dependency and a regression that detects
+the active-cell discrepancy before attempting the optimization again. No part
+of the rejected candidate is enabled. The durable evidence archive is
+[`validation/wo1/`](validation/wo1/ARCHIVE.md).
 
 Baseline and rejected-P1 timings (cycle ms / profiled compute microseconds per
 stage; rejected timings are diagnostic, not a claimed speedup):
@@ -894,7 +942,7 @@ the required LF cases improve solver cycle time by 8.5-9.3% in serial and
 by +1.7%; no LF speedup is inferred from that control. Three repeats and this
 one CPU do not establish GPU or production-scale performance.
 
-## Final validation and observations
+## Validation and observations before review follow-up
 
 - Release CPU and MPI builds pass. The final 187-check physical CPU selection
   had 186 passes and one G4 caller-guard failure; after repairing that guard,
@@ -935,7 +983,7 @@ input/executable hashes, timings and rejected P1 evidence are under
 `/tmp/cgl-wo1-perf/`. Work-order Markdown files and the Kokkos submodule pointer
 are unchanged. No branch was pushed and no PR was opened.
 
-After the final checker/fixture follow-ups, the exact delivered CPU/MPI binaries
+Before the review follow-up below, the exact delivered CPU/MPI binaries
 were run through the full fixed matrix again: all 24 configurations times three
 repeats match post-G, with zero output mismatches or repeat nondeterminism.
 `/tmp/cgl-wo1-perf/runs/final/provenance.json` records the final source diff and
@@ -943,3 +991,58 @@ these executable SHA-256 hashes:
 
 - CPU: `71698e4a0c36b337e9b00998a02a9f8f7834c10f10131ecaeacc53442f198fb8`
 - MPI: `7a92a266a18b740487c0d9470fd6bc4f4ddbc82ef219dd94b643b90964893e3e`
+
+## Review follow-up validation
+
+- Both original fixtures are restored: collisionless shear (`nu_coll=0`) and
+  3D AMR pressure amplitude 0.5. Shear now runs 39 cycles to $t=0.3$; capped
+  STS and explicit references run 994 cycles to $t=0.04$. Serial/MPI physical,
+  magnetic, divergence and timestep assertions keep their original tolerances.
+- The shearing restart already permits physical-state differences of $5\times10^{-6}$.
+  Its discontinuous hard-bound occupancy count therefore need not be exactly
+  equal near a wall. All other integer counters remain exact. Hard-bound visits
+  remain positive and at most the stage-cell count; the occupied fraction differs
+  by $2.55\times10^{-5}$, below its explicit absolute tolerance $10^{-4}$.
+  Full-precision strict exit checks enforce the final wall independently.
+- The broader CPU run gives 255 passes and one macOS test-fixture failure:
+  `os.sched_getaffinity` is absent on macOS. Both affinity mocks now allow that
+  absent attribute. The six-check targeted rerun passes, including this check,
+  its sibling and the restored AMR/churn/restart cases. Thus all 256 selected CPU
+  checks have passing results. All eight selected MPI checks pass.
+- The five earlier campaign failures now pass with portable test-local trusted
+  Git/Python paths and the correct campaign-input inventory. Production
+  authentication was not changed. They were not solely Linux-path failures.
+- Two new B4 grid checks are strict expected failures, explicitly marked as
+  merge blockers. Their bounds were not relaxed. Both velocity directions fail;
+  donor-cell reconstruction also fails. The isolated pre-B4 headers already give
+  pressure ratio $1.11\times10^8$ after one cycle; current headers keep that first
+  ratio at 1 but still reach $2.46\times10^{10}$ by cycle 50. The flux redesign is
+  unresolved and is not represented as completed validation.
+- A full float build remains blocked. Investigation additionally found table-reader
+  `double*`/`Real*` mismatches and geodesic/unit-system narrowing and range issues.
+  Trial portability edits were discarded; no unrelated float repair is retained.
+  Changed CGL math helpers retain their passing direct float tests.
+- B1 energy rounding runs only on a floor repair whose recovered pressure is
+  still below the floor. C2 pressure rounding follows an actual wall clamp;
+  encoded-A rounding requires a recovered hard-bound violation and never changes
+  total energy. The collision kernel returns without re-encoding when rates and
+  walls leave pressures unchanged.
+- The final CPU/MPI binaries again match all 24 post-G output configurations,
+  each repeated three times, byte for byte. The comparison harness accounts for
+  the four added strict wall checkpoints per cycle without counting them as LF
+  stages. These concurrent validation runs do not establish a revised speedup;
+  the timing tables above describe the pre-review implementation.
+- Changed source and tests pass style checks. The 18-page PDF compiles without
+  overfull boxes; the two changed pages were rendered and checked. Strict Sphinx
+  compilation passes with the same two pre-existing orphan-page warnings suppressed.
+- `.github/workflows/cgl-lf.yml` adds GitHub-hosted Linux CPU/MPI checks, explicit
+  restored AMR regressions, and a CUDA device-code compile using a pinned toolkit
+  container. This Mac has no CUDA/HIP compiler, and the fork has no self-hosted
+  runners. CUDA compilation is to be verified by the PR check; no GPU runtime
+  validation is claimed.
+
+Durable provenance, output hashes, rejected P1 patch, inputs and review evidence
+are committed under [`validation/wo1/`](validation/wo1/ARCHIVE.md). The P1 issue is
+recorded as a WO2 correctness investigation. The two root work-order files remain
+untracked and are not included. The PR must remain a draft while the B4 blocker
+and outstanding validation requirements are unresolved.

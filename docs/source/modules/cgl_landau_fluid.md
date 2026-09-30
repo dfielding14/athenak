@@ -71,9 +71,12 @@ AthenaK records LF-stage health metrics in normal MHD history output whenever
 this closure is active. Set `cgl_lf_strict_admissibility = true` for
 verification runs to terminate immediately if an LF refresh produces
 non-finite or non-positive thermodynamic state, activates density or pressure
-floors, or crosses an emergency mirror/firehose bound. The fluid firehose bound is always checked; configured backup walls are checked
-only when `backup_limiters` is enabled. These checks do not apply soft scattering
-between LF stages; a physical crossing within a stage still fails strict mode.
+floors. Hard walls are checked strictly at sweep entry and after the scheduled
+end-of-sweep projection. Intermediate LF crossings remain counted in `lf_hardbd`
+but do not abort: LF can cross a wall before that projection, even from an
+admissible initial state. The fluid firehose bound is always checked; configured
+backup walls are checked only when `backup_limiters` is enabled. No per-stage
+wall projection or soft scattering is added.
 
 At a face, $\nu_{\rm eff}$ is the sum of background collisions, one
 `limiter_nu_coll` contribution when an enabled soft threshold is exceeded, and
@@ -116,7 +119,7 @@ $\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ for strong collisions.
 | `limiter_nu_coll` | required when either limiter is enabled | Nonnegative finite soft-limiter relaxation frequency. |
 | `limiter_hardwall` | `false` | Legacy `true` is rejected. Use finite `limiter_nu_coll` for soft-threshold relaxation. |
 | `backup_limiters` | `false` | Project onto both configured backup walls; requires at least one soft limiter to be enabled. LF never enables this flag implicitly. |
-| `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
+| `cgl_lf_strict_admissibility` | `false` | Fail immediately on LF floors or invalid states; enforce hard walls at sweep entry and after the scheduled end projection. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
 | `cgl_lf_diagnostics` | `full` | `full` collects heat-flux face/cap/work diagnostics; `none` skips those reductions for production runs. |
 | `cgl_lf_arithmetic` | `safe` | `safe` uses overflow-protected scaled arithmetic; `fast` uses direct normal-range `Real` arithmetic. |

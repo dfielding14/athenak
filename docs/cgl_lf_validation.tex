@@ -225,16 +225,19 @@ $$
 $$
 followed by the applicable walls. With LF this occurs after the post sweep;
 walls alone follow the pre sweep and RK step. Without LF, rates and walls
-follow RK. There is no soft scattering during primitive recovery or between
+follow RK. A walls-only projection also follows the final post-AMR field and
+primitive refresh, without repeating rates. There is no soft scattering during primitive recovery or between
 LF stages. \texttt{limiter\_hardwall=true} is rejected. The paper decks use
 an explicit stiff finite rate $10^{10}$; approach to the soft threshold
 remains asymptotic, unlike the former algebraic projection.
 
 LF histories retain stage, floor, invalid-state, threshold-occupancy,
 heat-flux, and optional RK pressure-work diagnostics. Strict validation
-rejects floors, invalid states, crossings of the fluid wall, and crossings
-of explicitly enabled backup walls. Ordinary soft-threshold occupancy may
-be nonzero. The historical \texttt{lf\_hwproj} field remains for compatibility
+rejects floors and invalid states at every LF stage. The fluid wall and
+explicitly enabled backup walls are enforced at sweep entry and after the
+scheduled end-of-sweep projection. Intermediate LF crossings remain counted
+but are not fatal; no per-stage projection is added. Ordinary soft-threshold
+occupancy may be nonzero. The historical \texttt{lf\_hwproj} field remains for compatibility
 and is zero in new runs.
 
 \subsection*{Current fences and forcing}

@@ -828,10 +828,12 @@ With LF active, normal MHD history output appends cumulative counters:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
 `lf_mirror`, `lf_firehs`, `lf_hardbd`, `lf_qface`, `lf_qprcap`,
 `lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, `lf_qpewrk`, and
-`lf_hwproj`. Strict
-validation decks require zero floors, zero nonfinite/nonpositive states, and
-zero hard-bound violations; limiter and cap counts may be nonzero when
-intentionally exercised.
+`lf_hwproj`. Strict validation requires zero floors and zero
+nonfinite/nonpositive states at every LF stage, and admissible hard walls at
+sweep entry and after the scheduled end-of-sweep projection. Intermediate
+hard-bound, limiter and cap counts may be nonzero when intentionally exercised;
+the collisionless shearing regression checks such intermediate crossings and
+the corrected final state. Smooth-decay decks still require zero crossings.
 `lf_mirror` and `lf_firehs` are physical threshold-occupancy counters
 evaluated with the selected policy. `lf_hardbd` always checks the fluid bound $\Delta p\geq-B^2$ and additionally
 checks configured backup walls only when `backup_limiters=true`.
