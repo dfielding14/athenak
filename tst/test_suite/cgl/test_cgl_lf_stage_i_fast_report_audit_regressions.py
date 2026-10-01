@@ -623,7 +623,8 @@ def test_snapshot_worker_plan_bounds_count_cpu_and_memory(report, tmp_path, monk
         with snapshot.open("wb") as stream:
             stream.truncate(1024 ** 3)
     exact = {str(snapshot): [snapshot] for snapshot in snapshots}
-    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(3)))
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(3)),
+                        raising=False)
 
     cpu_limited = report.snapshot_worker_plan(8, snapshots, exact, 384.0)
     memory_limited = report.snapshot_worker_plan(8, snapshots, exact, 50.0)
@@ -639,7 +640,8 @@ def test_snapshot_worker_plan_rejects_budget_below_one_worker(
     snapshot = tmp_path / "snapshot.bin"
     with snapshot.open("wb") as stream:
         stream.truncate(1024 ** 3)
-    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(8)))
+    monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(8)),
+                        raising=False)
 
     with pytest.raises(report.ReportError, match="cannot fit one estimated"):
         report.snapshot_worker_plan(8, [snapshot], {str(snapshot): [snapshot]}, 23.0)

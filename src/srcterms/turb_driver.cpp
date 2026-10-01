@@ -180,7 +180,13 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
     npeak = 0.0;
     kpeak = get_serialized_real("kpeak", 4.0 * M_PI);
   }
-  std::string spectrum_name = pin->GetOrAddString(block_name, "spectrum", "parabolic");
+  // Type 2 is isotropic random driving without a solenoidal projection.
+  driving_type = pin->GetOrAddInteger(block_name, "driving_type", 0);
+  if (driving_type < 0 || driving_type > 2) {
+    FatalTurbulenceError("driving_type must be 0, 1, or 2");
+  }
+  std::string spectrum_name = pin->GetOrAddString(
+      block_name, "spectrum", driving_type == 2 ? "power_law" : "parabolic");
   if (spectrum_name == "parabolic") {
     spectrum = TurbSpectrum::parabolic;
   } else if (spectrum_name == "power_law") {
@@ -188,13 +194,10 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   } else {
     FatalTurbulenceError("spectrum must be parabolic or power_law");
   }
-  // driving type - 0 for 3D isotropic, 1 for planar (xy) driving
-  driving_type = pin->GetOrAddInteger(block_name, "driving_type", 0);
-  if (driving_type != 0 && driving_type != 1) {
-    FatalTurbulenceError("driving_type must be 0 or 1");
-  }
   std::string projection_policy_name =
-      pin->GetOrAddString(block_name, "projection_policy", "solenoidal_compressive");
+      pin->GetOrAddString(block_name, "projection_policy",
+                          driving_type == 2 ? "mks24_random_unprojected"
+                                            : "solenoidal_compressive");
   if (projection_policy_name == "solenoidal_compressive") {
     projection_policy = TurbProjectionPolicy::solenoidal_compressive;
   } else if (projection_policy_name == "mks24_random_unprojected") {
@@ -207,8 +210,12 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
         "mks24_random_unprojected, or mks24_alfvenic_perpendicular");
   }
   if (projection_policy == TurbProjectionPolicy::mks24_random_unprojected &&
-      driving_type != 0) {
-    FatalTurbulenceError("mks24_random_unprojected requires driving_type = 0");
+      driving_type != 0 && driving_type != 2) {
+    FatalTurbulenceError("mks24_random_unprojected requires driving_type = 0 or 2");
+  }
+  if (driving_type == 2 &&
+      projection_policy != TurbProjectionPolicy::mks24_random_unprojected) {
+    FatalTurbulenceError("driving_type = 2 requires mks24_random_unprojected");
   }
   if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular &&
       driving_type != 1) {
@@ -294,7 +301,6 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   record_injected_work =
       pin->GetOrAddBoolean(block_name, "record_injected_work", false);
   injected_work = 0.0;
-  injected_work_cycle_start = 0.0;
 
   sigma_x1 = get_serialized_real("sigma_x1", -1.0);
   sigma_x2 = get_serialized_real("sigma_x2", -1.0);
@@ -459,7 +465,7 @@ bool TurbulenceDriver::IsDrivenMode(int nkx, int nky, int nkz, Real dkx, Real dk
         SQR(k_shell_unit);
     return normalized_k2 >= nlow_sqr && normalized_k2 <= nhigh_sqr;
   }
-  if (driving_type == 0) {
+  if (driving_type == 0 || driving_type == 2) {
     const Real nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
     return nsqr >= nlow_sqr && nsqr <= nhigh_sqr;
   }
@@ -543,6 +549,9 @@ void TurbulenceDriver::Initialize() {
     }
   }
 
+  if (nmode != mode_count) {
+    FatalTurbulenceError("Initialize mode count does not match allocated mode_count");
+  }
   kx_mode_.template modify<HostMemSpace>();
   kx_mode_.template sync<DevExeSpace>();
   ky_mode_.template modify<HostMemSpace>();
@@ -671,33 +680,8 @@ void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
   //  We check for mesh changes, then initialize modes and update the forcing
   auto id_resize = tl->AddTask(&TurbulenceDriver::EnsureBasisSize, this, start);
   auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
-  auto id_add = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
-  return;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn  void IncludeForcingTasks
-//  \brief includes task in the stage_run task list for adding random forcing to fluid
-//  as an explicit source terms in each stage of integrator
-//  Called by MeshBlockPack::AddPhysics() function
-
-void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start) {
-  // These must be inserted after update task, but before the source terms
-  // We apply the forcing in each step of the time integration,
-  // note that we do not update the forcing in each RK stage
-  if (pmy_pack->pionn == nullptr) {
-    if (pmy_pack->phydro != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                               pmy_pack->phydro->id.rkupdt, pmy_pack->phydro->id.srctrms);
-    }
-    if (pmy_pack->pmhd != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                               pmy_pack->pmhd->id.rkupdt, pmy_pack->pmhd->id.srctrms);
-    }
-  } else {
-    auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                             pmy_pack->pionn->id.n_rkupdt, pmy_pack->pionn->id.n_flux);
-  }
+  auto id_update = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  tl->AddTask(&TurbulenceDriver::AddForcing, this, id_update);
   return;
 }
 
@@ -775,7 +759,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
 
               // Generate Fourier amplitudes
 
-              if (driving_type == 0) {
+              if (driving_type == 0 || driving_type == 2) {
                 if (kiso > 1e-16) {
                   if (spectrum == TurbSpectrum::power_law) {
                     norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);  // power-law driving
@@ -791,17 +775,9 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
                 }
               } else if (driving_type == 1) {
                 no_dir = 2;
-                if (projection_policy_ ==
-                    TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
-                  // MKS24 paper setup: B0 || z, so k_parallel = kz and
-                  // k_perp = (kx, ky), even though retained modes vary along z.
-                  kprl = fabs(kz);
-                  kprp = sqrt(SQR(kx) + SQR(ky));
-                } else {
-                  // Preserve the historical generic planar-driver convention.
-                  kprl = fabs(kx);
-                  kprp = sqrt(SQR(ky) + SQR(kz));
-                }
+                // The planar force is perpendicular to z for every policy.
+                kprl = fabs(kz);
+                kprp = sqrt(SQR(kx) + SQR(ky));
                 if (isotropic_power_spectrum && kiso > 1e-16) {
                   norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);
                 } else if (kprl > 1e-16 && kprp > 1e-16) {
@@ -882,6 +858,9 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
         }
       }
 
+      if (nmode != mode_count) {
+        FatalTurbulenceError("InitializeModes mode count does not match mode_count");
+      }
       mode_noise_real_.template modify<HostMemSpace>();
       mode_noise_imag_.template modify<HostMemSpace>();
 
@@ -1021,7 +1000,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
   const Real center_x3_ = center_x3;
   const TurbLocalization localization_ = localization;
 
-  if ((pm->ncycle >= 1 || physical_k_shell) && (current_time >= tdriv_start) &&
+  if ((current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
     if (normalization == TurbNormalization::edot &&
         (!std::isfinite(dt) || dt <= 0.0)) {
@@ -1378,6 +1357,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
     u0_ = (pmy_pack->pmhd->u0);
     w0 = (pmy_pack->phydro->w0);
     w0_ = (pmy_pack->pmhd->w0);
+    peos = pmy_pack->phydro->peos;
     flag_twofl = true;
   }
 
@@ -1389,6 +1369,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
   const int nji = nx2 * nx1;
 
   auto eos = peos->eos_data;  // copy-by-value (POD expected)
+  const bool secondary_is_ideal = flag_twofl && pmy_pack->pmhd->peos->eos_data.is_ideal;
 
   if ((current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
@@ -1399,36 +1380,38 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
           Real a2 = force_(m, 1, k, j, i);
           Real a3 = force_(m, 2, k, j, i);
 
-          Real den = w0(m, IDN, k, j, i);
-          auto& ux = w0(m, IVX, k, j, i);
-          auto& uy = w0(m, IVY, k, j, i);
-          auto& uz = w0(m, IVZ, k, j, i);
-
-          Real Fv = (a1 * ux + a2 * uy + a3 * uz);
+          Real den = u0(m, IDN, k, j, i);
+          Real work = (u0(m, IM1, k, j, i) * a1 +
+                       u0(m, IM2, k, j, i) * a2 +
+                       u0(m, IM3, k, j, i) * a3) * bdt;
           if (flag_relativistic) {
-            // Compute Lorentz factor
-            Real ut = 1. + ux * ux + uy * uy + uz * uz;
-            ut = sqrt(ut);
-            den /= ut;
-            Fv = (a1 * ux + a2 * uy + a3 * uz) / ut;
+            // Preserve the relativistic source and subsequent Lorentz transform.
+            const Real ux = w0(m, IVX, k, j, i);
+            const Real uy = w0(m, IVY, k, j, i);
+            const Real uz = w0(m, IVZ, k, j, i);
+            const Real ut = sqrt(1.0 + ux * ux + uy * uy + uz * uz);
+            den = w0(m, IDN, k, j, i) / ut;
+            work = den * (a1 * ux + a2 * uy + a3 * uz) * bdt / ut;
+          }
+          const Real kick2 = (a1 * a1 + a2 * a2 + a3 * a3) * bdt * bdt;
+          if (eos.is_ideal) {
+            u0(m, IEN, k, j, i) += work + 0.5 * den * kick2;
           }
           u0(m, IM1, k, j, i) += den * a1 * bdt;
           u0(m, IM2, k, j, i) += den * a2 * bdt;
           u0(m, IM3, k, j, i) += den * a3 * bdt;
-          if (eos.is_ideal) {
-            u0(m, IEN, k, j, i) +=
-                (Fv + 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * bdt) * den * bdt;
-            // u0(m,IEN,k,j,i) += Fv*den*bdt;
-          }
 
           if (flag_twofl) {
             den = u0_(m, IDN, k, j, i);
+            if (secondary_is_ideal) {
+              const Real work_secondary =
+                  (u0_(m, IM1, k, j, i) * a1 + u0_(m, IM2, k, j, i) * a2 +
+                   u0_(m, IM3, k, j, i) * a3) * bdt;
+              u0_(m, IEN, k, j, i) += work_secondary + 0.5 * den * kick2;
+            }
             u0_(m, IM1, k, j, i) += den * a1 * bdt;
             u0_(m, IM2, k, j, i) += den * a2 * bdt;
             u0_(m, IM3, k, j, i) += den * a3 * bdt;
-            u0_(m, IEN, k, j, i) +=
-                (Fv + 0.5 * (a1 * a1 + a2 * a2 + a3 * a3) * bdt) * den * bdt;
-            // u0_(m,IEN,k,j,i) += Fv*den*bdt;
           }
         });
 
@@ -1700,11 +1683,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     return TaskStatus::complete;
   }
 
-  Real dt = pm->dt;
-  Real bdt = dt;
-  if (pdrive != nullptr && stage > 0) {
-    bdt = (pdrive->beta[stage - 1]) * dt;
-  }
+  const Real bdt = pm->dt;
 
   Real forcing_energy_before = 0.0;
   auto integrated_energy = [&]() {
@@ -1746,23 +1725,19 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     EquationOfState* peos = nullptr;
     if (pmy_pack->phydro != nullptr) peos = pmy_pack->phydro->peos;
     if (pmy_pack->pmhd != nullptr) peos = pmy_pack->pmhd->peos;
-    if (pdrive == nullptr || stage <= 0 || peos == nullptr ||
+    if (peos == nullptr ||
         pmy_pack->pionn != nullptr || pmy_pack->pcoord->is_special_relativistic ||
         !peos->eos_data.is_ideal) {
       FatalTurbulenceError(
           "record_injected_work requires a single nonrelativistic ideal/CGL fluid");
     }
-    if (stage == 1) injected_work_cycle_start = injected_work;
     forcing_energy_before = integrated_energy();
   }
 
   ApplyForcingWithStep(bdt);
 
   if (record_injected_work) {
-    const Real stage_work = integrated_energy() - forcing_energy_before;
-    injected_work = pdrive->gam0[stage - 1] * injected_work +
-                    pdrive->gam1[stage - 1] * injected_work_cycle_start +
-                    stage_work;
+    injected_work += integrated_energy() - forcing_energy_before;
   }
   return TaskStatus::complete;
 }

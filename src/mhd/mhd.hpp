@@ -247,6 +247,12 @@ class MHD {
   TaskStatus Prolongate(Driver* pdrive, int stage);
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
+  // CUDA extended lambdas require their enclosing member to be public.
+  void RecomputeTimeStepFromCurrentState(Driver *pdrive);
+  void DiagnoseNonfiniteCGLState(int stage, const char *operation,
+                                 const char *phase, const char *sweep,
+                                 const char *representation,
+                                 DvceArray5D<Real> state);
   TaskStatus CGLCollisions(Driver *d, int stage);
   TaskStatus ClearSTSFlux(Driver *d, int stage);
   TaskStatus ClearSTSEField(Driver *d, int stage);
@@ -280,11 +286,6 @@ class MHD {
                                   Real cgl_dt_sweep = 0.0,
                                   Real cgl_rkl_weight = 0.0);
   void AddSelectedDiffusionEMF(DiffusionSelection selection);
-  void DiagnoseNonfiniteCGLState(int stage, const char *operation,
-                                 const char *phase, const char *sweep,
-                                 const char *representation,
-                                 DvceArray5D<Real> state);
-  void RecomputeTimeStepFromCurrentState(Driver *pdrive);
   MeshBlockPack* pmy_pack;   // ptr to MeshBlockPack containing this MHD
   // temporary variables used to store face-centered electric fields returned by RS
   DvceArray4D<Real> e1_cc, e2_cc, e3_cc;

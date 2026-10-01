@@ -1,0 +1,18 @@
+{
+  "source_commit": "eb8194125978fc0c816322835a1a65fe056f861c",
+  "source_patch_sha256": "6677f6fea85135d8d22c877541a93a4cff42ba923cf54357652ed65c76152bdc",
+  "provenance_note": "P2 candidate only; P1 candidate removed. Parent confirms both builds complete and concurrent simulations/builds paused.",
+  "binaries": {
+    "serial": {
+      "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build/src/athena",
+      "sha256": "e87a2cd6862eb02fd912f196e0228dc3b4d22b5e7711df8252999e84ec451a85"
+    },
+    "mpi": {
+      "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build-mpi/src/athena",
+      "sha256": "59a94c52159bb322d3f0fae2397fce2512bd3440e983d28082ca5b83f1f9f8b5"
+    }
+  },
+  "matrix_configurations": 24,
+  "repeats": 3,
+  "byte_comparison_failures": 0
+}

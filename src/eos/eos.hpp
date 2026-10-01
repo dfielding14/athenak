@@ -15,14 +15,17 @@
 #include <string>
 
 #include "athena.hpp"
-#include "mesh/meshblock.hpp"
 #include "parameter_input.hpp"
+
+class MeshBlockPack;
 
 //----------------------------------------------------------------------------------------
 //! \struct EOSData
 //! \brief container for EOS variables and functions needed inside kernels. Storing
 //! everything in a container makes them easier to capture, and pass to inline functions,
 //! inside kernels.
+
+enum class CGLCollisionMode { full, walls_only };
 
 struct EOS_Data {
   Real gamma;        // ratio of specific heats for ideal gas
@@ -33,9 +36,12 @@ struct EOS_Data {
   bool mlim, flim;   // mirror and firehose limiter flags
   bool coll;         // enable CGL collision/limiter relaxation
   bool backup_lim;   // enable backup CGL instability limiters
-  bool hardwall_lim; // project CGL pressure anisotropy to selected instability bounds
   Real nu_coll, lim_coll;  // physical and limiter collision frequencies
-  Real firehose_threshold;  // selected firehose activation coefficient in B^2 units
+  // Delta p = p_perp - p_parallel; magnetic pressure is B^2/2.
+  // Soft thresholds are -firehose_threshold*B^2/2 and +mirror_threshold*B^2/2.
+  Real firehose_threshold, mirror_threshold;
+  Real mirror_backup_factor, firehose_backup_factor;
+  Real limiter_backup_nu;  // heat-flux suppression frequency in inverse code time
   bool use_e, use_t; // use internal energy density (e) or temperature (t) as primitive
   Real dfloor, pfloor, tfloor, sfloor, bfloor;  // fluid and magnetic-field floors
   Real gamma_max;    // ceiling on Lorentz factor in SR/GR
@@ -310,6 +316,7 @@ class EquationOfState {
                           const int jl, const int ju, const int kl, const int ku);
   virtual void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const Real dtc,
+                          const CGLCollisionMode mode,
                           const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
   virtual void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
@@ -479,6 +486,7 @@ class CGLMHD : public EquationOfState {
                   const int jl, const int ju, const int kl, const int ku) override;
   void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                   DvceArray5D<Real> &cons, const Real dtc,
+                  const CGLCollisionMode mode,
                   const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
   void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,

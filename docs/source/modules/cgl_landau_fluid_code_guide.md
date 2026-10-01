@@ -9,7 +9,7 @@ workflows, use [CGL Landau-Fluid Validation](cgl_landau_fluid_validation.md).
 
 | Area | Primary files | Role |
 | --- | --- | --- |
-| CGL EOS and primitive recovery | `src/eos/cgl_mhd.cpp`, `src/eos/ideal_c2p_mhd.hpp`, `src/eos/cgl_physics.hpp` | CGL pressure recovery, conserved anisotropy, hard-wall projection, limiter predicates, heat-flux ratio helpers. |
+| CGL EOS and primitive recovery | `src/eos/cgl_mhd.cpp`, `src/eos/ideal_c2p_mhd.hpp`, `src/eos/cgl_physics.hpp` | CGL pressure recovery, conserved anisotropy, fluid/backup walls, limiter predicates, heat-flux ratio helpers. |
 | LF parabolic operator | `src/diffusion/cgl_landau_fluid.hpp`, `src/diffusion/cgl_landau_fluid.cpp`, `src/diffusion/cgl_landau_fluid_arithmetic.hpp` | Runtime parsing, face-state construction, LF heat-flux kernels, diagnostics, profiling, safe arithmetic. |
 | MHD integration | `src/mhd/mhd.cpp`, `src/mhd/mhd_tasks.cpp`, `src/mhd/mhd_sts.cpp`, `src/mhd/rsolvers/hlle_cgl.hpp` | Construction, task graph, STS sweep lifecycle, passive/active CGL fluxes, LF-only fast paths. |
 | Diagnostics and tests | `src/outputs/history.cpp`, `src/pgen/tests/cgl_landau_fluid.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `tst/scripts/cgl/`, `tst/test_suite/cgl/` | History columns, quantitative LF pgen, reduced paper pgen, regression workflows. |
@@ -74,20 +74,29 @@ For STS LF transport, MHD owns the split lifecycle:
 
 1. `BeginCGLLandauFluidSTSSweep` converts `IAN` from conserved anisotropy to
    magnetic moment.
-2. Each STS stage clears the LF flux slots and calls
-   `CGLLandauFluid::AddHeatFluxes`.
-3. `AddHeatFluxes` precomputes `T_parallel`, `T_perp`, and `|B|`, constructs
+2. Each STS stage calls `CGLLandauFluid::AddHeatFluxes`, which assigns every
+   LF face consumed by the update; a separate flux clear is unnecessary.
+3. `AddHeatFluxes` prepares `T_parallel`, `T_perp`, and `|B|`, constructs
    x1/x2/x3 face states, evaluates capped parallel and perpendicular LF heat
-   fluxes, and writes only `IEN` and `IAN` face fluxes.
+   fluxes, and writes only `IEN` and `IAN` face fluxes. Uniform, non-shearing
+   STS sweeps cache both LF and primitive-recovery magnetic norms at stage 1.
 4. `STSUpdateU` applies the RKL2 update to energy and magnetic moment.
-5. `CGLRefreshPrimFromMagneticMoment` rebuilds CGL primitives between stages.
+5. Primitive recovery rebuilds pressures between stages. On the uniform,
+   non-shearing STS path, `CGLLandauFluid::RefreshPrimitives` also prepares the
+   next stage's temperatures in the same pass. Other paths retain
+   `CGLRefreshPrimFromMagneticMoment`. Intermediate stages refresh one ghost
+   layer; the last stage refreshes all ghosts.
 6. `RecordAdmissibility` updates LF health counters and optionally aborts in
    strict mode.
 7. `EndCGLLandauFluidSTSSweep` converts `IAN` back to conserved anisotropy.
 
-When LF and CGL collisions or limiter scattering are active, the driver applies
-collision updates after each LF half-sweep. This gives the chronological split
-`L(dt/2) C(dt/2) H(dt) L(dt/2) C(dt/2)`.
+CGL rates advance once per full cycle. With $L$ for LF, $H$ for the RK
+hyperbolic step, $C$ for exact background decay followed by finite backward-Euler
+soft relaxation, and $W$ for the configured backup plus unconditional fluid wall,
+the chronological split is
+$L(\Delta t/2)\,W\,H(\Delta t)\,W\,L(\Delta t/2)\,C(\Delta t)\,W$.
+Without LF it is $H(\Delta t)\,C(\Delta t)\,W$. Primitive recovery does not
+apply soft scattering; restriction is refreshed after scheduled rate/wall changes.
 
 ## LF Face Closure
 
@@ -160,8 +169,8 @@ time.
 ## STS Fast Paths
 
 The MHD STS update has a CGL-LF-only path when no other MHD STS process is
-active. In that case, flux clearing, state copies, and the update kernel touch
-only `IEN` and `IAN` instead of all MHD variables. This preserves the same RKL2
+active. In that case, state copies and the update kernel touch only `IEN` and
+`IAN` instead of all MHD variables. This preserves the same RKL2
 recurrence while avoiding full-array work for variables that LF does not
 advance.
 
@@ -190,17 +199,23 @@ appends LF columns when the closure is active:
   `cgl_lf_record_pressure_work = true`.
 
 Strict admissibility is controlled by `cgl_lf_strict_admissibility`. In strict
-mode, floors, non-finite or non-positive thermodynamic state, or emergency hard
-bound violations abort the run during LF primitive refresh. In relaxed mode,
-the emergency backup limiter is enabled when instability limiters are active.
+mode, floors and non-finite or non-positive thermodynamic states abort during
+LF primitive refresh. Hard-bound violations abort at sweep entry or after the
+scheduled end-of-sweep wall projection. Intermediate LF crossings remain in
+`lf_hardbd`, without adding a per-stage projection. Boundary checks do not add
+stage visits or duplicate cumulative diagnostics. The fluid wall
+$\Delta p\geq-B^2$ is always checked; backup walls are checked only when
+explicitly enabled. Relaxed mode does not change `backup_limiters`. The retained
+`lf_hwproj` field is zero in new runs because primitive recovery no longer
+applies a soft-threshold projection.
 
 ## Active And Passive CGL
 
 Active CGL runs apply the anisotropic pressure tensor in the dynamic MHD fluxes.
-Passive-Delta runs evolve CGL/LF pressures diagnostically while the flow uses
-the isothermal-MHD passive path. The passive branch affects Riemann fluxes and
-timestep estimates, so active/passive comparisons should be documented as a
-model-path comparison rather than a single-line source-term toggle.
+`passive=true` is rejected at construction because its thermal-energy equation
+is inconsistent, pending WO2. The retained passive HLLE, FOFC, and CFL paths use
+isothermal signal speeds and remain covered by direct unit tests. Archived
+passive runs are historical model comparisons, not supported new executions.
 
 ## Restrictions
 
@@ -208,6 +223,8 @@ Current restrictions are intentionally conservative:
 
 - CGL is Newtonian MHD only; SR, GR, and dynamical-GR MHD reject it.
 - CGL dynamic runs use `rsolver = hlle`.
+- LF split integration rejects inflow and user boundaries because their `IAN`
+  writes are not magnetic-moment aware; support is deferred to WO2.
 - Ordinary isotropic conduction is incompatible with `eos = cgl`.
 - CGL LF STS cannot be combined with another MHD STS process in the same run.
 - Explicit LF is a reference mode and cannot be combined with another active
@@ -219,8 +236,9 @@ Current restrictions are intentionally conservative:
   creation now prolongates `rho`, velocity, CGL internal energy `U`, and
   pressure anisotropy `Delta`, then slope-scales child states before final
   admissibility projection.
-- Current-threshold LF/STS AMR refine-up and forced moving-pattern
-  refine/derefine churn smokes have passed on GPUs with strict admissibility.
+- Pre-WO1 LF/STS AMR refine-up and moving-pattern refine/derefine smokes
+  have retained GPU evidence. WO1 CPU/MPI acceptance uses the current fluid/backup
+  walls; those historical GPU runs do not validate the revised implementation.
   Dedicated CGL AMR repair counters report whether AMR transfer needed density,
   energy, pressure, low-field, hard-wall, anisotropy, interval, or slope-scaling
   repairs.

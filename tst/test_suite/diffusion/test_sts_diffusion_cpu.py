@@ -2,8 +2,10 @@
 
 from pathlib import Path
 import shutil
+import subprocess
 
 import numpy as np
+import pytest
 
 import test_suite.testutils as testutils
 
@@ -165,3 +167,33 @@ def test_mhd_sts_independent_scalar_diffusivities():
         assert amplitude_1 < amplitude_0
     finally:
         _cleanup()
+
+
+@pytest.mark.parametrize("saturated", ("false", "true"))
+def test_spitzer_requires_units_and_applies_heat_flux(tmp_path, saturated):
+    source = Path(f"{INPUT_ROOT}/sts_thermal_front.athinput").read_text()
+    source = source.replace("conductivity_model = power_law",
+                            f"conductivity_model = spitzer\nsat_hflux = {saturated}")
+    source = source.replace("conductivity_integrator = sts",
+                            "conductivity_integrator = explicit")
+    source = source.replace("sts_integrator = rkl2", "sts_integrator = none")
+    source = source.replace("nx1 = 256", "nx1 = 32").replace("nx1 = 128", "nx1 = 32")
+    source = source.replace("nlim = -1", "nlim = 1")
+    input_path = tmp_path / "spitzer.athinput"
+    input_path.write_text(source)
+    command = ["./athena", "-i", str(input_path), "-d", str(tmp_path)]
+    missing = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert missing.returncode != 0
+    assert "Spitzer conduction requires a <units> block" in missing.stdout
+
+    input_path.write_text(source +
+                          "\n<units>\nlength_cgs = 1\ntime_cgs = 1e-6\nmass_cgs = 1e-8\n")
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    paths = sorted((tmp_path / "tab").glob("*.tab"))
+    assert len(paths) == 2
+    initial = testutils.athena_read.tab(str(paths[0]))
+    final = testutils.athena_read.tab(str(paths[-1]))
+    assert np.all(np.isfinite(final["eint"]))
+    assert np.min(final["eint"]) > 0.0
+    assert np.max(np.abs(final["eint"] - initial["eint"])) > 1e-6

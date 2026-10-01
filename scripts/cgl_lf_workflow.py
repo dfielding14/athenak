@@ -21,6 +21,17 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 2
 HISTORY_LABEL = re.compile(r"\[\d+\]=(\S+)")
 FULL_INPUTS = (
+    "inputs/unit_tests/cgl_lf_smr_decay_2d.athinput",
+    "inputs/unit_tests/cgl_lf_oblique_decay_2d.athinput",
+    "inputs/unit_tests/cgl_lf_timestep_refresh.athinput",
+    "inputs/unit_tests/cgl_lf_density_contact.athinput",
+    "inputs/unit_tests/cgl_lf_uniform_timestep.athinput",
+    "inputs/unit_tests/cgl_lf_hotspot.athinput",
+    "inputs/unit_tests/cgl_lf_field_reversal_1d.athinput",
+    "inputs/unit_tests/cgl_lf_field_reversal_2d.athinput",
+    "inputs/unit_tests/cgl_reconstruction_ppmx.athinput",
+    "inputs/unit_tests/cgl_reconstruction_wenoz.athinput",
+    "inputs/unit_tests/cgl_collision_once.athinput",
     "inputs/unit_tests/cgl_lf_quant_parallel.athinput",
     "inputs/unit_tests/cgl_lf_quant_parallel_collisional.athinput",
     "inputs/unit_tests/cgl_lf_quant_perp.athinput",
@@ -325,7 +336,16 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "output3_single_file_per_rank": choice(
             "output3", "single_file_per_rank", "false"
         ),
-        "cgl_firehose_threshold": choice("mhd", "cgl_firehose_threshold", "oblique"),
+        "cgl_firehose_threshold": choice("mhd", "cgl_firehose_threshold", "none"),
+        "firehose_threshold": choice(
+            "mhd", "firehose_threshold",
+            "1.4" if choice("mhd", "cgl_firehose_threshold", "none") == "oblique"
+            else "2.0",
+        ),
+        "mirror_threshold": choice("mhd", "mirror_threshold", "1.0"),
+        "mirror_backup_factor": choice("mhd", "mirror_backup_factor", "2.0"),
+        "firehose_backup_factor": choice("mhd", "firehose_backup_factor", "1.0"),
+        "limiter_backup_nu": choice("mhd", "limiter_backup_nu", "1.0e10"),
         "cgl_heat_flux_integrator": choice("mhd", "cgl_heat_flux_integrator", "sts"),
         "cgl_lf_record_pressure_work": choice(
             "mhd", "cgl_lf_record_pressure_work", "false"
@@ -343,7 +363,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "pfloor": choice("mhd", "pfloor", "unspecified"),
         "tfloor": choice("mhd", "tfloor", "unspecified"),
         "bfloor": choice("mhd", "bfloor", "unspecified"),
-        "cgl_collision_split": "two_half_steps_after_lf_sweeps",
+        "cgl_collision_split": "rates_once_at_cycle_end",
     }
     strict_admissibility = choice(
         "mhd", "cgl_lf_strict_admissibility", "false"
@@ -356,7 +376,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         choices.update({
             "forcing_mode": (
                 "alfvenic_z_perpendicular" if driving_type == "1"
-                else "isotropic_random" if driving_type == "0"
+                else "isotropic_random" if driving_type in ("0", "2")
                 else f"unsupported_{driving_type}"
             ),
             "forcing_seed": choice("turb_driving", "rseed", "-1"),
@@ -427,6 +447,7 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 source,
                 (
                     "turb_driving/driving_type=0",
+                    "turb_driving/projection_policy=mks24_random_unprojected",
                     "turb_driving/rseed=314159",
                     "turb_driving/expo=2.0",
                 ),
@@ -636,7 +657,7 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
             CaseSpec(
                 "paper_convergence_firehose_oblique",
                 source,
-                reduced_overrides(16, "mhd/cgl_firehose_threshold=oblique"),
+                reduced_overrides(16, "mhd/firehose_threshold=1.4"),
                 paper_smoke=True,
             ),
         ]
@@ -682,6 +703,8 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                     (
                         f"mesh/nx1={resolution}",
                         f"meshblock/nx1={resolution}",
+                        # Keep the one-e-fold error budget proportional to dx^2.
+                        f"problem/decay_rel_tol={0.003*(128/int(resolution))**2}",
                     ),
                     validation_output=True,
                     accuracy_study="collisionless_resolution",
@@ -694,7 +717,9 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 cases.append(CaseSpec(
                     f"accuracy_{component}_sts_ratio{suffix}",
                     source,
-                    (f"time/sts_max_dt_ratio={dt_ratio}",),
+                    (f"time/sts_max_dt_ratio={dt_ratio}",
+                     # The ratio-1000 probe deliberately uses only a few large steps.
+                     f"problem/decay_rel_tol={0.04 if dt_ratio == '1000.0' else 0.003}"),
                     validation_output=True,
                     accuracy_study="timestep_sweep",
                     accuracy_parameters=(
@@ -851,7 +876,9 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 Path(source).stem,
                 source,
                 lf_active="cgl_lf_" in Path(source).stem,
-                validation_output=True,
+                validation_output=input_block_value(
+                    (ROOT_DIR / source).read_text(), "problem", "validation_output"
+                ) is not None,
             )
             for source in FULL_INPUTS
         ]
@@ -1354,7 +1381,7 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         "",
         "## Cases",
         "",
-        "| Case | Status | LF safety | Firehose policy |",
+        "| Case | Status | LF safety | Firehose threshold |",
         "| --- | --- | --- | --- |",
     ])
     lf_results = diagnostics.get("lf", {})
@@ -1363,7 +1390,9 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         safety = "not applicable"
         if lf is not None:
             safety = "clean" if lf.get("clean") else "failed"
-        policy = case.get("model_choices", {}).get("cgl_firehose_threshold", "n/a")
+        choices = case.get("model_choices", {})
+        policy = choices.get("firehose_threshold",
+                             choices.get("cgl_firehose_threshold", "n/a"))
         lines.append(
             f"| `{case['name']}` | {case['status']} | {safety} | `{policy}` |"
         )
@@ -1604,7 +1633,17 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
         )
     build_dir, executable = executable_path(args)
     ensure_executable(args, build_dir, executable)
-    cases = workflow_cases(args.workflow)
+    cases = []
+    disabled_cases = []
+    for spec in workflow_cases(args.workflow):
+        source = (ROOT_DIR / spec.input_path).read_text(encoding="utf-8")
+        passive = model_choices(source, spec.overrides)["passive_delta"].lower()
+        if passive in ("true", "1"):
+            reason = "Passive CGL thermal energy equation is disabled pending WO2."
+            print(f"Skipping {spec.name}: {reason}")
+            disabled_cases.append({"name": spec.name, "reason": reason})
+        else:
+            cases.append(spec)
     source_status = git_worktree_status()
     print(f"Running CGL-LF {args.workflow} workflow with {executable}")
     case_results = [run_case(spec, executable, paths) for spec in cases]
@@ -1619,6 +1658,7 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
         "executable": str(executable),
         "build_dir": str(build_dir),
         "cases": case_results,
+        "disabled_cases": disabled_cases,
         "diagnostics": {},
     }
     manifest["diagnostics"] = evaluate_manifest(manifest, paths.root)

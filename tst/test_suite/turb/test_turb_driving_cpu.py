@@ -336,3 +336,99 @@ def test_nonpositive_final_cycle_timestep_is_rejected(tmp_path):
         "sts_max_dt_ratio=",
     ):
         assert field in output
+
+
+def staged_turb_input(tmp_path, name, additions):
+    """Add canonical keys to a local input; Athena CLI cannot add missing keys."""
+    text = (INPUTS / name).read_text()
+    for block, keys in additions.items():
+        text = text.replace(f"<{block}>", f"<{block}>\n{keys}", 1)
+    path = tmp_path / "forcing.athinput"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def test_type_two_has_nonzero_force(tmp_path):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": "driving_type = 2",
+    })
+    result = run_athena(tmp_path / "run", path)
+    require_success(result)
+    assert rms_acceleration(read_force_blocks(latest_force(tmp_path / "run"))) > 0.0
+
+
+def test_type_two_rejects_projected_policy(tmp_path):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": "driving_type = 2\nprojection_policy = solenoidal_compressive",
+    })
+    result = run_athena(tmp_path / "run", path)
+    assert result.returncode != 0
+    assert "driving_type = 2 requires mks24_random_unprojected" in (
+        result.stdout + result.stderr
+    )
+
+
+@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
+@pytest.mark.parametrize("driving_type", [0, 2])
+def test_once_per_step_power(tmp_path, integrator, driving_type):
+    """Periodic total energy gains dedt*dt on every step, including the first."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": f"driving_type = {driving_type}\nrecord_injected_work = true",
+        "output1": "data_format = %24.16e",
+    })
+    result = run_athena(tmp_path / "run", path, f"time/integrator={integrator}")
+    require_success(result)
+    history = next((tmp_path / "run").glob("*.hydro.hst"))
+    header = history.read_text().splitlines()[1].split()
+    names = [field.split("=", 1)[1] for field in header if "=" in field]
+    data = np.loadtxt(history)
+    dt = np.diff(data[:, names.index("time")])
+    work = np.diff(data[:, names.index("tot-E")])
+    assert np.all(dt >= 0.0)
+    assert np.count_nonzero(dt > 0.0) == 6
+    np.testing.assert_array_equal(work[dt == 0.0], 0.0)
+    np.testing.assert_allclose(work[dt > 0.0] / dt[dt > 0.0], 0.1,
+                               rtol=2e-7, atol=2e-8)
+
+
+@pytest.mark.parametrize("hydro_eos,mhd_eos", [
+    (None, "ideal"), (None, "cgl"), (None, "isothermal"),
+    ("ideal", None), ("isothermal", None),
+    ("ideal", "ideal"), ("isothermal", "isothermal"),
+    ("ideal", "isothermal"), ("isothermal", "ideal"),
+])
+def test_conservative_forcing_kick(tmp_path, hydro_eos, mhd_eos):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {})
+    text = path.read_text()
+    start = text.index("<hydro>")
+    end = text.index("<problem>", start)
+    blocks = []
+    for fluid, eos in (("hydro", hydro_eos), ("mhd", mhd_eos)):
+        if eos is not None:
+            blocks.append(f"<{fluid}>\neos = {eos}\ngamma = 1.666666666666667\n"
+                          "reconstruct = plm\nrsolver = hlle\nnscalars = 1\n"
+                          "iso_sound_speed = 1.0\n")
+    if hydro_eos and mhd_eos:
+        blocks.append("<ion-neutral>\ndrag_coeff = 0.0\n")
+    text = text[:start] + "\n".join(blocks) + "\n" + text[end:]
+    if hydro_eos and mhd_eos:
+        text = text.replace("integrator = rk2", "integrator = imex2")
+    text = text.replace("pgen_name = turb", "pgen_name = turb_forcing")
+    text = text[:text.index("<output1>")]
+    path.write_text(text)
+    result = run_athena(tmp_path / "run", path, "time/nlim=0")
+    require_success(result)
+    assert "max kick error=" in result.stdout
+
+
+@pytest.mark.parametrize("driving_type", [1, 2])
+def test_every_selected_mode_is_nonzero(tmp_path, driving_type):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": f"driving_type = {driving_type}",
+    })
+    text = path.read_text().replace("pgen_name = turb", "pgen_name = turb_forcing")
+    path.write_text(text[:text.index("<output1>")])
+    result = run_athena(tmp_path / "run", path, "time/nlim=0")
+    require_success(result)
+    assert "nonzero modes" in result.stdout

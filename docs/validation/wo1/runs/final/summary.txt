@@ -1,0 +1,12 @@
+Final delivered binary verification: 24 configurations x 3 repeats = 72 simulations. Zero binary/history/full-restart byte mismatches against post-G; zero within-run nondeterminism. Final source binary files match the frozen final copies. Earlier P6 timing results remain the isolated performance report; timing samples in this final results.json are supplementary.
+
+{
+  "serial": {
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build/src/athena",
+    "sha256": "71698e4a0c36b337e9b00998a02a9f8f7834c10f10131ecaeacc53442f198fb8"
+  },
+  "mpi": {
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build-mpi/src/athena",
+    "sha256": "7a92a266a18b740487c0d9470fd6bc4f4ddbc82ef219dd94b643b90964893e3e"
+  }
+}

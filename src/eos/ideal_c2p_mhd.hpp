@@ -11,6 +11,8 @@
 //! with an ideal gas EOS. Versions for both non-relativistic and relativistic fluids are
 //! provided.
 
+#include <limits>
+
 #include "eos/cgl_physics.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -155,6 +157,42 @@ void CGLRecoverPressuresFromTotalEnergyAndAnisotropy(const Real rho, const Real 
   }
 }
 
+// A wall pressure can round outside the wall when encoded in the logarithmic A
+// coordinate. Return the nearest admissible representable A toward isotropy.
+KOKKOS_INLINE_FUNCTION
+Real CGLWallAdmissibleAnisotropy(const MHDPrim1D &w, const Real eint,
+                                const Real anisotropy, const EOS_Data &eos,
+                                const bool backup) {
+  const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+  const Real bmag = fmax(sqrt(bsqr), eos.bfloor);
+  Real p_parallel, p_perp;
+  CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+      w.d, eint, anisotropy, bmag, p_parallel, p_perp);
+  if (!cgl::HardBoundViolated(p_perp - p_parallel, bsqr, eos, backup)) {
+    return anisotropy;
+  }
+  Real inside = CGLConservedAnisotropy(w.d, 1.0, 1.0, bmag);
+  Real outside = anisotropy;
+  Real trial = Kokkos::nextafter(outside, inside);
+  CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+      w.d, eint, trial, bmag, p_parallel, p_perp);
+  if (!cgl::HardBoundViolated(p_perp - p_parallel, bsqr, eos, backup)) return trial;
+  outside = trial;
+  // Isotropy is exactly representable by the recovery helper. Bisect only if a
+  // one-ULP correction failed, stopping at adjacent representable coordinates.
+  while (true) {
+    trial = 0.5*inside + 0.5*outside;
+    if (trial == inside || trial == outside) return inside;
+    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+        w.d, eint, trial, bmag, p_parallel, p_perp);
+    if (cgl::HardBoundViolated(p_perp - p_parallel, bsqr, eos, backup)) {
+      outside = trial;
+    } else {
+      inside = trial;
+    }
+  }
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn Real CGLConservedAnisotropyToMagneticMoment()
 //! \brief Convert the IAN/legacy IMU slot from conserved anisotropy A to
@@ -221,8 +259,9 @@ KOKKOS_INLINE_FUNCTION
 void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
                                         HydPrim1D &w, bool &dfloor_used,
                                         bool &efloor_used, bool &tfloor_used,
-                                        bool &bfloor_used) {
-  const Real &dfloor_ = eos.dfloor;
+                                        bool &bfloor_used, const Real bmag) {
+  const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  const Real dfloor_ = fmax(eos.dfloor, bsqr/eos.sigma_max);
   Real pfloor = eos.pfloor;
   Real bfloor = eos.bfloor;
 
@@ -237,8 +276,6 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
   w.vy = di*u.my;
   w.vz = di*u.mz;
 
-  Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
-  Real bmag = sqrt(bsqr);
   Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
   Real e_m = 0.5*bsqr;
@@ -277,6 +314,16 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
   return;
 }
 
+KOKKOS_INLINE_FUNCTION
+void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
+                                        HydPrim1D &w, bool &dfloor_used,
+                                        bool &efloor_used, bool &tfloor_used,
+                                        bool &bfloor_used) {
+  const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                    tfloor_used, bfloor_used, sqrt(bsqr));
+}
+
 //----------------------------------------------------------------------------------------
 //! \!fn void SingleC2P_CGLMHD()
 //! \brief Converts conserved into primitive variables.  Operates over range of cells
@@ -288,12 +335,15 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
                         HydPrim1D &w,
                         bool &dfloor_used, bool &efloor_used, bool &tfloor_used,
                         bool &bfloor_used) {
-  const Real &dfloor_ = eos.dfloor;
+  const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  const Real dfloor_ = fmax(eos.dfloor, bsqr/eos.sigma_max);
   Real pfloor = eos.pfloor;
   Real bfloor = eos.bfloor;
 
+  // Preserve the pressure ratio encoded by A before changing its density.
+  const Real original_density = u.d;
   // apply density floor, without changing momentum or energy
-  if (u.d < dfloor_) {
+  if (!(u.d >= dfloor_) || !Kokkos::isfinite(u.d)) {
     u.d = dfloor_;
     dfloor_used = true;
   }
@@ -329,16 +379,26 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   //}
 
   // set pressures, apply floors, correcting total energy
-  Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   Real bmag = sqrt(bsqr);
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
   Real e_m = 0.5*bsqr;
   Real eint = (u.e - e_k - e_m);
   bool pressure_floor_used = false;
   if (bmag>bfloor) {
-    // Standard CGL EOS
-    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(w.d, eint, u.mu, bmag,
-                                                       w.e, w.pp);
+    // Check the logarithms without materializing either overflowing exponential.
+    const Real log_exp = u.mu/original_density;
+    const Real log_ratio = log_exp - (2.0*log(original_density) - 3.0*log(bmag));
+    const Real log_max = log(std::numeric_limits<Real>::max());
+    if (!(original_density > 0.0) || !Kokkos::isfinite(original_density) ||
+        !Kokkos::isfinite(log_exp) || !(log_exp < log_max) ||
+        !Kokkos::isfinite(log_ratio) || !(log_ratio < log_max)) {
+      w.e = TWO_3RDS*eint;
+      w.pp = w.e;
+      efloor_used = pressure_floor_used = true;
+    } else {
+      CGLRecoverPressuresFromInternalEnergyAndAnisotropy(original_density, eint,
+                                                         u.mu, bmag, w.e, w.pp);
+    }
   } else {
     // If field goes to zero, CGL is invalid. Revert to (adiabatic) EOS with
     // pprp=pprl=(2/3*pprp+1/3*pprl).
@@ -370,9 +430,29 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
 
   // The IAN/legacy IMU slot stores A. Keep it consistent with any pressure or field-floor
   // correction so a subsequent C2P conversion recovers the same primitive state.
-  if (pressure_floor_used || bfloor_used) {
+  if (dfloor_used || pressure_floor_used || bfloor_used) {
     const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
     u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag_inv);
+    // Return the state recovered from the repaired conserved variables. If rounding
+    // puts a pressure below its floor, round each energy addition upward so the
+    // next conversion accepts the same conserved state without another repair.
+    CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+        u.d, u.mx, u.my, u.mz, u.e, u.mu, u.bx, u.by, u.bz, bfloor, w.e, w.pp);
+    if (w.e < pfloor || w.pp < pfloor) {
+      efloor_used = true;
+      Real corrected_eint = u.e - e_k - e_m;
+      if (w.e > 0.0 && w.pp > 0.0) {
+        corrected_eint = Kokkos::nextafter(
+            corrected_eint*fmax(pfloor/w.e, pfloor/w.pp),
+            std::numeric_limits<Real>::infinity());
+      }
+      const Real energy_with_kinetic = Kokkos::nextafter(
+          corrected_eint + e_k, std::numeric_limits<Real>::infinity());
+      u.e = Kokkos::nextafter(fmax(u.e, energy_with_kinetic + e_m),
+                             std::numeric_limits<Real>::infinity());
+      CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+          u.d, u.mx, u.my, u.mz, u.e, u.mu, u.bx, u.by, u.bz, bfloor, w.e, w.pp);
+    }
   }
 
   return;
@@ -413,84 +493,48 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void SingleColl_CGLMHD()
-//! \brief Calculates the decay of pressure anisotropy due to scattering over
-//! one time step
+//! \brief Apply physical collisions and monotone soft-limiter relaxation.
 
 KOKKOS_INLINE_FUNCTION
-void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll,
-                       const Real &dtc, const bool &mlim, const bool &flim,
-                       const Real &firehose_threshold, const bool &backup) {
-  Real paniso = w.pp-w.e;
-  Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
-
-  // Apply background collisions
-  Real expdtnu = exp(-nu_coll*dtc);
-  paniso = paniso*expdtnu;
-  w.pp = ONE_3RD*(paniso + 3.0*piso);
-  w.e = w.pp - paniso;
-
-  // Apply limiters
-  Real nudt = lim_coll*dtc;
-  Real nudt_b = cgl::kBackupCollisionRate*dtc;
-  Real bsqr = w.bx*w.bx+w.by*w.by+w.bz*w.bz;
-  Real wpptmp;
-
-  // Firehose block
-  if (flim && backup) { //if using backup
-    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold) &&
-        !cgl::FirehoseHardBoundViolated(paniso, bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    } else if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
-                  + cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
-                - 2.*cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.pp = wpptmp;
-    }
-
-  } else if (flim && (!backup)) { //if not using backup, just standard flim
-    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold)) {
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    }
+void SingleCollRates_CGLMHD(MHDPrim1D &w, const EOS_Data &eos,
+                            const Real dt, const bool mlim, const bool flim) {
+  const Real initial = w.pp - w.e;
+  Real paniso = initial*exp(-eos.nu_coll*dt);
+  const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+  const Real nudt = eos.lim_coll*dt;
+  if (nudt > 0.0 && flim && paniso < cgl::FirehoseThreshold(bsqr, eos)) {
+    const Real threshold = cgl::FirehoseThreshold(bsqr, eos);
+    paniso = threshold + (paniso - threshold)/(1.0 + nudt);
   }
-
-  // Mirror block
-  if (mlim && backup) {
-    if (cgl::MirrorLimiterActive(paniso, bsqr) &&
-        !cgl::MirrorHardBoundViolated(paniso, bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    } else if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
-                  + cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
-                - 2.*cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
-      w.pp = wpptmp;
-    }
-
-  } else if (mlim && (!backup)) {  //if not using backup, just standard mlim
-    if (cgl::MirrorLimiterActive(paniso, bsqr)) {
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
-      w.pp = wpptmp;
-    }
+  if (nudt > 0.0 && mlim && paniso > cgl::MirrorThreshold(bsqr, eos)) {
+    const Real threshold = cgl::MirrorThreshold(bsqr, eos);
+    paniso = threshold + (paniso - threshold)/(1.0 + nudt);
   }
+  if (paniso == initial) return;
+  const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
+  w.pp = piso + ONE_3RD*paniso;
+  w.e = piso - TWO_3RDS*paniso;
+}
 
-  return;
+//----------------------------------------------------------------------------------------
+//! \brief Project backup walls and the unconditional fluid firehose wall.
+
+KOKKOS_INLINE_FUNCTION
+void SingleCollWalls_CGLMHD(MHDPrim1D &w, const EOS_Data &eos, const bool backup) {
+  const Real initial = w.pp - w.e;
+  const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+  const Real lower = backup ? cgl::FirehoseBackupWall(bsqr, eos) : -bsqr;
+  const Real upper = backup ? cgl::MirrorBackupWall(bsqr, eos)
+                            : std::numeric_limits<Real>::max();
+  const Real paniso = fmin(fmax(initial, lower), upper);
+  if (paniso == initial) return;
+  const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
+  w.pp = piso + ONE_3RD*paniso;
+  w.e = piso - TWO_3RDS*paniso;
+  // Round toward the admissible side if reconstruction straddled the wall.
+  // One pressure ULP suffices and makes subsequent wall applications exact no-ops.
+  if (w.pp - w.e < lower) w.e = Kokkos::nextafter(w.e, w.pp);
+  if (w.pp - w.e > upper) w.pp = Kokkos::nextafter(w.pp, w.e);
 }
 
 //----------------------------------------------------------------------------------------

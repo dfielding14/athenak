@@ -1,0 +1,25 @@
+........................................................................ [ 28%]
+........................................................................ [ 56%]
+...............................................................F........ [ 84%]
+........................................                                 [100%]
+=================================== FAILURES ===================================
+____________ test_snapshot_worker_plan_bounds_count_cpu_and_memory _____________
+
+report = <module 'cgl_lf_stage_i_fast_report_audit_regressions' from '/Users/dbf75/.codex/worktrees/bf22/athenak-DF/scripts/frontier/cgl_lf_stage_i_fast_report.py'>
+tmp_path = PosixPath('/private/var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/pytest-of-dbf75/pytest-134/test_snapshot_worker_plan_boun0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d8e8600>
+
+    def test_snapshot_worker_plan_bounds_count_cpu_and_memory(report, tmp_path, monkeypatch):
+        snapshots = [tmp_path / f"snapshot-{index}.bin" for index in range(5)]
+        for snapshot in snapshots:
+            with snapshot.open("wb") as stream:
+                stream.truncate(1024 ** 3)
+        exact = {str(snapshot): [snapshot] for snapshot in snapshots}
+>       monkeypatch.setattr(report.os, "sched_getaffinity", lambda _pid: set(range(3)))
+E       AttributeError: <module 'os' (frozen)> has no attribute 'sched_getaffinity'
+
+../../test_suite/cgl/test_cgl_lf_stage_i_fast_report_audit_regressions.py:626: AttributeError
+--------------- generated xml file: /tmp/cgl-wo1-review/cpu.xml ----------------
+=========================== short test summary info ============================
+FAILED ../../test_suite/cgl/test_cgl_lf_stage_i_fast_report_audit_regressions.py::test_snapshot_worker_plan_bounds_count_cpu_and_memory
+1 failed, 255 passed, 2561 deselected in 465.16s (0:07:45)

@@ -36,17 +36,18 @@ run_case() {
 run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_active.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_active.athinput \
   job/basename=cgl_lf_paper_turb_random \
-  problem/forcing_mode=random \
   turb_driving/driving_type=2
-run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_passive.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_limiter_off.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_np_mode.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_fast_wave.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_oblique_iaw.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_linear_wave_scan.athinput
 
-python3 "${ROOT_DIR}/scripts/analyze_cgl_lf_paper.py" "${RUN_DIR}" \
-  --output-dir "${RUN_DIR}/analysis" \
-  --synthetic-wave-test
+history_args=()
+for history in "${RUN_DIR}"/*.user.hst; do
+  history_args+=(--history "${history}")
+done
+python3 "${ROOT_DIR}/scripts/analyze_cgl_lf_paper.py" \
+  "${history_args[@]}" --output-dir "${RUN_DIR}/analysis" --synthetic-test
 
 echo "CGL-LF paper smoke outputs: ${RUN_DIR}"

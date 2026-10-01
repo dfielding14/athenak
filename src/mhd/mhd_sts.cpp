@@ -132,7 +132,7 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection,
   }
   if (selection == DiffusionSelection::sts_only && has_cgl_lf_split &&
       pcgl_lf != nullptr) {
-    pcgl_lf->AddHeatFluxes(w0, bcc0, peos->eos_data, cgl_dt_sweep,
+    pcgl_lf->AddHeatFluxes(w0, bcc0, b0, peos->eos_data, cgl_dt_sweep,
                            cgl_rkl_weight, uflx);
   }
   if (add_scalar_diffusion && pscalar_diff != nullptr) {
@@ -163,48 +163,6 @@ TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
   (void) stage;
   TraceCGLLFTask(pmy_pack, "ClearSTSFlux", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_clear_flux);
-  const bool lf_only_sts_cell_update =
-      has_sts_cgl_lf && pcgl_lf != nullptr && !has_sts_viscosity &&
-      !has_sts_hyperviscosity && !has_sts_conduction && !has_sts_resistivity &&
-      !has_sts_scalar_diffusion;
-  if (lf_only_sts_cell_update) {
-    auto flx1 = uflx.x1f;
-    auto flx2 = uflx.x2f;
-    auto flx3 = uflx.x3f;
-    const int nmb = pmy_pack->nmb_thispack;
-    const int n31 = static_cast<int>(flx1.extent(2));
-    const int n21 = static_cast<int>(flx1.extent(3));
-    const int n11 = static_cast<int>(flx1.extent(4));
-    const int n32 = static_cast<int>(flx2.extent(2));
-    const int n22 = static_cast<int>(flx2.extent(3));
-    const int n12 = static_cast<int>(flx2.extent(4));
-    const int n33 = static_cast<int>(flx3.extent(2));
-    const int n23 = static_cast<int>(flx3.extent(3));
-    const int n13 = static_cast<int>(flx3.extent(4));
-    par_for("mhd_sts_clear_cgl_lf_flux1", DevExeSpace(), 0, nmb - 1, 0, 1,
-            0, n31 - 1, 0, n21 - 1, 0, n11 - 1,
-    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
-                  const int i) {
-      const int n = (q == 0) ? IEN : IAN;
-      flx1(m,n,k,j,i) = 0.0;
-    });
-    par_for("mhd_sts_clear_cgl_lf_flux2", DevExeSpace(), 0, nmb - 1, 0, 1,
-            0, n32 - 1, 0, n22 - 1, 0, n12 - 1,
-    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
-                  const int i) {
-      const int n = (q == 0) ? IEN : IAN;
-      flx2(m,n,k,j,i) = 0.0;
-    });
-    par_for("mhd_sts_clear_cgl_lf_flux3", DevExeSpace(), 0, nmb - 1, 0, 1,
-            0, n33 - 1, 0, n23 - 1, 0, n13 - 1,
-    KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
-                  const int i) {
-      const int n = (q == 0) ? IEN : IAN;
-      flx3(m,n,k,j,i) = 0.0;
-    });
-    TraceCGLLFTask(pmy_pack, "ClearSTSFlux", "end", stage);
-    return TaskStatus::complete;
-  }
   Kokkos::deep_copy(DevExeSpace(), uflx.x1f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x2f, 0.0);
   Kokkos::deep_copy(DevExeSpace(), uflx.x3f, 0.0);
@@ -254,6 +212,8 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
+  pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
+                              STSSweepName(pdrive), 0, pdrive->sts.nstages, true);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "pre",
                               STSSweepName(pdrive), "anisotropy", u0);
@@ -268,6 +228,8 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     peos->CGLAnisotropyToMagneticMoment(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   cgl_slot_representation = CGLSlotRepresentation::magnetic_moment;
+  pcgl_lf->SetFusedPrimitiveRefresh(has_sts_cgl_lf &&
+      !pmy_pack->pmesh->multilevel && psbox_u == nullptr && psbox_b == nullptr);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);
@@ -654,8 +616,11 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
       RefreshCellCenteredBFromFace(pmy_pack, b0, bcc0, il, iu, jl, ju,
                                    kl, ku);
     }
-    peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju,
-                                           kl, ku);
+    if (pcgl_lf->UsesFusedPrimitiveRefresh()) {
+      pcgl_lf->RefreshPrimitives(u0, bcc0, w0, peos->eos_data, il, iu, jl, ju, kl, ku);
+    } else {
+      peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju, kl, ku);
+    }
   }
   pcgl_lf->RecordAdmissibility(
       u0, w0, bcc0, peos->eos_data,
@@ -696,6 +661,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     peos->CGLMagneticMomentToAnisotropy(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   cgl_slot_representation = CGLSlotRepresentation::anisotropy;
+  pcgl_lf->SetFusedPrimitiveRefresh(false);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "post",
                               STSSweepName(pdrive), "anisotropy", u0);
@@ -706,14 +672,13 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::STSPostSweepCGLCollisions()
-//! \brief Apply CGL relaxation after each split LF half-sweep.
+//! \brief Apply walls after the pre sweep, and rates then walls after the post sweep.
 //!
-//! The pre and post LF sweeps each advance dt_cycle/2. Use that same physical
-//! interval here so both source updates together advance exactly one cycle.
+//! Rates advance once per cycle after the final A-representation restoration.
 
 TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "begin", stage);
-  if (!has_cgl_lf_split || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
+  if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != pdrive->sts.nstages) {
     TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "skip", stage);
     return TaskStatus::complete;
   }
@@ -729,9 +694,15 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::post_sweep_collisions);
-    peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_sweep,
+    const auto mode = (pdrive->sts.sweep == Driver::STSSweep::pre)
+        ? CGLCollisionMode::walls_only : CGLCollisionMode::full;
+    peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_cycle, mode,
                      0, n1m1, 0, n2m1, 0, n3m1);
   }
+  // Synchronize the coarse representation with the final rates/wall update.
+  RestrictU(pdrive, stage);
+  pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
+                              STSSweepName(pdrive), stage, pdrive->sts.nstages, true);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "post-sweep-collisions", "post",
                               STSSweepName(pdrive), "anisotropy", u0);

@@ -18,12 +18,14 @@
 #endif
 
 #include "athena.hpp"
+#include "diffusion/limiters.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/nghbr_index.hpp"
 #include "eos/eos.hpp"
 #include "eos/cgl_physics.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/cgl_landau_fluid_arithmetic.hpp"
 
@@ -221,23 +223,12 @@ KOKKOS_INLINE_FUNCTION
 bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                          const Real ppar_l, const Real ppar_r,
                          const Real pperp_l, const Real pperp_r,
-                         const Real bx, const Real by, const Real bz, const int dir,
+                         const Real bx, const Real by, const Real bz, const Real bbar,
+                         const int dir,
                          const Real lf_k, const bool coeff_local, const Real cparallel0,
                          const bool backup, const EOS_Data &eos,
                          CGLLFFaceState &face) {
-  const Real bscale = fmax(fabs(bx), fmax(fabs(by), fabs(bz)));
-  if (bscale == 0.0 || lf_k <= 0.0) {
-    return false;
-  }
-  const Real bsx = bx/bscale;
-  const Real bsy = by/bscale;
-  const Real bsz = bz/bscale;
-  const Real bscaled_mag = sqrt(bsx*bsx + bsy*bsy + bsz*bsz);
-  const Real maximum = std::numeric_limits<Real>::max();
-  const Real bmag = (bscaled_mag > maximum/bscale)
-                        ? maximum
-                        : bscale*bscaled_mag;
-  if (bmag <= eos.bfloor || lf_k <= 0.0) {
+  if (bbar <= eos.bfloor || lf_k <= 0.0) {
     return false;
   }
   face.rho = fmax(static_cast<Real>(0.5)*rho_l +
@@ -246,20 +237,20 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                    static_cast<Real>(0.5)*ppar_r, eos.pfloor);
   face.pperp = fmax(static_cast<Real>(0.5)*pperp_l +
                     static_cast<Real>(0.5)*pperp_r, eos.pfloor);
-  face.bmag_inv = (static_cast<Real>(1.0)/bscale)/bscaled_mag;
-  face.bhx = bsx/bscaled_mag;
-  face.bhy = bsy/bscaled_mag;
-  face.bhz = bsz/bscaled_mag;
+  // Do not renormalize the averaged vector: conduction must weaken when
+  // neighboring fields reverse, while all inverse-field factors use Bbar.
+  face.bmag_inv = static_cast<Real>(1.0)/bbar;
+  face.bhx = bx/bbar;
+  face.bhy = by/bbar;
+  face.bhz = bz/bbar;
   face.bhdir = (dir == 0) ? face.bhx : ((dir == 1) ? face.bhy : face.bhz);
   face.cparallel =
       coeff_local ? sqrt(fmax(face.ppar/face.rho, eos.tfloor)) : cparallel0;
+  const Real maximum = std::numeric_limits<Real>::max();
   const Real sqrt_max = sqrt(maximum);
-  const Real bsqr = (bmag <= sqrt_max) ? bmag*bmag
-                                       : maximum;
+  const Real bsqr = (bbar <= sqrt_max) ? bbar*bbar : maximum;
   const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0)) +
-      cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
-                                eos.mlim, eos.flim, eos.firehose_threshold,
-                                backup);
+      cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos, backup);
   face.lf_k = lf_k;
   face.nu = nu;
   return true;
@@ -503,12 +494,7 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
   effective_backup_limiter = cgl::EffectiveBackupLimiter(
       configured_backup, true, instability_limiter_active,
       strict_admissibility);
-  if (effective_backup_limiter && !configured_backup &&
-      global_variable::my_rank == 0) {
-    std::cout << "CGL Landau-fluid relaxed admissibility enables the emergency "
-              << "hard-bound backup limiter; configured backup_limiters remains false."
-              << std::endl;
-  }
+
   profile_enabled_ =
       CGLProfileEnvValue("ATHENAK_CGL_LF_PROFILE",
                          pin->GetOrAddBoolean("mhd", "cgl_lf_profile", false));
@@ -698,8 +684,70 @@ void CGLLandauFluid::ResetHeatFluxDiagnostics() {
   sweep_qperp_rhs_ = 0.0;
 }
 
+// Uniform LF-only sweeps keep density, momentum, and B fixed between stages.
+void CGLLandauFluid::RefreshPrimitives(DvceArray5D<Real> &cons,
+                                       const DvceArray5D<Real> &bcc,
+                                       DvceArray5D<Real> &prim, const EOS_Data &eos_in,
+                                       int il, int iu, int jl, int ju, int kl, int ku) {
+  const EOS_Data eos = eos_in;
+  const int ni = iu - il + 1;
+  const int nji = (ju - jl + 1)*ni;
+  const int nkji = (ku - kl + 1)*nji;
+  const int nmkji = pmy_pack->nmb_thispack*nkji;
+  auto tpar = tpar_, tperp = tperp_, bmag_c2p = bmag_c2p_;
+  int nfloord = 0, nfloore = 0, nfloort = 0;
+  Kokkos::parallel_reduce("cgl_lf_refresh_and_precompute",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int idx, int &sumd, int &sume, int &sumt) {
+    const int m = idx/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/ni;
+    const int i = idx - m*nkji - k*nji - j*ni + il;
+    j += jl;
+    k += kl;
+    MHDCons1D u;
+    u.d = cons(m,IDN,k,j,i);
+    u.mx = cons(m,IM1,k,j,i);
+    u.my = cons(m,IM2,k,j,i);
+    u.mz = cons(m,IM3,k,j,i);
+    u.e = cons(m,IEN,k,j,i);
+    u.mu = cons(m,IAN,k,j,i);
+    u.bx = bcc(m,IBX,k,j,i);
+    u.by = bcc(m,IBY,k,j,i);
+    u.bz = bcc(m,IBZ,k,j,i);
+    HydPrim1D w;
+    bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                      tfloor_used, bfloor_used, bmag_c2p(m,k,j,i));
+    if (dfloor_used) {
+      cons(m,IDN,k,j,i) = u.d;
+      prim(m,IDN,k,j,i) = w.d;
+      prim(m,IVX,k,j,i) = w.vx;
+      prim(m,IVY,k,j,i) = w.vy;
+      prim(m,IVZ,k,j,i) = w.vz;
+      ++sumd;
+    }
+    if (efloor_used) {
+      cons(m,IEN,k,j,i) = u.e;
+      cons(m,IAN,k,j,i) = u.mu;
+      ++sume;
+    }
+    if (bfloor_used) cons(m,IAN,k,j,i) = u.mu;
+    prim(m,IPR,k,j,i) = w.e;
+    prim(m,IPP,k,j,i) = w.pp;
+    const Real rho = fmax(w.d, eos.dfloor);
+    tpar(m,k,j,i) = w.e/rho;
+    tperp(m,k,j,i) = w.pp/rho;
+    (void) sumt;
+  }, Kokkos::Sum<int>(nfloord), Kokkos::Sum<int>(nfloore), Kokkos::Sum<int>(nfloort));
+  pmy_pack->pmesh->ecounter.neos_dfloor += nfloord;
+  pmy_pack->pmesh->ecounter.neos_efloor += nfloore;
+  pmy_pack->pmesh->ecounter.neos_tfloor += nfloort;
+}
+
 void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                                    const DvceArray5D<Real> &bcc,
+                                   const DvceFaceFld4D<Real> &b,
                                    const EOS_Data &eos_in, Real dt_sweep,
                                    Real rkl_weight, DvceFaceFld5D<Real> &f) {
   CGLLFProfileRegion heat_flux_profile(this, CGLLFProfileBucket::heat_flux_total);
@@ -723,10 +771,19 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     Kokkos::realloc(bmag_, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
   }
 
+  if (fused_primitive_refresh_ &&
+      (bmag_c2p_.extent(0) != tpar_.extent(0) ||
+       bmag_c2p_.extent(1) != tpar_.extent(1) ||
+       bmag_c2p_.extent(2) != tpar_.extent(2) ||
+       bmag_c2p_.extent(3) != tpar_.extent(3))) {
+    Kokkos::realloc(bmag_c2p_, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
+  }
   auto tpar = tpar_;
   auto tperp = tperp_;
   auto bmag = bmag_;
-  {
+  auto bmag_c2p = bmag_c2p_;
+  const bool fused = fused_primitive_refresh_;
+  if (!fused || !precomputed_) {
     CGLLFProfileRegion profile(this, CGLLFProfileBucket::heat_flux_precompute);
     par_for("cgl_lf_precompute", DevExeSpace(), 0, nmb1, 0, ncells3 - 1,
             0, ncells2 - 1, 0, ncells1 - 1,
@@ -736,7 +793,13 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
       bmag(m,k,j,i) = ScaledMagneticMagnitude(
           bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
+      if (fused) {
+        const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
+                         + SQR(bcc(m,IBZ,k,j,i));
+        bmag_c2p(m,k,j,i) = sqrt(bsqr);
+      }
     });
+    precomputed_ = fused;
   }
 
   const bool multi_d = pmy_pack->pmesh->multi_d;
@@ -783,22 +846,30 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
     Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
     if (multi_d) {
-      ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                 tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-      py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                 tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+      ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+      py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
       byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                   bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
     }
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
     }
-    const Real bx = 0.5*bcc(m,IBX,k,j,i-1) + 0.5*bcc(m,IBX,k,j,i);
+    const Real bx = b.x1f(m,k,j,i);
     const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
     const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
@@ -807,7 +878,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
                             w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
                             w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
-                            bx, by, bz, 0, lf_k, local, cpar0, backup, eos, face)) {
+                            bx, by, bz, 0.5*bmag(m,k,j,i-1) + 0.5*bmag(m,k,j,i),
+                            0, lf_k, local, cpar0, backup, eos, face)) {
       if (fast_arithmetic) {
         Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
         CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -856,22 +928,30 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
     Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
     if (multi_d) {
-      ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                 tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-      py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                 tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+      ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+      py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
       byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                   bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
     }
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
     }
-    const Real bx = 0.5*bcc(m,IBX,k,j,i-1) + 0.5*bcc(m,IBX,k,j,i);
+    const Real bx = b.x1f(m,k,j,i);
     const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
     const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
@@ -880,7 +960,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
                             w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
                             w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
-                            bx, by, bz, 0, lf_k, local, cpar0, backup, eos, face)) {
+                            bx, by, bz, 0.5*bmag(m,k,j,i-1) + 0.5*bmag(m,k,j,i),
+                            0, lf_k, local, cpar0, backup, eos, face)) {
       if (fast_arithmetic) {
         Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
         CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -914,18 +995,26 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
       Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
       if (multi_d) {
-        ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                   tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-        py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                   tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+        ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+        py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
         byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                     bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
       }
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
       }
@@ -944,14 +1033,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji1)/nji1 + ks;
       const int j = (idx - m*nkji1 - (k - ks)*nji1)/ni1 + js;
       const int i = idx - m*nkji1 - (k - ks)*nji1 - (j - js)*ni1 + is;
-      const Real bx = 0.5*bcc(m,IBX,k,j,i-1) + 0.5*bcc(m,IBX,k,j,i);
+      const Real bx = b.x1f(m,k,j,i);
       const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
       const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
       CGLLFFaceState face;
       if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
                               w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
                               w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
-                              bx, by, bz, 0, lf_k, local, cpar0, backup, eos, face)) {
+                              bx, by, bz, 0.5*bmag(m,k,j,i-1) + 0.5*bmag(m,k,j,i),
+                              0, lf_k, local, cpar0, backup, eos, face)) {
         sum += face.cparallel + face.bmag_inv + fabs(face.bhdir) + face.nu;
       }
       }, Kokkos::Sum<Real>(detail));
@@ -972,22 +1062,30 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
       Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
       if (multi_d) {
-        ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                   tpar(m,k,j+1,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
-        py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                   tperp(m,k,j+1,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+        ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+        py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
         byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                     bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
       }
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                      tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                      tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
       }
-      const Real bx = 0.5*bcc(m,IBX,k,j,i-1) + 0.5*bcc(m,IBX,k,j,i);
+      const Real bx = b.x1f(m,k,j,i);
       const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
       const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
       CGLLFFaceState face;
@@ -996,7 +1094,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
                               w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
                               w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
-                              bx, by, bz, 0, lf_k, local, cpar0, backup, eos, face)) {
+                              bx, by, bz, 0.5*bmag(m,k,j,i-1) + 0.5*bmag(m,k,j,i),
+                              0, lf_k, local, cpar0, backup, eos, face)) {
         if (fast_arithmetic) {
           Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
           CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -1037,10 +1136,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji2)/nji2 + ks;
     const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
     const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
@@ -1048,15 +1151,19 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
     Real tz = 0.0, pz = 0.0, bzg = 0.0;
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
     }
     const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
-    const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
+    const Real by = b.x2f(m,k,j,i);
     const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
     Real eflux = 0.0, muflux = 0.0;
@@ -1064,7 +1171,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
                             w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
                             w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
-                            bx, by, bz, 1, lf_k, local, cpar0, backup, eos, face)) {
+                            bx, by, bz, 0.5*bmag(m,k,j-1,i) + 0.5*bmag(m,k,j,i),
+                            1, lf_k, local, cpar0, backup, eos, face)) {
       if (fast_arithmetic) {
         Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
         CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -1108,10 +1216,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji2)/nji2 + ks;
     const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
     const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
@@ -1119,15 +1231,19 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
     Real tz = 0.0, pz = 0.0, bzg = 0.0;
     if (three_d) {
-      tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                 tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-      pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                 tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+      tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+      pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
       bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                   bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
     }
     const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
-    const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
+    const Real by = b.x2f(m,k,j,i);
     const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
     CGLLFFaceState face;
     Real eflux = 0.0, muflux = 0.0;
@@ -1135,7 +1251,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
                             w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
                             w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
-                            bx, by, bz, 1, lf_k, local, cpar0, backup, eos, face)) {
+                            bx, by, bz, 0.5*bmag(m,k,j-1,i) + 0.5*bmag(m,k,j,i),
+                            1, lf_k, local, cpar0, backup, eos, face)) {
       if (fast_arithmetic) {
         Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
         CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -1164,11 +1281,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji2)/nji2 + ks;
       const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
       const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))
@@ -1178,10 +1299,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
       Real tz = 0.0, pz = 0.0, bzg = 0.0;
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
       }
@@ -1201,13 +1326,14 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
       const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
       const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
-      const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
+      const Real by = b.x2f(m,k,j,i);
       const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
       CGLLFFaceState face;
       if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
                               w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
                               w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
-                              bx, by, bz, 1, lf_k, local, cpar0, backup, eos, face)) {
+                              bx, by, bz, 0.5*bmag(m,k,j-1,i) + 0.5*bmag(m,k,j,i),
+                              1, lf_k, local, cpar0, backup, eos, face)) {
         sum += face.cparallel + face.bmag_inv + fabs(face.bhdir) + face.nu;
       }
       }, Kokkos::Sum<Real>(detail));
@@ -1223,11 +1349,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji2)/nji2 + ks;
       const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
       const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))
@@ -1237,15 +1367,19 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
       Real tz = 0.0, pz = 0.0, bzg = 0.0;
       if (three_d) {
-        tz = 0.25*(tpar(m,k+1,j,i) - tpar(m,k-1,j,i) +
-                   tpar(m,k+1,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
-        pz = 0.25*(tperp(m,k+1,j,i) - tperp(m,k-1,j,i) +
-                   tperp(m,k+1,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+        tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                      tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                      tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+        pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                      tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                      tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
         bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                     bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
       }
       const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
-      const Real by = 0.5*bcc(m,IBY,k,j-1,i) + 0.5*bcc(m,IBY,k,j,i);
+      const Real by = b.x2f(m,k,j,i);
       const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
       CGLLFFaceState face;
       Real eflux = 0.0, muflux = 0.0;
@@ -1253,7 +1387,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
                               w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
                               w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
-                              bx, by, bz, 1, lf_k, local, cpar0, backup, eos, face)) {
+                              bx, by, bz, 0.5*bmag(m,k,j-1,i) + 0.5*bmag(m,k,j,i),
+                              1, lf_k, local, cpar0, backup, eos, face)) {
         if (fast_arithmetic) {
           Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
           CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -1294,16 +1429,24 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji3)/nji3 + ks;
     const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
     const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                          tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
-    const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                          tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                            bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
@@ -1311,14 +1454,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
     const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
     const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
-    const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
+    const Real bz = b.x3f(m,k,j,i);
     CGLLFFaceState face;
     Real eflux = 0.0, muflux = 0.0;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
                             w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
                             w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
-                            bx, by, bz, 2, lf_k, local, cpar0, backup, eos, face)) {
+                            bx, by, bz, 0.5*bmag(m,k-1,j,i) + 0.5*bmag(m,k,j,i),
+                            2, lf_k, local, cpar0, backup, eos, face)) {
       if (fast_arithmetic) {
         Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
         CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -1362,16 +1506,24 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const int k = (idx - m*nkji3)/nji3 + ks;
     const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
     const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-    const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                          tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                          tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
+    const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
     const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                            bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx1;
-    const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                          tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
-    const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                          tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
+    const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                            bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx2;
     const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
@@ -1379,14 +1531,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
     const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
     const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
-    const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
+    const Real bz = b.x3f(m,k,j,i);
     CGLLFFaceState face;
     Real eflux = 0.0, muflux = 0.0;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
                             w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
                             w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
-                            bx, by, bz, 2, lf_k, local, cpar0, backup, eos, face)) {
+                            bx, by, bz, 0.5*bmag(m,k-1,j,i) + 0.5*bmag(m,k,j,i),
+                            2, lf_k, local, cpar0, backup, eos, face)) {
       if (fast_arithmetic) {
         Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
         CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -1415,20 +1568,28 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji3)/nji3 + ks;
       const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
       const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))
                              /size.d_view(m).dx1;
-      const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                            tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))
+      const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
-      const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                            tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))
+      const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
       const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                              bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))
@@ -1453,12 +1614,13 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
       const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
       const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
-      const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
+      const Real bz = b.x3f(m,k,j,i);
       CGLLFFaceState face;
       if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
                               w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
                               w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
-                              bx, by, bz, 2, lf_k, local, cpar0, backup, eos, face)) {
+                              bx, by, bz, 0.5*bmag(m,k-1,j,i) + 0.5*bmag(m,k,j,i),
+                              2, lf_k, local, cpar0, backup, eos, face)) {
         sum += face.cparallel + face.bmag_inv + fabs(face.bhdir) + face.nu;
       }
       }, Kokkos::Sum<Real>(detail));
@@ -1474,20 +1636,28 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const int k = (idx - m*nkji3)/nji3 + ks;
       const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
       const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
-      const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
-                            tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))
+      const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                      tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
-      const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
-                            tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i-1))
+      const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                      tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))
                             /size.d_view(m).dx1;
       const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                              bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))
                              /size.d_view(m).dx1;
-      const Real ty = 0.25*(tpar(m,k,j+1,i) - tpar(m,k,j-1,i) +
-                            tpar(m,k-1,j+1,i) - tpar(m,k-1,j-1,i))
+      const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                      tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                      tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                      tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
-      const Real py = 0.25*(tperp(m,k,j+1,i) - tperp(m,k,j-1,i) +
-                            tperp(m,k-1,j+1,i) - tperp(m,k-1,j-1,i))
+      const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                      tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                      tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                      tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))
                             /size.d_view(m).dx2;
       const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                              bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))
@@ -1497,14 +1667,15 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
       const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
       const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
-      const Real bz = 0.5*bcc(m,IBZ,k-1,j,i) + 0.5*bcc(m,IBZ,k,j,i);
+      const Real bz = b.x3f(m,k,j,i);
       CGLLFFaceState face;
       Real eflux = 0.0, muflux = 0.0;
       Real qpar_ratio = 0.0, qperp_ratio = 0.0;
       if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
                               w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
                               w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
-                              bx, by, bz, 2, lf_k, local, cpar0, backup, eos, face)) {
+                              bx, by, bz, 0.5*bmag(m,k-1,j,i) + 0.5*bmag(m,k,j,i),
+                              2, lf_k, local, cpar0, backup, eos, face)) {
         if (fast_arithmetic) {
           Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
           CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
@@ -1590,7 +1761,8 @@ void CGLLandauFluid::AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Rea
       + beta_dt*anisotropic_power;
 }
 
-void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_in) {
+void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
+                                 const DvceArray5D<Real> &bcc, const EOS_Data &eos_in) {
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::timestep_reduction);
   const EOS_Data eos = eos_in;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -1615,8 +1787,40 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos
     const int i = idx - m*nkji - (k - ks)*nji - (j - js)*nx1 + is;
     const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
     const Real cpar = local ? sqrt(fmax(w(m,IPR,k,j,i)/rho, eos.tfloor)) : cpar0;
-    const Real chi = cgl::kSqrtEightOverPi*cpar/kpar;
+    // Background collisions reduce the parallel diffusivity. Limiter rates
+    // are excluded: additional scattering can only lower the true diffusivity.
+    const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0));
+    const Real collision_over_speed = (cgl::kThreePiMinusEight*nu/cgl::kSqrtEightPi)/cpar;
+    Real chi = cgl::kSqrtEightOverPi*cpar/(kpar + collision_over_speed);
+    if (!Kokkos::isfinite(chi) || (chi == 0.0 && cpar > 0.0)) {
+      // Reuse the closure's scaled response when a finite chi has overflowing
+      // intermediates. Unit rho, pressure and gradient isolate the response.
+      const Real response = -cgl::ParallelHeatFluxRatio(cpar, 1.0, 1.0, kpar, nu, 1.0);
+      chi = cgl::PositiveProduct4(cgl::kSqrtEightOverPi, cpar, response, 1.0);
+    }
     if (chi > 0.0) {
+      // Use fresh cell fields: the heat-flux scratch magnitudes may predate RK.
+      const Real bcell = ScaledMagneticMagnitude(
+          bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
+      Real stiffness = 0.0;
+      const int ndim = three_d ? 3 : (multi_d ? 2 : 1);
+      for (int dir=0; dir<ndim; ++dir) {
+        for (int offset=-1; offset<=1; offset+=2) {
+          const int in = i + ((dir == 0) ? offset : 0);
+          const int jn = j + ((dir == 1) ? offset : 0);
+          const int kn = k + ((dir == 2) ? offset : 0);
+          const Real rho_face = fmax(
+              static_cast<Real>(0.5)*w(m,IDN,k,j,i) +
+              static_cast<Real>(0.5)*w(m,IDN,kn,jn,in), eos.dfloor);
+          const Real bneighbor = ScaledMagneticMagnitude(
+              bcc(m,IBX,kn,jn,in), bcc(m,IBY,kn,jn,in), bcc(m,IBZ,kn,jn,in));
+          const Real bbar = 0.5*bcell + 0.5*bneighbor;
+          const Real magnetic_factor = (bbar > 0.0)
+              ? fmax(static_cast<Real>(1.0), bcell/bbar) : static_cast<Real>(1.0);
+          stiffness = fmax(stiffness, (rho_face/rho)*magnetic_factor);
+        }
+      }
+      chi *= stiffness;
       min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/chi);
       if (multi_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/chi);
       if (three_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/chi);
@@ -1633,10 +1837,12 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const EOS_Data &eos_in,
                                          int dfloor_delta, int pfloor_delta,
                                          const char *sweep_name,
-                                         int stage, int nstages) {
+                                         int stage, int nstages, bool wall_checkpoint) {
+  if (wall_checkpoint && !strict_admissibility) return;
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
   const EOS_Data eos = eos_in;
-  if (profile_enabled_) {
+  const bool backup = effective_backup_limiter;
+  if (profile_enabled_ && !wall_checkpoint) {
     profile_last_nstages_ = nstages;
     if (nstages > profile_max_nstages_) {
       profile_max_nstages_ = nstages;
@@ -1676,38 +1882,37 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
     const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
                      + SQR(bcc(m,IBZ,k,j,i));
     const Real paniso = pperp - ppar;
-    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr)) {
-      ++nmirror;
-      if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
-        ++nhard;
-      }
-    }
-    if (eos.flim &&
-        cgl::FirehoseLimiterActive(paniso, bsqr, eos.firehose_threshold)) {
-      ++nfirehose;
-      if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
-        ++nhard;
-      }
-    }
+    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr, eos)) ++nmirror;
+    if (eos.flim && cgl::FirehoseLimiterActive(paniso, bsqr, eos)) ++nfirehose;
+    if (cgl::HardBoundViolated(paniso, bsqr, eos, backup)) ++nhard;
   }, Kokkos::Sum<int>(nonfinite), Kokkos::Sum<int>(nonpositive),
      Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
      Kokkos::Sum<int>(hard_bound));
 
-  diagnostics.nstage += static_cast<std::uint64_t>(nmkji);
-  diagnostics.dfloor += static_cast<std::uint64_t>(dfloor_delta);
-  diagnostics.pfloor += static_cast<std::uint64_t>(pfloor_delta);
-  diagnostics.nonfinite += static_cast<std::uint64_t>(nonfinite);
-  diagnostics.nonpositive += static_cast<std::uint64_t>(nonpositive);
-  diagnostics.mirror += static_cast<std::uint64_t>(mirror);
-  diagnostics.firehose += static_cast<std::uint64_t>(firehose);
-  diagnostics.hard_bound += static_cast<std::uint64_t>(hard_bound);
+  // Count every unprojected LF stage, including its hard-wall crossings. Entry
+  // and post-wall checks validate the split state without counting extra stages.
+  if (!wall_checkpoint) {
+    diagnostics.nstage += static_cast<std::uint64_t>(nmkji);
+    diagnostics.dfloor += static_cast<std::uint64_t>(dfloor_delta);
+    diagnostics.pfloor += static_cast<std::uint64_t>(pfloor_delta);
+    diagnostics.nonfinite += static_cast<std::uint64_t>(nonfinite);
+    diagnostics.nonpositive += static_cast<std::uint64_t>(nonpositive);
+    diagnostics.mirror += static_cast<std::uint64_t>(mirror);
+    diagnostics.firehose += static_cast<std::uint64_t>(firehose);
+    diagnostics.hard_bound += static_cast<std::uint64_t>(hard_bound);
+  }
 
+  // LF changes anisotropy while B is frozen and can cross a hard wall. The
+  // scheduled sweep-end projection must restore it before hyperbolic evolution;
+  // floors and invalid pressures remain fatal at every intermediate stage.
   if (strict_admissibility &&
       (dfloor_delta > 0 || pfloor_delta > 0 || nonfinite > 0 ||
-       nonpositive > 0 || hard_bound > 0)) {
+       nonpositive > 0 || (wall_checkpoint && hard_bound > 0))) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "CGL Landau-fluid strict admissibility failed after a split stage: "
+              << "CGL Landau-fluid strict admissibility failed "
+              << (wall_checkpoint ? "at a split-sweep wall checkpoint: "
+                                  : "after a split stage: ")
               << "sweep=" << sweep_name << " stage=" << stage << "/" << nstages
               << " dfloor=" << dfloor_delta << " pfloor=" << pfloor_delta
               << " nonfinite=" << nonfinite << " nonpositive=" << nonpositive

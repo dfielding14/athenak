@@ -1,0 +1,225 @@
+[  2%] Built target kokkossimd
+[  2%] Built target AlwaysCheckGit
+[  3%] Built target impl_git_version
+[ 12%] Built target kokkoscore
+[ 13%] Built target kokkoscontainers
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/bvals/physics/z4c_bcs.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/coordinates/adm.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/coordinates/coordinates.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/coordinates/excision.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/diffusion/conduction.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/diffusion/cgl_landau_fluid.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/diffusion/hyperviscosity.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/diffusion/resistivity.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/diffusion/scalar_diffusion.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/diffusion/sts_rkl2.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/diffusion/viscosity.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/driver/driver.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fluxes.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fofc.cpp.o
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/eos/eos.cpp.o
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:680:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::IdealGas, Primitive::ResetFloor>::AddCoordTermsEOS<2>' requested here
+  680 | INSTANTIATE_COORD_TERMS(Primitive::IdealGas, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:668:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  668 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<2>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:680:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::IdealGas, Primitive::ResetFloor>::AddCoordTermsEOS<3>' requested here
+  680 | INSTANTIATE_COORD_TERMS(Primitive::IdealGas, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:672:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  672 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<3>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:680:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::IdealGas, Primitive::ResetFloor>::AddCoordTermsEOS<4>' requested here
+  680 | INSTANTIATE_COORD_TERMS(Primitive::IdealGas, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:676:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  676 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<4>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:681:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::PiecewisePolytrope, Primitive::ResetFloor>::AddCoordTermsEOS<2>' requested here
+  681 | INSTANTIATE_COORD_TERMS(Primitive::PiecewisePolytrope, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:668:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  668 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<2>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:681:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::PiecewisePolytrope, Primitive::ResetFloor>::AddCoordTermsEOS<3>' requested here
+  681 | INSTANTIATE_COORD_TERMS(Primitive::PiecewisePolytrope, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:672:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  672 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<3>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:681:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::PiecewisePolytrope, Primitive::ResetFloor>::AddCoordTermsEOS<4>' requested here
+  681 | INSTANTIATE_COORD_TERMS(Primitive::PiecewisePolytrope, Primitive::ResetFloor);
+      | ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:676:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  676 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<4>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:42: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                          ^~~~~~~~~~~~~~~~~~~~~
+      |                                          static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:65: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                                                                 ^~~~~~~~~~~~~~~~~~~~~
+      |                                                                 static_cast<Real>(   )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:535:69: note: while substituting into a lambda expression here
+  535 |   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      |                                                                     ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:682:1: note: in instantiation of function template specialization 'dyngr::DynGRMHDPS<Primitive::EOSCompOSE<Primitive::NormalLogs>, Primitive::ResetFloor>::AddCoordTermsEOS<2>' requested here
+  682 | INSTANTIATE_COORD_TERMS(Primitive::EOSCompOSE<Primitive::NormalLogs>,
+      | ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:668:42: note: expanded from macro 'INSTANTIATE_COORD_TERMS'
+  668 | void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS<2>( \
+      |                                          ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/dyn_grmhd/dyn_grmhd.cpp:551:19: note: insert an explicit cast to silence this issue
+  551 |     Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
+      |                   ^~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(   )
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd.cpp.o] Error 1
+make[2]: *** Waiting for unfinished jobs....
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/eos/cgl_mhd.cpp.o
+make[1]: *** [src/CMakeFiles/athena.dir/all] Error 2
+make: *** [all] Error 2

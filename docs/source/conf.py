@@ -28,6 +28,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
+    "sphinx.ext.mathjax",
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
@@ -38,6 +39,7 @@ extensions = [
 myst_enable_extensions = [
     "colon_fence",
     "deflist",
+    "dollarmath",
     "fieldlist",
     "linkify",
     "substitution",

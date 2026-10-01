@@ -1,0 +1,34 @@
+[  2%] Built target kokkossimd
+[ 11%] Built target kokkoscore
+[ 11%] Built target AlwaysCheckGit
+[ 12%] Built target kokkoscontainers
+[ 13%] Built target impl_git_version
+[ 14%] Building CXX object src/CMakeFiles/athena.dir/coordinates/adm.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/coordinates/coordinates.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/diffusion/hyperviscosity.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fofc.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_grhyd.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_grmhd.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/eos/noop_dyngrmhd.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/eos_compose.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_fluxes.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_fofc.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_corner_e.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fluxes.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fofc.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_sts.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/outputs/derived_variables.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_fofc.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/gr_bondi.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/gr_monopole.cpp.o
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/rad_beam.cpp.o
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/rad_linear_wave.cpp.o
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_source.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_tetrad.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_update.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/srcterms/srcterms.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/utils/derived_vars.cpp.o
+[ 25%] Linking CXX executable athena
+[100%] Built target athena

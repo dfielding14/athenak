@@ -141,7 +141,13 @@ def test_cgl_amr_primitive_smooth_gpu():
         )
         aniso = _user_history("cgl_amr_gpu_aniso")
         _assert_clean_user(aniso)
-        _assert_no_amr_repairs(aniso)
+        # This fixture crosses Delta=-B^2: only fluid-wall repairs are expected.
+        assert aniso["amr_fh"][-1] > 0.0
+        assert aniso["amr_cell"][-1] == aniso["amr_fh"][-1]
+        assert aniso["amr_dlt"][-1] == aniso["amr_fh"][-1]
+        for column in AMR_REPAIR_COLUMNS:
+            if column not in ("amr_cell", "amr_fh", "amr_dlt"):
+                assert aniso[column][-1] == 0.0
         assert np.max(aniso["ncell"]) > aniso["ncell"][0]
     finally:
         _cleanup()
@@ -290,7 +296,10 @@ def test_cgl_amr_projection_stress_gpu():
         _run("cgl_amr_primitive_firehose.athinput", "cgl_amr_gpu_firehose")
         firehose = _user_history("cgl_amr_gpu_firehose")
         _assert_clean_user(firehose)
-        assert firehose["amr_fh"][-1] > 0.0
+        # The uniform fluid-wall projection runs before AMR: U=1.2, Delta=-1
+        # gives p_perp/p_parallel=7/22 and no further AMR repair.
+        _assert_no_amr_repairs(firehose)
+        assert abs(firehose["abs_anis"][-1] - np.log(22.0/7.0)) < 1.0e-12
 
         _run("cgl_amr_primitive_mirror.athinput", "cgl_amr_gpu_mirror")
         mirror = _user_history("cgl_amr_gpu_mirror")
@@ -302,8 +311,9 @@ def test_cgl_amr_projection_stress_gpu():
         )
         mirror_slope = _user_history("cgl_amr_gpu_mirror_slope")
         _assert_clean_user(mirror_slope)
-        assert mirror_slope["amr_mirr"][-1] > 0.0
-        assert mirror_slope["amr_slp"][-1] > 0.0
+        # Soft-threshold scattering runs once per cycle, not during AMR transfer.
+        assert mirror_slope["amr_mirr"][-1] == 0.0
+        assert mirror_slope["amr_slp"][-1] == 0.0
     finally:
         _cleanup()
 

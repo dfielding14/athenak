@@ -1,0 +1,5 @@
+xx                                                                       [100%]
+=========================== short test summary info ============================
+XFAIL ../../../../Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/test_suite/cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded[10.0] - Known T-B4 multi-cycle weak-field transport failure; blocks WO1 merge pending flux design
+XFAIL ../../../../Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/test_suite/cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded[-10.0] - Known T-B4 multi-cycle weak-field transport failure; blocks WO1 merge pending flux design
+2 xfailed in 0.08s

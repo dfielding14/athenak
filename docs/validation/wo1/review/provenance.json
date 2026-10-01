@@ -1,0 +1,12 @@
+{
+  "source_parent": "31b739890e44683272896e605ce3d41e7c265340",
+  "source_diff_sha256": "b23e4f89f564b29792665abafd5c02e4e9615e614b1da38c77000dad1d1815b5",
+  "binaries": {
+    "cpu": "776a69215e177b207629a03d23dfb60756e4d06898560b869bec4051dd11bbf8",
+    "mpi": "e9783464974a224581b6f809ce19c58e0825416622df969d7349e920f63e33ea"
+  },
+  "matrix_configurations": 24,
+  "repeats": 3,
+  "byte_comparison_failures": 0,
+  "timing_note": "Review validation ran concurrently with other checks. These runs prove output identity; no revised speedup claim is made. Strict mode adds four wall checkpoints per complete cycle."
+}

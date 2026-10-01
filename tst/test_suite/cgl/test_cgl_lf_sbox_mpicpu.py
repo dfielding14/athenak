@@ -67,8 +67,17 @@ def _assert_admissible(output, history):
     assert history["lf_qface"][-1] > 0.0
     assert abs(history["lf_qprwrk"][-1]) > 0.0
     assert abs(history["lf_qpewrk"][-1]) > 0.0
-    for column in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd"):
+    for column in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos"):
         assert history[column][-1] == 0.0
+    # Collisionless shear reaches the fluid wall. LF stages may cross it, and
+    # those visits remain visible even though strict sweep checkpoints pass.
+    assert 0.0 < history["lf_hardbd"][-1] <= history["lf_nstage"][-1]
+    ppar = _sorted_field(output, "eint")
+    pperp = _sorted_field(output, "p_perp")
+    bsqr = sum(_sorted_field(output, f"bcc{i}")**2 for i in (1, 2, 3))
+    # The on-disk primitive output is float32; strict checkpoints use Real.
+    tolerance = 8.0*np.finfo(np.float32).eps*np.maximum(ppar, pperp)
+    assert np.all(pperp - ppar + bsqr >= -tolerance)
 
 
 def _assert_magnetic_state(output, divb):
@@ -95,7 +104,6 @@ def _assert_restarted_diagnostics(reference, resumed):
         "lf_pfloor",
         "lf_nonfin",
         "lf_nonpos",
-        "lf_hardbd",
         "lf_qface",
         "lf_qprcap",
         "lf_qpr10",
@@ -106,6 +114,17 @@ def _assert_restarted_diagnostics(reference, resumed):
         "lf_hwproj",
     ):
         assert resumed[column][-1] == reference[column][-1]
+    # A threshold-visit count is not conserved: this restart is state-equivalent
+    # to the 5e-6 tolerance above, and near-wall cells can change classification.
+    # Compare the occupied fraction of stage cells, keeping all visits recorded.
+    for history in (reference, resumed):
+        assert 0.0 < history["lf_hardbd"][-1] <= history["lf_nstage"][-1]
+    np.testing.assert_allclose(
+        resumed["lf_hardbd"][-1]/resumed["lf_nstage"][-1],
+        reference["lf_hardbd"][-1]/reference["lf_nstage"][-1],
+        rtol=0.0,
+        atol=1.0e-4,
+    )
     for column in ("lf_qprwrk", "lf_qpewrk"):
         np.testing.assert_allclose(
             resumed[column][-1],

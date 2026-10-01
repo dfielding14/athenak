@@ -56,3 +56,10 @@ variable = mhd_divb
 dt = 1.0
 id = divb
 single_file_per_rank = true
+
+<mhd>
+firehose_threshold = 2.0
+mirror_threshold = 1.0
+mirror_backup_factor = 2.0
+firehose_backup_factor = 1.0
+limiter_backup_nu = 1.0e10

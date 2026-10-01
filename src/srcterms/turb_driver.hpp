@@ -95,7 +95,6 @@ class TurbulenceDriver {
   bool record_injected_work;
 
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
-  void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus InitializeModes(Driver* pdrive, int stage);
   TaskStatus EnsureBasisSize(Driver* pdrive, int stage);
   TaskStatus UpdateForcing(Driver* pdrive, int stage);
@@ -106,10 +105,12 @@ class TurbulenceDriver {
   TurbulenceRestartMetadata RestartMetadata() const;
   void ValidateRestartMetadata(const TurbulenceRestartMetadata& metadata) const;
 
- private:
+  // CUDA extended lambdas require their enclosing member to be public.
   void Initialize();
   void BuildBasis();
   void RenderForce();
+
+ private:
   bool IsDrivenMode(int nkx, int nky, int nkz, Real dkx, Real dky, Real dkz) const;
 
   MeshBlockPack* pmy_pack;  // MeshBlockPack containing this driver
@@ -119,7 +120,6 @@ class TurbulenceDriver {
   Real kpeak, npeak;
   bool use_npeak;
   Real tcorr, dedt, tdriv_duration, tdriv_start, k_shell_unit;
-  Real injected_work_cycle_start;
   Real expo, exp_prl, exp_prp;
   int driving_type, turb_flag;
   bool physical_k_shell, isotropic_power_spectrum;

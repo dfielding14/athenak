@@ -16,8 +16,9 @@
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "mhd/mhd.hpp"
-#include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "outputs/outputs.hpp"
 #include "pgen.hpp"
 
@@ -42,11 +43,6 @@ CglLfPaperMode ParseMode(const std::string &mode) {
   if (mode == "linear_wave_scan") return CglLfPaperMode::linear_wave_scan;
   FatalInput("<problem>/mode must be turbulence, np_mode, fast_wave, oblique_iaw, "
              "or linear_wave_scan");
-}
-
-void ValidateForcingMode(const std::string &forcing) {
-  if (forcing == "alfvenic" || forcing == "random" || forcing == "sonic_corr") return;
-  FatalInput("<problem>/forcing_mode must be alfvenic, random, or sonic_corr");
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -96,41 +92,9 @@ void CglLfPaperBField(const int mode, const Real x1, const Real x3,
 }
 
 KOKKOS_INLINE_FUNCTION
-Real CglLfPaperLimiterNu(const Real ppar, const Real pperp, const Real bx,
-                         const Real by, const Real bz, const Real lim_coll,
-                         const bool mlim, const bool flim, const bool backup_lim) {
-  const Real paniso = pperp - ppar;
-  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  const Real limiter_nu = fmax(lim_coll, static_cast<Real>(0.0));
-  const Real backup_nu = static_cast<Real>(1.0e10);
-  Real nu_eff = 0.0;
-
-  if (flim && backup_lim) {
-    if ((paniso <= static_cast<Real>(-0.7)*bsqr) && (paniso > -bsqr)) {
-      nu_eff = fmax(nu_eff, limiter_nu);
-    } else if (paniso <= -bsqr) {
-      nu_eff = fmax(nu_eff, backup_nu);
-    }
-  } else if (flim && paniso <= static_cast<Real>(-0.7)*bsqr) {
-    nu_eff = fmax(nu_eff, limiter_nu);
-  }
-
-  if (mlim && backup_lim) {
-    if ((paniso >= static_cast<Real>(0.5)*bsqr) && (paniso < bsqr)) {
-      nu_eff = fmax(nu_eff, limiter_nu);
-    } else if (paniso >= bsqr) {
-      nu_eff = fmax(nu_eff, backup_nu);
-    }
-  } else if (mlim && paniso >= static_cast<Real>(0.5)*bsqr) {
-    nu_eff = fmax(nu_eff, limiter_nu);
-  }
-
-  return nu_eff;
-}
-
-KOKKOS_INLINE_FUNCTION
 Real CglLfPaperChiPerp(const Real cpar, const Real lf_k_parallel, const Real nu_eff) {
-  const Real denom = static_cast<Real>(2.5066282746310002)*cpar*lf_k_parallel + nu_eff;
+  const Real denom = static_cast<Real>(2.5066282746310002)*cpar*lf_k_parallel
+                     + 2.0*nu_eff;
   return (denom > 0.0) ? static_cast<Real>(2.0)*SQR(cpar)/denom : 0.0;
 }
 
@@ -170,9 +134,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   const std::string mode_name = pin->GetOrAddString("problem", "mode", "turbulence");
   const int mode_id = static_cast<int>(ParseMode(mode_name));
-  const std::string forcing_mode =
-      pin->GetOrAddString("problem", "forcing_mode", "alfvenic");
-  ValidateForcingMode(forcing_mode);
 
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real b0 = pin->GetOrAddReal("problem", "B0", 1.0);
@@ -349,18 +310,17 @@ void CglLfPaperHistory(HistoryData *pdata, Mesh *pm) {
   auto &bcc = pm->pmb_pack->pmhd->bcc0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   EOS_Data eos = pm->pmb_pack->pmhd->peos->eos_data;
-  Conduction *pcond = pm->pmb_pack->pmhd->pcond;
+  auto *lf = pm->pmb_pack->pmhd->pcgl_lf;
 
-  const bool has_lf = (pcond != nullptr) && pcond->IsCGLLandauFluidHeatFlux();
-  const Real lf_k = has_lf ? pcond->lf_k_parallel : 0.0;
-  const bool lf_local = has_lf ? pcond->lf_coeff_local : true;
-  const Real lf_cpar0 = has_lf ? pcond->lf_c_parallel0 : 0.0;
+  const bool has_lf = (lf != nullptr);
+  const Real lf_k = has_lf ? lf->lf_k_parallel : 0.0;
+  const bool lf_local = has_lf ? lf->lf_coeff_local : true;
+  const Real lf_cpar0 = has_lf ? lf->lf_c_parallel0 : 0.0;
   const Real dfloor = eos.dfloor;
   const Real pfloor = eos.pfloor;
   const Real tfloor = eos.tfloor;
   const Real bfloor = eos.bfloor;
   const Real nu_coll = eos.nu_coll;
-  const Real lim_coll = eos.lim_coll;
   const bool mlim = eos.mlim;
   const bool flim = eos.flim;
   const bool backup = eos.backup_lim;
@@ -402,14 +362,13 @@ void CglLfPaperHistory(HistoryData *pdata, Mesh *pm) {
     const Real paniso = pperp - ppar;
     const Real beta = (bsqr > SQR(bfloor)) ? 2.0*p_iso/bsqr : 0.0;
 
-    const bool mir = mlim && ((backup && paniso >= 0.5*bsqr && paniso < bsqr) ||
-                              (!backup && paniso >= 0.5*bsqr));
-    const bool fire = flim && ((backup && paniso <= -0.7*bsqr && paniso > -bsqr) ||
-                               (!backup && paniso <= -0.7*bsqr));
-    const bool bmir = mlim && backup && paniso >= bsqr;
-    const bool bfire = flim && backup && paniso <= -bsqr;
+    const bool bmir = mlim && backup && cgl::MirrorHardBoundViolated(paniso, bsqr, eos);
+    const bool bfire = flim && backup &&
+                       cgl::FirehoseHardBoundViolated(paniso, bsqr, eos);
+    const bool mir = mlim && !bmir && cgl::MirrorLimiterActive(paniso, bsqr, eos);
+    const bool fire = flim && !bfire && cgl::FirehoseLimiterActive(paniso, bsqr, eos);
     const Real nu_eff = fmax(nu_coll, static_cast<Real>(0.0)) +
-        CglLfPaperLimiterNu(ppar, pperp, bx, by, bz, lim_coll, mlim, flim, backup);
+        cgl::LimiterCollisionRate(ppar, pperp, bsqr, eos, backup);
 
     array_sum::GlobalSum hvars;
     hvars.the_array[0] = vol;

@@ -221,7 +221,7 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
     pcond->NewTimeStep(w0, peos->eos_data);
   }
   if (pcgl_lf != nullptr) {
-    pcgl_lf->NewTimeStep(w0, peos->eos_data);
+    pcgl_lf->NewTimeStep(w0, bcc0, peos->eos_data);
     TraceCGLNewDt(pmy_pack, "after_cgl_lf");
   }
   if (pvisc != nullptr) {

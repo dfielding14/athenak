@@ -150,6 +150,8 @@ class Hydro {
   TaskStatus Prolongate(Driver* pdrive, int stage);
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
+  // CUDA extended lambdas require their enclosing member to be public.
+  void RecomputeTimeStepFromCurrentState(Driver *pdrive);
   TaskStatus ClearSTSFlux(Driver *d, int stage);
   TaskStatus STSFluxes(Driver *d, int stage);
   TaskStatus STSUpdate(Driver *d, int stage);
@@ -169,7 +171,6 @@ class Hydro {
 
  private:
   void AddSelectedDiffusionFluxes(DiffusionSelection selection);
-  void RecomputeTimeStepFromCurrentState(Driver *pdrive);
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Hydro
 };
 

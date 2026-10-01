@@ -1,0 +1,9 @@
+CUDA 12.6.85 / Kokkos 4.4.0, source 905c45cb8080daf2e8a055cf2e774edede21c67a
+Run: https://github.com/dfielding14/athenak/actions/runs/36762295540
+
+2026-09-30T19:05:44.2395646Z /__w/athenak/athenak/src/hydro/hydro_newdt.cpp(69): error: The enclosing parent function ("RecomputeTimeStepFromCurrentState") for an extended __host__ __device__ lambda cannot have private or protected access within its class
+2026-09-30T19:05:44.2474341Z /__w/athenak/athenak/src/hydro/hydro_newdt.cpp(85): error: The enclosing parent function ("RecomputeTimeStepFromCurrentState") for an extended __host__ __device__ lambda cannot have private or protected access within its class
+
+Hydro and MHD timestep refreshes, MHD nonfinite-state diagnostics, and three turbulence helpers contain extended device lambdas in private members. Their declarations are moved to public access; numerical bodies are unchanged.
+
+CPU rebuild after declaration moves: SHA-256 776a69215e177b207629a03d23dfb60756e4d06898560b869bec4051dd11bbf8, identical to the fully tested review binary.

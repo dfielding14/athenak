@@ -1,0 +1,232 @@
+diff --git a/src/bvals/bvals.hpp b/src/bvals/bvals.hpp
+index 3141fcefa..e6f9eb6ef 100644
+--- a/src/bvals/bvals.hpp
++++ b/src/bvals/bvals.hpp
+@@ -164,8 +164,10 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
+   TaskStatus InitFluxRecv(const int nvar) override;
+ 
+   // functions to communicate CC data
+-  TaskStatus PackAndSendCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
+-  TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
++  TaskStatus PackAndSendCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
++                            int var_offset=0, int var_count=-1);
++  TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
++                              int var_offset=0, int var_count=-1);
+   // functions to communicate fluxes of CC data
+   TaskStatus PackAndSendFluxCC(DvceFaceFld5D<Real> &flx);
+   TaskStatus RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx);
+diff --git a/src/bvals/bvals_cc.cpp b/src/bvals/bvals_cc.cpp
+index 7f71c2776..ffb459179 100644
+--- a/src/bvals/bvals_cc.cpp
++++ b/src/bvals/bvals_cc.cpp
+@@ -39,11 +39,14 @@ MeshBoundaryValuesCC::MeshBoundaryValuesCC(MeshBlockPack *pp, ParameterInput *pi
+ //! 5D Kokkos View of coarsened (restricted) array data also required with SMR/AMR
+ 
+ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+-                                               DvceArray5D<Real> &ca) {
++                                               DvceArray5D<Real> &ca,
++                                               const int var_offset,
++                                               const int var_count) {
+   // create local references for variables in kernel
+   int nmb = pmy_pack->nmb_thispack;
+   int nnghbr = pmy_pack->pmb->nnghbr;
+-  int nvar = a.extent_int(1);  // TODO(@user): 2nd index from L of in array must be NVAR
++  // Store the selected variables densely; buffer capacity is shared with full exchanges.
++  const int nvar = (var_count < 0) ? a.extent_int(1) - var_offset : var_count;
+ 
+   {int my_rank = global_variable::my_rank;
+   auto &nghbr = pmy_pack->pmb->nghbr;
+@@ -60,6 +63,7 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+     const int m = (tmember.league_rank())/(nnghbr*nvar);
+     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
+     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
++    const int av = v + var_offset;
+ 
+     // only load buffers when neighbor exists
+     if (nghbr.d_view(m,n).gid >= 0) {
+@@ -113,13 +117,13 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+           if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
+             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+             [&](const int i) {
+-              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
++              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,av,k,j,i);
+             });
+           // if neighbor is at coarser level, load data from coarse_u0
+           } else {
+             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+             [&](const int i) {
+-              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,v,k,j,i);
++              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,av,k,j,i);
+             });
+           }
+ 
+@@ -130,13 +134,13 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+           if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
+             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+             [&](const int i) {
+-              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
++              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,av,k,j,i);
+             });
+           // if neighbor is at coarser level, load data from coarse_u0
+           } else {
+             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+             [&](const int i) {
+-              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,v,k,j,i);
++              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,av,k,j,i);
+             });
+           }
+         }
+@@ -149,6 +153,7 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+     const int m = (tmember.league_rank())/(nnghbr*nvar);
+     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
+     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
++    const int av = v + var_offset;
+ 
+     // only load buffers when neighbor exists
+     if (nghbr.d_view(m,n).gid >= 0) {
+@@ -185,7 +190,8 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+             // load data from coarse_u0
+             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+             [&](const int i) {
+-              rbuf[dn].vars(dm,ndat+ (i-il + ni*(j-jl + nj*(k-kl + nk*v))))=ca(m,v,k,j,i);
++              rbuf[dn].vars(dm,ndat+ (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
++                  =ca(m,av,k,j,i);
+             });
+ 
+           // else copy into send buffer for MPI communication below
+@@ -193,7 +199,7 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+             // load data from coarse_u0
+             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+             [&](const int i) {
+-              sbuf[n].vars(m,ndat+ (i-il + ni*(j-jl + nj*(k-kl + nk*v))) )=ca(m,v,k,j,i);
++              sbuf[n].vars(m,ndat+ (i-il + ni*(j-jl + nj*(k-kl + nk*v))) )=ca(m,av,k,j,i);
+             });
+           }
+         });
+@@ -258,7 +264,9 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
+ // \brief Unpack boundary buffers
+ 
+ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
+-                                                 DvceArray5D<Real> &ca) {
++                                                 DvceArray5D<Real> &ca,
++                                                 const int var_offset,
++                                                 const int var_count) {
+   // create local references for variables in kernel
+   int nmb = pmy_pack->nmb_thispack;
+   int nnghbr = pmy_pack->pmb->nnghbr;
+@@ -298,7 +306,8 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
+ 
+   //----- STEP 2: buffers have all completed, so unpack
+ 
+-  int nvar = a.extent_int(1);  // TODO(@user): 2nd index from L of in array must be NVAR
++  // Store the selected variables densely; buffer capacity is shared with full exchanges.
++  const int nvar = (var_count < 0) ? a.extent_int(1) - var_offset : var_count;
+   auto &mblev = pmy_pack->pmb->mb_lev;
+ 
+   // Outer loop over (# of MeshBlocks)*(# of buffers)*(# of variables)
+@@ -307,6 +316,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
+     const int m = (tmember.league_rank())/(nnghbr*nvar);
+     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
+     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
++    const int av = v + var_offset;
+ 
+     // only unpack buffers when neighbor exists
+     if (nghbr.d_view(m,n).gid >= 0) {
+@@ -351,14 +361,14 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
+         if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
+           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+           [&](const int i) {
+-            a(m,v,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
++            a(m,av,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+           });
+ 
+         // if neighbor is at coarser level, load data into coarse_u0
+         } else {
+           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+           [&](const int i) {
+-            ca(m,v,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
++            ca(m,av,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+           });
+         }
+       });
+@@ -371,6 +381,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
+     const int m = (tmember.league_rank())/(nnghbr*nvar);
+     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
+     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
++    const int av = v + var_offset;
+     // only unpack buffers when neighbor exists
+     if (nghbr.d_view(m,n).gid >= 0) {
+       int il, iu, jl, ju, kl, ku;
+@@ -398,7 +409,8 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
+           // load data into coarse_u0
+           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+           [&](const int i) {
+-            ca(m,v,k,j,i) = rbuf[n].vars(m,ndat + (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
++            ca(m,av,k,j,i)
++                = rbuf[n].vars(m,ndat + (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+           });
+         });
+       }
+diff --git a/src/bvals/bvals_tasks.cpp b/src/bvals/bvals_tasks.cpp
+index 7c3a510db..af159fc48 100644
+--- a/src/bvals/bvals_tasks.cpp
++++ b/src/bvals/bvals_tasks.cpp
+@@ -48,6 +48,7 @@ TaskStatus MeshBoundaryValues::InitRecv(const int nvars) {
+           int tag = CreateBvals_MPI_Tag(m, n);
+ 
+           // calculate amount of data to be passed, get pointer to variables
++          // nvars is the active packed count, which may be less than buffer capacity.
+           int data_size = nvars;
+           if ( nghbr.h_view(m,n).lev < pmy_pack->pmb->mb_lev.h_view(m) ) {
+             data_size *= recvbuf[n].icoar_ndat;
+diff --git a/src/mhd/mhd_tasks.cpp b/src/mhd/mhd_tasks.cpp
+index f01013668..0768c22ae 100644
+--- a/src/mhd/mhd_tasks.cpp
++++ b/src/mhd/mhd_tasks.cpp
+@@ -299,7 +299,9 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
+ TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
+   TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "begin", stage);
+   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_init_recv);
+-  TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
++  // Shearing remaps all variables from the ordinary exchange's ghost zones.
++  const int nvar = (has_cgl_lf_split && psbox_u == nullptr) ? 2 : nmhd+nscalars;
++  TaskStatus tstat = pbval_u->InitRecv(nvar);
+   if (tstat != TaskStatus::complete) {
+     TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_u", stage);
+     return tstat;
+@@ -793,7 +795,10 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
+ 
+ TaskStatus MHD::SendU(Driver *pdrive, int stage) {
+   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_u);
+-  TaskStatus tstat = pbval_u->PackAndSendCC(u0, coarse_u0);
++  const bool lf_subset = psbox_u == nullptr &&
++      cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
++  TaskStatus tstat = pbval_u->PackAndSendCC(
++      u0, coarse_u0, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
+   return tstat;
+ }
+ 
+@@ -803,7 +808,10 @@ TaskStatus MHD::SendU(Driver *pdrive, int stage) {
+ 
+ TaskStatus MHD::RecvU(Driver *pdrive, int stage) {
+   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_u);
+-  TaskStatus tstat = pbval_u->RecvAndUnpackCC(u0, coarse_u0);
++  const bool lf_subset = psbox_u == nullptr &&
++      cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
++  TaskStatus tstat = pbval_u->RecvAndUnpackCC(
++      u0, coarse_u0, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
+   return tstat;
+ }
+ 
+@@ -1004,7 +1012,10 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
+ 
+   // physical BCs
+   pbval_u->HydroBCs((pmy_pack), (pbval_u->u_in), u0);
+-  pbval_b->BFieldBCs((pmy_pack), (pbval_b->b_in), b0);
++  // The magnetic field, including its physical ghost values, is frozen during LF.
++  if (cgl_slot_representation != CGLSlotRepresentation::magnetic_moment) {
++    pbval_b->BFieldBCs((pmy_pack), (pbval_b->b_in), b0);
++  }
+ 
+   // user BCs
+   if (pmy_pack->pmesh->pgen->user_bcs) {

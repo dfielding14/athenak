@@ -1,5 +1,9 @@
 # Turbulence Driving
 
+The CGL paper problem uses the same `<turb_driving>` block as other problems.
+Forcing geometry, spectrum, and normalization are set there; the removed
+`<problem>/forcing_mode` selector never controlled the driver.
+
 ## Scope
 
 `TurbulenceDriver` applies a stochastic acceleration source to hydro, MHD, or
@@ -44,6 +48,12 @@ with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
 `mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The
 cell-centered `force` field is rendered from those coefficients and the
 current MeshBlock geometry.
+
+The force is normalized and applied once per timestep as a full-`dt` kick before
+`CopyCons`, independent of the RK integrator. Ghost cells and primitive variables
+are refreshed before hyperbolic fluxes. OU coefficients remain fixed between
+`dt_update` boundaries; a step crossing multiple boundaries catches up the OU
+recurrence without applying extra fluid kicks.
 
 ## Tiled Evaluation
 
@@ -166,10 +176,10 @@ The following keys belong in `<turb_driving>`.
 | `accel_rms` | required for `accel_rms` | Target volume-weighted RMS acceleration. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive driven mode-radius bounds. |
 | `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is tile-local mode number. |
-| `spectrum` | `parabolic` | `parabolic` or `power_law`. |
+| `spectrum` | `power_law` for type 2, otherwise `parabolic` | `parabolic` or `power_law`. |
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Power-law spectrum exponents. |
 | `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds. |
-| `driving_type` | `0` | `0` for three-dimensional; `1` for planar driving. |
+| `driving_type` | `0` | `0` for three-dimensional projected driving; `1` for planar driving; `2` for isotropic unprojected random driving. |
 | `physical_k_shell` | `false` | Apply `nlow`/`nhigh` to `abs(k)/k_shell_unit`. |
 | `k_shell_unit` | `0.0` | Positive reference wavenumber required by `physical_k_shell`. |
 | `isotropic_power_spectrum` | `false` | Apply `expo` to total `abs(k)` for planar driving. |

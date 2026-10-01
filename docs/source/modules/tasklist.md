@@ -92,15 +92,9 @@ state such as the current stage count or CFL buffers.
 
 ### Inserting Work Between Existing Tasks
 `TaskList::InsertTask` splices a task before a target `TaskID` and rewrites downstream
-dependencies to preserve ordering (`src/tasklist/task_list.hpp:197`). The turbulence
-driver uses this to add forcing between the Runge–Kutta update and source-term evaluation,
-regardless of the hosting physics package:
-
-```cpp
-// src/srcterms/turb_driver.cpp:446
-tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-               pmy_pack->phydro->id.rkupdt, pmy_pack->phydro->id.srctrms);
-```
+dependencies to preserve ordering (`src/tasklist/task_list.hpp:197`). For example, it can order a new source between a solver update and its next
+consumer. Turbulence forcing uses a dependency chain in `before_timeintegrator`
+instead, so its full-timestep kick runs once before `CopyCons`.
 
 ### Numerical Relativity Choreography
 `numrel::NumericalRelativity` maintains three queues (start/run/end). Each queued task

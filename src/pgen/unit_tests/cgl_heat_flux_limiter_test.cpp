@@ -15,6 +15,7 @@
 
 #include "athena.hpp"
 #include "diffusion/cgl_landau_fluid_arithmetic.hpp"
+#include "diffusion/limiters.hpp"
 #include "diffusion/sts_rkl2.hpp"
 #include "eos/cgl_physics.hpp"
 #include "mesh/mesh.hpp"
@@ -79,42 +80,116 @@ void CheckBackupLimiterPolicy() {
           cgl::EffectiveBackupLimiter(true, false, false, true));
   Require("strict LF does not imply backup",
           !cgl::EffectiveBackupLimiter(false, true, true, true));
-  Require("relaxed LF enables backup",
-          cgl::EffectiveBackupLimiter(false, true, true, false));
-  Require("relaxed LF without instability limiters does not enable backup",
+  Require("relaxed LF does not imply backup",
+          !cgl::EffectiveBackupLimiter(false, true, true, false));
+  Require("relaxed LF without instability limiters does not imply backup",
           !cgl::EffectiveBackupLimiter(false, true, false, false));
-  Require("unrelated relaxed configuration does not enable backup",
+  Require("unrelated relaxed configuration does not imply backup",
           !cgl::EffectiveBackupLimiter(false, false, true, false));
 
   constexpr Real ppar = 1.0;
   constexpr Real bsqr = 1.0;
   constexpr Real limiter_rate = 20.0;
+  EOS_Data eos{};
+  eos.firehose_threshold = 2.0;
+  eos.mirror_threshold = 1.0;
+  eos.firehose_backup_factor = 1.0;
+  eos.mirror_backup_factor = 2.0;
+  eos.limiter_backup_nu = 1.0e10;
+  eos.lim_coll = limiter_rate;
+  eos.mlim = true;
   const bool relaxed_backup =
-      cgl::EffectiveBackupLimiter(false, true, true, false);
+      cgl::EffectiveBackupLimiter(true, true, true, false);
+  RequireClose("default firehose threshold", cgl::FirehoseThreshold(bsqr, eos), -1.0);
+  RequireClose("default mirror threshold", cgl::MirrorThreshold(bsqr, eos), 0.5);
+  RequireClose("default firehose wall", cgl::FirehoseBackupWall(bsqr, eos), -1.0);
+  RequireClose("default mirror wall", cgl::MirrorBackupWall(bsqr, eos), 1.0);
   RequireClose(
       "relaxed mirror ordinary limiter rate",
-      cgl::LimiterCollisionRate(
-          ppar, 1.75, bsqr, limiter_rate, true, false,
-          cgl::kFirehoseObliqueThreshold, relaxed_backup),
-      limiter_rate);
+      cgl::LimiterCollisionRate(ppar, 1.75, bsqr, eos, relaxed_backup), limiter_rate);
   RequireClose(
       "relaxed mirror hard-bound backup rate",
-      cgl::LimiterCollisionRate(
-          ppar, 2.25, bsqr, limiter_rate, true, false,
-          cgl::kFirehoseObliqueThreshold, relaxed_backup),
-      cgl::kBackupCollisionRate);
-  RequireClose(
-      "relaxed firehose hard-bound backup rate",
-      cgl::LimiterCollisionRate(
-          3.0, 1.0, bsqr, limiter_rate, false, true,
-          cgl::kFirehoseParallelThreshold, relaxed_backup),
-      cgl::kBackupCollisionRate);
+      cgl::LimiterCollisionRate(ppar, 2.25, bsqr, eos, relaxed_backup),
+      eos.limiter_backup_nu + limiter_rate);
   RequireClose(
       "strict unconfigured hard bound retains finite limiter rate",
-      cgl::LimiterCollisionRate(
-          ppar, 2.25, bsqr, limiter_rate, true, false,
-          cgl::kFirehoseObliqueThreshold, false),
-      limiter_rate);
+      cgl::LimiterCollisionRate(ppar, 2.25, bsqr, eos, false), limiter_rate);
+  eos.mlim = false;
+  eos.flim = true;
+  RequireClose(
+      "relaxed firehose hard-bound backup rate",
+      cgl::LimiterCollisionRate(3.0, 1.0, bsqr, eos, relaxed_backup),
+      eos.limiter_backup_nu + limiter_rate);
+  eos.firehose_threshold = 1.4;
+  eos.mirror_threshold = 0.6;
+  eos.firehose_backup_factor = 1.2;
+  eos.mirror_backup_factor = 3.0;
+  eos.limiter_backup_nu = 1234.0;
+  RequireClose("configured firehose threshold", cgl::FirehoseThreshold(2.0, eos), -1.4);
+  RequireClose("configured mirror threshold", cgl::MirrorThreshold(2.0, eos), 0.6);
+  RequireClose("configured firehose wall", cgl::FirehoseBackupWall(2.0, eos), -1.68);
+  RequireClose("configured mirror wall", cgl::MirrorBackupWall(2.0, eos), 1.8);
+  RequireClose("configured backup rate",
+               cgl::LimiterCollisionRate(3.0, 1.0, bsqr, eos, true), 1254.0);
+  Require("disabled backup leaves a soft-firehose state admissible",
+          !cgl::HardBoundViolated(-0.9, 1.0, eos, false));
+  Require("enabled backup detects a state beyond its firehose wall",
+          cgl::HardBoundViolated(-0.9, 1.0, eos, true));
+  Require("fluid firehose bound is unconditional",
+          cgl::HardBoundViolated(-1.1, 1.0, eos, false));
+  Require("a state on the backup wall is admissible",
+          !cgl::HardBoundViolated(cgl::FirehoseBackupWall(1.0, eos), 1.0, eos, true));
+  eos.firehose_backup_factor = 10.0;
+  RequireClose("firehose wall cannot cross fluid wall",
+               cgl::FirehoseBackupWall(2.0, eos), -2.0);
+}
+
+void CheckAdditiveCollisionRates() {
+  // Independent totals: background 7, soft 11, backup 101, so both give 119.
+  EOS_Data eos{};
+  eos.nu_coll = 7.0;
+  eos.lim_coll = 11.0;
+  eos.limiter_backup_nu = 101.0;
+  eos.firehose_threshold = 1.0;
+  eos.mirror_threshold = 1.0;
+  eos.firehose_backup_factor = 2.0;
+  eos.mirror_backup_factor = 2.0;
+  struct Case { Real delta, bsqr; bool mirror, firehose, backup; Real expected; };
+  const Case cases[] = {
+    { 0.00, 1.0, true, true, true, 7.0},
+    { 0.50, 1.0, true, true, true, 7.0},
+    {-0.50, 1.0, true, true, true, 7.0},
+    { 0.75, 1.0, true, true, true, 18.0},
+    {-0.75, 1.0, true, true, true, 18.0},
+    { 1.00, 1.0, true, true, true, 18.0},
+    {-1.00, 1.0, true, true, true, 18.0},
+    { 1.25, 1.0, true, true, true, 119.0},
+    {-1.25, 1.0, true, true, true, 119.0},
+    { 1.25, 1.0, true, true, false, 18.0},
+    {-1.25, 1.0, true, true, false, 18.0},
+    { 1.25, 1.0, false, true, true, 108.0},
+    {-1.25, 1.0, true, false, true, 108.0},
+    { 0.75, 1.0, false, true, true, 7.0},
+    {-0.75, 1.0, true, false, true, 7.0},
+    { 3.00, 4.0, true, true, true, 18.0},
+    {-3.00, 4.0, true, true, true, 18.0},
+    { 4.50, 4.0, true, true, true, 119.0},
+    {-4.50, 4.0, true, true, true, 119.0},
+  };
+  for (const auto &test : cases) {
+    eos.mlim = test.mirror;
+    eos.flim = test.firehose;
+    const Real got = eos.nu_coll +
+        cgl::LimiterCollisionRate(8.0, 8.0 + test.delta, test.bsqr, eos, test.backup);
+    RequireClose("independent additive collision-rate total", got, test.expected);
+  }
+  // The fluid wall still adds backup scattering when the chosen soft FH bound
+  // lies farther from isotropy and is not yet active.
+  eos.firehose_threshold = 4.0;
+  eos.mlim = false;
+  eos.flim = true;
+  RequireClose("fluid wall supplies backup without soft activation",
+               eos.nu_coll + cgl::LimiterCollisionRate(8.0, 6.5, 1.0, eos, true), 108.0);
 }
 
 void CheckFiniteOverflowCases() {
@@ -228,7 +303,7 @@ Real ReferencePerpendicularHeatFlux(
     const Real cparallel, const Real rho, const Real ppar,
     const Real pperp, const Real bmag, const Real lf_k,
     const Real nu, const Real grad_tperp, const Real grad_b) {
-  const Real denominator = cgl::kSqrtTwoPi*cparallel*lf_k + nu;
+  const Real denominator = cgl::kSqrtTwoPi*cparallel*lf_k + 2.0*nu;
   const Real chi_perp = static_cast<Real>(2.0)*cparallel*cparallel/denominator;
   const Real q_unlimited = -chi_perp*(
       rho*grad_tperp -
@@ -381,6 +456,15 @@ void CheckPerpendicularClosureOrdinaryAgreement() {
   RequireRelativeClose("perpendicular ordinary agreement", got, expected);
   Require("perpendicular ordinary ratio finite", std::isfinite(ratio));
   Require("perpendicular ordinary sign preserved", got*ratio > 0.0);
+}
+
+void CheckPerpendicularCollisionalLimit() {
+  // In the BGK limit, the uncapped thermal diffusivity is c_parallel^2/nu.
+  const Real nu = 1.0e16;
+  const Real ratio = cgl::PerpendicularHeatFluxRatio(
+      2.0, 3.0, 12.0, 12.0, 1.0, 1.0, nu, 1.0, 0.0);
+  const Real chi = -ratio*cgl::kSqrtTwoOverPi*2.0*12.0/3.0;
+  RequireRelativeClose("perpendicular BGK limit", chi*nu/4.0, 1.0);
 }
 
 void CheckPerpendicularClosureOverflowEndpoints() {
@@ -695,11 +779,39 @@ void CheckWeightedRKLCacheAlgebra() {
       state);
 }
 
+void CheckDiffusionSlopeMeans() {
+  // Ordinary inputs retain the legacy evaluation order bit for bit.
+  for (Real sign : {static_cast<Real>(-1.0), static_cast<Real>(1.0)}) {
+    for (Real a : {static_cast<Real>(0.125), static_cast<Real>(1.1),
+                   static_cast<Real>(7.0), static_cast<Real>(1024.0)}) {
+      const Real b = 3.0*a;
+      Require("ordinary van Leer bitwise agreement",
+              VanLeerLimiter(sign*a, sign*b) == 2.0*(sign*a)*(sign*b)/(sign*a+sign*b));
+    }
+    const Real large = 0.75*std::numeric_limits<Real>::max();
+    const Real small = std::numeric_limits<Real>::min();
+    const Real subnormal = 4.0*std::numeric_limits<Real>::denorm_min();
+    for (Real slope : {large, small, subnormal}) {
+      Require("equal finite slopes survive overflow and underflow",
+              VanLeerLimiter(sign*slope, sign*slope) == sign*slope);
+      Require("four equal finite slopes survive overflow and underflow",
+              VL4Limiter(sign*slope, sign*slope, sign*slope, sign*slope) == sign*slope);
+    }
+    Require("finite mean with overflowing twice-a intermediate",
+            VanLeerLimiter(sign*large, sign*0.5) == sign);
+  }
+  Require("opposite slopes vanish", VanLeerLimiter(-1.0, 1.0) == 0.0);
+  Require("zero slope vanishes", VanLeerLimiter(0.0, 1.0) == 0.0);
+  Require("transverse extremum vanishes", VL4Limiter(1.0, 2.0, -1.0, 2.0) == 0.0);
+}
+
 } // namespace
 
 void RunCglHeatFluxLimiterChecks() {
+  CheckDiffusionSlopeMeans();
   CheckModerateValues();
   CheckBackupLimiterPolicy();
+  CheckAdditiveCollisionRates();
   CheckFiniteOverflowCases();
   CheckInfiniteAsymptotes();
   CheckRatioLimiter();
@@ -707,6 +819,7 @@ void RunCglHeatFluxLimiterChecks() {
   CheckParallelClosureOrdinaryAgreement();
   CheckParallelClosureOverflowEndpoints();
   CheckPerpendicularClosureOrdinaryAgreement();
+  CheckPerpendicularCollisionalLimit();
   CheckPerpendicularClosureOverflowEndpoints();
   CheckPerpendicularClosureCancellationSigns();
   CheckWeightedFluxArithmetic();

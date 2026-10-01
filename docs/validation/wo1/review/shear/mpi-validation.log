@@ -1,0 +1,43 @@
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/../vis/python/athena_read.py:102: UserWarning: Multiple headers found; using most recent data
+  warnings.warn('Multiple headers found; using most recent data')
+{
+  "sts": {
+    "time": 0.3,
+    "cycle": 39,
+    "lf_nstage": 3297280.0,
+    "lf_hardbd": 1172382.0,
+    "lf_dfloor": 0.0,
+    "lf_pfloor": 0.0,
+    "lf_nonfin": 0.0,
+    "lf_nonpos": 0.0
+  },
+  "mpi": {
+    "time": 0.3,
+    "cycle": 39,
+    "lf_nstage": 3297280.0,
+    "lf_hardbd": 1172382.0,
+    "lf_dfloor": 0.0,
+    "lf_pfloor": 0.0,
+    "lf_nonfin": 0.0,
+    "lf_nonpos": 0.0
+  },
+  "capped": {
+    "time": 0.04,
+    "cycle": 994
+  },
+  "explicit": {
+    "time": 0.04,
+    "cycle": 994
+  },
+  "restart": {
+    "time": 0.3,
+    "cycle": 39,
+    "lf_nstage": 3297280.0,
+    "lf_hardbd": 1172466.0,
+    "lf_dfloor": 0.0,
+    "lf_pfloor": 0.0,
+    "lf_nonfin": 0.0,
+    "lf_nonpos": 0.0
+  }
+}
+PASS full collisionless shear serial/MPI/capped/explicit/restart regression

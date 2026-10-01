@@ -1,0 +1,97 @@
+{
+  "before_sha256": "71698e4a0c36b337e9b00998a02a9f8f7834c10f10131ecaeacc53442f198fb8",
+  "after_sha256": "64f1399dca116e5586f1dad2eb6ed33a0b2412ba0b394ca3b402e6ee17993e13",
+  "baseline": [
+    {
+      "file": "build-review-amr/evidence/baseline-before-lf/bin/cgl_lf_amr_3d_current.state.00000.bin",
+      "cycle": 0,
+      "blocks": 27,
+      "min_margin": 0.03465175639092255,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/baseline-before-lf/bin/cgl_lf_amr_3d_current.state.00001.bin",
+      "cycle": 1,
+      "blocks": 27,
+      "min_margin": 0.06048211279036253,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/baseline-before-lf/bin/cgl_lf_amr_3d_current.state.00002.bin",
+      "cycle": 2,
+      "blocks": 216,
+      "min_margin": 0.06036348657958618,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/baseline-before-lf/bin/cgl_lf_amr_3d_current.state.00003.bin",
+      "cycle": 3,
+      "blocks": 216,
+      "min_margin": 0.06065287295031668,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/baseline-before-lf/bin/cgl_lf_amr_3d_current.state.00004.bin",
+      "cycle": 3,
+      "blocks": 27,
+      "min_margin": -0.00461627805254472,
+      "negative_count": 8,
+      "near_wall_count": 0
+    }
+  ],
+  "after": [
+    {
+      "file": "build-review-amr/evidence/fixed-before-lf/bin/cgl_lf_amr_3d_current.state.00000.bin",
+      "cycle": 0,
+      "blocks": 27,
+      "min_margin": 0.03465175639092255,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/fixed-before-lf/bin/cgl_lf_amr_3d_current.state.00001.bin",
+      "cycle": 1,
+      "blocks": 27,
+      "min_margin": 0.06048211279036253,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/fixed-before-lf/bin/cgl_lf_amr_3d_current.state.00002.bin",
+      "cycle": 2,
+      "blocks": 216,
+      "min_margin": 0.06036348657958618,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/fixed-before-lf/bin/cgl_lf_amr_3d_current.state.00003.bin",
+      "cycle": 3,
+      "blocks": 216,
+      "min_margin": 0.06065287295031668,
+      "negative_count": 0,
+      "near_wall_count": 0
+    },
+    {
+      "file": "build-review-amr/evidence/fixed-before-lf/bin/cgl_lf_amr_3d_current.state.00004.bin",
+      "cycle": 3,
+      "blocks": 27,
+      "min_margin": 4.5931317793623805e-07,
+      "negative_count": 0,
+      "near_wall_count": 8
+    }
+  ],
+  "max_history_conservation_error": {
+    "mass": 3.622657729351886e-13,
+    "1-mom": 5.134781488891349e-15,
+    "2-mom": 1.1310397063368782e-14,
+    "3-mom": 4.045375145977914e-15,
+    "tot-E": 2.4868995751603507e-14
+  },
+  "negative_control": "New CPU test fails baseline at min_margin=-0.00461627805254472 >= -2e-6 assertion",
+  "validation": "5 passed: final field wall regression, 2D/3D LF churn, double/float C2P floor and wall idempotence. 3 passed: pure-CGL churn, restart through regrid, projection stress."
+}

@@ -1,3 +1,4 @@
+# Evolve to chi k^2 t = 1 over hundreds of cycles, resolving finite damping.
 # Quantitative CGL Landau-fluid STS test.
 # lf_k_parallel is the closure wavenumber |k_parallel|, not a conductivity.
 # background mode freezes only c_parallel; gradients and state variables remain live.
@@ -7,7 +8,7 @@ basename = cgl_lf_quant_parallel
 
 <mesh>
 nghost = 2
-nx1 = 64
+nx1 = 128
 x1min = 0.0
 x1max = 1.0
 ix1_bc = periodic
@@ -24,7 +25,7 @@ ix3_bc = periodic
 ox3_bc = periodic
 
 <meshblock>
-nx1 = 64
+nx1 = 128
 nx2 = 1
 nx3 = 1
 
@@ -32,11 +33,11 @@ nx3 = 1
 evolution = kinematic
 integrator = rk2
 sts_integrator = rkl2
-sts_max_dt_ratio = 1000.0
+sts_max_dt_ratio = 10.0
 cfl_number = 0.4
-nlim = 1
-tlim = 0.02
-ndiag = 1
+nlim = -1
+tlim = 0.099735570100358162
+ndiag = 100
 
 <mhd>
 eos = cgl
@@ -65,7 +66,7 @@ ppar0 = 1.0
 pperp0 = 1.0
 b0 = 1.0
 amp = 1.0e-4
-decay_rel_tol = 5.0e-2
-phase_rel_tol = 2.0e-2
+decay_rel_tol = 3.0e-3
+phase_rel_tol = 1.0e-6
 validation_output = false
 validation_output_dir = docs/figures/data

@@ -1,0 +1,98 @@
+{
+  "lf1d": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/lf1d.athinput",
+    "sha256": "76eadf8d34674197a3c23e1cb6cd21987b1a6449b60a8bc78b7c1370c3981c77",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_quant_parallel.athinput",
+    "source_sha256": "6c0be74794eb58eceeea127949e1a4b604d795a13491f685a54263977e05c7f9",
+    "mpi": false,
+    "required": true
+  },
+  "lf2d": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/lf2d.athinput",
+    "sha256": "0f74067fc84a83794711e7c420db978eda91bb72e9b59f4e9d6c3d343e357272",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_oblique_decay_2d.athinput",
+    "source_sha256": "01a8596240e889fced337724307c61fb9b72e51f0711cb28c81c3a76babd7781",
+    "mpi": true,
+    "required": true
+  },
+  "lf3d": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/lf3d.athinput",
+    "sha256": "b78286ef7ed070b4f0ed53ab90959700fe88f3e024efe8b340805f24b35e7075",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_rotated_decay.athinput",
+    "source_sha256": "02b672e42073a17321d14c7ff0935d8f89dfb901e4a3b6e3758401970b39f4b2",
+    "mpi": true,
+    "required": true
+  },
+  "smr": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/smr.athinput",
+    "sha256": "e89213a76ada0ce37443f3647a8a05789a1c9775c5e044945daed79358718c29",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_smr_decay_2d.athinput",
+    "source_sha256": "88aecc1a35d1591db2263a5c240aa0ae46f20a46c6f9f907384566137eda9d73",
+    "mpi": true,
+    "required": true
+  },
+  "pure_cgl": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/pure_cgl.athinput",
+    "sha256": "f7cf00cb96c261fbb542de52ced12d2870300fe52d029fcaa7a25e440a4c82a0",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_pure_paper_oblique_wave.athinput",
+    "source_sha256": "1368576b098d13871eaff3b6b3d7161989afb66eb674678fb989035b38001cc9",
+    "mpi": false,
+    "required": true
+  },
+  "shear": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/shear.athinput",
+    "sha256": "ffef8f9235f187cc192a0061e6ddc7c04faf20050bc833ece85b1bcd86ffa538",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/inputs/cgl_lf_sts_sbox.athinput",
+    "source_sha256": "38c95b6cc940e91f69efba6771fdd19256747c500e07a5f1282f8b43611a1fab",
+    "mpi": true,
+    "required": false
+  },
+  "smr_varied": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/smr_varied.athinput",
+    "sha256": "60e862ca3acae17febded53b2d8e9752229a1e8b14afbe7a22650f95394cc0ee",
+    "source": "/private/tmp/cgl-wo1-perf/smr_varied_source.athinput",
+    "source_sha256": "3f097050afe8ea7100305ba1f76b303722492623f0b580b84ee38645cec707c8",
+    "mpi": true,
+    "required": false
+  },
+  "smr_outflow": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/smr_outflow.athinput",
+    "sha256": "96155baf8a2b697871862aaa09c8df55b8ecd20fb058c0d9282814f181f6feda",
+    "source": "/private/tmp/cgl-wo1-perf/smr_varied_source.athinput",
+    "source_sha256": "3f097050afe8ea7100305ba1f76b303722492623f0b580b84ee38645cec707c8",
+    "mpi": true,
+    "required": false
+  },
+  "outflow": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/outflow.athinput",
+    "sha256": "eba5b9982c8f1748333526589ef45661321a6feb5d50cf10bf97b207cae7ad62",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_field_reversal_1d.athinput",
+    "source_sha256": "71fbfbffe82ae0d7baddb01c6f39e81b1e10404312fc0a3ba0b77b72267f000d",
+    "mpi": false,
+    "required": false
+  },
+  "density": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/density.athinput",
+    "sha256": "dbb68b86f1f20766a08c0fb766f802bc7e23caf60885a5b248aee43841e290a3",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_density_contact.athinput",
+    "source_sha256": "e901d2ad12e8cf02f0194e93a22513391b4f59a64c6a33def5df4526599dbf30",
+    "mpi": false,
+    "required": false
+  },
+  "low_b": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/low_b.athinput",
+    "sha256": "008ebd28eb8372d5a14f6ddeea4c9e745c825498162b542512fa4f013525fdd4",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_quant_parallel.athinput",
+    "source_sha256": "6c0be74794eb58eceeea127949e1a4b604d795a13491f685a54263977e05c7f9",
+    "mpi": false,
+    "required": false
+  },
+  "velocity": {
+    "input": "/private/tmp/cgl-wo1-perf/inputs/velocity.athinput",
+    "sha256": "2cf8fcd66a8bc1b04692de1d4116d073df66dcc9fe09ececf8af4659697ad782",
+    "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_lf_field_wave.athinput",
+    "source_sha256": "bd1091a64d6dd4a7fdbc676af96208f6abbbd2b95a11c21fbf87d496ba2f9847",
+    "mpi": false,
+    "required": false
+  }
+}

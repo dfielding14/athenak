@@ -139,16 +139,14 @@ Required changes:
                     tfloor_used, bfloor_used);
    ```
 
-4. If `eos.hardwall_lim` is enabled and `|B| > bfloor`, apply the same
-   hard-wall projection used by `CGLMHD::ConsToPrim`.
-5. Store both CGL primitive pressures:
+4. Store both CGL primitive pressures:
 
    ```cpp
    prim(m, IPR, k, j, i) = w.e;   // p_parallel
    prim(m, IPP, k, j, i) = w.pp;  // p_perp
    ```
 
-6. Keep scalar conversion unchanged.
+5. Keep scalar conversion unchanged.
 
 ### PrimToConsFineBndry
 
@@ -223,14 +221,12 @@ B_eff = max(|B|, bfloor)
 U = E - 0.5 * |m|^2 / rho - 0.5 * |B|^2
 U = max(U, 1.5 * pfloor)
 
-Delta_min = 3 * pfloor - 2 * U
+Delta_min = max(3 * pfloor - 2 * U, -B^2)
 Delta_max = U - 1.5 * pfloor
 
-if hardwall firehose:
-    Delta_min = max(Delta_min, firehose_threshold * B^2)
-
-if hardwall mirror:
-    Delta_max = min(Delta_max, 0.5 * B^2)
+if backup_limiters:
+    Delta_min = max(Delta_min, firehose_backup_wall)
+    Delta_max = min(Delta_max, mirror_backup_wall)
 
 if |B| <= bfloor:
     Delta = 0

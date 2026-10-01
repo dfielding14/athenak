@@ -62,8 +62,9 @@ Real DeltaFromPressures(const Real p_parallel, const Real p_perp) {
 KOKKOS_INLINE_FUNCTION
 void PressuresFromUDelta(const Real U, const Real delta,
                          Real &p_parallel, Real &p_perp) {
-  p_parallel = TWO_3RDS*(U - delta);
-  p_perp = TWO_3RDS*U + ONE_3RD*delta;
+  const Real piso = TWO_3RDS*U;
+  p_parallel = piso - TWO_3RDS*delta;
+  p_perp = piso + ONE_3RD*delta;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -72,17 +73,13 @@ bool Finite3(const Real a, const Real b, const Real c) {
 }
 
 KOKKOS_INLINE_FUNCTION
-void DeltaInterval(const Real U, const Real bsqr, const Real bmag,
+void DeltaInterval(const Real U, const Real bsqr,
                    const EOS_Data &eos, Real &delta_min, Real &delta_max) {
-  delta_min = 3.0*eos.pfloor - 2.0*U;
+  delta_min = fmax(3.0*eos.pfloor - 2.0*U, -bsqr);
   delta_max = U - 1.5*eos.pfloor;
-  if (eos.hardwall_lim && bmag > eos.bfloor) {
-    if (eos.flim) {
-      delta_min = fmax(delta_min, eos.firehose_threshold*bsqr);
-    }
-    if (eos.mlim) {
-      delta_max = fmin(delta_max, cgl::kMirrorThreshold*bsqr);
-    }
+  if (eos.backup_lim) {
+    delta_min = fmax(delta_min, cgl::FirehoseBackupWall(bsqr, eos));
+    delta_max = fmin(delta_max, cgl::MirrorBackupWall(bsqr, eos));
   }
 }
 
@@ -106,7 +103,7 @@ bool IsAdmissiblePrimaryState(const Real rho, const Real vx, const Real vy,
   if (bmag <= eos.bfloor) return true;
 
   Real delta_min, delta_max;
-  DeltaInterval(U, bsqr, bmag, eos, delta_min, delta_max);
+  DeltaInterval(U, bsqr, eos, delta_min, delta_max);
   const Real tol = 16.0*std::numeric_limits<Real>::epsilon()*
                    fmax(fmax(fabs(delta_min), fabs(delta_max)), fmax(U, bsqr));
   return delta_min <= delta_max + tol;
@@ -134,7 +131,7 @@ bool IsAdmissibleUDelta(const Real rho, const Real vx, const Real vy,
     return fabs(delta) <= 16.0*std::numeric_limits<Real>::epsilon()*fmax(U, 1.0);
   }
   Real delta_min, delta_max;
-  DeltaInterval(U, bsqr, bmag, eos, delta_min, delta_max);
+  DeltaInterval(U, bsqr, eos, delta_min, delta_max);
   const Real tol = 16.0*std::numeric_limits<Real>::epsilon()*
                    fmax(fmax(fabs(delta_min), fabs(delta_max)), fmax(U, bsqr));
   return delta >= delta_min - tol && delta <= delta_max + tol;
@@ -201,11 +198,11 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
   report.b_eff = b_eff;
 
   Real delta_min, delta_max;
-  DeltaInterval(U, bsqr, bmag, eos, delta_min, delta_max);
+  DeltaInterval(U, bsqr, eos, delta_min, delta_max);
   if (delta_min > delta_max) {
     const Real U_floor = 1.5*eos.pfloor;
     U = fmax(U, U_floor);
-    DeltaInterval(U, bsqr, bmag, eos, delta_min, delta_max);
+    DeltaInterval(U, bsqr, eos, delta_min, delta_max);
     if (delta_min > delta_max) {
       delta_min = delta_max = 0.0;
     }
@@ -219,19 +216,13 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
     }
     delta = 0.0;
   } else if (delta < delta_min) {
-    if (eos.hardwall_lim && eos.flim &&
-        eos.firehose_threshold*bsqr >= delta_min &&
-        delta < eos.firehose_threshold*bsqr) {
-      repairs |= kFirehoseHardwall;
-    }
+    const Real wall = eos.backup_lim ? cgl::FirehoseBackupWall(bsqr, eos) : -bsqr;
+    if (delta < wall && wall >= delta_min) repairs |= kFirehoseHardwall;
     repairs |= kAnisotropyChanged;
     delta = delta_min;
   } else if (delta > delta_max) {
-    if (eos.hardwall_lim && eos.mlim &&
-        cgl::kMirrorThreshold*bsqr <= delta_max &&
-        delta > cgl::kMirrorThreshold*bsqr) {
-      repairs |= kMirrorHardwall;
-    }
+    if (eos.backup_lim && delta > cgl::MirrorBackupWall(bsqr, eos) &&
+        cgl::MirrorBackupWall(bsqr, eos) <= delta_max) repairs |= kMirrorHardwall;
     repairs |= kAnisotropyChanged;
     delta = delta_max;
   }
@@ -245,6 +236,12 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
   if (!Kokkos::isfinite(p_perp) || p_perp < eos.pfloor) {
     p_perp = eos.pfloor;
     repairs |= kPerpPressureFloor;
+  }
+  // As in the collision wall map, keep reconstruction roundoff inside the wall.
+  const Real lower = eos.backup_lim ? cgl::FirehoseBackupWall(bsqr, eos) : -bsqr;
+  if (p_perp - p_parallel < lower) p_parallel = Kokkos::nextafter(p_parallel, p_perp);
+  if (eos.backup_lim && p_perp - p_parallel > cgl::MirrorBackupWall(bsqr, eos)) {
+    p_perp = Kokkos::nextafter(p_perp, p_parallel);
   }
   U = InternalEnergyFromPressures(p_parallel, p_perp);
   delta = DeltaFromPressures(p_parallel, p_perp);
@@ -269,6 +266,21 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
   u.mu = (slot == magnetic_moment)
              ? p_perp/b_eff
              : CGLConservedAnisotropy(rho, p_parallel, p_perp, b_eff);
+
+  if (slot == anisotropy) {
+    const Real recovered_eint = u.e - ke - me;
+    const Real admissible = CGLWallAdmissibleAnisotropy(
+        w, recovered_eint, u.mu, eos, eos.backup_lim);
+    if (admissible != u.mu) {
+      u.mu = admissible;
+      CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
+          rho, recovered_eint, u.mu, b_eff, w.e, w.pp);
+      p_parallel = w.e;
+      p_perp = w.pp;
+      U = InternalEnergyFromPressures(p_parallel, p_perp);
+      delta = DeltaFromPressures(p_parallel, p_perp);
+    }
+  }
 
   report.repairs = repairs;
   report.U = U;

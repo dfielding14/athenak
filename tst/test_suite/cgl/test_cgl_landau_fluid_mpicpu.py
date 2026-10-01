@@ -91,12 +91,7 @@ def test_cgl_lf_amr_is_reproducible_across_mpi_decomposition():
 
 
 def test_cgl_lf_quantitative_projection_is_global_across_mpi_ranks():
-    flags = [
-        "meshblock/nx1=32",
-        "time/nlim=0",
-        "problem/reference_steps=1",
-        "problem/wave_rel_tol=1.0e-8",
-    ]
+    flags = ["meshblock/nx1=32"]
     testutils.mpi_run(
         OBLIQUE_INPUT,
         ["job/basename=cgl_mpi_projection_single", *flags],
@@ -107,3 +102,43 @@ def test_cgl_lf_quantitative_projection_is_global_across_mpi_ranks():
         ["job/basename=cgl_mpi_projection_four", *flags],
         threads=4,
     )
+
+
+def test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks():
+    input_file = "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput"
+    try:
+        for heating_rate, post_stages in ((0, 7), (3000, 11)):
+            histories = []
+            for nranks in (1, 4):
+                Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)
+                testutils.mpi_run(
+                    input_file, [f"problem/heating_rate={heating_rate}"], threads=nranks
+                )
+                history = testutils.athena_read.hst("cgl_lf_timestep_refresh.mhd.hst")
+                assert history["lf_nstage"][-1] == 64 * (7 + post_stages)
+                histories.append(history)
+            for name in ("time", "dt", "tot-E", "lf_nstage"):
+                np.testing.assert_allclose(histories[0][name], histories[1][name],
+                                           rtol=2.0e-12, atol=0.0)
+    finally:
+        Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)
+
+
+def test_cgl_lf_oblique_decay_agrees_across_mpi_ranks():
+    from test_suite.cgl.test_cgl_lf_oblique_decay_cpu import (
+        run_oblique_decay, assert_oblique_agreement,
+    )
+    for axis in ("x", "y"):
+        one_block = run_oblique_decay(axis, 64, nranks=1)
+        four_blocks = run_oblique_decay(axis, 32, nranks=1)
+        four_ranks = run_oblique_decay(axis, 32, nranks=4)
+        assert_oblique_agreement(one_block, four_blocks)
+        assert_oblique_agreement(one_block, four_ranks)
+
+
+def test_cgl_lf_smr_decay_conserves_energy_across_mpi_ranks():
+    from test_suite.cgl.test_cgl_lf_oblique_decay_cpu import run_smr_decay
+    single = run_smr_decay(nranks=1)
+    multi = run_smr_decay(nranks=4)
+    for name in ("time", "dt", "tot-E", "lf_nstage"):
+        np.testing.assert_allclose(single[name], multi[name], rtol=2.0e-13, atol=0)

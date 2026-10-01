@@ -17,6 +17,7 @@
 
 // Athena++ headers
 #include "athena.hpp"
+#include "diffusion/limiters.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
@@ -44,20 +45,6 @@ parabolic::ParabolicIntegratorMode ParseConductivityIntegrator(std::string block
 }
 
 } // namespace
-
-KOKKOS_INLINE_FUNCTION
-Real VanLeerLimiter(const Real a, const Real b) {
-  if (a*b > 0) {
-    return 2.0*a*b/(a+b);
-  } else {
-    return 0.0;
-  }
-}
-
-KOKKOS_INLINE_FUNCTION
-Real VL4Limiter(const Real a, const Real b, const Real c, const Real d) {
-  return VanLeerLimiter(VanLeerLimiter(a,b),VanLeerLimiter(c,d));
-}
 
 //----------------------------------------------------------------------------------------
 //! \fn Real KappaTemp()
@@ -123,6 +110,12 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "<" << block << ">/conductivity_model = '" << model
               << "' must be 'constant', 'spitzer', or 'power_law'" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (tdep_kappa && !power_law_kappa && pmy_pack->punit == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Spitzer conduction requires a <units> block"
+              << " to convert temperature and conductivity" << std::endl;
     std::exit(EXIT_FAILURE);
   }
   kappa_tref = pin->GetOrAddReal(block, "conductivity_tref", 1.0);

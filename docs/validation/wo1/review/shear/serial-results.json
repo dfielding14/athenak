@@ -1,0 +1,20 @@
+{
+  "safe": {
+    "cycle": 39,
+    "time": 0.3,
+    "nstage": 3297280.0,
+    "hard_bound": 1172382.0
+  },
+  "fast-profile": {
+    "cycle": 39,
+    "time": 0.3,
+    "nstage": 3297280.0,
+    "hard_bound": 1172382.0
+  },
+  "explicit": {
+    "cycle": 7605,
+    "time": 0.3,
+    "nstage": 31150080.0,
+    "hard_bound": 12120020.0
+  }
+}
