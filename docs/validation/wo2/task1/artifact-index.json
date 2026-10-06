@@ -1,0 +1,58 @@
+{
+  "derivative_envelope_results.json": {
+    "artifact": "task1-research/derivative_envelope_results.json",
+    "sha256": "bc27202fb0630f522d298d13f3b9e69fb1a85fee0a6a1ad9227c5acb54bde1b9"
+  },
+  "gradb_derivative_results.json": {
+    "artifact": "task1-research/gradb_derivative_results.json",
+    "sha256": "f71da507d26a2b42ecb037f440076ae78bffe888476d5505c0c8e7e0a1331b1e"
+  },
+  "production_face_results.json": {
+    "artifact": "task1-research/production_face_results.json",
+    "sha256": "ac45b929095728cfab541f68fd23f609b28d07f6e0ebe754f57512d908ac8880"
+  },
+  "integrated_scalar_results.json": {
+    "artifact": "task1-research/integrated_scalar_results.json",
+    "sha256": "7d4908b376fffdc3495d414c9038c78d5fd1c189c59ff9181d90a4d2af7f75c7"
+  },
+  "jacobian_envelope_search_results.json": {
+    "artifact": "task1-research/jacobian_envelope_search_results.json",
+    "sha256": "9d9800ec6013dbe85c786c21f66d52fd3fb30c31f7b6d2cffe891193f8b26c38"
+  },
+  "jacobian_counterexample_rkl_results.json": {
+    "artifact": "task1-research/jacobian_counterexample_rkl_results.json",
+    "sha256": "1760d3245ec5139df6e610352cf17d5ef4e7458e764916d9b5cdca9388632a5d"
+  },
+  "task1-documented-candidate.json": {
+    "artifact": "task1-research/task1-documented-candidate.json",
+    "sha256": "30122707345cf48f095975245a988cf286459859119f997a22539dd5a3c4b246"
+  },
+  "timing-valid-summary.json": {
+    "artifact": "task1-research/timing-valid-summary.json",
+    "sha256": "1fe02b244034fe41bcde03d434e4a7d32bd8c060c8ec328708bf2c027c2f4edb"
+  },
+  "planar-turbulence-audit.json": {
+    "artifact": "task1-research/planar-turbulence-audit.json",
+    "sha256": "9477bd4825c19157d712c6d274f8e5892696de6d7fa40f440a1478153054ea03"
+  },
+  "turbulence-full-precision-differences.json": {
+    "artifact": "task1-research/turbulence-full-precision-differences.json",
+    "sha256": "645c4e54c1df92b12c8af9e50c4cb35cbee36912f00fff74130899712d0b127c"
+  },
+  "supplemental3d-comparison.json": {
+    "artifact": "turbulence-research/supplemental3d-comparison.json",
+    "sha256": "4f77175e14b5947e3a87f45e75ce5a5a0263fdd1d00df0e0ab802d5b10df60a1"
+  },
+  "wave-timing-results.json": {
+    "artifact": "task1-research/wave-timing-5628672/results.json",
+    "sha256": "df0935e12eda218fe0c2e81a2995f437682fda9da011993f75b2d29cf5983332"
+  },
+  "forcing-padding-optin-audit.json": {
+    "artifact": "turbulence-research/runs/task1-1rank/forcing-padding-optin-audit.json",
+    "sha256": "54cdcb600d041403e820cd43807daec1cac38f8ac388d1f1616f7b1bbfa8db3e"
+  },
+  "remaining-rng-byte-audit.json": {
+    "artifact": "turbulence-research/runs/task1-1rank/remaining-rng-byte-audit.json",
+    "sha256": "9a5f89021635cded25b1068ebd1c3db9ff5ee68534a1eae0841eb759aa05e96b"
+  }
+}

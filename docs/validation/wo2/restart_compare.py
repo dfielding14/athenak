@@ -12,7 +12,7 @@ import re
 import struct
 
 
-def _dormant_forcing_ranges(raw, header, nmb):
+def _dormant_forcing_ranges(raw, header, nmb, *, validate_evolved=False):
     """Recognize the pinned native v3 forcing record; retain RNG padding and seed."""
     blocks = {}
     block = None
@@ -29,7 +29,7 @@ def _dormant_forcing_ranges(raw, header, nmb):
     if 'turb_driving' not in blocks:
         return [], dict(info, reason='no forcing record')
     time, _, cycle = struct.unpack_from('=ddi', raw, header + 232)
-    if time != 0.0 or cycle != 0:
+    if not validate_evolved and (time != 0.0 or cycle != 0):
         return [], dict(info, reason='not initial time and cycle', time=time, cycle=cycle)
     assert 'z4c' not in blocks, 'unsupported metadata before the forcing record'
     start = header + 252 + nmb*(16 + 4)
@@ -63,6 +63,8 @@ def _dormant_forcing_ranges(raw, header, nmb):
                 n_updates=integers[2], time=time, cycle=cycle,
                 rng_offset=rng, rng_bytes=296, idum=idum, iset=iset,
                 retained_padding_range=[rng + 284, rng + 288])
+    if time != 0.0 or cycle != 0:
+        return [], dict(info, reason='not initial time and cycle')
     if integers[2] != 0 or idum != -1 or iset != 0:
         return [], dict(info, reason='forcing RNG is not the verified dormant seed state')
     ranges = [[rng + 8, rng + 280], [rng + 288, rng + 296]]
@@ -73,7 +75,8 @@ def _dormant_forcing_ranges(raw, header, nmb):
     return ranges, info
 
 
-def normalized_restart(path, *, normalize_dormant_startup_forcing=False):
+def normalized_restart(path, *, normalize_dormant_startup_forcing=False,
+                       normalize_forcing_padding=False):
     path = Path(path)
     raw = path.read_bytes()
     marker = b'<par_end>\n'
@@ -88,9 +91,31 @@ def normalized_restart(path, *, normalize_dormant_startup_forcing=False):
     stop = start + 9*4
     ranges = [[start, stop]]
     forcing = None
-    if normalize_dormant_startup_forcing:
-        extra, forcing = _dormant_forcing_ranges(raw, header, nmb)
-        ranges.extend(extra)
+    padding = None
+    if normalize_dormant_startup_forcing or normalize_forcing_padding:
+        extra, info = _dormant_forcing_ranges(raw, header, nmb,
+                                             validate_evolved=normalize_forcing_padding)
+        if normalize_dormant_startup_forcing:
+            ranges.extend(extra)
+            forcing = dict(info)
+        if normalize_forcing_padding:
+            padding = {'enabled': True, 'applied': 'rng_offset' in info}
+            if padding['applied']:
+                padding_range = info['retained_padding_range']
+                ranges.append(padding_range)
+                padding.update(range=padding_range,
+                    metadata_version=info['metadata_version'], rng_offset=info['rng_offset'],
+                    rng_bytes=info['rng_bytes'], time=info['time'], cycle=info['cycle'],
+                    idum=info['idum'], iset=info['iset'],
+                    abi='native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8',
+                    abi_compile_proof='p1-research/rng_restart_abi.cpp',
+                    source='src/utils/random.hpp:26-34; src/outputs/restart.cpp:328',
+                    rule='zero only the four non-member alignment bytes between iset and gset')
+                if forcing is not None:
+                    forcing['padding_normalized_by_separate_opt_in'] = True
+            else:
+                padding['reason'] = info['reason']
+    ranges.sort()
     normalized = bytearray(raw)
     for lo, hi in ranges:
         normalized[lo:hi] = bytes(hi-lo)
@@ -110,9 +135,15 @@ def normalized_restart(path, *, normalize_dormant_startup_forcing=False):
         metadata['dormant_startup_forcing'] = forcing
         if forcing['applied']:
             metadata['rule'] += '; explicitly opted-in verified dormant initial forcing RNG members only'
+    if padding is not None:
+        metadata['forcing_padding'] = padding
+        if padding['applied']:
+            metadata['rule'] += '; independently opted-in verified four-byte RNG alignment padding only'
     return normalized, metadata
 
 
-def restart_hashes(path, *, normalize_dormant_startup_forcing=False):
+def restart_hashes(path, *, normalize_dormant_startup_forcing=False,
+                   normalize_forcing_padding=False):
     return normalized_restart(path,
-        normalize_dormant_startup_forcing=normalize_dormant_startup_forcing)[1]
+        normalize_dormant_startup_forcing=normalize_dormant_startup_forcing,
+        normalize_forcing_padding=normalize_forcing_padding)[1]

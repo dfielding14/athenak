@@ -125,7 +125,7 @@ class CGLLandauFluid {
                                       Real pressure_power, Real anisotropic_power);
   void ResetHeatFluxDiagnostics();
   void NewTimeStep(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
-                    const EOS_Data &eos);
+                    const DvceFaceFld4D<Real> &b, const EOS_Data &eos);
   void RecordAdmissibility(const DvceArray5D<Real> &u, const DvceArray5D<Real> &w,
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
                            int dfloor_delta, int pfloor_delta,
@@ -150,6 +150,7 @@ class CGLLandauFluid {
   std::uint64_t profile_counts_[kCGLLFProfileBucketCount] = {};
   Real profile_detail_sink_ = 0.0;
   DvceArray4D<Real> tpar_, tperp_, bmag_;
+  DvceArray4D<Real> timestep_bmag_, timestep_tpar_, timestep_tperp_;
   // C2P and LF use different norm expressions; retain both rounding histories.
   DvceArray4D<Real> bmag_c2p_;
   bool fused_primitive_refresh_ = false;

@@ -1,0 +1,574 @@
+[
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "uniform",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 36.572334298122804,
+    "universal_bound": 36.572334298122804,
+    "spectral": 36.57233429812285,
+    "bound_over_spectral": 0.9999999999999989,
+    "old_bound_over_envelope": 2.0000000000000004
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "uniform",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 36.572334298122804,
+    "universal_bound": 36.572334298122804,
+    "spectral": 36.57233429812285,
+    "bound_over_spectral": 0.9999999999999989,
+    "old_bound_over_envelope": 2.0000000000000004
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "uniform",
+    "angle_deg": 29.999999999999996,
+    "limited": false,
+    "bound": 52.40861958705844,
+    "universal_bound": 52.40861958705844,
+    "spectral": 36.57233429812294,
+    "bound_over_spectral": 1.4330127018922139,
+    "old_bound_over_envelope": 1.395661041496076
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "uniform",
+    "angle_deg": 29.999999999999996,
+    "limited": true,
+    "bound": 69.51049320880165,
+    "universal_bound": 163.26261660960793,
+    "spectral": 36.57233429812288,
+    "bound_over_spectral": 1.9006304777316156,
+    "old_bound_over_envelope": 1.05228239967349
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "uniform",
+    "angle_deg": 45.0,
+    "limited": false,
+    "bound": 54.85850144718421,
+    "universal_bound": 54.85850144718421,
+    "spectral": 36.572334298122726,
+    "bound_over_spectral": 1.5000000000000033,
+    "old_bound_over_envelope": 1.3333333333333335
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "uniform",
+    "angle_deg": 45.0,
+    "limited": true,
+    "bound": 74.60604412550502,
+    "universal_bound": 182.86167149061407,
+    "spectral": 36.572334298122804,
+    "bound_over_spectral": 2.039958497517464,
+    "old_bound_over_envelope": 0.9804121027138094
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "random",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 186.90364501068115,
+    "universal_bound": 186.90364501068115,
+    "spectral": 90.23101057311169,
+    "bound_over_spectral": 2.071390354862958,
+    "old_bound_over_envelope": 0.6767805852345993
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "random",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 192.26807904773554,
+    "universal_bound": 279.4255849211681,
+    "spectral": 91.80948564039817,
+    "bound_over_spectral": 2.094207125839004,
+    "old_bound_over_envelope": 0.6578978626056979
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "sheet",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 37.86759926426056,
+    "universal_bound": 37.86759926426056,
+    "spectral": 36.574585006789704,
+    "bound_over_spectral": 1.0353528073450682,
+    "old_bound_over_envelope": 2.4159207958653472
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "sheet",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 39.07930238046792,
+    "universal_bound": 46.70737736925691,
+    "spectral": 36.564985605896894,
+    "bound_over_spectral": 1.0687629636087028,
+    "old_bound_over_envelope": 2.3410121209775547
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "synthetic_turbulence",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 83.80375319603314,
+    "universal_bound": 83.80375319603314,
+    "spectral": 37.05696682952684,
+    "bound_over_spectral": 2.2614844215813865,
+    "old_bound_over_envelope": 1.3532102357843885
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "synthetic_turbulence",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 80.00626620010385,
+    "universal_bound": 196.65683772480557,
+    "spectral": 35.51112796177204,
+    "bound_over_spectral": 2.2529914083898186,
+    "old_bound_over_envelope": 1.417440183227467
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 10,
+    "limited": false,
+    "bound": 131.9402546651933,
+    "spectral": 60.01794721514622,
+    "bound_over_spectral": 2.1983466744076954,
+    "old_bound_over_envelope": 3.0490745853128867
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 10,
+    "limited": true,
+    "bound": 168.28173610917437,
+    "spectral": 64.05331253907656,
+    "bound_over_spectral": 2.627213635618172,
+    "old_bound_over_envelope": 2.3906080753668824
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 50,
+    "limited": false,
+    "bound": 485.4141883457926,
+    "spectral": 197.83539731648034,
+    "bound_over_spectral": 2.453626575072751,
+    "old_bound_over_envelope": 3.842469161357858
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 50,
+    "limited": true,
+    "bound": 607.2650378932585,
+    "spectral": 232.99418044501098,
+    "bound_over_spectral": 2.606352814192195,
+    "old_bound_over_envelope": 3.0714579842683367
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 200,
+    "limited": false,
+    "bound": 1810.9414396480397,
+    "spectral": 727.6369815596003,
+    "bound_over_spectral": 2.488797965939705,
+    "old_bound_over_envelope": 4.059236280633886
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 200,
+    "limited": true,
+    "bound": 2253.4524195835747,
+    "spectral": 873.2452576783184,
+    "bound_over_spectral": 2.580549278417828,
+    "old_bound_over_envelope": 3.2621231005539113
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 1000,
+    "limited": false,
+    "bound": 8880.420113260025,
+    "spectral": 3554.891549976827,
+    "bound_over_spectral": 2.498084678087553,
+    "old_bound_over_envelope": 4.122429588410734
+  },
+  {
+    "shape": [
+      6,
+      6
+    ],
+    "kind": "density",
+    "contrast": 1000,
+    "limited": true,
+    "bound": 11033.118455265258,
+    "spectral": 4289.58573618676,
+    "bound_over_spectral": 2.5720708557449607,
+    "old_bound_over_envelope": 3.3180924124811075
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "uniform",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 16.25437079916569,
+    "universal_bound": 16.25437079916569,
+    "spectral": 16.25437079916571,
+    "bound_over_spectral": 0.9999999999999989,
+    "old_bound_over_envelope": 3.0
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "uniform",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 16.25437079916569,
+    "universal_bound": 16.25437079916569,
+    "spectral": 16.25437079916571,
+    "bound_over_spectral": 0.9999999999999989,
+    "old_bound_over_envelope": 3.0
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "uniform",
+    "angle_deg": 29.999999999999996,
+    "limited": false,
+    "bound": 23.292719816470417,
+    "universal_bound": 23.292719816470417,
+    "spectral": 16.254370799165702,
+    "bound_over_spectral": 1.433012701892218,
+    "old_bound_over_envelope": 2.0934915622441137
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "uniform",
+    "angle_deg": 29.999999999999996,
+    "limited": true,
+    "bound": 38.27386501440718,
+    "universal_bound": 72.56116293760351,
+    "spectral": 16.25437079916574,
+    "bound_over_spectral": 2.3546814261411826,
+    "old_bound_over_envelope": 1.2740576991412156
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "uniform",
+    "angle_deg": 45.0,
+    "limited": false,
+    "bound": 24.38155619874854,
+    "universal_bound": 24.38155619874854,
+    "spectral": 16.2543707991657,
+    "bound_over_spectral": 1.4999999999999996,
+    "old_bound_over_envelope": 1.9999999999999998
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "uniform",
+    "angle_deg": 45.0,
+    "limited": true,
+    "bound": 41.68029262434385,
+    "universal_bound": 81.27185399582845,
+    "spectral": 16.254370799165734,
+    "bound_over_spectral": 2.5642513720975972,
+    "old_bound_over_envelope": 1.1699321028522824
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "random",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 166.39217951930277,
+    "universal_bound": 166.39217951930277,
+    "spectral": 76.88465815808475,
+    "bound_over_spectral": 2.1641792199580188,
+    "old_bound_over_envelope": 0.5392867317368242
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "random",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 153.3603810440365,
+    "universal_bound": 335.24473480328584,
+    "spectral": 73.29806190598151,
+    "bound_over_spectral": 2.0922842576758702,
+    "old_bound_over_envelope": 0.5851126221039149
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "sheet",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 16.83079853511002,
+    "universal_bound": 16.83079853511002,
+    "spectral": 16.25437079916576,
+    "bound_over_spectral": 1.0354629375117888,
+    "old_bound_over_envelope": 2.8972548329049514
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "sheet",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 18.057726552897762,
+    "universal_bound": 20.865792686720354,
+    "spectral": 16.254370799165752,
+    "bound_over_spectral": 1.1109458973228645,
+    "old_bound_over_envelope": 2.7004015292097754
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "synthetic_turbulence",
+    "angle_deg": 0.0,
+    "limited": false,
+    "bound": 45.54221375115124,
+    "universal_bound": 45.54221375115124,
+    "spectral": 17.591215611198727,
+    "bound_over_spectral": 2.5889179439173406,
+    "old_bound_over_envelope": 1.6585598026899744
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "synthetic_turbulence",
+    "angle_deg": 0.0,
+    "limited": true,
+    "bound": 56.50496972511398,
+    "universal_bound": 165.43598255037728,
+    "spectral": 17.23011089823365,
+    "bound_over_spectral": 3.279431575272484,
+    "old_bound_over_envelope": 1.3367759583030494
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 10,
+    "limited": false,
+    "bound": 58.640113184530335,
+    "spectral": 28.59753362478227,
+    "bound_over_spectral": 2.05053043923038,
+    "old_bound_over_envelope": 4.5736118779693316
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 10,
+    "limited": true,
+    "bound": 90.47504673156577,
+    "spectral": 31.733497261688864,
+    "bound_over_spectral": 2.8510896856235965,
+    "old_bound_over_envelope": 2.964321410984835
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 50,
+    "limited": false,
+    "bound": 215.73963926479666,
+    "spectral": 89.4295163406599,
+    "bound_over_spectral": 2.412398591567791,
+    "old_bound_over_envelope": 5.763703742036788
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 50,
+    "limited": true,
+    "bound": 322.480298805086,
+    "spectral": 118.97225532114217,
+    "bound_over_spectral": 2.71055043829012,
+    "old_bound_over_envelope": 3.855923511432085
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 200,
+    "limited": false,
+    "bound": 804.8628620657954,
+    "spectral": 325.43442475330005,
+    "bound_over_spectral": 2.473195214906759,
+    "old_bound_over_envelope": 6.088854420950829
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 200,
+    "limited": true,
+    "bound": 1192.4999940837063,
+    "spectral": 448.882835118524,
+    "bound_over_spectral": 2.656595219928238,
+    "old_bound_over_envelope": 4.109595656404219
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 1000,
+    "limited": false,
+    "bound": 3946.853383671122,
+    "spectral": 1594.2914224298256,
+    "bound_over_spectral": 2.4756160185920133,
+    "old_bound_over_envelope": 6.183644382616101
+  },
+  {
+    "shape": [
+      4,
+      4,
+      4
+    ],
+    "kind": "density",
+    "contrast": 1000,
+    "limited": true,
+    "bound": 5832.605035569681,
+    "spectral": 2209.008834587672,
+    "bound_over_spectral": 2.640371982332239,
+    "old_bound_over_envelope": 4.184397470102914
+  },
+  {
+    "kind": "true_jacobian_counterexample",
+    "bound": 99.84187998736107,
+    "spectral": 72.90806395150243,
+    "bound_over_spectral": 1.369421632890632,
+    "true_jacobian_row": 99.72241434441642,
+    "gradient_derivative_matrix_error": 2.6141077399947663e-08
+  }
+]

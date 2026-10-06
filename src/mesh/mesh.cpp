@@ -58,6 +58,7 @@ Mesh::Mesh(ParameterInput *pin) :
   dt_last_completed(0.),
   dt_parabolic_sts(std::numeric_limits<float>::max()),
   sts_max_dt_ratio(-1.0),
+  sts_safety(0.9),
   sts_integrator(parabolic::STSIntegrator::none) {
   // Set physical size and number of cells in mesh (root level)
   mesh_size.x1min = pin->GetReal("mesh", "x1min");
@@ -611,7 +612,7 @@ void Mesh::NewTimeStep(const Real tlim) {
 
   // Parabolic-process timestep budgets
   for (const auto &process : pmb_pack->parabolic_processes) {
-    Real process_dt = (cfl_no)*(process.ExplicitDt());
+    Real process_dt = (process.UsesSTS() ? sts_safety : cfl_no)*process.ExplicitDt();
     dt_legacy = std::min(dt_legacy, process_dt);
     if (process.UsesSTS()) {
       dt_parabolic_sts = std::min(dt_parabolic_sts, process_dt);
@@ -680,6 +681,7 @@ void Mesh::NewTimeStep(const Real tlim) {
               << " dt_parabolic_sts=" << dt_parabolic_sts
               << " cfl_number=" << cfl_no
               << " sts_integrator=" << static_cast<int>(sts_integrator)
+              << " sts_safety=" << sts_safety
               << " sts_max_dt_ratio=" << sts_max_dt_ratio
               << std::endl;
     std::exit(EXIT_FAILURE);
@@ -696,7 +698,7 @@ void Mesh::RefreshSTSParabolicTimeStep() {
   dt_parabolic_sts = std::numeric_limits<float>::max();
   for (const auto &process : pmb_pack->parabolic_processes) {
     if (process.UsesSTS()) {
-      dt_parabolic_sts = std::min(dt_parabolic_sts, (cfl_no)*(process.ExplicitDt()));
+      dt_parabolic_sts = std::min(dt_parabolic_sts, sts_safety*process.ExplicitDt());
     }
   }
 

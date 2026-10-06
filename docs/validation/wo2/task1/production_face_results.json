@@ -1,0 +1,370 @@
+{
+  "production_fragment_sha256": "01a4c9550ee9d6ee356d626dfab0579180373a4cf859ef70f10aeb836d833e0a",
+  "production_cases": [
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "uniform",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 2.3672287306873386e-16,
+      "frozen_matrix_relative_error": 3.5508430960310076e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "uniform",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 4.162535326087618e-17,
+      "frozen_matrix_relative_error": 1.6650141304350471e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "uniform",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 1.321688693001772e-16,
+      "frozen_matrix_relative_error": 2.643377386003544e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "random",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 1.6099459438736985e-16,
+      "frozen_matrix_relative_error": 4.829837831621096e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "random",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 1.2812960153887162e-16,
+      "frozen_matrix_relative_error": 1.2812960153887162e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "random",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 2.8269225951106737e-16,
+      "frozen_matrix_relative_error": 9.894229082887358e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "sheet",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 1.3647810398992442e-16,
+      "frozen_matrix_relative_error": 1.3647810398992442e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "sheet",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 2.009943072490454e-16,
+      "frozen_matrix_relative_error": 2.009943072490454e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "sheet",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 1.4868215176687218e-16,
+      "frozen_matrix_relative_error": 4.460464553006165e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "synthetic_turbulence",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 4.037908874207535e-16,
+      "frozen_matrix_relative_error": 2.523693046379709e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "synthetic_turbulence",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 1.32198629799343e-16,
+      "frozen_matrix_relative_error": 2.64397259598686e-16
+    },
+    {
+      "shape": [
+        6,
+        6
+      ],
+      "kind": "synthetic_turbulence",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 1.546967942945055e-16,
+      "frozen_matrix_relative_error": 2.6298455030065935e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "uniform",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 1.0505733181469674e-16,
+      "frozen_matrix_relative_error": 3.151719954440902e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "uniform",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 3.159452014089619e-16,
+      "frozen_matrix_relative_error": 3.9493150176120234e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "uniform",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 1.302144154559092e-16,
+      "frozen_matrix_relative_error": 3.9064324636772766e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "random",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 1.419168781482126e-16,
+      "frozen_matrix_relative_error": 2.838337562964252e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "random",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 3.5700501502650855e-16,
+      "frozen_matrix_relative_error": 5.355075225397629e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "random",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 3.831306294506588e-16,
+      "frozen_matrix_relative_error": 6.225872728573206e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "sheet",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 3.200029509536803e-16,
+      "frozen_matrix_relative_error": 4.266706012715738e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "sheet",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 4.56716335858032e-16,
+      "frozen_matrix_relative_error": 5.328357251677039e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "sheet",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 1.1821655614286705e-16,
+      "frozen_matrix_relative_error": 1.1821655614286705e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "synthetic_turbulence",
+      "local": false,
+      "nu": 0.0,
+      "production_relative_error": 5.023659743943896e-16,
+      "frozen_matrix_relative_error": 6.279574679929869e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "synthetic_turbulence",
+      "local": true,
+      "nu": 0.1,
+      "production_relative_error": 1.7773589251815093e-16,
+      "frozen_matrix_relative_error": 3.5547178503630186e-16
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "kind": "synthetic_turbulence",
+      "local": true,
+      "nu": 100.0,
+      "production_relative_error": 1.443925094570342e-16,
+      "frozen_matrix_relative_error": 5.053737830996198e-16
+    }
+  ],
+  "checkerboard_cases": [
+    {
+      "shape": [
+        8,
+        8
+      ],
+      "guide": 1.0,
+      "divergence_max": 0.0,
+      "exact_radius": 130.03496639332553,
+      "matrix_radius": 130.03496639332565,
+      "production_modal_decay": 130.0349630135677,
+      "old_bound": 130.03496639332553,
+      "old_bound_over_radius": 1.0,
+      "face_normal_max": 1.0
+    },
+    {
+      "shape": [
+        8,
+        8
+      ],
+      "guide": 0.1,
+      "divergence_max": 0.0,
+      "exact_radius": 13003.496639332552,
+      "matrix_radius": 13003.496639332525,
+      "production_modal_decay": 13003.496662276286,
+      "old_bound": 130.03496639332553,
+      "old_bound_over_radius": 0.01,
+      "face_normal_max": 10.0
+    },
+    {
+      "shape": [
+        8,
+        8
+      ],
+      "guide": 0.01,
+      "divergence_max": 0.0,
+      "exact_radius": 1300349.6639332552,
+      "matrix_radius": 1300349.663933254,
+      "production_modal_decay": 1300349.738411532,
+      "old_bound": 130.03496639332553,
+      "old_bound_over_radius": 0.0001,
+      "face_normal_max": 100.0
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "guide": 1.0,
+      "divergence_max": 0.0,
+      "exact_radius": 48.763112397497075,
+      "matrix_radius": 48.763112397497096,
+      "production_modal_decay": 48.7631117509591,
+      "old_bound": 48.763112397497075,
+      "old_bound_over_radius": 1.0,
+      "face_normal_max": 1.0
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "guide": 0.1,
+      "divergence_max": 0.0,
+      "exact_radius": 3267.1285306323034,
+      "matrix_radius": 3267.128530632297,
+      "production_modal_decay": 3267.128578181552,
+      "old_bound": 48.763112397497075,
+      "old_bound_over_radius": 0.014925373134328361,
+      "face_normal_max": 10.0
+    },
+    {
+      "shape": [
+        4,
+        4,
+        4
+      ],
+      "guide": 0.01,
+      "divergence_max": 0.0,
+      "exact_radius": 325103.670354113,
+      "matrix_radius": 325103.6703541126,
+      "production_modal_decay": 325103.693114167,
+      "old_bound": 48.763112397497075,
+      "old_bound_over_radius": 0.00014999250037498125,
+      "face_normal_max": 100.0
+    }
+  ]
+}

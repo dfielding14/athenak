@@ -117,6 +117,29 @@ The closure formulas are shared through `src/eos/cgl_physics.hpp`:
 production path using direct `Real` arithmetic after the same ratio and cap
 logic.
 
+## LF Timestep Implementation
+
+`MHD::NewTimeStep` passes primitive state, cell-centered magnetic field, and
+staggered face fields to `CGLLandauFluid::NewTimeStep`. That method refreshes
+independent magnetic-magnitude and temperature scratch arrays, then reduces a
+bound for the two temperature rows across all owned cells. It visits both faces
+in every active direction and calls `BuildCGLLFFaceState` with limiter scattering
+disabled to obtain an upper conductivity envelope. Background collisions remain
+included. The heat-flux cache is not reused across the hyperbolic update.
+
+`CGLLFVL4DerivativeNorm` evaluates the transverse limiter's Jacobian row norm.
+The normal field is read from the staggered face array; the grad-B response
+includes derivatives with respect to both face temperatures. Ordinary finite
+rows use direct arithmetic. Exceptional rows use `CGLLFLog*` helpers to retain
+conductivity, field normalization, density and cell width together before taking
+the reciprocal. The derivation and frozen-coefficient limitations are recorded
+in [LF Discrete Timestep Bound](cgl_lf_timestep.md).
+
+`Mesh::NewTimeStep` and `Mesh::RefreshSTSParabolicTimeStep` multiply only STS
+process reference steps by `sts_safety`. `LoadSTSConfig` validates the finite
+`(0, 1]` range and loads the same parameter for fresh and restarted meshes.
+Explicit processes and the advective timestep retain `cfl_number` scaling.
+
 ## Runtime Modes
 
 The current implementation exposes three LF performance/safety switches:

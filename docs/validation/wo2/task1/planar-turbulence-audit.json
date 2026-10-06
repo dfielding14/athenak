@@ -1,0 +1,131 @@
+{
+  "classification": "original deck is planar and has an exactly zero discrete LF operator; timing is throughput evidence only",
+  "source_reasons": [
+    "driving_type1 has two transverse force components",
+    "default isotropic_power_spectrum=false and generic solenoidal_compressive projection make retain_z_variation=false",
+    "turb_basis_z explicitly assigns zsin0/zcos1",
+    "paper turbulence starts from uniform Bz with Bx=By=0"
+  ],
+  "results": [
+    {
+      "label": "baseline-1rank-recheck",
+      "restart_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/turbulence-research/runs/baseline-1rank-recheck/physics-tlim1/rst/cgl_lf_paper_turb_active.00004.rst",
+      "sha256": "0dbfb3919d701ca6f1aa51035543cff685d0875aa42210b6e7eb6ae9ce7b924d",
+      "max_abs_transverse_face_B": 0.0,
+      "within_block_z_variation_by_variable": {
+        "rho": 0.0,
+        "mom1": 0.0,
+        "mom2": 0.0,
+        "mom3": 0.0,
+        "E": 0.0,
+        "A": 0.0
+      },
+      "matching_xy_planes_across_z_blocks": [
+        {
+          "block": 0,
+          "matching_xy_plane_block": 4,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 1,
+          "matching_xy_plane_block": 5,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 2,
+          "matching_xy_plane_block": 6,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 3,
+          "matching_xy_plane_block": 7,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 4,
+          "matching_xy_plane_block": 0,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 5,
+          "matching_xy_plane_block": 1,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 6,
+          "matching_xy_plane_block": 2,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 7,
+          "matching_xy_plane_block": 3,
+          "max_absolute_difference": 0.0
+        }
+      ],
+      "max_abs_actual_qwork": {
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0
+      }
+    },
+    {
+      "label": "task1-1rank",
+      "restart_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/turbulence-research/runs/task1-1rank/physics-tlim1/rst/cgl_lf_paper_turb_active.00004.rst",
+      "sha256": "56ce032c4380f5b687a1215f6f14b6811d81992c56aa0da6e244a18b3d8dd1fa",
+      "max_abs_transverse_face_B": 0.0,
+      "within_block_z_variation_by_variable": {
+        "rho": 0.0,
+        "mom1": 0.0,
+        "mom2": 0.0,
+        "mom3": 0.0,
+        "E": 0.0,
+        "A": 0.0
+      },
+      "matching_xy_planes_across_z_blocks": [
+        {
+          "block": 0,
+          "matching_xy_plane_block": 4,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 1,
+          "matching_xy_plane_block": 5,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 2,
+          "matching_xy_plane_block": 6,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 3,
+          "matching_xy_plane_block": 7,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 4,
+          "matching_xy_plane_block": 0,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 5,
+          "matching_xy_plane_block": 1,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 6,
+          "matching_xy_plane_block": 2,
+          "max_absolute_difference": 0.0
+        },
+        {
+          "block": 7,
+          "matching_xy_plane_block": 3,
+          "max_absolute_difference": 0.0
+        }
+      ],
+      "max_abs_actual_qwork": {
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0
+      }
+    }
+  ]
+}

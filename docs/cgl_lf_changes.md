@@ -12,6 +12,18 @@ at an outflow/coarse-fine intersection. Magnetic boundary updates remain
 required. Compact communication is evaluated separately in Task 3.
 Conservative A and both accepted strict B4 expected failures are retained.
 
+Task 1 replaces the LF conductivity-only timestep estimate with a bound
+built from the actual staggered face stencil and both temperature rows.
+It includes VL4 limiter derivatives and grad-B reverse coupling. The new
+`time/sts_safety = 0.9` independently scales the budget for all STS
+processes; explicit and advective CFL scaling is unchanged. The
+[derivation](source/modules/cgl_lf_timestep.md) states the frozen-coefficient
+assumptions and the limits of the resulting stability claim. The
+[Task1 validation report](validation/wo2/task1/README.md) records a 1.78x median
+throughput gain on the separately labeled nonzero-transport 3D turbulence case
+and 2.37x on the slow eigenwave. SMR reaches the common final time 1.24–1.26x
+faster through fewer cycles, despite a modestly higher cost per cycle.
+
 The following sections preserve the WO1 implementation record.
 
 

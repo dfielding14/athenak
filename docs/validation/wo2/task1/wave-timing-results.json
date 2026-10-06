@@ -1,0 +1,1339 @@
+{
+  "job": "5628672",
+  "cases": {
+    "cgl_lf_paper_eigen_slow-1rank": {
+      "runs": [
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/final_refill/athena-hip-final_refill",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 8.921037554042414,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/baseline/warmup",
+          "cycles": 284,
+          "solver_seconds": 7.662287,
+          "solver_seconds_per_cycle": 0.026979883802816903,
+          "lf_cell_stages": 1886208.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "baseline",
+          "repeat": -1
+        },
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/task1-hip-refill/src/athena",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.737600500928238,
+          "binary_sha256": "5f7fdae897632d6b56cbef37220791394cbbbb6c3256dfe83ed1e082f8e74efe",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/task1/warmup",
+          "cycles": 284,
+          "solver_seconds": 3.260019,
+          "solver_seconds_per_cycle": 0.01147894014084507,
+          "lf_cell_stages": 436224.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "task1",
+          "repeat": -1
+        },
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/task1-hip-refill/src/athena",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.427161453058943,
+          "binary_sha256": "5f7fdae897632d6b56cbef37220791394cbbbb6c3256dfe83ed1e082f8e74efe",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/task1/r0",
+          "cycles": 284,
+          "solver_seconds": 3.182878,
+          "solver_seconds_per_cycle": 0.011207316901408452,
+          "lf_cell_stages": 436224.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "task1",
+          "repeat": 0
+        },
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/final_refill/athena-hip-final_refill",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 8.92346545192413,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/baseline/r0",
+          "cycles": 284,
+          "solver_seconds": 7.65465,
+          "solver_seconds_per_cycle": 0.026952992957746478,
+          "lf_cell_stages": 1886208.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "baseline",
+          "repeat": 0
+        },
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/final_refill/athena-hip-final_refill",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 8.924782313872129,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/baseline/r1",
+          "cycles": 284,
+          "solver_seconds": 7.681956,
+          "solver_seconds_per_cycle": 0.027049140845070423,
+          "lf_cell_stages": 1886208.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "baseline",
+          "repeat": 1,
+          "repeatability": {
+            "failures": [],
+            "files": {
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00000.bin": {
+                "left_raw_sha256": "75a18e4717663b660eec67913d5a2ed60c8129c43dd8fbb2e238c1c852d71b10",
+                "right_raw_sha256": "75a18e4717663b660eec67913d5a2ed60c8129c43dd8fbb2e238c1c852d71b10",
+                "equal": true
+              },
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00001.bin": {
+                "left_raw_sha256": "85573c1edd134b1134db5e8ba1724b938fe81dc47c9a74e3edb7473d261945ab",
+                "right_raw_sha256": "85573c1edd134b1134db5e8ba1724b938fe81dc47c9a74e3edb7473d261945ab",
+                "equal": true
+              },
+              "cgl_lf_paper_eigen_slow.mhd.hst": {
+                "left_raw_sha256": "275aa9ee16c327ac206ace4f4cc25fe4f1fe27d89f344dc2e91f35ae036dcf7c",
+                "right_raw_sha256": "275aa9ee16c327ac206ace4f4cc25fe4f1fe27d89f344dc2e91f35ae036dcf7c",
+                "equal": true,
+                "columns": {
+                  "lf_pfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpr10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_mirror": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "time": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hwproj": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpecap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpewrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nstage": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hardbd": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "mass": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "dt": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprwrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonpos": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qface": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprcap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "tot-E": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonfin": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpe10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_firehs": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "aam-D": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_dfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  }
+                }
+              },
+              "rst/cgl_lf_paper_eigen_slow.00000.rst": {
+                "left_raw_sha256": "b990ac6ee9e4744ad826058e4934b3018a40b73911c0dc94ca245bb3bed5aeae",
+                "right_raw_sha256": "7beb56a65c4d07ba9d382f2def879f5038afd0b455d7affd96148348e36aab83",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7458,
+                  "normalized_ranges": [
+                    [
+                      7578,
+                      7614
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "b990ac6ee9e4744ad826058e4934b3018a40b73911c0dc94ca245bb3bed5aeae",
+                  "normalized_sha256": "46a633357a85d792dfae4d7a7fd64dd61004929d0ab6d449e7efb13238f03538"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7458,
+                  "normalized_ranges": [
+                    [
+                      7578,
+                      7614
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "7beb56a65c4d07ba9d382f2def879f5038afd0b455d7affd96148348e36aab83",
+                  "normalized_sha256": "46a633357a85d792dfae4d7a7fd64dd61004929d0ab6d449e7efb13238f03538"
+                },
+                "equal": true
+              },
+              "rst/cgl_lf_paper_eigen_slow.00001.rst": {
+                "left_raw_sha256": "bc2a7743eb5e066e793785721d6b90d24c94abd7820891895ea0469dcf9b9c36",
+                "right_raw_sha256": "c5836c131f5e1acba70021f8fcbf6cd0e69250a22799f17504f264441b0bc0d1",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7588,
+                  "normalized_ranges": [
+                    [
+                      7708,
+                      7744
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "bc2a7743eb5e066e793785721d6b90d24c94abd7820891895ea0469dcf9b9c36",
+                  "normalized_sha256": "3d793fe448b588f57db20b0aee373d360f9c0a7ebbbe84bb02655769b16f5bf3"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7588,
+                  "normalized_ranges": [
+                    [
+                      7708,
+                      7744
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "c5836c131f5e1acba70021f8fcbf6cd0e69250a22799f17504f264441b0bc0d1",
+                  "normalized_sha256": "3d793fe448b588f57db20b0aee373d360f9c0a7ebbbe84bb02655769b16f5bf3"
+                },
+                "equal": true
+              }
+            }
+          }
+        },
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/task1-hip-refill/src/athena",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.513690476072952,
+          "binary_sha256": "5f7fdae897632d6b56cbef37220791394cbbbb6c3256dfe83ed1e082f8e74efe",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/task1/r1",
+          "cycles": 284,
+          "solver_seconds": 3.22578,
+          "solver_seconds_per_cycle": 0.011358380281690141,
+          "lf_cell_stages": 436224.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "task1",
+          "repeat": 1,
+          "repeatability": {
+            "failures": [],
+            "files": {
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00000.bin": {
+                "left_raw_sha256": "2221765dafb6634a1db5495f59d444c439dfa2035fe32d0ae01a20b518006c2a",
+                "right_raw_sha256": "2221765dafb6634a1db5495f59d444c439dfa2035fe32d0ae01a20b518006c2a",
+                "equal": true
+              },
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00001.bin": {
+                "left_raw_sha256": "a12d355d30a9bd8b769cb9144611702e1823f89104f4c5c70a6a54661ef0b430",
+                "right_raw_sha256": "a12d355d30a9bd8b769cb9144611702e1823f89104f4c5c70a6a54661ef0b430",
+                "equal": true
+              },
+              "cgl_lf_paper_eigen_slow.mhd.hst": {
+                "left_raw_sha256": "1adf8a78dffd2ab5662d376c5ef70afab36ea87c42cd54275f627eef35653ef3",
+                "right_raw_sha256": "1adf8a78dffd2ab5662d376c5ef70afab36ea87c42cd54275f627eef35653ef3",
+                "equal": true,
+                "columns": {
+                  "lf_pfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpr10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_mirror": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "time": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hwproj": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpecap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpewrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nstage": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hardbd": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "mass": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "dt": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprwrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonpos": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qface": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprcap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "tot-E": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonfin": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpe10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_firehs": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "aam-D": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_dfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  }
+                }
+              },
+              "rst/cgl_lf_paper_eigen_slow.00000.rst": {
+                "left_raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                "right_raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7519,
+                  "normalized_ranges": [
+                    [
+                      7639,
+                      7675
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                  "normalized_sha256": "0cd7dde4f31fd0f5cbf13641c3f85fb4eed64f58fba01ba26b52cac795f69f25"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7519,
+                  "normalized_ranges": [
+                    [
+                      7639,
+                      7675
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                  "normalized_sha256": "0cd7dde4f31fd0f5cbf13641c3f85fb4eed64f58fba01ba26b52cac795f69f25"
+                },
+                "equal": true
+              },
+              "rst/cgl_lf_paper_eigen_slow.00001.rst": {
+                "left_raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                "right_raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7662,
+                  "normalized_ranges": [
+                    [
+                      7782,
+                      7818
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                  "normalized_sha256": "4df6b6153d528646aa039747fd499a07b4baca7f9833b07d10fe21bf05e5c41a"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7662,
+                  "normalized_ranges": [
+                    [
+                      7782,
+                      7818
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                  "normalized_sha256": "4df6b6153d528646aa039747fd499a07b4baca7f9833b07d10fe21bf05e5c41a"
+                },
+                "equal": true
+              }
+            }
+          }
+        },
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/task1-hip-refill/src/athena",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.976578361121938,
+          "binary_sha256": "5f7fdae897632d6b56cbef37220791394cbbbb6c3256dfe83ed1e082f8e74efe",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/task1/r2",
+          "cycles": 284,
+          "solver_seconds": 3.239407,
+          "solver_seconds_per_cycle": 0.011406362676056337,
+          "lf_cell_stages": 436224.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "task1",
+          "repeat": 2,
+          "repeatability": {
+            "failures": [],
+            "files": {
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00000.bin": {
+                "left_raw_sha256": "2221765dafb6634a1db5495f59d444c439dfa2035fe32d0ae01a20b518006c2a",
+                "right_raw_sha256": "2221765dafb6634a1db5495f59d444c439dfa2035fe32d0ae01a20b518006c2a",
+                "equal": true
+              },
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00001.bin": {
+                "left_raw_sha256": "a12d355d30a9bd8b769cb9144611702e1823f89104f4c5c70a6a54661ef0b430",
+                "right_raw_sha256": "a12d355d30a9bd8b769cb9144611702e1823f89104f4c5c70a6a54661ef0b430",
+                "equal": true
+              },
+              "cgl_lf_paper_eigen_slow.mhd.hst": {
+                "left_raw_sha256": "1adf8a78dffd2ab5662d376c5ef70afab36ea87c42cd54275f627eef35653ef3",
+                "right_raw_sha256": "1adf8a78dffd2ab5662d376c5ef70afab36ea87c42cd54275f627eef35653ef3",
+                "equal": true,
+                "columns": {
+                  "lf_pfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpr10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_mirror": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "time": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hwproj": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpecap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpewrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nstage": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hardbd": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "mass": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "dt": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprwrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonpos": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qface": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprcap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "tot-E": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonfin": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpe10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_firehs": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "aam-D": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_dfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  }
+                }
+              },
+              "rst/cgl_lf_paper_eigen_slow.00000.rst": {
+                "left_raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                "right_raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7519,
+                  "normalized_ranges": [
+                    [
+                      7639,
+                      7675
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                  "normalized_sha256": "0cd7dde4f31fd0f5cbf13641c3f85fb4eed64f58fba01ba26b52cac795f69f25"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7519,
+                  "normalized_ranges": [
+                    [
+                      7639,
+                      7675
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "587ddddabeee8bee0719432f55241bad875ab6ffa0472bfb7776c0be40f804c2",
+                  "normalized_sha256": "0cd7dde4f31fd0f5cbf13641c3f85fb4eed64f58fba01ba26b52cac795f69f25"
+                },
+                "equal": true
+              },
+              "rst/cgl_lf_paper_eigen_slow.00001.rst": {
+                "left_raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                "right_raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7662,
+                  "normalized_ranges": [
+                    [
+                      7782,
+                      7818
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                  "normalized_sha256": "4df6b6153d528646aa039747fd499a07b4baca7f9833b07d10fe21bf05e5c41a"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7662,
+                  "normalized_ranges": [
+                    [
+                      7782,
+                      7818
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "560ec27bdbc34e5393e7d58188164e8463c4ea279d11745d24deeacd03051d61",
+                  "normalized_sha256": "4df6b6153d528646aa039747fd499a07b4baca7f9833b07d10fe21bf05e5c41a"
+                },
+                "equal": true
+              }
+            }
+          }
+        },
+        {
+          "command": [
+            "srun",
+            "--exact",
+            "-N1",
+            "-n",
+            "1",
+            "--ntasks-per-node",
+            "1",
+            "--threads-per-core=1",
+            "--cpu-bind=threads",
+            "-c7",
+            "--gpus-per-task=1",
+            "--gpu-bind=closest",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/final_refill/athena-hip-final_refill",
+            "-i",
+            "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/inputs/cgl_lf_paper_eigen_slow-1rank.athinput"
+          ],
+          "returncode": 0,
+          "launch_inclusive_seconds": 9.08490491984412,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "8248d03bcf49363f3a1bd9a4cc0a834f57ef0ff4ded71605c321856e2a665e8a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/wave-timing-5628672/cgl_lf_paper_eigen_slow-1rank/baseline/r2",
+          "cycles": 284,
+          "solver_seconds": 7.383996,
+          "solver_seconds_per_cycle": 0.025999985915492956,
+          "lf_cell_stages": 1886208.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "baseline",
+          "repeat": 2,
+          "repeatability": {
+            "failures": [],
+            "files": {
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00000.bin": {
+                "left_raw_sha256": "75a18e4717663b660eec67913d5a2ed60c8129c43dd8fbb2e238c1c852d71b10",
+                "right_raw_sha256": "75a18e4717663b660eec67913d5a2ed60c8129c43dd8fbb2e238c1c852d71b10",
+                "equal": true
+              },
+              "bin/cgl_lf_paper_eigen_slow.mhd_w_bcc.00001.bin": {
+                "left_raw_sha256": "85573c1edd134b1134db5e8ba1724b938fe81dc47c9a74e3edb7473d261945ab",
+                "right_raw_sha256": "85573c1edd134b1134db5e8ba1724b938fe81dc47c9a74e3edb7473d261945ab",
+                "equal": true
+              },
+              "cgl_lf_paper_eigen_slow.mhd.hst": {
+                "left_raw_sha256": "275aa9ee16c327ac206ace4f4cc25fe4f1fe27d89f344dc2e91f35ae036dcf7c",
+                "right_raw_sha256": "275aa9ee16c327ac206ace4f4cc25fe4f1fe27d89f344dc2e91f35ae036dcf7c",
+                "equal": true,
+                "columns": {
+                  "lf_pfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpr10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_mirror": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "time": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hwproj": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpecap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpewrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nstage": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_hardbd": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-mom": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "1-KE": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "mass": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "dt": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprwrk": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonpos": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qface": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "3-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qprcap": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "tot-E": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_nonfin": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_qpe10": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_firehs": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "aam-D": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "lf_dfloor": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  },
+                  "2-ME": {
+                    "exact": true,
+                    "allowed_reduction_roundoff": false,
+                    "max_abs": 0.0
+                  }
+                }
+              },
+              "rst/cgl_lf_paper_eigen_slow.00000.rst": {
+                "left_raw_sha256": "b990ac6ee9e4744ad826058e4934b3018a40b73911c0dc94ca245bb3bed5aeae",
+                "right_raw_sha256": "7beb56a65c4d07ba9d382f2def879f5038afd0b455d7affd96148348e36aab83",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7458,
+                  "normalized_ranges": [
+                    [
+                      7578,
+                      7614
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "b990ac6ee9e4744ad826058e4934b3018a40b73911c0dc94ca245bb3bed5aeae",
+                  "normalized_sha256": "46a633357a85d792dfae4d7a7fd64dd61004929d0ab6d449e7efb13238f03538"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7458,
+                  "normalized_ranges": [
+                    [
+                      7578,
+                      7614
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "7beb56a65c4d07ba9d382f2def879f5038afd0b455d7affd96148348e36aab83",
+                  "normalized_sha256": "46a633357a85d792dfae4d7a7fd64dd61004929d0ab6d449e7efb13238f03538"
+                },
+                "equal": true
+              },
+              "rst/cgl_lf_paper_eigen_slow.00001.rst": {
+                "left_raw_sha256": "bc2a7743eb5e066e793785721d6b90d24c94abd7820891895ea0469dcf9b9c36",
+                "right_raw_sha256": "c5836c131f5e1acba70021f8fcbf6cd0e69250a22799f17504f264441b0bc0d1",
+                "left_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7588,
+                  "normalized_ranges": [
+                    [
+                      7708,
+                      7744
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "bc2a7743eb5e066e793785721d6b90d24c94abd7820891895ea0469dcf9b9c36",
+                  "normalized_sha256": "3d793fe448b588f57db20b0aee373d360f9c0a7ebbbe84bb02655769b16f5bf3"
+                },
+                "right_restart": {
+                  "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+                  "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+                  "real_bytes": 8,
+                  "int_bytes": 4,
+                  "binary_header_offset": 7588,
+                  "normalized_ranges": [
+                    [
+                      7708,
+                      7744
+                    ]
+                  ],
+                  "normalized_byte_count": 36,
+                  "raw_sha256": "c5836c131f5e1acba70021f8fcbf6cd0e69250a22799f17504f264441b0bc0d1",
+                  "normalized_sha256": "3d793fe448b588f57db20b0aee373d360f9c0a7ebbbe84bb02655769b16f5bf3"
+                },
+                "equal": true
+              }
+            }
+          }
+        }
+      ],
+      "medians": {
+        "baseline": {
+          "solver_seconds": 7.65465,
+          "solver_seconds_per_cycle": 0.026952992957746478,
+          "cycles": 284,
+          "lf_cell_stages": 1886208.0,
+          "active_cells": 256,
+          "total_stages": 7368.0,
+          "mean_stages_per_sweep": 12.971830985915492
+        },
+        "task1": {
+          "solver_seconds": 3.22578,
+          "solver_seconds_per_cycle": 0.011358380281690141,
+          "cycles": 284,
+          "lf_cell_stages": 436224.0,
+          "active_cells": 256,
+          "total_stages": 1704.0,
+          "mean_stages_per_sweep": 3.0
+        }
+      },
+      "speedup_per_cycle": 2.3729609582798576,
+      "speedup_to_common_final_time": 2.372960958279858,
+      "final_time": [
+        0.05,
+        0.05
+      ],
+      "max_active_field_difference": {
+        "dens": 0.0,
+        "velx": 1.0459189070388675e-11,
+        "vely": 2.7284841053187847e-11,
+        "velz": 9.549694368615746e-12,
+        "eint": 0.0,
+        "p_perp": 0.0,
+        "bcc1": 0.0,
+        "bcc2": 0.0,
+        "bcc3": 0.0
+      }
+    }
+  },
+  "failures": [],
+  "reference": "Task0 physical-corner refill; original-periodic cases unchanged",
+  "candidate_manifest": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/source-task1-refill.json",
+  "harness_source_sha256": "fc545d8af27f6fef1e5db3406f75d26c9dcd0c1236b693371e3b3234dea556e6",
+  "timing": "Unprofiled solver wall including identical outputs; Common wave tlim0.05; original256cells/amplitude/eigenmode/strict tolerance preserved. One warmup and three alternating paired repeats. Launch wall retained separately."
+}

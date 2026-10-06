@@ -29,7 +29,7 @@ sts_integrator = rkl2
 sts_max_dt_ratio = 20
 cfl_number = 0.4
 nlim = 20
-tlim = 1
+tlim = 1.0e3
 ndiag = 1
 <mhd>
 eos = cgl

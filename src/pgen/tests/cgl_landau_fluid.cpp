@@ -50,6 +50,7 @@ enum class TestMode {
   paper_eigen_wave,
   rotated_decay,
   field_reversal,
+  staggered_checkerboard,
   density_contact,
   timestep_refresh,
   hotspot,
@@ -148,13 +149,14 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "timestep_refresh") return TestMode::timestep_refresh;
   if (mode == "density_contact") return TestMode::density_contact;
   if (mode == "field_reversal") return TestMode::field_reversal;
+  if (mode == "staggered_checkerboard") return TestMode::staggered_checkerboard;
   if (mode == "hotspot") return TestMode::hotspot;
   if (mode == "low_field") return TestMode::low_field;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, "
        "collision_relaxation, grad_b, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "density_contact, timestep_refresh, field_reversal, hotspot, or low_field");
+       "density_contact, timestep_refresh, field_reversal, staggered_checkerboard, hotspot, or low_field");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -173,6 +175,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::timestep_refresh: return "timestep_refresh";
     case TestMode::density_contact: return "density_contact";
     case TestMode::field_reversal: return "field_reversal";
+    case TestMode::staggered_checkerboard: return "staggered_checkerboard";
     case TestMode::hotspot: return "hotspot";
     case TestMode::low_field: return "low_field";
   }
@@ -1714,7 +1717,7 @@ void CheckTimestepRefresh(ParameterInput *pin, Mesh *pm) {
   RequireRelative("heated uniform LF timestep", lf->dtnew, dt0/std::sqrt(pressure),
                   2.0e-12);
   RequireRelative("refreshed mesh LF timestep", pm->dt_parabolic_sts,
-                  pm->cfl_no*dt0/std::sqrt(pressure), 2.0e-12);
+                  pm->sts_safety*dt0/std::sqrt(pressure), 2.0e-12);
   const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
   for (int m=0; m<nmb; ++m) {
     for (int i=indcs.is; i<=indcs.ie; ++i) {
@@ -1760,12 +1763,58 @@ void CheckDensityContact(ParameterInput *pin, Mesh *pm) {
           "density contact amplified its temperature seed");
 }
 
+// This divergence-free staggered mode cancels in the x/y cell averages.
+// It directly checks the face-normal-field stiffness in the LF timestep.
+void CheckStaggeredCheckerboard(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const auto w = HostCopy(pmhd->w0);
+  const auto bx = HostCopy(pmhd->b0.x1f);
+  const auto by = HostCopy(pmhd->b0.x2f);
+  const auto bz = HostCopy(pmhd->b0.x3f);
+  const auto &ind = pm->mb_indcs;
+  const Real hx = (pm->mesh_size.x1max-pm->mesh_size.x1min)/pm->mesh_indcs.nx1;
+  const Real hy = (pm->mesh_size.x2max-pm->mesh_size.x2min)/pm->mesh_indcs.nx2;
+  const Real hz = (pm->mesh_size.x3max-pm->mesh_size.x3min)/pm->mesh_indcs.nx3;
+  const Real rho0 = pin->GetReal("problem","rho0");
+  const Real tp0 = pin->GetReal("problem","ppar0")/rho0;
+  const Real tt0 = pin->GetReal("problem","pperp0")/rho0;
+  const Real guide = pin->GetReal("problem","bz0");
+  const Real amplitude = pin->GetReal("problem","b0");
+  Real divmax=0.0, bcc_error=0.0, deviation=0.0;
+  for (int k=ind.ks;k<=ind.ke;++k) {
+    for (int j=ind.js;j<=ind.je;++j) {
+      for (int i=ind.is;i<=ind.ie;++i) {
+        Real div=(bx(0,k,j,i+1)-bx(0,k,j,i))/hx +
+                 (by(0,k,j+1,i)-by(0,k,j,i))/hy;
+        if (pm->three_d) div += (bz(0,k+1,j,i)-bz(0,k,j,i))/hz;
+        divmax=std::max(divmax,std::abs(div));
+        bcc_error=std::max(bcc_error,std::abs(0.5*(bx(0,k,j,i+1)+bx(0,k,j,i))));
+        bcc_error=std::max(bcc_error,std::abs(0.5*(by(0,k,j+1,i)+by(0,k,j,i))));
+        bcc_error=std::max(bcc_error,std::abs(0.5*(bz(0,k+1,j,i)+bz(0,k,j,i))-guide));
+        const Real tp=w(0,IPR,k,j,i)/w(0,IDN,k,j,i);
+        const Real tt=w(0,IPP,k,j,i)/w(0,IDN,k,j,i);
+        Require(std::isfinite(tp) && std::isfinite(tt) && tp>0.0 && tt>0.0,
+                "staggered checkerboard produced invalid temperatures");
+        deviation=std::max(deviation,std::max(std::abs(tp/tp0-1.0),std::abs(tt/tt0-1.0)));
+      }
+    }
+  }
+  Require(divmax <= 1.e-12*amplitude/hx && bcc_error <= 1.e-12*guide,
+          "staggered checkerboard magnetic initialization is inconsistent");
+  Require(deviation < 10.0*pin->GetReal("problem","amp"),
+          "staggered checkerboard amplified its seed");
+  std::cout << "CGL LF staggered_checkerboard: divB=" << divmax
+            << " bcc_error=" << bcc_error << " max_delta_T=" << deviation
+            << " dt_explicit=" << pmhd->pcgl_lf->dtnew << std::endl;
+}
+
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
           "quantitative LF tests require <mhd>/eos = cgl");
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::field_reversal ||
+      mode == TestMode::staggered_checkerboard ||
       mode == TestMode::hotspot) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
@@ -1800,6 +1849,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckTimestepRefresh(pin, pm);
   } else if (mode == TestMode::density_contact) {
     CheckDensityContact(pin, pm);
+  } else if (mode == TestMode::staggered_checkerboard) {
+    CheckStaggeredCheckerboard(pin, pm);
   } else if (mode == TestMode::field_reversal) {
     CheckFieldReversal(pin, pm);
   } else if (mode == TestMode::hotspot) {
@@ -1822,6 +1873,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   }
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::field_reversal ||
+      mode == TestMode::staggered_checkerboard ||
       mode == TestMode::hotspot) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
@@ -1871,6 +1923,14 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
   const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real by_amp = pin->GetOrAddReal("problem", "by_amp", 0.0);
+  if (mode == TestMode::staggered_checkerboard) {
+    Require(pmy_mesh_->multi_d, "staggered checkerboard requires 2D or 3D");
+    Require(pmy_mesh_->mesh_indcs.nx1%2 == 0 && pmy_mesh_->mesh_indcs.nx2%2 == 0 &&
+            (!pmy_mesh_->three_d || pmy_mesh_->mesh_indcs.nx3%2 == 0),
+            "staggered checkerboard requires even periodic grid dimensions");
+    Require(bz0 > pmhd->peos->eos_data.bfloor && bx0 > 0.0,
+            "staggered checkerboard requires positive amplitude and resolved guide field");
+  }
   const Real eig_rho_re = pin->GetOrAddReal("problem", "eigen_rho_re", 0.0);
   const Real eig_rho_im = pin->GetOrAddReal("problem", "eigen_rho_im", 0.0);
   const Real eig_vx_re = pin->GetOrAddReal("problem", "eigen_vx_re", 0.0);
@@ -1945,7 +2005,12 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real by = (mode == TestMode::grad_b) ? by_amp*s : by0;
     Real bz = bz0;
 
-    if (mode == TestMode::density_contact) {
+    if (mode == TestMode::staggered_checkerboard) {
+      const Real seed = amp*(((i-is+j-js+k-ks)%2 == 0) ? 1.0 : -1.0);
+      ppar = ppar0*(1.0+seed);
+      pperp = pperp0*(1.0+seed);
+      by = 0.0;
+    } else if (mode == TestMode::density_contact) {
       // Two one-face density jumps, with uniform temperatures plus a small seed.
       if (x >= xmin + 0.25*xlength && x < xmin + 0.75*xlength) rho *= density_contrast;
       const Real seed = amp*((q%2 == 0) ? 1.0 : -1.0);
@@ -2004,14 +2069,15 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     w0(m,IVZ,k,j,i) = vz;
     w0(m,IPR,k,j,i) = ppar;
     w0(m,IPP,k,j,i) = pperp;
-    bcc0(m,IBX,k,j,i) = bx0;
+    bcc0(m,IBX,k,j,i) = (mode == TestMode::staggered_checkerboard) ? 0.0 : bx0;
     bcc0(m,IBY,k,j,i) = by;
     bcc0(m,IBZ,k,j,i) = bz;
   });
 
   par_for("cgl_lf_quant_init_b1", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie + 1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    b0.x1f(m,k,j,i) = bx0;
+    b0.x1f(m,k,j,i) = (mode == TestMode::staggered_checkerboard) ?
+        bx0*(((i-is+j-js)%2 == 0) ? 1.0 : -1.0) : bx0;
   });
   par_for("cgl_lf_quant_init_b2", DevExeSpace(), 0, nmb - 1, ks, ke, js, je + 1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -2020,7 +2086,9 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     const Real x = CellCenterX(q, indcs.nx1, block_size.x1min, block_size.x1max);
     const Real s = sin(k_wave*(x - xmin));
     const Real c = cos(k_wave*(x - xmin));
-    b0.x2f(m,k,j,i) = (mode == TestMode::field_reversal) ?
+    b0.x2f(m,k,j,i) = (mode == TestMode::staggered_checkerboard) ?
+        -bx0*(block_size.dx2/block_size.dx1)*(((i-is+j-js)%2 == 0) ? 1.0 : -1.0) :
+        (mode == TestMode::field_reversal) ?
         tanh((x - reversal_center)/block_size.dx1) :
         (mode == TestMode::grad_b) ? by_amp*s :
         by0 + ((mode == TestMode::paper_eigen_wave) ?

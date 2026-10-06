@@ -276,15 +276,41 @@ def test_cgl_lf_field_reversal_stability(dimension, arithmetic, diagnostics):
         history = testutils.athena_read.hst(f"{basename}.mhd.hst")
         assert len(history["time"]) == 21
         cells = 64 if dimension == 1 else 64 * 16
-        # Independent magnetic stiffness for the one-cell tanh sheet.
-        bmag = np.hypot(0.03, np.tanh(np.arange(64) + 0.5 - 32.0))
-        left = np.r_[bmag[0], bmag[:-1]]
-        right = np.r_[bmag[1:], bmag[-1]]
-        stiffness = max(1.0, np.max(2*bmag/(bmag + left)),
-                        np.max(2*bmag/(bmag + right)))
-        fac = 0.5 if dimension == 1 else 0.25
+        # Independently sum the two temperature-row envelopes for the initial
+        # one-cell tanh sheet. Outflow ghosts duplicate the edge cell.
+        by = np.tanh(np.arange(64) + 0.5 - 32.0)
+        bmag = np.hypot(0.03, by)
         chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
-        expected_dt = 20.0*0.4*fac/(64**2 * chi * stiffness)
+        h = 1.0/64
+        rows = np.zeros((2, 64))
+        for cell in range(64):
+            for offset in (-1, 1):
+                neighbor = int(np.clip(cell + offset, 0, 63))
+                bbar = (bmag[cell] + bmag[neighbor])/2
+                bn = 0.03/bbar
+                bt = (by[cell] + by[neighbor])/(2*bbar)
+                # The transverse y slopes are all zero: the generalized VL4
+                # derivative envelope is 8/h, not the zero secant factor.
+                shape = (2*abs(bn) + (8*abs(bt) if dimension == 2 else 0))/h
+                parallel = chi*abs(bn)*shape
+                # Isotropy makes the drift itself vanish, but differentiating
+                # Tperp_f*(1-Tperp_f/Tpar_f) leaves two unit responses.
+                grad_b_over_b = abs(bn*(bmag[neighbor]-bmag[cell])/h/bbar)
+                perpendicular = 0.5*chi*abs(bn)*(shape + 2*grad_b_over_b)
+                beta = bmag[cell]/bbar
+                rows[0, cell] += (parallel + 2*abs(1-beta)*perpendicular)/h
+                rows[1, cell] += beta*perpendicular/h
+            if dimension == 2:
+                bn, bt = by[cell]/bmag[cell], 0.03/bmag[cell]
+                # Checkerboard x slopes have mixed signs in the interior;
+                # at the physical edge a zero outflow slope adds a kink.
+                derivative = 8.0 if cell in (0, 63) else 0.0
+                parallel = 2*chi*abs(bn)*(2*abs(bn) + derivative*abs(bt))/h**2
+                rows[0, cell] += parallel
+                lower, upper = max(cell-1, 0), min(cell+1, 63)
+                grad_b_over_b = abs(bt*(bmag[upper]-bmag[lower])/(2*h*bmag[cell]))
+                rows[1, cell] += 0.5*parallel + 2*chi*abs(bn)*grad_b_over_b/h
+        expected_dt = 20.0*0.9*2.0/np.max(rows)
         np.testing.assert_allclose(history["dt"][0], expected_dt,
                                    rtol=2.0e-12, atol=0.0)
         # Each of 20 cycles executes two seven-stage RKL2 sweeps at ratio 10.
@@ -321,7 +347,7 @@ def test_cgl_lf_uniform_collisional_timestep(cpar, kpar, nu):
             pi = Decimal("3.14159265358979323846264338327950288419716939937510")
             c, k, frequency = (Decimal(str(value)) for value in (cpar, kpar, nu))
             chi = 8*c*c / ((8*pi).sqrt()*c*k + (3*pi - 8)*frequency)
-            expected_dt = float(Decimal(20)*Decimal("0.4")*Decimal("0.5")
+            expected_dt = float(Decimal(20)*Decimal("0.9")*Decimal("0.5")
                                 / (Decimal(16)**2 * chi))
         np.testing.assert_allclose(history["dt"][0], expected_dt, rtol=2.0e-12, atol=0.0)
     finally:
@@ -348,7 +374,7 @@ def test_cgl_lf_density_contact_stability(contrast, arithmetic):
             history = testutils.athena_read.hst(f"{basename}.mhd.hst")
             assert history["lf_nstage"][-1] == 64 * 3 * 2 * 7
             chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
-            expected_dt = 20.0*0.4*0.5/(64**2 * chi * (contrast + 1.0)/2.0)
+            expected_dt = 40.0*0.9/(64**2 * chi * (contrast + 3.0))
             np.testing.assert_allclose(history["dt"][0], expected_dt,
                                        rtol=2.0e-12, atol=0.0)
             for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
@@ -5523,16 +5549,150 @@ def test_cgl_lf_hotspot_preserves_minima_and_energy(
         _cleanup()
 
 
-@pytest.mark.parametrize("heating_rate,post_stages", [(0, 7), (3000, 11)])
-def test_cgl_lf_post_sweep_timestep_refresh(heating_rate, post_stages):
+@pytest.mark.parametrize("heating_rate", (0, 3000))
+def test_cgl_lf_post_sweep_timestep_refresh(heating_rate):
     try:
         testutils.run(
             "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput",
             [f"problem/heating_rate={heating_rate}"],
         )
         history = testutils.athena_read.hst("cgl_lf_timestep_refresh.mhd.hst")
+        # Uniform field-aligned row: dt_FE=h^2/(2*chi); the cycle cap
+        # is 20*sts_safety*dt_FE. Heating changes p by (2/3)*rate*dt.
+        chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+        cycle_dt = 20.0*0.9*0.5/(64**2*chi)
+        np.testing.assert_allclose(history["dt"][0], cycle_dt,
+                                   rtol=2.0e-12, atol=0.0)
+        pressure = 1.0 + (2.0/3.0)*heating_rate*cycle_dt
+        post_ratio = 10.0*np.sqrt(pressure)
+        post_stages = 3
+        while (post_stages**2 + post_stages - 2)/4 < post_ratio:
+            post_stages += 2
         assert history["lf_nstage"][-1] == 64 * (7 + post_stages)
         for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd"):
             assert history[name][-1] == 0
     finally:
         Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)
+
+
+# Intended addition to test_cgl_landau_fluid_cpu.py; also reusable by the GPU runner.
+@pytest.mark.parametrize("dimension", (2, 3))
+@pytest.mark.parametrize("guide", (0.1, 0.01))
+def test_cgl_lf_staggered_checkerboard_timestep_and_stability(dimension, guide):
+    basename = f"cgl_ci_staggered_checkerboard_{dimension}_{guide:g}"
+    try:
+        flags = [f"problem/bz0={guide:.17g}"]
+        if dimension == 3:
+            flags += ["mesh/nx3=8", "meshblock/nx3=8"]
+        _run_unit("cgl_lf_staggered_checkerboard.athinput", basename, *flags)
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+        # Bcc=(0,0,guide), but the x/y face fields have magnitude one.
+        # The checkerboard seed turns off all transverse limiter derivatives.
+        radius = 4.0*chi*8**2*(2.0/guide**2 + (dimension == 3))
+        expected_initial_dt = 20.0*0.9*2.0/radius
+        np.testing.assert_allclose(history["dt"][0], expected_initial_dt,
+                                   rtol=2.0e-12, atol=0.0)
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos",
+                     "lf_hardbd", "lf_hwproj"):
+            assert np.all(history[name] == 0.0)
+        assert history["lf_nstage"][-1] > 0
+        # The existing pgen final callback separately checks discrete divB,
+        # face-to-cell consistency, positive temperatures, and seed growth<10.
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("value", ("0", "-0.1", "1.01", "nan", "inf"))
+def test_cgl_lf_invalid_sts_safety_is_rejected(tmp_path, value):
+    source = Path(f"{UNIT_INPUT_ROOT}/cgl_lf_uniform_timestep.athinput").read_text()
+    staged = tmp_path / "invalid_sts_safety.athinput"
+    staged.write_text(source.replace("<time>", f"<time>\nsts_safety = {value}", 1))
+    result = subprocess.run(["./athena", "-i", str(staged)],
+                            capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "<time>/sts_safety must lie in (0, 1]" in result.stdout
+
+
+@pytest.mark.parametrize("integrator", ("sts", "explicit"))
+def test_cgl_lf_sts_safety_changes_only_sts_budget(tmp_path, integrator):
+    try:
+        source = Path(f"{UNIT_INPUT_ROOT}/cgl_lf_uniform_timestep.athinput").read_text()
+        source = source.replace("<time>", "<time>\nsts_safety = 0.9", 1)
+        if integrator == "explicit":
+            source = source.replace("sts_integrator = rkl2", "sts_integrator = none")
+        staged = tmp_path / "sts_safety.athinput"
+        staged.write_text(source)
+        measured = []
+        for safety in (0.45, 0.9):
+            basename = f"cgl_ci_safety_{integrator}_{safety:g}"
+            testutils.run(str(staged), [f"job/basename={basename}",
+                          f"mhd/cgl_heat_flux_integrator={integrator}",
+                          f"time/sts_safety={safety}", "mhd/nu_coll=0"])
+            measured.append(testutils.athena_read.hst(f"{basename}.mhd.hst")["dt"][0])
+        np.testing.assert_allclose(measured[1]/measured[0],
+                                   2.0 if integrator == "sts" else 1.0,
+                                   rtol=2.0e-12, atol=0.0)
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_sts_safety_is_loaded_from_restart(tmp_path):
+    try:
+        basename = "cgl_ci_safety_restart"
+        source = Path(f"{UNIT_INPUT_ROOT}/cgl_lf_uniform_timestep.athinput").read_text()
+        source = source.replace("<time>", "<time>\nsts_safety = 0.45", 1)
+        source += "\n<output2>\nfile_type = rst\ndcycle = 1\n"
+        staged = tmp_path / "sts_safety_restart.athinput"
+        staged.write_text(source)
+        testutils.run(str(staged), [f"job/basename={basename}",
+                      "time/nlim=1", "mhd/nu_coll=0"])
+        checkpoints = sorted(Path("rst").glob(f"{basename}.*.rst"))
+        assert checkpoints
+        original = testutils.athena_read.hst(f"{basename}.mhd.hst")["dt"][0]
+        # A uniform stationary state isolates reload of the mesh STS factor;
+        # restarting with one more cycle also checks that the budget is usable.
+        result = subprocess.run(["./athena", "-r", str(checkpoints[-1]),
+                                 "job/basename=cgl_ci_safety_resumed", "time/nlim=2"],
+                                capture_output=True, text=True, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = checkpoints[-1].read_bytes()[:40000].decode("ascii", errors="ignore")
+        marker = re.search(r"(?m)^sts_safety\s*=\s*(\S+)", text)
+        assert marker is not None and float(marker.group(1)) == 0.45
+        resumed = testutils.athena_read.hst("cgl_ci_safety_resumed.mhd.hst")["dt"]
+        np.testing.assert_allclose(resumed, original, rtol=2.0e-12, atol=0.0)
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+@pytest.mark.parametrize("cpar,kpar,nu,bx,bz,length", (
+    (1.0e-200, 1.0, 1.0, 1.0, 0.0, 1.6e-199),
+    (1.0e200, 1.0e-200, 0.0, 1.0e-100, 1.0, 1.0),
+))
+def test_cgl_lf_scaled_face_row_timestep(tmp_path, cpar, kpar, nu, bx, bz, length):
+    from decimal import Decimal, localcontext
+
+    basename = "cgl_ci_scaled_row"
+    try:
+        source = Path(f"{UNIT_INPUT_ROOT}/cgl_lf_uniform_timestep.athinput").read_text()
+        staged = tmp_path / "scaled_face_row.athinput"
+        staged.write_text(source.replace("<problem>", "<problem>\nbz0 = 0", 1))
+        testutils.run(str(staged), [f"job/basename={basename}",
+                      f"mhd/lf_c_parallel0={cpar:.17g}", f"mhd/lf_k_parallel={kpar:.17g}",
+                      f"mhd/nu_coll={nu:.17g}", f"problem/b0={bx:.17g}",
+                      f"problem/bz0={bz:.17g}", f"mesh/x1max={length:.17g}"])
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        with localcontext() as context:
+            context.prec = 80
+            pi = Decimal("3.14159265358979323846264338327950288419716939937510")
+            c, k, frequency, b1, b3, domain = (
+                Decimal(str(v)) for v in (cpar, kpar, nu, bx, bz, length))
+            chi = 8*c*c / ((8*pi).sqrt()*c*k + (3*pi-8)*frequency)
+            projected_chi = chi*b1*b1/(b1*b1+b3*b3)
+            expected_dt = float(Decimal(20)*Decimal("0.9")*(domain/16)**2 /
+                                (2*projected_chi))
+        np.testing.assert_allclose(history["dt"][0], expected_dt,
+                                   rtol=3.0e-12, atol=0.0)
+    finally:
+        _cleanup()

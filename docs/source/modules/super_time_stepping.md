@@ -32,6 +32,7 @@ diffusion processes to STS in the physics block:
 ```ini
 <time>
 sts_integrator = rkl2
+sts_safety = 0.9
 sts_max_dt_ratio = -1.0
 
 <hydro>
@@ -53,8 +54,9 @@ An input file for this case is provided at
 
 ## Integration Algorithm
 
-Let `dt_diff` be the most restrictive explicit parabolic timestep among all
-registered STS processes. For a hydro/MHD cycle of duration `dt`, the driver
+Let `dt_diff` be `sts_safety` times the smallest parabolic reference timestep
+among all registered STS processes and MPI ranks. For a hydro/MHD cycle of
+duration `dt`, the driver
 runs a pre-cycle and post-cycle parabolic sweep, each of duration
 `dt_sweep = dt / 2`. This symmetric split keeps the STS contribution
 second-order compatible with the normal second-order evolution.
@@ -138,7 +140,15 @@ All non-STS stability limits continue to restrict the cycle as usual.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `<time>/sts_integrator` | `none` | `none` or `rkl2` global STS controller |
+| `<time>/sts_safety` | `0.9` | Finite factor in `(0, 1]` multiplying every STS process reference timestep |
 | `<time>/sts_max_dt_ratio` | `-1.0` | Optional positive limit `dt <= ratio * dt_diff`; `-1.0` disables the cap |
+
+`sts_safety` is independent of `<time>/cfl_number`: advection and explicitly
+integrated parabolic processes retain CFL scaling. The STS factor is used
+both when selecting the initial cycle and when refreshing the parabolic
+budget before the post-sweep. It is stored in the input parameter state and
+loaded again on restart. Older restart files without the parameter use the
+default `0.9`. The ratio cap below refers to the safety-scaled `dt_diff`.
 
 The optional ratio cap is useful for validation and for runs where operator
 splitting accuracy, rather than explicit stability, should limit large STS

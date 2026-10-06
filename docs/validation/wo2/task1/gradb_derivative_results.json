@@ -1,0 +1,146 @@
+{
+  "cases": [
+    {
+      "kind": "sheet",
+      "ratio": 0.2,
+      "error": [
+        1.0125470974621123e-07,
+        1.0632919235767282e-09
+      ],
+      "parallel_to_perp_norm": 0.009474885651477513,
+      "row_bound": 27.26918566154812,
+      "jacobian_row": 25.87467890399395
+    },
+    {
+      "kind": "sheet",
+      "ratio": 0.5,
+      "error": [
+        6.640003427088945e-09,
+        1.0615845222824945e-10
+      ],
+      "parallel_to_perp_norm": 0.05380168561704815,
+      "row_bound": 26.037829286409394,
+      "jacobian_row": 26.021545574179424
+    },
+    {
+      "kind": "sheet",
+      "ratio": 1.0,
+      "error": [
+        1.1701878217584052e-07,
+        1.1887160132208606e-09
+      ],
+      "parallel_to_perp_norm": 0.22592792037924792,
+      "row_bound": 29.119086845369207,
+      "jacobian_row": 26.862410904582454
+    },
+    {
+      "kind": "sheet",
+      "ratio": 3.0,
+      "error": [
+        1.584323475345606e-08,
+        1.81246172416917e-10
+      ],
+      "parallel_to_perp_norm": 1.9933293233501748,
+      "row_bound": 28.130079155881738,
+      "jacobian_row": 27.76252944599861
+    },
+    {
+      "kind": "random",
+      "ratio": 0.2,
+      "error": [
+        4.751376861306615e-08,
+        4.799546255034668e-10
+      ],
+      "parallel_to_perp_norm": 0.6397706148792798,
+      "row_bound": 225.5722988461574,
+      "jacobian_row": 224.04791513082483
+    },
+    {
+      "kind": "random",
+      "ratio": 0.5,
+      "error": [
+        5.192138822942116e-09,
+        6.020915174620375e-11
+      ],
+      "parallel_to_perp_norm": 7.8409816339873375,
+      "row_bound": 450.1418316602979,
+      "jacobian_row": 435.4710079912191
+    },
+    {
+      "kind": "random",
+      "ratio": 1.0,
+      "error": [
+        1.7621344781342112e-07,
+        1.779709745910513e-09
+      ],
+      "parallel_to_perp_norm": 4.5951746285984285,
+      "row_bound": 58.28770415774452,
+      "jacobian_row": 55.773409063383376
+    },
+    {
+      "kind": "random",
+      "ratio": 3.0,
+      "error": [
+        2.6218862996821906e-07,
+        2.653090797757791e-09
+      ],
+      "parallel_to_perp_norm": 186.9131795400675,
+      "row_bound": 358.11977031460907,
+      "jacobian_row": 295.69872866092
+    },
+    {
+      "kind": "synthetic_turbulence",
+      "ratio": 0.2,
+      "error": [
+        9.049922941772333e-09,
+        1.0155468598624596e-10
+      ],
+      "parallel_to_perp_norm": 0.17062151297899628,
+      "row_bound": 58.7579513270273,
+      "jacobian_row": 58.44703448220769
+    },
+    {
+      "kind": "synthetic_turbulence",
+      "ratio": 0.5,
+      "error": [
+        7.990871322577761e-07,
+        8.019644199953856e-09
+      ],
+      "parallel_to_perp_norm": 0.9458583537834029,
+      "row_bound": 91.23059106419304,
+      "jacobian_row": 89.6527595221916
+    },
+    {
+      "kind": "synthetic_turbulence",
+      "ratio": 1.0,
+      "error": [
+        2.1565542693630462e-08,
+        2.2992795644914792e-10
+      ],
+      "parallel_to_perp_norm": 2.9804444736041833,
+      "row_bound": 73.60813497711305,
+      "jacobian_row": 64.25124528265444
+    },
+    {
+      "kind": "synthetic_turbulence",
+      "ratio": 3.0,
+      "error": [
+        6.301911613365525e-08,
+        6.577841178717569e-10
+      ],
+      "parallel_to_perp_norm": 52.36858205964294,
+      "row_bound": 117.7758444312715,
+      "jacobian_row": 86.81848938217513
+    },
+    {
+      "kind": "isotropic_sheet_1d",
+      "parallel_to_perp_norm": 0.053457747381969616,
+      "row_bound": 0.928636581246729,
+      "jacobian_row": 0.8763909319191081
+    }
+  ],
+  "reversal_expected_dt": {
+    "1": 2.4229069212191616,
+    "2": 0.006978246033076956
+  }
+}

@@ -1,0 +1,487 @@
+{
+  "opt_ins": [
+    "normalize_dormant_startup_forcing=True",
+    "normalize_forcing_padding=True"
+  ],
+  "files_rewritten": false,
+  "original_results_rewritten": false,
+  "records": {
+    "repeat-0/cgl_lf_paper_turb_active.00000.rst": {
+      "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+      "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+      "real_bytes": 8,
+      "int_bytes": 4,
+      "binary_header_offset": 9050,
+      "normalized_ranges": [
+        [
+          9170,
+          9206
+        ],
+        [
+          9718,
+          9990
+        ],
+        [
+          9994,
+          9998
+        ],
+        [
+          9998,
+          10006
+        ]
+      ],
+      "normalized_byte_count": 320,
+      "raw_sha256": "550e112403a46d1db84bdf0dbf8a4ac8adc200c99849120c0c096df448d15ac7",
+      "normalized_sha256": "284a3b34eb61873fc513467d587476a9c49568a7156790d6515803a25bdc2fb2",
+      "dormant_startup_forcing": {
+        "enabled": true,
+        "applied": true,
+        "metadata_version": 3,
+        "mode_count": 10,
+        "n_updates": 0,
+        "time": 0.0,
+        "cycle": 0,
+        "rng_offset": 9710,
+        "rng_bytes": 296,
+        "idum": -1,
+        "iset": 0,
+        "retained_padding_range": [
+          9994,
+          9998
+        ],
+        "ranges": [
+          [
+            9718,
+            9990
+          ],
+          [
+            9998,
+            10006
+          ]
+        ],
+        "members": [
+          "idum2",
+          "iy",
+          "iv[0:32]",
+          "gset"
+        ],
+        "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+        "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+        "padding_normalized_by_separate_opt_in": true
+      },
+      "forcing_padding": {
+        "enabled": true,
+        "applied": true,
+        "range": [
+          9994,
+          9998
+        ],
+        "metadata_version": 3,
+        "rng_offset": 9710,
+        "rng_bytes": 296,
+        "time": 0.0,
+        "cycle": 0,
+        "idum": -1,
+        "iset": 0,
+        "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+        "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+        "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+        "rule": "zero only the four non-member alignment bytes between iset and gset"
+      }
+    },
+    "repeat-0/cgl_lf_paper_turb_active.00001.rst": {
+      "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+      "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+      "real_bytes": 8,
+      "int_bytes": 4,
+      "binary_header_offset": 9182,
+      "normalized_ranges": [
+        [
+          9302,
+          9338
+        ],
+        [
+          10126,
+          10130
+        ]
+      ],
+      "normalized_byte_count": 40,
+      "raw_sha256": "139ae8f9ad0d42e7505d49179021da5afa0e1521ac03e3293465f7d397adaffb",
+      "normalized_sha256": "befd440f03cf15250cf4d36cbaecf9294883231b03857065ca61d7813f9998c3",
+      "dormant_startup_forcing": {
+        "enabled": true,
+        "applied": false,
+        "metadata_version": 3,
+        "mode_count": 10,
+        "n_updates": 11,
+        "time": 0.10327951026794302,
+        "cycle": 64,
+        "rng_offset": 9842,
+        "rng_bytes": 296,
+        "idum": 252293171,
+        "iset": 0,
+        "retained_padding_range": [
+          10126,
+          10130
+        ],
+        "reason": "not initial time and cycle",
+        "padding_normalized_by_separate_opt_in": true
+      },
+      "forcing_padding": {
+        "enabled": true,
+        "applied": true,
+        "range": [
+          10126,
+          10130
+        ],
+        "metadata_version": 3,
+        "rng_offset": 9842,
+        "rng_bytes": 296,
+        "time": 0.10327951026794302,
+        "cycle": 64,
+        "idum": 252293171,
+        "iset": 0,
+        "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+        "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+        "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+        "rule": "zero only the four non-member alignment bytes between iset and gset"
+      }
+    },
+    "repeat-1/cgl_lf_paper_turb_active.00000.rst": {
+      "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+      "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+      "real_bytes": 8,
+      "int_bytes": 4,
+      "binary_header_offset": 9050,
+      "normalized_ranges": [
+        [
+          9170,
+          9206
+        ],
+        [
+          9718,
+          9990
+        ],
+        [
+          9994,
+          9998
+        ],
+        [
+          9998,
+          10006
+        ]
+      ],
+      "normalized_byte_count": 320,
+      "raw_sha256": "c434d9b869761b6fe22dcf257cbe8d7a87e56c7259452f7460abab397904f5f9",
+      "normalized_sha256": "284a3b34eb61873fc513467d587476a9c49568a7156790d6515803a25bdc2fb2",
+      "dormant_startup_forcing": {
+        "enabled": true,
+        "applied": true,
+        "metadata_version": 3,
+        "mode_count": 10,
+        "n_updates": 0,
+        "time": 0.0,
+        "cycle": 0,
+        "rng_offset": 9710,
+        "rng_bytes": 296,
+        "idum": -1,
+        "iset": 0,
+        "retained_padding_range": [
+          9994,
+          9998
+        ],
+        "ranges": [
+          [
+            9718,
+            9990
+          ],
+          [
+            9998,
+            10006
+          ]
+        ],
+        "members": [
+          "idum2",
+          "iy",
+          "iv[0:32]",
+          "gset"
+        ],
+        "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+        "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+        "padding_normalized_by_separate_opt_in": true
+      },
+      "forcing_padding": {
+        "enabled": true,
+        "applied": true,
+        "range": [
+          9994,
+          9998
+        ],
+        "metadata_version": 3,
+        "rng_offset": 9710,
+        "rng_bytes": 296,
+        "time": 0.0,
+        "cycle": 0,
+        "idum": -1,
+        "iset": 0,
+        "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+        "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+        "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+        "rule": "zero only the four non-member alignment bytes between iset and gset"
+      }
+    },
+    "repeat-1/cgl_lf_paper_turb_active.00001.rst": {
+      "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+      "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+      "real_bytes": 8,
+      "int_bytes": 4,
+      "binary_header_offset": 9182,
+      "normalized_ranges": [
+        [
+          9302,
+          9338
+        ],
+        [
+          10126,
+          10130
+        ]
+      ],
+      "normalized_byte_count": 40,
+      "raw_sha256": "a3672b5a38fad53520a4d4c8a02683a24f5fdff8d6c7f5ad898a10434e3f65a8",
+      "normalized_sha256": "befd440f03cf15250cf4d36cbaecf9294883231b03857065ca61d7813f9998c3",
+      "dormant_startup_forcing": {
+        "enabled": true,
+        "applied": false,
+        "metadata_version": 3,
+        "mode_count": 10,
+        "n_updates": 11,
+        "time": 0.10327951026794302,
+        "cycle": 64,
+        "rng_offset": 9842,
+        "rng_bytes": 296,
+        "idum": 252293171,
+        "iset": 0,
+        "retained_padding_range": [
+          10126,
+          10130
+        ],
+        "reason": "not initial time and cycle",
+        "padding_normalized_by_separate_opt_in": true
+      },
+      "forcing_padding": {
+        "enabled": true,
+        "applied": true,
+        "range": [
+          10126,
+          10130
+        ],
+        "metadata_version": 3,
+        "rng_offset": 9842,
+        "rng_bytes": 296,
+        "time": 0.10327951026794302,
+        "cycle": 64,
+        "idum": 252293171,
+        "iset": 0,
+        "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+        "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+        "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+        "rule": "zero only the four non-member alignment bytes between iset and gset"
+      }
+    },
+    "repeat-2/cgl_lf_paper_turb_active.00000.rst": {
+      "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+      "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+      "real_bytes": 8,
+      "int_bytes": 4,
+      "binary_header_offset": 9050,
+      "normalized_ranges": [
+        [
+          9170,
+          9206
+        ],
+        [
+          9718,
+          9990
+        ],
+        [
+          9994,
+          9998
+        ],
+        [
+          9998,
+          10006
+        ]
+      ],
+      "normalized_byte_count": 320,
+      "raw_sha256": "9be6ec20927c6cd909f2d842cad05332c19a5102e8646aa63a87b205910121be",
+      "normalized_sha256": "284a3b34eb61873fc513467d587476a9c49568a7156790d6515803a25bdc2fb2",
+      "dormant_startup_forcing": {
+        "enabled": true,
+        "applied": true,
+        "metadata_version": 3,
+        "mode_count": 10,
+        "n_updates": 0,
+        "time": 0.0,
+        "cycle": 0,
+        "rng_offset": 9710,
+        "rng_bytes": 296,
+        "idum": -1,
+        "iset": 0,
+        "retained_padding_range": [
+          9994,
+          9998
+        ],
+        "ranges": [
+          [
+            9718,
+            9990
+          ],
+          [
+            9998,
+            10006
+          ]
+        ],
+        "members": [
+          "idum2",
+          "iy",
+          "iv[0:32]",
+          "gset"
+        ],
+        "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+        "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+        "padding_normalized_by_separate_opt_in": true
+      },
+      "forcing_padding": {
+        "enabled": true,
+        "applied": true,
+        "range": [
+          9994,
+          9998
+        ],
+        "metadata_version": 3,
+        "rng_offset": 9710,
+        "rng_bytes": 296,
+        "time": 0.0,
+        "cycle": 0,
+        "idum": -1,
+        "iset": 0,
+        "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+        "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+        "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+        "rule": "zero only the four non-member alignment bytes between iset and gset"
+      }
+    },
+    "repeat-2/cgl_lf_paper_turb_active.00001.rst": {
+      "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+      "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+      "real_bytes": 8,
+      "int_bytes": 4,
+      "binary_header_offset": 9182,
+      "normalized_ranges": [
+        [
+          9302,
+          9338
+        ],
+        [
+          10126,
+          10130
+        ]
+      ],
+      "normalized_byte_count": 40,
+      "raw_sha256": "66cb2f6dc46d2cc0b834045567a5ecbe17ab0d3d0fd8fafd97b68e99eef989db",
+      "normalized_sha256": "befd440f03cf15250cf4d36cbaecf9294883231b03857065ca61d7813f9998c3",
+      "dormant_startup_forcing": {
+        "enabled": true,
+        "applied": false,
+        "metadata_version": 3,
+        "mode_count": 10,
+        "n_updates": 11,
+        "time": 0.10327951026794302,
+        "cycle": 64,
+        "rng_offset": 9842,
+        "rng_bytes": 296,
+        "idum": 252293171,
+        "iset": 0,
+        "retained_padding_range": [
+          10126,
+          10130
+        ],
+        "reason": "not initial time and cycle",
+        "padding_normalized_by_separate_opt_in": true
+      },
+      "forcing_padding": {
+        "enabled": true,
+        "applied": true,
+        "range": [
+          10126,
+          10130
+        ],
+        "metadata_version": 3,
+        "rng_offset": 9842,
+        "rng_bytes": 296,
+        "time": 0.10327951026794302,
+        "cycle": 64,
+        "idum": 252293171,
+        "iset": 0,
+        "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+        "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+        "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+        "rule": "zero only the four non-member alignment bytes between iset and gset"
+      }
+    }
+  },
+  "comparisons": [
+    {
+      "reference": "repeat-0/cgl_lf_paper_turb_active.00000.rst",
+      "candidate": "repeat-1/cgl_lf_paper_turb_active.00000.rst",
+      "equal": true
+    },
+    {
+      "reference": "repeat-0/cgl_lf_paper_turb_active.00001.rst",
+      "candidate": "repeat-1/cgl_lf_paper_turb_active.00001.rst",
+      "equal": true
+    },
+    {
+      "reference": "repeat-0/cgl_lf_paper_turb_active.00000.rst",
+      "candidate": "repeat-2/cgl_lf_paper_turb_active.00000.rst",
+      "equal": true
+    },
+    {
+      "reference": "repeat-0/cgl_lf_paper_turb_active.00001.rst",
+      "candidate": "repeat-2/cgl_lf_paper_turb_active.00001.rst",
+      "equal": true
+    }
+  ],
+  "live_state_guard_probes": [
+    {
+      "mutated_field": "padding",
+      "normalized_equal": true,
+      "expected": true
+    },
+    {
+      "mutated_field": "seed",
+      "normalized_equal": false,
+      "expected": false
+    },
+    {
+      "mutated_field": "live_shuffle",
+      "normalized_equal": false,
+      "expected": false
+    },
+    {
+      "mutated_field": "cache_flag",
+      "normalized_equal": false,
+      "expected": false
+    },
+    {
+      "mutated_field": "cached_gaussian",
+      "normalized_equal": false,
+      "expected": false
+    },
+    {
+      "mutated_field": "physical_state",
+      "normalized_equal": false,
+      "expected": false
+    }
+  ]
+}

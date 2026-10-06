@@ -1,0 +1,117 @@
+{
+  "accepted_case_count": 3,
+  "source": "timing-5628672/results.json",
+  "excluded_case": {
+    "name": "lf1d-4rank",
+    "reason": "unchanged input has one MeshBlock and correctly rejects four ranks; no runtime result or speedup exists",
+    "runs_preserved": 8
+  },
+  "cases": {
+    "lf1d-1rank": {
+      "medians": {
+        "baseline": {
+          "solver_seconds": 3.087026,
+          "solver_seconds_per_cycle": 0.014841471153846153,
+          "cycles": 208,
+          "lf_cell_stages": 266240.0,
+          "active_cells": 128,
+          "total_stages": 2080.0,
+          "mean_stages_per_sweep": 5.0
+        },
+        "task1": {
+          "solver_seconds": 1.788774,
+          "solver_seconds_per_cycle": 0.019234129032258067,
+          "cycles": 93,
+          "lf_cell_stages": 118528.0,
+          "active_cells": 128,
+          "total_stages": 926.0,
+          "mean_stages_per_sweep": 4.978494623655914
+        }
+      },
+      "speedup_to_common_final_time": 1.7257775437254788,
+      "speedup_per_cycle": 0.7716216902234112,
+      "max_field_output_difference": {
+        "dens": 0.0,
+        "velx": 0.0,
+        "vely": 0.0,
+        "velz": 0.0,
+        "eint": 0.0,
+        "p_perp": 0.0,
+        "bcc1": 0.0,
+        "bcc2": 0.0,
+        "bcc3": 0.0
+      }
+    },
+    "smr-1rank": {
+      "medians": {
+        "baseline": {
+          "solver_seconds": 3.663945,
+          "solver_seconds_per_cycle": 0.052342071428571425,
+          "cycles": 70,
+          "lf_cell_stages": 2488320.0,
+          "active_cells": 2560,
+          "total_stages": 972.0,
+          "mean_stages_per_sweep": 6.942857142857143
+        },
+        "task1": {
+          "solver_seconds": 2.899478,
+          "solver_seconds_per_cycle": 0.055759192307692315,
+          "cycles": 52,
+          "lf_cell_stages": 1863680.0,
+          "active_cells": 2560,
+          "total_stages": 728.0,
+          "mean_stages_per_sweep": 7.0
+        }
+      },
+      "speedup_to_common_final_time": 1.2636567685631688,
+      "speedup_per_cycle": 0.9387164566469254,
+      "max_field_output_difference": {
+        "dens": 0.0,
+        "velx": 0.0,
+        "vely": 0.0,
+        "velz": 0.0,
+        "eint": 0.0,
+        "p_perp": 0.0,
+        "bcc1": 0.0,
+        "bcc2": 0.0,
+        "bcc3": 0.0
+      }
+    },
+    "smr-4rank": {
+      "medians": {
+        "baseline": {
+          "solver_seconds": 3.092693,
+          "solver_seconds_per_cycle": 0.04418132857142857,
+          "cycles": 70,
+          "lf_cell_stages": 2488320.0,
+          "active_cells": 2560,
+          "total_stages": 972.0,
+          "mean_stages_per_sweep": 6.942857142857143
+        },
+        "task1": {
+          "solver_seconds": 2.491383,
+          "solver_seconds_per_cycle": 0.047911211538461534,
+          "cycles": 52,
+          "lf_cell_stages": 1863680.0,
+          "active_cells": 2560,
+          "total_stages": 728.0,
+          "mean_stages_per_sweep": 7.0
+        }
+      },
+      "speedup_to_common_final_time": 1.2413559055351988,
+      "speedup_per_cycle": 0.9221501012547191,
+      "max_field_output_difference": {
+        "dens": 0.0,
+        "velx": 0.0,
+        "vely": 0.0,
+        "velz": 0.0,
+        "eint": 0.0,
+        "p_perp": 0.0,
+        "bcc1": 0.0,
+        "bcc2": 0.0,
+        "bcc3": 0.0
+      }
+    }
+  },
+  "note": "lf1d is a sinusoidal parallel-decay fixture; separate propagating-eigenwave benchmark queued."
+}

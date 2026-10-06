@@ -20,6 +20,7 @@ Use CGL with the HLLE solver:
 ```ini
 <time>
 sts_integrator = rkl2
+sts_safety = 0.9
 
 <mhd>
 eos = cgl
@@ -104,9 +105,9 @@ $\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ for strong collisions.
 | `iso_sound_speed` | unused in active CGL | Retained for the disabled passive model; it does not bypass the `passive=true` fence. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
 | `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
-| `lf_k_parallel` | required | Positive closure wavenumber magnitude. |
+| `lf_k_parallel` | required | Finite positive closure wavenumber magnitude. |
 | `lf_coefficient_mode` | `local` | `local` or `background`. |
-| `lf_c_parallel0` | required in background mode | Positive fixed parallel thermal speed. |
+| `lf_c_parallel0` | required in background mode | Finite positive fixed parallel thermal speed. |
 | `nu_coll` | `0.0` | Background anisotropy-relaxation frequency. |
 | `mirror_limiter` | `false` | Enable mirror-limiter relaxation. |
 | `firehose_limiter` | `false` | Enable firehose-limiter relaxation. |
@@ -203,6 +204,30 @@ exchange used by the momentum update before the contraction is evaluated.
 Archived passive-Delta runs retain zeros for both fields because their
 diagnostic CGL pressures were not applied to flow momentum. New passive runs
 are disabled.
+
+## LF Timestep
+
+LF estimates its parabolic reference step from the actual face stencil. The
+estimate includes staggered normal magnetic fields, directional cell widths,
+face-to-cell density ratios, transverse VL4 limiter derivatives, and the
+coupling between parallel and perpendicular temperatures from magnetic-field
+gradients. A normal face field divided by the mean neighboring magnetic
+magnitude need not have magnitude at most one; replacing it with a normalized
+cell-centered direction can miss strong discrete stiffness.
+
+The RKL2 controller uses this reference step multiplied by
+`<time>/sts_safety`, whose default is `0.9` and allowed range is finite
+`0 < sts_safety <= 1`. This factor applies to every process assigned to STS.
+The advective CFL and explicitly integrated parabolic processes continue to use
+`<time>/cfl_number`. Both initial stage selection and the refreshed post-sweep
+budget use `sts_safety`; restart files retain the setting. The optional
+`sts_max_dt_ratio` cycle cap uses this safety-scaled budget.
+
+The estimate bounds the magnitude of the local frozen temperature Jacobian.
+It does not establish a nonlinear RKL2 stability theorem for state-dependent
+closure coefficients, scattering switches, projection walls, or the composite
+AMR operator. See [LF Discrete Timestep Bound](cgl_lf_timestep.md) for the
+assumptions, derivation, exceptional arithmetic, and regression cases.
 
 ## Current Restrictions
 

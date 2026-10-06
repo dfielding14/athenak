@@ -1,0 +1,246 @@
+{
+  "classification": "supplemental nonzero 3D LF transport; finite-time stability/activity comparison, not convergence or a closed forced-energy ledger",
+  "reference": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/turbulence-research/runs/supplemental3d-baseline-1rank/physics-tlim1/rst/cgl_lf_paper_turb_active.00004.rst",
+    "sha256": "4d416769781191e4dc72a68e5be3d74fa53288dcd6d45365f5bdd9c064b60d0c",
+    "active_cells": 221184,
+    "time": 1.0,
+    "dt": 0.0016178014376291637,
+    "cycle": 619,
+    "geometry_activity": {
+      "max_abs_transverse_face_B": 0.31142591494489996,
+      "max_abs_within_block_z_difference": 0.3036983945453588
+    }
+  },
+  "candidate": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/turbulence-research/runs/supplemental3d-task1-1rank/physics-tlim1/rst/cgl_lf_paper_turb_active.00004.rst",
+    "sha256": "2198be33567bd4f772b051add4eceae8da9092d97dcb7331973c3a93b8a9be97",
+    "active_cells": 221184,
+    "time": 1.0,
+    "dt": 0.0016178014227015301,
+    "cycle": 619,
+    "geometry_activity": {
+      "max_abs_transverse_face_B": 0.3114258930800519,
+      "max_abs_within_block_z_difference": 0.3036984064463937
+    }
+  },
+  "common_time": 1.0,
+  "staged_input_sha256": "273100ffea214d9f3aa7022d59d57935e26221ad57a7453bb06de6d6cdc9ef5e",
+  "intentional_physics_change": "projection_policy=mks24_alfvenic_perpendicular only; original paper deck retained separately",
+  "median_seconds_per_cycle": {
+    "baseline": 0.18477234375,
+    "task1": 0.103998640625
+  },
+  "speedup_baseline_over_task1": 1.7766803742777288,
+  "mean_stages_per_sweep": {
+    "baseline": 9.0,
+    "task1": 4.1875
+  },
+  "full_physics": {
+    "baseline": {
+      "cycles": 619,
+      "final_time": 1.0,
+      "solver_seconds": 107.1858,
+      "mean_stages_per_sweep": 8.996768982229403,
+      "lf_activity": {
+        "max_abs_applied_qwork": {
+          "lf_qprwrk": 0.0013835003529520155,
+          "lf_qpewrk": 0.00045900990458190094
+        },
+        "roundoff_scaled_activity_floor": 3.41060513164848e-12,
+        "resolved_applied_qwork": true,
+        "hfpow_min": 0.0,
+        "hfpow_max": 0.005602939946322036,
+        "max_abs_hfpow": 0.005602939946322036,
+        "interpretation": "qwork is signed actual RKL-applied owned-face q*temperature-jump contraction; hfpow is a signed cell-centered instantaneous proxy; neither sign is an acceptance requirement"
+      },
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "history_final": {
+        "time": 1.0,
+        "dt": 0.0016178014376291637,
+        "mass": 2.0,
+        "1-mom": 2.168404344971009e-19,
+        "2-mom": 3.2526065174565133e-19,
+        "3-mom": -1.0842021724855044e-19,
+        "tot-E": 16.04000000000064,
+        "aam-D": -0.00024979723114953653,
+        "1-KE": 0.004544178142003675,
+        "2-KE": 0.004479746522077508,
+        "3-KE": 7.300704232332279e-05,
+        "1-ME": 0.01094451178452548,
+        "2-ME": 0.014379761934036235,
+        "3-ME": 1.0000677951908943,
+        "lf_nstage": 2463547392.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 7390642176.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0013835003529520155,
+        "lf_qpewrk": 0.00045900990458190094,
+        "lf_hwproj": 0.0
+      },
+      "user_history_final": {
+        "time": 1.0,
+        "dt": 0.0016178014376291637,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.009096931706404505,
+        "emag": 1.0253786827046927,
+        "ecgl": 15.005524385589542,
+        "b2": 2.0507573654093854,
+        "b4": 2.1033863362278105,
+        "beta": 19.517632528660453,
+        "dp": 0.36983794100109213,
+        "absdp": 0.36983794100109213,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0032639719446521647
+      }
+    },
+    "task1": {
+      "cycles": 619,
+      "final_time": 1.0,
+      "solver_seconds": 65.37339,
+      "mean_stages_per_sweep": 4.920840064620355,
+      "lf_activity": {
+        "max_abs_applied_qwork": {
+          "lf_qprwrk": 0.0013833649075108245,
+          "lf_qpewrk": 0.0004589995653062548
+        },
+        "roundoff_scaled_activity_floor": 3.41060513164848e-12,
+        "resolved_applied_qwork": true,
+        "hfpow_min": 0.0,
+        "hfpow_max": 0.005603012932740565,
+        "max_abs_hfpow": 0.005603012932740565,
+        "interpretation": "qwork is signed actual RKL-applied owned-face q*temperature-jump contraction; hfpow is a signed cell-centered instantaneous proxy; neither sign is an acceptance requirement"
+      },
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "history_final": {
+        "time": 1.0,
+        "dt": 0.0016178014227015301,
+        "mass": 2.0,
+        "1-mom": 8.673617379884035e-19,
+        "2-mom": -6.505213034913027e-19,
+        "3-mom": -2.710505431213761e-20,
+        "tot-E": 16.04000000000037,
+        "aam-D": -0.0002497960229360266,
+        "1-KE": 0.004544178959230329,
+        "2-KE": 0.004479747296875949,
+        "3-KE": 7.300693811458203e-05,
+        "1-ME": 0.010944510909461297,
+        "2-ME": 0.014379761445515886,
+        "3-ME": 1.000067795100198,
+        "lf_nstage": 1347452928.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 4042358784.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0013833649075108245,
+        "lf_qpewrk": 0.0004589995653062548,
+        "lf_hwproj": 0.0
+      },
+      "user_history_final": {
+        "time": 1.0,
+        "dt": 0.0016178014227015301,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.00909693319422086,
+        "emag": 1.0253786812571994,
+        "ecgl": 15.005524385548945,
+        "b2": 2.050757362514399,
+        "b4": 2.103386325690882,
+        "beta": 19.517632511811,
+        "dp": 0.369837942006794,
+        "absdp": 0.369837942006794,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.003264028076626216
+      }
+    }
+  },
+  "max_all_payload_difference": 9.080315284076476e-06,
+  "active_state": {
+    "rho": {
+      "max_absolute_difference": 4.75729603044428e-07,
+      "relative_L1_difference": 4.2102589238356065e-08,
+      "rms_difference": 5.7438909341871997e-08,
+      "volume_integral_difference": 1.789234751871217e-17
+    },
+    "mom1": {
+      "max_absolute_difference": 1.1124672913143119e-06,
+      "relative_L1_difference": 1.167769328754801e-06,
+      "rms_difference": 8.916479001397726e-08,
+      "volume_integral_difference": 5.712916160607309e-19
+    },
+    "mom2": {
+      "max_absolute_difference": 1.712221830540983e-06,
+      "relative_L1_difference": 1.1379297144023052e-06,
+      "rms_difference": 8.365301563822252e-08,
+      "volume_integral_difference": -9.168082666465808e-19
+    },
+    "mom3": {
+      "max_absolute_difference": 2.2075668919749325e-06,
+      "relative_L1_difference": 2.6637030024696853e-05,
+      "rms_difference": 2.5275142954040827e-07,
+      "volume_integral_difference": 1.1703073851676169e-20
+    },
+    "total_E": {
+      "max_absolute_difference": 7.307987525351223e-06,
+      "relative_L1_difference": 5.8128867803843655e-08,
+      "rms_difference": 6.63539790421639e-07,
+      "volume_integral_difference": -2.7288122250518146e-13
+    },
+    "A": {
+      "max_absolute_difference": 9.080315284076476e-06,
+      "relative_L1_difference": 2.5933569984549214e-05,
+      "rms_difference": 5.35208688001483e-07,
+      "volume_integral_difference": 1.208213509513653e-09
+    }
+  }
+}

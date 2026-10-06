@@ -1,0 +1,90 @@
+{
+  "base_commit": "e1b2ecd006d8c358d13d28ba017459bb8578c33d",
+  "unchanged_tested_source_files": {
+    "src/diffusion/cgl_landau_fluid.cpp": "1631a9e4aa308a019249179594e26b2073365aea161c10e1c4de6646a2a1331d",
+    "src/diffusion/cgl_landau_fluid.hpp": "bb02f484851bcf310fd9d6a21b4cbfa5c31ad62cc46c1a70bda71aaf7286a32f",
+    "src/mhd/mhd_newdt.cpp": "1c3b8901b9a750bfe9e4fa292f842e38548715c8d3dff6d254b6e7e2efd60354",
+    "src/mesh/mesh.hpp": "11951ae203a96ae4607fc4aadf6f537f2f845ab29e3186f941f1e31d82a04503",
+    "src/mesh/mesh.cpp": "e96b890be85743ebabe45ffde8189101e95884abd4a5a288e1bffff0f1006e8f",
+    "src/mesh/build_tree.cpp": "dcb72cab5cbbf9204d6573918dbf871d367551ef5ae911030999d1360fc5e364",
+    "src/pgen/tests/cgl_landau_fluid.cpp": "7c8cec9bc3a18b12ed9118b5eb8f0a1d03ce1fbf5bb816152dd363b3209164a3",
+    "inputs/unit_tests/cgl_lf_staggered_checkerboard.athinput": "d257e452c094221886edd18099cc977c4c21e28a57482e3bd20404341d5043ab",
+    "inputs/unit_tests/cgl_lf_field_reversal_1d.athinput": "0975dd1492b9e3e4298694030459703be4ff1634bc7e01157f0a235f9bafbed0",
+    "inputs/unit_tests/cgl_lf_field_reversal_2d.athinput": "42b283ef21ea3055d29278b2df9a1f480c8ca9440790652edd21d4e58ccb4050",
+    "tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py": "8dc0c1659e7951e3c0a27c510a7c546a57cdb94a467ac48e4d9c907d95aa97b2"
+  },
+  "files": {
+    "src/diffusion/cgl_landau_fluid.cpp": {
+      "sha256": "1631a9e4aa308a019249179594e26b2073365aea161c10e1c4de6646a2a1331d",
+      "source": "tested candidate"
+    },
+    "src/diffusion/cgl_landau_fluid.hpp": {
+      "sha256": "bb02f484851bcf310fd9d6a21b4cbfa5c31ad62cc46c1a70bda71aaf7286a32f",
+      "source": "tested candidate"
+    },
+    "src/mhd/mhd_newdt.cpp": {
+      "sha256": "1c3b8901b9a750bfe9e4fa292f842e38548715c8d3dff6d254b6e7e2efd60354",
+      "source": "tested candidate"
+    },
+    "src/mesh/mesh.hpp": {
+      "sha256": "11951ae203a96ae4607fc4aadf6f537f2f845ab29e3186f941f1e31d82a04503",
+      "source": "tested candidate"
+    },
+    "src/mesh/mesh.cpp": {
+      "sha256": "e96b890be85743ebabe45ffde8189101e95884abd4a5a288e1bffff0f1006e8f",
+      "source": "tested candidate"
+    },
+    "src/mesh/build_tree.cpp": {
+      "sha256": "dcb72cab5cbbf9204d6573918dbf871d367551ef5ae911030999d1360fc5e364",
+      "source": "tested candidate"
+    },
+    "src/pgen/tests/cgl_landau_fluid.cpp": {
+      "sha256": "7c8cec9bc3a18b12ed9118b5eb8f0a1d03ce1fbf5bb816152dd363b3209164a3",
+      "source": "tested candidate"
+    },
+    "inputs/unit_tests/cgl_lf_staggered_checkerboard.athinput": {
+      "sha256": "d257e452c094221886edd18099cc977c4c21e28a57482e3bd20404341d5043ab",
+      "source": "tested candidate"
+    },
+    "inputs/unit_tests/cgl_lf_field_reversal_1d.athinput": {
+      "sha256": "0975dd1492b9e3e4298694030459703be4ff1634bc7e01157f0a235f9bafbed0",
+      "source": "tested candidate"
+    },
+    "inputs/unit_tests/cgl_lf_field_reversal_2d.athinput": {
+      "sha256": "42b283ef21ea3055d29278b2df9a1f480c8ca9440790652edd21d4e58ccb4050",
+      "source": "tested candidate"
+    },
+    "tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py": {
+      "sha256": "8dc0c1659e7951e3c0a27c510a7c546a57cdb94a467ac48e4d9c907d95aa97b2",
+      "source": "tested candidate"
+    },
+    "docs/source/modules/cgl_landau_fluid.md": {
+      "sha256": "857a7572ac08766d15b9fc08392fafb8078236506444e49bff57cae319afe1f6",
+      "source": "documentation"
+    },
+    "docs/source/modules/cgl_landau_fluid_code_guide.md": {
+      "sha256": "782986e5537b1927bf5f28995aadfdd5b3a4b49305a05a8cdc1062120f90bd32",
+      "source": "documentation"
+    },
+    "docs/source/modules/super_time_stepping.md": {
+      "sha256": "a0afd5b1a908af6662beb172c414cfedfb04f29fe2b662f4feb7367aa0311b1c",
+      "source": "documentation"
+    },
+    "docs/source/reference/input_parameters.md": {
+      "sha256": "b1cd6b2ac0d6f0cfb146a3bf1cae79c9967f865232996beedba6c4976310129e",
+      "source": "documentation"
+    },
+    "docs/cgl_lf_changes.md": {
+      "sha256": "7ff685947187bbc9c514cfe257efcb5198dc520c51b73c5416848720b00b23ef",
+      "source": "documentation"
+    },
+    "docs/source/modules/cgl_lf_timestep.md": {
+      "sha256": "95ac8acdd606234fed8248e87ec10c7f15923b49a60cf9fcd05cf81ab0b33490",
+      "source": "documentation"
+    }
+  },
+  "patch": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task1-research/task1-documented-candidate.patch",
+    "sha256": "01abfdeb75b8d348c34bb979d0d81734ce1edb0ebb0cf819eb17faf5b215760c"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "reference": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/turbulence-research/runs/baseline-1rank-recheck/physics-tlim1/rst/cgl_lf_paper_turb_active.00004.rst",
+    "sha256": "0dbfb3919d701ca6f1aa51035543cff685d0875aa42210b6e7eb6ae9ce7b924d",
+    "active_cells": 221184
+  },
+  "candidate": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/turbulence-research/runs/task1-1rank/physics-tlim1/rst/cgl_lf_paper_turb_active.00004.rst",
+    "sha256": "56ce032c4380f5b687a1215f6f14b6811d81992c56aa0da6e244a18b3d8dd1fa",
+    "active_cells": 221184
+  },
+  "common_time": 1.0,
+  "max_all_payload_difference": 8.86402062860725e-13,
+  "active_state": {
+    "rho": {
+      "max_absolute_difference": 5.417888360170764e-14,
+      "relative_L1_difference": 1.499731087774138e-14,
+      "volume_integral_difference": 2.1491296396823777e-17
+    },
+    "mom1": {
+      "max_absolute_difference": 6.676083297296742e-14,
+      "relative_L1_difference": 2.0791957308857593e-13,
+      "volume_integral_difference": 9.102810150692438e-20
+    },
+    "mom2": {
+      "max_absolute_difference": 5.435235594930532e-14,
+      "relative_L1_difference": 8.757748517127099e-14,
+      "volume_integral_difference": -2.7562793269703132e-17
+    },
+    "mom3": {
+      "max_absolute_difference": 0.0,
+      "relative_L1_difference": 0.0,
+      "volume_integral_difference": 0.0
+    },
+    "total_E": {
+      "max_absolute_difference": 8.86402062860725e-13,
+      "relative_L1_difference": 3.138455560212786e-14,
+      "volume_integral_difference": -3.5701765617920006e-13
+    },
+    "A": {
+      "max_absolute_difference": 5.476058053479504e-13,
+      "relative_L1_difference": 3.1797876791426614e-06,
+      "volume_integral_difference": 3.9941636505124407e-13
+    }
+  }
+}

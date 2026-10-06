@@ -10,6 +10,9 @@ inputs, raw outputs, and scheduler logs are retained under
 Conservative A and both strict B4 expected failures remain unchanged. The
 unresolved sharp-contact limitation is not treated as a passing test.
 
+The [Task 1 report](task1/README.md) records the new timestep bound, independent
+proof checks, changed expectations and paired GPU measurements.
+
 ## Task 0: establish the actual GPU baseline
 
 Triage: **implemented**, including diagnosis of two compiler-contract failures
@@ -93,6 +96,10 @@ run retains synchronized kernel timing. The full original tlim=1 run completes
 620 cycles in 107.411 solver seconds with zero LF repair/wall counters and
 maximum relative mass drift 1.1102230246251565e-16. This is original-duration
 stability/throughput evidence, not a turbulence resolution-convergence study.
+A later full-precision audit established that this original input is exactly
+planar and its LF q-work is zero. It therefore does not validate nonzero heat
+transport. Task1 includes a separately labeled 3D forcing pair with verified
+nonzero LF transport; see the linked report.
 
 The turbulence harness initially failed its profiling command because the input
 had not declared the two profiling parameters. The corrected input declares their
@@ -102,8 +109,9 @@ fields, and final restart state repeat exactly. Initial turbulence restarts also
 serialize dormant, uninitialized RNG fields. An explicit opt-in comparison validates
 native forcing metadata version 3, 24 metadata/config integers, time/cycle/update
 count zero, idum=-1, and iset=0, then excludes only 272 bytes of unused shuffle
-state plus the unused 8-byte Gaussian cache. RNG padding, seed/cache flags, all
-live forcing state, and physical fields remain compared. Source inspection proves
+state plus the unused 8-byte Gaussian cache. Seed/cache flags, all live forcing state, and physical fields remain compared.
+Task1 adds a separate opt-in for the four bytes of native RNG alignment padding;
+its ABI proof and exact ranges are recorded in that report. Source inspection proves
 those dormant fields are initialized before their first use; mutation probes verify
 that changes outside the two ranges still fail comparison. No output is rewritten.
 The default comparison still excludes only the nine root coarse-index integers.

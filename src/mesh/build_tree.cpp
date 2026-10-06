@@ -43,6 +43,12 @@ parabolic::STSIntegrator ParseSTSIntegrator(ParameterInput *pin) {
 
 void LoadSTSConfig(Mesh *pmesh, ParameterInput *pin) {
   pmesh->sts_integrator = ParseSTSIntegrator(pin);
+  pmesh->sts_safety = pin->GetOrAddReal("time", "sts_safety", 0.9);
+  if (!(pmesh->sts_safety > 0.0 && pmesh->sts_safety <= 1.0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<time>/sts_safety must lie in (0, 1]" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   pmesh->sts_max_dt_ratio = pin->GetOrAddReal("time", "sts_max_dt_ratio", -1.0);
   if (pmesh->sts_max_dt_ratio != -1.0 && pmesh->sts_max_dt_ratio <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
