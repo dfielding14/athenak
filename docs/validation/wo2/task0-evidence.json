@@ -1,0 +1,1666 @@
+{
+  "baseline_source_sha": "9a4030b09307bc43865d5e597638f8645a6388f8",
+  "kokkos_sha": "08ceff92bcf3a828844480bc1e6137eb74028517",
+  "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2",
+  "hardware": "Frontier MI250X gfx90a; driver6.16.13",
+  "toolchain": "CCE20.0.0 ROCm6.4.2 CrayMPICH9.0.1 double Release",
+  "hip_flags": "-fno-cray -mno-daz-ftz; linker-no-pie",
+  "binding": "srun --exact --threads-per-core=1 --cpu-bind=threads -c7 --gpus-per-task=1 --gpu-bind=closest",
+  "cpu_aggregate": {
+    "classification": "Union of original CPU suite and focused reruns at the same frozen source and CPU binary; not a fresh monolithic suite invocation.",
+    "counts": {
+      "passed": 213,
+      "failed": 0,
+      "xfailed": 2
+    },
+    "test_count": 215,
+    "harness_adaptations": [
+      "CPU relink and standalone compiler wrapper disable startup DAZ/FTZ via -mno-daz-ftz.",
+      "Missing scripts/docs staging links restored for analysis utilities.",
+      "Stage I exact-source imports remap DEFAULT_ROOT to an unused WO2 test sentinel; assertions and canonical guards are untouched."
+    ],
+    "evidence_files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-analysis-recheck/results.xml",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml"
+    ],
+    "results": [
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_amr_projection_cpu",
+        "name": "test_cgl_amr_projection_rejects_nonfinite_magnetic_fields"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_amr_walls_cpu",
+        "name": "test_cgl_amr_walls_after_final_field_refresh"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_c2p_pressure_floor_cpu",
+        "name": "test_cgl_c2p_pressure_floor_energy_consistency[False]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_c2p_pressure_floor_cpu",
+        "name": "test_cgl_c2p_pressure_floor_energy_consistency[True]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_fast_speed_cpu",
+        "name": "test_cgl_active_hlle_uses_scaled_literature_discriminant[False]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_fast_speed_cpu",
+        "name": "test_cgl_active_hlle_uses_scaled_literature_discriminant[True]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_heat_flux_limiter_cpu",
+        "name": "test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[double]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_heat_flux_limiter_cpu",
+        "name": "test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[single]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_profile_summary_reports_core_buckets"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_profile_detail_reports_directional_probe_buckets"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[full-safe-1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[full-safe-2]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[full-fast-1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[full-fast-2]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[none-safe-1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[none-safe-2]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[none-fast-1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_field_reversal_stability[none-fast-2]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_uniform_collisional_timestep[1.0-6.283185307179586-0.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_uniform_collisional_timestep[1.0-6.283185307179586-10.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_uniform_collisional_timestep[1.0-6.283185307179586-100.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_uniform_collisional_timestep[1.4e+308-1.4e+308-0.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_uniform_collisional_timestep[1e+154-1e-154-1.4e+308]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[safe-10]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[safe-50]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[safe-200]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[safe-1000]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[fast-10]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[fast-50]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[fast-200]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_density_contact_stability[fast-1000]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_quantitative_decay_and_diagnostics"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_runtime_mode_matrix_preserves_short_decay_state"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_3d_runtime_modes_exercise_directional_fast_paths"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_limiter_occupancy_remains_admissible"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-analysis-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_heat_flux_cap_face_activity_is_reported"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_heat_flux_cap_fractions_are_meshblock_layout_independent"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_final_refresh_is_meshblock_layout_independent"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_low_field_faces_disable_transport_cleanly"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_background_collision_advances_one_physical_timestep"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_collision_rates_once_per_cycle_with_and_without_lf[False]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_collision_rates_once_per_cycle_with_and_without_lf[True]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_collision_refreshes_next_timestep_from_relaxed_state"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_firehose_threshold_policies_are_distinct"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stiff_limiter_relaxes_to_selected_firehose_threshold"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[sts-false]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[sts-true]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[explicit-false]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[explicit-true]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_relaxed_mode_obeys_configured_walls[cgl_lf_limiter.athinput-cgl_ci_relaxed_mirror_recovery-flags0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_relaxed_mode_obeys_configured_walls[cgl_lf_firehose_policy.athinput-cgl_ci_relaxed_firehose_recovery-flags1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_face_collision_rates_add[false-18-safe]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_face_collision_rates_add[false-18-fast]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_face_collision_rates_add[true-119-safe]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_face_collision_rates_add[true-119-fast]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-analysis-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_transport_proxy_uses_additive_configured_rates"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_relaxed_mode_does_not_enable_backup"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_fast_relaxed_mode_does_not_enable_backup"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_history_uses_only_configured_backup"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_explicit_reference_agrees_with_capped_sts"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_explicit_reference_executes_both_half_sweeps"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_explicit_reference_finite_collision_split"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_reconstruction_pressure_peak[ppmx]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_reconstruction_pressure_peak[wenoz]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_fofc_live_flux_mutation"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_amr_conserved_prolongation_stays_admissible"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_restart_marker_round_trips_terminal_time"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_restart_preserves_final_state_and_admissibility"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_no_diagnostics_restart_clears_heat_flux_counters"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_restart_with_finite_collision_preserves_corrected_split"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_integrator_is_rejected"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_rejects_representation_blind_boundaries[sts-mesh/ix1_bc=inflow-<mesh>/ix1_bc = inflow]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_rejects_representation_blind_boundaries[explicit-mesh/ox1_bc=user-<mesh>/ox1_bc = user]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[periodic-sts]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[periodic-explicit]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[reflect-sts]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[reflect-explicit]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[outflow-sts]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[outflow-explicit]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[diode-sts]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_allows_representation_preserving_boundaries[diode-explicit]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_eigen_field_initialization_uses_meshblock_coordinates"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_threshold-0-> 0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_threshold--1-> 0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[mirror_threshold-0-> 0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[mirror_threshold-nan-> 0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[mirror_backup_factor-0.99->= 1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_backup_factor-0.99->= 1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_backup_factor-inf->= 1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[limiter_backup_nu--1->= 0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_numeric_threshold_is_rejected[limiter_backup_nu-nan->= 0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_conflicting_legacy_threshold_is_rejected"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_numeric_threshold_matches_legacy_policy"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_firehose_threshold_is_rejected"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_diagnostics=invalid-cgl_lf_diagnostics]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_arithmetic=invalid-cgl_lf_arithmetic]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_sts_flux=invalid-cgl_lf_sts_flux]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_sts_flux=physical-requires <mhd>/cgl_lf_diagnostics = 'none']"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_invalid_runtime_mode_is_rejected[option4-requires <mhd>/cgl_lf_arithmetic = 'fast']"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_legacy_hardwall_requires_migration"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_paper_initializer_supports_pure_cgl_without_lf"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_random_forcing_leaves_cartesian_amplitudes_unprojected"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_fixed_edot_normalization_sets_first_cycle_amplitude"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks[rk1]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks[rk2]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks[rk3]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_forcing_seed_is_deterministic_and_selectable"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_passive_delta_is_disabled"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_passive_delta_must_match_eos_mode"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_type_two_rejects_alfvenic_policy"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_alfvenic_policy_rejects_compressive_blend"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_inputs_explicitly_set_thresholds"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_groups_rank_local_output_products"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_requires_retained_source_bundle_provenance"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_authenticates_legacy_restart_marker_with_binary_time"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_authorizes_only_reviewed_historical_r03_submission"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_rejects_prospective_budget_overruns_and_counts_rows_once"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_replay_budget_gate_precedes_controlled_writes"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_retains_r17_last_across_lifecycle"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_rejects_late_r17_replay_and_reconcile"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_authenticates_historical_production_utility"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_qualification_token_binds_corrected_build"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_cancels_only_terminal_never_started_submitted_job"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_reconcile_holds_root_lock"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_stage_i_panel_schema_pins_reference_inventory_and_admission"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_rank_local_binary_reader_keeps_unequal_rank_files"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_snapshot_window_skips_unselected_field_reads"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_paper_snapshot_analysis_uses_both_pressures"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_explicit_reference_rejects_sts_configuration"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_amr_primitive_prolongation_rejects_pressure_work_recording"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[full-safe-30-8.660254037844387-5.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[full-safe-45-7.0710678118654755-7.0710678118654755]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[full-fast-30-8.660254037844387-5.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[full-fast-45-7.0710678118654755-7.0710678118654755]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[none-safe-30-8.660254037844387-5.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[none-safe-45-7.0710678118654755-7.0710678118654755]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[none-fast-30-8.660254037844387-5.0]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_hotspot_preserves_minima_and_energy[none-fast-45-7.0710678118654755-7.0710678118654755]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_post_sweep_timestep_refresh[0-7]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_landau_fluid_cpu",
+        "name": "test_cgl_lf_post_sweep_timestep_refresh[3000-11]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_pure_paper_eigen_alfven]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_pure_paper_eigen_slow]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_pure_paper_eigen_fast]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_lf_paper_eigen_alfven]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_lf_paper_eigen_slow]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_lf_paper_eigen_fast]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_lf_field_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_lf_paper_oblique_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_short_wave_is_resolved[cgl_pure_paper_oblique_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_pure_paper_eigen_alfven]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_pure_paper_eigen_slow]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_pure_paper_eigen_fast]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_lf_paper_eigen_alfven]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_lf_paper_eigen_slow]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_lf_paper_eigen_fast]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_lf_field_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_lf_paper_oblique_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_convergence_over_noninteger_periods[cgl_pure_paper_oblique_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_rejects_ineffective_reference[cgl_lf_field_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_rejects_ineffective_reference[cgl_lf_paper_oblique_wave]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_wave_rejects_ineffective_reference[cgl_lf_paper_eigen_slow]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_eigen_wave_rejects_disabled_lf[slow]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_eigen_wave_rejects_disabled_lf[fast]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_decay_resolves_closure_coefficients[collisionless-parallel]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_decay_resolves_closure_coefficients[collisionless-perp]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_decay_resolves_closure_coefficients[collisional-parallel]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_decay_resolves_closure_coefficients[collisional-perp]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-varying_pure-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-varying_pure-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-uniform_lf-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-uniform_lf-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-varying_pure-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-varying_pure-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-uniform_lf-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-uniform_lf-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-varying_pure-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-varying_pure-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-uniform_lf-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-uniform_lf-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-varying_pure-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-varying_pure-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-uniform_lf-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-uniform_lf-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-varying_pure-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-varying_pure-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-uniform_lf-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-uniform_lf-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-varying_pure-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-varying_pure-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-uniform_lf-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-uniform_lf-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_wall_ordering[pure-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_wall_ordering[pure-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_wall_ordering[lf-mirror]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_acceptance_cpu",
+        "name": "test_limiter_stress_matches_wall_ordering[lf-firehose]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_oblique_decay_cpu",
+        "name": "test_cgl_lf_oblique_decay_agrees_across_blocks[x]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_oblique_decay_cpu",
+        "name": "test_cgl_lf_oblique_decay_agrees_across_blocks[y]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_oblique_decay_cpu",
+        "name": "test_cgl_lf_smr_decay_conserves_total_energy"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu-stage-i-recheck/results.xml",
+        "classname": "test_cgl_lf_stage_i_fast_report_audit_regressions",
+        "name": "test_snapshot_worker_plan_bounds_count_cpu_and_memory"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_lf_turb_driving_cpu",
+        "name": "test_cgl_lf_amr_with_turbulence_driving_restarts_reproducibly"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_parameters_cpu",
+        "name": "test_cgl_constructor_parameters[False]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_parameters_cpu",
+        "name": "test_cgl_constructor_parameters[True]"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_passive_fast_path_cpu",
+        "name": "test_passive_cgl_signals_and_runtime_fence"
+      },
+      {
+        "outcome": "passed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_passive_workflow_cpu",
+        "name": "test_passive_cases_are_recorded_but_not_executed"
+      },
+      {
+        "outcome": "xfailed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_weak_field_cpu",
+        "name": "test_weak_field_contact_remains_bounded[10.0]"
+      },
+      {
+        "outcome": "xfailed",
+        "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/cpu-noftz-cpu/results.xml",
+        "classname": "test_cgl_weak_field_cpu",
+        "name": "test_weak_field_contact_remains_bounded[-10.0]"
+      }
+    ]
+  },
+  "fixed_matrix_summary": {
+    "source_sha": "9a4030b09307bc43865d5e597638f8645a6388f8",
+    "backend": "hip",
+    "executable_sha256": "adcdadd805c63fd774ef69bd7673c9b0ab52e77cf37e2e3913cff2b890c18150",
+    "slurm_job": "5628672",
+    "inputs": {
+      "density": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/density.athinput",
+        "sha256": "dbb68b86f1f20766a08c0fb766f802bc7e23caf60885a5b248aee43841e290a3"
+      },
+      "lf1d": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/lf1d.athinput",
+        "sha256": "76eadf8d34674197a3c23e1cb6cd21987b1a6449b60a8bc78b7c1370c3981c77"
+      },
+      "lf2d": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/lf2d.athinput",
+        "sha256": "0f74067fc84a83794711e7c420db978eda91bb72e9b59f4e9d6c3d343e357272"
+      },
+      "lf3d": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/lf3d.athinput",
+        "sha256": "b78286ef7ed070b4f0ed53ab90959700fe88f3e024efe8b340805f24b35e7075"
+      },
+      "low_b": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/low_b.athinput",
+        "sha256": "008ebd28eb8372d5a14f6ddeea4c9e745c825498162b542512fa4f013525fdd4"
+      },
+      "outflow": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/outflow.athinput",
+        "sha256": "eba5b9982c8f1748333526589ef45661321a6feb5d50cf10bf97b207cae7ad62"
+      },
+      "pure_cgl": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/pure_cgl.athinput",
+        "sha256": "f7cf00cb96c261fbb542de52ced12d2870300fe52d029fcaa7a25e440a4c82a0"
+      },
+      "shear": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/shear.athinput",
+        "sha256": "ffef8f9235f187cc192a0061e6ddc7c04faf20050bc833ece85b1bcd86ffa538"
+      },
+      "smr": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/smr.athinput",
+        "sha256": "e89213a76ada0ce37443f3647a8a05789a1c9775c5e044945daed79358718c29"
+      },
+      "smr_outflow": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/smr_outflow.athinput",
+        "sha256": "96155baf8a2b697871862aaa09c8df55b8ecd20fb058c0d9282814f181f6feda"
+      },
+      "smr_varied": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/smr_varied.athinput",
+        "sha256": "60e862ca3acae17febded53b2d8e9752229a1e8b14afbe7a22650f95394cc0ee"
+      },
+      "velocity": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/matrix/baseline-nocray/inputs/velocity.athinput",
+        "sha256": "2cf8fcd66a8bc1b04692de1d4116d073df66dcc9fe09ececf8af4659697ad782"
+      }
+    },
+    "warmup_repeats": 1,
+    "timed_repeats": 3,
+    "timing": "Solver wall time per cycle includes configured outputs; launch-inclusive elapsed retained separately. Profile runs are not uninstrumented benchmarks.",
+    "failures": [],
+    "cases": {
+      "density-1rank": {
+        "median": {
+          "wall_s_per_cycle": 1.1593109949802358,
+          "solver_s_per_cycle": 0.3891716666666667,
+          "stages": 42,
+          "sts_profile_s_per_stage": 0.0008648205952380952,
+          "shared_transport_s_per_stage": 0.00020618466666666666
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "lf1d-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.12008381755283783,
+          "solver_s_per_cycle": 0.11207057692307693,
+          "stages": 2080,
+          "sts_profile_s_per_stage": 0.0008241321442307692,
+          "shared_transport_s_per_stage": 0.0001360810576923077
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "lf2d-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.15609631975780108,
+          "solver_s_per_cycle": 0.1345139,
+          "stages": 972,
+          "sts_profile_s_per_stage": 0.0013912108055555556,
+          "shared_transport_s_per_stage": 0.00018029448559670782
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "lf2d-4rank": {
+        "median": {
+          "wall_s_per_cycle": 0.1605182621129123,
+          "solver_s_per_cycle": 0.13411752857142858,
+          "stages": 972,
+          "sts_profile_s_per_stage": 0.0013760581666666665,
+          "shared_transport_s_per_stage": 0.00019057083333333334
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "lf3d-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.4994665547972545,
+          "solver_s_per_cycle": 0.2742179,
+          "stages": 140,
+          "sts_profile_s_per_stage": 0.00430575535,
+          "shared_transport_s_per_stage": 0.0003501322142857143
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "lf3d-4rank": {
+        "median": {
+          "wall_s_per_cycle": 0.4085247766925022,
+          "solver_s_per_cycle": 0.23758020000000002,
+          "stages": 140,
+          "sts_profile_s_per_stage": 0.002512321562857142,
+          "shared_transport_s_per_stage": 0.00043673335714285714
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "low_b-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.35263777039945127,
+          "solver_s_per_cycle": 0.20085160000000002,
+          "stages": 100,
+          "sts_profile_s_per_stage": 0.0008067707100000001,
+          "shared_transport_s_per_stage": 0.00016579198
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "outflow-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.25015823955181987,
+          "solver_s_per_cycle": 0.1699789,
+          "stages": 280,
+          "sts_profile_s_per_stage": 0.0007879718928571429,
+          "shared_transport_s_per_stage": 0.00017180557142857143
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "pure_cgl-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.46794337934503955,
+          "solver_s_per_cycle": 0.17136016666666667,
+          "stages": 0
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "shear-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.41251882719807326,
+          "solver_s_per_cycle": 0.25065499999999996,
+          "stages": 140,
+          "sts_profile_s_per_stage": 0.002028843285714286,
+          "shared_transport_s_per_stage": 0.0002661628142857143
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "shear-4rank": {
+        "median": {
+          "wall_s_per_cycle": 0.4121567718917504,
+          "solver_s_per_cycle": 0.2346961,
+          "stages": 140,
+          "sts_profile_s_per_stage": 0.002040870082857143,
+          "shared_transport_s_per_stage": 0.0003163435142857143
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "smr-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.18276427884120494,
+          "solver_s_per_cycle": 0.15945828571428572,
+          "stages": 972,
+          "sts_profile_s_per_stage": 0.0013641884043209874,
+          "shared_transport_s_per_stage": 0.0014845255658436215
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "smr-4rank": {
+        "median": {
+          "wall_s_per_cycle": 0.1689948195724615,
+          "solver_s_per_cycle": 0.14161852857142856,
+          "stages": 972,
+          "sts_profile_s_per_stage": 0.0013917902561728392,
+          "shared_transport_s_per_stage": 0.000843557767489712
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "smr_outflow-1rank": {
+        "median": {
+          "wall_s_per_cycle": 1.0603838067618199,
+          "solver_s_per_cycle": 0.29123575,
+          "stages": 40,
+          "sts_profile_s_per_stage": 0.00145643115,
+          "shared_transport_s_per_stage": 0.00239936355
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "smr_outflow-4rank": {
+        "median": {
+          "wall_s_per_cycle": 1.1812688694917597,
+          "solver_s_per_cycle": 0.2614285,
+          "stages": 40,
+          "sts_profile_s_per_stage": 0.0014628222799999999,
+          "shared_transport_s_per_stage": 0.002017324575
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "smr_varied-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.7018400172237307,
+          "solver_s_per_cycle": 0.29227425,
+          "stages": 40,
+          "sts_profile_s_per_stage": 0.001436671675,
+          "shared_transport_s_per_stage": 0.002327388775
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      },
+      "smr_varied-4rank": {
+        "median": {
+          "wall_s_per_cycle": 0.7204575050272979,
+          "solver_s_per_cycle": 0.27372875,
+          "stages": 40,
+          "sts_profile_s_per_stage": 0.0014706968075,
+          "shared_transport_s_per_stage": 0.0019337133249999999
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": true
+      },
+      "velocity-1rank": {
+        "median": {
+          "wall_s_per_cycle": 0.933484501282995,
+          "solver_s_per_cycle": 0.33857866666666664,
+          "stages": 42,
+          "sts_profile_s_per_stage": 0.0008734102142857142,
+          "shared_transport_s_per_stage": 0.00021052164285714287
+        },
+        "sample_count": 3,
+        "physical_repeatability": true,
+        "raw_restart_variation": false
+      }
+    }
+  },
+  "turbulence_results": "turbulence-research/runs/baseline-1rank-recheck/results.json",
+  "turbulence_repeatability_audit": {
+    "runs": [
+      {
+        "run": "baseline-1rank",
+        "files": 6,
+        "comparisons": 4,
+        "all_equal": true
+      },
+      {
+        "run": "baseline-1rank-recheck",
+        "files": 6,
+        "comparisons": 4,
+        "all_equal": true
+      }
+    ],
+    "guard_probes": [
+      {
+        "mutation": "dormant_shuffle",
+        "normalized_equal": true,
+        "expected": true
+      },
+      {
+        "mutation": "dormant_gset",
+        "normalized_equal": true,
+        "expected": true
+      },
+      {
+        "mutation": "retained_padding",
+        "normalized_equal": false,
+        "expected": false
+      },
+      {
+        "mutation": "physical_state",
+        "normalized_equal": false,
+        "expected": false
+      },
+      {
+        "mutation": "seed",
+        "forcing_normalization_applied": false
+      },
+      {
+        "mutation": "cache_flag",
+        "forcing_normalization_applied": false
+      },
+      {
+        "mutation": "time",
+        "forcing_normalization_applied": false
+      },
+      {
+        "mutation": "cycle",
+        "forcing_normalization_applied": false
+      },
+      {
+        "mutation": "metadata_version",
+        "rejected": true
+      }
+    ]
+  },
+  "gpu_broad_suite": {
+    "passed": 194,
+    "xfail": 2,
+    "seconds": 2265.14,
+    "xml": "baseline/hip-nocray-cpu/results.xml",
+    "note": "CPU-built helper subtests remain CPU coverage"
+  },
+  "task0_refill_cpu": "baseline/task0-refill-cpu-cpu/results.xml",
+  "task0_refill_hip": "baseline/task0-refill-hip-cpu/results.xml",
+  "task0_refill_quantification": "p1-research/original-refill-quantification.json",
+  "known_baseline_conservation_gap": "p1-research/TASK6_BASELINE_DEFECT.md"
+}

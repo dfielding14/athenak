@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_SRC_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SRC_DIR="${SRC_DIR:-${DEFAULT_SRC_DIR}}"
 BUILD_JOBS="${BUILD_JOBS:-16}"
-STACK_TAG="${STACK_TAG:-cpe25.09-cce20-rocm6.4.2}"
+STACK_TAG="${STACK_TAG:-cpe25.09-cce20-rocm6.4.2-nocray-noftz}"
 
 module restore
 module load PrgEnv-cray
@@ -60,6 +60,9 @@ fi
   cmake --version | head -n 1
 } | tee "${MANIFEST_DIR}/environment.txt"
 
+# CCE 20 HIP can miscompile Kokkos Min reductions (kokkos/kokkos#9476).
+# Disable that optimizer and retain subnormals needed by the LF extreme-value
+# arithmetic. Apply this contract to Kokkos and the application, including link.
 cmake -S "${SRC_DIR}" -B "${BUILD_DIR}" \
   -DCMAKE_BUILD_TYPE=Release \
   -DPROBLEM=built_in_pgens \
@@ -68,6 +71,8 @@ cmake -S "${SRC_DIR}" -B "${BUILD_DIR}" \
   -DKokkos_ARCH_ZEN3=ON \
   -DKokkos_ARCH_VEGA90A=ON \
   -DCMAKE_CXX_COMPILER=CC \
+  -DCMAKE_CXX_FLAGS="-fno-cray -mno-daz-ftz" \
+  -DCMAKE_EXE_LINKER_FLAGS="-no-pie" \
   2>&1 | tee "${BUILD_LOG_DIR}/configure-${GIT_SHORT}-${STACK_TAG}.log"
 
 cmake --build "${BUILD_DIR}" --parallel "${BUILD_JOBS}" \

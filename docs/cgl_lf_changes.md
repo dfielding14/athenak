@@ -1,5 +1,20 @@
 # WO1 CGL-LF changes and validation
 
+## WO2 follow-ups on Frontier
+
+WO2 starts from `9a4030b09307bc43865d5e597638f8645a6388f8`. The
+[implementation and validation report](validation/wo2/README.md) records the
+actual CPU/HIP/MPI baseline, retained artifacts, and per-task evidence.
+
+Task 0 adds the verified CCE20/HIP build contract and refreshes physical CGL-LF
+corner ghosts after prolongation. This corrects a demonstrated baseline error
+at an outflow/coarse-fine intersection. Magnetic boundary updates remain
+required. Compact communication is evaluated separately in Task 3.
+Conservative A and both accepted strict B4 expected failures are retained.
+
+The following sections preserve the WO1 implementation record.
+
+
 Status: the 41-task implementation is complete. On 2026-10-06 the user accepted
 the T-B4 sharp-contact failure as a known limitation shared with the checked
 reference implementations; retain A and the current implementation. This is
